@@ -387,6 +387,10 @@ struct TranscriptView: View {
         case .item(let item):
             TranscriptItemView(item: item, fullPayload: console.fullPayload, console: console)
                 .modifier(AnchorRow(itemID: item.id, ruler: ruler, recompute: recomputeStuck))
+        case .toolGroup(let cards):
+            // No `AnchorRow`: a folded run of tool calls is never the "Your question" the sticky
+            // header names, so it has no business moving that anchor.
+            ToolGroupCardView(cards: cards, fullPayload: console.fullPayload)
         case .statusCard(let card):
             SessionStatusCardView(card: card)
         case .approval(let approval):

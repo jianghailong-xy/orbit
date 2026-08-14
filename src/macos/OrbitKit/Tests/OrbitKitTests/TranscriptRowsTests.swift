@@ -97,4 +97,51 @@ final class TranscriptRowsTests: XCTestCase {
             statusCards: [c], canPageOlder: true, showWorkingIndicator: true)
         XCTAssertEqual(Set(rows.map(\.id)).count, rows.count)
     }
+
+    // MARK: - tool-run folding
+
+    private func toolItem(_ id: String, _ name: String = "Bash", status: ToolStatus = .ok) -> TranscriptItem {
+        .toolCall(ToolCard(id: id, name: name, input: .null, result: "ok", status: status))
+    }
+
+    private func built(_ items: [TranscriptItem]) -> [TranscriptRow] {
+        TranscriptRows.build(state: state(items: items), statusCards: [],
+                             canPageOlder: false, showWorkingIndicator: false)
+    }
+
+    func testThreeConsecutiveCallsFoldIntoOneRowKeyedOnTheFirst() {
+        let r = built([.user(user("i1")), toolItem("t1"), toolItem("t2"), toolItem("t3")])
+
+        // The run's three rows become one, and it answers to the first call's id — the prepend
+        // anchor may well be that call, and a scrollTo nobody carries is a silent no-op.
+        XCTAssertEqual(r.map(\.id), ["i1", "t1", "transcript-bottom"])
+        guard case .toolGroup(let cards) = r[1] else { return XCTFail("expected a folded run") }
+        XCTAssertEqual(cards.map(\.id), ["t1", "t2", "t3"])
+    }
+
+    func testTwoCallsStayTheirOwnRows() {
+        XCTAssertEqual(built([toolItem("t1"), toolItem("t2")]).map(\.id), ["t1", "t2", "transcript-bottom"])
+    }
+
+    func testProseBetweenCallsKeepsThemApart() {
+        let r = built([toolItem("t1"), toolItem("t2"), .error(id: "e1", message: "boom"), toolItem("t3"), toolItem("t4")])
+
+        XCTAssertEqual(r.map(\.id), ["t1", "t2", "e1", "t3", "t4", "transcript-bottom"])
+    }
+
+    // A question, a plan, a spawned child session and a `!`-shell line each render as their own
+    // card — folding them away would hide the thing the turn was about.
+    func testCallsThatAreNotStepsBreakTheRun() {
+        let r = built([toolItem("t1"), toolItem("t2"), toolItem("q1", "AskUserQuestion"), toolItem("t3"), toolItem("t4")])
+        XCTAssertEqual(r.map(\.id), ["t1", "t2", "q1", "t3", "t4", "transcript-bottom"])
+
+        let shell = built([toolItem("t1"), toolItem("shell-1"), toolItem("t2"), toolItem("t3")])
+        XCTAssertEqual(shell.map(\.id), ["t1", "shell-1", "t2", "t3", "transcript-bottom"])
+    }
+
+    func testEveryRowIdStaysUniqueWithFoldedRuns() {
+        let r = built([.user(user("i1")), toolItem("t1"), toolItem("t2"), toolItem("t3"), toolItem("t4")])
+
+        XCTAssertEqual(Set(r.map(\.id)).count, r.count)
+    }
 }

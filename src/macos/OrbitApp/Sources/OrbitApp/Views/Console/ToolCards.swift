@@ -151,11 +151,7 @@ struct ToolCardView: View {
     }
 
     @ViewBuilder private var status: some View {
-        switch card.status {
-        case .running: ProgressView().controlSize(.small)
-        case .ok:      Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
-        case .error:   Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
-        }
+        ToolStatusGlyph(status: card.status)
     }
 
     private var detail: some View {
@@ -415,6 +411,107 @@ struct CollapsibleMono: View {
                 Button(open ? "Show less" : "Show \(hidden) more lines") { open.toggle() }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.blue)
             }
+        }
+    }
+}
+
+/// The one glyph a tool row ends on. Shared by a single call and by a folded run of them, so the
+/// two can never drift into saying "done" in two different shapes.
+struct ToolStatusGlyph: View {
+    let status: ToolStatus
+    var body: some View {
+        switch status {
+        case .running: ProgressView().controlSize(.small)
+        case .ok:      Image(systemName: "checkmark.circle.fill").font(.orbitLabel).foregroundStyle(.green)
+        case .error:   Image(systemName: "xmark.circle.fill").font(.orbitLabel).foregroundStyle(.red)
+        }
+    }
+}
+
+/// A run of consecutive tool calls, folded into one row (web parity: `ToolGroupView`).
+///
+/// Nothing opens it by itself. Opening on "something is running" would guarantee a collapse the
+/// moment that call lands — the condition is transient — and a group snapping from N rows back to
+/// one, at the live edge, is the transcript jumping under the reader's eyes. The row says what the
+/// run is doing instead; a tap says which calls.
+struct ToolGroupCardView: View {
+    let cards: [ToolCard]
+    var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
+    @State private var expanded = false
+    private let summary: ToolGroupSummary
+
+    init(cards: [ToolCard], fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
+        self.cards = cards
+        self.fullPayload = fullPayload
+        self.summary = ToolGroupSummary.make(cards)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            row
+            if expanded {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(cards, id: \.id) { card in
+                        ToolCardView(card: card, fullPayload: fullPayload)
+                    }
+                }
+            }
+        }
+        .padding(.leading, 11)
+        .padding(.trailing, 10)
+        .padding(.vertical, 6)
+        .background(expanded ? Color.gray.opacity(0.06) : Color.clear)
+        .overlay(alignment: .leading) { Rectangle().fill(summary.tone.color).frame(width: 3) }
+        .clipShape(RoundedRectangle(cornerRadius: expanded ? 8 : 0))
+        .overlay {
+            if expanded { RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.12), lineWidth: 1) }
+        }
+    }
+
+    private var row: some View {
+        HStack(spacing: 7) {
+            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+            Image(systemName: summary.symbol)
+                .font(.orbitMeta).foregroundStyle(summary.tone.color)
+                .frame(width: 20, height: 20)
+                .background(summary.tone.color.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+            Text(summary.title)
+                .font(.orbitMono.weight(.semibold))
+                .foregroundStyle(.primary)
+            counts
+            if let breakdown = summary.breakdown {
+                Text(breakdown)
+                    .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Color.gray.opacity(0.14), in: RoundedRectangle(cornerRadius: 4))
+                    .layoutPriority(-1)   // the first thing to give way on a narrow phone
+            }
+            ToolStatusGlyph(status: summary.status)
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeOut(duration: 0.12)) { expanded.toggle() }
+        }
+    }
+
+    /// `1 running · 5 succeeded`, plus the call the run is currently defined by — the one still in
+    /// flight, or the first that failed, which is what makes a red row worth opening.
+    private var leadTint: Color { summary.lead?.kind == .failed ? .red : .secondary }
+
+    @ViewBuilder private var counts: some View {
+        if let lead = summary.lead {
+            (Text(summary.counts + " · ").foregroundColor(.secondary)
+                + Text("\(lead.kind.rawValue): ").foregroundColor(leadTint)
+                + Text(lead.text).foregroundColor(leadTint))
+                .font(.orbitLabel)
+                .lineLimit(1).truncationMode(.tail)
+        } else {
+            Text(summary.counts)
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(1).truncationMode(.tail)
         }
     }
 }

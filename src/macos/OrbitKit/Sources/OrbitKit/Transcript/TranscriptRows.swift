@@ -35,6 +35,8 @@ public struct LocalStatusCard: Identifiable, Equatable, Sendable {
 public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case loadOlder(cursor: Int)
     case item(TranscriptItem)
+    /// A run of consecutive tool calls, folded into one row (see `TranscriptRows.groupToolRuns`).
+    case toolGroup([ToolCard])
     case statusCard(LocalStatusCard)
     case approval(PendingApproval)
     case working
@@ -44,10 +46,16 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     /// A history row keeps its bare item id — that's what `scrollTo` targets (the prepend anchor,
     /// the sticky header's jump-back) and what `AnchorRow` reports as the top anchor. Every other
     /// kind is namespaced, so no two rows can collide however the sources move.
+    ///
+    /// A group takes the bare id of its first call rather than a namespaced one, and can do so
+    /// without risking a collision because it *replaces* that call's own row. It has to: a prepend
+    /// anchor is the id of the window's first item, which may well be a tool call, and a
+    /// `scrollTo` at an id no row carries is a silent no-op — the reader's place, lost.
     public var id: String {
         switch self {
         case .loadOlder(let cursor): return "load-older-\(cursor)"
         case .item(let item):        return item.id
+        case .toolGroup(let cards):  return cards.first?.id ?? "tool-group-empty"
         case .statusCard(let card):  return "local-status-\(card.id)"
         case .approval(let appr):    return "approval-\(appr.id)"
         case .working:               return "working-indicator"
@@ -106,6 +114,52 @@ public enum TranscriptRows {
         // Ids are unique by construction above; a repeat could only come from a malformed stream
         // (two events sharing a tool_use id). Drop it rather than hand the List a diff that aborts.
         var seen = Set<String>()
-        return rows.filter { seen.insert($0.id).inserted }
+        return groupToolRuns(rows).filter { seen.insert($0.id).inserted }
+    }
+
+    /// Web parity (`TOOL_GROUP_MIN`): a shorter run reads better as its own rows than as a row
+    /// saying "Bash × 2".
+    public static let toolGroupMin = 3
+
+    /// Fold runs of consecutive tool calls into one row. Between two pieces of prose the transcript's
+    /// job is to say "it did nine things", not to spend nine rows saying which — on a phone those
+    /// nine rows are the whole screen, and the reply that follows them is off it.
+    ///
+    /// Anything that isn't a groupable call ends the run, so a status card, a sentence, or an
+    /// approval between two calls keeps them apart, exactly as the reader saw them happen.
+    static func groupToolRuns(_ rows: [TranscriptRow]) -> [TranscriptRow] {
+        var out: [TranscriptRow] = []
+        var run: [ToolCard] = []
+        func flush() {
+            if run.count >= toolGroupMin {
+                out.append(.toolGroup(run))
+            } else {
+                out.append(contentsOf: run.map { TranscriptRow.item(.toolCall($0)) })
+            }
+            run.removeAll()
+        }
+        for row in rows {
+            if case .item(let item) = row, case .toolCall(let card) = item, isGroupable(card) {
+                run.append(card)
+            } else {
+                flush()
+                out.append(row)
+            }
+        }
+        flush()
+        return out
+    }
+
+    /// A call one folded row can stand in for: no interactive twin rendered below it (question,
+    /// plan), no transcript or card of its own (Task, Workspace, a spawned child session), and not
+    /// a `!`-shell command the user ran — that one is the user's own line, not a step.
+    private static func isGroupable(_ card: ToolCard) -> Bool {
+        if card.id.hasPrefix("shell-") { return false }
+        switch card.name {
+        case "AskUserQuestion", "ExitPlanMode", "mcp__orbit__session_create", "Task", "Workspace":
+            return false
+        default:
+            return true
+        }
     }
 }
