@@ -4068,15 +4068,15 @@ body {
     padding-left: 3px;
   }
   /* Every control keeps its natural width except the agent label. */
-  .composer-pills > .composer-pill:not(.composer-pill-agent),
+  .composer-pills > .composer-pill:not(.composer-pill-workspace),
   .composer-usage {
     flex: none;
   }
-  .composer-pill-agent {
+  .composer-pill-workspace {
     min-width: 0;
     flex-shrink: 1;
   }
-  .composer-pill-agent .ant-select {
+  .composer-pill-workspace .ant-select {
     min-width: 0;
   }
 }
@@ -5508,7 +5508,7 @@ body {
   font-size: 11.5px;
   color: var(--text-4);
 }
-.chat-session-card-agent {
+.chat-session-card-workspace {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color: var(--text-3);
 }
@@ -8197,7 +8197,7 @@ body {
   content: '·';
   margin-right: 6px;
 }
-.ssearch-agent {
+.ssearch-workspace {
   color: var(--text-2);
 }
 .ssearch-snippet {
