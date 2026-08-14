@@ -17,7 +17,7 @@ public protocol TranscriptPersisting: Sendable {
 public struct FileTranscriptStore: TranscriptPersisting {
     public let directory: URL
     private let maxFiles: Int
-    private static let schemaVersion = 3
+    private static let schemaVersion = 4
 
     public init(directory: URL, maxFiles: Int = 200) {
         self.directory = directory
@@ -32,6 +32,10 @@ public struct FileTranscriptStore: TranscriptPersisting {
     /// session, so spend one cheap tail re-fetch instead.
     /// v3: context usage can arrive on non-`turn_end` events; old snapshots may have cached 0/nil
     /// after seeing the relevant seq, so force one tail re-fetch.
+    /// v4: snapshots written before the reducer learned to ignore `RunEvent.sentinelSeq` can carry
+    /// a `maxSeq` of 2^53-1, which makes every reconnect replay nothing for the rest of that
+    /// session's life. The damage is already on disk, so upgrading the reducer alone wouldn't heal
+    /// an affected device — dropping those snapshots does, at the cost of one tail re-fetch.
     private struct Envelope: Codable { var version: Int; var reducer: TranscriptReducer }
 
     public func load(sessionID: String) -> TranscriptReducer? {

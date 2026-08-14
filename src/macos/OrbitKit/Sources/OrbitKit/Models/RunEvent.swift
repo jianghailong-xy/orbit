@@ -17,6 +17,15 @@ public struct RunEvent: Codable, Equatable, Sendable {
     /// Expanding the card refetches the payload whole via `APIClient.eventFull`.
     public let truncated: Bool
 
+    /// The `seq` the server stamps on a terminal `status` broadcast (`Number.MAX_SAFE_INTEGER` in
+    /// apiserver: runner-api turn-complete/finalize, and the reaper). It means "after everything",
+    /// not a row — nothing with this seq is persisted, so it can never be replayed. A client that
+    /// lets it advance the reconnect cursor asks for `?sinceSeq=<this>` forever after, and the
+    /// server's history replay (`seq > sinceSeq`) returns NOTHING from then on: every turn that
+    /// happens while the app isn't watching live is lost to that session for good. Web guards it
+    /// the same way (AgentView's `isSeq`).
+    public static let sentinelSeq = 9_007_199_254_740_991
+
     enum CodingKeys: String, CodingKey { case seq, type, ts, turnId, payload, truncated }
 
     public init(seq: Int, type: RunEventType, ts: String? = nil, turnId: String? = nil, payload: JSONValue = .null, truncated: Bool = false) {

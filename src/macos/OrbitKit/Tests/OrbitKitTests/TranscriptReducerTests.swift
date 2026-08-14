@@ -1024,6 +1024,28 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertFalse(cards[1].stale, "the newest card is the live one")
     }
 
+    /// The terminal `status` the server broadcasts when a turn is finalized (a spent quota, the
+    /// reaper) rides `RunEvent.sentinelSeq`. Letting it advance the reconnect cursor is how a
+    /// session goes permanently blind: every later reconnect asks for `?sinceSeq=2^53-1`, the
+    /// server's `seq > sinceSeq` replay returns nothing, and whatever ran while the app wasn't
+    /// watching live is never seen. It must still apply the status.
+    func testTerminalStatusBroadcastDoesNotMoveTheReconnectCursor() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 41, type: .user, payload: .object(["text": .string("/upgrade")])))
+        r.apply(RunEvent(seq: 42, type: .assistant, payload: .object([
+            "text": .string("You've hit your weekly limit · resets 6am (Europe/Berlin)")])))
+        r.apply(RunEvent(seq: RunEvent.sentinelSeq, type: .status,
+                         payload: .object(["status": .string("FAILED"), "final": .bool(true)])))
+
+        XCTAssertEqual(r.state.status, .failed, "the finalization still lands")
+        XCTAssertEqual(r.state.maxSeq, 42, "reconnect cursor stays on the last real event")
+        XCTAssertEqual(r.state.oldestSeq, 41, "scroll-up cursor stays on the last real event")
+
+        // The retry the user then sends must fold normally — the sentinel didn't poison dedup.
+        r.apply(RunEvent(seq: 43, type: .user, payload: .object(["text": .string("/upgrade")])))
+        XCTAssertEqual(r.state.maxSeq, 43)
+    }
+
     /// A reply that merely quotes a limit is an ordinary reply — rendering it as the provider
     /// refusing to answer would replace it with a card saying the opposite of what it says.
     func testAReplyAboutAQuotaStaysAReply() {

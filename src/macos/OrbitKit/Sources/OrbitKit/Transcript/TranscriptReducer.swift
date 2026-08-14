@@ -92,7 +92,10 @@ public struct TranscriptReducer: Sendable, Codable {
     public init() {}
 
     public mutating func apply(_ ev: RunEvent) {
-        if ev.type.isDurable && ev.seq > 0 {
+        // `sentinelSeq` is a live-only terminal broadcast wearing a durable type — it must move
+        // neither cursor (see `RunEvent.sentinelSeq`), and it is not deduped either: it is never
+        // replayed, so a repeat is a genuine second finalization, and `applyStatus` is idempotent.
+        if ev.type.isDurable && ev.seq > 0 && ev.seq != RunEvent.sentinelSeq {
             if seen.contains(ev.seq) { return }       // dedup replayed/duplicate durable events
             seen.insert(ev.seq)
             if ev.seq > state.maxSeq { state.maxSeq = ev.seq }
