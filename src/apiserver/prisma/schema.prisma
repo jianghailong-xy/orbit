@@ -981,6 +981,16 @@ model TaskList {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Standing instructions for every task in this list — how this class of work is done, as
+  // opposed to which item this task is. Spliced into the run prompt at dispatch, so editing it
+  // takes effect on every task not yet started, without touching a single task row.
+  //
+  // This layer was missing entirely: above it sits Workspace.systemPrompt (one machine, every
+  // kind of work) and below it Task.description (one item), and with nowhere in between the
+  // invariant half of a campaign's instructions ends up copied into every description. Measured
+  // on this deployment: 27,706 task descriptions collapse to 140 distinct shapes, ~86% of each
+  // one duplicated text. Applying one lesson learned meant rewriting all of them.
+  instructions  String?
   // Emergency stop for the whole list. The auto-run sweep skips a paused list's tasks and
   // execute() refuses them, so one write halts a campaign that is dispatching wrongly —
   // previously the only way to stop one was to edit and redeploy the reconciler. Runs already

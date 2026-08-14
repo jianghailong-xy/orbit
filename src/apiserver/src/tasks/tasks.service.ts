@@ -2705,7 +2705,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         model: true,
         status: true,
         listId: true,
-        list: { select: { paused: true, maxConcurrent: true } },
+        list: { select: { paused: true, maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -2767,10 +2767,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private buildExecutePrompt(task: { title: string; description?: string | null }): string {
+  /**
+   * The run prompt: what this task is, how its list's work is done, and the reporting protocol
+   * every task run follows.
+   *
+   * The list's standing instructions are assembled in here at dispatch rather than copied into
+   * each task at creation, which is what makes editing them take effect on every task not yet
+   * started — including ones already queued — for one write instead of one per task.
+   *
+   * They sit after the task's own description because the description is what identifies the
+   * work; the instructions are the procedure it belongs to. With no instructions the string is
+   * byte-for-byte what it was before this layer existed, so an untouched list dispatches exactly
+   * as it always did.
+   */
+  private buildExecutePrompt(task: {
+    title: string;
+    description?: string | null;
+    list?: { instructions?: string | null } | null;
+  }): string {
+    const instructions = task.list?.instructions?.trim();
     return (
       `请开始执行任务「${task.title}」。\n\n` +
       (task.description ? `任务描述：\n${task.description}\n\n` : '') +
+      (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
       `请按以下步骤进行：\n` +
       `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
       `2. 执行任务。\n` +
@@ -2801,6 +2820,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         provider: true,
         model: true,
         status: true,
+        // Same list instructions the single-task Run assembles: a task must not get a different
+        // prompt depending on which button started it.
+        list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });

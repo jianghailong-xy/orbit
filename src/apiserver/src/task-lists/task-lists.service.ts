@@ -161,6 +161,11 @@ export class TaskListsService {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
         ...(dto.paused !== undefined ? { paused: dto.paused } : {}),
         ...(dto.maxConcurrent !== undefined ? { maxConcurrent: dto.maxConcurrent } : {}),
+        // Blank is stored as null so "no instructions" has one representation: an empty string
+        // and null must not assemble into different prompts.
+        ...(dto.instructions !== undefined
+          ? { instructions: dto.instructions?.trim() ? dto.instructions : null }
+          : {}),
       },
     });
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);

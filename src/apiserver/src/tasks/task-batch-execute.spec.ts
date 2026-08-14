@@ -156,3 +156,39 @@ test('batchExecute preserves runnable order when collecting out-of-order failure
     { id: 'task-3', ok: false, error: 'failure 3' },
   ]);
 });
+
+test('a bulk run carries the list instructions the single-task Run would have', async () => {
+  // The two Run buttons must assemble the same prompt for the same task. They reach
+  // buildExecutePrompt through different queries, so the batch query having its own `select` is
+  // exactly where the two can drift apart without anything failing loudly.
+  const instructions = '须去重、断点续传，并按 Content-Length 校验。';
+  const prisma = {
+    task: {
+      // Honours the caller's `select`, like the groupBy stub in auto-run-backoff.spec: a stub
+      // that hands back fields nobody asked for cannot fail when the query stops asking, which
+      // is precisely the drift this test exists to catch.
+      findMany: async (args: { select?: Record<string, unknown> }) => [
+        {
+          id: 'task-0',
+          title: 'Task 0',
+          description: '下载 000_00008.parquet',
+          ...(args?.select?.list ? { list: { instructions } } : {}),
+          assignee: { id: 'workspace-0', runnerId: 'runner-1' },
+        },
+      ],
+    },
+    taskDependency: { findMany: async () => [] },
+    session: { findMany: async () => [] },
+  } as never;
+  const service = new TasksService(prisma, {} as never, {} as never);
+  const prompts: string[] = [];
+  (service as any).runWorkspaceOnTask = async (...args: unknown[]) => {
+    prompts.push(args[3] as string);
+    return 'session-1';
+  };
+
+  await service.batchExecute('owner-1', ['task-0']);
+
+  assert.equal(prompts.length, 1);
+  assert.match(prompts[0], /作业指导（本任务列表通用）：\n须去重、断点续传，并按 Content-Length 校验。/);
+});

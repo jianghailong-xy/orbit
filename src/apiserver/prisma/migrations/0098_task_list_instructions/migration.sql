@@ -1,0 +1,22 @@
+-- Standing instructions for a task list: the campaign-level layer of the run prompt.
+--
+-- A task run's prompt is assembled from several sources with very different lifetimes: the
+-- server-side template (every run, forever), workspace.system_prompt (one machine, every kind of
+-- work) and task.description (one item, once). Nothing sat between the last two, so the
+-- invariant half of a campaign's instructions — how this class of work is done — had nowhere to
+-- live but inside every individual description.
+--
+-- What that costs, measured on this deployment: 27,706 task descriptions collapse to 140
+-- distinct shapes once the per-item identifiers are masked, and those 140 differ from each other
+-- only by a crawl name. It is effectively one instruction materialised 27,706 times, ~86% of
+-- each description being the duplicated part. Acting on one lesson learned from a failed run
+-- therefore meant 27,706 destructive writes that still could not reach a task already
+-- dispatched.
+--
+-- Held here instead, the same edit is a single write, and because the prompt is assembled at
+-- dispatch it applies to every task not yet started — including ones already queued.
+--
+-- Existing rows are untouched and existing descriptions are not migrated: with instructions
+-- NULL the assembled prompt is byte-for-byte what it is today, so nothing changes for a list
+-- until someone writes one.
+ALTER TABLE "task_list" ADD COLUMN "instructions" TEXT;
