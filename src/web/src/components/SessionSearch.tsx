@@ -236,7 +236,10 @@ export function SessionSearch() {
                 </div>
                 {hit.snippet && hit.matchField !== 'title' && (
                   <div className="ssearch-snippet">
-                    {splitHighlight(hit.snippet, trimmed).map((seg, si) =>
+                    {/* Highlighted with the query the server echoed back, not the one in the box:
+                        both it and the snippet have had their markdown marks stripped, so pasting
+                        "the **merge** button" still lights up the phrase inside the result. */}
+                    {splitHighlight(hit.snippet, search.data?.q ?? trimmed).map((seg, si) =>
                       seg.match ? <mark key={si}>{seg.text}</mark> : <span key={si}>{seg.text}</span>,
                     )}
                   </div>

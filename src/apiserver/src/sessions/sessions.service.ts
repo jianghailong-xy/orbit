@@ -144,6 +144,25 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * The corpus half of `stripEmphasis`, in SQL — the query half lives in search-query.ts and the two
+ * must always be applied together.
+ *
+ * This expression is also, character for character, what migration 0095 builds
+ * session_search_trgm and run_event_text_trgm on. A trigram index over an expression is only used
+ * by a query that repeats that expression exactly, so if these two ever drift the search still
+ * returns the right rows — by scanning every one of them (measured 450ms against 5ms on the
+ * session tier here). Change one, change the other.
+ *
+ * Nested replace() rather than the regexp_replace(…, '[*\`]', …) that reads more obviously: same
+ * result, ~5x the speed (125ms against 356ms over 20k message bodies). replace() hands back the
+ * source unchanged when there is nothing to remove, so the ~60% of rows carrying no marks cost a
+ * scan instead of a rebuild — and this runs on every row a trigram index admits, since a trigram
+ * match is approximate and always rechecked.
+ */
+const stripMarks = (col: Prisma.Sql): Prisma.Sql =>
+  Prisma.sql`replace(replace(${col}, '*', ''), '\`', '')`;
+
 /** What SessionsService.resolveProviderSwitch answers — see its doc comment. */
 interface ResolvedProviderSwitch {
   /** The identity the session should dispatch under: the requested one, or the current one when
@@ -842,10 +861,16 @@ export class SessionsService {
    *    see search-query.ts for why that floor is the index's, not a product decision.
    *
    * An empty query returns recents, so ⌘K doubles as a session switcher.
+   *
+   * Every tier searches the text with its markdown marks removed (see stripMarks), because what is
+   * stored is markdown source and what the user is searching for is the line they read.
    */
   async search(ownerId: string, q: string | undefined, limit: number) {
     const take = Math.min(Math.max(limit || 20, 1), 50);
-    const norm = normalizeSearchQuery(q);
+    // Both sides lose `*` and backticks, exactly as in-session find does: the corpus in SQL, the
+    // query here. Stripping the query first also means a query of nothing but marks normalizes to
+    // null and answers with recents, rather than matching every row.
+    const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) {
       const recents = await this.searchRows(ownerId, null, take);
       return { q: '', contentSearched: false, hits: recents };
@@ -892,19 +917,27 @@ export class SessionsService {
     const contentCte =
       norm && norm.searchContent
         ? Prisma.sql`
-            -- One row per session: the most recent matching message. DISTINCT ON needs the
-            -- leading ORDER BY key to be the grouping column, hence session_id then seq DESC.
-            SELECT DISTINCT ON (e.session_id)
-              e.session_id,
-              e.payload->>'text' AS match_text
-            FROM run_event e
-            -- Not merely a lookup: run_event has no owner column, so this join IS the
-            -- authorization boundary for conversation text. Never drop it.
-            JOIN session s ON s.id = e.session_id
-            WHERE s.owner_id = ${ownerId}::uuid
-              AND e.type IN ('user', 'assistant')
-              AND (e.payload->>'text') ILIKE ${norm.pattern}
-            ORDER BY e.session_id, e.seq DESC
+            -- Stripped only AFTER the collapse to one row per session. The predicate below has to
+            -- strip (that is what the index is built on, and every candidate row is rechecked
+            -- against it), but the text carried out for the snippet does not: doing it here
+            -- rebuilds a few hundred bodies instead of every matching message — 484ms against
+            -- 566ms for a word matching 7.7k messages.
+            SELECT session_id, ${stripMarks(Prisma.sql`raw_text`)} AS match_text
+            FROM (
+              -- One row per session: the most recent matching message. DISTINCT ON needs the
+              -- leading ORDER BY key to be the grouping column, hence session_id then seq DESC.
+              SELECT DISTINCT ON (e.session_id)
+                e.session_id,
+                e.payload->>'text' AS raw_text
+              FROM run_event e
+              -- Not merely a lookup: run_event has no owner column, so this join IS the
+              -- authorization boundary for conversation text. Never drop it.
+              JOIN session s ON s.id = e.session_id
+              WHERE s.owner_id = ${ownerId}::uuid
+                AND e.type IN ('user', 'assistant')
+                AND ${stripMarks(Prisma.sql`e.payload->>'text'`)} ILIKE ${norm.pattern}
+              ORDER BY e.session_id, e.seq DESC
+            ) c
           `
         : Prisma.sql`SELECT NULL::uuid AS session_id, NULL::text AS match_text WHERE false`;
 
@@ -917,40 +950,54 @@ export class SessionsService {
     // reach them through ANY branch (a session admitted by its workspace's name would otherwise still
     // be labelled 'prompt' and hand back a snippet cut from a 7 KB body).
     const pattern = norm?.pattern ?? '';
-    const fields: { field: SessionSearchHit['matchField']; col: Prisma.Sql; test: Prisma.Sql }[] = [
+    type Field = {
+      field: SessionSearchHit['matchField'];
+      /** What the fenced sub-select in `meta` projects for this field — evaluated once per row. */
+      proj: Prisma.Sql;
+      /** Reads that projection, never the underlying column. Same for `col`. */
+      test: Prisma.Sql;
+      col: Prisma.Sql;
+    };
+    /**
+     * A text field: stripped once into `x.<field>`, then both matched and snippeted from there.
+     * The predicate and the snippet source being one expression is also what keeps them agreeing —
+     * strpos() looks for the stripped query, so a snippet cut from the raw column would miss and
+     * hand back the head of a 7 KB body instead of the match.
+     */
+    const textField = (field: Field['field'], col: Prisma.Sql): Field => ({
+      field,
+      proj: Prisma.sql`${stripMarks(col)} AS ${Prisma.raw(`"${field}"`)}`,
+      test: Prisma.sql`${Prisma.raw(`x."${field}"`)} ILIKE ${pattern}`,
+      col: Prisma.raw(`x."${field}"`),
+    });
+    const fields: Field[] = [
       // Base62 is decoded in normalizeSearchQuery; comparing the resulting UUID lets the primary
       // key resolve the exact child session without adding a database-side Base62 implementation.
       // Workspaces/logs also abbreviate UUIDs to their first 8–12 hex characters, handled by the
       // second predicate. An abbreviation's match text is the full UUID so a collision is visible.
       {
         field: 'id',
-        col: Prisma.sql`CASE
-          WHEN s.id = ${norm?.sessionId ?? null}::uuid THEN ${norm?.raw ?? ''}
-          ELSE s.id::text
-        END`,
-        test: Prisma.sql`(
-          s.id = ${norm?.sessionId ?? null}::uuid
-          OR replace(s.id::text, '-', '') LIKE ${norm?.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null}
-        )`,
+        proj: Prisma.sql`(
+            s.id = ${norm?.sessionId ?? null}::uuid
+            OR replace(s.id::text, '-', '') LIKE ${norm?.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null}
+          ) AS "id_hit",
+          CASE
+            WHEN s.id = ${norm?.sessionId ?? null}::uuid THEN ${norm?.raw ?? ''}
+            ELSE s.id::text
+          END AS "id_text"`,
+        test: Prisma.sql`x."id_hit"`,
+        col: Prisma.sql`x."id_text"`,
       },
-      { field: 'title', col: Prisma.sql`s.title`, test: Prisma.sql`s.title ILIKE ${pattern}` },
+      textField('title', Prisma.sql`s.title`),
       ...(norm?.searchContent
         ? [
-            {
-              field: 'prompt' as const,
-              col: Prisma.sql`s.prompt`,
-              test: Prisma.sql`s.prompt ILIKE ${pattern}`,
-            },
-            {
-              field: 'reply' as const,
-              col: Prisma.sql`s.last_assistant_text`,
-              test: Prisma.sql`s.last_assistant_text ILIKE ${pattern}`,
-            },
+            textField('prompt', Prisma.sql`s.prompt`),
+            textField('reply', Prisma.sql`s.last_assistant_text`),
           ]
         : []),
-      { field: 'branch', col: Prisma.sql`s.branch`, test: Prisma.sql`s.branch ILIKE ${pattern}` },
-      { field: 'agent', col: Prisma.sql`a.name`, test: Prisma.sql`a.name ILIKE ${pattern}` },
-      { field: 'task', col: Prisma.sql`t.title`, test: Prisma.sql`t.title ILIKE ${pattern}` },
+      textField('branch', Prisma.sql`s.branch`),
+      textField('agent', Prisma.sql`a.name`),
+      textField('task', Prisma.sql`t.title`),
     ];
     const matchFieldCase = Prisma.sql`CASE ${Prisma.join(
       fields.map((f) => Prisma.sql`WHEN ${f.test} THEN ${f.field}::text`),
@@ -961,6 +1008,7 @@ export class SessionsService {
       ' ',
     )} END`;
     const retest = Prisma.join(fields.map((f) => f.test), ' OR ');
+    const projection = Prisma.join(fields.map((f) => f.proj), ',\n          ');
 
     // The session-side predicate, likewise chosen by the floor. Above it, the long bodies are in
     // play and the predicate is written against the exact expression session_search_trgm indexes.
@@ -970,13 +1018,16 @@ export class SessionsService {
     // 4.4ms and returns 51 — see CONTENT_MIN_CHARS.
     const sessionPredicate = norm?.searchContent
       ? Prisma.sql`
-          (
+          ${stripMarks(Prisma.sql`
             coalesce(s.title, '') || ' ' ||
             coalesce(s.prompt, '') || ' ' ||
             coalesce(s.last_assistant_text, '') || ' ' ||
             coalesce(s.branch, '')
-          ) ILIKE ${pattern}`
-      : Prisma.sql`(s.title ILIKE ${pattern} OR s.branch ILIKE ${pattern})`;
+          `)} ILIKE ${pattern}`
+      : Prisma.sql`(
+          ${stripMarks(Prisma.sql`s.title`)} ILIKE ${pattern}
+          OR ${stripMarks(Prisma.sql`s.branch`)} ILIKE ${pattern}
+        )`;
 
     // Rank buckets first (a title hit beats a hit buried in a message), then the list's own
     // recency order inside each bucket — for switching sessions "the one I touched most
@@ -1017,21 +1068,36 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.workspace_id IN (SELECT id FROM workspace WHERE name ILIKE ${norm.pattern})
+              AND s.workspace_id IN (
+                SELECT id FROM workspace WHERE ${stripMarks(Prisma.sql`name`)} ILIKE ${norm.pattern}
+              )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.task_id IN (SELECT id FROM task WHERE title ILIKE ${norm.pattern})
+              AND s.task_id IN (
+                SELECT id FROM task WHERE ${stripMarks(Prisma.sql`title`)} ILIKE ${norm.pattern}
+              )
           ),
           meta AS (
             SELECT
-              s.id AS session_id,
+              x.session_id,
               ${matchFieldCase} AS match_field,
               ${matchTextCase}  AS match_text
-            FROM meta_ids mi
-            JOIN session s ON s.id = mi.id
-            LEFT JOIN workspace a ON a.id = s.workspace_id
-            LEFT JOIN task  t ON t.id = s.task_id
+            FROM (
+              SELECT
+                s.id AS session_id,
+                ${projection}
+              FROM meta_ids mi
+              JOIN session s ON s.id = mi.id
+              LEFT JOIN workspace a ON a.id = s.workspace_id
+              LEFT JOIN task  t ON t.id = s.task_id
+              -- OFFSET 0 here is an optimization fence, not leftover paging: it stops the planner
+              -- from flattening this sub-select into the CASEs above, which would re-run every
+              -- strip once per branch it appears in — up to fifteen rebuilds of the same multi-KB
+              -- body per row. Measured 346ms with the fence against 584ms without, for a word
+              -- matching 2k sessions. Deleting it costs that silently.
+              OFFSET 0
+            ) x
             -- Concatenating the columns with a space invents adjacencies that don't exist: a
             -- query spanning the seam ("foo bar" where the title ends in "foo" and the prompt
             -- opens with "bar") matches the indexed expression while matching no actual field.
@@ -1763,12 +1829,13 @@ export class SessionsService {
           -- the JSON *encoding*, so a query containing a quote or a newline won't match inside
           -- them — acceptable for what people actually search for (a path, a name, a phrase).
           --
-          -- Asterisks and backticks are dropped (see stripEmphasis, which strips the query the
-          -- same way) because what is stored is markdown source and what the user is searching
-          -- for is what they read: "the merge button" has to find "the **merge** button", and
-          -- 9.5k assistant events here carry bold. Underscore is deliberately kept — it is a
-          -- character in half the identifiers anyone would search for, not decoration.
-          regexp_replace(
+          -- Asterisks and backticks are dropped (stripMarks, which the ⌘K palette shares and
+          -- stripEmphasis strips the query with) because what is stored is markdown source and
+          -- what the user is searching for is what they read: "the merge button" has to find
+          -- "the **merge** button", and 9.5k assistant events here carry bold. Underscore is
+          -- deliberately kept — it is a character in half the identifiers anyone would search
+          -- for, not decoration.
+          ${stripMarks(Prisma.sql`
             concat_ws(' ',
               payload->>'text',
               payload->>'name',
@@ -1777,8 +1844,8 @@ export class SessionsService {
                    THEN payload->>'content'
                    ELSE (payload->'content')::text END,
               payload->>'message'
-            ), '[*\`]', '', 'g'
-          ) AS text
+            )
+          `)} AS text
         FROM run_event
         WHERE session_id = ${id}::uuid
           AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
