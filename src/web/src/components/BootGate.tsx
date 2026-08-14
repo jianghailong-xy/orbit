@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useMatch } from 'react-router-dom';
 import { getToken } from '../api';
-import { decodeId } from '../lib/idCodec';
+import { routeId } from '../lib/idCodec';
 import {
   workspacesQuery,
   meQuery,
@@ -74,9 +74,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // The deep-link the very first paint must cover, latched on mount so later in-app
   // navigations (and the background refetches) never re-gate the splash.
   const [deep] = useState<DeepLink | null>(() => {
-    const sid = sessionMatch?.params.id ? decodeId(sessionMatch.params.id) : null;
+    const sid = sessionMatch?.params.id ? routeId(sessionMatch.params.id) : null;
     if (sid) return { kind: 'session', id: sid };
-    const aid = workspaceMatch?.params.id ? decodeId(workspaceMatch.params.id) : null;
+    const aid = workspaceMatch?.params.id ? routeId(workspaceMatch.params.id) : null;
     if (aid) return { kind: 'agent', id: aid };
     return null;
   });

@@ -223,8 +223,12 @@ describe('what a row says about being kept current', () => {
 });
 
 const runner = (over: Partial<Runner>): Runner => ({
-  // A real UUID: the card links to /runners/<base62>, which only encodes one.
-  id: '019fc086-c7c7-7c92-8215-778ad8a6280a',
+  // The public id, because that is what an opted-in client is handed (`X-Orbit-Id-Format:
+  // public`). It has to match the spelling `routeId` produces from `?runner=…`, or the
+  // "came here for this row" focus silently marks nothing — which is the whole failure mode
+  // the flip to one internal spelling exists to remove.
+  // = uuidToBase62('019fc086-c7c7-7c92-8215-778ad8a6280a')
+  id: '33zx0JhRhJo8rd25d3qAM',
   name: 'mac-studio',
   online: true,
   ...over,

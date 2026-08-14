@@ -31,7 +31,7 @@ import {
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, revokeWorkspacePermissionRule } from '../api';
-import { decodeId, encodeId } from '../lib/idCodec';
+import { routeId, encodeId } from '../lib/idCodec';
 import { providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
@@ -80,7 +80,7 @@ const fmtTime = (d?: string | null): string =>
 // conversation belongs to a workspace, reached via each workspace's "对话" button.
 export function RunnerDetailPage() {
   // /runners/<base62> — decode the route param to the runner's UUID.
-  const runnerId = decodeId(useParams().id);
+  const runnerId = routeId(useParams().id);
   const navigate = useNavigate();
   const { modal } = AntdApp.useApp();
   const message = useToast();

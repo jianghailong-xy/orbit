@@ -26,7 +26,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { decodeId } from '../lib/idCodec';
+import { routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
@@ -132,12 +132,13 @@ export function TaskListView() {
   };
 
   // /lists/<base62> renders a single user list instead of all tasks: fetch that list
-  // and render its tasks (GET /task-lists/:id includes them). decodeId -> the UUID.
+  // and render its tasks (GET /task-lists/:id includes them). routeId normalizes the param to
+  // the public id the rest of the app holds; the server takes either spelling in the path.
   // "/lists/none" is the virtual "未分组" view — tasks with no list. It isn't a real
   // list id, so skip decoding and keep listId null; the all-tasks data is filtered below.
   const listMatch = useMatch('/lists/:key');
   const isUnlisted = listMatch?.params.key === 'none';
-  const listId = listMatch && !isUnlisted ? decodeId(listMatch.params.key) : null;
+  const listId = listMatch && !isUnlisted ? routeId(listMatch.params.key) : null;
   const isListView = !!listId;
 
   // The all-tasks and unlisted views use cursor pagination. Status/title/list filters are
@@ -184,9 +185,9 @@ export function TaskListView() {
       (q.state.data?.tasks ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
   });
   // A /tasks/:id deep link (e.g. a session header's "回到任务") opens that task's detail
-  // panel; decodeId -> the UUID TaskDetailPanel fetches by.
+  // panel; routeId normalizes it to the public id TaskDetailPanel fetches by.
   const taskMatch = useMatch('/tasks/:id');
-  const deepTaskId = taskMatch ? decodeId(taskMatch.params.id) : null;
+  const deepTaskId = taskMatch ? routeId(taskMatch.params.id) : null;
   // Switching lists/sections closes any open panel; a deep link opens its task instead.
   useEffect(() => setSelectedTaskId(deepTaskId), [listId, loc.pathname, deepTaskId]);
   // The selection is scoped to what's currently visible; reset it whenever that set

@@ -16,9 +16,30 @@ export function encodeId(id: string): string {
   return uuidToBase62(toUuid(id));
 }
 
-/** Route param (base62 public id or raw UUID) -> UUID. Falls back to the raw
- *  value if it isn't decodable, so a malformed link degrades to "not found"
- *  rather than crashing the view. */
+/**
+ * Route param (either spelling) -> the app's canonical internal id: the public id.
+ *
+ * The web asks the server for `X-Orbit-Id-Format: public`, so every id it holds — from a REST
+ * payload, from an SSE frame, from a link it built — is base62. This is the one remaining place a
+ * *different* spelling can enter: a bookmark from before the flip, or a link someone pasted with a
+ * raw UUID in it. Normalizing here means those keep working and, more importantly, that the ~100
+ * `x.id === y` comparisons scattered through the views never have to care — both sides are already
+ * the same spelling, so none of them needed touching.
+ *
+ * Falls back to the raw value if it is neither spelling, so a malformed link degrades to "not
+ * found" rather than crashing the view.
+ */
+export function routeId(param: string | null | undefined): string | null {
+  if (!param) return null;
+  try {
+    return encodeId(param);
+  } catch {
+    return param;
+  }
+}
+
+/** Either spelling -> UUID. Now only for storage keys that must stay stable across the flip
+ *  (see transcriptStore); route params go through `routeId` instead. */
 export function decodeId(param: string | null | undefined): string | null {
   if (!param) return null;
   try {

@@ -131,6 +131,12 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
     headers: {
       ...init.headers,
       'x-orbit-client': `web/${__APP_VERSION__}`,
+      // Ask for ids in the spelling this app actually uses. Every id the web holds — route param,
+      // REST payload, SSE frame — is then the same base62 public id, which is what lets the id
+      // comparisons all over the views stay as they are. The SSE streams opt in via a query
+      // parameter instead (EventSource cannot send headers); both have to agree or one session
+      // ends up with two spellings inside one page.
+      'x-orbit-id-format': 'public',
       ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
     },
   });
@@ -204,11 +210,13 @@ export class ApiError extends Error {
  *  user expands it. Sent on both the page fetch and the SSE so a card looks the same either way. */
 export const MAX_EVENT_PAYLOAD = 2048;
 
-/** SSE URL for a session's event stream (token in query, since EventSource has no headers). */
+/** SSE URL for a session's event stream (token AND id-format in query, since EventSource has no
+ *  headers — `idFormat` is the same opt-in `authedFetch` sends as a header, so the stream and the
+ *  REST payloads name a session the same way). */
 export const sessionEventsUrl = (sessionId: string, sinceSeq?: number): string => {
   const tok = encodeURIComponent(getToken() ?? '');
   const since = sinceSeq && sinceSeq > 0 ? `&sinceSeq=${sinceSeq}` : '';
-  return `/api/sessions/${sessionId}/events?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}`;
+  return `/api/sessions/${sessionId}/events?access_token=${tok}${since}&maxPayload=${MAX_EVENT_PAYLOAD}&idFormat=public`;
 };
 
 export interface EventPageEvent {

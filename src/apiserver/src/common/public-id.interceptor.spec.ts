@@ -10,9 +10,12 @@ const B62 = uuidToBase62(UUID);
 
 /** Run a response body through the interceptor the way Nest does. `asking` is a client that opted
  *  in to Phase 3's `id`-is-the-public-id format. */
-function through<T>(body: T, opts: { asking?: boolean } = {}): Promise<T> {
+function through<T>(body: T, opts: { asking?: boolean | 'query' } = {}): Promise<T> {
   const interceptor = new PublicIdInterceptor();
-  const request = { headers: opts.asking ? { 'x-orbit-id-format': 'public' } : {} };
+  const request = {
+    headers: opts.asking === true ? { 'x-orbit-id-format': 'public' } : {},
+    query: opts.asking === 'query' ? { idFormat: 'public' } : {},
+  };
   const context = { switchToHttp: () => ({ getRequest: () => request }) };
   return lastValueFrom(
     interceptor.intercept(context as never, { handle: () => of(body) } as never),
@@ -142,4 +145,17 @@ test('a fence token round-trips through the pipe unchanged', async () => {
 test('a non-UUID id is left alone even when the client asked', async () => {
   const out = await through({ id: 'toolu_01ABC' }, { asking: true });
   assert.equal(out.id, 'toolu_01ABC');
+});
+
+// EventSource cannot send headers — that is why the SSE routes already take their bearer token in
+// the query. Without a query form of the opt-in, a client would get base62 from REST and UUIDs
+// from its own event stream: two spellings for one session inside one page.
+test('the opt-in is also accepted as a query parameter, for EventSource', async () => {
+  const out = await through({ data: { seq: 7, sessionId: UUID } }, { asking: 'query' });
+  assert.equal((out.data as Record<string, unknown>).sessionId, B62);
+});
+
+test('a request that asks neither way is untouched', async () => {
+  const out = await through({ id: UUID });
+  assert.equal(out.id, UUID);
 });

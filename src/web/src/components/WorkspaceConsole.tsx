@@ -3,7 +3,7 @@ import { Button, Result, Spin } from 'antd';
 import { useRef } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { decodeId } from '../lib/idCodec';
+import { routeId } from '../lib/idCodec';
 import { sessionQuery } from '../lib/queries';
 import { WorkspaceView } from './WorkspaceView';
 
@@ -29,10 +29,10 @@ export function WorkspaceConsole() {
   const agentsMatch = useMatch('/agents/:id/*');
   const workspaceMatch = workspacesMatch ?? agentsMatch;
   const sessionMatch = useMatch('/sessions/:id');
-  const selectedSessionId = sessionMatch ? decodeId(sessionMatch.params.id) : null;
+  const selectedSessionId = sessionMatch ? routeId(sessionMatch.params.id) : null;
   // A /sessions/:id deep link carries no runner — fetch the session to find it.
   const sessionQ = useQuery(sessionQuery(selectedSessionId));
-  const openWorkspaceId = workspaceMatch ? decodeId(workspaceMatch.params.id) : null;
+  const openWorkspaceId = workspaceMatch ? routeId(workspaceMatch.params.id) : null;
   const openWorkspace = (workspaces.data ?? []).find((a: any) => a.id === openWorkspaceId) ?? null;
   // Prefer the workspace's runner; fall back to treating the id as a runner so older
   // /workspaces/<runner> links still resolve, then to the open session's runner.

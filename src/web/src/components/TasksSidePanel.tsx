@@ -25,7 +25,7 @@ import type {
   SlashCommandInfo,
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
-import { decodeId, encodeId } from '../lib/idCodec';
+import { routeId, encodeId } from '../lib/idCodec';
 import { workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
@@ -148,8 +148,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // `agents` is the pre-rename URL people still have bookmarked.
   const workspacesMatch = useMatch('/workspaces/:id/*');
   const agentsMatch = useMatch('/agents/:id/*');
-  const openWorkspaceId = decodeId((workspacesMatch ?? agentsMatch)?.params.id);
-  const sessionId = decodeId(useMatch('/sessions/:id')?.params.id);
+  const openWorkspaceId = routeId((workspacesMatch ?? agentsMatch)?.params.id);
+  const sessionId = routeId(useMatch('/sessions/:id')?.params.id);
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
     // Keep the previous session's data while the next one loads so activeWorkspaceId

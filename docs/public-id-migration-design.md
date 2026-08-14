@@ -107,13 +107,27 @@ schema 里有 90 个 `@db.Uuid` 列、37 个不同字段名。**但"是 UUID 列
 
 好处是这条路没有"翻转日":每端各自准备好各自 opt-in,出问题只回滚那一端,不需要全局闸门,也不需要赌。
 
-**客户端 opt-in 的前提(未做,每端各自一次改造):** 不是加个 header 就行。web 目前把 UUID 当内部规范拼写——路由参数经 `decodeId` 归一成 UUID,再与 API 给的 `id` 比较。一旦 opt-in,`s.id` 变 base62 而 `selectedId` 仍是 UUID,这些比较会**静默**恒假:
+**web 已 opt-in(本轮完成)。**
+
+做法不是逐个改比较,而是**把 web 的内部规范拼写整体换成 public id**——这样路由参数和 API id 两侧自然同拼写,那 103 处比较**一处未动**:
+
+- `routeId()` 取代路由边界上的 `decodeId()`(12 处):把参数归一成 public id(旧的裸 UUID 书签照样能用)
+- 三条传输全部 opt-in:REST 发头;**两条 SSE 发 query**
+- `decodeId` 保留,只服务于必须跨翻转保持稳定的存储键(`transcriptStore`)
+
+**服务端为此补了 query 形式的 opt-in。** `EventSource` 根本设不了头(这也是 token 被迫走 `?access_token=` 的原因)。没有它,opt-in 的 web 会从 REST 拿到 base62、从自己的事件流拿到 UUID——一个页面里同一个 session 两种拼写,正是这次迁移要消灭的状态。
+
+⚠️ **部署耦合(重要):** web 的 opt-in **不能先于**服务端的 `idFormat` query 支持上线。当前线上的 apiserver 只有 header 形式,没有 query 形式——两者必须同批部署。测试 `the public-id opt-in covers every transport` 钉住了 REST 与 SSE 必须成对,但钉不住跨服务的版本顺序。
+
+**原生端与 runner:建议不 opt-in。** 它们的 id 只有一个来源(服务器)、也没有地址栏,翻转拼写对它们零收益、纯风险;存储键在 phase 2 已经与拼写无关了。**只有 web 从中受益,因为只有 web 有 URL**——这恰好是"逐客户端 opt-in"比"全局翻转"对的地方。
+
+**原先记录的前提(现已解决):** 不是加个 header 就行。web 目前把 UUID 当内部规范拼写——路由参数经 `decodeId` 归一成 UUID,再与 API 给的 `id` 比较。一旦 opt-in,`s.id` 变 base62 而 `selectedId` 仍是 UUID,这些比较会**静默**恒假:
 
 - `WorkspaceView.tsx:1255` `sessions.find((s) => s.id === selectedId)`
 - `WorkspaceView.tsx:1286` `sessionDetailQ.data?.id === selectedId`
 - `WorkspaceConsole.tsx:36` `workspaces.find((a) => a.id === openWorkspaceId)`
 
-全库 103 处 id 比较,其中 20 处涉及路由派生的 id。所以每端 opt-in 前必须先选定**一种**内部拼写并把两侧都归一进去。web 若选 base62,就是路由参数不再 decode;若继续选 UUID,那 opt-in 本身就没有意义(见 phase 2 的结论)。**这一步不能盲改,得单独一次带回归的改造。**
+全库 103 处 id 比较,其中 20 处涉及路由派生的 id。选定 base62 为内部拼写后,这 20 处两侧同时变成 base62,**因此一处都不用改**——`RunnerEngines.test.tsx` 的 fixture 是唯一暴露出来的,因为它绕过服务器直接注入 UUID id,正好演示了拼写不一致时故障有多安静:焦点行什么都不标,不报错。
 
 验证(已做):默认形状不变、opt-in 后 `id`/嵌套/数组均翻转且 `toUuid(id)` 仍指向同一行、非 UUID 值不被改写,以及 doc 要求的那条——**opt-in 状态下围栏令牌逐字节不变、往返穿过 `::uuid` 路径后仍相等**。
 

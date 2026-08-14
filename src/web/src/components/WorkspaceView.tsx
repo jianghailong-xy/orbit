@@ -47,7 +47,7 @@ import {
   useState,
 } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
-import { decodeId, encodeId } from '../lib/idCodec';
+import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
@@ -847,7 +847,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The picked session lives in the URL (/sessions/:id, a base62 public id) so
   // it deep-links and survives a refresh; selecting a session = navigation.
   // Decode once here; everything downstream works with the raw session UUID.
-  const selectedId = decodeId(useMatch('/sessions/:id')?.params.id);
+  const selectedId = routeId(useMatch('/sessions/:id')?.params.id);
   // Latest selectedId, readable from async callbacks (loadOlder) to bail if the user has
   // switched sessions since the request was issued — so a late page never lands in the wrong
   // transcript. Assigning during render is safe for a "current value" ref.
@@ -873,7 +873,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const workspacesMatch = useMatch('/workspaces/:id/*');
   const agentsMatch = useMatch('/agents/:id/*');
   const workspaceMatch = workspacesMatch ?? agentsMatch;
-  const lockedWorkspaceId = decodeId(workspaceMatch?.params.id);
+  const lockedWorkspaceId = routeId(workspaceMatch?.params.id);
   const composingRoute = (workspaceMatch?.params['*'] ?? '') === 'new';
   // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
   // choices (the auto-open redirect, the in-pane back button) key off this.

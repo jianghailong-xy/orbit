@@ -105,8 +105,19 @@ function addTwins(value: unknown, replaceSource: boolean, depth = 0): unknown {
  */
 const FORMAT_HEADER = 'x-orbit-id-format';
 
-function wantsPublicIds(request: { headers?: Record<string, unknown> } | undefined): boolean {
-  return request?.headers?.[FORMAT_HEADER] === 'public';
+/** The same opt-in, as a query parameter, for the one transport that cannot send a header:
+ *  `EventSource` has no headers at all, which is why the SSE routes already carry their bearer
+ *  token in the query (`?access_token=`). Without this a client that opted in would get base62
+ *  ids from REST and UUIDs from its own event stream — two spellings for one session inside one
+ *  page, which is the exact mixed-spelling state this migration exists to avoid. */
+const FORMAT_QUERY = 'idFormat';
+
+function wantsPublicIds(
+  request: { headers?: Record<string, unknown>; query?: Record<string, unknown> } | undefined,
+): boolean {
+  return (
+    request?.headers?.[FORMAT_HEADER] === 'public' || request?.query?.[FORMAT_QUERY] === 'public'
+  );
 }
 
 @Injectable()

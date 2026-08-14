@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Tag } from 'antd';
 import type { LoginEngine, RunnerEngineHealth, RunnerInstallState } from '@orbit/shared';
 import { api } from '../api';
-import { decodeId, encodeId } from '../lib/idCodec';
+import { routeId, encodeId } from '../lib/idCodec';
 import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
 import { updateNoteOf } from '../lib/runnerEngines';
@@ -411,7 +411,7 @@ export function RunnerEngines() {
   // hidden — arriving opens that card, and the open sticks, because it is the same edit they'd
   // have made by hand.
   const [params] = useSearchParams();
-  const focusRunner = decodeId(params.get('runner'));
+  const focusRunner = routeId(params.get('runner'));
   const engineParam = params.get('engine');
   const focusEngine = ENGINES.find((e) => e === engineParam) ?? null;
   useEffect(() => {
