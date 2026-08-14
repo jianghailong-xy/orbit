@@ -146,9 +146,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // a bare `/workspaces/:id` matches exactly and would miss /new, falling back to the
   // "Runners" highlight. params.id stays the workspace id under the splat.
   // `agents` is the pre-rename URL people still have bookmarked.
-  const openWorkspaceId = decodeId(
-    (useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*'))?.params.id,
-  );
+  const workspacesMatch = useMatch('/workspaces/:id/*');
+  const agentsMatch = useMatch('/agents/:id/*');
+  const openWorkspaceId = decodeId((workspacesMatch ?? agentsMatch)?.params.id);
   const sessionId = decodeId(useMatch('/sessions/:id')?.params.id);
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),

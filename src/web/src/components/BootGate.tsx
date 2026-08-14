@@ -58,7 +58,9 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const sessionMatch = useMatch('/sessions/:id');
   // Two patterns, one meaning: `agents` is the pre-rename URL people still have bookmarked.
-  const workspaceMatch = useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*');
+  const workspacesMatch = useMatch('/workspaces/:id/*');
+  const agentsMatch = useMatch('/agents/:id/*');
+  const workspaceMatch = workspacesMatch ?? agentsMatch;
   const hasToken = !!getToken();
   const onBypass = isBypass(loc.pathname);
   // Signed-out boot on a real route: the deployment may have zero users (fresh install),

@@ -870,7 +870,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // to it and the session list is filtered to that workspace's conversations.
   // /workspaces/<id>/new is the "compose a new session" draft state (the splat is 'new').
   // Two patterns, one meaning: `agents` is the pre-rename URL people still have bookmarked.
-  const workspaceMatch = useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*');
+  const workspacesMatch = useMatch('/workspaces/:id/*');
+  const agentsMatch = useMatch('/agents/:id/*');
+  const workspaceMatch = workspacesMatch ?? agentsMatch;
   const lockedWorkspaceId = decodeId(workspaceMatch?.params.id);
   const composingRoute = (workspaceMatch?.params['*'] ?? '') === 'new';
   // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout

@@ -25,7 +25,9 @@ export function WorkspaceConsole() {
   // /workspaces/<workspace> names the workspace (its runner is derived below); /sessions/<id>
   // resolves the runner from the session behind it.
   // Two patterns, one meaning: `agents` is the pre-rename URL people still have bookmarked.
-  const workspaceMatch = useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*');
+  const workspacesMatch = useMatch('/workspaces/:id/*');
+  const agentsMatch = useMatch('/agents/:id/*');
+  const workspaceMatch = workspacesMatch ?? agentsMatch;
   const sessionMatch = useMatch('/sessions/:id');
   const selectedSessionId = sessionMatch ? decodeId(sessionMatch.params.id) : null;
   // A /sessions/:id deep link carries no runner — fetch the session to find it.
