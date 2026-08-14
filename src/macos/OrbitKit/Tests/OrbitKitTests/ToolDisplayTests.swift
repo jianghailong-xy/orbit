@@ -121,11 +121,27 @@ final class ToolDisplayTests: XCTestCase {
         XCTAssertEqual(d.tone, .plain)
     }
 
-    func testErrorStatusAutoOpens() {
+    // A failure is the loudest thing a call can do and the least proportionate to unfold: what has
+    // the lines is the input, not the reason. It stays folded like any other settled call, with the
+    // red glyph on the row carrying the news.
+    func testErrorStatusStaysFolded() {
         let d = ToolDisplay.describe(name: "Read",
                                      input: obj(["file_path": .string("/a/x")]),
                                      status: .error, id: "t1")
-        XCTAssertTrue(d.autoOpen)
+        XCTAssertFalse(d.autoOpen)
+    }
+
+    // ...but a plan, a question and a `!`-shell command still open themselves: each is the point of
+    // the turn rather than a step inside it.
+    func testPlansAndQuestionsStillAutoOpen() {
+        let plan = ToolDisplay.describe(name: "ExitPlanMode",
+                                        input: obj(["plan": .string("# Do the thing")]),
+                                        status: .error, id: "t1")
+        let question = ToolDisplay.describe(name: "AskUserQuestion",
+                                            input: obj(["questions": .array([])]),
+                                            status: .error, id: "t2")
+        XCTAssertTrue(plan.autoOpen)
+        XCTAssertTrue(question.autoOpen)
     }
 
     func testNumberedAssignsGutterLineNumbers() {

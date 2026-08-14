@@ -54,7 +54,9 @@ public struct ToolDisplay: Equatable, Sendable {
     public let path: PathParts?      // a file path → bold filename + dimmed parent dir
     public let meta: String?         // trailing badge (line range, edit count)
     public let body: ToolBody
-    /// Whether the card should start expanded (plans, questions, shell, errors).
+    /// Whether the card should start expanded (plans, questions, shell). A failure deliberately
+    /// does not: the input is what has the lines, the reason is four, and on a phone one failed
+    /// heredoc fills the screen. The red glyph on the folded row says it happened; a tap says why.
     public let autoOpen: Bool
 
     public var hasBody: Bool { body != .none }
@@ -65,7 +67,6 @@ public struct ToolDisplay: Equatable, Sendable {
     /// `!`-shell command is tagged `shell-…` by the runner and rendered as a distinct "Shell" card.
     public static func describe(name: String, input: JSONValue, status: ToolStatus, id: String) -> ToolDisplay {
         let isShell = id.hasPrefix("shell-")
-        let isError = status == .error
 
         if isShell {
             return ToolDisplay(label: "Shell", symbol: "terminal", tone: .exec,
@@ -81,21 +82,21 @@ public struct ToolDisplay: Equatable, Sendable {
             return ToolDisplay(label: "Bash", symbol: "terminal", tone: .exec,
                                summary: bashSummary.isEmpty ? nil : bashSummary, summaryMono: prose.isEmpty,
                                path: nil, meta: nil,
-                               body: .command(command), autoOpen: isError)
+                               body: .command(command), autoOpen: false)
 
         case "Read":
             return ToolDisplay(label: "Read", symbol: "doc.text", tone: .read,
                                summary: nil, summaryMono: false,
                                path: input["file_path"]?.stringValue.map(splitPath),
                                meta: lineMeta(offset: input["offset"]?.intValue, limit: input["limit"]?.intValue),
-                               body: .none, autoOpen: isError)
+                               body: .none, autoOpen: false)
 
         case "Write":
             let content = input["content"]?.stringValue
             return ToolDisplay(label: "Write", symbol: "doc.badge.plus", tone: .write,
                                summary: nil, summaryMono: false,
                                path: input["file_path"]?.stringValue.map(splitPath), meta: nil,
-                               body: (content?.isEmpty == false) ? .code(content!) : .none, autoOpen: isError)
+                               body: (content?.isEmpty == false) ? .code(content!) : .none, autoOpen: false)
 
         case "Edit":
             let hunk = collapseCtx(lineDiff(input["old_string"]?.stringValue ?? "",
@@ -103,7 +104,7 @@ public struct ToolDisplay: Equatable, Sendable {
             return ToolDisplay(label: "Edit", symbol: "pencil", tone: .write,
                                summary: nil, summaryMono: false,
                                path: input["file_path"]?.stringValue.map(splitPath), meta: nil,
-                               body: .diff([hunk]), autoOpen: isError)
+                               body: .diff([hunk]), autoOpen: false)
 
         case "MultiEdit":
             var edits: [JSONValue] = []
@@ -115,44 +116,44 @@ public struct ToolDisplay: Equatable, Sendable {
                                summary: nil, summaryMono: false,
                                path: input["file_path"]?.stringValue.map(splitPath),
                                meta: "\(edits.count) edits",
-                               body: hunks.isEmpty ? .none : .diff(hunks), autoOpen: isError)
+                               body: hunks.isEmpty ? .none : .diff(hunks), autoOpen: false)
 
         case "Glob":
             return ToolDisplay(label: "Glob", symbol: "folder", tone: .read,
                                summary: joinSummary([input["pattern"], input["path"]]), summaryMono: true,
-                               path: nil, meta: nil, body: .none, autoOpen: isError)
+                               path: nil, meta: nil, body: .none, autoOpen: false)
 
         case "Grep":
             return ToolDisplay(label: "Grep", symbol: "magnifyingglass", tone: .read,
                                summary: joinSummary([input["pattern"], input["path"], input["glob"]]), summaryMono: true,
-                               path: nil, meta: nil, body: .none, autoOpen: isError)
+                               path: nil, meta: nil, body: .none, autoOpen: false)
 
         case "TodoWrite":
             return ToolDisplay(label: "Todos", symbol: "checklist", tone: .plain,
                                summary: nil, summaryMono: false, path: nil, meta: nil,
-                               body: todoBody(input["todos"]), autoOpen: isError)
+                               body: todoBody(input["todos"]), autoOpen: false)
 
         case "WebFetch":
             return ToolDisplay(label: "WebFetch", symbol: "globe", tone: .read,
                                summary: input["url"]?.stringValue, summaryMono: true,
-                               path: nil, meta: nil, body: .none, autoOpen: isError)
+                               path: nil, meta: nil, body: .none, autoOpen: false)
 
         case "WebSearch":
             return ToolDisplay(label: "WebSearch", symbol: "magnifyingglass", tone: .read,
                                summary: input["query"]?.stringValue, summaryMono: false,
-                               path: nil, meta: nil, body: .none, autoOpen: isError)
+                               path: nil, meta: nil, body: .none, autoOpen: false)
 
         case "ToolSearch":
             return ToolDisplay(label: "ToolSearch", symbol: "puzzlepiece.extension", tone: .read,
                                summary: input["query"]?.stringValue, summaryMono: true,
-                               path: nil, meta: nil, body: .none, autoOpen: isError)
+                               path: nil, meta: nil, body: .none, autoOpen: false)
 
         case "Task", "Agent":
             let sub = input["subagent_type"]?.stringValue
             let prompt = input["prompt"]?.stringValue
             return ToolDisplay(label: sub.map { "\(name) · \($0)" } ?? name, symbol: "rectangle.3.group", tone: .agent,
                                summary: input["description"]?.stringValue, summaryMono: false, path: nil, meta: nil,
-                               body: (prompt?.isEmpty == false) ? .markdown(prompt!) : .none, autoOpen: isError)
+                               body: (prompt?.isEmpty == false) ? .markdown(prompt!) : .none, autoOpen: false)
 
         case "ExitPlanMode":
             let plan = input["plan"]?.stringValue
@@ -171,11 +172,11 @@ public struct ToolDisplay: Equatable, Sendable {
                 let label = String(name.dropFirst(5)).replacingOccurrences(of: "__", with: " · ")
                 return ToolDisplay(label: label, symbol: "puzzlepiece.extension", tone: .plain,
                                    summary: kvSummary(input), summaryMono: true,
-                                   path: nil, meta: nil, body: .none, autoOpen: isError)
+                                   path: nil, meta: nil, body: .none, autoOpen: false)
             }
             return ToolDisplay(label: name, symbol: "wrench.and.screwdriver", tone: .plain,
                                summary: kvSummary(input), summaryMono: true,
-                               path: nil, meta: nil, body: .none, autoOpen: isError)
+                               path: nil, meta: nil, body: .none, autoOpen: false)
         }
     }
 

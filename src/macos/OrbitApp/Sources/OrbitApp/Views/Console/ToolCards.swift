@@ -129,10 +129,20 @@ struct ToolCardView: View {
 
     @ViewBuilder private var summary: some View {
         if let p = d.path {
-            (Text(p.base).fontWeight(.semibold).foregroundColor(.primary)
-             + Text(p.dir.isEmpty ? "" : "  \(p.dir)").foregroundColor(.secondary))
-                .font(.orbitMono)
-                .lineLimit(1).truncationMode(.middle)
+            // Two Texts, not one concatenation: `.middle` truncation on the joined string eats the
+            // seam between them — the end of the filename and the start of the parent dir — which
+            // is how `task_cli.go  …/runner-go/` rendered as `task_cli…unner-go/`, extension gone
+            // and the two run together (the dir already carries its own leading `…/`). Split, the
+            // leaf keeps the space it needs and the dir is what gives way, from its head.
+            HStack(spacing: 6) {
+                Text(p.base).fontWeight(.semibold).foregroundColor(.primary)
+                    .lineLimit(1).truncationMode(.tail).layoutPriority(1)
+                if !p.dir.isEmpty {
+                    Text(p.dir).foregroundColor(.secondary)
+                        .lineLimit(1).truncationMode(.head)
+                }
+            }
+            .font(.orbitMono)
         } else if let s = d.summary, !s.isEmpty {
             Text(s)
                 .font(d.summaryMono ? .orbitMono : .orbitLabel)
