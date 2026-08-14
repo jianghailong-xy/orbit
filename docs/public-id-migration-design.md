@@ -1,6 +1,6 @@
 # 设计文档:把 base62 public id 变成 API 的 id(方案 A)
 
-状态:草案 · 2026-08-14 · **Phase 0 / 1 / 2 已落地**(分类清单 · 双向覆盖测试 · 客户端版本上报 · 服务端双发 · 三端拼写无关);phase 3(翻转 `id`)未开始,且**须等 `client_version` 攒够数据** · 全部未部署
+状态:草案 · 2026-08-14 · **Phase 0 / 1 / 2 已落地**(分类清单 · 双向覆盖测试 · 客户端版本上报 · 服务端双发 · 三端拼写无关)· **Phase 3 服务端机制已落地但无客户端启用**(改为逐客户端 opt-in,默认行为完全不变)· phase 4(删 UUID 那半)须等 `client_version` 有数据 · **全部未部署**
 作者:Claude(应 jianghailong 要求)
 影响面:`src/apiserver`(响应侧拦截器 + 字段清单)、`src/web`、`src/ios`、`src/macos`、`src/runner-go`
 关联:`src/apiserver/src/common/public-id.ts`(入方向规则)、`src/apiserver/src/common/workspace-alias.interceptor.ts`(同型迁移的先例)
@@ -99,9 +99,23 @@ schema 里有 90 个 `@db.Uuid` 列、37 个不同字段名。**但"是 UUID 列
 
 验证:web 432/432、runner `go test ./...` 全绿、新增 storageKey/idCodec/runner 三组键归一测试。Swift 的 128 位 base62 解码**用 20000 个随机 id 与 `@orbit/shared` 对拍过**(逐行转写成 JS 比对,零不符,含溢出与前导零边界),但 Swift 本身**未编译**——需要 client CI。
 
-**Phase 3 —— 翻转 `id` 本身**
-`id` 直接是 base62,孪生字段成为过渡别名。
-验证:全量测试 + staging 泡;**必须补一条**:base62 往返穿过 `::uuid` 围栏路径后比较仍然相等。
+**Phase 3 —— 翻转 `id` 本身**·**服务端机制已落地,无客户端启用**
+
+原计划是"等版本下限说明旧构建消失后全局翻转"。改成了**按客户端逐请求选择加入**:客户端发 `X-Orbit-Id-Format: public`,该响应里 `id` 及所有 public id 字段就是 base62;不发的一律照旧。
+
+为什么让客户端声明而不是服务端按 `X-Orbit-Client` 版本推断:版本阈值要配、要解析、要比较,每一步都是一次对"某个没人记得的构建"猜错的机会——一个开了一个月的浏览器标签页是在它主人刷新时升级,不是在某个配置说升级时。**客户端是唯一知道自己能解析什么的一方,所以由它来说。** `client_version` 于是专职回答另一个问题——UUID 那条路什么时候能删——这本来就是它建出来的目的。
+
+好处是这条路没有"翻转日":每端各自准备好各自 opt-in,出问题只回滚那一端,不需要全局闸门,也不需要赌。
+
+**客户端 opt-in 的前提(未做,每端各自一次改造):** 不是加个 header 就行。web 目前把 UUID 当内部规范拼写——路由参数经 `decodeId` 归一成 UUID,再与 API 给的 `id` 比较。一旦 opt-in,`s.id` 变 base62 而 `selectedId` 仍是 UUID,这些比较会**静默**恒假:
+
+- `WorkspaceView.tsx:1255` `sessions.find((s) => s.id === selectedId)`
+- `WorkspaceView.tsx:1286` `sessionDetailQ.data?.id === selectedId`
+- `WorkspaceConsole.tsx:36` `workspaces.find((a) => a.id === openWorkspaceId)`
+
+全库 103 处 id 比较,其中 20 处涉及路由派生的 id。所以每端 opt-in 前必须先选定**一种**内部拼写并把两侧都归一进去。web 若选 base62,就是路由参数不再 decode;若继续选 UUID,那 opt-in 本身就没有意义(见 phase 2 的结论)。**这一步不能盲改,得单独一次带回归的改造。**
+
+验证(已做):默认形状不变、opt-in 后 `id`/嵌套/数组均翻转且 `toUuid(id)` 仍指向同一行、非 UUID 值不被改写,以及 doc 要求的那条——**opt-in 状态下围栏令牌逐字节不变、往返穿过 `::uuid` 路径后仍相等**。
 
 **Phase 4 —— 删掉孪生字段和 `encodeId`/`decodeId`。**
 

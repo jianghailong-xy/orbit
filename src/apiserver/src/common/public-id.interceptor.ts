@@ -68,28 +68,51 @@ function encode(value: unknown): unknown {
   return undefined;
 }
 
-function addTwins(value: unknown, depth = 0): unknown {
+function addTwins(value: unknown, replaceSource: boolean, depth = 0): unknown {
   if (depth > MAX_DEPTH || value === null || typeof value !== 'object') return value;
   if (value instanceof Date || Buffer.isBuffer(value)) return value;
   if (Array.isArray(value)) {
-    for (const item of value) addTwins(item, depth + 1);
+    for (const item of value) addTwins(item, replaceSource, depth + 1);
     return value;
   }
   const obj = value as Record<string, unknown>;
-  for (const key of Object.keys(obj)) addTwins(obj[key], depth + 1);
+  for (const key of Object.keys(obj)) addTwins(obj[key], replaceSource, depth + 1);
   for (const [field, twinName] of TWIN) {
+    if (!(field in obj)) continue;
+    const encoded = encode(obj[field]);
+    if (encoded === undefined) continue;
     // Only ever ADD, and never over a name the handler chose itself — same rule as the alias
     // interceptor, so a route that already computes its own public id keeps what it wrote.
-    if (!(field in obj) || twinName in obj) continue;
-    const encoded = encode(obj[field]);
-    if (encoded !== undefined) obj[twinName] = encoded;
+    if (!(twinName in obj)) obj[twinName] = encoded;
+    // Phase 3: for a client that asked for it, `id` IS the public id. Guarded on a successful
+    // encode, so a field holding something that isn't a UUID (`id: "toolu_01…"`) is never
+    // rewritten into something the caller didn't send.
+    if (replaceSource && encoded !== null) obj[field] = encoded;
   }
   return obj;
 }
 
+/**
+ * Phase 3's opt-in. A client that can read base62 in `id` asks for it per request; everything
+ * else keeps getting the UUID it has always got.
+ *
+ * WHY THE CLIENT DECLARES IT rather than the server inferring it from `X-Orbit-Client`: a version
+ * threshold has to be configured, parsed and compared, and every one of those is a way to guess
+ * wrong about a build nobody can recall — a browser tab open since last month upgrades when its
+ * owner reloads, not when a config says so. The client is the only party that knows what it can
+ * parse, so it is the party that says. `client_version` then answers the *other* question — when
+ * the UUID path can be deleted — which is what it was built for.
+ */
+const FORMAT_HEADER = 'x-orbit-id-format';
+
+function wantsPublicIds(request: { headers?: Record<string, unknown> } | undefined): boolean {
+  return request?.headers?.[FORMAT_HEADER] === 'public';
+}
+
 @Injectable()
 export class PublicIdInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    return next.handle().pipe(map((body) => addTwins(body)));
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const replaceSource = wantsPublicIds(context.switchToHttp().getRequest());
+    return next.handle().pipe(map((body) => addTwins(body, replaceSource)));
   }
 }
