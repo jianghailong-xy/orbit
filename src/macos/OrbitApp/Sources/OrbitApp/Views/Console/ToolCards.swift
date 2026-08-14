@@ -464,8 +464,19 @@ struct ToolGroupCardView: View {
         .overlay(alignment: .leading) { Rectangle().fill(summary.tone.color).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: expanded ? 8 : 0))
         .overlay {
-            if expanded { RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.12), lineWidth: 1) }
+            // Faded, not inserted. An `if` here adds and removes a view, and a structural change is
+            // one more thing for the List to animate at the same moment the row is re-measuring.
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                .opacity(expanded ? 1 : 0)
         }
+        // Open and close instantly. Animating this row means SwiftUI interpolating its contents
+        // while the UICollectionView behind the List re-measures and animates the same cell —
+        // both driving one height, which is the flicker. A single card gets away with it because
+        // its delta is one body; a run of nine cards appearing at once does not. Belt and braces:
+        // the explicit `withAnimation` is gone from the tap AND an animation inherited from an
+        // ancestor's transaction is refused here, so nothing off-screen can re-animate the fold.
+        .animation(nil, value: expanded)
     }
 
     private var row: some View {
@@ -492,9 +503,7 @@ struct ToolGroupCardView: View {
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeOut(duration: 0.12)) { expanded.toggle() }
-        }
+        .onTapGesture { expanded.toggle() }
     }
 
     /// `1 running · 5 succeeded`, plus the call the run is currently defined by — the one still in
