@@ -911,4 +911,11 @@ public struct SessionSearchResponse: Codable, Equatable, Sendable {
     public let q: String
     public let contentSearched: Bool
     public let hits: [SessionSearchHit]
+    /// Every session the query matched, even when `hits` was capped. Optional so a server that
+    /// predates it still decodes; `effectiveTotal` is what the UI should read.
+    public let total: Int?
+
+    /// The match count to display. An older server sends no total, and a page with nothing behind
+    /// it is its own total either way.
+    public var effectiveTotal: Int { total ?? hits.count }
 }

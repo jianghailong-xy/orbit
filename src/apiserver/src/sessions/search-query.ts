@@ -34,6 +34,10 @@ export interface NormalizedSearchQuery {
   raw: string;
   /** `%…%`, with LIKE metacharacters escaped, for the ILIKE comparison. */
   pattern: string;
+  /** `…%` — the same escaped query anchored to the start, for the ranking's prefix bonus. A hit
+   *  whose text BEGINS with the query is a much stronger signal than one that merely contains it
+   *  somewhere, and it is the cheapest match-quality signal available to a substring search. */
+  prefixPattern: string;
   /** A possible full UUID or Base62 public id decoded to the session's database id. Because the
    *  Base62 alphabet overlaps ordinary words, some text also produces a harmless candidate that
    *  simply misses the owner-scoped primary-key lookup. This lets a short id copied from an Orbit
@@ -81,6 +85,7 @@ export function normalizeSearchQuery(q: string | undefined | null): NormalizedSe
   return {
     raw,
     pattern: `%${escapeLike(raw)}%`,
+    prefixPattern: `${escapeLike(raw)}%`,
     sessionId: decodeSessionId(raw),
     sessionIdPrefix: /^[0-9a-f]{8,12}$/i.test(raw) ? raw.toLowerCase() : null,
     // Count by code points, not UTF-16 units: an emoji is one character to the user and one

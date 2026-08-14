@@ -888,6 +888,10 @@ export class SessionsService {
    *
    * Every tier searches the text with its markdown marks removed (see stripMarks), because what is
    * stored is markdown source and what the user is searching for is the line they read.
+   *
+   * Ordering is a score, not a tier ranking — see the `scored` CTE for why, and for the quota that
+   * keeps the name tier from taking a page the palette has no way to scroll past. `total` reports
+   * what the page left behind.
    */
   async search(ownerId: string, q: string | undefined, limit: number) {
     const take = Math.min(Math.max(limit || 20, 1), 50);
@@ -897,10 +901,10 @@ export class SessionsService {
     const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) {
       const recents = await this.searchRows(ownerId, null, take);
-      return { q: '', contentSearched: false, hits: recents };
+      return { q: '', contentSearched: false, total: recents.total, hits: recents.hits };
     }
-    const hits = await this.searchRows(ownerId, norm, take);
-    return { q: norm.raw, contentSearched: norm.searchContent, hits };
+    const { hits, total } = await this.searchRows(ownerId, norm, take);
+    return { q: norm.raw, contentSearched: norm.searchContent, total, hits };
   }
 
   /**
@@ -914,7 +918,7 @@ export class SessionsService {
     ownerId: string,
     norm: NormalizedSearchQuery | null,
     take: number,
-  ): Promise<SessionSearchHit[]> {
+  ): Promise<{ hits: SessionSearchHit[]; total: number }> {
     type Row = {
       id: string;
       title: string;
@@ -932,6 +936,10 @@ export class SessionsService {
       endReason: string | null;
       matchField: SessionSearchHit['matchField'];
       snippet: string | null;
+      /** Every session the query matched, before the tier quota and the LIMIT — the same window
+       *  count in-session find already reports, repeated on every row. Absent on the recents
+       *  branch, which isn't a search and whose total is just what it returned. */
+      total?: number;
     };
 
     // The conversation-text tier is composed in or out HERE, at SQL-build time, rather than being
@@ -1053,9 +1061,6 @@ export class SessionsService {
           OR ${stripMarks(Prisma.sql`s.branch`)} ILIKE ${pattern}
         )`;
 
-    // Rank buckets first (a title hit beats a hit buried in a message), then the list's own
-    // recency order inside each bucket — for switching sessions "the one I touched most
-    // recently" beats "the one with the most matches" every time.
     const rows = norm
       ? await this.prisma.$queryRaw<Row[]>(Prisma.sql`
           WITH meta_ids AS (
@@ -1140,47 +1145,97 @@ export class SessionsService {
               COALESCE(m.match_text, c.match_text) AS match_text
             FROM meta m
             FULL OUTER JOIN content c ON c.session_id = m.session_id
+          ),
+          scored AS (
+            SELECT
+              s.id, s.title, s.status,
+              a.id   AS "workspaceId",
+              a.name AS "workspaceName",
+              s.assigned_runner_id AS "runnerId",
+              s.task_id AS "taskId",
+              t.title   AS "taskTitle",
+              s.last_turn_at AS "lastTurnAt",
+              s.created_at   AS "createdAt",
+              COALESCE(s.completed_at, s.archived_at) AS "completedAt",
+              COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
+              s.deleted_at   AS "deletedAt",
+              s.end_reason   AS "endReason",
+              h.match_field  AS "matchField",
+              -- A ±60-character window around the first literal occurrence. strpos() is literal
+              -- while ILIKE is not, which is exactly why the pattern escapes % and _ (see
+              -- search-query.ts) — otherwise the two could disagree and strpos would return 0.
+              -- greatest()/least() keep the window in range if they ever do disagree anyway.
+              substr(
+                h.match_text,
+                greatest(1, strpos(lower(h.match_text), lower(${norm.raw})) - 60),
+                length(${norm.raw}) + 120
+              ) AS "snippet",
+              -- Which field matched, as a WEIGHT rather than a lexicographic bucket. Ordering by
+              -- the bucket first gives the field infinite priority over recency, so a title hit
+              -- from six months ago outranked a message hit from ten minutes ago; summing instead
+              -- lets a recent conversation hit overtake a stale name hit while a fresh title hit
+              -- still wins outright.
+              --
+              -- prompt/reply/message share one weight on purpose. They are not three degrees of
+              -- relevance, they are one corpus stored in three places: prompt is the first user
+              -- message and last_assistant_text is the last assistant one, both duplicated from
+              -- run_event onto the session row. Ranking them apart said "message #1 outranks
+              -- message #2", which is a fact about the schema and not about the search — and in
+              -- practice let the long final summary of every session crowd out the real hits.
+              (CASE h.match_field
+                 WHEN 'id'    THEN 1000  -- an exact identity match is never not the answer
+                 WHEN 'title' THEN 4     -- a short human-written label: the most match per character
+                 WHEN 'prompt'  THEN 2
+                 WHEN 'reply'   THEN 2
+                 WHEN 'message' THEN 2
+                 ELSE 1                  -- branch / agent / task: names of the container, not of this
+               END)
+              + (CASE
+                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '1 day'  THEN 3
+                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '7 days' THEN 2
+                   WHEN COALESCE(s.last_turn_at, s.created_at) > now() - interval '30 days' THEN 1
+                   ELSE 0
+                 END)
+              -- Exactness, the one match-quality signal a substring search can afford. The length
+              -- test in front is what keeps it affordable: without it every candidate row lowers a
+              -- multi-KB body to compare it against a handful of characters.
+              + (CASE
+                   WHEN length(h.match_text) = length(${norm.raw})
+                        AND lower(h.match_text) = lower(${norm.raw}) THEN 3
+                   WHEN h.match_text ILIKE ${norm.prefixPattern} THEN 2
+                   ELSE 0
+                 END) AS score,
+              (h.match_field IN ('prompt', 'reply', 'message')) AS is_conversation
+            FROM hit h
+            JOIN session s ON s.id = h.session_id
+            LEFT JOIN workspace a ON a.id = s.workspace_id
+            LEFT JOIN task  t ON t.id = s.task_id
+          ),
+          ranked AS (
+            SELECT
+              scored.*,
+              -- Counted before the quota and the LIMIT, so the palette can admit to what it cut.
+              count(*) OVER () AS total,
+              count(*) FILTER (WHERE is_conversation) OVER () AS conv_total,
+              row_number() OVER (
+                PARTITION BY is_conversation
+                ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
+              ) AS group_rn
+            FROM scored
           )
           SELECT
-            s.id, s.title, s.status,
-            a.id   AS "workspaceId",
-            a.name AS "workspaceName",
-            s.assigned_runner_id AS "runnerId",
-            s.task_id AS "taskId",
-            t.title   AS "taskTitle",
-            s.last_turn_at AS "lastTurnAt",
-            s.created_at   AS "createdAt",
-            COALESCE(s.completed_at, s.archived_at) AS "completedAt",
-            COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
-            s.deleted_at   AS "deletedAt",
-            s.end_reason   AS "endReason",
-            h.match_field  AS "matchField",
-            -- A ±60-character window around the first literal occurrence. strpos() is literal
-            -- while ILIKE is not, which is exactly why the pattern escapes % and _ (see
-            -- search-query.ts) — otherwise the two could disagree and strpos would return 0.
-            -- greatest()/least() keep the window in range if they ever do disagree anyway.
-            substr(
-              h.match_text,
-              greatest(1, strpos(lower(h.match_text), lower(${norm.raw})) - 60),
-              length(${norm.raw}) + 120
-            ) AS "snippet"
-          FROM hit h
-          JOIN session s ON s.id = h.session_id
-          LEFT JOIN workspace a ON a.id = s.workspace_id
-          LEFT JOIN task  t ON t.id = s.task_id
-          ORDER BY
-            CASE h.match_field
-              WHEN 'id'      THEN 0
-              WHEN 'title'   THEN 1
-              WHEN 'prompt'  THEN 2
-              WHEN 'reply'   THEN 3
-              WHEN 'message' THEN 4
-              WHEN 'branch'  THEN 5
-              WHEN 'agent'   THEN 6
-              ELSE 7
-            END,
-            s.last_turn_at DESC NULLS LAST,
-            s.created_at DESC
+            id, title, status, "workspaceId", "workspaceName", "runnerId", "taskId", "taskTitle",
+            "lastTurnAt", "createdAt", "completedAt", "archivedAt", "deletedAt", "endReason",
+            "matchField", "snippet", total::int AS "total"
+          FROM ranked
+          -- The name tier cannot take the whole page. Weights alone don't prevent that: a common
+          -- word matches 31 titles AND 600 messages here, and with every title touched this month
+          -- the top 20 is 20 titles — the conversation hits aren't ranked low, they're unreachable,
+          -- because the palette has no paging. So conversation keeps up to half the page and the
+          -- name tier takes what's left, which is all of it when there is nothing to reserve for.
+          WHERE is_conversation
+             OR group_rn <= ${take}::int - LEAST(conv_total, ${take}::int / 2)
+          ORDER BY score DESC, "lastTurnAt" DESC NULLS LAST, "createdAt" DESC
           LIMIT ${take}::int
         `)
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
@@ -1208,7 +1263,7 @@ export class SessionsService {
           LIMIT ${take}::int
         `);
 
-    return rows.map((r) =>
+    const hits = rows.map((r) =>
       withSessionState({
         id: r.id,
         title: r.title,
@@ -1231,6 +1286,9 @@ export class SessionsService {
         snippet: r.snippet ? r.snippet.replace(/\s+/g, ' ').trim() : null,
       }),
     );
+    // Recents returns everything it has, so what it returned IS the total; a search carries the
+    // pre-quota count out on every row.
+    return { hits, total: norm ? (rows[0]?.total ?? 0) : hits.length };
   }
 
   /**

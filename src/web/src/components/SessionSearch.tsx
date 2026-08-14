@@ -176,6 +176,10 @@ export function SessionSearch() {
   // Clamped: the server is the authority on the floor, so if it ever reports contentSearched:false
   // for a query that already looks long enough, the hint still reads sensibly instead of "type -1".
   const missingChars = Math.max(1, CONTENT_MIN_CHARS - [...trimmed].length);
+  // The palette shows one page and has no way to ask for a second, so a capped result set has to
+  // say so — otherwise "20 hits" for a common word reads as the whole answer.
+  const total = search.data?.total ?? hits.length;
+  const capped = total > hits.length;
 
   return (
     <Modal
@@ -257,7 +261,13 @@ export function SessionSearch() {
             search message text.
           </span>
         ) : (
-          <span>{trimmed ? 'Searching IDs, titles, messages, workspaces and tasks' : 'Recent sessions'}</span>
+          <span>
+            {!trimmed
+              ? 'Recent sessions'
+              : capped
+                ? `Top ${hits.length} of ${total} matching sessions`
+                : 'Searching IDs, titles, messages, workspaces and tasks'}
+          </span>
         )}
         <span className="ssearch-keys">
           <kbd>↑↓</kbd> navigate <kbd>↵</kbd> open <kbd>esc</kbd> close

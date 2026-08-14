@@ -51,6 +51,9 @@ struct SessionSearchView: View {
     @State private var hits: [SessionSearchHit] = []
     @State private var contentSearched = true
     @State private var loading = false
+    /// Matches the server found, which is more than `hits` whenever the page was capped — the
+    /// palette has no paging, so the count is the only sign the rest exists.
+    @State private var total = 0
     /// The query the currently displayed `hits` came from — what the snippets are highlighted
     /// against, so highlighting can't run ahead of the results while typing.
     @State private var shownQuery = ""
@@ -104,6 +107,9 @@ struct SessionSearchView: View {
                 Label("Matching names only — type more to search message text.",
                       systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.orange)
+            } else if !shownQuery.isEmpty && total > hits.count {
+                Text("Top \(hits.count) of \(total) matching sessions")
+                    .foregroundStyle(.secondary)
             } else {
                 Text(shownQuery.isEmpty ? "Recent sessions"
                                         : "IDs, titles, messages, agents and tasks")
@@ -131,6 +137,7 @@ struct SessionSearchView: View {
         if Task.isCancelled { return }
         hits = res.hits
         contentSearched = res.contentSearched
+        total = res.effectiveTotal
         shownQuery = res.q
     }
 

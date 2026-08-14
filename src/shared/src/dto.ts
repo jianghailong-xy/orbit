@@ -1185,6 +1185,10 @@ export interface SessionSearchHit {
 export interface SessionSearchResponse {
   q: string;
   contentSearched: boolean;
+  /** Every session the query matched, even when `hits` was capped — the palette has no paging, so
+   *  without this a query whose matches overflow one page is indistinguishable from one that found
+   *  exactly a page's worth. On an empty query (recents) it is simply `hits.length`. */
+  total: number;
   hits: SessionSearchHit[];
 }
 
