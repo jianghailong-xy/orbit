@@ -11,6 +11,7 @@ const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
  */
 function promptFor(task: {
   description?: string | null;
+  isForeman?: boolean;
   list?: { instructions?: string | null } | null;
 }) {
   const created: any[][] = [];
@@ -25,6 +26,7 @@ function promptFor(task: {
         status: 'OPEN',
         listId: task.list ? 'list-1' : null,
         list: task.list ? { paused: false, maxConcurrent: null, ...task.list } : null,
+        isForeman: false,
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         ...task,
       }),
@@ -110,4 +112,18 @@ test('instructions reach a task that has no description of its own', async () =>
   const text = await prompt();
   assert.ok(!text.includes('任务描述：'), text);
   assert.ok(text.includes('作业指导（本任务列表通用）：\n按 manifest 逐个下载。'), text);
+});
+
+test('a foreman task is not given the list instructions', async () => {
+  // Those describe how the list's *work* is done. A coordination run is not doing that work, so
+  // handing it the work procedure is misdirection — and it is the run most likely to act on a
+  // stray instruction, since diagnosing a stall is open-ended by nature.
+  const prompt = await promptFor({
+    description: '列表已停滞 30 分钟。',
+    isForeman: true,
+    list: { instructions: '须去重、断点续传，并按 Content-Length 校验。' },
+  });
+  const text = await prompt();
+  assert.ok(!text.includes('作业指导'), text);
+  assert.ok(text.includes('列表已停滞 30 分钟。'), text);
 });

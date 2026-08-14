@@ -414,6 +414,7 @@ model Workspace {
 
   sessions      Session[]
   assignedTasks Task[] // tasks assigned to run in this workspace
+  foremanFor    TaskList[] @relation("TaskListForeman") // lists whose coordination runs here
   // Service tokens pinned to this workspace (see ServiceToken).
   serviceTokens ServiceToken[]
   // What this workspace always allows without asking again (see WorkspacePermissionRule).
@@ -1003,6 +1004,21 @@ model TaskList {
   // auto-running takes every free slot and starves every other list behind it.
   maxConcurrent Int?    @map("max_concurrent")
 
+  /// The workspace that runs this list's coordination work, when it has one. A foreman is not a
+  /// resident process watching the list — it is dispatched as an ordinary task when something
+  /// needs deciding, does one bounded piece of work, and ends. That is what lets it inherit the
+  /// retry, reaping, slot accounting and audit every other run already has, instead of needing a
+  /// parallel set of guarantees; a long-lived supervisor session would be subject to exactly the
+  /// failures it exists to notice.
+  foremanWorkspaceId String?    @map("foreman_workspace_id") @db.Uuid
+  foremanWorkspace   Workspace? @relation("TaskListForeman", fields: [foremanWorkspaceId], references: [id], onDelete: SetNull)
+  /// Dispatch the foreman when the list has been stalled this many minutes: work remains, but
+  /// nothing is running and nothing has started in that long. Null disables it. The condition is
+  /// deliberately "nothing happened", not "something failed" — every incident this is built for
+  /// (a wedged session holding a task, a livelocked merge, a quota outage nobody was told about)
+  /// looks identical from outside and none of them raises an error anywhere.
+  foremanStallMinutes Int?      @map("foreman_stall_minutes")
+
   tasks     Task[]
   revisions TaskListRevision[]
 
@@ -1032,9 +1048,11 @@ model TaskListRevision {
   /// cannot mint the same number.
   version Int
 
-  instructions  String?
-  paused        Boolean
-  maxConcurrent Int?    @map("max_concurrent")
+  instructions        String?
+  paused              Boolean
+  maxConcurrent       Int?    @map("max_concurrent")
+  foremanWorkspaceId  String? @map("foreman_workspace_id") @db.Uuid
+  foremanStallMinutes Int?    @map("foreman_stall_minutes")
 
   /// Why this change was made, in words. Optional, but it is the field that makes the history
   /// readable rather than merely complete.
@@ -1091,6 +1109,11 @@ model Task {
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
+  // This task is a coordination run over its list, not one of the list's units of work. Two
+  // consequences: it does not receive the list's standing instructions (those describe how the
+  // *work* is done, and the foreman is not doing it), and an unfinished one suppresses further
+  // foreman dispatch for that list, so a stall cannot mint a new coordinator every minute.
+  isForeman        Boolean     @default(false) @map("is_foreman")
   // Best-effort dedup of a redelivered turn's re-created tasks: a hash of (session, turn, title,
   // description), set only when the create happens inside a live turn (see TasksService). @unique
   // gives a Postgres unique index, which by default treats NULLs as distinct — so the many tasks

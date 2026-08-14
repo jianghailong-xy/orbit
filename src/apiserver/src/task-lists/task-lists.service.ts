@@ -169,6 +169,12 @@ export class TaskListsService {
     const policy = {
       ...(dto.paused !== undefined ? { paused: dto.paused } : {}),
       ...(dto.maxConcurrent !== undefined ? { maxConcurrent: dto.maxConcurrent } : {}),
+      ...(dto.foremanWorkspaceId !== undefined
+        ? { foremanWorkspaceId: dto.foremanWorkspaceId }
+        : {}),
+      ...(dto.foremanStallMinutes !== undefined
+        ? { foremanStallMinutes: dto.foremanStallMinutes }
+        : {}),
       // Blank is stored as null so "no instructions" has one representation: an empty string
       // and null must not assemble into different prompts.
       ...(dto.instructions !== undefined
@@ -215,7 +221,13 @@ export class TaskListsService {
         if (existing === 0) {
           const before = await tx.taskList.findUniqueOrThrow({
             where: { id },
-            select: { instructions: true, paused: true, maxConcurrent: true },
+            select: {
+              instructions: true,
+              paused: true,
+              maxConcurrent: true,
+              foremanWorkspaceId: true,
+              foremanStallMinutes: true,
+            },
           });
           await tx.taskListRevision.create({
             data: {
@@ -242,6 +254,8 @@ export class TaskListsService {
             instructions: list.instructions,
             paused: list.paused,
             maxConcurrent: list.maxConcurrent,
+            foremanWorkspaceId: list.foremanWorkspaceId,
+            foremanStallMinutes: list.foremanStallMinutes,
             note: recordAs.note ?? null,
             authorType: recordAs.author?.type ?? CreatorType.USER,
             authorId: recordAs.author?.id ?? ownerId,
@@ -289,6 +303,8 @@ export class TaskListsService {
         instructions: target.instructions,
         paused: target.paused,
         maxConcurrent: target.maxConcurrent,
+        foremanWorkspaceId: target.foremanWorkspaceId,
+        foremanStallMinutes: target.foremanStallMinutes,
       },
       { note: note ?? `Restored v${version}`, author },
     );

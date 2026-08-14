@@ -447,9 +447,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Periodic backstop for auto-run edges triggerDependents can't catch (see
     // reconcileReadyTasks). Single-replica assumption, same as ReaperService.
     this.reconcileTimer = setInterval(() => {
-      this.reconcileReadyTasks().catch((e) =>
-        this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
-      );
+      // Both sweeps ride this one timer. A second setInterval is how the reconciler once ended
+      // up running twice a minute (TasksService was provided by two modules), and the symptom —
+      // duplicate dispatch — took a production incident to spot. Sequential, not concurrent, so
+      // the foreman sees the dispatch decisions this same tick already made.
+      this.reconcileReadyTasks()
+        .catch((e) =>
+          this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        .then(() => this.dispatchStalledListForemen())
+        .catch((e) =>
+          this.logger.error(`foreman sweep failed: ${e instanceof Error ? e.message : e}`),
+        );
     }, RECONCILE_INTERVAL_MS);
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
   }
@@ -2362,6 +2371,113 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * File a coordination task on every list that has gone quiet with work left in it.
+   *
+   * "Stalled" is deliberately the absence of activity rather than the presence of an error. A
+   * wedged session still holding its task, a livelocked merge, a spent quota, a dependency that
+   * will never complete — from outside they are indistinguishable, none of them raises anything,
+   * and the auto-run sweep has nothing to say about any of them because none of their tasks is a
+   * candidate. What they share is that work remained, nothing was running, and nothing had
+   * started for a long time.
+   *
+   * The foreman is dispatched as an ordinary task, so it queues behind the same slots, obeys the
+   * same quota and disk gates, and leaves the same audit trail as any other run. It is not a
+   * process that watches the list; it is a run that happens once and ends, and if it dies the
+   * condition simply still holds and the next sweep files another.
+   */
+  private async dispatchStalledListForemen(): Promise<void> {
+    // Anchored on `foreman_workspace_id IS NOT NULL`, which is highly selective — the scan is
+    // proportional to the lists that opted in, not to the task table.
+    const stalled = await this.prisma.$queryRaw<
+      { id: string; ownerId: string; title: string; workspaceId: string; minutes: number }[]
+    >`
+      SELECT tl.id, tl.owner_id AS "ownerId", tl.title,
+             tl.foreman_workspace_id AS "workspaceId", tl.foreman_stall_minutes AS "minutes"
+      FROM task_list tl
+      WHERE tl.foreman_workspace_id IS NOT NULL
+        AND tl.foreman_stall_minutes IS NOT NULL
+        AND tl.paused = false
+        -- Old enough to have been able to stall: a list created a minute ago whose tasks are all
+        -- still blocked is starting up, not stuck.
+        AND tl.created_at < now() - make_interval(mins => tl.foreman_stall_minutes)
+        -- Work actually remains.
+        AND EXISTS (
+          SELECT 1 FROM task t
+          WHERE t.list_id = tl.id AND t.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+        )
+        -- Nothing is being worked. TASK_OCCUPYING, not just RUNNING: a session parked at
+        -- AWAITING_INPUT is idle but alive, and calling that a stall would file a foreman over a
+        -- run that is merely waiting for a human.
+        AND NOT EXISTS (
+          SELECT 1 FROM task t JOIN session s ON s.task_id = t.id
+          WHERE t.list_id = tl.id
+            AND s.status IN (${Prisma.join(
+              TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+              ', ',
+            )})
+        )
+        -- Nothing has started recently either, so this is quiet rather than merely between runs.
+        AND NOT EXISTS (
+          SELECT 1 FROM task t JOIN session s ON s.task_id = t.id
+          WHERE t.list_id = tl.id
+            AND s.created_at > now() - make_interval(mins => tl.foreman_stall_minutes)
+        )
+        -- One coordinator at a time. A stall persists by definition, so without this the sweep
+        -- would file a fresh foreman every minute for as long as it lasted — the same unbounded
+        -- respawn the auto-run reconciler had to be given a brake for.
+        AND NOT EXISTS (
+          SELECT 1 FROM task t
+          WHERE t.list_id = tl.id AND t.is_foreman = true
+            AND t.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+        )`;
+    for (const list of stalled) {
+      try {
+        const task = await this.prisma.task.create({
+          data: {
+            title: `[FOREMAN] ${list.title} — 停滞 ${list.minutes} 分钟`.slice(0, 200),
+            description: this.buildForemanBrief(list.title, list.minutes),
+            ownerId: list.ownerId,
+            listId: list.id,
+            assigneeId: list.workspaceId,
+            isForeman: true,
+            // Nothing gates this run but the stall that caused it; it has no prerequisites, and
+            // the auto-run sweep only ever considers tasks that do.
+            autoRunWhenReady: false,
+            creatorType: CreatorType.USER,
+            creatorId: list.ownerId,
+          },
+          select: { id: true },
+        });
+        await this.execute(list.ownerId, task.id);
+        this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
+      } catch (e) {
+        this.logger.warn(
+          `foreman dispatch for list ${list.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * The foreman's brief. Self-contained on purpose: it is read by an agent with no memory of the
+   * list, and it names the tools rather than the conclusion — what stalled a list is exactly what
+   * nobody knew in advance, so instructing it to "resume the downloads" would be guessing on its
+   * behalf.
+   */
+  private buildForemanBrief(title: string, minutes: number): string {
+    return (
+      `任务列表「${title}」已停滞约 ${minutes} 分钟：仍有未完成的任务，但没有任何任务在运行，也没有新的运行被发起。\n\n` +
+      `请诊断原因并处理，然后结束本次运行。这是一次性的协调任务，不要保持长时间运行或轮询。\n\n` +
+      `建议的排查顺序：\n` +
+      `1. 用 tasklist_get / task_list 查看该列表的任务状态分布，找出卡在哪一层。\n` +
+      `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
+      `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
+      `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +
+      `完成后请用 task_comment 记录你的判断与所做的改动，再将本任务置为 DONE。`
+    );
+  }
+
+  /**
    * Of these tasks' assignees, which (runner, provider) pairs have an exhausted account quota
    * right now — mapped to the moment it frees up. Dispatching against one is pointless: the
    * run dies on arrival with the provider's own "usage limit" error, so the only effect is a
@@ -2705,6 +2821,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         model: true,
         status: true,
         listId: true,
+        isForeman: true,
         list: { select: { paused: true, maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
@@ -2783,9 +2900,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private buildExecutePrompt(task: {
     title: string;
     description?: string | null;
+    isForeman?: boolean;
     list?: { instructions?: string | null } | null;
   }): string {
-    const instructions = task.list?.instructions?.trim();
+    // A foreman is coordinating the list, not performing its work, so the standing instructions
+    // — which say how that work is done — would be noise at best and misdirection at worst.
+    const instructions = task.isForeman ? undefined : task.list?.instructions?.trim();
     return (
       `请开始执行任务「${task.title}」。\n\n` +
       (task.description ? `任务描述：\n${task.description}\n\n` : '') +
@@ -2820,8 +2940,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         provider: true,
         model: true,
         status: true,
-        // Same list instructions the single-task Run assembles: a task must not get a different
-        // prompt depending on which button started it.
+        // Same inputs the single-task Run assembles its prompt from: a task must not get a
+        // different prompt depending on which button started it.
+        isForeman: true,
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

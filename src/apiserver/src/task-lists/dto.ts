@@ -3,6 +3,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -44,6 +45,14 @@ export class UpdateTaskListDto {
    * policy field — a rename produces no revision to attach it to.
    */
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+  /** Workspace that runs this list's coordination when it stalls; null clears it. */
+  @IsOptional() @IsUUID() foremanWorkspaceId?: string | null;
+  /**
+   * Minutes of no activity, with work remaining, before a foreman is filed; null disables it.
+   * Floored at 5 because the sweep itself runs once a minute and a run takes longer than that to
+   * start — anything shorter would call a list stalled while it was still getting going.
+   */
+  @IsOptional() @IsInt() @Min(5) foremanStallMinutes?: number | null;
 }
 
 export class RestoreTaskListRevisionDto {
