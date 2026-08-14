@@ -807,6 +807,15 @@ func (t *Transport) updateTaskList(id, agentID string, body map[string]interface
 	return out, err
 }
 
+func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "DELETE", "/runner/task-lists/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // ── Session orchestration ops for the `orbit mcp` server (L3) ──────────────
 // Owner-scoped, runner-token-authenticated. Each call also carries the current session id
 // and its signed credential so the server can prove which claimed process made the request.

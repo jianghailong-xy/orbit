@@ -193,3 +193,27 @@ test('a headless runner update carries no agent author', async () => {
 
   assert.equal(calls[0][3], undefined);
 });
+
+test('deleteList removes the owned list through TaskListsService', async () => {
+  const seen: { ownerId?: string; listId?: string } = {};
+  const expected = { ok: true };
+  const taskLists = {
+    remove: async (ownerId: string, listId: string) => {
+      seen.ownerId = ownerId;
+      seen.listId = listId;
+      return expected;
+    },
+  } as never;
+  const controller = new RunnerTasksController({} as never, taskLists);
+
+  const result = await controller.deleteList(RUNNER, 'list-1');
+
+  assert.deepEqual(seen, { ownerId: 'owner-1', listId: 'list-1' });
+  assert.equal(result, expected);
+});
+
+test('deleteList is exposed as DELETE task-lists/:id', () => {
+  const handler = RunnerTasksController.prototype.deleteList;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'task-lists/:id');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.DELETE);
+});

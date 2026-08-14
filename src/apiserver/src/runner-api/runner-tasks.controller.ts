@@ -206,4 +206,13 @@ export class RunnerTasksController {
       creator ? { type: creator.type, id: creator.id, sessionId } : undefined,
     );
   }
+
+  /**
+   * Delete a list. Its tasks survive — the FK detaches them (list_id -> null) rather than
+   * cascading — so this discards the grouping and its policy revisions, not the work.
+   */
+  @Delete('task-lists/:id')
+  deleteList(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
+    return this.taskLists.remove(runner.ownerId, id);
+  }
 }

@@ -424,6 +424,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "tasklist_delete":
+		id := getString(args, "listId")
+		if id == "" {
+			return toolResult("listId is required", true)
+		}
+		raw, err := s.t.deleteTaskList(id)
+		if err != nil {
+			return toolResult("delete task-list failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "session_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -944,6 +955,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"foremanStallMinutes": map[string]interface{}{"type": "integer"},
 				"note":                str,
 			}, "listId"),
+		},
+		{
+			"name": "tasklist_delete",
+			"description": "Delete a task list. The list's tasks are NOT deleted — they are detached and " +
+				"become listless, keeping their assignees, dependencies and sessions; what is destroyed " +
+				"is the grouping, its standing instructions, and its policy revisions. This cannot be " +
+				"undone. To stop a list from dispatching without discarding any of that, set `paused` " +
+				"with tasklist_update instead.",
+			"inputSchema": obj(map[string]interface{}{"listId": str}, "listId"),
 		},
 	}
 	if includeOrchestration {

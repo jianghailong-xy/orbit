@@ -43,6 +43,7 @@ Usage:
   orbit task-list create --title TITLE [--json]
   orbit task-list get LIST_ID [--json]
   orbit task-list update LIST_ID [options]
+  orbit task-list delete LIST_ID [--json]
 `
 
 var taskActionHelp = map[string]string{
@@ -183,6 +184,16 @@ sent, so a partial edit never blanks the rest of the policy.
 
 Usage:
   orbit task-list create --title TITLE [--json]
+`,
+	"delete": `orbit task-list delete — delete a task list
+
+Usage:
+  orbit task-list delete LIST_ID [--json]
+
+The list's tasks are not deleted: they are detached and become listless, keeping their
+assignees, dependencies and sessions. What goes is the grouping, its standing
+instructions, and its policy revisions — and that cannot be undone. To stop dispatch
+without discarding any of it, use ` + "`orbit task-list update LIST_ID --paused true`" + `.
 `,
 }
 
@@ -363,6 +374,8 @@ func cmdTaskListCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskListGet(args[1:], out)
 	case "update":
 		return cliTaskListUpdate(args[1:], in, out)
+	case "delete":
+		return cliTaskListDelete(args[1:], out)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", action, taskListHelp)
 	}
@@ -1121,6 +1134,30 @@ func cliTaskListCreate(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+func cliTaskListDelete(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task-list delete")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("list id is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.deleteTaskList(id)
+	if err != nil {
+		return fmt.Errorf("delete task list: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 type cliCapabilitySpec struct {
 	Tool        string
 	Argv        []string
@@ -1146,6 +1183,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_get", Argv: []string{"orbit", "task-list", "get"}, Usage: "orbit task-list get LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}},
 	{Tool: "tasklist_update", Argv: []string{"orbit", "task-list", "update"}, Usage: "orbit task-list update LIST_ID [options]", Arguments: []string{"[list-id] (required)", "--title <text>", "--instructions <text> | --instructions-file -", "--paused[=true|false]", "--max-concurrent <n> | --clear-max-concurrent", "--foreman-workspace-id <id> | --clear-foreman", "--foreman-stall-minutes <n>", "--note <text>", "--json"}, Description: "Change a task list's dispatch policy. In a session the change is attributed to this agent (like the MCP path); headless it falls back to the runner owner. Every change is recorded as a restorable revision.", Mutates: true},
+	{Tool: "tasklist_delete", Argv: []string{"orbit", "task-list", "delete"}, Usage: "orbit task-list delete LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}, Description: "Delete a task list. Its tasks are not deleted — they are detached and become listless; the grouping, its standing instructions and its policy revisions are what go, and that cannot be undone. To stop dispatch without discarding them, pass --paused true to task-list update instead.", Mutates: true},
 }
 
 type cliCapability struct {

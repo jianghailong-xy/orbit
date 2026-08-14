@@ -40,17 +40,18 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 15 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 16 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
 	// could only replace a task's whole prerequisite set, never edit one edge. tasklist_get /
 	// tasklist_update joined them: a list's dispatch policy was readable only as a row in
 	// tasklist_list and not writable at all, so an agent could see a list stall and do nothing
-	// about it.
+	// about it. tasklist_delete closed the last gap: an agent could make lists but never
+	// clean up the ones it made.
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
-		"tasklist_get", "tasklist_update",
+		"tasklist_get", "tasklist_update", "tasklist_delete",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {
@@ -601,6 +602,30 @@ func TestTaskListCLICreate(t *testing.T) {
 	}
 	if gotPath != "/api/runner/task-lists" || gotBody["title"] != "Release" {
 		t.Fatalf("path = %q body = %#v", gotPath, gotBody)
+	}
+}
+
+func TestTaskListCLIDelete(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskListCLI([]string{"delete", "list-1", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/runner/task-lists/list-1" {
+		t.Fatalf("%s %s", gotMethod, gotPath)
+	}
+	// A bare `task-list delete` must not reach the server: DELETE on the collection route is not
+	// this command's mistake to make.
+	err := cmdTaskListCLI([]string{"delete", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "list id is required") {
+		t.Fatalf("missing id error = %v", err)
 	}
 }
 

@@ -683,3 +683,25 @@ func TestMCPTaskListUpdateRequiresAListId(t *testing.T) {
 		t.Fatalf("empty tasklist_update did not error: %#v", res)
 	}
 }
+
+func TestMCPTaskListDelete(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "workspace-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("tasklist_delete", map[string]interface{}{"listId": "list-1"})
+	if res["isError"] == true {
+		t.Fatalf("tasklist_delete returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/api/runner/task-lists/list-1" {
+		t.Fatalf("tasklist_delete hit %s %s", gotMethod, gotPath)
+	}
+	// Without an id this must fail here, not send DELETE to the collection route.
+	if res := mcp.callTool("tasklist_delete", map[string]interface{}{}); res["isError"] != true {
+		t.Fatalf("tasklist_delete without listId did not error: %#v", res)
+	}
+}
