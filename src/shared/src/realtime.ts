@@ -93,6 +93,14 @@ export interface ControlSessionSummary {
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   pendingApprovals: number;
   lastTurnAt: string | null;
+  /** When the server will re-send the message this run's failure killed, or null if nothing is
+   *  armed. Part of the summary because it is part of what `runState: FAILED` means here: a
+   *  failure with a retry armed is one the server intends to undo, which the clients draw as
+   *  Retrying rather than Failed. Always sent (as null when nothing is armed) — a client that
+   *  folds the summary into a loaded row must treat that null as a value and clear its own,
+   *  since it is how the row learns the retries ran out; only an absent key means "unchanged",
+   *  and only an older control plane omits it. */
+  retryAt?: string | null;
 }
 
 /** `data` for `session.ended`. */

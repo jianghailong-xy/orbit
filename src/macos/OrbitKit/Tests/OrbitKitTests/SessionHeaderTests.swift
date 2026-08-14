@@ -12,7 +12,8 @@ final class SessionHeaderTests: XCTestCase {
                          pendingApprovals: Int? = nil, runningBgCount: Int? = nil,
                          engineTurnActive: Bool? = nil,
                          error: String? = nil, endReason: String? = nil,
-                         createdAt: String? = nil, lastTurnAt: String? = nil) -> Session {
+                         createdAt: String? = nil, lastTurnAt: String? = nil,
+                         retryAt: String? = nil) -> Session {
         Session(id: "s", title: title, status: status, runStatus: runStatus,
                 sessionState: sessionState,
                 runState: runState, lifecycleState: lifecycleState,
@@ -20,7 +21,7 @@ final class SessionHeaderTests: XCTestCase {
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, engineTurnActive: engineTurnActive,
                 error: error, endReason: endReason,
-                createdAt: createdAt, lastTurnAt: lastTurnAt)
+                createdAt: createdAt, lastTurnAt: lastTurnAt, retryAt: retryAt)
     }
 
     // MARK: statusWord — the terse state word (web `statusLabel`)
@@ -77,6 +78,24 @@ final class SessionHeaderTests: XCTestCase {
     func testStatusWordFailedOfflineIsDisconnected() {
         XCTAssertEqual(SessionHeader.statusWord(for: session(.failed, error: "runner offline")),
                        "Disconnected")
+    }
+
+    /// The header must not say "Failed" over a transcript whose card is counting down to a
+    /// re-send of the same message. The run settles FAILED the moment the turn dies — its slot
+    /// has to go back — but an armed `retryAt` is what says that is a prediction, not an outcome.
+    func testStatusWordRetryingWhileTheServerStillMeansToResend() {
+        let now = Date()
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        let armed = f.string(from: now.addingTimeInterval(30))
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.failed, error: "API Error: 529", retryAt: armed),
+                                     now: now),
+            "Retrying")
+        // Spent: the server cleared retryAt when it gave up, and the failure is the outcome.
+        XCTAssertEqual(
+            SessionHeader.statusWord(for: session(.failed, error: "API Error: 529"), now: now),
+            "Failed")
     }
 
     /// Every ended run reads "Ended" — the accusatory "Cancelled" and the misleading "Dormant"

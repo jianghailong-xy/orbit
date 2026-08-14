@@ -37,12 +37,13 @@ public struct SessionStatusGlyph: Equatable, Sendable {
     }
 
     /// The glyph for a session. Lifecycle location never overrides the run's actual state.
-    public static func make(for s: Session) -> SessionStatusGlyph {
+    public static func make(for s: Session, now: Date = Date()) -> SessionStatusGlyph {
         make(runState: s.effectiveRunState,
              pendingApprovals: s.pendingApprovals,
              runningBgCount: s.runningBgCount,
              engineTurnActive: s.engineTurnActive == true,
-             error: s.error)
+             error: s.error,
+             retryPending: s.retryPending(now: now))
     }
 
     /// Compatibility overload for callers that hold legacy plain fields rather than a Session.
@@ -53,13 +54,15 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             runningBgCount: Int? = nil,
                             engineTurnActive: Bool = false,
                             error: String? = nil,
-                            endReason: String? = nil) -> SessionStatusGlyph {
+                            endReason: String? = nil,
+                            retryPending: Bool = false) -> SessionStatusGlyph {
         make(runState: SessionRunState.resolve(runState, legacy: sessionState,
                                                status: status, endReason: endReason),
              pendingApprovals: pendingApprovals,
              runningBgCount: runningBgCount,
              engineTurnActive: engineTurnActive,
-             error: error)
+             error: error,
+             retryPending: retryPending)
     }
 
     /// The shared presentation mapping for the orthogonal execution state. The end reason is
@@ -70,7 +73,8 @@ public struct SessionStatusGlyph: Equatable, Sendable {
                             pendingApprovals: Int? = nil,
                             runningBgCount: Int? = nil,
                             engineTurnActive: Bool = false,
-                            error: String? = nil) -> SessionStatusGlyph {
+                            error: String? = nil,
+                            retryPending: Bool = false) -> SessionStatusGlyph {
         // The working glyph, shared by the two states that mean the agent is generating.
         func generating() -> SessionStatusGlyph {
             if (pendingApprovals ?? 0) > 0 {
@@ -103,6 +107,15 @@ public struct SessionStatusGlyph: Equatable, Sendable {
             return .init(shape: .symbol("checkmark.circle.fill"), tone: .success, label: "Succeeded")
 
         case .failed:
+            // A failure the server is about to undo by itself is not red: the situation is
+            // handled and nothing is being asked of the reader (the same reasoning the
+            // transcript's auto-retry card draws neutral until the retries run out). Red would
+            // put the row in the list's "look at me" set for the 30 seconds before it fixes
+            // itself — including the runner-offline case, whose retry waits out a restart.
+            if retryPending {
+                return .init(shape: .symbol("clock.arrow.circlepath"), tone: .neutral,
+                             label: "Retrying — the run resumes on its own")
+            }
             let err = (error ?? "").lowercased()
             if err.contains("offline") {
                 return .init(shape: .symbol("wifi.slash"), tone: .neutral,

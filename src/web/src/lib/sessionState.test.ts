@@ -9,6 +9,7 @@ import {
   sessionLifecycleLabel,
   sessionLifecycleStateOf,
   sessionHoldsRunnerSlot,
+  sessionRetryPending,
   sessionRunStateOf,
   sessionRunStatusOf,
   sessionStateOf,
@@ -177,6 +178,37 @@ describe('session state predicates', () => {
   });
 });
 
+describe('sessionRetryPending', () => {
+  const now = Date.parse('2026-08-14T12:00:00Z');
+  const at = (offsetMs: number) => new Date(now + offsetMs).toISOString();
+
+  it('holds a FAILED run open while the server still means to re-send it', () => {
+    expect(sessionRetryPending({ runState: 'FAILED', retryAt: at(30_000) }, now)).toBe(true);
+    // Armed for right now — what the reaper does for a runner that vanished mid-turn. The sweep
+    // that fires it is seconds away, so this is the middle of a retry, not the end of one.
+    expect(sessionRetryPending({ runState: 'FAILED', retryAt: at(0) }, now)).toBe(true);
+    expect(sessionRetryPending({ runState: 'FAILED', retryAt: at(-30_000) }, now)).toBe(true);
+  });
+
+  it('falls back to the failure when nothing is armed, or nothing came for it', () => {
+    expect(sessionRetryPending({ runState: 'FAILED', retryAt: null }, now)).toBe(false);
+    expect(sessionRetryPending({ runState: 'FAILED' }, now)).toBe(false);
+    expect(sessionRetryPending({ runState: 'FAILED', retryAt: 'not a date' }, now)).toBe(false);
+    // Long past due with the row untouched: the single-replica sweeper never came, and saying
+    // "Retrying" forever would be a worse lie than the one this rule exists to fix.
+    expect(sessionRetryPending({ runState: 'FAILED', retryAt: at(-10 * 60_000) }, now)).toBe(false);
+  });
+
+  it('leaves every other run state alone', () => {
+    // The quota case can park here instead. Nothing claims that session is over, and a window
+    // that resets in four hours would read absurdly as "Retrying".
+    expect(sessionRetryPending({ runState: 'AWAITING_INPUT', retryAt: at(4 * 3600_000) }, now)).toBe(
+      false,
+    );
+    expect(sessionRetryPending({ runState: 'RUNNING', retryAt: at(30_000) }, now)).toBe(false);
+  });
+});
+
 describe('sessionEndedBanner', () => {
   it('uses the run outcome while separately explaining a Completed resume', () => {
     expect(
@@ -218,6 +250,17 @@ describe('sessionEndedBanner', () => {
     expect(
       sessionEndedBanner({ runState: 'ENDED', endReason: 'future_reason' }, false, true),
     ).toBe('Session ended. Sending a message starts a new session.');
+  });
+
+  it('does not call a session failed while the server is about to re-send it', () => {
+    const armed = new Date(Date.now() + 30_000).toISOString();
+    expect(
+      sessionEndedBanner({ runState: 'FAILED', error: 'API Error: 529', retryAt: armed }, true, true),
+    ).toBe('Retrying automatically. Send a message to resume this session.');
+    // Once the retries are spent the server clears retryAt, and the failure is the outcome.
+    expect(
+      sessionEndedBanner({ runState: 'FAILED', error: 'API Error: 529', retryAt: null }, true, true),
+    ).toBe('Session failed. Send a message to resume this session.');
   });
 
   it('includes a server-provided resume blocker before explaining the fresh-session fallback', () => {

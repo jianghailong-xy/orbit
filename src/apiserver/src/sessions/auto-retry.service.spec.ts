@@ -74,14 +74,23 @@ function makeService(
       return { turnId: 't', seq: 1 };
     },
   } as unknown as SessionsService;
-  const settled: string[] = [];
-  const push = {
-    notifySessionSettled: async (id: string) => {
-      settled.push(id);
+  // What the service told the world. A `final` STATUS carrying no `retryAt` is the settlement
+  // signal — RealtimeService turns exactly that into the owner's push — so `settled` is derived
+  // from the published events rather than from a second fake, which is what keeps this test
+  // honest about the one rule both halves share.
+  const published: Array<{ id: string; payload: Record<string, unknown> }> = [];
+  const realtime = {
+    publish: (id: string, event: { payload: Record<string, unknown> }) => {
+      published.push({ id, payload: event.payload });
+    },
+    publishSessionUpdated: (id: string) => {
+      published.push({ id, payload: {} });
     },
   };
-  const service = new AutoRetryService(prisma as never, sessions, push as never);
-  return { service, updates, resumed, rows, settled };
+  const settled = () =>
+    published.filter((p) => p.payload.final && !p.payload.retryAt).map((p) => p.id);
+  const service = new AutoRetryService(prisma as never, sessions, realtime as never);
+  return { service, updates, resumed, rows, published, settled };
 }
 
 function row(over: SessionRow = {}): SessionRow {
@@ -228,13 +237,30 @@ test('releases one session per (runner, provider) per sweep', async () => {
 });
 
 test('hands back to the user once the attempts are spent', async () => {
-  const { service, resumed, rows, settled } = makeService([row({ retryAttempts: 5 })]);
+  const { service, resumed, rows, published, settled } = makeService([
+    row({ status: RunStatus.FAILED, retryAttempts: 5 }),
+  ]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, []);
   assert.equal(rows[0].retryAt, null, 'disarmed');
-  // Giving up moves no status, so this is the only moment the owner can be told the failure
-  // is now the outcome. PushService re-reads the row and decides whether to actually alert.
-  assert.deepEqual(settled, ['session-1']);
+  // Giving up moves no status, so this is the only moment the failure becomes the outcome —
+  // the clients stop drawing "Retrying" and the owner is told, both off this one event.
+  assert.deepEqual(published, [
+    { id: 'session-1', payload: { status: RunStatus.FAILED, final: true } },
+  ]);
+  assert.deepEqual(settled(), ['session-1']);
+});
+
+test('a quota-parked session that gives up announces no failure', async () => {
+  // AWAITING_INPUT is a session that idled, not one that failed: there is no outcome to settle
+  // and nothing terminal to declare, only a card that lost its countdown.
+  const { service, rows, published, settled } = makeService([
+    row({ status: RunStatus.AWAITING_INPUT, retryAttempts: 5 }),
+  ]);
+  await service.sweep(NOW);
+  assert.equal(rows[0].retryAt, null, 'disarmed');
+  assert.deepEqual(published, [{ id: 'session-1', payload: {} }], 'a plain list refresh');
+  assert.deepEqual(settled(), []);
 });
 
 test('spends an attempt on every dispatch, so a repeating failure runs out', async () => {

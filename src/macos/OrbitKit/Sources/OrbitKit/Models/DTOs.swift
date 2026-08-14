@@ -258,6 +258,28 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         let state = effectiveRunState
         return state == .running || (state == .awaitingInput && engineTurnActive == true)
     }
+    /// Whether this session's failure is one the server intends to undo by itself — a port of the
+    /// web console's `sessionRetryPending`. A spent quota, a provider that couldn't answer, and a
+    /// runner that vanished mid-turn all settle the run FAILED on the spot (the turn IS over and
+    /// its slot has to go back) while arming `retryAt` in the same breath, which is what makes
+    /// that FAILED a prediction rather than an outcome. The row draws as Retrying until the wait
+    /// ends: the retry runs, or the server gives up and clears `retryAt`.
+    ///
+    /// A retry already due is still pending — that is what the reaper arms for a vanished runner,
+    /// and its sweep is seconds away. One long past due is not: the sweeper is single-replica, and
+    /// a row left saying "Retrying" forever would be a worse lie than the one this fixes. The
+    /// grace matches web's `RETRY_STALE_MS` — four of the server's 30s sweeps.
+    ///
+    /// Deliberately `.failed`-only: the quota case can park at `.awaitingInput` instead, where
+    /// nothing claims the session is over and a window resetting in four hours would read
+    /// absurdly as "Retrying".
+    public func retryPending(now: Date = Date()) -> Bool {
+        guard effectiveRunState == .failed, let retryAt, let at = RelativeTime.parse(retryAt)
+        else { return false }
+        return at.timeIntervalSince(now) > -Session.retryStale
+    }
+    /// How long past due an armed retry is still believed. Mirrors web's `RETRY_STALE_MS`.
+    private static let retryStale: TimeInterval = 120
     /// Prefer the explicit field, then the lifecycle timestamps older servers already returned.
     public var effectiveLifecycleState: SessionLifecycleState {
         if let lifecycleState, lifecycleState != .unknown { return lifecycleState }

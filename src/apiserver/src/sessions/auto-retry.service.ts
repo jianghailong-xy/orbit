@@ -8,7 +8,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { PushService } from '../push/push.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 
@@ -60,7 +60,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
-    private readonly push: PushService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   onModuleInit(): void {
@@ -278,10 +278,25 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       data: { retryAt: null },
     });
     this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
-    // Giving up is the moment the failure becomes the outcome. The row moves no status — it has
-    // been FAILED since the turn died — so no `final` STATUS is published here and this is the
-    // only chance to tell the owner. PushService re-reads the row and ignores the AWAITING_INPUT
-    // spelling of parked, which is a session waiting on its user, not a failure.
-    if (cleared.count > 0) void this.push.notifySessionSettled(sessionId);
+    if (cleared.count === 0) return;
+    // Giving up is the moment the failure becomes the outcome, so this is where it is announced.
+    // The row moves no status — it has been FAILED since the turn died — but the clients have
+    // been drawing it as "Retrying" off the `retryAt` that just went away, so they need to be
+    // told that the wait is over as much as the owner's phone does. Publishing the STATUS does
+    // both: `final` with no `retryAt` beside it is exactly the settlement signal the failing
+    // turn withheld, and RealtimeService.publish turns it into the one push notification.
+    if (parkedAs === RunStatus.FAILED) {
+      this.realtime.publish(sessionId, {
+        seq: Number.MAX_SAFE_INTEGER,
+        type: RunEventType.STATUS,
+        ts: new Date().toISOString(),
+        payload: { status: RunStatus.FAILED, final: true },
+      });
+      return;
+    }
+    // The other spelling of parked is a session that simply idled (a quota killed the turn
+    // before it could fail one), which is not a failure and never was: nothing to announce and
+    // nothing terminal to declare — only a row whose card just lost its countdown.
+    this.realtime.publishSessionUpdated(sessionId);
   }
 }

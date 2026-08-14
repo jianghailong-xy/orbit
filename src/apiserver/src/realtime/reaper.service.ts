@@ -270,6 +270,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const status = opts.status ?? RunStatus.FAILED;
     const failed = status === RunStatus.FAILED;
+    // Due immediately (see below), and carried on the published STATUS so that event says the
+    // same thing the row does: this end is one the server means to undo, not a settlement.
+    const retryAt = opts.armRetry ? new Date() : null;
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
     const ok = await this.prisma.$transaction(async (tx) => {
       const res = await tx.session.updateMany({
@@ -286,7 +289,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           // Due immediately: AutoRetryService's own sweep is what waits for the runner to
           // come back, so arming for "now" makes the first sweep after this the first check
           // rather than a fixed delay guessing when the runner returns.
-          ...(opts.armRetry ? { retryAt: new Date() } : {}),
+          ...(retryAt ? { retryAt } : {}),
           finishedAt: new Date(),
           cancelRequestedAt: new Date(),
         },
@@ -314,7 +317,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       seq: Number.MAX_SAFE_INTEGER,
       type: RunEventType.STATUS,
       ts: new Date().toISOString(),
-      payload: { status, final: true, reason },
+      payload: { status, final: true, reason, ...(retryAt ? { retryAt: retryAt.toISOString() } : {}) },
     });
     const msg = `reaped session ${sessionId} -> ${status} (${reason})`;
     if (failed) this.log.warn(msg);

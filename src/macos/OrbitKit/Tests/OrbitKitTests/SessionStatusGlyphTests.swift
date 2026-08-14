@@ -10,14 +10,22 @@ final class SessionStatusGlyphTests: XCTestCase {
                          runStatus: RunStatus? = nil,
                          sessionState: SessionState? = nil,
                          runState: SessionRunState? = nil,
-                         lifecycleState: SessionLifecycleState? = nil) -> Session {
+                         lifecycleState: SessionLifecycleState? = nil,
+                         retryAt: String? = nil) -> Session {
         Session(id: "s", title: "t", status: status, runStatus: runStatus,
                 sessionState: sessionState,
                 runState: runState, lifecycleState: lifecycleState,
                 agentId: nil, assignedRunnerId: nil,
                 pendingApprovals: pendingApprovals, branch: nil, updatedAt: nil,
                 runningBgCount: runningBgCount, engineTurnActive: engineTurnActive,
-                error: error, endReason: endReason)
+                error: error, endReason: endReason, retryAt: retryAt)
+    }
+
+    /// ISO-8601 `offset` seconds from `now` — an armed `retryAt` as the server writes it.
+    private func iso(_ offset: TimeInterval, from now: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f.string(from: now.addingTimeInterval(offset))
     }
 
     func testRunning() {
@@ -72,6 +80,33 @@ final class SessionStatusGlyphTests: XCTestCase {
         let g = SessionStatusGlyph.make(for: session(.failed, error: "runner offline"))
         XCTAssertEqual(g.shape, .symbol("wifi.slash"))
         XCTAssertEqual(g.tone, .neutral)
+    }
+
+    /// A FAILED row the server has already armed a re-send for is not an outcome yet, so it must
+    /// not wear the red X that puts it in the list's "look at me" set — 30 seconds before it
+    /// fixes itself. Both the near-future arming (a 529's backoff) and the due-now one (what the
+    /// reaper writes for a runner that vanished mid-turn) are the middle of a retry.
+    func testFailedWithArmedRetryIsNeutralRetrying() {
+        let now = Date()
+        let retrying = SessionStatusGlyph(shape: .symbol("clock.arrow.circlepath"), tone: .neutral,
+                                          label: "Retrying — the run resumes on its own")
+        for offset in [30.0, 0.0, -30.0] {
+            let s = session(.failed, error: "API Error: 529", retryAt: iso(offset, from: now))
+            XCTAssertEqual(SessionStatusGlyph.make(for: s, now: now), retrying, "offset \(offset)")
+        }
+        // Runner-offline keeps its own neutral disconnect glyph only once nothing is armed.
+        let offline = session(.failed, error: "runner offline", retryAt: iso(10, from: now))
+        XCTAssertEqual(SessionStatusGlyph.make(for: offline, now: now), retrying)
+    }
+
+    /// The two ways the wait ends: the server clears `retryAt` when it gives up, and a `retryAt`
+    /// nobody ever came for goes stale rather than saying "Retrying" forever.
+    func testFailedFallsBackToTheFailureOnceNothingIsComing() {
+        let now = Date()
+        let spent = session(.failed, error: "boom", retryAt: nil)
+        XCTAssertEqual(SessionStatusGlyph.make(for: spent, now: now).tone, .error)
+        let stale = session(.failed, error: "boom", retryAt: iso(-10 * 60, from: now))
+        XCTAssertEqual(SessionStatusGlyph.make(for: stale, now: now).tone, .error)
     }
 
     func testPendingIsQueued() {

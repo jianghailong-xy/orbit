@@ -80,6 +80,35 @@ final class SessionUpsertTests: XCTestCase {
         XCTAssertEqual(merged.id, "s1")
     }
 
+    /// `retryAt` is the one field where the summary's null differs from its absence, because the
+    /// row's state depends on it: the summary that turns a row FAILED is also what says the
+    /// failure is being retried, and the summary that clears it is how the row learns the retries
+    /// ran out. Merging a null as "unchanged" would leave a spent countdown drawn as "Retrying".
+    func testTracksTheArmedRetryInBothDirections() throws {
+        let row = try loadedRow()
+        let failedArmed = try summary("""
+        {"id":"s1","status":"FAILED","runStatus":"FAILED","runState":"FAILED","pendingApprovals":0,
+         "retryAt":"2026-08-01T10:00:30.000Z"}
+        """)
+        let armed = row.applying(failedArmed)
+        XCTAssertEqual(armed.retryAt, "2026-08-01T10:00:30.000Z")
+        let midWait = try XCTUnwrap(RelativeTime.parse("2026-08-01T10:00:10Z"))
+        XCTAssertTrue(armed.retryPending(now: midWait))
+
+        // Gave up: same status, explicit null. The row must stop claiming a retry is coming.
+        let gaveUp = try summary("""
+        {"id":"s1","status":"FAILED","runStatus":"FAILED","runState":"FAILED","pendingApprovals":0,
+         "retryAt":null}
+        """)
+        XCTAssertNil(armed.applying(gaveUp).retryAt)
+
+        // An older control plane omits the key entirely — that is the only "leave it alone".
+        let legacy = try summary("""
+        {"id":"s1","status":"FAILED","runStatus":"FAILED","runState":"FAILED","pendingApprovals":0}
+        """)
+        XCTAssertEqual(armed.applying(legacy).retryAt, "2026-08-01T10:00:30.000Z")
+    }
+
     /// The row's nested agent carries provider + effort; the summary's carries neither, so the
     /// richer one has to win or the composer would lose that context on a status change.
     func testKeepsTheRicherNestedAgent() throws {

@@ -17,7 +17,7 @@ public enum SessionHeader {
 
     /// The short execution-state word. Lifecycle location is deliberately not consulted: a succeeded
     /// session remains "Succeeded" in Open, Completed and Trash alike. The DTO resolves old servers.
-    public static func statusWord(for s: Session) -> String {
+    public static func statusWord(for s: Session, now: Date = Date()) -> String {
         switch s.effectiveRunState {
         case .queued:
             return "Queued"
@@ -34,6 +34,8 @@ public enum SessionHeader {
         case .succeeded:
             return "Succeeded"
         case .failed:
+            // Not "Failed" while the server is still going to re-send it — see `retryPending`.
+            if s.retryPending(now: now) { return "Retrying" }
             return (s.error ?? "").lowercased().contains("offline") ? "Disconnected" : "Failed"
         case .interrupted:
             return "Interrupted"
@@ -48,7 +50,7 @@ public enum SessionHeader {
     /// back to the live stream's status.
     public static func subtitle(for session: Session?, now: Date = Date()) -> String? {
         guard let s = session else { return nil }
-        let word = statusWord(for: s)
+        let word = statusWord(for: s, now: now)
         let lifecycle = lifecycleWord(for: s)
         // The two axes no longer share any vocabulary — a filed session reads "Ended · Completed",
         // which is exactly the split this subtitle exists to show — so there is nothing to collapse.

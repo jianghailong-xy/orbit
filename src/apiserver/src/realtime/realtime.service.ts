@@ -278,7 +278,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // when their own conditional write won. That makes it the one signal per settlement, so the
     // owner's phone is told once. PushService decides whether this particular ending is worth an
     // interruption; a session id is all it needs. Locally-originated only, like the badge sync.
-    if (event.type === RunEventType.STATUS && (event.payload as { final?: boolean }).final) {
+    //
+    // `retryAt` on that same payload takes it back: the turn is over (which is what `final`
+    // tells the clients) but the server has already armed a re-send of the same message, so
+    // nothing has settled yet and announcing it would report a failure the user never had.
+    // The announcement moves to whoever ends the wait — AutoRetryService.disarm when the
+    // retries are spent, or the next finalization if the retry runs and fails on its own.
+    const status = event.payload as { final?: boolean; retryAt?: string | null };
+    if (event.type === RunEventType.STATUS && status.final && !status.retryAt) {
       void this.push.notifySessionSettled(runId);
     }
   }
@@ -586,6 +593,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         cancelRequestedAt: true,
         startedAt: true,
         numTurns: true,
+        retryAt: true,
         runtimeSessionId: true,
         assignedRunnerId: true,
         assignedRunner: {
@@ -627,6 +635,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         : null,
       pendingApprovals,
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
+      // Read fresh with the status it qualifies: the same summary has to be able to say both
+      // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
+      retryAt: s.retryAt ? s.retryAt.toISOString() : null,
     };
   }
 

@@ -1882,6 +1882,11 @@ export class RunnerApiController {
           taskId: true,
           mergeStatus: true,
           mergedSourceSha: true,
+          // Armed by the event batch that carried this turn's error (the runner flushes events
+          // before it reports the turn), so by now it answers "is this failure one the server
+          // intends to undo by itself" — which is what keeps the STATUS published below from
+          // announcing a settlement that hasn't happened.
+          retryAt: true,
         },
       });
       // A turn that failed mid-run (e.g. an API/content-filter error the agent couldn't
@@ -1930,7 +1935,7 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
-        return { applied: false, status: current.status, failSession };
+        return { applied: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -2011,6 +2016,7 @@ export class RunnerApiController {
           applied: false,
           status: latest?.status ?? current.status,
           failSession,
+          retryAt: current.retryAt,
         };
       }
       if (failSession) {
@@ -2054,7 +2060,7 @@ export class RunnerApiController {
         await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, status: nextStatus, failSession };
+      return { applied: true, status: nextStatus, failSession, retryAt: current.retryAt };
     });
     if (finalized.failSession) {
       // Only announce the terminal status if this call actually finalized the session
@@ -2064,7 +2070,17 @@ export class RunnerApiController {
           seq: Number.MAX_SAFE_INTEGER,
           type: RunEventType.STATUS,
           ts: new Date().toISOString(),
-          payload: { status: RunStatus.FAILED, final: true },
+          // `final` still fires with a retry armed: it means "this turn is over" — the clients
+          // tear down the in-flight turn on it, and a half-streamed bubble left mid-air is
+          // wrong whether or not the run resumes in 30 seconds. `retryAt` is what says the
+          // FAILED beside it is not yet the outcome: publish() reads it to hold the settlement
+          // announcement, and the clients read the same field off the row to draw Retrying.
+          // Null once the retries are spent, and AutoRetryService.disarm publishes the real one.
+          payload: {
+            status: RunStatus.FAILED,
+            final: true,
+            ...(finalized.retryAt ? { retryAt: finalized.retryAt.toISOString() } : {}),
+          },
         });
       }
       return { ok: true, status: finalized.status };
@@ -2530,7 +2546,8 @@ export class RunnerApiController {
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
         },
       });
-      if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout };
+      const retryAt = quotaRetryAt ?? current.retryAt;
+      if (res.count === 0) return { finalized: false, effectiveStatus, keepCheckout, retryAt };
       await retireSessionInboxGeneration(tx, sessionId);
       // Persist the committed branch's per-file diffs to the side table (see turn-complete) —
       // off the session payload, fetched on demand when a file's diff is opened.
@@ -2567,7 +2584,7 @@ export class RunnerApiController {
           await postRunFailureComment(tx, current.taskId, dto.error || dto.result || 'run failed');
         }
       }
-      return { finalized: true, effectiveStatus, keepCheckout };
+      return { finalized: true, effectiveStatus, keepCheckout, retryAt };
     });
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
 
@@ -2575,7 +2592,13 @@ export class RunnerApiController {
       seq: Number.MAX_SAFE_INTEGER,
       type: RunEventType.STATUS,
       ts: new Date().toISOString(),
-      payload: { status: outcome.effectiveStatus, final: true },
+      // See turn-complete: an armed retry means this end is not the outcome yet, so the event
+      // carries the moment it resumes and publish() withholds the settlement announcement.
+      payload: {
+        status: outcome.effectiveStatus,
+        final: true,
+        ...(outcome.retryAt ? { retryAt: outcome.retryAt.toISOString() } : {}),
+      },
     });
     return { ok: true, keepCheckout: outcome.keepCheckout };
   }

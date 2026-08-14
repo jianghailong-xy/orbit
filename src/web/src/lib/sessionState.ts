@@ -55,6 +55,8 @@ export interface SessionStateSource {
   archivedAt?: unknown;
   deletedAt?: unknown;
   error?: string | null;
+  /** When the server will re-send the message this run's failure killed. See sessionRetryPending. */
+  retryAt?: string | null;
 }
 
 const SESSION_RUN_STATE_SET = new Set<string>(SESSION_RUN_STATES);
@@ -176,6 +178,36 @@ export function sessionStateOf(session: SessionStateSource): SessionStateValue {
   return state === 'SUCCEEDED' ? 'COMPLETED' : state;
 }
 
+/**
+ * How long past its due moment an armed retry is still believed. AutoRetryService sweeps every
+ * 30s and re-arms each time it defers, so a retry that is actually going to happen is never more
+ * than a sweep or two stale — but the sweeper is single-replica, and a session left saying
+ * "Retrying" forever because nobody ever came for it would be a worse lie than the one this fixes.
+ * Past this the row falls back to the failure it already is, with no watchdog needed to do it.
+ */
+const RETRY_STALE_MS = 2 * 60_000;
+
+/**
+ * Whether this session's failure is one the server intends to undo by itself: a spent quota, a
+ * provider that couldn't answer, a runner that vanished mid-turn. All three settle the run FAILED
+ * on the spot — the turn IS over, its slot has to go back, and the list must not show it as idly
+ * waiting on its user — and all three arm `retryAt` in the same breath, which is what makes that
+ * FAILED a prediction rather than an outcome. So the row is drawn as Retrying until the wait ends:
+ * the retry runs, or AutoRetryService gives up and clears `retryAt` (see its `disarm`).
+ *
+ * Deliberately FAILED-only. The quota case can also park at AWAITING_INPUT, where nothing claims
+ * the session is over and a reset hours out would read absurdly as "Retrying"; there the armed
+ * retry is detail for the card, not a correction to the state.
+ */
+export const sessionRetryPending = (session: SessionStateSource, now = Date.now()): boolean => {
+  if (sessionRunStateOf(session) !== 'FAILED') return false;
+  if (!session.retryAt) return false;
+  const at = Date.parse(session.retryAt);
+  // A retry that is due right now (what the reaper arms for a vanished runner) is pending too:
+  // the sweep that fires it is seconds away, and the card says "re-sending your message".
+  return Number.isFinite(at) && at > now - RETRY_STALE_MS;
+};
+
 /** States that can accept another turn without reviving/recreating the session. */
 export const isSessionLive = (session: SessionStateSource): boolean =>
   ['QUEUED', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].includes(sessionRunStateOf(session));
@@ -216,9 +248,15 @@ export function sessionEndedBanner(
       base = 'Session succeeded.';
       break;
     case 'FAILED':
-      base = session.error?.toLowerCase().includes('offline')
-        ? 'Session interrupted.'
-        : 'Session failed.';
+      // Not "Session failed" while the server is going to re-send it: the card above this line
+      // is counting down to exactly that, and two lines contradicting each other is how the
+      // reader learns to trust neither. What survives is the half that is still true and still
+      // useful — they can jump in now instead of waiting for the retry.
+      base = sessionRetryPending(session)
+        ? 'Retrying automatically.'
+        : session.error?.toLowerCase().includes('offline')
+          ? 'Session interrupted.'
+          : 'Session failed.';
       break;
     case 'INTERRUPTED':
       base = 'Session interrupted.';

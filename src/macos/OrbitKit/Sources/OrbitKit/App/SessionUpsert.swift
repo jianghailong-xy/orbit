@@ -35,6 +35,11 @@ public extension Session {
             agentId: summary.agentId,
             pendingApprovals: summary.pendingApprovals,
             lastTurnAt: summary.lastTurnAt,
+            // The one field here whose absence and whose null mean different things — see the
+            // DTO. It travels with the status because it qualifies it: the summary that turns a
+            // row FAILED is the same one that has to say the failure is being retried, and the
+            // summary that ends the retry is what stops the row saying so.
+            retryAt: summary.retryAt,
             // The row's nested agent is richer than the summary's (it carries provider + effort, which
             // the composer reads), so it wins; the summary only fills a row that somehow has none.
             agent: agent ?? summary.agent.map {
@@ -70,7 +75,10 @@ public extension Session {
                          agentId: String? = nil,
                          pendingApprovals: Int? = nil,
                          lastTurnAt: String? = nil,
-                         agent: SessionAgentRef? = nil) -> Session {
+                         agent: SessionAgentRef? = nil,
+                         // Doubly optional so a caller can clear it: `nil` keeps the row's value,
+                         // `.some(nil)` writes null. Every other field here means "keep" by nil.
+                         retryAt: String?? = nil) -> Session {
         Session(id: id,
                 title: title ?? self.title,
                 status: status ?? self.status,
@@ -103,6 +111,6 @@ public extension Session {
                 createdAt: createdAt,
                 lastTurnAt: lastTurnAt ?? self.lastTurnAt,
                 tags: tags,
-                retryAt: retryAt)
+                retryAt: retryAt ?? self.retryAt)
     }
 }

@@ -169,6 +169,7 @@ import {
   sessionEndedBanner,
   sessionLifecycleLabel,
   sessionLifecycleStateOf,
+  sessionRetryPending,
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
@@ -666,6 +667,7 @@ export function statusLabel(session: any): string {
     return (session.pendingApprovals ?? 0) > 0 ? 'Waiting for approval' : 'Running';
   if (state === 'AWAITING_INPUT') return parkedWorkLabel(session)?.text ?? 'Waiting for your reply';
   if (state === 'FAILED') {
+    if (sessionRetryPending(session)) return 'Retrying';
     const err: string = typeof session.error === 'string' ? session.error : '';
     return err.toLowerCase().includes('offline') ? 'Disconnected' : 'Failed';
   }
@@ -724,6 +726,16 @@ export function StatusIcon({ session }: { session: any }) {
     );
   }
   if (state === 'FAILED') {
+    // A failure the server is about to undo by itself is not red: the situation is handled and
+    // nothing is being asked of the reader (the same reasoning the transcript's AutoRetryCard
+    // draws neutral until the retries run out). Red would put it in the list's "look at me" set
+    // for the 30 seconds before it fixes itself.
+    if (sessionRetryPending(session))
+      return (
+        <Tooltip title="Retrying — the run resumes on its own">
+          <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
+        </Tooltip>
+      );
     const err: string = typeof session.error === 'string' ? session.error : '';
     if (err.toLowerCase().includes('offline'))
       return (

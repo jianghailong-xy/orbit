@@ -90,6 +90,15 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     public let agent: AgentRef?
     public let pendingApprovals: Int
     public let lastTurnAt: String?
+    /// When the server will re-send the message this run's failure killed — part of the summary
+    /// because it is part of what `runState == .failed` means (see `Session.retryPending`).
+    ///
+    /// Doubly optional because all three cases differ: `nil` is an older control plane that never
+    /// sends the key (keep whatever the row knows), `.some(nil)` is this server saying nothing is
+    /// armed any more (the retries ran out — clear it, and the row stops saying "Retrying"), and
+    /// `.some(value)` is the moment to resume. `decodeIfPresent` cannot tell the first two apart
+    /// — it maps an explicit null to nil as well — so the decoder asks `contains` instead.
+    public let retryAt: String??
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -118,6 +127,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         agent = try values.decodeIfPresent(AgentRef.self, forKey: .agent)
         pendingApprovals = try values.decode(Int.self, forKey: .pendingApprovals)
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
+        retryAt = values.contains(.retryAt)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .retryAt))
+            : nil
     }
 }
 
