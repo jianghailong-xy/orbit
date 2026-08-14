@@ -109,8 +109,14 @@ struct ToolCardView: View {
     private var row: some View {
         HStack(spacing: 7) {
             if hasDetail {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                // One glyph turned, never two swapped: `chevron.down` is wider and shorter than
+                // `chevron.right`, so exchanging them resizes the first item in the row and shoves
+                // everything after it up and to the right — the whole line appearing to jump on a
+                // tap. A rotation is drawn, not laid out, so the box stays put at any Dynamic Type
+                // size (these are caption2, so they scale).
+                Image(systemName: "chevron.right")
                     .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
             }
             Image(systemName: d.symbol)
                 .font(.orbitMeta).foregroundStyle(d.tone.color)
@@ -490,8 +496,11 @@ struct ToolGroupCardView: View {
 
     private var row: some View {
         HStack(spacing: 7) {
-            Image(systemName: expanded ? "chevron.down" : "chevron.right")
+            // Turned, not swapped — see ToolCardView: the two chevron symbols are different sizes,
+            // and the difference lands on every item to their right.
+            Image(systemName: "chevron.right")
                 .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
             Image(systemName: summary.symbol)
                 .font(.orbitMeta).foregroundStyle(summary.tone.color)
                 .frame(width: 20, height: 20)
