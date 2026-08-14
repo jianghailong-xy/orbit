@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent × Workspace → Session — 设计 demo</title>
+<style>
+:root{
+  --bg-base:#fff; --bg-raised:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa;
+  --bg-hover:#f5f6f7; --bg-hover-strong:#e3e6eb;
+  --border:#dee0e3; --border-subtle:#eceef1;
+  --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e; --text-4:#a8acb3;
+  --accent:#3370ff; --accent-soft:#eaf1ff; --accent-line:#b6cbff;
+  --success:#2ea121; --warn:#ff8800; --danger:#f54a45;
+  --violet:#7f4dff; --violet-soft:#f1ecff; --violet-line:#d6c7ff;
+  --radius:6px;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-sunken);color:var(--text-1);font-size:13px;line-height:1.55}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 20px 24px}
+
+h1{font-size:20px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--text-2);font-size:13px;margin:0 0 18px}
+h2{font-size:15px;margin:0 0 2px}
+.h2sub{color:var(--text-3);font-size:12px;margin:0 0 14px}
+
+.tabs{display:flex;gap:4px;background:var(--bg-hover);padding:3px;border-radius:8px;margin-bottom:18px;width:fit-content}
+.tab{padding:6px 14px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--text-2);border:none;background:none;font-family:inherit}
+.tab.on{background:#fff;color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.06);font-weight:500}
+.screen{display:none}.screen.on{display:block}
+
+.card{background:var(--bg-raised);border:1px solid var(--border-subtle);border-radius:10px}
+.pad{padding:16px}
+
+/* ── app chrome ── */
+.app{display:grid;grid-template-columns:216px 1fr;height:508px;overflow:hidden}
+.side{border-right:1px solid var(--border-subtle);background:var(--bg-subtle);padding:10px 8px;overflow:auto}
+.sect{font-size:11px;color:var(--text-4);text-transform:uppercase;letter-spacing:.05em;padding:8px 8px 4px;font-weight:600}
+.row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;color:var(--text-1)}
+.row:hover{background:var(--bg-hover)}
+.row.on{background:var(--accent-soft);color:var(--accent);font-weight:500}
+.row.sub{padding-left:22px;font-size:12.5px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--success);flex:none}
+.dot.off{background:var(--text-4)}
+.main{display:flex;flex-direction:column;min-width:0;background:var(--bg-base)}
+.hdr{padding:12px 18px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;gap:10px}
+.hdr .t{font-size:14px;font-weight:600}
+.hdr .p{font-size:12px;color:var(--text-3);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.body{flex:1;padding:18px;overflow:auto}
+
+/* ── composer ── */
+.composer{border:1px solid var(--border);border-radius:10px;background:#fff}
+.composer textarea{width:100%;border:none;outline:none;resize:none;padding:14px 14px 6px;font:inherit;font-size:13.5px;color:var(--text-1);background:none}
+.pills{display:flex;align-items:center;gap:2px;padding:6px 8px;border-top:1px solid var(--border-subtle);flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--text-2);border:1px solid transparent;background:none;font-family:inherit}
+.pill:hover{background:var(--bg-hover)}
+.pill .k{color:var(--text-4);font-size:11.5px}
+.pill .v{color:var(--text-1)}
+.pill .caret{color:var(--text-4);font-size:9px}
+.pill.agent{background:var(--violet-soft);border-color:var(--violet-line);color:var(--violet)}
+.pill.agent .v{color:var(--violet);font-weight:600}
+.pill.agent .k{color:#a58bff}
+.pill.inherit{border-color:var(--violet-line);border-style:dashed;background:#fbfaff}
+.pill.over{border-color:var(--accent-line);background:var(--accent-soft)}
+.pill.over .v{color:var(--accent)}
+.spacer{flex:1}
+.send{background:var(--accent);color:#fff;border:none;border-radius:6px;padding:5px 14px;font-size:12.5px;cursor:pointer;font-family:inherit}
+
+.prov{font-size:11px;color:var(--violet);padding:2px 0 0 9px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.prov b{font-weight:600}
+.prov .ov{color:var(--accent)}
+
+/* ── agent picker ── */
+.menu{border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(31,35,41,.1);background:#fff;width:330px;padding:5px;margin-top:8px}
+.mi{display:flex;gap:10px;padding:8px 9px;border-radius:6px;cursor:pointer}
+.mi:hover{background:var(--bg-hover)}
+.mi.on{background:var(--violet-soft)}
+.ico{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;color:#fff;letter-spacing:-.02em}
+.ico.d{background:#8f959e}.ico.r{background:#7f4dff}.ico.m{background:#0ea5a5}.ico.f{background:#f5713b}
+.chip{width:16px;height:16px;border-radius:4px;display:inline-grid;place-items:center;font-size:9px;font-weight:700;color:#fff;vertical-align:-3px;margin-right:5px;letter-spacing:-.02em}
+.chip.d{background:#8f959e}.chip.r{background:#7f4dff}.chip.m{background:#0ea5a5}.chip.f{background:#f5713b}
+.mi .n{font-size:13px;font-weight:500}
+.mi .d{font-size:11.5px;color:var(--text-3);margin-top:1px}
+.mi .m{font-size:11px;color:var(--text-4);margin-top:3px;font-family:ui-monospace,Menlo,monospace}
+
+/* ── agent cards ── */
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.acard{border:1px solid var(--border-subtle);border-radius:10px;padding:14px;background:#fff}
+.acard:hover{border-color:var(--accent-line)}
+.ah{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px}
+.ah .n{font-size:14px;font-weight:600}
+.ah .d{font-size:12px;color:var(--text-2);margin-top:2px}
+.kv{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.tag{font-size:11px;padding:2px 7px;border-radius:4px;background:var(--bg-hover);color:var(--text-2);font-family:ui-monospace,Menlo,monospace}
+.tag.a{background:var(--violet-soft);color:var(--violet)}
+.use{font-size:11.5px;color:var(--text-3);margin-top:10px;padding-top:9px;border-top:1px dashed var(--border-subtle)}
+
+/* ── before / after ── */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.bcol h3{font-size:13px;margin:0 0 3px}
+.bcol .cap{font-size:11.5px;color:var(--text-3);margin:0 0 10px}
+.old{border:1px solid var(--border-subtle);border-radius:8px;overflow:hidden}
+.oldrow{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--border-subtle);font-size:12.5px}
+.oldrow:last-child{border-bottom:none}
+.oldrow .nm{font-weight:600;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.oldrow .why{font-size:11px;color:var(--danger);margin-left:auto;background:#fff1f0;padding:1px 6px;border-radius:4px}
+.mx{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.mx th{font-weight:600;color:var(--text-2);padding:7px 8px;text-align:left;font-size:11.5px;border-bottom:1px solid var(--border-subtle)}
+.mx th.ag{color:var(--violet)}
+.mx td{padding:7px 8px;border-bottom:1px solid var(--border-subtle);color:var(--text-3)}
+.mx td.w{color:var(--text-1);font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+.mx td.c{text-align:center;color:var(--success);font-size:13px}
+
+.note{background:var(--bg-subtle);border:1px solid var(--border-subtle);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 14px;font-size:12.5px;color:var(--text-2);margin-top:14px}
+.note b{color:var(--text-1)}
+.note.v{border-left-color:var(--violet)}
+.note.w{border-left-color:var(--warn)}
+
+.compose{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px}
+.src{border:1px solid var(--border-subtle);border-radius:8px;overflow:hidden}
+.src .sh{padding:7px 11px;font-size:11.5px;font-weight:600;background:var(--bg-subtle);border-bottom:1px solid var(--border-subtle);display:flex;gap:7px;align-items:center}
+.src pre{margin:0;padding:11px;font-size:11.5px;font-family:ui-monospace,Menlo,monospace;color:var(--text-2);white-space:pre-wrap;line-height:1.6}
+.badge{font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600}
+.badge.repo{background:#e8f5e9;color:#2ea121}
+.badge.ag{background:var(--violet-soft);color:var(--violet)}
+
+label.f{display:block;font-size:12px;font-weight:600;margin:14px 0 5px}
+label.f span{font-weight:400;color:var(--text-3);margin-left:6px}
+.inp,.ta{width:100%;border:1px solid var(--border);border-radius:6px;padding:7px 10px;font:inherit;font-size:12.5px;color:var(--text-1)}
+.ta{resize:vertical;min-height:78px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Agent × Workspace → Session</h1>
+  <p class="sub">把 Agent 这个词还给它该指的东西：一个跨机器、无路径、可复用的<b>预设</b>。Workspace 说"在哪"，Agent 说"怎么干"，Session 是这一次真的跑起来。</p>
+
+  <div class="tabs">
+    <button class="tab on" data-s="0">① 新建会话</button>
+    <button class="tab" data-s="1">② Agent 库</button>
+    <button class="tab" data-s="2">③ Agent 编辑器</button>
+    <button class="tab" data-s="3">④ 为什么值得</button>
+  </div>
+
+  <!-- ══════════ 1 ══════════ -->
+  <section class="screen on" id="s0">
+    <h2>核心流程：选 Workspace，再选 Agent</h2>
+    <p class="h2sub">左侧层级不变（Runner ▸ Workspace ▸ Session）。Agent 是新的一枚 pill —— 选中它会<b>填充</b> Mode / Model / Effort，而不是锁死它们。</p>
+
+    <div class="card app">
+      <div class="side">
+        <div class="sect">Runners</div>
+        <div class="row"><span class="dot"></span>wikova</div>
+        <div class="row sub on">orbit</div>
+        <div class="row sub">wikids</div>
+        <div class="row"><span class="dot"></span>workstation</div>
+        <div class="row sub">wikova</div>
+        <div class="row"><span class="dot off"></span>MacBook Air</div>
+        <div class="row sub">orbit</div>
+        <div class="sect" style="color:#7f4dff">Agents</div>
+        <div class="row"><span class="chip d">D</span>Default</div>
+        <div class="row"><span class="chip r">R</span>Reviewer</div>
+        <div class="row"><span class="chip m">M</span>Migrator</div>
+        <div class="row"><span class="chip f">F</span>Firefighter</div>
+      </div>
+
+      <div class="main">
+        <div class="hdr">
+          <span class="dot"></span>
+          <span class="t">orbit</span>
+          <span class="p">wikova · ~/orbit</span>
+        </div>
+        <div class="body">
+          <div class="composer">
+            <textarea rows="3" placeholder="要做什么…">审一遍这个分支的 diff，只挑真会出错的地方，别提风格。</textarea>
+            <div class="pills">
+              <button class="pill agent" id="agbtn"><span class="k">Agent</span><span class="v" id="agname">Reviewer</span><span class="caret">▾</span></button>
+              <span style="width:1px;height:16px;background:var(--border-subtle);margin:0 6px"></span>
+              <button class="pill inherit" id="pMode"><span class="k">Mode</span><span class="v">Plan</span></button>
+              <span class="spacer"></span>
+              <button class="pill inherit" id="pModel"><span class="k">Model</span><span class="v">Opus 5</span></button>
+              <button class="pill inherit" id="pEff"><span class="k">Effort</span><span class="v">high</span></button>
+              <button class="send">开始</button>
+            </div>
+          </div>
+          <div class="prov" id="prov"><span>↑ Mode / Model / Effort 来自 <b>Reviewer</b> —— 点任意一枚可以只为这次会话改掉</span></div>
+
+          <div class="menu" id="menu">
+            <div class="mi on" data-a="Reviewer"><div class="ico r">R</div><div><div class="n">Reviewer</div><div class="d">只找真错误，不谈风格；不改文件</div><div class="m">Opus 5 · plan · high</div></div></div>
+            <div class="mi" data-a="Default"><div class="ico d">D</div><div><div class="n">Default</div><div class="d">没有人设，用账号默认值</div><div class="m">账号默认 · auto</div></div></div>
+            <div class="mi" data-a="Migrator"><div class="ico m">M</div><div><div class="n">Migrator</div><div class="d">大改动先写迁移与回滚，小步提交</div><div class="m">Opus 5 · acceptEdits · max</div></div></div>
+            <div class="mi" data-a="Firefighter"><div class="ico f">F</div><div><div class="n">Firefighter</div><div class="d">线上救火：先止血，能读生产只读接口</div><div class="m">Opus 5 · dontAsk · max</div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="note v"><b>关键取舍：预设填充，不是预设锁死。</b> 选了 Reviewer，三枚 pill 变虚线紫框表示"继承自 Agent"；你改其中一枚，它变实线蓝框 <span style="color:#3370ff">仅本次会话</span>，Agent 本身不变。改不了的预设是笼子，不是预设。</div>
+    <div class="note w"><b>还没定的：</b>已有的 <code>@mention</code> 现在指 workspace（在哪跑）。加了 Agent 之后 <code>@reviewer</code> 更像在指 Agent。建议保留 <code>@</code> 指 workspace，Agent 只走 pill —— 否则一个符号两个含义，正是我们刚花力气拆开的那种毛病。</div>
+  </section>
+
+  <!-- ══════════ 2 ══════════ -->
+  <section class="screen" id="s1">
+    <h2>Agent 库 —— 账号级，不挂在任何一台机器下</h2>
+    <p class="h2sub">这是它和 Workspace 最大的区别，所以在侧栏里它<b>不在 Runners 分组内</b>。同一个 Reviewer 在你三台机器的任何一个检出上都成立。</p>
+    <div class="grid">
+      <div class="acard"><div class="ah"><div class="ico d">D</div><div><div class="n">Default</div><div class="d">没有人设。模型、姿态、effort 全用账号默认值。</div></div></div>
+        <div class="kv"><span class="tag">账号默认模型</span><span class="tag">auto</span></div>
+        <div class="use">10 个 workspace · 3 141 次会话 &nbsp;·&nbsp; 迁移时所有现存会话落在这里</div></div>
+
+      <div class="acard"><div class="ah"><div class="ico r">R</div><div><div class="n">Reviewer</div><div class="d">只找真会出错的地方，不谈风格偏好；不写文件。</div></div></div>
+        <div class="kv"><span class="tag a">Opus 5</span><span class="tag">plan</span><span class="tag">high</span><span class="tag">deny: Write, Edit</span></div>
+        <div class="use">3 个 workspace（orbit · wikova · wikids）· 上次用于 2 小时前</div></div>
+
+      <div class="acard"><div class="ah"><div class="ico m">M</div><div><div class="n">Migrator</div><div class="d">大改动：先写迁移与回滚路径，再小步提交。</div></div></div>
+        <div class="kv"><span class="tag a">Opus 5</span><span class="tag">acceptEdits</span><span class="tag">max</span></div>
+        <div class="use">2 个 workspace（orbit · wikova）</div></div>
+
+      <div class="acard"><div class="ah"><div class="ico f">F</div><div><div class="n">Firefighter</div><div class="d">线上救火：先止血再解释，可读生产只读接口。</div></div></div>
+        <div class="kv"><span class="tag a">Opus 5</span><span class="tag">dontAsk</span><span class="tag">max</span><span class="tag">allow: kubectl</span></div>
+        <div class="use">1 个 workspace（wikova-prod）</div></div>
+    </div>
+    <div class="note"><b>为什么工具白名单可以放在 Agent 上，却不能放在 Workspace 上。</b>之前的结论是"工具名是运行时相关的，而 provider 是 per-session 绑定，目录层不知道会用哪个运行时，写下去校验不了"。Agent 钉了模型 ⇒ 钉了运行时 ⇒ 工具名此刻是可知、可校验的。这一刀正好把那个反对意见解掉了。</div>
+  </section>
+
+  <!-- ══════════ 3 ══════════ -->
+  <section class="screen" id="s2">
+    <h2>Agent 编辑器</h2>
+    <p class="h2sub">注意这里<b>没有</b>路径、没有机器、没有 git 设置 —— 那些是 Workspace 的。一个字段只属于一个实体，这是整个拆分的检验标准。</p>
+    <div class="card pad">
+      <div class="two">
+        <div>
+          <label class="f">名称</label><input class="inp" value="Reviewer" />
+          <label class="f">一句话说明 <span>出现在选择器里</span></label><input class="inp" value="只找真会出错的地方，不谈风格；不改文件" />
+          <label class="f">人设 <span>追加到系统提示</span></label>
+          <textarea class="ta">你在审查代码改动。
+
+只报会导致错误行为的问题：逻辑错误、竞态、
+边界情况、破坏的契约。不要报格式、命名、
+"可以更简洁"这类偏好。
+
+每条结论给出会失败的具体输入。找不到真问题
+就说没有 —— 凑数的发现比漏报更贵。</textarea>
+          <div class="two" style="margin-top:14px">
+            <div><label class="f" style="margin-top:0">模型</label><input class="inp" value="claude-opus-5" /></div>
+            <div><label class="f" style="margin-top:0">Effort</label><input class="inp" value="high" /></div>
+          </div>
+          <div class="two">
+            <div><label class="f">权限姿态</label><input class="inp" value="plan" /></div>
+            <div><label class="f">禁用工具</label><input class="inp" value="Write, Edit" /></div>
+          </div>
+        </div>
+        <div>
+          <label class="f" style="margin-top:0">生效时怎么组合</label>
+          <div class="compose" style="grid-template-columns:1fr">
+            <div class="src"><div class="sh"><span class="badge repo">仓库</span> ~/orbit/CLAUDE.md</div>
+              <pre>这个代码库怎么工作、约定是什么。
+随仓库走，进版本库，换谁来都适用。</pre></div>
+            <div class="src"><div class="sh"><span class="badge ag">Agent</span> Reviewer</div>
+              <pre>我这次要你怎么工作。
+跟人走，跨机器，换仓库照样成立。</pre></div>
+          </div>
+          <div class="note v" style="margin-top:12px"><b>这两者不重复，是正交的。</b>之前我说"DB 里的 per-directory system prompt 在重复盘上的 CLAUDE.md"——那个批评对<b>目录级</b>的人设成立，对<b>角色级</b>的不成立。CLAUDE.md 回答"这个代码库需要什么"，Agent 回答"我要你以什么方式工作"。9 行里只有 1 行设了 systemPrompt，恰恰因为挂错了地方。</div>
+          <div class="note w"><b>迁移：</b>现存 workspace 里设过 systemPrompt 的（只有 wikids 一个）自动升成一个同名 Agent；其余全部落到 Default。任何人不做任何事，行为不变。</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 4 ══════════ -->
+  <section class="screen" id="s3">
+    <h2>为什么值得做：你的名字里已经写满了缺失的维度</h2>
+    <p class="h2sub">真实数据。今天一个实体同时背着"哪个项目""哪台机器""什么角色"，只能靠名字后缀编码。</p>
+    <div class="ba">
+      <div class="bcol">
+        <h3>现在</h3><p class="cap">10 个 workspace，名字在替三个维度打工</p>
+        <div class="old">
+          <div class="oldrow"><span class="nm">orbit</span><span style="color:var(--text-3)">wikova · ~/orbit</span></div>
+          <div class="oldrow"><span class="nm">iOS</span><span style="color:var(--text-3)">MacBook · ~/develop/orbit</span><span class="why">同一个仓库，只能改名区分</span></div>
+          <div class="oldrow"><span class="nm">wikova</span><span style="color:var(--text-3)">workstation · ~/wikova</span></div>
+          <div class="oldrow"><span class="nm">wikova-prod</span><span style="color:var(--text-3)">wikova · ~/wikova</span><span class="why">同一个路径，靠后缀区分机器</span></div>
+          <div class="oldrow"><span class="nm">wikova-develop</span><span style="color:var(--text-3)">wikova · ~/wikova-develop</span></div>
+          <div class="oldrow"><span class="nm">GPTRunner</span><span style="color:var(--text-3)">vmi · ~/gpt/…</span><span class="why">名字编码的是运行时</span></div>
+        </div>
+        <div class="note w" style="margin-top:12px">想要一个 "reviewer" 的行为，只有两条路：把 systemPrompt 写死在某一个 workspace 上（于是只在那个目录成立），或者每次重新敲一遍。</div>
+      </div>
+      <div class="bcol">
+        <h3>拆开之后</h3><p class="cap">Workspace 只说地方，Agent 只说方式，任意一格都是合法会话</p>
+        <table class="mx">
+          <tr><th>Workspace</th><th class="ag"><span class="chip d">D</span>Default</th><th class="ag"><span class="chip r">R</span>Reviewer</th><th class="ag"><span class="chip m">M</span>Migrator</th><th class="ag"><span class="chip f">F</span>Firefighter</th></tr>
+          <tr><td class="w">orbit @ wikova</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td></tr>
+          <tr><td class="w">orbit @ MacBook</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td></tr>
+          <tr><td class="w">wikova @ workstation</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td></tr>
+          <tr><td class="w">wikova @ wikova</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td></tr>
+          <tr><td class="w">wikids @ wikova</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td><td class="c">✓</td></tr>
+        </table>
+        <div class="note v" style="margin-top:12px">名字回到只说一件事：<code>orbit</code> 就叫 orbit，在哪台机器由 <code>@runner</code> 说，用什么角色由 Agent 说。5 个 workspace × 4 个 agent = 20 种组合，写 9 行配置。</div>
+      </div>
+    </div>
+
+    <div class="note"><b>老实说代价。</b>这是加一个实体，不是省一个。多一次选择（虽然有 Default 兜底）、多一张表、多一层继承要在三端渲染"这个值从哪来"。只有当你真的会复用角色时它才回本 —— 如果你永远只用 Default，这一层就是纯负担。所以我建议：<b>先只做 Agent 库 + 组合器 pill，不动任务指派、不动 @mention、不做共享/市场</b>，用两周看你自己建不建第二个 Agent。建了再往下走。</div>
+  </section>
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.screen').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on'); document.getElementById('s'+t.dataset.s).classList.add('on');
+});
+const A={
+ Reviewer:{mode:'Plan',model:'Opus 5',eff:'high'},
+ Default:{mode:'Auto',model:'Opus 5',eff:'—'},
+ Migrator:{mode:'Accept edits',model:'Opus 5',eff:'max'},
+ Firefighter:{mode:"Don't ask",model:'Opus 5',eff:'max'}};
+const over={};
+function paint(n){
+  document.getElementById('agname').textContent=n;
+  [['pMode','mode','Mode'],['pModel','model','Model'],['pEff','eff','Effort']].forEach(([id,k,label])=>{
+    const el=document.getElementById(id), v=over[k]??A[n][k];
+    el.className='pill '+(over[k]?'over':'inherit');
+    el.innerHTML=`<span class="k">${label}</span><span class="v">${v}</span>`;
+  });
+  const ov=Object.keys(over);
+  document.getElementById('prov').innerHTML= ov.length
+    ? `<span>↑ 未改的来自 <b>${n}</b>；<span class="ov">${ov.length} 项已为本次会话覆盖</span> —— Agent 本身没变</span>`
+    : `<span>↑ Mode / Model / Effort 来自 <b>${n}</b> —— 点任意一枚可以只为这次会话改掉</span>`;
+}
+document.getElementById('agbtn').onclick=()=>{const m=document.getElementById('menu');m.style.display=m.style.display==='block'?'none':'block'};
+document.querySelectorAll('.mi').forEach(mi=>mi.onclick=()=>{
+  document.querySelectorAll('.mi').forEach(x=>x.classList.remove('on')); mi.classList.add('on');
+  for(const k in over) delete over[k];
+  paint(mi.dataset.a); document.getElementById('menu').style.display='none';
+});
+const cyc={mode:['Plan','Auto','Accept edits',"Don't ask"],model:['Opus 5','Sonnet 5','GPT-5.6'],eff:['high','max','medium']};
+[['pMode','mode'],['pModel','model'],['pEff','eff']].forEach(([id,k])=>{
+  document.getElementById(id).onclick=()=>{
+    const n=document.getElementById('agname').textContent;
+    const list=cyc[k], cur=over[k]??A[n][k];
+    over[k]=list[(Math.max(0,list.indexOf(cur))+1)%list.length];
+    paint(n);
+  };
+});
+document.getElementById('menu').style.display='none';
+paint('Reviewer');
+// Deep-linkable tabs (#s0..#s3), and #s0-menu to show the picker open.
+const h=(location.hash||'').replace('#','');
+if(h){
+  const n=h.replace('-menu','').replace('s','');
+  const t=document.querySelector('.tab[data-s="'+n+'"]'); if(t) t.click();
+  if(h.endsWith('-menu')) document.getElementById('menu').style.display='block';
+}
+</script>
+</body>
+</html>
