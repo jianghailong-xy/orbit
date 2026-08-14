@@ -152,7 +152,17 @@ export class TaskListsService {
 
   async update(ownerId: string, id: string, dto: UpdateTaskListDto) {
     await this.get(ownerId, id);
-    const list = await this.prisma.taskList.update({ where: { id }, data: { title: dto.title } });
+    // Each field is written only when the caller sent it, so a title rename cannot silently
+    // clear a pause and a pause cannot blank a title. `maxConcurrent: null` is a meaningful
+    // value (uncap), which is why it is distinguished from "absent" rather than falsy-checked.
+    const list = await this.prisma.taskList.update({
+      where: { id },
+      data: {
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.paused !== undefined ? { paused: dto.paused } : {}),
+        ...(dto.maxConcurrent !== undefined ? { maxConcurrent: dto.maxConcurrent } : {}),
+      },
+    });
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return list;
   }

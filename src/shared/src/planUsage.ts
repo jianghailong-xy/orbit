@@ -34,6 +34,25 @@ function snapshotFor(usage: PlanUsage, provider: string): PlanUsageSnapshot | un
 }
 
 /**
+ * Does this runner report `provider`'s quota at all? This is the question
+ * {@link planUsageBlockedUntil} cannot answer, because it collapses two very different
+ * situations into the same `null`: "the quota is reported and demonstrably fine" and "there
+ * is no quota data here to judge by".
+ *
+ * That distinction matters to anything holding work back after a usage-limit failure. With a
+ * readable snapshot, a null verdict is positive knowledge — the window has reset, so work
+ * should resume at once. With no snapshot the caller is blind, and resuming immediately is
+ * what turns a multi-day quota outage into a once-a-minute respawn loop.
+ */
+export function planUsageReported(
+  usage: PlanUsage | null | undefined,
+  provider: string,
+): boolean {
+  if (!usage) return false;
+  return snapshotFor(usage, provider) !== undefined;
+}
+
+/**
  * When does `provider`'s quota on this runner free up again, if it is exhausted right now?
  * Returns the latest reset among the exhausted windows (all of them must clear before work
  * can resume), or null when nothing is exhausted, the provider isn't covered by this

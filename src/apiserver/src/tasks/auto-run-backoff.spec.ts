@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
+  QUOTA_BLIND_RETRY_BACKOFF_MS,
   TasksService,
 } from './tasks.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
@@ -27,10 +28,14 @@ interface Options {
 /** Every task in these fixtures is assigned to the same workspace. */
 const AGENT_ID = 'workspace-1';
 
+type ErrorClause = Array<{ error: { contains: string } }>;
 type GroupByArgs = {
   where: {
     taskId: { in: string[] };
-    NOT?: { OR?: Array<{ error: { contains: string } }> };
+    /** Present on the usage-limit query: count only failures matching a marker. */
+    OR?: ErrorClause;
+    /** Present on the budget query: count only failures matching no marker. */
+    NOT?: { OR?: ErrorClause };
   };
 };
 
@@ -72,11 +77,21 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     },
     session: {
       groupBy: async ({ where }: GroupByArgs) => {
+        const included = (where.OR ?? []).map((c) => c.error.contains.toLowerCase());
         const excluded = (where.NOT?.OR ?? []).map((c) => c.error.contains.toLowerCase());
-        const counted = (h: FailureHistory): number =>
-          h.errors
-            ? h.errors.filter((e) => !excluded.some((m) => e.toLowerCase().includes(m))).length
-            : (h.failed ?? 0);
+        // A `failed: n` fixture means n ordinary failures with no usage-limit wording, so it
+        // stands in as n empty error strings — counted by the exclusion query, ignored by the
+        // inclusion one. Modelling both directions is what lets a test assert that a quota
+        // failure and a real failure are held back by different rules.
+        const counted = (h: FailureHistory): number => {
+          const errors = h.errors ?? Array.from({ length: h.failed ?? 0 }, () => '');
+          return errors.filter((e) => {
+            const lower = e.toLowerCase();
+            return included.length
+              ? included.some((m) => lower.includes(m))
+              : !excluded.some((m) => lower.includes(m));
+          }).length;
+        };
         return history
           .filter((h) => where.taskId.in.includes(h.taskId) && counted(h) > 0)
           .map((h) => ({
@@ -249,6 +264,88 @@ test('a genuine failure still counts when quota failures are mixed in', async ()
   await sweep(service);
   // One real failure 30s ago -> still inside the first backoff window.
   assert.deepEqual(executed, []);
+});
+
+// The hole these four close: planUsageBlockedUntil declines to block without a reported
+// `resetsAt` on the grounds that "the caller's normal failure backoff" will handle it, while
+// that backoff exempts usage-limit failures on the grounds that the gate will. Between the two,
+// a quota the runner could not date re-dispatched a session every single sweep.
+test('a usage-limit failure is held when the runner reports no quota to judge by', async () => {
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-blind-quota', errors: [QUOTA_ERROR], lastFailedAt: agoMs(30_000) }],
+    // No planUsage at all: nothing says whether the window is still shut.
+    { provider: 'codex' },
+  );
+  await sweep(service);
+  assert.deepEqual(executed, []);
+});
+
+test('the blind hold is flat, so the task returns on its own once it elapses', async () => {
+  const { service, executed } = makeService(
+    [],
+    [
+      {
+        taskId: 'task-blind-cooled',
+        errors: [QUOTA_ERROR],
+        lastFailedAt: agoMs(QUOTA_BLIND_RETRY_BACKOFF_MS + 1_000),
+      },
+    ],
+    { provider: 'codex' },
+  );
+  await sweep(service);
+  assert.deepEqual(executed, ['task-blind-cooled']);
+});
+
+test('a blind quota outage never retires a task, however many runs it killed', async () => {
+  // The whole point of exempting quota failures from the budget: far past MAX_AUTO_RUN_FAILURES
+  // and it still comes back, because none of those runs said anything about the task itself.
+  const { service, executed } = makeService(
+    [],
+    [
+      {
+        taskId: 'task-blind-many',
+        errors: Array.from({ length: MAX_AUTO_RUN_FAILURES + 5 }, () => QUOTA_ERROR),
+        lastFailedAt: agoMs(QUOTA_BLIND_RETRY_BACKOFF_MS + 1_000),
+      },
+    ],
+    { provider: 'codex' },
+  );
+  await sweep(service);
+  assert.deepEqual(executed, ['task-blind-many']);
+});
+
+test('a reported healthy quota dispatches at once — a snapshot is positive evidence', async () => {
+  // Same fresh usage-limit failure as the blind case above, but here the runner does report the
+  // provider's quota and nothing is exhausted. That report is what distinguishes "the window
+  // reopened" from "we have no idea", and only the latter earns a hold.
+  const { service, executed } = makeService(
+    [],
+    [{ taskId: 'task-quota-recovered', errors: [QUOTA_ERROR], lastFailedAt: agoMs(30_000) }],
+    {
+      provider: 'codex',
+      planUsage: {
+        provider: 'codex',
+        primary: { label: 'Weekly limit', utilization: 4, resetsAt: inHours(72) },
+      },
+    },
+  );
+  await sweep(service);
+  assert.deepEqual(executed, ['task-quota-recovered']);
+});
+
+test('a paused list is filtered out of the candidate scan in SQL', async () => {
+  let sql = '';
+  const prisma = {
+    $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
+      sql = Prisma.sql(strings, ...(bound as never[])).text;
+      return [];
+    },
+  } as never;
+  await sweep(new TasksService(prisma, {} as never, {} as never));
+  // In the scan, not only in execute(): a paused 500-task list would otherwise throw once per
+  // task per minute for as long as the pause lasted.
+  assert.match(sql, /NOT EXISTS \(SELECT 1 FROM task_list tl WHERE tl\.id = t\.list_id AND tl\.paused = true\)/);
 });
 
 test('the sweep selects candidates on all five READY conditions, anchored on a DONE prerequisite', async () => {

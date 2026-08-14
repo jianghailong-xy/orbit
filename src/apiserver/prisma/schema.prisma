@@ -969,6 +969,17 @@ model TaskList {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  // Emergency stop for the whole list. The auto-run sweep skips a paused list's tasks and
+  // execute() refuses them, so one write halts a campaign that is dispatching wrongly —
+  // previously the only way to stop one was to edit and redeploy the reconciler. Runs already
+  // in flight are deliberately left alone: this gates dispatch, not execution.
+  paused        Boolean @default(false)
+  // Cap on this list's concurrently RUNNING task sessions, enforced by the claim transaction's
+  // existing batch gate (see QueueService) with the list id as the batch. Null means uncapped,
+  // which is the pre-existing behaviour: only the runner-wide cap applies, so a 500-task list
+  // auto-running takes every free slot and starves every other list behind it.
+  maxConcurrent Int?    @map("max_concurrent")
+
   tasks Task[]
 
   @@index([ownerId])

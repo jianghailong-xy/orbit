@@ -12,6 +12,7 @@ import { CreatorType, Prisma, RunStatus, Task, TaskComment } from '@prisma/clien
 import {
   AgentProvider,
   planUsageBlockedUntil,
+  planUsageReported,
   RunEventType,
   TaskStatus,
   USAGE_LIMIT_ERROR_MARKERS,
@@ -148,6 +149,11 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  -- A paused list is out of the sweep entirely: pausing is the stop for a campaign dispatching
+  -- wrongly, so it has to work here, not only on the manual button. Filtered in SQL rather than
+  -- by letting execute() throw per task, which would log one rejection per task per minute for
+  -- as long as the pause lasts. A task with no list has nothing to pause and is unaffected.
+  AND NOT EXISTS (SELECT 1 FROM task_list tl WHERE tl.id = t.list_id AND tl.paused = true)
   AND EXISTS (
     SELECT 1 FROM task_dependency d
     JOIN task p ON p.id = d.depends_on_task_id
@@ -201,6 +207,17 @@ const RECONCILE_INTERVAL_MS = 60_000;
 // so entry [0] is the wait after the first failed run.
 export const AUTO_RUN_RETRY_BACKOFF_MS = [2 * 60_000, 8 * 60_000, 30 * 60_000, 120 * 60_000];
 export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
+
+// Flat brake for runs killed by a provider usage limit that the quota gate could not put a
+// resume time on. Those failures are excluded from the budget above on purpose (see
+// autoRunHoldOff) — one quota outage must not permanently retire a fleet — and
+// planUsageBlockedUntil deliberately declines to block without a reported `resetsAt`, leaving
+// "the caller's normal failure backoff" to handle it. Between those two decisions nothing
+// actually did: a blind gate plus an exempt failure is the once-a-minute respawn loop the
+// backoff exists to stop. This is that missing brake, and it is flat rather than escalating
+// because a quota is not evidence the task is broken — it recovers on its own schedule, and
+// the only job here is to stop burning a session a minute while waiting for it.
+export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
 
 // PostgreSQL accepts at most 32,767 bind parameters. Dependency lookups are also used
 // by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
@@ -2251,9 +2268,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
-    const quotaBlocked = await this.quotaBlockedRunners(ready);
-    // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS).
-    const heldOff = await this.autoRunHoldOff(ready.map((t) => t.id));
+    const { blocked: quotaBlocked, blind: quotaBlind } = await this.quotaGate(ready);
+    // Don't re-dispatch a task whose runs keep failing (see AUTO_RUN_RETRY_BACKOFF_MS). Tasks
+    // on a runner reporting no quota at all are named so the backoff can damp a usage limit
+    // the gate above had no reset time to hold on.
+    const blindTaskIds = new Set(
+      ready
+        .filter((t) => {
+          const runnerId = t.assignee?.runnerId;
+          return !!runnerId && quotaBlind.has(`${runnerId}:${t.assignee.provider}`);
+        })
+        .map((t) => t.id),
+    );
+    const heldOff = await this.autoRunHoldOff(
+      ready.map((t) => t.id),
+      blindTaskIds,
+    );
     let quotaHeld = 0;
     let resumesAt: Date | undefined;
     for (const t of ready) {
@@ -2291,19 +2321,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * failed session per sweep until the window resets (a weekly limit means days of them).
    *
    * Keyed per (runner, provider) because one runner can host workspaces on several runtimes and
-   * only some of their quotas may be spent. Runners whose snapshot reports no exhausted
-   * window — or reports one with no reset time — are simply absent: the failure backoff, not
-   * this gate, handles anything we cannot put a resume time on.
+   * only some of their quotas may be spent. A pair whose snapshot reports no exhausted window,
+   * or an exhausted one with no reset time, is absent from `blocked`.
+   *
+   * `blind` names the pairs this gate has *no quota data for at all*, which is a different
+   * thing from "not blocked" and must not be confused with it: for a reported-and-healthy
+   * quota, dispatching immediately after a usage-limit failure is right (the window reset),
+   * while doing the same with no snapshot to go on is what produces the respawn loop
+   * QUOTA_BLIND_RETRY_BACKOFF_MS exists to damp.
    */
-  private async quotaBlockedRunners(
+  private async quotaGate(
     tasks: Array<{ assignee: { provider: string; runnerId: string | null } | null }>,
-  ): Promise<Map<string, Date>> {
+  ): Promise<{ blocked: Map<string, Date>; blind: Set<string> }> {
     const runnerIds = [
       ...new Set(
         tasks.map((t) => t.assignee?.runnerId).filter((id): id is string => typeof id === 'string'),
       ),
     ];
-    if (runnerIds.length === 0) return new Map();
+    const blocked = new Map<string, Date>();
+    const blind = new Set<string>();
+    if (runnerIds.length === 0) return { blocked, blind };
     const runners = await this.prisma.runner.findMany({
       where: { id: { in: runnerIds } },
       select: { id: true, planUsage: true },
@@ -2312,20 +2349,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       runners.map((r) => [r.id, r.planUsage as unknown as PlanUsage | null]),
     );
     const now = new Date();
-    const blocked = new Map<string, Date>();
     for (const t of tasks) {
       const assignee = t.assignee;
       if (!assignee?.runnerId) continue;
       const key = `${assignee.runnerId}:${assignee.provider}`;
+      const usage = usageByRunner.get(assignee.runnerId);
+      if (!planUsageReported(usage, assignee.provider)) blind.add(key);
       if (blocked.has(key)) continue;
-      const until = planUsageBlockedUntil(
-        usageByRunner.get(assignee.runnerId),
-        assignee.provider,
-        now,
-      );
+      const until = planUsageBlockedUntil(usage, assignee.provider, now);
       if (until) blocked.set(key, until);
     }
-    return blocked;
+    return { blocked, blind };
   }
 
   /**
@@ -2336,14 +2370,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * reconciler candidate, so for an OPEN auto-run task these failures are its run history.
    * Tasks with no failed run are absent from the result and dispatch immediately.
    *
-   * Runs killed by an exhausted provider quota are excluded: they carry no evidence that
-   * anything is wrong with the task, so letting them spend its budget would leave a fleet
+   * Runs killed by an exhausted provider quota are excluded from that budget: they carry no
+   * evidence that anything is wrong with the task, so letting them spend it would leave a fleet
    * permanently un-runnable after one quota outage — exactly the tasks that should pick
    * themselves back up once the window resets.
+   *
+   * `quotaBlindTaskIds` are the ones whose runner reports no quota snapshot to judge by. Only
+   * those get the flat QUOTA_BLIND_RETRY_BACKOFF_MS hold after a usage-limit failure. A task
+   * whose runner *does* report a healthy quota is dispatched at once instead: that report is
+   * positive evidence the window reset, and delaying it would be the very "un-runnable fleet"
+   * this exemption exists to prevent.
    */
-  private async autoRunHoldOff(taskIds: string[]): Promise<Set<string>> {
+  private async autoRunHoldOff(
+    taskIds: string[],
+    quotaBlindTaskIds: ReadonlySet<string>,
+  ): Promise<Set<string>> {
     const held = new Set<string>();
     const uniqueIds = [...new Set(taskIds)];
+    const usageLimitIs = (negated: boolean) => {
+      const clauses = USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
+        error: { contains: marker, mode: Prisma.QueryMode.insensitive },
+      }));
+      return negated ? { NOT: { OR: clauses } } : { OR: clauses };
+    };
     for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
       const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
       const failures = await this.prisma.session.groupBy({
@@ -2351,11 +2400,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: {
           taskId: { in: ids },
           status: RunStatus.FAILED,
-          NOT: {
-            OR: USAGE_LIMIT_ERROR_MARKERS.map((marker) => ({
-              error: { contains: marker, mode: Prisma.QueryMode.insensitive },
-            })),
-          },
+          ...usageLimitIs(true),
         },
         _count: { _all: true },
         _max: { createdAt: true },
@@ -2371,6 +2416,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const lastFailedAt = row._max.createdAt?.getTime();
         if (lastFailedAt === undefined) continue;
         if (now - lastFailedAt < AUTO_RUN_RETRY_BACKOFF_MS[failed - 1]) held.add(row.taskId);
+      }
+      // The mirror query: only the usage-limit failures, counted for their recency alone, and
+      // only for the tasks the gate is blind on. A separate round trip rather than one
+      // unfiltered groupBy because the two populations need different arithmetic — one
+      // escalates and gives up, this one never does — and a single grouped row cannot tell
+      // them apart.
+      const blindIds = ids.filter((id) => quotaBlindTaskIds.has(id));
+      if (blindIds.length === 0) continue;
+      const quotaFailures = await this.prisma.session.groupBy({
+        by: ['taskId'],
+        where: {
+          taskId: { in: blindIds },
+          status: RunStatus.FAILED,
+          ...usageLimitIs(false),
+        },
+        _max: { createdAt: true },
+      });
+      for (const row of quotaFailures) {
+        if (!row.taskId || held.has(row.taskId)) continue;
+        const lastFailedAt = row._max.createdAt?.getTime();
+        if (lastFailedAt === undefined) continue;
+        if (now - lastFailedAt < QUOTA_BLIND_RETRY_BACKOFF_MS) held.add(row.taskId);
       }
     }
     return held;
@@ -2590,6 +2657,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         provider: true,
         model: true,
         status: true,
+        listId: true,
+        list: { select: { paused: true, maxConcurrent: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -2602,6 +2671,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           : 'Prerequisites are not all complete yet, cannot run',
       );
     }
+    // The sweep already filters paused lists out in SQL; this is the manual button's half of the
+    // same rule, so "paused" cannot be quietly bypassed by clicking Run on a task inside one.
+    if (task.list?.paused) {
+      throw new BadRequestException('This task list is paused — resume it before running');
+    }
     if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
     if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
     const prompt = this.buildExecutePrompt(task);
@@ -2611,6 +2685,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       { id: task.assignee.id, runnerId: task.assignee.runnerId },
       prompt,
       `执行任务：${task.title}`,
+      // The list doubles as a durable batch so its cap is enforced by the claim transaction's
+      // existing batch gate — no second scheduler. Only when the list actually sets a cap:
+      // batch_id with a NULL batch_max_concurrent makes the gate's `count(*) < NULL` evaluate
+      // to NULL, and the session would never be claimed at all.
+      task.listId && task.list?.maxConcurrent != null
+        ? { id: task.listId, maxConcurrent: task.list.maxConcurrent }
+        : undefined,
     );
     if (task.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, task.id);
     return { ok: true, sessionId };
