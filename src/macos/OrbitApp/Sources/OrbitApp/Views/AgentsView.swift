@@ -574,6 +574,7 @@ struct NewSessionView: View {
                 .padding(.horizontal, 12).padding(.vertical, 4)
                 .background(.bar)
             }
+            ComposerAttachmentsView(console: draft)
             ComposerView(console: draft, autoFocus: true)
         }
         #if os(iOS)

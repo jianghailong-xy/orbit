@@ -51,8 +51,11 @@ struct ConsoleView: View {
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
-                    // Background tray sits above the worktree bar, matching web's layout — the
-                    // git status bar stays directly above the composer.
+                    // Staged attachments, background tray, git bar, composer — web's order
+                    // (`workspace-composer`). The image you just added tops the stack rather than
+                    // sitting between the tray and the composer, where it read as another piece of
+                    // session chrome instead of part of the message about to be sent.
+                    ComposerAttachmentsView(console: console)
                     BackgroundTrayView(procs: console.state.background)
                     WorktreeBar(console: console)
                     ComposerView(console: console)

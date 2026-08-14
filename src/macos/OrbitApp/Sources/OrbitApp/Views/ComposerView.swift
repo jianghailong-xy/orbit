@@ -163,13 +163,6 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
-            if !console.pendingAttachments.isEmpty {
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(console.pendingAttachments) { attachmentChip($0) }
-                    Spacer(minLength: 0)
-                }
-            }
-
             if showSlash { slashMenu }
 
             // One rounded box wrapping the + menu, the growing field, and send — mirrors the web
@@ -568,84 +561,6 @@ struct ComposerView: View {
         if selected { Label(text, systemImage: "checkmark") } else { Text(text) }
     }
 
-    // MARK: staged attachment chips (mirror the web composer's image thumbnails / file chips)
-
-    @ViewBuilder
-    private func attachmentChip(_ att: PendingAttachment) -> some View {
-        if let data = att.previewImageData, let image = PlatformImage(data: data) {
-            // Inline image: a 48×48 thumbnail with a corner remove button (web's .composer-attach).
-            Image(platformImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 48, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
-                // While the background upload runs, dim the thumbnail and show a spinner (web
-                // parity: the `composer-attach-spin` badge). It clears the instant the id lands.
-                .overlay {
-                    if att.isUploading {
-                        RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.35))
-                        ProgressView().controlSize(.small).tint(.white)
-                    }
-                }
-                // iOS: tap the staged thumbnail to open the full-screen viewer before sending
-                // (the tiny 48² chip is hard to read otherwise). Preview the full-resolution bytes
-                // seeded in the shared store when the upload finishes — the same source the sent
-                // bubble uses — falling back to the downsampled thumbnail while still uploading.
-                // The remove button is overlaid *after* this, so it stays on top and its taps aren't
-                // captured by the preview.
-                .modifier(ComposerImageTap(image: att.remoteID.flatMap { console.attachments.image(for: $0) } ?? image))
-                .overlay(alignment: .topTrailing) {
-                    Button { console.removeAttachment(att) } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(removeGlyphFont)
-                            .foregroundStyle(.white, .black.opacity(0.55))
-                            #if os(iOS)
-                            // A .plain button's hit area is only its glyph, so the 11pt caption2 ✕ gave
-                            // a ~13pt target — under a third of HIG's 44pt and the composer's hardest
-                            // control to tap. Enlarge the *touchable* area to 30pt (glyph stays a small
-                            // corner badge) and nudge it up/right so that area reaches into empty space
-                            // past the 48pt thumb instead of blanketing the image — a full 44pt box would
-                            // cover it and steal its tap-to-preview. macOS (pointer) keeps the tight badge.
-                            .frame(width: 30, height: 30)
-                            .contentShape(Rectangle())
-                            .offset(x: 7, y: -7)
-                            #endif
-                    }
-                    .buttonStyle(.plain)
-                    #if os(macOS)
-                    .padding(2)
-                    #endif
-                    .help("Remove image")
-                }
-        } else {
-            // Other file: a name + size chip (web's .composer-file). The leading icon spins while
-            // the upload is in flight, then settles to a paperclip (web parity).
-            HStack(spacing: 6) {
-                if att.isUploading {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Image(systemName: "paperclip").foregroundStyle(.secondary)
-                }
-                Text(att.filename).lineLimit(1).truncationMode(.middle)
-                Text(byteString(att.byteCount)).foregroundStyle(.secondary)
-                Button { console.removeAttachment(att) } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Remove file")
-            }
-            .font(.orbitLabel)
-            .padding(.vertical, 4).padding(.horizontal, 8)
-            .frame(maxWidth: 220, alignment: .leading)
-            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-
-    private func byteString(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-    }
-
     // MARK: `/` autocomplete menu
 
     // The `/` menu was tuned as a macOS pointer menu (dense rows, 4pt gutters). On iOS those same
@@ -757,6 +672,104 @@ struct ComposerView: View {
         console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
     }
     #endif
+}
+
+/// The staged attachments a message is about to carry: 48² thumbnails for images, name + size
+/// chips for other files. Its own view because it does NOT live inside the composer box's stack —
+/// the console places it at the top of the composer chrome, above the background tray and the git
+/// bar (web parity: `.composer-attachments` is the first child of `.workspace-composer`), so a
+/// screenshot you just added reads as part of the message you're sending rather than as something
+/// buried under the diff chip.
+struct ComposerAttachmentsView: View {
+    let console: ConsoleModel
+
+    var body: some View {
+        if !console.pendingAttachments.isEmpty {
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(console.pendingAttachments) { attachmentChip($0) }
+                Spacer(minLength: 0)
+            }
+            // The same 16pt gutter + 8pt gap the tray and worktree cards below it use, so the
+            // three read as one inset stack above the composer.
+            .padding(.horizontal, 16).padding(.bottom, 8)
+        }
+    }
+
+    @ViewBuilder
+    private func attachmentChip(_ att: PendingAttachment) -> some View {
+        if let data = att.previewImageData, let image = PlatformImage(data: data) {
+            // Inline image: a 48×48 thumbnail with a corner remove button (web's .composer-attach).
+            Image(platformImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 48, height: 48)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
+                // While the background upload runs, dim the thumbnail and show a spinner (web
+                // parity: the `composer-attach-spin` badge). It clears the instant the id lands.
+                .overlay {
+                    if att.isUploading {
+                        RoundedRectangle(cornerRadius: 8).fill(.black.opacity(0.35))
+                        ProgressView().controlSize(.small).tint(.white)
+                    }
+                }
+                // iOS: tap the staged thumbnail to open the full-screen viewer before sending
+                // (the tiny 48² chip is hard to read otherwise). Preview the full-resolution bytes
+                // seeded in the shared store when the upload finishes — the same source the sent
+                // bubble uses — falling back to the downsampled thumbnail while still uploading.
+                // The remove button is overlaid *after* this, so it stays on top and its taps aren't
+                // captured by the preview.
+                .modifier(ComposerImageTap(image: att.remoteID.flatMap { console.attachments.image(for: $0) } ?? image))
+                .overlay(alignment: .topTrailing) {
+                    Button { console.removeAttachment(att) } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(removeGlyphFont)
+                            .foregroundStyle(.white, .black.opacity(0.55))
+                            #if os(iOS)
+                            // A .plain button's hit area is only its glyph, so the 11pt caption2 ✕ gave
+                            // a ~13pt target — under a third of HIG's 44pt and the composer's hardest
+                            // control to tap. Enlarge the *touchable* area to 30pt (glyph stays a small
+                            // corner badge) and nudge it up/right so that area reaches into empty space
+                            // past the 48pt thumb instead of blanketing the image — a full 44pt box would
+                            // cover it and steal its tap-to-preview. macOS (pointer) keeps the tight badge.
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                            .offset(x: 7, y: -7)
+                            #endif
+                    }
+                    .buttonStyle(.plain)
+                    #if os(macOS)
+                    .padding(2)
+                    #endif
+                    .help("Remove image")
+                }
+        } else {
+            // Other file: a name + size chip (web's .composer-file). The leading icon spins while
+            // the upload is in flight, then settles to a paperclip (web parity).
+            HStack(spacing: 6) {
+                if att.isUploading {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "paperclip").foregroundStyle(.secondary)
+                }
+                Text(att.filename).lineLimit(1).truncationMode(.middle)
+                Text(byteString(att.byteCount)).foregroundStyle(.secondary)
+                Button { console.removeAttachment(att) } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("Remove file")
+            }
+            .font(.orbitLabel)
+            .padding(.vertical, 4).padding(.horizontal, 8)
+            .frame(maxWidth: 220, alignment: .leading)
+            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    private func byteString(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
 }
 
 /// iOS: make a staged composer image thumbnail tappable to open the shared full-screen viewer
