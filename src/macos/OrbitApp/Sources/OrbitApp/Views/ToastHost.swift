@@ -32,62 +32,74 @@ private struct ToastHost: ViewModifier {
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .top) {
-                if let toast = model.toast {
-                    HStack(spacing: 12) {
-                        Image(systemName: toast.icon ?? Self.icon(for: toast.tone))
-                            .font(.title3)
-                            .foregroundStyle(Self.tint(for: toast.tone))
-                            .accessibilityHidden(true)
-                        // The copy doubles as the way into the session it reports on. It's the copy —
-                        // not the whole card — so Undo and ✕ keep their own targets, and it takes the
-                        // full width (see `copy`) so the tap lands anywhere along the row.
-                        if toast.sessionID != nil {
-                            Button { model.openToastSession() } label: { copy(toast) }
-                                .buttonStyle(.plain)
-                                .accessibilityHint("Opens the session")
-                        } else {
-                            copy(toast)
-                        }
-                        if toast.canUndo {
-                            Button("Undo") { model.undoSessionAction() }
-                                .font(.body.weight(.semibold))
-                        }
-                        // A persistent card needs a way out; a self-dismissing one would just be
-                        // offering to race its own timer.
-                        if toast.tone.isPersistent {
-                            Button { model.dismissToast() } label: {
-                                Image(systemName: "xmark")
+                // The card's animation belongs to this container, never to `content`.
+                // `.animation(_:value:)` animates *everything* the modifier is attached to, so hanging
+                // it off the modified content put the whole shell — the section's NavigationSplitView
+                // included — under `.snappy` for any change that landed in the same transaction as a
+                // toast change. Tapping the card is exactly that transaction: `openToastSession` clears
+                // the toast and routes to its session in one go, so the collapsed split's push ran as a
+                // SwiftUI implicit animation over a UIKit navigation transition and wedged the stack —
+                // the frozen screen showing the list and the console composited on top of each other.
+                // An always-present container (empty when there's no toast) keeps the insert/remove
+                // transition animated while leaving the shell below on its own transaction.
+                ZStack(alignment: .top) {
+                    if let toast = model.toast {
+                        HStack(spacing: 12) {
+                            Image(systemName: toast.icon ?? Self.icon(for: toast.tone))
+                                .font(.title3)
+                                .foregroundStyle(Self.tint(for: toast.tone))
+                                .accessibilityHidden(true)
+                            // The copy doubles as the way into the session it reports on. It's the copy
+                            // — not the whole card — so Undo and ✕ keep their own targets, and it takes
+                            // the full width (see `copy`) so the tap lands anywhere along the row.
+                            if toast.sessionID != nil {
+                                Button { model.openToastSession() } label: { copy(toast) }
+                                    .buttonStyle(.plain)
+                                    .accessibilityHint("Opens the session")
+                            } else {
+                                copy(toast)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel("Dismiss")
+                            if toast.canUndo {
+                                Button("Undo") { model.undoSessionAction() }
+                                    .font(.body.weight(.semibold))
+                            }
+                            // A persistent card needs a way out; a self-dismissing one would just be
+                            // offering to race its own timer.
+                            if toast.tone.isPersistent {
+                                Button { model.dismissToast() } label: {
+                                    Image(systemName: "xmark")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("Dismiss")
+                            }
                         }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background {
+                            let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            shape.fill(.regularMaterial)
+                                // Hairline edge so the card still reads as a distinct surface where the
+                                // material lands on a same-toned background. `.primary` so it inverts
+                                // with the appearance instead of staying a dark line in dark mode.
+                                .overlay(shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.7))
+                                .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
+                        }
+                        // Cap the card so a long message wraps into a compact block instead of
+                        // stretching across an iPad/Mac window (web parity: the 560px notice cap).
+                        .frame(maxWidth: 560)
+                        .padding(.horizontal, 16)
+                        .padding(.top, Self.topInset)
+                        // A card that names a session is a shortcut into it, so it has to take touches.
+                        // One that names none (a draft console's) stays pass-through rather than eating
+                        // scrolls and taps on the transcript beneath it for its whole 4s.
+                        .allowsHitTesting(toast.sessionID != nil)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .id(toast.id)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
-                    .background {
-                        let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        shape.fill(.regularMaterial)
-                            // Hairline edge so the card still reads as a distinct surface where the
-                            // material lands on a same-toned background. `.primary` so it inverts
-                            // with the appearance instead of staying a dark line in dark mode.
-                            .overlay(shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.7))
-                            .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-                    }
-                    // Cap the card so a long message wraps into a compact block instead of stretching
-                    // across an iPad/Mac window (web parity: the 560px notice cap).
-                    .frame(maxWidth: 560)
-                    .padding(.horizontal, 16)
-                    .padding(.top, Self.topInset)
-                    // A card that names a session is a shortcut into it, so it has to take touches.
-                    // One that names none (a draft console's) stays pass-through rather than eating
-                    // scrolls and taps on the transcript beneath it for its whole 4s.
-                    .allowsHitTesting(toast.sessionID != nil)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .id(toast.id)
                 }
+                .animation(.snappy, value: model.toast)
             }
-            .animation(.snappy, value: model.toast)
             // A card that only paints is invisible to VoiceOver — announce it as it arrives, with
             // the diagnostic, which on a failure is the part worth hearing.
             .onChange(of: model.toast) { _, new in
