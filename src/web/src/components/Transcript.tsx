@@ -1702,8 +1702,8 @@ type ToolGroupSummary = {
   title: string;
   summary: string;
   breakdown?: string;
-  latest?: string;
-  latestMono?: boolean;
+  active?: string;
+  activeMono?: boolean;
   icon: ReactNode;
   tone: Tone;
   status: 'running' | 'error' | 'pending' | 'ok';
@@ -1727,14 +1727,14 @@ function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
         <span className="chat-tool-name">{summary.title}</span>
         <span
           className="chat-tool-summary"
-          title={summary.latest ? `${summary.summary} · Latest: ${summary.latest}` : summary.summary}
+          title={summary.active ? `${summary.summary} · Running: ${summary.active}` : summary.summary}
         >
           {summary.summary}
-          {summary.latest && (
-            <span className="chat-tool-group-latest">
+          {summary.active && (
+            <span className="chat-tool-group-active">
               {' '}
-              · Latest:{' '}
-              <span className={summary.latestMono ? 'mono' : undefined}>{summary.latest}</span>
+              · Running:{' '}
+              <span className={summary.activeMono ? 'mono' : undefined}>{summary.active}</span>
             </span>
           )}
         </span>
@@ -1753,21 +1753,12 @@ function ToolGroupView({ nodes, live }: { nodes: ToolNode[]; live?: boolean }) {
 }
 
 function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary {
-  const described = nodes.map((node) => {
-    const desc = describeTool(node.name, node.input, node.id.startsWith('shell-'));
-    const latest = latestToolSummary(node, desc);
-    return {
-      desc,
-      latest: latest?.text,
-      latestMono: latest?.mono,
-    };
-  });
+  const described = nodes.map((node) => describeTool(node.name, node.input, node.id.startsWith('shell-')));
   const counts = new Map<string, number>();
-  for (const item of described) counts.set(item.desc.label, (counts.get(item.desc.label) ?? 0) + 1);
+  for (const desc of described) counts.set(desc.label, (counts.get(desc.label) ?? 0) + 1);
   const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const sameKind = entries.length === 1;
   const title = sameKind ? `${entries[0][0]} × ${nodes.length}` : `Tools × ${nodes.length}`;
-  const latestItem = [...described].reverse().find((item) => item.latest);
   const running = nodes.filter((node) => live && !node.result).length;
   const pending = nodes.filter((node) => !live && !node.result).length;
   const failed = nodes.filter((node) => !!node.result?.isError).length;
@@ -1777,14 +1768,20 @@ function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary
   if (failed) parts.push(`${failed} failed`);
   if (pending) parts.push(`${pending} pending`);
   if (succeeded) parts.push(`${succeeded} succeeded`);
-  const first = described[0]?.desc;
+  // A single call only earns a slot on the folded row while it is still in flight, where it reads
+  // as progress. Once the group has settled, "the last call" is an arbitrary anchor that doesn't
+  // stand for the group (a 31-step group tends to end on some small `ls`), so the row goes to the
+  // counts and the per-kind breakdown instead. Point at the oldest unfinished call, so parallel
+  // calls settling can't make the label jump backwards.
+  const active = running ? activeToolSummary(described[nodes.findIndex((node) => !node.result)]) : undefined;
+  const first = described[0];
   const status: ToolGroupSummary['status'] = running ? 'running' : failed ? 'error' : pending ? 'pending' : 'ok';
   return {
     title,
     summary: parts.join(' · '),
     breakdown: sameKind ? undefined : entries.map(([label, count]) => `${label} × ${count}`).join(' · '),
-    latest: latestItem?.latest,
-    latestMono: latestItem?.latestMono,
+    active: active?.text,
+    activeMono: active?.mono,
     icon: sameKind ? first?.icon : <ToolOutlined />,
     tone: sameKind ? (first?.tone ?? 'default') : 'default',
     status,
@@ -1792,11 +1789,10 @@ function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary
   };
 }
 
-function latestToolSummary(node: ToolNode, desc: ToolDesc): { text: string; mono: boolean } | undefined {
-  const input = node.input ?? {};
-  if (node.name === 'Bash' && typeof input.command === 'string' && input.command) {
-    return { text: shellCommandSummary(input.command), mono: true };
-  }
+// What the group's in-flight call is doing, in the same words its expanded row uses: the
+// tool's own description when it has one (`desc.summary` already falls back to the raw
+// command for shells that ship without one), never a second, command-shaped language.
+function activeToolSummary(desc: ToolDesc): { text: string; mono: boolean } | undefined {
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };

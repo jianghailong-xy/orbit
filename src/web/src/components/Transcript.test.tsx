@@ -383,6 +383,65 @@ describe('Bash folded row', () => {
   });
 });
 
+// The folded row of a tool group has one job: decide whether the group is worth opening. A
+// settled group answers that with its counts and per-kind breakdown — the last call of 31 is an
+// arbitrary anchor — so only a call still in flight gets a string, and it speaks in the same
+// prose the expanded rows use rather than in raw shell.
+describe('tool group folded row', () => {
+  const call = (seq: number, id: string, description: string, command: string) => ({
+    seq,
+    type: 'tool_use',
+    payload: { id, name: 'Bash', input: { command, description } },
+  });
+  const done = (seq: number, toolUseId: string) => ({ seq, type: 'tool_result', payload: { toolUseId, content: 'ok' } });
+  // A running group auto-opens, so assert against the folded row alone — the expanded detail
+  // below it legitimately shows every raw command.
+  const foldedRow = (html: string) => html.split('chat-tool-group-detail')[0];
+
+  it('names the in-flight call by purpose while the group is still running', () => {
+    const html = foldedRow(renderToStaticMarkup(
+      <Transcript
+        live
+        events={[
+          call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
+          done(2, 't1'),
+          call(3, 't2', 'Locate codex rollout file', 'find /root/.codex -name "*01a000ae*" 2>/dev/null | head'),
+          call(4, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
+        ]}
+      />,
+    ));
+
+    expect(html).toContain('· Running: ');
+    expect(html).toContain('Locate codex rollout file');
+    // Neither the raw command of the running call nor of the finished one.
+    expect(html).not.toContain('01a000ae');
+    expect(html).not.toContain('orbit capabilities');
+  });
+
+  it('leaves the row to the counts once every call has settled', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
+          done(2, 't1'),
+          call(3, 't2', 'Locate codex rollout file', 'find /root/.codex -name "*01a000ae*" 2>/dev/null | head'),
+          done(4, 't2'),
+          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
+          done(6, 't3'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('3 succeeded');
+    expect(html).not.toContain('Running: ');
+    // No call speaks for the group: neither the last command nor its description.
+    expect(html).not.toContain('journalctl');
+    expect(html).not.toContain('Read runner logs');
+    // The per-call detail is one click away, so nothing is lost — only deferred.
+    expect(html).not.toContain('chat-tool-group-detail');
+  });
+});
+
 describe('runtime authentication help', () => {
   // The relay branch renders RunnerSignIn, which reads the query cache.
   const card = (provider: string) =>
