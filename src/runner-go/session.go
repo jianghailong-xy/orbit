@@ -956,7 +956,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 // an agent asked to "create tasks" reaches for these, but their todos live only in
 // the claude process and never reach Orbit's database, so the tasks never show in
 // the UI. Disabling them forces all task work through the orbit MCP server.
-var builtinTaskTools = []string{"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop"}
+// Both families are listed because claude has shipped this feature under two names
+// across versions; denying a name the installed claude does not have is a no-op, while
+// missing the one it does have fails silently.
+var builtinTaskTools = []string{
+	"TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop",
+	"TodoWrite", "TodoRead",
+}
 
 // withBuiltinTaskToolsDisallowed appends builtinTaskTools to the agent's configured
 // disallow list, de-duplicated and order-stable.

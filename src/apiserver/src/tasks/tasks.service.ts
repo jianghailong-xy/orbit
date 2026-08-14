@@ -676,27 +676,48 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
     const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
+    // Best-effort idempotency: a redelivered turn re-runs and re-creates the same tasks. A key is
+    // only formed inside a live turn; without one this stays exactly the old create path. Checking
+    // first lets the common (sequential) re-run return the original task without a write attempt.
+    const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    const idempotencyKey =
+      sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, dto.title, dto.description) : undefined;
+    if (idempotencyKey) {
+      const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
+      if (existing) return existing;
+    }
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
     if (dependsOnTaskIds.length) await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
-    const data = this.taskCreateData(ownerId, dto, creator, sessionId);
+    const data = this.taskCreateData(ownerId, dto, creator, sessionId, idempotencyKey);
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
     // before its prerequisites and closing a cycle. Any FK/write failure rolls the task back too.
-    const task = dependsOnTaskIds.length
-      ? await this.prisma.$transaction(async (tx) => {
-          await this.lockDependencyGraph(tx, ownerId);
-          const created = await tx.task.create({ data });
-          await tx.taskDependency.createMany({
-            data: dependsOnTaskIds.map((dependsOnTaskId) => ({
-              taskId: created.id,
-              dependsOnTaskId,
-            })),
-          });
-          return created;
-        })
-      : await this.prisma.task.create({ data });
+    let task: Task;
+    try {
+      task = dependsOnTaskIds.length
+        ? await this.prisma.$transaction(async (tx) => {
+            await this.lockDependencyGraph(tx, ownerId);
+            const created = await tx.task.create({ data });
+            await tx.taskDependency.createMany({
+              data: dependsOnTaskIds.map((dependsOnTaskId) => ({
+                taskId: created.id,
+                dependsOnTaskId,
+              })),
+            });
+            return created;
+          })
+        : await this.prisma.task.create({ data });
+    } catch (e) {
+      // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
+      // pre-check above. Return the winner rather than surfacing a write conflict to the agent.
+      if (idempotencyKey && this.isDuplicateKey(e)) {
+        const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
+        if (existing) return existing;
+      }
+      throw e;
+    }
     // Push the new task to the owner's control-plane stream (GET /api/events) so their task
     // list refreshes live instead of on the next poll — the fix for "MCP-created tasks only
     // show up after a manual refresh". Scoped via the creating session (the MCP path always
@@ -713,6 +734,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     dto: CreateTaskDto,
     creator: Creator | undefined,
     sessionId: string | undefined,
+    idempotencyKey?: string,
   ): Prisma.TaskUncheckedCreateInput {
     return {
       title: dto.title,
@@ -722,6 +744,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       creatorType: creator?.type ?? CreatorType.USER,
       creatorId: creator?.id ?? ownerId,
       creatorSessionId: sessionId,
+      idempotencyKey,
       assigneeId: dto.assigneeId,
       listId: dto.listId,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
@@ -781,6 +804,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const existingPrerequisites = distinct(items.flatMap((item) => item.dependsOnTaskIds ?? []));
     if (existingPrerequisites.length) await this.assertOwnedTasks(ownerId, existingPrerequisites);
     const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
+    // One turn for the whole batch (see create): the same key that collapses a re-run of a single
+    // create collapses a re-run of a batch, item by item, without merging distinct items.
+    const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
 
     const hasDependencies = items.some(
       (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
@@ -792,9 +818,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const idByRef = new Map<string, string>();
       const rows: Array<Task & { ref?: string }> = [];
       for (const item of items) {
-        const task = await tx.task.create({
-          data: this.taskCreateData(ownerId, item, creator, sessionId),
-        });
+        // find-or-create by the item's key: a re-run's items already exist (committed by the first
+        // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
+        // A ref pointing at a collapsed item therefore resolves to the surviving task's id.
+        const idempotencyKey =
+          sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description) : undefined;
+        const existing = idempotencyKey
+          ? await tx.task.findUnique({ where: { idempotencyKey } })
+          : null;
+        const task =
+          existing ??
+          (await tx.task.create({
+            data: this.taskCreateData(ownerId, item, creator, sessionId, idempotencyKey),
+          }));
         if (item.ref !== undefined) idByRef.set(item.ref, task.id);
         const dependsOnTaskIds = [
           ...new Set([
@@ -803,7 +839,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             ...(item.dependsOnRefs ?? []).map((ref) => idByRef.get(ref)!),
           ]),
         ];
-        if (dependsOnTaskIds.length)
+        // Only a newly created task needs its edges; an existing one already carries them from the
+        // first run, and re-inserting would collide on the (taskId, dependsOnTaskId) unique index.
+        if (!existing && dependsOnTaskIds.length)
           await tx.taskDependency.createMany({
             data: dependsOnTaskIds.map((dependsOnTaskId) => ({
               taskId: task.id,
@@ -827,6 +865,46 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     return session?.id;
+  }
+
+  /**
+   * The conversation turn a task create belongs to, or undefined. The inbox delivers at most one
+   * message/shell turn IN_FLIGHT per session at a time (the claim SQL only hands out a PENDING one
+   * when none is in flight), so this is unambiguous. A redelivered turn keeps its row id, which is
+   * precisely what lets the idempotency key below match between a turn's first run and its re-run.
+   */
+  private async currentTurnId(sessionId: string): Promise<string | undefined> {
+    const turn = await this.prisma.conversationTurn.findFirst({
+      where: { sessionId, status: 'IN_FLIGHT', kind: { in: ['message', 'shell'] } },
+      orderBy: { seq: 'desc' },
+      select: { id: true },
+    });
+    return turn?.id;
+  }
+
+  /**
+   * A best-effort key that collapses the SAME task created twice inside one turn — the shape of a
+   * redelivered turn re-running its side effects (a lease expiry hands the turn back and the engine
+   * re-creates the tasks it already created; see the runner's redelivery double-run). Scoped by
+   * turnId so two DIFFERENT turns that each legitimately create an identically worded task are
+   * never merged. The tradeoff — two byte-identical creates within ONE turn collapse to one — is
+   * deliberate and far rarer than the duplicate it prevents.
+   */
+  private taskIdempotencyKey(
+    sessionId: string,
+    turnId: string,
+    title: string,
+    description?: string,
+  ): string {
+    return createHash('sha256')
+      .update(JSON.stringify(['task-create', sessionId, turnId, title.trim(), (description ?? '').trim()]))
+      .digest('hex');
+  }
+
+  /** True for a unique-constraint violation — the idempotency index firing on a concurrent re-run
+   *  that raced past the pre-check. */
+  private isDuplicateKey(e: unknown): boolean {
+    return e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
   }
 
   async list(ownerId: string) {

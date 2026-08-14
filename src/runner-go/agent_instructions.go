@@ -44,13 +44,31 @@ func orbitCLIInstructionExecutable(exe string) string {
 
 // orbitCLIInstructions is generated with the resolved binary path so an agent
 // cannot accidentally execute a project-local/PATH-shadowed `orbit` program.
+//
+// It leads with what separates an Orbit task from an engine's built-in todo/plan
+// entry — audience, not tool preference. An agent that never learns the distinction
+// records the user's work in session-local scratch that never reaches Orbit, so the
+// task silently never appears in the UI. The "returned its id" rule gives the agent
+// something it can check itself, which also catches the case where it wrote no task
+// at all and merely listed one in its reply.
+//
+// Kept ASCII and roughly a paragraph long: codex carries this as a single
+// application-context value capped at 1,000 tokens (see codexAgentAdditionalContext).
 func orbitCLIInstructions(executable string) string {
 	executable = orbitCLIInstructionExecutable(executable)
 	if executable == "" {
 		return ""
 	}
 	command := shellQuote(executable)
-	return "Orbit CLI is available in this session at `" + command + "`. Run `" + command + " capabilities --json` to discover the commands currently available, then execute the returned argv with that exact absolute path. Prefer native `mcp__orbit__*` tools when present. Use `--json` output for Orbit CLI commands. Do not run `" + command + " mcp` directly."
+	return "Orbit tasks are the user's durable record: visible in Orbit's UI, outliving this session. " +
+		"Any built-in todo or plan tool you have is private scratch the user never sees: fine for tracking your own steps, " +
+		"but anything the user asked you to record, or follow-up work they should see, MUST go through an Orbit tool. " +
+		"Never claim a task was created or updated unless an Orbit tool returned its id.\n\n" +
+		"Write to Orbit with the `mcp__orbit__*` tools when your tool list has them: their inputs are schema-checked and " +
+		"they need no shell. The Orbit CLI at `" + command + "` is for shell composition (pipes, scripts, bulk input) and " +
+		"work that outlives this turn. Inside a session both attribute the task to you, so either is fine; the CLI needs " +
+		"`" + command + " capabilities --json` first to discover its commands, then run the returned argv with that exact " +
+		"absolute path. Use `--json` output. Do not run `" + command + " mcp` directly."
 }
 
 func withOrbitCLIInstructions(configured, executable string) string {

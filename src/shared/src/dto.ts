@@ -29,6 +29,36 @@ export interface SessionCapabilities {
   canRestore: boolean;
 }
 
+/** What actually happens to an action the session's policy has not pre-approved. */
+export type UnapprovedAction = 'ask' | 'deny' | 'allow';
+
+/** Whether a runtime can put a human in the loop at all. */
+export type ApprovalSupport = 'full' | 'partial' | 'none';
+
+/**
+ * What a session's permission mode MEANS on the runtime that actually runs it.
+ *
+ * A permission mode is the user's intent ("ask me before you act"), but only some runtimes can
+ * honor it: Claude and Kimi can block on a human, OpenCode runs non-interactive, and Codex is
+ * currently started with approvals off. Left underived, the same mode silently meant three
+ * different things depending on the engine — including "you will be asked" resolving to "nothing
+ * is ever asked, everything is allowed". This is the server's single answer to "what will this
+ * session actually do", so clients can show it instead of implying the mode is universal.
+ *
+ * Optional on wire payloads: rolling servers/clients, and sessions on a custom (BYOK) provider
+ * slug whose borrowed runtime cannot be resolved from the session row alone, simply omit it.
+ */
+export interface PermissionSemantics {
+  /** The session's configured mode, echoed so a client can show intent vs. reality together. */
+  mode: string;
+  unapproved: UnapprovedAction;
+  approvalSupport: ApprovalSupport;
+  /** False when the runtime cannot deliver what the mode asks for. */
+  honored: boolean;
+  /** Why, whenever the guarantee is not the plain reading of the mode. */
+  note?: string;
+}
+
 /**
  * Everything a runner needs to drive Claude Code for one session. Mirrors the
  * relevant `@anthropic-ai/claude-agent-sdk` `query()` options.

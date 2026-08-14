@@ -2264,10 +2264,38 @@ export class RunnerApiController {
           data: toolUses.map((e) => ({
             sessionId,
             name: String((e.payload as Record<string, unknown>).name ?? 'unknown'),
+            toolUseId: String((e.payload as { id?: unknown }).id ?? '') || null,
             input: ((e.payload as Record<string, unknown>).input ?? Prisma.JsonNull) as Prisma.InputJsonValue,
             startedAt: new Date(e.ts),
           })),
         });
+      }
+
+      // Pair each tool_result back to the row its tool_use created, so the outcome columns
+      // (output / is_error / finished_at) stop being dead. The tool_use is always persisted
+      // before its result — same batch (createMany ran just above) or an earlier one (durable,
+      // idempotent by seq) — so the row exists by now. Matching on (sessionId, toolUseId) with a
+      // non-empty id keeps a result from smearing across the id-less rows old runtimes produced.
+      // finished_at is derived from the event ts, so replaying a retried batch rewrites identical
+      // values — idempotent without a guard. A runtime that streams incremental results for one id
+      // (rare) collapses to its last write, which is the outcome a reader wants.
+      const toolResults = events.filter(
+        (e) => e.type === RunEventType.TOOL_RESULT && String((e.payload as { toolUseId?: unknown }).toolUseId ?? '') !== '',
+      );
+      if (toolResults.length > 0) {
+        await Promise.all(
+          toolResults.map((e) => {
+            const p = e.payload as { toolUseId?: unknown; content?: unknown; isError?: unknown };
+            return tx.toolCall.updateMany({
+              where: { sessionId, toolUseId: String(p.toolUseId) },
+              data: {
+                output: (p.content ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+                isError: !!p.isError,
+                finishedAt: new Date(e.ts),
+              },
+            });
+          }),
+        );
       }
 
       // Maintain the running background-shell set (Session.runningBgShells), which drives the

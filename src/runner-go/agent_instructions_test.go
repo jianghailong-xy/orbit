@@ -23,6 +23,8 @@ func TestWithOrbitCLIInstructions(t *testing.T) {
 		"mcp__orbit__*",
 		"Use `--json` output",
 		" mcp` directly",
+		"durable record",
+		"returned its id",
 	} {
 		if !strings.Contains(got, phrase) {
 			t.Errorf("merged instructions do not contain %q", phrase)

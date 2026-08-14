@@ -21,6 +21,9 @@ Usage:
   orbit task delete [task-id] [--json]
   orbit task start [task-id] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
+  orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]
+  orbit task dependency-add [task-id] --depends-on ID [--json]
+  orbit task dependency-remove [task-id] --depends-on ID [--json]
 
 When task-id is omitted, ORBIT_TASK_ID is used if this command is running inside
 an Orbit task session. Run 'orbit task <command> --help' for command options.
@@ -189,9 +192,99 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskStart(args[1:], out)
 	case "comment":
 		return cliTaskComment(args[1:], in, out)
+	case "dependency-graph":
+		return cliTaskDependencyGraph(args[1:], out)
+	case "dependency-add":
+		return cliTaskDependencyAdd(args[1:], out)
+	case "dependency-remove":
+		return cliTaskDependencyRemove(args[1:], out)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", action, taskHelp)
 	}
+}
+
+// cliTaskDependencyGraph mirrors the task_dependency_graph MCP tool: read the DAG a
+// task sits in. --max-depth/--max-nodes default to 0, which the transport omits so the
+// server applies its own caps — the same "unset means default" the MCP tool relies on.
+func cliTaskDependencyGraph(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task dependency-graph")
+	maxDepth := fs.Int("max-depth", 0, "max dependency depth to walk (server default when unset)")
+	maxNodes := fs.Int("max-nodes", 0, "max nodes to return (server default when unset)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.taskDependencyGraph(id, *maxDepth, *maxNodes)
+	if err != nil {
+		return fmt.Errorf("get task dependency graph: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliTaskDependencyAdd mirrors task_dependency_add: add one edge, taskId waits for the
+// --depends-on prerequisite. The granular edit that preserves every other edge, unlike
+// `task update --depends-on` which replaces the whole set.
+func cliTaskDependencyAdd(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task dependency-add")
+	dependsOn := fs.String("depends-on", "", "prerequisite task id this task waits for (required)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(*dependsOn) == "" {
+		return fmt.Errorf("--depends-on is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.addTaskDependency(id, *dependsOn)
+	if err != nil {
+		return fmt.Errorf("add task dependency: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliTaskDependencyRemove mirrors task_dependency_remove: drop one edge, leaving the
+// rest of the DAG intact. Removing an absent edge is a no-op, matching the MCP tool.
+func cliTaskDependencyRemove(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task dependency-remove")
+	dependsOn := fs.String("depends-on", "", "prerequisite task id to detach (required)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(*dependsOn) == "" {
+		return fmt.Errorf("--depends-on is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.removeTaskDependency(id, *dependsOn)
+	if err != nil {
+		return fmt.Errorf("remove task dependency: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
 func cmdTaskListCLI(args []string, out io.Writer) error {
@@ -500,14 +593,30 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// The current runner credential is owner-wide rather than session-scoped.
-	// Keep ORBIT_AGENT_ID as a convenient default assignee, but do not trust
-	// environment variables as author-attribution headers.
-	raw, err := t.createTask("", "", body)
+	// Inside a session, attribute the task to the acting agent exactly as the MCP task tools do —
+	// both read the same ORBIT_AGENT_ID, and the two write paths must not disagree on who created a
+	// task. Passing the session also links the task to it and lets the server dedup a redelivered
+	// turn's re-created tasks (see TasksService idempotency). ORBIT_AGENT_ID stays the default
+	// assignee regardless.
+	agentID, sessionID := cliTaskAttribution()
+	raw, err := t.createTask(agentID, sessionID, body)
 	if err != nil {
 		return fmt.Errorf("create task: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliTaskAttribution returns the (agentId, sessionId) a CLI write is attributed to. Inside a
+// session the runner injects both, and the CLI claims agent authorship like the MCP server. A
+// headless process (launchd/cron) has no ORBIT_SESSION_ID: it keeps runner-owner attribution,
+// because its runner credential is shared and must not let any script pose as an agent by setting
+// an env var. The credential itself is always the runner token either way; only attribution moves.
+func cliTaskAttribution() (agentID, sessionID string) {
+	sessionID = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+	if sessionID == "" {
+		return "", ""
+	}
+	return strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID")), sessionID
 }
 
 func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
@@ -536,8 +645,9 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	// Owner-wide credential, so no agent attribution header — same as `orbit task create`.
-	out2, err := t.createTasksBatch("", "", map[string]interface{}{"tasks": items})
+	// In-session agent attribution + session link, same as `orbit task create`.
+	agentID, sessionID := cliTaskAttribution()
+	out2, err := t.createTasksBatch(agentID, sessionID, map[string]interface{}{"tasks": items})
 	if err != nil {
 		return fmt.Errorf("create tasks: %w", err)
 	}
@@ -788,7 +898,10 @@ func cliTaskComment(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.commentTask(id, "", body)
+	// In-session comments are authored by the acting agent (same ORBIT_AGENT_ID the MCP path uses);
+	// a headless comment stays runner-owner.
+	agentID, _ := cliTaskAttribution()
+	raw, err := t.commentTask(id, agentID, body)
 	if err != nil {
 		return fmt.Errorf("comment on task: %w", err)
 	}
@@ -851,12 +964,15 @@ type cliCapabilitySpec struct {
 var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task as the runner owner. ORBIT_AGENT_ID is used only as the default assignee; runner-wide CLI credentials do not claim agent authorship. This only records the task; call task_start when it should run immediately.", Mutates: true},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call as the runner owner — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. ORBIT_AGENT_ID is used only as each item's default assignee; runner-wide CLI credentials do not claim agent authorship.", Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately.", Mutates: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
-	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task as the runner owner. Runner-wide CLI credentials do not claim agent authorship.", Mutates: true},
+	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
+	{Tool: "task_dependency_graph", Argv: []string{"orbit", "task", "dependency-graph"}, Usage: "orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--max-depth <n> (server default when unset)", "--max-nodes <n> (server default when unset)", "--json"}},
+	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Mutates: true},
+	{Tool: "task_dependency_remove", Argv: []string{"orbit", "task", "dependency-remove"}, Usage: "orbit task dependency-remove [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
 }

@@ -38,11 +38,17 @@ const (
 	codexInstructionsAdditionalContext
 )
 
+// codexApprovalFn answers one inbound approval request. nil keeps the fail-closed behaviour that
+// predates the bridge, which is also what the protocol tests exercise.
+type codexApprovalFn func(context.Context, codexApprovalRequest, map[string]interface{}) bool
+
 type codexAppServer struct {
-	cmd    *exec.Cmd
-	cancel context.CancelFunc
-	stdin  io.WriteCloser
-	ioWg   sync.WaitGroup
+	cmd     *exec.Cmd
+	ctx     context.Context // cancelled with the process; bounds a pending approval poll
+	cancel  context.CancelFunc
+	stdin   io.WriteCloser
+	ioWg    sync.WaitGroup
+	approve codexApprovalFn
 
 	writeMu sync.Mutex
 	mu      sync.Mutex
@@ -140,7 +146,10 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			return stFailed, true, false
 		}
 	}
-	app, err := startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit)
+	app, err := startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
+		func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
+			return bridgeCodexApproval(approvalCtx, t, job, request, params)
+		})
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to spawn codex app-server: " + err.Error()})
 		return stFailed, true, false
@@ -638,7 +647,87 @@ func turnAttachmentRefs(atts []TurnAttachment) []map[string]interface{} {
 	return refs
 }
 
-func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stateDir string, processEnv []string, emit emitFn) (*codexAppServer, error) {
+// codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
+// permission mode. This is what makes an "ask me first" mode mean that on Codex too: `untrusted`
+// auto-approves only known-safe read-only commands and asks about everything else, which Orbit
+// then routes to the same approval card Claude and Kimi use.
+//
+// dontAsk deliberately stays on `never`. Orbit's Don't Ask is fail-closed ("deny anything not
+// pre-approved"), but Codex is never handed an allowlist — so switching it to `untrusted` would
+// deny every command in the mode agents default to, breaking task-launched runs wholesale. Codex
+// therefore still does not enforce Don't Ask; the session payload says so (permissionSemantics)
+// rather than the UI implying otherwise. Closing that gap needs an allowlist plumbed to Codex,
+// which is a separate change.
+func codexApprovalPolicy(permissionMode string) string {
+	switch permissionMode {
+	case "default", "acceptEdits", "plan":
+		return "untrusted"
+	default:
+		return "never"
+	}
+}
+
+// codexAutomaticApproval applies the parts of a permission mode that need no human, mirroring
+// kimiAutomaticPermissionOption. The second result reports whether the mode decided at all;
+// otherwise the request goes to the user.
+func codexAutomaticApproval(permissionMode string, request codexApprovalRequest) (allowed, decided bool) {
+	switch permissionMode {
+	case "plan":
+		// Plan mode is read-only by definition: nothing it proposes may execute or edit.
+		return false, true
+	case "acceptEdits":
+		if request.fileChange {
+			return true, true
+		}
+	}
+	return false, false
+}
+
+// bridgeCodexApproval answers one Codex approval request: the agent's own policy first, then a
+// human via the same approval card the other runtimes use. Fails CLOSED on every error path —
+// a control-plane outage must never auto-approve a command.
+func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}) bool {
+	if ctx.Err() != nil || t == nil || job == nil {
+		return false
+	}
+	if allowed, decided := codexAutomaticApproval(job.Agent.PermissionMode, request); decided {
+		return allowed
+	}
+	input := map[string]interface{}{}
+	for _, key := range []string{"command", "cwd", "reason", "grantRoot"} {
+		if value := firstString(params, key); value != "" {
+			input[key] = value
+		}
+	}
+	if len(input) == 0 {
+		input["detail"] = params
+	}
+	approvalID, err := t.createApproval(ctx, job.SessionID, map[string]interface{}{
+		"toolName":  request.toolName(),
+		"input":     input,
+		"toolUseId": firstString(params, "itemId", "item_id"),
+	})
+	if err != nil {
+		return false
+	}
+	// Poll without a wall-clock cap, as the MCP and Kimi bridges do: an unanswered approval is a
+	// human who has not looked yet, not a denial. Cancelling the session cancels ctx and unblocks.
+	for {
+		if ctx.Err() != nil {
+			return false
+		}
+		decision, pollErr := t.pollApproval(ctx, job.SessionID, approvalID)
+		if pollErr != nil {
+			return false
+		}
+		if decision.Status == "PENDING" {
+			continue
+		}
+		return decision.Status == "ALLOWED"
+	}
+}
+
+func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stateDir string, processEnv []string, emit emitFn, approve codexApprovalFn) (*codexAppServer, error) {
 	procCtx, cancel := context.WithCancel(ctx)
 	exe, err := os.Executable()
 	if err != nil {
@@ -673,8 +762,10 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 	}
 	app := &codexAppServer{
 		cmd:             cmd,
+		ctx:             procCtx,
 		cancel:          cancel,
 		stdin:           stdin,
+		approve:         approve,
 		pending:         map[string]chan codexRPCMessage{},
 		notifications:   make(chan codexRPCMessage, 256),
 		done:            make(chan struct{}),
@@ -963,7 +1054,7 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		"clientUserMessageId": orbitTurnID,
 		"input":               input,
 		"cwd":                 execDir,
-		"approvalPolicy":      "never",
+		"approvalPolicy":      codexApprovalPolicy(job.Agent.PermissionMode),
 		"runtimeWorkspaceRoots": []string{
 			execDir,
 			upDir,
@@ -997,7 +1088,7 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]interface{} {
 	params := map[string]interface{}{
 		"cwd":            execDir,
-		"approvalPolicy": "never",
+		"approvalPolicy": codexApprovalPolicy(job.Agent.PermissionMode),
 		"sandbox":        "danger-full-access", // see codexTurnParams: parity with unsandboxed Claude
 		"runtimeWorkspaceRoots": []string{
 			execDir,
@@ -1120,15 +1211,55 @@ func (a *codexAppServer) deliverResponse(msg codexRPCMessage) {
 	}
 }
 
-func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
-	method := strings.ToLower(msg.Method)
-	var result map[string]interface{}
+// codexApprovalRequest classifies an inbound approval so the answer uses the vocabulary that
+// request family expects. Codex ships two: the v2 thread protocol
+// (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`) answers with
+// accept/decline, while the older exec/apply-patch requests answer with approved/denied.
+type codexApprovalRequest struct {
+	fileChange bool
+	legacy     bool
+}
+
+func classifyCodexApproval(method string) (codexApprovalRequest, bool) {
+	lower := strings.ToLower(method)
 	switch {
-	case strings.Contains(method, "commandexecution") || strings.Contains(method, "filechange"):
-		result = map[string]interface{}{"decision": "decline"}
-	case strings.Contains(method, "execcommand") || strings.Contains(method, "applypatch"):
-		result = map[string]interface{}{"decision": "denied"}
-	default:
+	case strings.Contains(lower, "commandexecution"):
+		return codexApprovalRequest{}, true
+	case strings.Contains(lower, "filechange"):
+		return codexApprovalRequest{fileChange: true}, true
+	case strings.Contains(lower, "execcommand"):
+		return codexApprovalRequest{legacy: true}, true
+	case strings.Contains(lower, "applypatch"):
+		return codexApprovalRequest{fileChange: true, legacy: true}, true
+	}
+	return codexApprovalRequest{}, false
+}
+
+func (r codexApprovalRequest) decision(allowed bool) string {
+	if r.legacy {
+		if allowed {
+			return "approved"
+		}
+		return "denied"
+	}
+	if allowed {
+		return "accept"
+	}
+	return "decline"
+}
+
+// toolName mirrors what codexEmitItem already calls these in the transcript, so an approval card
+// and the tool card it authorizes name the same thing.
+func (r codexApprovalRequest) toolName() string {
+	if r.fileChange {
+		return "apply_patch"
+	}
+	return "Bash"
+}
+
+func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
+	request, isApproval := classifyCodexApproval(msg.Method)
+	if !isApproval {
 		_ = a.write(map[string]interface{}{
 			"id": msg.ID,
 			"error": map[string]interface{}{
@@ -1138,7 +1269,19 @@ func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
 		})
 		return
 	}
-	_ = a.write(map[string]interface{}{"id": msg.ID, "result": result})
+	// Answer on a goroutine: readLoop calls this inline, and an approval blocks on a human who
+	// may take minutes. Blocking here would stall the only reader of codex's stdout — no
+	// notifications, no responses to our own requests, a wedged session. write() is mutex-guarded.
+	go func() {
+		allowed := false
+		if a.approve != nil {
+			allowed = a.approve(a.ctx, request, rawObject(msg.Params))
+		}
+		_ = a.write(map[string]interface{}{
+			"id":     msg.ID,
+			"result": map[string]interface{}{"decision": request.decision(allowed)},
+		})
+	}()
 }
 
 func (a *codexAppServer) closeDone() {

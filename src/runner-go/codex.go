@@ -569,6 +569,24 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 			"content":   codexWebSearchSummary(item),
 			"isError":   codexItemIsError(item),
 		})
+	// update_plan arrives as a plan/todo item rather than a tool call, and until now
+	// nothing matched it: codex's own scratch checklist was dropped on the floor. See
+	// plan_events.go for why it has to be visible on a runtime that cannot deny it.
+	case strings.Contains(lower, "todo") || strings.Contains(lower, "plan_update") || strings.Contains(lower, "planupdate") || strings.Contains(lower, "update_plan") || strings.Contains(lower, "updateplan"):
+		rows := planEntries(item)
+		if !completed {
+			emit(evToolUse, map[string]interface{}{
+				"id":    fallbackID(id, itemType),
+				"name":  "update_plan",
+				"input": map[string]interface{}{"items": rows},
+			})
+			return
+		}
+		emit(evToolResult, map[string]interface{}{
+			"toolUseId": fallbackID(id, itemType),
+			"content":   planChecklist(rows),
+			"isError":   codexItemIsError(item),
+		})
 	case strings.Contains(lower, "tool"):
 		name := firstString(item, "toolName", "name", "tool_name")
 		if !completed {
@@ -584,6 +602,8 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 			"content":   firstPresent(item, "output", "result", "content"),
 			"isError":   codexItemIsError(item),
 		})
+	default:
+		logUnhandledStreamKind("codex", itemType)
 	}
 }
 

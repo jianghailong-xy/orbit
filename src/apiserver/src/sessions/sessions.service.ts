@@ -1258,6 +1258,7 @@ export class SessionsService {
       deletedAt: Date | null;
       source: string;
       provider: string;
+      providerBuiltin: boolean;
       model: string | null;
       permissionMode: string | null;
       effort: string | null;
@@ -1308,6 +1309,7 @@ export class SessionsService {
         COALESCE(s.completed_at, s.archived_at) AS "archivedAt",
         s.deleted_at      AS "deletedAt",
         s.source, s.provider, s.model,
+        s.provider_builtin AS "providerBuiltin",
         s.permission_mode AS "permissionMode",
         s.effort,
         left(s.last_assistant_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastAssistantText",
@@ -1413,6 +1415,7 @@ export class SessionsService {
         deletedAt: r.deletedAt,
         source: r.source,
         provider: r.provider,
+        providerBuiltin: r.providerBuiltin,
         model: r.model,
         permissionMode: r.permissionMode,
         effort: r.effort,

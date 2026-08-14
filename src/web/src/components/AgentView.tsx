@@ -153,7 +153,13 @@ import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { lastUserMessageText, MAX_PROMPT_CHARS, TRASH_RETENTION_DAYS } from '@orbit/shared';
+import {
+  AgentProvider,
+  derivePermissionSemantics,
+  lastUserMessageText,
+  MAX_PROMPT_CHARS,
+  TRASH_RETENTION_DAYS,
+} from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -3733,6 +3739,21 @@ export function AgentView({ runner }: { runner: Runner }) {
   const autoOk =
     !shownProviderCapabilitiesResolved ||
     supportsAuto(shownModel, shownProvider, configuredProviders);
+  // What a permission mode ACTUALLY means on the engine that will run it. Derived with the same
+  // shared table the server stamps onto the session payload, so the picker cannot drift from it.
+  //
+  // Only for built-in engines: a configured (BYOK) slug borrows a runtime this screen cannot name,
+  // and telling someone "you will be asked" for a session that might be running on Codex is
+  // exactly the false assurance this is here to remove. Unknown => say nothing.
+  const shownProviderIsBuiltin = Object.values(AgentProvider).some((p) => p === shownProvider);
+  const permissionSemanticsFor = useCallback(
+    (label: string) =>
+      shownProviderIsBuiltin
+        ? derivePermissionSemantics(shownProvider, MODE_TO_PERMISSION[label])
+        : undefined,
+    [shownProvider, shownProviderIsBuiltin],
+  );
+  const shownModeSemantics = permissionSemanticsFor(shownMode);
   // Model, Mode & Effort can be changed any time on a live session (the runner must be
   // online to act on it). A change made mid-turn doesn't abort the running turn: the
   // server defers the re-spawn until the turn finishes, so it applies on the next turn —
@@ -5111,7 +5132,10 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
               events, so the parent span is what surfaces the reason on hover. With the
               icons gone, the tooltip also names what each pill controls. */}
-          <Tooltip title={configHint || 'Permission mode'} open={hoverTipOpen}>
+          <Tooltip
+            title={configHint || shownModeSemantics?.note || 'Permission mode'}
+            open={hoverTipOpen}
+          >
             <span className="composer-pill">
               <Select
                 size="small"
@@ -5126,13 +5150,29 @@ export function AgentView({ runner }: { runner: Runner }) {
                     setMode(v);
                   }
                 }}
-                options={MODE_OPTIONS.map((m) => ({
-                  value: m,
-                  // Carry the Auto-mode constraint on the greyed option itself, where it's
-                  // actionable, instead of in a row-wide paragraph.
-                  label: m === 'Auto' && !autoOk ? 'Auto (needs Opus 5, Fable 5, or Sonnet 5)' : m,
-                  disabled: m === 'Auto' && !autoOk,
-                }))}
+                options={MODE_OPTIONS.map((m) => {
+                  // A mode this engine cannot honor is still selectable — it is the user's stored
+                  // intent, and it starts being enforced the moment the session moves to an engine
+                  // that can. It just must not read as a guarantee it isn't: say so on the option,
+                  // where the choice is made, exactly as the Auto constraint does below.
+                  const semantics = permissionSemanticsFor(m);
+                  const unenforced =
+                    semantics && !semantics.honored
+                      ? semantics.unapproved === 'allow'
+                        ? ' — not enforced here, everything is allowed'
+                        : ' — not enforced here, unapproved actions are denied'
+                      : '';
+                  return {
+                    value: m,
+                    // Carry the Auto-mode constraint on the greyed option itself, where it's
+                    // actionable, instead of in a row-wide paragraph.
+                    label:
+                      m === 'Auto' && !autoOk
+                        ? 'Auto (needs Opus 5, Fable 5, or Sonnet 5)'
+                        : `${m}${unenforced}`,
+                    disabled: m === 'Auto' && !autoOk,
+                  };
+                })}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}
               />

@@ -806,6 +806,35 @@ func TestRewriteLocalMarkdownImagesSkipsOutsideRootFileLink(t *testing.T) {
 	}
 }
 
+// update_plan is codex's scratch checklist, and Orbit cannot deny the tool. Dropping
+// the item left a task recorded there invisible in the transcript AND absent from
+// tool_call, so there was nothing to diagnose with. Both stream casings must render.
+func TestHandleCodexItemRendersPlanUpdate(t *testing.T) {
+	for _, itemType := range []string{"todo_list", "todoList"} {
+		t.Run(itemType, func(t *testing.T) {
+			item := map[string]interface{}{
+				"type": itemType, "id": "plan_1",
+				"items": []interface{}{
+					map[string]interface{}{"text": "ship the fix", "completed": true},
+					map[string]interface{}{"text": "write the test", "status": "in_progress"},
+				},
+			}
+			started := captureCodexItem(item, false)
+			if len(started) != 1 || started[0].typ != evToolUse || started[0].payload["name"] != "update_plan" {
+				t.Fatalf("started = %+v, want an update_plan tool_use", started)
+			}
+			done := captureCodexItem(item, true)
+			if len(done) != 1 || done[0].typ != evToolResult {
+				t.Fatalf("completed = %+v, want one tool_result", done)
+			}
+			want := "- [x] ship the fix\n- [ ] write the test"
+			if done[0].payload["content"] != want {
+				t.Fatalf("content = %q, want %q", done[0].payload["content"], want)
+			}
+		})
+	}
+}
+
 // webSearch has no result body — render the query/opened page as the summary.
 func TestHandleCodexItemAppServerWebSearch(t *testing.T) {
 	item := map[string]interface{}{

@@ -38,8 +38,21 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 10 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 13 {
 		t.Fatalf("capabilities = %#v", doc)
+	}
+	// The dependency trio reached CLI parity with the MCP tools; without them a script
+	// could only replace a task's whole prerequisite set, never edit one edge.
+	for _, want := range []string{"task_dependency_graph", "task_dependency_add", "task_dependency_remove"} {
+		found := false
+		for _, capability := range doc.Capabilities {
+			if capability.ID == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("capability %q not exposed to the CLI", want)
+		}
 	}
 	if doc.Registered {
 		t.Fatal("unregistered temp home reported registered")
@@ -51,9 +64,12 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 		if capability.Description == "" || capability.MCPInputSchema == nil {
 			t.Fatalf("capability did not reuse MCP description/schema: %#v", capability)
 		}
-		writesAsOwner := capability.ID == "task_create" || capability.ID == "task_create_batch" ||
+		// In-session these writes are attributed to the agent (matching the MCP path); headless they
+		// fall back to the runner owner. The description must state BOTH so neither is misleading.
+		writesAttributed := capability.ID == "task_create" || capability.ID == "task_create_batch" ||
 			capability.ID == "task_comment"
-		if writesAsOwner && !strings.Contains(capability.Description, "runner owner") {
+		if writesAttributed &&
+			(!strings.Contains(capability.Description, "agent") || !strings.Contains(capability.Description, "runner owner")) {
 			t.Fatalf("CLI attribution is misleading: %#v", capability)
 		}
 		if len(capability.Arguments) == 0 {
@@ -67,6 +83,20 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 				t.Fatalf("unsafe capability exposed: %q", capability.ID)
 			}
 		}
+	}
+}
+
+func TestCLITaskAttributionInSessionOnly(t *testing.T) {
+	// In a session the runner injects both ids: the CLI claims agent authorship, like the MCP path.
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	if agentID, sessionID := cliTaskAttribution(); agentID != "agent-1" || sessionID != "session-1" {
+		t.Fatalf("in-session attribution = (%q, %q), want (agent-1, session-1)", agentID, sessionID)
+	}
+	// Headless (no session): a shared runner credential must not let a script pose as an agent.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	if agentID, sessionID := cliTaskAttribution(); agentID != "" || sessionID != "" {
+		t.Fatalf("headless attribution = (%q, %q), want empty", agentID, sessionID)
 	}
 }
 
@@ -100,7 +130,7 @@ func TestTaskCLIHelpDocumentsDelete(t *testing.T) {
 	}
 }
 
-func TestTaskCLICreateDefaultsAssigneeWithoutTrustingAttributionEnv(t *testing.T) {
+func TestTaskCLICreateAttributesToAgentInSession(t *testing.T) {
 	var gotHeader, gotSession string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,9 +159,11 @@ func TestTaskCLICreateDefaultsAssigneeWithoutTrustingAttributionEnv(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if gotHeader != "" || gotSession != "" {
-		t.Fatalf("untrusted attribution headers = agent %q session %q", gotHeader, gotSession)
+	// In-session: the task is attributed to the agent and linked to the session, like the MCP path.
+	if gotHeader != "agent-1" || gotSession != "session-1" {
+		t.Fatalf("in-session attribution headers = agent %q session %q", gotHeader, gotSession)
 	}
+	// ORBIT_AGENT_ID is still the default assignee, independent of authorship.
 	if gotBody["assigneeId"] != "agent-1" {
 		t.Fatalf("assigneeId = %#v", gotBody["assigneeId"])
 	}
@@ -149,7 +181,7 @@ func TestTaskCLICreateDefaultsAssigneeWithoutTrustingAttributionEnv(t *testing.T
 
 func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 	var requests int
-	var gotHeader string
+	var gotHeader, gotSession string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests++
@@ -157,6 +189,7 @@ func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 			t.Errorf("request = %s %s", r.Method, r.URL.Path)
 		}
 		gotHeader = r.Header.Get("X-Orbit-Agent-Id")
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
 		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
 			t.Errorf("decode body: %v", err)
 		}
@@ -166,6 +199,7 @@ func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 	defer srv.Close()
 	configureCLITestRunner(t, srv.URL)
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
 
 	stdin := strings.NewReader(`[{"title":"Build","ref":"build"},
 	  {"title":"Deploy","dependsOnRefs":["build"],"assigneeId":null}]`)
@@ -176,8 +210,8 @@ func TestTaskCLICreateBatchPostsStdinTasksInOneRequest(t *testing.T) {
 	if requests != 1 {
 		t.Fatalf("requests = %d, want a single batch call", requests)
 	}
-	if gotHeader != "" {
-		t.Fatalf("untrusted attribution header = %q", gotHeader)
+	if gotHeader != "agent-1" || gotSession != "session-1" {
+		t.Fatalf("in-session attribution = agent %q session %q", gotHeader, gotSession)
 	}
 	tasks, _ := gotBody["tasks"].([]interface{})
 	if len(tasks) != 2 {
@@ -432,7 +466,7 @@ func TestTaskCLIRejectsArbitraryDescriptionAndBodyFiles(t *testing.T) {
 	}
 }
 
-func TestTaskCLICommentReadsStdinWithoutTrustingAttributionEnv(t *testing.T) {
+func TestTaskCLICommentReadsStdinAndAuthorsAsAgentInSession(t *testing.T) {
 	var gotAgent string
 	var gotBody map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -443,12 +477,14 @@ func TestTaskCLICommentReadsStdinWithoutTrustingAttributionEnv(t *testing.T) {
 	defer srv.Close()
 	configureCLITestRunner(t, srv.URL)
 	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
 
 	var out bytes.Buffer
 	if err := cmdTaskCLI([]string{"comment", "task-1", "--body-file", "-", "--json"}, strings.NewReader("done\n"), &out); err != nil {
 		t.Fatal(err)
 	}
-	if gotAgent != "" || gotBody["body"] != "done\n" {
+	// In-session, the comment is authored by the acting agent (same as the MCP path).
+	if gotAgent != "agent-1" || gotBody["body"] != "done\n" {
 		t.Fatalf("agent = %q body = %#v", gotAgent, gotBody["body"])
 	}
 }

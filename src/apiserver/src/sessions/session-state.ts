@@ -1,4 +1,7 @@
+import { normalizeRuntimeProvider } from '../common/runtime-provider';
 import {
+  derivePermissionSemantics,
+  type PermissionSemantics,
   type SessionCapabilities,
   SessionFilingState,
   SessionLifecycleState,
@@ -24,8 +27,13 @@ export interface RawSessionStateFields {
   deletedAt?: Date | string | null;
 }
 
-/** Complete server-side input needed to derive action capabilities. */
+/** Complete server-side input needed to derive action capabilities.
+ *  The provider/permission trio is optional so callers that only carry lifecycle state (and the
+ *  specs built around them) keep compiling; permission semantics are simply omitted then. */
 export interface SessionCapabilityFields extends RawSessionStateFields {
+  provider?: string | null;
+  providerBuiltin?: boolean | null;
+  permissionMode?: string | null;
   cancelRequestedAt: Date | string | null;
   startedAt: Date | string | null;
   numTurns: number;
@@ -129,9 +137,31 @@ export function withSessionState<T extends RawSessionStateFields>(
 export function withSessionCapabilities<T extends SessionCapabilityFields>(
   session: T,
   nowMs: number = Date.now(),
-): ReturnType<typeof withSessionState<T>> & { capabilities: SessionCapabilities } {
+): ReturnType<typeof withSessionState<T>> & {
+  capabilities: SessionCapabilities;
+  permissionSemantics?: PermissionSemantics;
+} {
+  const semantics = derivePermissionSemanticsForSession(session);
   return {
     ...withSessionState(session),
     capabilities: deriveSessionCapabilities(session, nowMs),
+    ...(semantics ? { permissionSemantics: semantics } : {}),
   };
+}
+
+/**
+ * What the session's permission mode actually means on the runtime that runs it.
+ *
+ * Only derived for built-in providers: a custom (BYOK) slug borrows a runtime that this row alone
+ * does not name, and claiming "you will be asked" for a session that might be running on Codex is
+ * exactly the false assurance this field exists to remove. Omitted rather than guessed.
+ */
+function derivePermissionSemanticsForSession(
+  session: SessionCapabilityFields,
+): PermissionSemantics | undefined {
+  if (session.provider == null || session.providerBuiltin !== true) return undefined;
+  return derivePermissionSemantics(
+    normalizeRuntimeProvider(session.provider, true),
+    session.permissionMode,
+  );
 }

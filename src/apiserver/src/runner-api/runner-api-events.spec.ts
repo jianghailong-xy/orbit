@@ -15,6 +15,8 @@ function makeController(
     updateMany: [] as any[],
     update: [] as any[],
     executeRaw: [] as string[],
+    toolCreate: [] as any[],
+    toolUpdate: [] as any[],
   };
   let published = 0;
   const tx = {
@@ -31,9 +33,18 @@ function makeController(
         return { count: args.data.length };
       },
     },
-    // Every tool_use is also denormalized into tool_call; irrelevant here, but the ingest path
-    // writes it unconditionally, so the stub has to exist for any batch carrying one.
-    toolCall: { createMany: async (args: any) => ({ count: args.data.length }) },
+    // Every tool_use is denormalized into tool_call on create, and its tool_result pairs back
+    // via updateMany. Record both so a test can assert the id is stored and the outcome lands.
+    toolCall: {
+      createMany: async (args: any) => {
+        calls.toolCreate.push(args);
+        return { count: args.data.length };
+      },
+      updateMany: async (args: any) => {
+        calls.toolUpdate.push(args);
+        return { count: 1 };
+      },
+    },
     session: {
       findUniqueOrThrow: async () => ({
         status,
@@ -181,6 +192,54 @@ test('a Monitor launch joins the running background set', async () => {
     calls.executeRaw.some((sql: string) => sql.includes('running_bg_shells')),
     'the Monitor launch is recorded as background work',
   );
+});
+
+// A tool_use stores its id, and the tool_result pairs back to that row to fill the outcome —
+// output/is_error/finished_at were dead columns until the id gave the result something to join to.
+test('a tool_result fills the outcome of the tool_call its tool_use created', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 50,
+        type: RunEventType.TOOL_USE,
+        ts: '2026-07-31T12:00:00.000Z',
+        payload: { id: 'toolu_1', name: 'task_create', input: { title: 'x' } },
+      },
+      {
+        seq: 51,
+        type: RunEventType.TOOL_RESULT,
+        ts: '2026-07-31T12:00:01.000Z',
+        payload: { toolUseId: 'toolu_1', content: 'created task t_9', isError: false },
+      },
+    ],
+  });
+
+  assert.equal(calls.toolCreate[0].data[0].toolUseId, 'toolu_1', 'the tool_use id is stored');
+  assert.equal(calls.toolUpdate.length, 1, 'the result pairs back to exactly one row');
+  assert.deepEqual(calls.toolUpdate[0].where, { sessionId: 'session-1', toolUseId: 'toolu_1' });
+  assert.equal(calls.toolUpdate[0].data.output, 'created task t_9');
+  assert.equal(calls.toolUpdate[0].data.isError, false);
+});
+
+// A result whose runtime emitted no tool_use id must not run an update — { toolUseId: '' } would
+// smear one outcome across every id-less row an old runtime produced.
+test('a tool_result with no tool_use id updates nothing', async () => {
+  const { calls, controller } = makeController();
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 52,
+        type: RunEventType.TOOL_RESULT,
+        ts: '2026-07-31T12:00:02.000Z',
+        payload: { content: 'orphan output' },
+      },
+    ],
+  });
+
+  assert.equal(calls.toolUpdate.length, 0, 'an id-less result never issues an update');
 });
 
 test('a durable turn event still advances lastTurnAt', async () => {

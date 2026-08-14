@@ -745,6 +745,57 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 	}
 }
 
+// ACP delivers Kimi's scratch checklist as a plan update, which Orbit dropped: work
+// recorded there instead of in an Orbit task was invisible everywhere. Each update
+// replaces the whole plan, so successive versions must be distinct tool calls.
+func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
+	type event struct {
+		typ     string
+		payload map[string]interface{}
+	}
+	var events []event
+	emit := func(typ string, payload map[string]interface{}) {
+		events = append(events, event{typ: typ, payload: payload})
+	}
+	active := &kimiActiveTurn{
+		orbitTurnID: "turn-1",
+		seenTools:   map[string]bool{},
+		doneTools:   map[string]bool{},
+	}
+	var mu sync.Mutex
+	plan := func(status string) map[string]interface{} {
+		return map[string]interface{}{
+			"sessionUpdate": "plan",
+			"entries": []interface{}{
+				map[string]interface{}{"content": "add the case", "status": status},
+			},
+		}
+	}
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("pending")), emit, &mu, &active)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("completed")), emit, &mu, &active)
+	if len(events) != 4 {
+		t.Fatalf("events = %#v, want a tool_use/tool_result pair per plan update", events)
+	}
+	if events[0].typ != evToolUse || events[0].payload["name"] != "plan" {
+		t.Fatalf("first event = %#v, want a plan tool_use", events[0])
+	}
+	if events[1].payload["content"] != "- [ ] add the case" {
+		t.Fatalf("first checklist = %q", events[1].payload["content"])
+	}
+	if events[3].payload["content"] != "- [x] add the case" {
+		t.Fatalf("second checklist = %q", events[3].payload["content"])
+	}
+	if events[0].payload["id"] == events[2].payload["id"] {
+		t.Fatalf("plan updates reused tool id %v", events[0].payload["id"])
+	}
+	// An empty plan carries nothing to show and must not open a card.
+	handleKimiNotification("session-1", kimiNotification(t, "session-1",
+		map[string]interface{}{"sessionUpdate": "plan"}), emit, &mu, &active)
+	if len(events) != 4 {
+		t.Fatalf("empty plan emitted %#v", events[4:])
+	}
+}
+
 func TestKimiPermissionOptionMapsApprovalAndQuestion(t *testing.T) {
 	options := []interface{}{
 		map[string]interface{}{"optionId": "approve_once", "name": "Approve once", "kind": "allow_once"},

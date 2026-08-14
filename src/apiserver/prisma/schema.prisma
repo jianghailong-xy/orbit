@@ -803,6 +803,12 @@ model ToolCall {
   sessionId  String    @map("session_id") @db.Uuid
   session    Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   name       String
+  // The tool_use id the runtime assigned this call. A tool_result event arrives in a
+  // later event batch than its tool_use, so it can only be joined back to this row by
+  // (sessionId, toolUseId) — without the column, output/isError/finishedAt below were
+  // unreachable and stayed NULL forever. Nullable because very old runners never sent an
+  // id, and because it is the pairing key, the result update skips rows where it is unset.
+  toolUseId  String?   @map("tool_use_id")
   input      Json?
   output     Json?
   isError    Boolean   @default(false) @map("is_error")
@@ -810,6 +816,7 @@ model ToolCall {
   finishedAt DateTime? @map("finished_at")
 
   @@index([sessionId])
+  @@index([sessionId, toolUseId])
   @@map("tool_call")
 }
 
@@ -958,6 +965,11 @@ model Task {
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
+  // Best-effort dedup of a redelivered turn's re-created tasks: a hash of (session, turn, title,
+  // description), set only when the create happens inside a live turn (see TasksService). @unique
+  // gives a Postgres unique index, which by default treats NULLs as distinct — so the many tasks
+  // created outside any turn (user API, headless) coexist freely while an in-turn re-run collides.
+  idempotencyKey   String?     @unique @map("idempotency_key")
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 

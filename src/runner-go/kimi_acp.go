@@ -1004,6 +1004,7 @@ type kimiActiveTurn struct {
 	thought     strings.Builder
 	seenTools   map[string]bool
 	doneTools   map[string]bool
+	plans       int // plan updates seen this turn; makes each one a distinct tool id
 }
 
 func kimiContentText(value interface{}) string {
@@ -1111,6 +1112,31 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 				"isError":   status == "failed",
 			})
 		}
+	// ACP delivers Kimi's scratch checklist as a plan update rather than a tool call,
+	// and Orbit rendered none of it. See plan_events.go. Each update replaces the whole
+	// plan, so it gets its own id: successive versions are separate cards, not one card
+	// whose result keeps being overwritten.
+	case "plan":
+		rows := planEntries(update)
+		if len(rows) == 0 {
+			return
+		}
+		a.plans++
+		id := fmt.Sprintf("kimi-plan-%d", a.plans)
+		emit(evToolUse, map[string]interface{}{
+			"id":    id,
+			"name":  "plan",
+			"input": map[string]interface{}{"entries": rows},
+		})
+		emit(evToolResult, map[string]interface{}{
+			"toolUseId": id,
+			"content":   planChecklist(rows),
+			"isError":   false,
+		})
+	default:
+		// user_message_chunk is Orbit's own prompt echoed back, and mode changes have no
+		// transcript representation by design; neither is a gap worth reporting.
+		logUnhandledStreamKind("kimi", kind, "user_message_chunk", "current_mode_update")
 	}
 }
 

@@ -403,7 +403,9 @@ func TestProviderProcessesDoNotReceiveSessionOrchestrationToken(t *testing.T) {
 
 	t.Run("codex app server", func(t *testing.T) {
 		job, capture, root := newJobAndFakeProvider(t, "codex")
-		app, err := startCodexAppServer(context.Background(), job, root, root, envWithAgent(job.Agent.Env), emit)
+		// nil approval bridge: this asserts process environment, and nil is the fail-closed
+		// default (every approval request is declined) rather than a missing dependency.
+		app, err := startCodexAppServer(context.Background(), job, root, root, envWithAgent(job.Agent.Env), emit, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
