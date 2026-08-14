@@ -26,6 +26,8 @@ struct ConsoleView: View {
     /// otherwise be typed in as if it were the name.
     @State private var renaming = false
     @State private var renameDraft = ""
+    /// Gates the "needs you" banner to the compact shell — see the `safeAreaInset` below.
+    @Environment(\.horizontalSizeClass) private var hSize
     #endif
 
     var body: some View {
@@ -69,6 +71,12 @@ struct ConsoleView: View {
             _ = registry.model(for: sessionID, agentID: agentID)
         }
         #if os(iOS)
+        // "Another session needs you", below the nav bar and above the transcript. Compact only:
+        // the regular-width split keeps the session list on screen beside this console, and that
+        // list carries the bar — showing it in both columns would state one fact twice.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if hSize == .compact { NeedsYouBannerView(excluding: sessionID) }
+        }
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
         // carries no title, so iOS would reserve a *large* — and empty — title bar: a big blank band
         // at the top, above the transcript. Force the slim inline bar so the transcript starts

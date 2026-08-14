@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Needs-you banner — mockup</title>
+<style>
+  :root {
+    --amber: #FF9500;
+    --amber-bg: rgba(255, 149, 0, .13);
+    --blue: #007AFF;
+    --label: #000;
+    --label-2: rgba(60, 60, 67, .6);
+    --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .16);
+    --bar: #f7f7f8;
+    --surface: #fff;
+    --drawer: #f9f9f9;
+    --chip: #e5e5ea;
+  }
+  .dark {
+    --amber: #FF9F0A;
+    --amber-bg: rgba(255, 159, 10, .20);
+    --blue: #0A84FF;
+    --label: #fff;
+    --label-2: rgba(235, 235, 245, .6);
+    --label-3: rgba(235, 235, 245, .3);
+    --sep: rgba(84, 84, 88, .65);
+    --bar: #1c1c1e;
+    --surface: #000;
+    --drawer: #1c1c1e;
+    --chip: #2c2c2e;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 48px 32px 80px;
+    background: #ececef;
+    color: #16161a;
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 26px; letter-spacing: -.02em; margin: 0 0 6px; }
+  h2 { font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: #6b6b73;
+       margin: 56px 0 20px; font-weight: 600; }
+  .lede { color: #55555e; max-width: 760px; margin: 0 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }
+  figure { margin: 0; width: 360px; }
+  figcaption { margin-top: 14px; font-size: 13.5px; line-height: 1.5; color: #55555e; }
+  figcaption b { color: #16161a; }
+  /* Only the leading label is a block heading; bolds inside the sentence stay inline. */
+  figcaption > b:first-child { display: block; font-size: 14px; margin-bottom: 2px; }
+  figcaption .bad { color: #b3261e; }
+  figcaption .good { color: #9a6000; }
+
+  /* ── phone shell ───────────────────────────────────────────── */
+  .phone {
+    width: 360px; height: 730px; border-radius: 46px; overflow: hidden;
+    background: var(--surface); color: var(--label);
+    display: flex; flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, .20), 0 0 0 1px rgba(0, 0, 0, .07);
+  }
+  .phone.dark { box-shadow: 0 24px 64px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .10); }
+
+  .status { display: flex; justify-content: space-between; align-items: flex-end;
+            padding: 16px 30px 6px; font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+  .status .r { display: flex; gap: 6px; align-items: center; font-size: 12.5px; }
+  .batt { width: 22px; height: 11px; border: 1.2px solid var(--label-3); border-radius: 3px;
+          position: relative; }
+  .batt::before { content: ""; position: absolute; inset: 1.5px; right: 5px;
+                  background: var(--label); border-radius: 1px; }
+
+  .nav { display: flex; align-items: center; gap: 10px; padding: 4px 14px 9px;
+         border-bottom: .5px solid var(--sep); }
+  .nav .t { flex: 1; text-align: center; min-width: 0; }
+  .nav .t b { display: block; font-size: 16px; font-weight: 600; letter-spacing: -.01em;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav .t i { display: block; font-style: normal; font-size: 11px; color: var(--label-2); }
+  .nav .t.big { text-align: left; }
+  .nav .t.big b { font-size: 17px; }
+  .ico { width: 22px; height: 22px; flex: none; stroke: var(--blue); fill: none;
+         stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+  .ico.g { stroke: var(--label); }
+  .ico.s { width: 18px; height: 18px; stroke: var(--label-3); stroke-width: 2.2; }
+
+  /* ── THE BANNER ────────────────────────────────────────────── */
+  .needs {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 16px; background: var(--amber-bg);
+    border-bottom: .5px solid var(--sep); cursor: pointer;
+  }
+  .needs .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; }
+  .needs .txt { flex: 1; font-size: 14.5px; letter-spacing: -.01em; }
+  .needs .chev { width: 15px; height: 15px; stroke: var(--label-3); fill: none;
+                 stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .hl { outline: 2px dashed rgba(255, 149, 0, .8); outline-offset: -2px; }
+
+  /* ── console body ──────────────────────────────────────────── */
+  .tx { flex: 1; padding: 18px 16px; overflow: hidden; }
+  .tx .who { font-size: 12px; font-weight: 600; color: var(--label-2); margin-bottom: 5px;
+             letter-spacing: .02em; }
+  .tx p { margin: 0 0 16px; font-size: 14.5px; line-height: 1.5; letter-spacing: -.01em; }
+  .tool { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--label-2);
+          border: .5px solid var(--sep); border-radius: 9px; padding: 8px 11px; margin-bottom: 16px; }
+  /* Reset the page-level <code> chip styling — inside a phone it must read as transcript text,
+     not as a light chip (which went solid-white on the dark frame). */
+  .tool code { font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--label);
+               background: none; padding: 0; }
+  .tool .sp { width: 12px; height: 12px; border: 2px solid var(--blue); border-right-color: transparent;
+              border-radius: 50%; flex: none; }
+
+  .wtbar, .composer { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+                      background: var(--bar); border-top: .5px solid var(--sep); }
+  .wtbar { font-size: 12.5px; color: var(--label-2); }
+  .wtbar .grow { flex: 1; }
+  .wtbar .btn { border: .5px solid var(--sep); border-radius: 7px; padding: 3px 10px;
+                font-size: 12.5px; color: var(--label); }
+  .composer { padding-bottom: 26px; }
+  .composer .field { flex: 1; border: .5px solid var(--sep); border-radius: 19px; padding: 9px 14px;
+                     color: var(--label-3); font-size: 14.5px; background: var(--surface); }
+  .composer .send { width: 33px; height: 33px; border-radius: 50%; background: var(--blue);
+                    display: flex; align-items: center; justify-content: center; flex: none; }
+  .composer .send svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2.4;
+                        stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── session list ──────────────────────────────────────────── */
+  .grp { font-size: 12.5px; font-weight: 600; color: var(--label-2); padding: 16px 16px 6px; }
+  .srow { display: flex; align-items: center; gap: 9px; padding: 11px 16px;
+          border-bottom: .5px solid var(--sep); }
+  .srow .col { flex: 1; min-width: 0; }
+  .srow .ttl { font-size: 15px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; }
+  .srow .sub { font-size: 12.5px; color: var(--label-2); white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; margin-top: 1px; }
+  .srow .sub.amber { color: var(--amber); }
+  .srow .rel { font-size: 12px; color: var(--label-3); flex: none; }
+  .adot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); flex: none; }
+
+  /* ── drawer ────────────────────────────────────────────────── */
+  .drawer { background: var(--drawer); flex: 1; padding: 6px 0 0;
+            display: flex; flex-direction: column; }
+  .dhead { display: flex; align-items: center; padding: 8px 10px 10px 22px; }
+  .dhead b { flex: 1; font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+  .disc { width: 40px; height: 40px; border-radius: 50%; background: var(--chip);
+          display: flex; align-items: center; justify-content: center; flex: none; }
+  .drow { display: flex; align-items: center; gap: 11px; margin: 1px 10px; padding: 10px 12px;
+          border-radius: 10px; font-size: 15px; letter-spacing: -.01em; }
+  .drow.sel { background: rgba(0, 122, 255, .14); }
+  .drow .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drow .n { font-size: 12.5px; color: var(--label-2); flex: none; }
+  .drow .odot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; flex: none; }
+  .drow .odot.off { background: var(--label-3); }
+  .drow.kid { padding-left: 48px; }
+  .badge { flex: none; font-size: 12.5px; font-weight: 600; color: var(--amber);
+           background: var(--amber-bg); border-radius: 999px; padding: 1.5px 8px; }
+  .dlabel { display: flex; gap: 8px; padding: 16px 22px 4px; font-size: 13.5px; font-weight: 600;
+            color: var(--label-2); }
+  /* Floats over the bottom of the rail, as in the app. */
+  .actionbar { display: flex; align-items: center; gap: 12px; padding: 10px 10px 26px;
+               margin-top: auto; }
+  .newbtn { display: flex; align-items: center; gap: 8px; background: var(--blue); color: #fff;
+            border-radius: 999px; padding: 11px 18px; font-size: 15px; font-weight: 600; }
+  .newbtn svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2; }
+
+  /* ── spec ──────────────────────────────────────────────────── */
+  table { border-collapse: collapse; margin-top: 14px; font-size: 14px; }
+  td, th { border-bottom: 1px solid #dcdce2; padding: 9px 22px 9px 0; text-align: left;
+           vertical-align: top; }
+  th { color: #6b6b73; font-weight: 600; }
+  code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+         background: #e2e2e8; border-radius: 4px; padding: 1px 5px; }
+  ul { max-width: 780px; padding-left: 20px; }
+  li { margin-bottom: 7px; }
+  .cut { color: #b3261e; font-weight: 600; }
+</style>
+
+<h1>“Needs you” banner — one signal, one tap</h1>
+<p class="lede">
+  A session blocked on an approval is stopped work, not an unread message. So: <b>one</b> amber bar
+  that names where it is and teleports you there — not a badge trail you have to hunt down.
+</p>
+
+<h2>1 · The main case — you’re working in another session</h2>
+<div class="row">
+
+  <!-- BEFORE -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        <div class="t"><b>p1-codex-approval-probe</b><i>Running · 2m ago</i></div>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 13v6a1 1 0 001 1h12a1 1 0 001-1v-6"/></svg>
+      </div>
+      <div class="tx">
+        <div class="who">Codex</div>
+        <p>Rebased onto main and pushed. Kicking off the client CI now so the Swift compile gates
+           run before you look at it.</p>
+        <div class="tool"><span class="sp"></span><code>gh workflow run client.yml</code></div>
+      </div>
+      <div class="wtbar"><span>main · clean</span><span class="grow"></span>
+        <span class="btn">Commit</span><span class="btn">Merge ⌄</span></div>
+      <div class="composer">
+        <div class="field">Message p1-codex-approval-probe…</div>
+        <div class="send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>Before</b>
+      <span class="bad">wikova-develop has been sitting on an approval for 8 minutes.</span>
+      This screen says nothing. The only signal lives inside a collapsed runner group in a closed drawer.
+    </figcaption>
+  </figure>
+
+  <!-- AFTER -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        <div class="t"><b>p1-codex-approval-probe</b><i>Running · 2m ago</i></div>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 13v6a1 1 0 001 1h12a1 1 0 001-1v-6"/></svg>
+      </div>
+      <div class="needs hl">
+        <span class="dot"></span>
+        <span class="txt">wikova-develop needs you</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="tx">
+        <div class="who">Codex</div>
+        <p>Rebased onto main and pushed. Kicking off the client CI now so the Swift compile gates
+           run before you look at it.</p>
+        <div class="tool"><span class="sp"></span><code>gh workflow run client.yml</code></div>
+      </div>
+      <div class="wtbar"><span>main · clean</span><span class="grow"></span>
+        <span class="btn">Commit</span><span class="btn">Merge ⌄</span></div>
+      <div class="composer">
+        <div class="field">Message p1-codex-approval-probe…</div>
+        <div class="send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>After</b>
+      36pt, directly under the nav bar, above the transcript. Names the <b>workspace</b>, not a count —
+      “1” tells you nothing, “wikova-develop” lets you decide whether to go now.
+      Tap = straight to that session’s approval card. The three bottom bands never move.
+    </figcaption>
+  </figure>
+</div>
+
+<h2>2 · The other states</h2>
+<div class="row">
+
+  <!-- N=3 on the session list -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <svg class="ico g" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <div class="t big"><b>wikova-prod</b></div>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M4 6h16M6 12h12M9 18h6"/></svg>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg>
+      </div>
+      <div class="needs hl">
+        <span class="dot"></span>
+        <span class="txt">3 sessions need you</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="grp">Today</div>
+      <div class="srow"><div class="col"><div class="ttl">Ship the 0.1.110 release</div>
+        <div class="sub">Running · tagging v0.1.110</div></div><span class="rel">2m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Backfill worktree fences</div>
+        <div class="sub">Waiting for you · 8m</div></div><span class="adot"></span><span class="rel">8m</span></div>
+      <div class="srow"><div class="col"><div class="ttl">Gateway 413 on upload</div>
+        <div class="sub">Dormant · finished</div></div><span class="rel">1h</span></div>
+      <div class="grp">Yesterday</div>
+      <div class="srow"><div class="col"><div class="ttl">DeepSeek naming recreate</div>
+        <div class="sub">Completed</div></div><span class="rel">1d</span></div>
+    </div>
+    <figcaption>
+      <b>N &gt; 1 — it counts instead of naming</b>
+      Tap takes the oldest one; clear it and the bar re-renders as “2 sessions need you”.
+      That loop is what makes it an inbox rather than a notification.
+      Note the row-level amber dot is unchanged — the bar is about the ones <i>not</i> on this screen.
+    </figcaption>
+  </figure>
+
+  <!-- Dark -->
+  <figure>
+    <div class="phone dark">
+      <div class="status"><span>9:41</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <svg class="ico" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        <div class="t"><b>Ship the 0.1.110 release</b><i>Running · just now</i></div>
+        <svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12M8 7l4-4 4 4M5 13v6a1 1 0 001 1h12a1 1 0 001-1v-6"/></svg>
+      </div>
+      <div class="needs">
+        <span class="dot"></span>
+        <span class="txt">wikova-develop needs you</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="tx">
+        <div class="who">Claude</div>
+        <p>Replayed the two commits onto origin/main and tagged v0.1.110. The macOS notarize job is
+           the long pole — about nine minutes.</p>
+        <div class="tool"><span class="sp"></span><code>git push origin v0.1.110</code></div>
+      </div>
+      <div class="wtbar"><span>main · clean</span><span class="grow"></span>
+        <span class="btn">Commit</span><span class="btn">Merge ⌄</span></div>
+      <div class="composer">
+        <div class="field">Message orbit…</div>
+        <div class="send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>Dark</b>
+      Amber tint lifts to 20% so it survives on black. Text stays label-primary in both —
+      amber-on-amber is the usual legibility trap.
+      <b>N = 0:</b> the bar is absent from the layout entirely — no zero-height placeholder, no gap.
+    </figcaption>
+  </figure>
+
+  <!-- Drawer -->
+  <figure>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="drawer">
+        <div class="dhead"><b>Orbit</b>
+          <span class="disc"><svg class="ico s" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg></span>
+        </div>
+        <div class="drow">
+          <svg class="ico g" style="width:20px;height:20px" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/></svg>
+          <span class="grow">wikova</span><span class="odot"></span><span class="n">5</span>
+          <svg class="ico s" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="drow kid"><span class="grow">orbit</span></div>
+        <div class="drow kid"><span class="grow">wikova-develop</span><span class="badge">1</span></div>
+        <div class="drow kid"><span class="grow">wikova-prod</span></div>
+        <div class="drow kid"><span class="grow">wikids</span></div>
+        <div class="drow kid sel"><span class="grow">p1-codex-approval-probe</span></div>
+        <div class="drow">
+          <svg class="ico g" style="width:20px;height:20px" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/></svg>
+          <span class="grow">long’s MacBook</span><span class="odot off"></span><span class="n">1</span>
+          <svg class="ico s" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="drow">
+          <svg class="ico g" style="width:20px;height:20px" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M9 20h6M12 16v4"/></svg>
+          <span class="grow">workstation</span><span class="odot"></span><span class="n">1</span>
+          <svg class="ico s" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="dlabel">Task Lists <span style="font-weight:400">118</span></div>
+        <div class="drow kid"><span class="grow">FineWeb CC-MAIN-2…</span><span class="n">402</span></div>
+        <div class="drow kid"><span class="grow">FineWeb CC-MAIN-2…</span><span class="n">501</span></div>
+        <div class="actionbar">
+          <span class="newbtn"><svg viewBox="0 0 24 24"><path d="M4 20h16M6 16l9-9 3 3-9 9H6z"/></svg>New session</span>
+          <span class="grow" style="flex:1"></span>
+          <span class="disc" style="background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.14)">
+            <svg class="ico s" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="7.4" stroke-dasharray="2.2 2.6"/></svg>
+          </span>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>Drawer — demoted to a quiet answer, not the alarm</b>
+      One amber count on the agent row (matches web today). Deliberately <b>no</b> roll-up on the
+      collapsed <i>workstation</i> / <i>long’s MacBook</i> rows and <b>no</b> dot on the hamburger:
+      with a one-tap banner you never hunt through machine groups, and repeating one fact on four
+      surfaces is noise, not emphasis.
+    </figcaption>
+  </figure>
+</div>
+
+<h2>3 · Spec</h2>
+<table>
+  <tr><th>Height</th><td>36pt — 9pt padding above/below a single line</td></tr>
+  <tr><th>Background</th><td><code>Color.orange.opacity(0.12)</code> light · <code>0.20</code> dark</td></tr>
+  <tr><th>Dot</th><td>7pt solid <code>.orange</code> — the exact dot <code>SessionLiveIndicator</code>
+      already uses for “needs you”, so it’s the same word in the same language</td></tr>
+  <tr><th>Text</th><td><code>.primary</code> + <code>.orbitControl</code> — never a bare
+      <code>system(size:)</code>, the font-tokens CI job hard-fails on it</td></tr>
+  <tr><th>Chevron</th><td><code>.tertiary</code> + <code>.orbitMeta</code></td></tr>
+  <tr><th>Separators</th><td>hairline below only; the nav bar draws its own above</td></tr>
+  <tr><th>Motion</th><td><b>none</b> — no pulse, no spring. It can sit there for hours while the
+      transcript beneath it is being read</td></tr>
+  <tr><th>Hit target</th><td>whole bar, <code>.contentShape(Rectangle())</code></td></tr>
+  <tr><th>VoiceOver</th><td>“wikova-develop needs you, button”</td></tr>
+  <tr><th>Copy</th><td><code>{workspace} needs you</code> / <code>{n} sessions need you</code> —
+      English (repo standard), and “needs you” is already the product’s word for this state
+      (<code>SessionGroups.needsYou</code>, web <code>.tp-count.needs-you</code>, menu bar
+      “2 needs you”)</td></tr>
+  <tr><th>Excludes</th><td>the session you’re looking at — its approval card is already inline at the
+      tail of the transcript</td></tr>
+  <tr><th>Mount</th><td>one shared <code>.needsYouBanner()</code> via
+      <code>.safeAreaInset(edge:.top)</code> on the console + the session list. Wrapping
+      <code>CompactSections</code> instead would put it <i>above</i> the nav bar</td></tr>
+  <tr><th>Data</th><td>already on the client — the cross-agent Open snapshot carries
+      <code>pendingApprovals</code> per row, same rule the server’s
+      <code>GET /sessions/counts</code> uses. No new endpoint</td></tr>
+</table>
+
+<h2>4 · Explicitly not building</h2>
+<ul>
+  <li><span class="cut">Dot on the hamburger.</span> Second telling of one fact; “something’s wrong
+      somewhere” with no destination is pure anxiety.</li>
+  <li><span class="cut">Needs-you roll-up on collapsed runner rows.</span> Only needed if the user has
+      to find it themselves — they don’t anymore.</li>
+  <li><span class="cut">A “Needs you” section in the drawer.</span> Still requires opening the drawer,
+      and duplicates Recents.</li>
+  <li><span class="cut">A toast.</span> Approvals persist for hours; a transient is missable by design.</li>
+  <li><span class="cut">Red.</span> Red is failure in this app already (<code>SessionLiveIndicator</code>
+      error dot). Amber is “waiting on a human”.</li>
+</ul>
+</html>
