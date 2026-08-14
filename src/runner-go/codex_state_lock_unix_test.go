@@ -43,6 +43,61 @@ func TestCodexStateInitFileLockSerializesAndIsPrivate(t *testing.T) {
 	unlockAgain()
 }
 
+func TestCodexStateHandshakeLockSerializesSharedStartsAndDegrades(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	shared := codexStateSelection{Dir: "/state", Partition: codexStatePartition("/root/.codex"), Shared: true}
+
+	unlock := lockCodexStateHandshakeWithTimeout(context.Background(), shared, time.Second)
+	lockPath, err := codexStateInitLockPath(shared.Partition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Fatalf("handshake lock was not taken: %v", err)
+	}
+	// A second start on the same partition waits rather than opening the SQLite home
+	// alongside the first one.
+	held := make(chan struct{})
+	go func() {
+		defer close(held)
+		lockCodexStateHandshakeWithTimeout(context.Background(), shared, time.Minute)()
+	}()
+	select {
+	case <-held:
+		t.Fatal("concurrent handshake was not serialized")
+	case <-time.After(150 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case <-held:
+	case <-time.After(5 * time.Second):
+		t.Fatal("handshake lock was not released")
+	}
+
+	// Waiting out a stuck holder degrades to the unserialized start, never to a failure.
+	unlock = lockCodexStateHandshakeWithTimeout(context.Background(), shared, time.Second)
+	defer unlock()
+	start := time.Now()
+	lockCodexStateHandshakeWithTimeout(context.Background(), shared, 100*time.Millisecond)()
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("degraded handshake waited %s, want the bounded timeout", elapsed)
+	}
+}
+
+func TestCodexStateHandshakeLockSkipsSessionLocalState(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ORBIT_HOME", root)
+	// Legacy state has one writer, so it takes no lock — and leaves no lock file behind.
+	lockCodexStateHandshakeWithTimeout(context.Background(), codexStateSelection{Dir: "/state", Layout: codexStateLayoutLegacy}, time.Second)()
+	entries, err := filepath.Glob(filepath.Join(root, ".codex-state-*.init.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("session-local start took a partition lock: %v", entries)
+	}
+}
+
 func TestCodexStateInitFileLockSerializesAcrossProcesses(t *testing.T) {
 	if os.Getenv("ORBIT_CODEX_LOCK_CHILD") == "1" {
 		path := os.Getenv("ORBIT_CODEX_LOCK_PATH")

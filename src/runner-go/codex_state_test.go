@@ -322,6 +322,42 @@ func TestRetryableCodexStateInitErrorIsLimitedToBackfillLease(t *testing.T) {
 	}
 }
 
+func TestCodexStderrStateInitFailureIsLimitedToCodexOwnLine(t *testing.T) {
+	// The line the runner recorded when a session lost its start to a concurrent one.
+	failure := "Error: failed to initialize sqlite state runtime under /root/.orbit/codex-state/b30327ab8049b1dbefb89e92: " +
+		"failed to initialize state runtime at /root/.orbit/codex-state/b30327ab8049b1dbefb89e92"
+	if !codexStderrIsStateInitFailure(failure) {
+		t.Fatal("codex state runtime failure was not recognized on stderr")
+	}
+	for _, line := range []string{
+		"ERROR codex_core: exec rejected by user",
+		"WARNING: proceeding, even though we could not create PATH aliases",
+		"thread/start failed: unsupported protocol",
+		"",
+	} {
+		if codexStderrIsStateInitFailure(line) {
+			t.Fatalf("unrelated stderr %q was read as a state init failure", line)
+		}
+	}
+}
+
+func TestCodexHandshakeRetriesOnlyBoundedStateInitFailures(t *testing.T) {
+	if !shouldRetryCodexHandshake(0, true, nil) {
+		t.Fatal("first state init failure was not retried")
+	}
+	if shouldRetryCodexHandshake(codexStateHandshakeRetries, true, nil) {
+		t.Fatal("state init failure retried past its attempt budget")
+	}
+	// A process that died for any other reason, or a handshake budget already spent, is the
+	// caller's failure to report rather than something another attempt can fix.
+	if shouldRetryCodexHandshake(0, false, nil) {
+		t.Fatal("unrelated start failure was retried")
+	}
+	if shouldRetryCodexHandshake(0, true, context.DeadlineExceeded) {
+		t.Fatal("state init failure retried after the handshake budget expired")
+	}
+}
+
 func TestRetryCodexStateInitializationRetriesOnlyLeaseWaits(t *testing.T) {
 	var calls atomic.Int32
 	err := retryCodexStateInitialization(context.Background(), time.Millisecond, func(context.Context) error {

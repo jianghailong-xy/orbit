@@ -23,6 +23,11 @@ const (
 	codexStateInitTimeout      = 20 * time.Minute
 	codexConnectionInitTimeout = 2 * time.Minute
 	codexStateRetryDelay       = 2 * time.Second
+
+	// How long a starting app-server waits for its partition's handshake lock. Long enough for
+	// the handshakes queued ahead of it on a busy runner, and bounded so a stuck holder degrades
+	// to the unserialized start this replaced instead of stalling every Codex start.
+	codexStateHandshakeLockTimeout = 45 * time.Second
 )
 
 type codexStateSelection struct {
@@ -369,6 +374,39 @@ func retryCodexStateInitialization(ctx context.Context, retryDelay time.Duration
 		case <-timer.C:
 		}
 	}
+}
+
+// lockCodexStateHandshake serializes the spawn-and-initialize window of every app-server that
+// opens one shared partition. Codex opens and migrates that SQLite home per process with no lock
+// of its own, so two starts landing together — a second session, or the runner's own plan-usage
+// probe — can leave one of them dead on an otherwise healthy directory.
+//
+// Only the window is held. The process keeps the database open for the rest of the session, so
+// holding past the handshake would serialize the runner down to one Codex session at a time.
+// Waiting is bounded and best-effort for the same reason: correctness here is Codex's, and a
+// holder that never returns must not take every other start down with it.
+func lockCodexStateHandshake(ctx context.Context, state codexStateSelection) func() {
+	return lockCodexStateHandshakeWithTimeout(ctx, state, codexStateHandshakeLockTimeout)
+}
+
+func lockCodexStateHandshakeWithTimeout(ctx context.Context, state codexStateSelection, timeout time.Duration) func() {
+	noop := func() {}
+	// A session-local partition has one writer by construction.
+	if !state.Shared {
+		return noop
+	}
+	lockPath, err := codexStateInitLockPath(state.Partition)
+	if err != nil {
+		return noop
+	}
+	lockCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	unlock, err := acquireCodexStateInitFileLock(lockCtx, lockPath)
+	if err != nil {
+		logln("codex shared state handshake starting without the partition lock:", err)
+		return noop
+	}
+	return unlock
 }
 
 func ensureSharedCodexStateReady(waitCtx, bootstrapCtx context.Context, state codexStateSelection, env []string) error {

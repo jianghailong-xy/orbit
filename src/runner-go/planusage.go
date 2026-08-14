@@ -409,12 +409,19 @@ func fetchCodexPlanUsage(ctx context.Context, _ *http.Client) (*PlanUsage, error
 	}
 	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
+	// This probe is the other regular starter on the shared partition, so it takes the same
+	// handshake lock a session start does. Losing the wait costs one usage refresh; colliding
+	// with a session start can cost the session.
+	unlock := lockCodexStateHandshake(cctx, state)
 	app, err := startBareCodexAppServer(cctx, state.Dir, env, cwd)
 	if err != nil {
+		unlock()
 		return nil, err
 	}
 	defer app.close()
-	if err := app.initialize(cctx); err != nil {
+	err = app.initialize(cctx)
+	unlock()
+	if err != nil {
 		return nil, err
 	}
 	result, err := app.request(cctx, "account/rateLimits/read", nil)

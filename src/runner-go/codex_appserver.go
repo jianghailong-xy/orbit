@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -65,6 +66,10 @@ type codexAppServer struct {
 	contextGeneration   uint64
 	contextRefreshEpoch uint64
 	contextNeedsRefresh bool
+
+	// Set from the stderr reader when Codex died bringing up its SQLite state, which is the
+	// one start failure worth another attempt. Read only after close() has joined that reader.
+	stateInitFailed atomic.Bool
 }
 
 type codexAppActiveTurn struct {
@@ -146,12 +151,21 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			return stFailed, true, false
 		}
 	}
-	app, err := startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
-		func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-			return bridgeCodexApproval(approvalCtx, t, job, request, params)
-		})
+	// Shared state has already crossed the expensive backfill gate. Legacy and
+	// credential-isolated state may still need that work, so keep the same bounded
+	// long window instead of reintroducing the old two-minute interruption.
+	initTimeout := codexConnectionInitTimeout
+	if !state.Shared {
+		initTimeout = codexStateInitTimeout
+	}
+	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
+		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
+			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
+				return bridgeCodexApproval(approvalCtx, t, job, request, params)
+			})
+	})
 	if err != nil {
-		emit(evError, map[string]interface{}{"message": "failed to spawn codex app-server: " + err.Error()})
+		emit(evError, map[string]interface{}{"message": err.Error()})
 		return stFailed, true, false
 	}
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
@@ -165,20 +179,6 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		asyncWg.Wait()
 	}()
 
-	// Shared state has already crossed the expensive backfill gate. Legacy and
-	// credential-isolated state may still need that work, so keep the same bounded
-	// long window instead of reintroducing the old two-minute interruption.
-	initTimeout := codexConnectionInitTimeout
-	if !state.Shared {
-		initTimeout = codexStateInitTimeout
-	}
-	initCtx, cancelInit := context.WithTimeout(ctx, initTimeout)
-	err = app.initialize(initCtx)
-	cancelInit()
-	if err != nil {
-		emit(evError, map[string]interface{}{"message": "failed to initialize codex app-server: " + err.Error()})
-		return stFailed, true, false
-	}
 	// A resumed thread already carries the developer message an earlier generation
 	// injected, and inject_items appends rather than replaces. Injecting again on every
 	// warm restart / LRU reload would accumulate a copy of the agent context per
@@ -663,6 +663,17 @@ func codexStderrIsExpectedRefusal(line string) bool {
 	return strings.Contains(lower, "rejected by user") || strings.Contains(lower, "rejected(\\\"rejected by user")
 }
 
+// codexStderrIsStateInitFailure recognizes Codex refusing to bring up the SQLite state it keeps
+// under `sqlite_home`, which it reports on stderr and then exits — leaving the runner holding
+// nothing but its own "codex app-server closed" from the unanswered initialize.
+//
+// This is the start failure worth retrying: Codex opens that home per process, so a start racing
+// another one can lose a directory that is in fact healthy. Keyed on Codex's own line so that
+// configuration, permission and data damage keep failing on the first attempt.
+func codexStderrIsStateInitFailure(line string) bool {
+	return strings.Contains(strings.ToLower(line), "failed to initialize sqlite state runtime")
+}
+
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
 // permission mode. This is what makes an "ask me first" mode mean that on Codex too: `untrusted`
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
@@ -749,6 +760,55 @@ func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession,
 	}
 }
 
+// codexStateHandshakeRetries is how many further starts Codex gets after dying on its SQLite
+// state. Two collided starters only need one to step back, so a couple of short retries covers
+// the contention this exists for, while a state directory that is genuinely broken still fails
+// in seconds instead of minutes.
+const codexStateHandshakeRetries = 2
+
+func shouldRetryCodexHandshake(attempt int, stateInitFailed bool, ctxErr error) bool {
+	return stateInitFailed && ctxErr == nil && attempt < codexStateHandshakeRetries
+}
+
+// startReadyCodexAppServer returns an app-server that has completed its initialize handshake,
+// holding the partition's handshake lock across the pair and retrying a start Codex lost to a
+// concurrent one. Its errors carry the phase they failed in, because that is what the session
+// transcript reports.
+//
+// spawn keeps the caller's context: the process outlives this call, so only the handshake runs
+// on the bounded one. Every attempt shares that single budget rather than getting its own.
+func startReadyCodexAppServer(ctx context.Context, state codexStateSelection, initTimeout time.Duration, spawn func() (*codexAppServer, error)) (*codexAppServer, error) {
+	initCtx, cancelInit := context.WithTimeout(ctx, initTimeout)
+	defer cancelInit()
+	for attempt := 0; ; attempt++ {
+		unlock := lockCodexStateHandshake(initCtx, state)
+		app, err := spawn()
+		if err != nil {
+			unlock()
+			return nil, fmt.Errorf("failed to spawn codex app-server: %w", err)
+		}
+		err = app.initialize(initCtx)
+		unlock()
+		if err == nil {
+			return app, nil
+		}
+		// close() joins the stderr reader, so Codex's own account of the failure is complete
+		// by the time the retry decision reads it.
+		app.close()
+		if !shouldRetryCodexHandshake(attempt, app.stateInitFailed.Load(), initCtx.Err()) {
+			return nil, fmt.Errorf("failed to initialize codex app-server: %w", err)
+		}
+		logln("codex app-server lost its shared state handshake, retrying:", err)
+		timer := time.NewTimer(codexStateRetryDelay)
+		select {
+		case <-initCtx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("failed to initialize codex app-server: %w", err)
+		case <-timer.C:
+		}
+	}
+}
+
 func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stateDir string, processEnv []string, emit emitFn, approve codexApprovalFn) (*codexAppServer, error) {
 	procCtx, cancel := context.WithCancel(ctx)
 	exe, err := os.Executable()
@@ -808,6 +868,9 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
 			line := stripANSI(s.Text())
+			if codexStderrIsStateInitFailure(line) {
+				app.stateInitFailed.Store(true)
+			}
 			if codexStderrIsExpectedRefusal(line) {
 				continue
 			}
