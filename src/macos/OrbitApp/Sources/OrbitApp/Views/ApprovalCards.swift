@@ -29,9 +29,14 @@ struct ApprovalCard: View {
 // MARK: - shared card language
 
 /// Card metrics, forked because the two clients are answered with different instruments: a phone
-/// card is roomier and its rows/buttons meet the 44pt touch minimum (a tap has no hover to aim
-/// with, and a mis-tap here runs a command), while macOS keeps the compact sizing that suits a
-/// pointer in a much wider transcript column.
+/// card is roomier and its answer rows meet the 44pt touch minimum (a tap has no hover to aim with,
+/// and a mis-tap here runs a command), while macOS keeps the compact sizing that suits a pointer in
+/// a much wider transcript column.
+///
+/// The action buttons deliberately do NOT run at `.controlSize(.large)`: 50pt-tall bars read as
+/// bulky stacked three-deep on a phone. They keep the system's default height and take their target
+/// from spanning the card instead — a full-width 34pt bar is far easier to hit than the
+/// content-width pill it replaced, even though it's under 44pt.
 private enum ApprovalMetrics {
     #if os(iOS)
     static let padding: CGFloat = 14
@@ -61,16 +66,6 @@ private extension View {
                 RoundedRectangle(cornerRadius: ApprovalMetrics.radius)
                     .strokeBorder(tone.opacity(0.28))
             }
-    }
-
-    /// One of the card's decisions. iOS runs them at `.large` — ~50pt tall, comfortably over the
-    /// touch minimum, where the default control size draws ~34. macOS keeps its native size.
-    @ViewBuilder func approvalAction() -> some View {
-        #if os(iOS)
-        controlSize(.large)
-        #else
-        self
-        #endif
     }
 
     /// The *label* of a card action, stretched to the card's width on iOS. It has to be the label:
@@ -206,7 +201,6 @@ struct ToolApprovalCard: View {
             Text("Allow").approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
-        .approvalAction()
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.
@@ -218,14 +212,12 @@ struct ToolApprovalCard: View {
                 .approvalActionLabel()
         }
         .buttonStyle(.bordered)
-        .approvalAction()
     }
     private var denyButton: some View {
         Button(role: .destructive) { decide(console, approval, .deny) } label: {
             Text("Deny").approvalActionLabel()
         }
         .buttonStyle(.bordered)
-        .approvalAction()
     }
 }
 
@@ -302,7 +294,6 @@ struct QuestionCard: View {
             Text("Submit").approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
-        .approvalAction()
         .disabled(!allAnswered)
     }
     // Reply conversationally in the main composer instead of picking an option; the text rides back
@@ -316,7 +307,6 @@ struct QuestionCard: View {
                 .approvalActionLabel()
         }
         .buttonStyle(.bordered)
-        .approvalAction()
     }
 
     private func isSelected(_ q: AskQuestion, _ label: String) -> Bool {
@@ -420,13 +410,11 @@ struct PlanCard: View {
             Text("Approve & run").approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
-        .approvalAction()
     }
     private var keepPlanningButton: some View {
         Button(role: .cancel) { decide(console, approval, .deny) } label: {
             Text("Keep planning").approvalActionLabel()
         }
         .buttonStyle(.bordered)
-        .approvalAction()
     }
 }
