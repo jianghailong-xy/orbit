@@ -23,8 +23,8 @@ struct PendingAttachment: Identifiable, Equatable, Sendable {
     /// isn't re-decoding the full-resolution source on every body pass; nil for a non-image file.
     let previewImageData: Data?
 
-    /// True until the background upload resolves — drives the chip's spinner and gates send
-    /// (mirrors the web composer's `status === 'uploading'`).
+    /// True until the background upload resolves — drives the chip's spinner and makes a send that
+    /// lands in this window wait for the bytes (mirrors the web composer's `status === 'uploading'`).
     var isUploading: Bool { remoteID == nil }
 }
 
@@ -118,6 +118,13 @@ final class ConsoleModel {
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
     var effort: Effort = .default
     private(set) var pendingAttachments: [PendingAttachment] = []
+    /// The in-flight `attach` uploads, keyed by their chip's local id, so a send that lands while
+    /// the bytes are still going up can wait for them instead of leaving them behind. Each upload
+    /// clears its own entry when it resolves.
+    private var uploadTasks: [String: Task<Void, Never>] = [:]
+    /// True while a send is holding for the staged attachments to finish uploading (see `send`).
+    /// Keeps the composer's contents put and the send button spinning until the ids land.
+    private(set) var waitingForUploads = false
     private(set) var sending = false
     /// True from the moment the user sends a message until the agent's first output for that turn
     /// lands (or the send fails). Bridges the window where the POST has returned but the live
@@ -581,9 +588,21 @@ final class ConsoleModel {
     var isLive: Bool { isDraft ? false : ComposerLogic.isLive(status: sessionStatus) }
 
     var canSend: Bool {
-        guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !sending else { return false }
+        guard !sending, !waitingForUploads else { return false }
+        guard !composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || canSendAttachmentsAlone else { return false }
         if replyContext != nil { return true }   // a question reply always sends (deny+message)
         return availability != .blocked
+    }
+
+    /// Whether what's staged can go out with no text at all — web parity (`!!text.trim() ||
+    /// readyImages.length > 0`): a screenshot on its own is a perfectly good message, and the
+    /// runner builds an image-only user turn for it (no text block). Two cases keep the
+    /// text-is-required rule: a draft, because POST /sessions rejects an empty `prompt`, and a
+    /// question reply, whose deny+message channel carries text only. `send` also excludes a
+    /// bare `!`, which is a shell no-op rather than a message.
+    private var canSendAttachmentsAlone: Bool {
+        !isDraft && replyContext == nil && !pendingAttachments.isEmpty
     }
 
     /// Whether to show a "working" row at the transcript tail: the agent owes a response it hasn't
@@ -928,11 +947,26 @@ final class ConsoleModel {
     /// send is labeled "Queued"; nil until the session record loads, where it falls back to the
     /// stream-reconciled status. See `ComposerLogic.willQueue`.
     func send(authoritative: RunStatus? = nil) async {
-        guard !sending else { return }
+        guard !sending, !waitingForUploads else { return }
+        // A chip is staged the moment an image is picked, while its bytes are still going up (see
+        // `attach`). Sending in that window would leave the image behind for good: only chips that
+        // already carry a `remoteID` ride along, and the staged list is cleared below either way.
+        // So honor the tap and hold until the upload lands. (Web instead disables its send button
+        // while `uploading` — the wait costs the user the same time without a button that looks
+        // dead.) Everything below reads the composer afterwards, so text typed during the wait
+        // still goes out with this send.
+        if pendingAttachments.contains(where: \.isUploading) {
+            waitingForUploads = true
+            await waitForStagedUploads()
+            waitingForUploads = false
+        }
         // A leading `!` runs the remainder as a raw shell command on the runner, bypassing claude
         // (mirrors the web composer). A bare `!` with nothing after it is a no-op.
         let (text, shell) = ComposerLogic.parseShell(composerText)
-        guard !text.isEmpty else {
+        // Empty text still sends when something is staged to carry the message (see
+        // `canSendAttachmentsAlone`) — but never as a shell turn: a bare `!` is a no-op that only
+        // clears itself, and attachments mean nothing to a raw command (web ignores them there too).
+        guard !text.isEmpty || (!shell && canSendAttachmentsAlone) else {
             if shell { composerText = "" }
             return
         }
@@ -992,7 +1026,7 @@ final class ConsoleModel {
         // The raw draft, so a shell send comes back with its leading `!`.
         let draft = composerText
         let staged = pendingAttachments
-        // Every staged attachment is uploaded by now (send is gated on `isUploading`), so each
+        // Every staged attachment has finished uploading by now (the send waited above), so each
         // carries its server `remoteID`; `compactMap` is belt-and-suspenders against a stray nil.
         let ready = pendingAttachments.compactMap { att in att.remoteID.map { (att, $0) } }
         let attachmentIds = ready.map(\.1)
@@ -1372,7 +1406,8 @@ final class ConsoleModel {
         pendingAttachments.append(PendingAttachment(id: uid, remoteID: nil, filename: filename,
                                                     mimeType: mimeType, byteCount: data.count,
                                                     previewImageData: preview))
-        Task {
+        uploadTasks[uid] = Task {
+            defer { uploadTasks[uid] = nil }
             do {
                 // A draft has no session yet — upload session-less; createSession links the ids later.
                 let id = try await api.uploadAttachment(sessionID: isDraft ? nil : sessionID,
@@ -1385,6 +1420,17 @@ final class ConsoleModel {
                 pendingAttachments.removeAll { $0.id == uid }
                 statusMessage = "Upload failed — \(filename)"
             }
+        }
+    }
+
+    /// Wait out the uploads behind the currently staged chips — what `send` holds on so a message
+    /// picked up mid-upload still carries its attachments. Every upload resolves one way or the
+    /// other (success fills the chip's `remoteID`, failure drops the chip and reports it) and clears
+    /// its own `uploadTasks` entry, so this always ends; re-reading both collections each pass means
+    /// a chip removed while waiting stops holding it up, and one attached during the wait still does.
+    private func waitForStagedUploads() async {
+        while let task = pendingAttachments.compactMap({ uploadTasks[$0.id] }).first {
+            await task.value
         }
     }
 

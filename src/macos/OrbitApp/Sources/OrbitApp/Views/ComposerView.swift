@@ -219,9 +219,16 @@ struct ComposerView: View {
                         let status = app.session(id: console.sessionID)?.effectiveRunStatus
                         Task { await console.send(authoritative: status) }
                     } label: {
+                        // A send that arrives while an attachment is still uploading waits for the
+                        // bytes (ConsoleModel.send) rather than dropping it. Spin in place — same
+                        // footprint, so nothing reflows — so that wait doesn't read as a dead tap.
                         Image(systemName: "arrow.up.circle.fill")
                             .font(sendGlyphFont)
                             .foregroundStyle(console.canSend ? Color.accentColor : Color.secondary)
+                            .opacity(console.waitingForUploads ? 0 : 1)
+                            .overlay {
+                                if console.waitingForUploads { ProgressView().controlSize(.small) }
+                            }
                     }
                     .buttonStyle(.plain)
                     .disabled(!console.canSend)
