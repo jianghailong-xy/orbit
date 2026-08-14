@@ -14,22 +14,23 @@ func TestContextPingerEmitsFirstReadingThenThrottles(t *testing.T) {
 		got = append(got, payload["contextTokens"].(int))
 	}
 	var p contextPinger
+	job := &ClaimedSession{Agent: AgentExecConfig{Model: "claude-opus-5"}}
 
-	p.ping(emit, 0)     // no reading yet — nothing to report
-	p.ping(emit, 12000) // first reading goes out at once: the gauge is showing 0%
-	p.ping(emit, 13000) // still inside the interval
-	p.ping(emit, 14000)
+	p.ping(emit, 0, job)     // no reading yet — nothing to report
+	p.ping(emit, 12000, job) // first reading goes out at once: the gauge is showing 0%
+	p.ping(emit, 13000, job) // still inside the interval
+	p.ping(emit, 14000, job)
 
 	if len(got) != 1 || got[0] != 12000 {
 		t.Fatalf("want one ping of 12000, got %v", got)
 	}
 
 	p.at = time.Now().Add(-contextPingInterval)
-	p.ping(emit, 12000) // unchanged since the last ping — nothing new to say
+	p.ping(emit, 12000, job) // unchanged since the last ping — nothing new to say
 	if len(got) != 1 {
 		t.Fatalf("unchanged reading pinged again: %v", got)
 	}
-	p.ping(emit, 20000)
+	p.ping(emit, 20000, job)
 	if len(got) != 2 || got[1] != 20000 {
 		t.Fatalf("want a second ping of 20000, got %v", got)
 	}

@@ -150,6 +150,10 @@ export function localStatusRows(s: LocalStatusSnapshot): LocalStatusRow[] {
       label: 'Context',
       value: `${pct}% (${fmtTokens(contextTokens)} / ${fmtTokens(contextWindow)} tokens)`,
     });
+  } else if (contextTokens > 0) {
+    // Occupancy without a window: the count is measured and worth showing, the percentage would
+    // be against a number nobody reported.
+    rows.push({ label: 'Context', value: `${fmtTokens(contextTokens)} tokens (window not reported)` });
   } else {
     rows.push({ label: 'Context', value: 'not reported yet' });
   }

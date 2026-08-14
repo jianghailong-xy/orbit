@@ -1151,8 +1151,9 @@ final class ConsoleModel {
     private func showStatusCommand() {
         let window: Int? = provider == "opencode" && modelID.isEmpty
             ? nil
-            : AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog,
-                                          configured: configuredProviders)
+            : state.contextWindow ?? AgentDefaults.contextWindow(for: modelID, catalog: modelCatalog,
+                                                                 configured: configuredProviders,
+                                                                 provider: provider)
         let primary = planUsage?.rows.first
         let rows = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
             surface: "App",

@@ -490,6 +490,13 @@ final class Phase2LogicTests: XCTestCase {
 
         let unreported = ComposerHostCommand.statusRows(ComposerStatusSnapshot(surface: "App"))
         XCTAssertTrue(unreported.contains(ComposerStatusRow(label: "Context", value: "not reported yet")))
+
+        // Occupancy measured, window unknown (a runner too old to report one, on a model no table
+        // covers): the count is a fact and still shown; the percentage would be against nothing.
+        let noWindow = ComposerHostCommand.statusRows(ComposerStatusSnapshot(
+            surface: "App", model: "vendor-model", contextTokens: 94_500))
+        XCTAssertTrue(noWindow.contains(
+            ComposerStatusRow(label: "Context", value: "95k tokens (window not reported)")))
     }
 
     func testSlashPickAndOpening() {

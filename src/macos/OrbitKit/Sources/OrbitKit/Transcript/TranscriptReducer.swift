@@ -24,12 +24,18 @@ public struct TranscriptState: Equatable, Sendable, Codable {
     /// nil until the first usage-bearing event arrives (older runners omit it) → the gauge is
     /// hidden.
     public var contextTokens: Int?
+    /// What `contextTokens` is a fraction of, reported beside it by the runner (which reads it off
+    /// the CLI that produced the tokens). Kept as a pair rather than looked up per render: a
+    /// window resolved separately can belong to a different model than the count it divides — the
+    /// id alone doesn't determine it (`opus` vs `opus[1m]`). nil for a runner too old to send one,
+    /// which leaves the composer on AgentDefaults.contextWindow.
+    public var contextWindow: Int?
     public init() {}
 
     // Tolerant decode so snapshots written before `queued` (or the history-window cursor) existed
     // still rehydrate (the keys just default) instead of discarding the whole cached session; the
     // other fields keep their prior strictness. `encode(to:)` stays synthesized from these keys.
-    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens }
+    enum CodingKeys: String, CodingKey { case items, pendingApprovals, background, queued, status, maxSeq, oldestSeq, hasMoreOlder, contextTokens, contextWindow }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         items = try c.decode([TranscriptItem].self, forKey: .items)
@@ -41,6 +47,7 @@ public struct TranscriptState: Equatable, Sendable, Codable {
         oldestSeq = (try? c.decodeIfPresent(Int.self, forKey: .oldestSeq)) ?? nil
         hasMoreOlder = (try? c.decodeIfPresent(Bool.self, forKey: .hasMoreOlder)) ?? false
         contextTokens = (try? c.decodeIfPresent(Int.self, forKey: .contextTokens)) ?? nil
+        contextWindow = (try? c.decodeIfPresent(Int.self, forKey: .contextWindow)) ?? nil
     }
 }
 
@@ -101,8 +108,12 @@ public struct TranscriptReducer: Sendable, Codable {
         }
         // The runner reports context-window occupancy on `turn_end`; a lightweight event can also
         // refresh the gauge without ending the active turn. Guard on > 0 so an event without usage
-        // doesn't blank a known value.
-        if let ct = ev.payload["contextTokens"]?.intValue, ct > 0 { state.contextTokens = ct }
+        // doesn't blank a known value. The window rides the same event and is taken only from one
+        // that carried a count, so the two halves the gauge divides always describe one reading.
+        if let ct = ev.payload["contextTokens"]?.intValue, ct > 0 {
+            state.contextTokens = ct
+            if let cw = ev.payload["contextWindow"]?.intValue, cw > 0 { state.contextWindow = cw }
+        }
 
         switch ev.type {
         case .textDelta:      appendAssistantDelta(str(ev, "delta") ?? str(ev, "text") ?? "")

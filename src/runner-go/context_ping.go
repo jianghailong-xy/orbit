@@ -21,10 +21,15 @@ type contextPinger struct {
 
 const contextPingInterval = 20 * time.Second
 
-func (p *contextPinger) ping(emit emitFn, tokens int) {
+// The window rides along so the gauge's two halves arrive together; resolved here rather than by
+// the caller so the lookup only runs on the pings that are actually emitted.
+func (p *contextPinger) ping(emit emitFn, tokens int, job *ClaimedSession) {
 	if tokens <= 0 || tokens == p.last || time.Since(p.at) < contextPingInterval {
 		return
 	}
 	p.last, p.at = tokens, time.Now()
-	emit(evSystem, map[string]interface{}{"subtype": "context", "contextTokens": tokens})
+	emit(evSystem, withContextWindow(map[string]interface{}{
+		"subtype":       "context",
+		"contextTokens": tokens,
+	}, job))
 }

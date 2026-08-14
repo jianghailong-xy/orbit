@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,13 +42,73 @@ func fetchClaudeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 			continue // alias not recognized by this CLI version — skip, keep the rest
 		}
 		priority := i
+		id := claudeModelID(name)
 		models = append(models, ModelInfo{
-			Value:    claudeModelID(name),
-			Label:    name,
-			Priority: &priority,
+			Value:         id,
+			Label:         name,
+			Priority:      &priority,
+			ContextWindow: fetchClaudeContextWindow(ctx, id),
 		})
 	}
 	return models, nil
+}
+
+// fetchClaudeContextWindow asks the CLI how big this model's context window is, rather than
+// keeping the number in a table. The window is a property of (model, CLI version, account,
+// gateway) and not of the model id alone — `opus` and `opus[1m]` are the same model with two
+// different windows — so a hand-maintained list is a guess that silently rots into a wrong
+// denominator under the clients' context gauge. `/context` reports what the CLI will actually
+// use for the model it was pointed at.
+//
+// Returns 0 for anything it can't read (an older CLI, a changed layout, a model this install
+// won't accept). 0 travels as "no reading" all the way to the gauge, which then shows the token
+// count without a percentage — a missing number beats a fabricated one.
+func fetchClaudeContextWindow(ctx context.Context, model string) int {
+	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(
+		cctx,
+		"claude",
+		"-p",
+		"--no-session-persistence",
+		"--setting-sources",
+		"user",
+		"--model",
+		model,
+		"/context",
+	).CombinedOutput()
+	if err != nil {
+		return 0
+	}
+	return parseContextWindow(out)
+}
+
+// The denominator of `/context`'s headline reading: "**Tokens:** 18.2k / 1m (2%)" -> 1000000.
+// Anchored on the label so the percentage table below it can't match.
+var contextWindowRe = regexp.MustCompile(`(?i)tokens:\**\s*[\d.]+\s*[km]?\s*/\s*([\d.]+)\s*([km])?`)
+
+// parseContextWindow pulls the window out of `claude -p "/context"` output. Returns 0 when the
+// line isn't present or doesn't parse — see fetchClaudeContextWindow on why that is a valid answer.
+func parseContextWindow(out []byte) int {
+	m := contextWindowRe.FindSubmatch(bytes.TrimSpace(out))
+	if m == nil {
+		return 0
+	}
+	n, err := strconv.ParseFloat(string(m[1]), 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	switch strings.ToLower(string(m[2])) {
+	case "k":
+		n *= 1_000
+	case "m":
+		n *= 1_000_000
+	}
+	// A bare number under 1k is the CLI having printed something other than a window.
+	if n < 1_000 {
+		return 0
+	}
+	return int(math.Round(n))
 }
 
 func resolveClaudeModelName(ctx context.Context, alias string) (string, error) {

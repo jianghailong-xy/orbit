@@ -2219,14 +2219,23 @@ export class RunnerApiController {
         }
         frontier = { seq: e.seq, tool };
       }
-      // Current context-window occupancy (Session.contextTokens), denormalized off the turn_end
-      // event that already carries it for the clients' gauge. Highest seq in the batch wins, and
-      // only a positive number counts: a runtime that doesn't report it sends 0, which must leave
-      // the last known value standing rather than blanking it mid-session.
-      const contextTokens = durable.reduce<{ seq: number; tokens: number } | null>((acc, e) => {
-        const tokens = (e.payload as { contextTokens?: unknown } | null)?.contextTokens;
+      // Current context-window occupancy (Session.contextTokens/contextWindow), denormalized off
+      // the turn_end event that already carries it for the clients' gauge. Highest seq in the
+      // batch wins, and only a positive number counts: a runtime that doesn't report it sends 0,
+      // which must leave the last known value standing rather than blanking it mid-session.
+      //
+      // The window is read off that same event rather than reduced separately, because the pair is
+      // one reading: the denominator only describes this numerator if it came from the same model
+      // at the same moment. A runner too old to send one leaves the stored window alone — stale by
+      // one release beats mismatched.
+      const context = durable.reduce<{ seq: number; tokens: number; window: number } | null>((acc, e) => {
+        const payload = e.payload as { contextTokens?: unknown; contextWindow?: unknown } | null;
+        const tokens = payload?.contextTokens;
         if (typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens <= 0) return acc;
-        return !acc || e.seq > acc.seq ? { seq: e.seq, tokens: Math.round(tokens) } : acc;
+        if (acc && e.seq <= acc.seq) return acc;
+        const window = payload?.contextWindow;
+        const usable = typeof window === 'number' && Number.isFinite(window) && window > 0;
+        return { seq: e.seq, tokens: Math.round(tokens), window: usable ? Math.round(window as number) : 0 };
       }, null);
       // A reply that is only the provider saying it cannot answer right now — the account's
       // quota spent, or the API overloaded — is the failure that fixes itself: the same
@@ -2242,13 +2251,14 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
-      if (lastAssistant || frontier || contextTokens || engineTurnActive !== undefined) {
+      if (lastAssistant || frontier || context || engineTurnActive !== undefined) {
         await tx.session.update({
           where: { id: sessionId },
           data: {
             ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
             ...(frontier ? { lastToolUse: frontier.tool } : {}),
-            ...(contextTokens ? { contextTokens: contextTokens.tokens } : {}),
+            ...(context ? { contextTokens: context.tokens } : {}),
+            ...(context?.window ? { contextWindow: context.window } : {}),
             ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
             // undefined = nothing in this batch either asked or answered; keep the stored
             // message rather than writing null over it.

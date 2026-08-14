@@ -1,0 +1,19 @@
+-- The context gauge is a fraction, and only its numerator was ever measured. `context_tokens`
+-- comes from the engine; the denominator was resolved at render time from three hand-maintained
+-- tables keyed on a model id (a provider preset, web's, Swift's), consulted with the hand-typed
+-- ones ahead of the runner's own probe, and defaulted to 200k when none of them knew.
+--
+-- Keying on the model id cannot work: the window is a property of (model, CLI version, account,
+-- gateway), not of the id — Claude Code offers `opus` and `opus[1m]` as one model with two
+-- windows — so the tables were wrong by construction and looked right only because the default
+-- was plausible. Anthropic's preset said 200k for Opus 5 while the client tables said 1M, and the
+-- preset won: every Claude session displayed 83% where it should have displayed 17%.
+--
+-- So the runner now reports the window next to the tokens, from the same probe of the same CLI
+-- that produced them, and this column stores that half of the pair — written only from an event
+-- that carried both, so the two halves on this row always describe one reading.
+--
+-- Nullable, like context_tokens: a runtime that can't report a window ("no reading") is not a
+-- runtime reporting a small one, and a caller that confuses the two draws a full gauge on a
+-- session that has barely started.
+ALTER TABLE "session" ADD COLUMN "context_window" INTEGER;

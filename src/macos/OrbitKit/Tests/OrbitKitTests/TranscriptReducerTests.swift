@@ -241,6 +241,28 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.contextTokens, 109879, "zero does not blank the last known value")
     }
 
+    /// The gauge's denominator arrives on the same event as its numerator, because only then do
+    /// the two describe the same model at the same moment — the runner reads the window off the
+    /// CLI that produced the count. A runner too old to send one leaves the window nil, and the
+    /// composer falls back to AgentDefaults; it must never pair a new count with a stale window.
+    func testContextWindowTravelsWithTheTokensItDivides() {
+        var r = TranscriptReducer()
+        XCTAssertNil(r.state.contextWindow)
+        r.apply(RunEvent(seq: 1, type: .turnEnd,
+                         payload: .object(["contextTokens": .int(620_000), "contextWindow": .int(1_000_000)])))
+        XCTAssertEqual(r.state.contextTokens, 620_000)
+        XCTAssertEqual(r.state.contextWindow, 1_000_000)
+        // Switched to a smaller-window model: the pair moves together.
+        r.apply(RunEvent(seq: 2, type: .turnEnd,
+                         payload: .object(["contextTokens": .int(12_000), "contextWindow": .int(200_000)])))
+        XCTAssertEqual(r.state.contextTokens, 12_000)
+        XCTAssertEqual(r.state.contextWindow, 200_000)
+        // An event with no window at all keeps the last one rather than blanking the gauge.
+        r.apply(RunEvent(seq: 3, type: .system, payload: .object(["contextTokens": .int(15_000)])))
+        XCTAssertEqual(r.state.contextTokens, 15_000)
+        XCTAssertEqual(r.state.contextWindow, 200_000)
+    }
+
     /// A `Read` on an image delivers `content` as an array of base64 `image` blocks, not a string.
     /// The reducer must decode those into `ToolCard.resultImages` for inline display (web parity),
     /// and leave `result` nil so no empty OUTPUT text panel renders alongside the image.

@@ -1517,7 +1517,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			}
 			if ct := contextTokensFromAssistant(msg); ct > 0 {
 				contextTokens = ct
-				ctxPing.ping(emit, ct)
+				ctxPing.ping(emit, ct, job)
 			}
 		}
 		if msg["type"] == "result" {
@@ -1542,12 +1542,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				job.RuntimeSessionID = r.ClaudeSessionID
 				writeSessionMeta(scratchDir, job, execDir)
 			}
-			emit(evTurnEnd, map[string]interface{}{
+			emit(evTurnEnd, withContextWindow(map[string]interface{}{
 				"subtype":       r.Subtype,
 				"numTurns":      r.NumTurns,
 				"costUsd":       r.CostUsd,
 				"contextTokens": contextTokens,
-			})
+			}, job))
 			var turnID string
 			select {
 			case turnID = <-pending:

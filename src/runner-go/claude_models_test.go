@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -131,6 +132,42 @@ func TestClaudeModelID(t *testing.T) {
 	for in, want := range cases {
 		if got := claudeModelID(in); got != want {
 			t.Errorf("claudeModelID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestParseContextWindow(t *testing.T) {
+	// Real `claude -p "/context"` output: the headline reading, then a table whose rows also
+	// carry token counts and percentages the regex must not pick up.
+	full := []byte(strings.Join([]string{
+		"## Context Usage",
+		"",
+		"**Model:** claude-opus-5  ",
+		"**Tokens:** 18.2k / 1m (2%)",
+		"",
+		"| Category | Tokens | Percentage |",
+		"|----------|--------|------------|",
+		"| System prompt | 3.2k | 0.3% |",
+		"| Free space | 981.8k | 98.2% |",
+	}, "\n"))
+	if got := parseContextWindow(full); got != 1_000_000 {
+		t.Fatalf("parseContextWindow(full) = %d, want 1000000", got)
+	}
+
+	cases := map[string]int{
+		"**Tokens:** 29.3k / 967k (3%)": 967_000,
+		"Tokens: 1000 / 200k":           200_000,
+		"**Tokens:** 5k / 1M":           1_000_000,
+		// Nothing to read: an older CLI that doesn't know /context, or a changed layout. 0 is a
+		// valid answer — it travels as "no reading" rather than as a wrong denominator.
+		"Unknown slash command: /context": 0,
+		"":                                0,
+		// A window under 1k is the CLI having printed something that isn't one.
+		"**Tokens:** 1 / 8": 0,
+	}
+	for in, want := range cases {
+		if got := parseContextWindow([]byte(in)); got != want {
+			t.Errorf("parseContextWindow(%q) = %d, want %d", in, got, want)
 		}
 	}
 }

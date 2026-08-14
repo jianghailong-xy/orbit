@@ -162,12 +162,12 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 		if numTurns < 1 {
 			numTurns = 1
 		}
-		emit(evTurnEnd, map[string]interface{}{
+		emit(evTurnEnd, withContextWindow(map[string]interface{}{
 			"subtype":       result.Subtype,
 			"numTurns":      numTurns,
 			"costUsd":       result.CostUSD,
 			"contextTokens": result.ContextTokens,
-		})
+		}, job))
 		liveFiles, livePatches := liveDiff(job.WT)
 		if err := completeTurn(TurnCompleteRequest{
 			TurnID:           turnID,
@@ -501,7 +501,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 			continue
 		}
 		handleOpenCodeEvent(event, emit, &result)
-		ctxPing.ping(emit, result.ContextTokens)
+		ctxPing.ping(emit, result.ContextTokens, job)
 	}
 	waitErr := waitSessionProcessTree(cmd)
 	stderrWG.Wait()
