@@ -104,7 +104,18 @@ final class ConsoleModel {
     /// Async context refreshes may replace only a pristine seed. This explicit revision catches a
     /// user who picks away and then returns to the same model, which a string comparison misses.
     private var modelSelectionRevision = ModelSelectionRevision()
-    var permissionMode: PermissionMode = .default
+    /// The floor until `loadContext` adopts the session's real posture — the same value the server
+    /// would resolve for a session that stores none, so the pill can't flash a mode nobody chose.
+    var permissionMode = AgentDefaults.defaultPermissionMode
+    /// True once the user picks a Mode themselves. Only an edited pick is remembered as the account
+    /// default (web parity — `modeWasEdited`): the untouched seed is the app floor, and writing that
+    /// back would erase what Settings actually asked for.
+    var permissionModeWasEdited = false
+    /// The account's synced `defaultPermissionMode` and its write-back, injected by `ConsoleRegistry`
+    /// so a console needn't know about `AppModel`. A closure, not a value: the `user` payload primes
+    /// asynchronously, so a console built before it lands must still read the current one.
+    @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
+    @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
     var effort: Effort = .default
     private(set) var pendingAttachments: [PendingAttachment] = []
     private(set) var sending = false
@@ -235,12 +246,16 @@ final class ConsoleModel {
         // list ("Claude Opus 5") until the catalogue lands and settles on "Opus 5".
         self.modelCatalog = modelCatalog
         self.modelID = defaultModel
-        let savedMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
+        // A new session starts at the app floor (Auto), clamped when this model can't run it —
+        // web parity (WorkspaceView's `pickedModeSeed`). Deliberately NOT read off the agent:
+        // migration 0094 dropped the workspace's mode column and moved the seed to the account,
+        // so the field the wire still carries is always nil — which seeded every draft "Don't Ask".
+        let seed = AgentDefaults.defaultPermissionMode
         self.permissionMode = providerCapabilitiesResolved
             ? AgentDefaults.clampPermissionMode(
-                savedMode, for: defaultModel, provider: provider,
+                seed, for: defaultModel, provider: provider,
                 configured: configuredProviders)
-            : savedMode
+            : seed
         // Seed the effort pill from the agent's default too (web parity), so a new session shows —
         // and starts at — the agent's configured effort unless the user overrides it.
         if let ef = agent.effort, let e = Effort(rawValue: ef) {
@@ -618,10 +633,11 @@ final class ConsoleModel {
         if modelSelectionRevision.isPristine {
             modelID = s.model ?? AgentDefaults.defaultModel(for: provider)
         }
-        // A stored mode is adopted verbatim; a session with no stored mode falls back to
-        // `dontAsk` (web's `permissionMode ?? 'dontAsk'`), never the hardcoded `.default`.
-        if let pm = s.permissionMode { permissionMode = PermissionMode(rawValue: pm) ?? .default }
-        else { permissionMode = .dontAsk }
+        // A stored mode is adopted verbatim; a session with none (task- or MCP-created) resolves
+        // exactly as the server will — account default, else the floor. Web parity
+        // (`effectivePermissionMode`).
+        permissionMode = AgentDefaults.resolvePermissionMode(
+            session: s.permissionMode, accountDefault: accountDefaultPermissionMode())
         if let ef = s.effort ?? s.agent?.effort, let e = Effort(rawValue: ef) {
             effort = AgentDefaults.normalizeEffort(e, for: provider)
         } else {
@@ -1207,6 +1223,11 @@ final class ConsoleModel {
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            // The Mode pick is different: without a write-back it lived on this one session, while
+            // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
+            // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
+            // remembered default, never a wrong dispatch.
+            if permissionModeWasEdited { rememberDefaultPermissionMode(permissionMode.rawValue) }
             onSessionCreated?(session)
         } catch {
             statusMessage = "Couldn't start the session — \(error)"

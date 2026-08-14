@@ -484,6 +484,27 @@ public enum AgentDefaults {
 
     public static let permissionModes = PermissionMode.allCases
 
+    /// The posture a run gets when nobody said. Mirrors `DEFAULT_PERMISSION_MODE` in
+    /// apiserver/src/common/permission-mode.ts: the server resolves this same floor at dispatch,
+    /// so a pill showing anything else misreports what the runtime is about to do.
+    public static let defaultPermissionMode = PermissionMode.auto
+
+    /// Session intent wins; else the account default (`user.preferences.defaultPermissionMode`);
+    /// else the floor. Mirrors the server's `resolvePermissionMode`.
+    ///
+    /// There is deliberately no workspace/agent step: migration 0094 dropped that column and moved
+    /// the seed to the account, so a session with no stored mode is *not* "Don't Ask" — and since
+    /// the composer pill is authoritative on resume, guessing here doesn't just misreport the
+    /// session, it rewrites it on the next send.
+    public static func resolvePermissionMode(session: String?,
+                                             accountDefault: String?) -> PermissionMode {
+        // A mode neither side understands (older/newer client, hand-edited row) falls through
+        // rather than reaching a runtime that cannot honour it — the server does the same.
+        if let session, let mode = PermissionMode(rawValue: session) { return mode }
+        if let accountDefault, let mode = PermissionMode(rawValue: accountDefault) { return mode }
+        return defaultPermissionMode
+    }
+
     /// Claude's Auto mode is model-specific. Every other runtime has it runtime-wide, for any
     /// model — Codex spells it `on-request` ("the model decides when to ask the user for
     /// approval"), Kimi and OpenCode expose it as a plain mode.

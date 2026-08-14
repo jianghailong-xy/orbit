@@ -405,7 +405,7 @@ struct AgentSettingsSheet: View {
 /// content column — mirroring how Open renders ConsoleView in its detail pane.
 func newSessionDraftIdentity(_ agent: Agent) -> String {
     [
-        agent.id, agent.defaultProvider, agent.permissionMode ?? "dontAsk",
+        agent.id, agent.defaultProvider,
         agent.effort ?? "", agent.runnerId ?? "host",
     ].joined(separator: "|")
 }
@@ -863,17 +863,18 @@ private struct SpinnerGlyph: View {
     }
 }
 
-/// The edit form. Fields mirror the web RunnerDetailPage agent form: name, permission mode,
-/// Instructions (appendSystemPrompt), working directory, enabled. There is no runtime field — an
-/// agent holds no provider; that is picked per session in the composer. Empty Instructions /
-/// workDir omit the key (no change) — matching the web, which sends `undefined` when blank.
+/// The edit form. Fields mirror the web RunnerDetailPage agent form: name, effort, Instructions
+/// (appendSystemPrompt), working directory, enabled. There is no runtime field — an agent holds no
+/// provider; that is picked per session in the composer. Nor a permission mode: migration 0094
+/// dropped that column (the posture is per-run, seeded from the account — Settings → Default
+/// permission). Empty Instructions / workDir omit the key (no change) — matching the web, which
+/// sends `undefined` when blank.
 struct AgentFormContent: View {
     let agents: AgentsModel
     let agent: Agent
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
-    @State private var mode: PermissionMode = .dontAsk
     @State private var effort: Effort = .default
     @State private var instructions = ""
     @State private var workDir = ""
@@ -881,14 +882,13 @@ struct AgentFormContent: View {
     @State private var confirmingDelete = false
 
     /// Not an editable field: an agent holds no provider. This is what the project last ran on,
-    /// and it is here only because the effort vocabulary and the permission modes below genuinely
-    /// differ by runtime. The choice itself lives in the composer, per session.
+    /// and it is here only because the effort vocabulary below genuinely differs by runtime. The
+    /// choice itself lives in the composer, per session.
     private var provider: String { agent.defaultProvider }
 
     private var effortOptions: [Effort] {
         // `model` / `modelCatalog` were dropped when agents stopped storing a model default; the
-        // Runtime-resolved `effectiveModel` and the runner's own catalog replace them (same pair the
-        // permission picker below already uses).
+        // Runtime-resolved `effectiveModel` and the runner's own catalog replace them.
         let catalog = agents.modelCatalog(for: agent.runnerId)
         let options = AgentDefaults.efforts(for: provider, model: effectiveModel, catalog: catalog)
         let current = AgentDefaults.normalizedEffort(
@@ -897,16 +897,9 @@ struct AgentFormContent: View {
     }
 
     /// Agents no longer store a model default. Resolve the model this Runtime will provide, which
-    /// is what the stored mode is clamped against below.
+    /// is what the effort vocabulary above is drawn from.
     private var effectiveModel: String {
         agents.effectiveDefaultModel(for: provider, runnerId: agent.runnerId)
-    }
-
-    /// Every mode, on every engine — see ComposerView.permissionModeMenuItems.
-    private var permissionModeOptions: [PermissionMode] { AgentDefaults.permissionModes }
-
-    private var providerResolved: Bool {
-        AgentDefaults.isBuiltInProvider(provider) || agents.configuredProvidersLoaded
     }
 
     var body: some View {
@@ -914,14 +907,8 @@ struct AgentFormContent: View {
             Section {
                 TextField("Name", text: $name, prompt: Text("e.g. tea-cli builder"))
 
-                Picker("Permission mode", selection: $mode) {
-                    ForEach(permissionModeOptions, id: \.self) {
-                        Text(AgentDefaults.label($0)).tag($0)
-                    }
-                }
-
-                // A new session with this agent seeds its reasoning effort from here (like
-                // permission mode); "Default" (the empty value) leaves it to the model's default.
+                // A new session with this agent seeds its reasoning effort from here; "Default"
+                // (the empty value) leaves it to the model's default.
                 Picker("Effort", selection: $effort) {
                     ForEach(effortOptions) {
                         Text($0.label).tag($0)
@@ -960,19 +947,6 @@ struct AgentFormContent: View {
         }
         .formStyle(.grouped)
         .onAppear(perform: prefill)
-        .onChange(of: effectiveModel) { _, model in
-            if providerResolved {
-                mode = AgentDefaults.clampPermissionMode(
-                    mode, for: model, provider: provider, configured: agents.configuredProviders)
-            }
-        }
-        .onChange(of: agents.configuredProvidersLoaded) { _, loaded in
-            if loaded {
-                mode = AgentDefaults.clampPermissionMode(
-                    mode, for: effectiveModel, provider: provider,
-                    configured: agents.configuredProviders)
-            }
-        }
         // Cancel/Done pair (the iOS editing-sheet idiom, e.g. Contacts): "Done" commits the working
         // copy and closes, "Cancel" discards and closes — a discoverable exit that also works on
         // macOS, where the sheet has no swipe-to-dismiss (Cancel binds to Esc, Done to Return). Done
@@ -1003,12 +977,6 @@ struct AgentFormContent: View {
 
     private func prefill() {
         name = agent.name
-        let savedMode = PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk
-        mode = providerResolved
-            ? AgentDefaults.clampPermissionMode(
-                savedMode, for: effectiveModel, provider: provider,
-                configured: agents.configuredProviders)
-            : savedMode
         effort = prefilledEffort
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
@@ -1024,7 +992,6 @@ struct AgentFormContent: View {
 
     private var isDirty: Bool {
         name != agent.name
-        || mode != (PermissionMode(rawValue: agent.permissionMode ?? "dontAsk") ?? .dontAsk)
         || effort != prefilledEffort
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
@@ -1044,7 +1011,6 @@ struct AgentFormContent: View {
         let req = UpdateAgentRequest(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             appendSystemPrompt: instructions.isEmpty ? nil : instructions,
-            permissionMode: mode.rawValue,
             // Always send the raw value ("" for Default) so picking Default actually clears a
             // previously-set effort — omitting (nil) would leave the old value unchanged.
             effort: effort.rawValue,
