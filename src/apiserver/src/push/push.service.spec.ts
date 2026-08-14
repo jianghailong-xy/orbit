@@ -96,6 +96,93 @@ test('a second approval on an already-flagged session does not alert again', asy
   assert.equal(JSON.parse(bodies[1]).aps.badge, 2);
 });
 
+function settledSession(over: Record<string, unknown> = {}) {
+  return {
+    title: 'Fix the login bug',
+    ownerId: 'owner-1',
+    status: RunStatus.SUCCEEDED,
+    retryAt: null,
+    completedAt: null,
+    deletedAt: null,
+    error: null,
+    owner: { preferences: {} },
+    ...over,
+  };
+}
+
+function settleHarness(session: Record<string, unknown> | null) {
+  const sent: { body: string; collapseId?: string }[] = [];
+  const prisma = {
+    session: { findUnique: async () => session },
+    deviceToken: { findMany: async () => [{ token: 'device', environment: 'sandbox' }] },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  (service as any).deliver = async (
+    _t: unknown,
+    body: string,
+    _p: unknown,
+    _pr: unknown,
+    _a: unknown,
+    collapseId?: string,
+  ) => {
+    sent.push({ body, collapseId });
+  };
+  return { service, sent };
+}
+
+test('a settled session alerts its owner, collapsing on the session', async () => {
+  const { service, sent } = settleHarness(settledSession());
+
+  await service.notifySessionSettled('s-1');
+
+  assert.equal(sent.length, 1);
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.aps.alert.title, 'Fix the login bug');
+  assert.equal(payload.aps.alert.body, 'Finished');
+  assert.equal(payload.aps.category, 'ORBIT_SESSION');
+  assert.equal(payload.sessionID, 's-1');
+  assert.equal(payload.kind, 'finished');
+  // A settled session is not one "needing your reply", so it must not move that count.
+  assert.equal(payload.aps.badge, undefined);
+  assert.equal(sent[0].collapseId, 'settled-s-1');
+});
+
+test('a failure carries its first error line', async () => {
+  const { service, sent } = settleHarness(
+    settledSession({ status: RunStatus.FAILED, error: 'API Error: 529 overloaded_error' }),
+  );
+
+  await service.notifySessionSettled('s-1');
+
+  const payload = JSON.parse(sent[0].body);
+  assert.equal(payload.kind, 'failed');
+  assert.equal(payload.aps.alert.body, 'Failed · API Error: 529 overloaded_error');
+});
+
+test('an ending not worth an interruption sends nothing', async () => {
+  const { service, sent } = settleHarness(settledSession({ status: RunStatus.CANCELLED }));
+  await service.notifySessionSettled('s-1');
+  assert.equal(sent.length, 0);
+});
+
+test('the owner can turn settle alerts off', async () => {
+  const off = settleHarness(settledSession({ owner: { preferences: { notifySessionFinished: false } } }));
+  await off.service.notifySessionSettled('s-1');
+  assert.equal(off.sent.length, 0);
+
+  // Absent (and explicit true) means on — the switch only has to be written to opt out.
+  const on = settleHarness(settledSession({ owner: { preferences: { notifySessionFinished: true } } }));
+  await on.service.notifySessionSettled('s-1');
+  assert.equal(on.sent.length, 1);
+});
+
+test('a vanished session is not an error', async () => {
+  const { service, sent } = settleHarness(null);
+  await service.notifySessionSettled('s-gone');
+  assert.equal(sent.length, 0);
+});
+
 test('approval push initially requires a canonical Open, non-ending RUNNING session', async () => {
   const calls: any[] = [];
   const prisma = {

@@ -273,6 +273,14 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         .then((meta) => meta && this.push.scheduleBadgeSync(meta.ownerId))
         .catch(() => undefined);
     }
+    // `final` marks the STATUS that a finalization actually applied — /turn-complete's failure,
+    // the runner's /finalize, and the reaper's forceFinalize each publish exactly one, and only
+    // when their own conditional write won. That makes it the one signal per settlement, so the
+    // owner's phone is told once. PushService decides whether this particular ending is worth an
+    // interruption; a session id is all it needs. Locally-originated only, like the badge sync.
+    if (event.type === RunEventType.STATUS && (event.payload as { final?: boolean }).final) {
+      void this.push.notifySessionSettled(runId);
+    }
   }
 
   streamForRun(runId: string): Observable<NormalizedRunEvent> {

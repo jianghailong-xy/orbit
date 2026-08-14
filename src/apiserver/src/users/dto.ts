@@ -46,6 +46,15 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsString()
   defaultEffort?: string;
+
+  /**
+   * Whether a session settling — a run that finished on its own, or failed for good — pushes
+   * an alert to this account's registered devices. Default on (an absent key means on), so the
+   * switch only ever has to be written to turn it off.
+   */
+  @IsOptional()
+  @IsBoolean()
+  notifySessionFinished?: boolean;
 }
 
 /** Set a user's access role (admin area). */

@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { PushModule } from '../push/push.module';
 import { SessionTagsModule } from '../session-tags/session-tags.module';
 import { AutoRetryService } from './auto-retry.service';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
 @Module({
-  imports: [SessionTagsModule],
+  // PushModule: AutoRetryService announces the failure it just gave up retrying.
+  imports: [SessionTagsModule, PushModule],
   controllers: [SessionsController],
   // AutoRetryService lives here rather than beside the reaper so it can depend on
   // SessionsService directly — re-sending a message is exactly resume(), and reimplementing

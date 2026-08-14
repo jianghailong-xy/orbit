@@ -8,6 +8,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 
@@ -59,6 +60,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
+    private readonly push: PushService,
   ) {}
 
   onModuleInit(): void {
@@ -271,10 +273,15 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * to the auto-run backoff — a second retry mechanism racing this one.
    */
   private async disarm(sessionId: string, parkedAs: RunStatus, why: string): Promise<void> {
-    await this.prisma.session.updateMany({
+    const cleared = await this.prisma.session.updateMany({
       where: { id: sessionId, status: parkedAs },
       data: { retryAt: null },
     });
     this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
+    // Giving up is the moment the failure becomes the outcome. The row moves no status — it has
+    // been FAILED since the turn died — so no `final` STATUS is published here and this is the
+    // only chance to tell the owner. PushService re-reads the row and ignores the AWAITING_INPUT
+    // spelling of parked, which is a session waiting on its user, not a failure.
+    if (cleared.count > 0) void this.push.notifySessionSettled(sessionId);
   }
 }

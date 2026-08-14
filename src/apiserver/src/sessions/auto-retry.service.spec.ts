@@ -74,8 +74,14 @@ function makeService(
       return { turnId: 't', seq: 1 };
     },
   } as unknown as SessionsService;
-  const service = new AutoRetryService(prisma as never, sessions);
-  return { service, updates, resumed, rows };
+  const settled: string[] = [];
+  const push = {
+    notifySessionSettled: async (id: string) => {
+      settled.push(id);
+    },
+  };
+  const service = new AutoRetryService(prisma as never, sessions, push as never);
+  return { service, updates, resumed, rows, settled };
 }
 
 function row(over: SessionRow = {}): SessionRow {
@@ -222,10 +228,13 @@ test('releases one session per (runner, provider) per sweep', async () => {
 });
 
 test('hands back to the user once the attempts are spent', async () => {
-  const { service, resumed, rows } = makeService([row({ retryAttempts: 5 })]);
+  const { service, resumed, rows, settled } = makeService([row({ retryAttempts: 5 })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, []);
   assert.equal(rows[0].retryAt, null, 'disarmed');
+  // Giving up moves no status, so this is the only moment the owner can be told the failure
+  // is now the outcome. PushService re-reads the row and decides whether to actually alert.
+  assert.deepEqual(settled, ['session-1']);
 });
 
 test('spends an attempt on every dispatch, so a repeating failure runs out', async () => {

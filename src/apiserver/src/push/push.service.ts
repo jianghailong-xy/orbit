@@ -6,6 +6,7 @@ import { RunStatus } from '@prisma/client';
 import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { badgeDiff, BadgeState } from './badge-diff';
+import { settleAlert } from './settle-alert';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
@@ -164,6 +165,72 @@ export class PushService {
     }
   }
 
+  /**
+   * Tell a session's owner that it just settled — the run finished, or failed for good.
+   *
+   * The approval push covers the one case where an agent is blocked on you; this covers the
+   * other reason you'd want your phone to ring, which until now only the macOS shell had (it
+   * derives the same event locally from its Open-list polling — see OrbitKit `SessionDelta`).
+   * On iOS nothing arrived at all: a task that ran for forty minutes finished in silence, and
+   * a run that died to a provider error was invisible until you next opened the app.
+   *
+   * Deliberately narrow, because the interrupt budget is per-person while the number of agents
+   * running is not: `settleAlert` announces only what happened on its own and is really over.
+   * Called on the STATUS event the runner/reaper mark `final` — the one signal that fires
+   * exactly once per finalization — and again when auto-retry gives up, which settles a
+   * failure without moving the row's status.
+   *
+   * Fire-and-forget, like the others: callers `void` this.
+   */
+  async notifySessionSettled(sessionId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: {
+          title: true,
+          ownerId: true,
+          status: true,
+          retryAt: true,
+          completedAt: true,
+          deletedAt: true,
+          error: true,
+          owner: { select: { preferences: true } },
+        },
+      });
+      if (!session) return;
+      const alert = settleAlert(session);
+      if (!alert) return;
+      const prefs = (session.owner?.preferences ?? {}) as { notifySessionFinished?: boolean };
+      if (prefs.notifySessionFinished === false) return;
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: session.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+
+      const body = JSON.stringify({
+        aps: {
+          alert: { title: session.title || 'Orbit', body: alert.body },
+          sound: 'default',
+          // Registered by the clients with a Reply action (OrbitKit Notifications), so a
+          // finished run can be answered from the banner. No badge: that count means
+          // "sessions needing your reply", and a settled session is not one.
+          category: 'ORBIT_SESSION',
+          'thread-id': sessionId,
+        },
+        sessionID: sessionId, // OrbitKit Notifications.keySession — routes the tap to this session
+        kind: alert.kind,
+      });
+
+      // Collapse on the session: the two triggers can both fire for one settlement (a runner
+      // finalize the reaper also force-finalizes), and APNs replaces a same-id banner instead
+      // of stacking a second one. Cheaper and more robust than remembering what we've sent.
+      await this.deliver(tokens, body, 'alert', '10', auth, `settled-${sessionId}`);
+    } catch (err) {
+      this.log.warn(`settle notify failed: ${(err as Error).message}`);
+    }
+  }
+
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
    *  Mirrors the client's SessionGrouping.needsYou exactly: an Open, non-ending RUNNING session
    *  with at least one PENDING approval. Counting sessions (not approval rows) keeps the badge equal
@@ -226,18 +293,20 @@ export class PushService {
     await this.deliver(tokens, body, 'background', '5', auth);
   }
 
-  /** Fan a prepared payload out to a set of device tokens, pruning any APNs reports as dead. */
+  /** Fan a prepared payload out to a set of device tokens, pruning any APNs reports as dead.
+   *  `collapseId`, when given, makes a repeat of the same alert replace the delivered one. */
   private async deliver(
     tokens: { token: string; environment: string }[],
     body: string,
     pushType: 'alert' | 'background',
     priority: '10' | '5',
     auth: string,
+    collapseId?: string,
   ): Promise<void> {
     await Promise.all(
       tokens.map(async (t) => {
         const host = t.environment === 'sandbox' ? APNS_HOST_SANDBOX : APNS_HOST_PROD;
-        const res = await this.send(host, t.token, body, auth, pushType, priority);
+        const res = await this.send(host, t.token, body, auth, pushType, priority, collapseId);
         if (res.status === 410 || res.reason === 'BadDeviceToken' || res.reason === 'Unregistered') {
           // APNs says this token is dead — drop it so we stop pushing to it.
           await this.prisma.deviceToken.deleteMany({ where: { token: t.token } }).catch(() => {});
@@ -269,6 +338,7 @@ export class PushService {
     auth: string,
     pushType: 'alert' | 'background' = 'alert',
     priority: '10' | '5' = '10',
+    collapseId?: string,
   ): Promise<{ status: number; reason?: string }> {
     return new Promise((resolve) => {
       const client = http2.connect(`https://${host}`);
@@ -288,6 +358,8 @@ export class PushService {
         'apns-topic': this.bundleId,
         'apns-push-type': pushType,
         'apns-priority': priority,
+        // APNs caps this at 64 bytes; every id built here is well inside it.
+        ...(collapseId ? { 'apns-collapse-id': collapseId } : {}),
         'content-type': 'application/json',
       });
       let status = 0;

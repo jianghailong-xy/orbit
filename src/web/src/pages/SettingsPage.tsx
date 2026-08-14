@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, Segmented, Select } from 'antd';
+import { Card, Segmented, Select, Switch } from 'antd';
 import { api } from '../api';
 import { meQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
@@ -63,6 +63,19 @@ export function SettingsPage() {
               { label: 'Light', value: 'light' },
               { label: 'Dark', value: 'dark' },
             ]}
+          />
+        </Field>
+      </Card>
+
+      <Card title="Notifications" style={{ marginBottom: 16 }}>
+        <Field
+          label="When a session finishes"
+          hint="Alert your devices when a run finishes on its own or fails for good."
+        >
+          <Switch
+            checked={prefs.notifySessionFinished ?? true}
+            onChange={(v) => save.mutate({ notifySessionFinished: v })}
+            loading={save.isPending}
           />
         </Field>
       </Card>

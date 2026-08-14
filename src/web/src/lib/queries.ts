@@ -78,6 +78,9 @@ export interface UserPreferences {
   /** Account-wide default reasoning effort for a new session (last-picked-wins). '' = model
    *  default. Synced so the value carries to the iOS/macOS clients (replaces localStorage). */
   defaultEffort?: string;
+  /** Whether a session settling — finished on its own, or failed for good — pushes an alert to
+   *  this account's registered devices. Absent means on; only opting out is ever written. */
+  notifySessionFinished?: boolean;
 }
 
 export interface Me {
