@@ -1103,7 +1103,7 @@ func cliTaskListUpdate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.updateTaskList(id, os.Getenv("ORBIT_AGENT_ID"), body)
+	raw, err := t.updateTaskList(id, os.Getenv("ORBIT_AGENT_ID"), os.Getenv("ORBIT_SESSION_ID"), body)
 	if err != nil {
 		return fmt.Errorf("update task list: %w", err)
 	}

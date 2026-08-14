@@ -418,7 +418,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if len(body) == 0 {
 			return toolResult("nothing to update", true)
 		}
-		raw, err := s.t.updateTaskList(id, s.agentID, body)
+		raw, err := s.t.updateTaskList(id, s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("update task-list failed: "+err.Error(), true)
 		}

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
-import { TasksService } from './tasks.service';
+import {
+  FOREMAN_RETRY_BACKOFF_MS,
+  MAX_CONSECUTIVE_FOREMEN,
+  TasksService,
+} from './tasks.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 
 const LIST = {
@@ -19,14 +23,29 @@ const LIST = {
  */
 function makeService(
   stalled: (typeof LIST)[] = [LIST],
-  options: { failExecuteFor?: string[] } = {},
+  options: { failExecuteFor?: string[]; priorForemen?: { count: number; agoMs: number } } = {},
 ) {
   const created: any[] = [];
   const executed: string[] = [];
   let sql = '';
+  let historySql = '';
   const prisma = {
+    // Two raw queries reach this stub: the candidate scan, then the foreman history. Told apart
+    // by which one has already run, so a test can say "this list has N prior foremen" in one
+    // place without the scan's own SQL assertions changing.
     $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-      sql = Prisma.sql(strings, ...(bound as never[])).text;
+      const text = Prisma.sql(strings, ...(bound as never[])).text;
+      if (text.includes('is_foreman = true') && text.includes('GROUP BY')) {
+        historySql = text;
+        const prior = options.priorForemen;
+        if (!prior) return [];
+        return stalled.map((l) => ({
+          listId: l.id,
+          count: BigInt(prior.count),
+          lastAt: new Date(Date.now() - prior.agoMs),
+        }));
+      }
+      sql = text;
       return stalled;
     },
     task: {
@@ -49,6 +68,7 @@ function makeService(
         service as unknown as { dispatchStalledListForemen(): Promise<void> }
       ).dispatchStalledListForemen(),
     sqlText: () => sql,
+    historySql: () => historySql,
   };
 }
 
@@ -139,4 +159,60 @@ test('an idle-but-live session counts as occupied, not as a stall', async () => 
   await f.sweep();
 
   assert.equal((f.sqlText().match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);
+});
+
+// Suppressing while one foreman is unfinished only stops concurrent coordinators. The moment one
+// reaches DONE the suppression lifts and the stall — which it evidently did not fix — is still
+// there, so without these the sweep files another every stall window, forever.
+test('a stall a previous foreman did not clear is held off, not re-coordinated at once', async () => {
+  const f = makeService([LIST], { priorForemen: { count: 1, agoMs: 60_000 } });
+
+  await f.sweep();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('the hold lifts once the backoff for that many attempts has elapsed', async () => {
+  const f = makeService([LIST], {
+    priorForemen: { count: 1, agoMs: FOREMAN_RETRY_BACKOFF_MS[0] + 1_000 },
+  });
+
+  await f.sweep();
+
+  assert.equal(f.created.length, 1);
+});
+
+test('the backoff lengthens with each coordinator that failed to fix it', async () => {
+  // Two prior attempts: the first step is no longer enough to release it.
+  const f = makeService([LIST], {
+    priorForemen: { count: 2, agoMs: FOREMAN_RETRY_BACKOFF_MS[0] + 1_000 },
+  });
+
+  await f.sweep();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('past the cap the list is left for a human, however long it has been', async () => {
+  // A coordinator that has failed this many times is reporting a problem it cannot solve; the
+  // next identical run is not what surfaces it.
+  const f = makeService([LIST], {
+    priorForemen: { count: MAX_CONSECUTIVE_FOREMEN, agoMs: 30 * 24 * 60 * 60_000 },
+  });
+
+  await f.sweep();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('the history query counts only foremen filed since real work last ran', async () => {
+  // This is what makes the escalation measure repeated failure rather than the list's age: a list
+  // that stalled, was fixed, worked, and stalled again months later starts from step one.
+  // A candidate must exist for the history query to run at all.
+  const f = makeService([LIST], { priorForemen: { count: 1, agoMs: 0 } });
+  await f.sweep();
+  const history = f.historySql();
+
+  assert.match(history, /wt\.is_foreman = false/);
+  assert.match(history, /ft\.created_at > COALESCE/);
 });

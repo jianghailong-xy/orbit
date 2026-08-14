@@ -797,13 +797,19 @@ func (t *Transport) getTaskList(id string) (json.RawMessage, error) {
 }
 
 // updateTaskList sends only the fields the caller set, so an agent adjusting one knob cannot
-// blank the rest. Attribution rides the same agent/session headers the task writes use.
-func (t *Transport) updateTaskList(id, agentID string, body map[string]interface{}) (json.RawMessage, error) {
+// blank the rest.
+//
+// Both attribution headers, via taskCreateHeaders: the agent alone is not enough. A policy
+// revision records which run made it so a human reading the history months later can open that
+// run and see the reasoning; with only the agent id the entry says "wikova changed this" of a
+// workspace that has had thousands of sessions.
+func (t *Transport) updateTaskList(id, agentID, sessionID string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
-	err := t.doHeaders(nil, "PATCH", "/runner/task-lists/"+url.PathEscape(id), body, &out, taskOpTimeout, agentHeader(agentID))
+	err := t.doHeaders(nil, "PATCH", "/runner/task-lists/"+url.PathEscape(id), body, &out, taskOpTimeout,
+		taskCreateHeaders(agentID, sessionID))
 	return out, err
 }
 

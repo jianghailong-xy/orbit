@@ -629,17 +629,18 @@ func TestMCPTaskListPolicyToolsSendOnlyWhatWasSet(t *testing.T) {
 		}
 	}
 
-	var gotMethod, gotPath, gotAgent string
+	var gotMethod, gotPath, gotAgent, gotSession string
 	var body map[string]interface{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotAgent = r.Header.Get("X-Orbit-Agent-Id")
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
 		json.NewDecoder(r.Body).Decode(&body)
 		w.Write([]byte(`{"ok":true}`))
 	}))
 	defer srv.Close()
 
-	mcp := &mcpServer{agentID: "workspace-1", t: NewTransport(srv.URL, "tok")}
+	mcp := &mcpServer{agentID: "workspace-1", sessionID: "session-9", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("tasklist_update", map[string]interface{}{
 		"listId":       "list-1",
 		"instructions": "按 manifest 逐个下载。",
@@ -652,9 +653,11 @@ func TestMCPTaskListPolicyToolsSendOnlyWhatWasSet(t *testing.T) {
 	if gotMethod != http.MethodPatch || gotPath != "/api/runner/task-lists/list-1" {
 		t.Fatalf("tasklist_update hit %s %s", gotMethod, gotPath)
 	}
-	// Attribution: the revision this creates has to name the agent that made it.
-	if gotAgent != "workspace-1" {
-		t.Fatalf("agent header = %q", gotAgent)
+	// Attribution: the revision this creates has to name the agent AND the run that made it.
+	// The agent alone is not enough — a workspace has thousands of sessions, and the point of
+	// recording the author is that a human can open the run and read why.
+	if gotAgent != "workspace-1" || gotSession != "session-9" {
+		t.Fatalf("attribution headers = agent %q session %q", gotAgent, gotSession)
 	}
 	// Every field the caller set must survive the trip — a silently dropped key would mean an
 	// agent believing it had changed policy that never moved.

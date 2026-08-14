@@ -219,6 +219,22 @@ export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
 // the only job here is to stop burning a session a minute while waiting for it.
 export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
 
+// Brake on repeat foremen for the same stall.
+//
+// Suppressing while one is unfinished only stops *concurrent* coordinators. The moment a foreman
+// reaches DONE the suppression lifts, and a stall it could not fix is by definition still there —
+// so the sweep files another one stall-window later, forever. At the 5-minute floor that is 12
+// sessions an hour, indefinitely: nine times the rate of the runaway that motivated this whole
+// area, arrived at by way of a comment promising not to repeat it.
+//
+// Indexed by how many foremen have already run without any real work happening in between, so a
+// list that stalls, gets fixed, works, and stalls again months later starts from the first step.
+// Past MAX_CONSECUTIVE_FOREMEN the list is left alone until something actually runs in it: a
+// coordinator that has failed this many times is reporting a problem it cannot solve, and the
+// next identical run is not what surfaces it.
+export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
+export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
+
 /**
  * Is this workspace's filesystem below its runner's free-space floor, so no new work should be
  * dispatched onto it?
@@ -2430,7 +2446,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           WHERE t.list_id = tl.id AND t.is_foreman = true
             AND t.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
         )`;
+    // How many foremen have already run for this stall, and when the last one did. "For this
+    // stall" is anchored on the newest session of a NON-foreman task: anything a coordinator
+    // actually got moving resets the count, so the escalation measures repeated failure to fix
+    // rather than the list's age.
+    const history = await this.foremanHistory(stalled.map((l) => l.id));
+    const now = Date.now();
+    let heldOff = 0;
     for (const list of stalled) {
+      const prior = history.get(list.id);
+      if (prior) {
+        if (prior.count >= MAX_CONSECUTIVE_FOREMEN) {
+          heldOff += 1;
+          continue;
+        }
+        const since = now - prior.lastAt.getTime();
+        if (since < FOREMAN_RETRY_BACKOFF_MS[prior.count - 1]) {
+          heldOff += 1;
+          continue;
+        }
+      }
       try {
         const task = await this.prisma.task.create({
           data: {
@@ -2456,6 +2491,40 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    if (heldOff > 0) {
+      this.logger.log(
+        `foreman: ${heldOff} stalled list(s) held — a previous coordinator did not clear the stall`,
+      );
+    }
+  }
+
+  /**
+   * For each of these lists: how many foremen have run since anything else did, and when the
+   * newest of them was filed.
+   *
+   * A foreman that ran and left the list still stalled is evidence the next one will too, so the
+   * count drives an escalating hold rather than a fixed one. Anchoring on the newest session of a
+   * non-foreman task is what makes it self-resetting: the moment real work runs again the list is
+   * no longer failing to recover, and the next stall starts from the first backoff step.
+   */
+  private async foremanHistory(
+    listIds: string[],
+  ): Promise<Map<string, { count: number; lastAt: Date }>> {
+    const out = new Map<string, { count: number; lastAt: Date }>();
+    if (listIds.length === 0) return out;
+    const rows = await this.prisma.$queryRaw<{ listId: string; count: bigint; lastAt: Date }[]>`
+      SELECT ft.list_id AS "listId", count(*) AS "count", max(ft.created_at) AS "lastAt"
+      FROM task ft
+      WHERE ft.is_foreman = true
+        AND ft.list_id = ANY(${listIds}::uuid[])
+        AND ft.created_at > COALESCE(
+          (SELECT max(s.created_at)
+             FROM task wt JOIN session s ON s.task_id = wt.id
+            WHERE wt.list_id = ft.list_id AND wt.is_foreman = false),
+          '-infinity'::timestamp)
+      GROUP BY ft.list_id`;
+    for (const row of rows) out.set(row.listId, { count: Number(row.count), lastAt: row.lastAt });
+    return out;
   }
 
   /**
