@@ -1798,6 +1798,30 @@ body {
 .rd-env-row > .ant-input:first-child {
   flex: 0 0 38%;
 }
+/* Standing "always allow" grants: a monospace token per grant, with revoke on the right. */
+.rd-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.rd-rule-token {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-sunken, var(--bg-raised));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.rd-rule-empty {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.55;
+}
 /* In-place agent editor card — replaces the old modal; lives inside the list. */
 .rd-workspace-form {
   border: 1px solid var(--border-subtle);

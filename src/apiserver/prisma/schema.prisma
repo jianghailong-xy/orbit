@@ -404,10 +404,48 @@ model Workspace {
   assignedTasks Task[] // tasks assigned to run in this workspace
   // Service tokens pinned to this workspace (see ServiceToken).
   serviceTokens ServiceToken[]
+  // What this workspace always allows without asking again (see WorkspacePermissionRule).
+  permissionRules WorkspacePermissionRule[]
 
   @@index([ownerId])
   @@index([runnerId])
   @@map("workspace")
+}
+
+/// A tool call this workspace's sessions may make without asking a human again — written
+/// when someone answers an approval with "always allow", read back into every later session
+/// of the same workspace.
+///
+/// Workspace-scoped on purpose. The unit of trust is not a session: "I trust `npm test` in
+/// this repo" does not stop being true when a conversation ends, and re-teaching it once per
+/// session makes the cost scale with the number of sessions — which is the thing the product
+/// is for. It is not account-scoped either, because a command waved through in a toy checkout
+/// must not silently arm itself in the repo that matters; the workspace is what owns the
+/// workDir, the runner and the env, so it is the boundary users already reason about.
+///
+/// Orbit stores and scopes these; it does NOT match them. They are handed to the runtime
+/// (claude's `--allowedTools`) so the vendor's own matcher decides what counts as "the same
+/// kind of call" — writing a second matcher for shell strings here would be a bypassable
+/// parser guarding a shell.
+model WorkspacePermissionRule {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // The gated tool ("Bash", "Edit", …).
+  toolName    String    @map("tool_name")
+  // Narrows the tool, in the runtime's own rule grammar (Bash uses a command prefix like
+  // "git commit:*"). Empty string — not NULL — means "every call to this tool", so the
+  // unique index actually collapses duplicates (postgres treats NULLs as distinct).
+  ruleContent String    @default("") @map("rule_content")
+  // Who allowed it, and from which approval (no FK: the approval's session may be deleted
+  // long before the rule is revoked).
+  createdById String?   @map("created_by_id") @db.Uuid
+  approvalId  String?   @map("approval_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([workspaceId, toolName, ruleContent])
+  @@index([workspaceId])
+  @@map("workspace_permission_rule")
 }
 
 // A first-class interactive chat session (Route B): a long-lived conversation

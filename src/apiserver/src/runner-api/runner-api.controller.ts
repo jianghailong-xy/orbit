@@ -110,6 +110,7 @@ import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
+import { dispatchAllowedTools } from '../common/permission-rules';
 import {
   isTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -981,7 +982,9 @@ export class RunnerApiController {
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: {
-        workspace: true,
+        // Same standing "always allow" grants the claim path sends: a reclaimed session must
+        // not start re-asking about calls this workspace already approved permanently.
+        workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
         // The account-level permission default, which replaced the per-workspace one.
         owner: { select: { preferences: true } },
@@ -1086,7 +1089,11 @@ export class RunnerApiController {
         model: exec.model,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
-        allowedTools: [...ALWAYS_ALLOWED_TOOLS],
+        allowedTools: dispatchAllowedTools(
+          provider,
+          ALWAYS_ALLOWED_TOOLS,
+          workspace?.permissionRules ?? [],
+        ),
         disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
         permissionMode: normalizeBuiltinPermissionMode(
           provider,

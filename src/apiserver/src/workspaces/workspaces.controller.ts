@@ -61,4 +61,21 @@ export class WorkspacesController {
   cleanUpRepo(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.requestRepoCleanup(user.userId, id);
   }
+
+  /** What this workspace's sessions no longer ask about ("always allow" answers that outlived
+   *  the session they were given in). */
+  @Get(':id/permission-rules')
+  permissionRules(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.workspaces.listPermissionRules(user.userId, id);
+  }
+
+  /** Revoke one standing grant; this workspace's sessions ask about that call again. */
+  @Delete(':id/permission-rules/:ruleId')
+  removePermissionRule(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('ruleId', PublicIdPipe) ruleId: string,
+  ) {
+    return this.workspaces.removePermissionRule(user.userId, id, ruleId);
+  }
 }

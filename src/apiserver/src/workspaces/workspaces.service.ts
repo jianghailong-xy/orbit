@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import {
@@ -232,6 +233,36 @@ export class WorkspacesService {
     // listing filters on `deletedAt: null`, while runtime lookups by a live session's workspaceId
     // deliberately don't — so in-flight sessions keep resolving their workspace's config.
     await this.prisma.workspace.update({ where: { id }, data: { deletedAt: new Date() } });
+    return { ok: true };
+  }
+
+  /**
+   * The standing "always allow" grants on this workspace — what its sessions no longer ask
+   * about, because someone already answered once with "always allow".
+   *
+   * Listing them is not a nicety: a grant that cannot be seen cannot be judged, and one that
+   * outlives the session that created it has to be revocable, or "always" is a decision the
+   * user can never take back.
+   */
+  async listPermissionRules(ownerId: string, id: string): Promise<WorkspacePermissionRuleInfo[]> {
+    await this.get(ownerId, id);
+    const rules = await this.prisma.workspacePermissionRule.findMany({
+      where: { workspaceId: id },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, toolName: true, ruleContent: true, createdAt: true },
+    });
+    return rules.map((rule) => ({ ...rule, createdAt: rule.createdAt.toISOString() }));
+  }
+
+  /** Revoke one standing grant. Its workspace's sessions ask about that call again from their
+   *  next dispatch on — a session already running keeps whatever its runtime was started with,
+   *  since the allowlist is a process argument. */
+  async removePermissionRule(ownerId: string, id: string, ruleId: string) {
+    await this.get(ownerId, id);
+    const res = await this.prisma.workspacePermissionRule.deleteMany({
+      where: { id: ruleId, workspaceId: id },
+    });
+    if (res.count === 0) throw new NotFoundException('permission rule not found');
     return { ok: true };
   }
 }

@@ -30,9 +30,9 @@ import {
 } from 'antd';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, revokeWorkspacePermissionRule } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
-import { providersQuery } from '../lib/queries';
+import { providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
@@ -450,6 +450,9 @@ export function RunnerDetailPage() {
               placeholder="Added to this workspace's system prompt on every run (optional)"
             />
           </div>
+          {/* Only for a saved workspace: grants are recorded against a workspace that exists,
+              so there is nothing to show (or revoke) while one is being created. */}
+          {editing && <WorkspacePermissionRules workspaceId={editing.id} />}
         </div>
       )}
       <div className="rd-form-actions">
@@ -802,6 +805,65 @@ function RdField({ label, value }: { label: string; value: string }) {
     <div className="rd-field">
       <div className="rd-field-label">{label}</div>
       <div className="rd-field-value">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * What this workspace's sessions no longer ask about — the "always allow" answers that outlived
+ * the session they were given in.
+ *
+ * Read-and-revoke only: a grant is never created here, it is created by answering an approval
+ * with "always allow". So revoking acts immediately instead of joining the form's dirty/Save
+ * cycle — the point of showing them is that a standing grant can be taken back, and a Save
+ * button between the user and that is one step too many.
+ */
+function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
+  const qc = useQueryClient();
+  const message = useToast();
+  const rules = useQuery(workspacePermissionRulesQuery(workspaceId));
+  const revokeMut = useMutation({
+    mutationFn: (ruleId: string) => revokeWorkspacePermissionRule(workspaceId, ruleId),
+    onSuccess: () =>
+      void qc.invalidateQueries({
+        queryKey: workspacePermissionRulesQuery(workspaceId).queryKey,
+      }),
+    onError: (e: Error) => message.error(e.message || 'Revoke failed'),
+  });
+  const rows = rules.data ?? [];
+  return (
+    <div className="rd-form-field">
+      <div className="rd-form-label">Always allowed</div>
+      {rules.isLoading ? (
+        <Spin size="small" />
+      ) : rows.length === 0 ? (
+        <div className="rd-rule-empty">
+          Nothing yet. Answering an approval with “always allow” records it here, and this
+          workspace's sessions stop asking about that call.
+        </div>
+      ) : (
+        <>
+          {rows.map((rule) => (
+            <div className="rd-rule-row" key={rule.id}>
+              <code className="rd-rule-token">
+                {rule.ruleContent ? `${rule.toolName}(${rule.ruleContent})` : rule.toolName}
+              </code>
+              <Button
+                type="text"
+                title="Ask about this again"
+                icon={<DeleteOutlined />}
+                loading={revokeMut.isPending && revokeMut.variables === rule.id}
+                onClick={() => revokeMut.mutate(rule.id)}
+              />
+            </div>
+          ))}
+          {/* Says where it does NOT apply, because the alternative is a user reading this list
+              as the whole truth about a Codex or OpenCode session. */}
+          <div className="rd-rule-empty">
+            Applied when the session runs on Claude, from its next start on.
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ import {
 } from '../common/session-tree-sql';
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
+import { dispatchAllowedTools } from '../common/permission-rules';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -217,7 +218,9 @@ export class QueueService {
     const session = await this.prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
       include: {
-        workspace: true,
+        // The workspace's standing "always allow" grants ride along: they are what turns an
+        // approval a human already answered into one this session never has to ask again.
+        workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
         // The account-level permission default, which replaced the per-workspace one.
         owner: { select: { preferences: true } },
@@ -375,7 +378,11 @@ export class QueueService {
         model: exec.model,
         appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
         systemPrompt: workspace?.systemPrompt ?? undefined,
-        allowedTools: [...ALWAYS_ALLOWED_TOOLS],
+        allowedTools: dispatchAllowedTools(
+          provider,
+          ALWAYS_ALLOWED_TOOLS,
+          workspace?.permissionRules ?? [],
+        ),
         disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their

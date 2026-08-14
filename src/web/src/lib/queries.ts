@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { EventSearchResponse, SessionSearchResponse } from '@orbit/shared';
-import { api, getSession, getSessionDiff } from '../api';
+import { api, getSession, getSessionDiff, type WorkspacePermissionRuleInfo } from '../api';
 import {
   sessionLifecycleStateOf,
   type SessionLifecycleView,
@@ -42,6 +42,15 @@ export const setupStatusQuery = () =>
 
 export const workspacesQuery = () =>
   queryOptions({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
+
+/** What a workspace's sessions no longer ask about: the "always allow" answers that outlived
+ *  the session they were given in. Read where they can be reviewed and revoked. */
+export const workspacePermissionRulesQuery = (workspaceId: string) =>
+  queryOptions({
+    queryKey: ['workspace-permission-rules', workspaceId] as const,
+    queryFn: () =>
+      api<WorkspacePermissionRuleInfo[]>(`/workspaces/${workspaceId}/permission-rules`),
+  });
 
 /** Control-plane–configured providers (custom slugs borrowing a built-in runtime), de-sensitized
  *  for the pickers. Merged with the built-in claude/codex in the provider/model dropdowns; any

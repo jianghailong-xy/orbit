@@ -24,6 +24,7 @@ import {
   FilePatch,
   MAX_PROMPT_CHARS,
   PermissionMode,
+  type PermissionRule,
   RunEventType,
   SessionEndReason,
   SessionFilingState,
@@ -39,6 +40,7 @@ import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
 } from '../common/permission-mode';
+import { normalizePermissionRules } from '../common/permission-rules';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -3107,7 +3109,10 @@ export class SessionsService {
     approvalId: string,
     dto: ApprovalDecisionRequest,
   ): Promise<ApprovalInfo> {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true, workspaceId: true },
+    });
     if (!session) throw new NotFoundException('session not found');
     if (dto.behavior !== 'allow' && dto.behavior !== 'deny') {
       throw new BadRequestException('behavior must be "allow" or "deny"');
@@ -3134,6 +3139,11 @@ export class SessionsService {
     const a = await this.prisma.approval.findFirst({ where: { id: approvalId, sessionId: id } });
     if (!a) throw new NotFoundException('approval not found');
     if (res.count > 0) {
+      // Only the decision that actually landed writes the standing grant: a second, losing
+      // click on an already-answered approval must not widen anything.
+      if (dto.behavior === 'allow' && session.workspaceId) {
+        await this.rememberForWorkspace(session.workspaceId, ownerId, approvalId, dto.rememberRules);
+      }
       this.realtime.publish(id, {
         seq: 0,
         type: RunEventType.APPROVAL_RESOLVED,
@@ -3142,6 +3152,31 @@ export class SessionsService {
       });
     }
     return this.toApprovalInfo(a);
+  }
+
+  /** Persist "always allow" rules on the workspace this session belongs to, so its other and
+   *  later sessions start with them (see WorkspacePermissionRule). Duplicates are skipped by
+   *  the unique index, so re-approving something already granted is a no-op rather than a
+   *  second row. A session with no workspace stores nothing — the decision still applies to
+   *  the running session through the runner's long-poll, as it always did. */
+  private async rememberForWorkspace(
+    workspaceId: string,
+    ownerId: string,
+    approvalId: string,
+    rules: PermissionRule[] | undefined,
+  ): Promise<void> {
+    const stored = normalizePermissionRules(rules);
+    if (!stored.length) return;
+    await this.prisma.workspacePermissionRule.createMany({
+      data: stored.map((rule) => ({
+        workspaceId,
+        toolName: rule.toolName,
+        ruleContent: rule.ruleContent,
+        createdById: ownerId,
+        approvalId,
+      })),
+      skipDuplicates: true,
+    });
   }
 
   private toApprovalInfo(a: {

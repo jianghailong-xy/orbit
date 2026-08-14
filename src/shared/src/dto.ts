@@ -762,14 +762,26 @@ export interface ApprovalCreateRequest {
  *  The runner feeds this to claude as the tool's `updatedInput.answers`. */
 export type QuestionAnswers = Record<string, string[]>;
 
-/** A claude permission rule to add for the rest of the session, so future "same kind"
- *  calls are auto-allowed by claude's own engine without re-prompting. `toolName` is the
- *  gated tool (e.g. "Bash", "Edit"); `ruleContent` narrows it (Bash uses a command
- *  prefix like "git commit:*") — omit it to allow every call to that tool. The runner
- *  wraps this into claude's updatedPermissions (addRules / allow / session). */
+/** A claude permission rule for "same kind" calls, so future ones are auto-allowed by
+ *  claude's own engine without re-prompting. `toolName` is the gated tool (e.g. "Bash",
+ *  "Edit"); `ruleContent` narrows it (Bash uses a command prefix like "git commit:*") —
+ *  omit it to allow every call to that tool. The runner wraps this into claude's
+ *  updatedPermissions for the running session, and the control plane stores it on the
+ *  session's workspace so its other sessions start with it too. */
 export interface PermissionRule {
   toolName: string;
   ruleContent?: string;
+}
+
+/** A standing "always allow" grant on a workspace: a rule someone approved once, now
+ *  applied to every session of that workspace instead of dying with the one it was
+ *  granted in. Listed and revoked through /workspaces/:id/permission-rules. */
+export interface WorkspacePermissionRuleInfo {
+  id: string;
+  toolName: string;
+  /** '' means every call to that tool (never null — see the stored column). */
+  ruleContent: string;
+  createdAt: string;
 }
 
 /** Browser → control plane: a human's allow/deny on a pending approval. For an

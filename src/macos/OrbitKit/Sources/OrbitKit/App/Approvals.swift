@@ -121,9 +121,10 @@ public enum Approvals {
 
     // MARK: remember-rule (allow + remember same kind)
 
-    /// The session-scoped rule for "allow + remember", or nil when it doesn't apply:
-    /// questions/plans aren't repeatable, and a Bash command with no clean prefix can't be
-    /// generalized. Non-Bash tools get a tool-wide rule (no `ruleContent`).
+    /// The rule for "allow + remember", or nil when it doesn't apply: questions/plans aren't
+    /// repeatable, and a Bash command with no clean prefix can't be generalized. Non-Bash tools
+    /// get a tool-wide rule (no `ruleContent`). The running session stops asking, and the control
+    /// plane keeps the rule on that session's workspace so its other sessions start with it too.
     public static func rememberRule(toolName: String, input: JSONValue) -> PermissionRule? {
         if isQuestion(toolName: toolName) || isPlan(toolName: toolName) { return nil }
         if toolName == "Bash" {

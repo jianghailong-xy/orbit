@@ -423,12 +423,27 @@ export interface ApprovalInfo {
 export const listApprovals = (sessionId: string, status = 'PENDING') =>
   api<ApprovalInfo[]>(`/sessions/${sessionId}/approvals?status=${status}`);
 
-/** A claude permission rule to add for the rest of the session so future "same kind"
- *  calls are auto-allowed (mirrors PermissionRule in @orbit/shared). */
+/** A claude permission rule so future "same kind" calls are auto-allowed
+ *  (mirrors PermissionRule in @orbit/shared). */
 export interface PermissionRule {
   toolName: string;
   ruleContent?: string;
 }
+
+/** A standing "always allow" grant on a workspace — one of these rules, kept, so every
+ *  session of that workspace starts with it instead of asking again. */
+export interface WorkspacePermissionRuleInfo {
+  id: string;
+  toolName: string;
+  /** '' = every call to that tool. */
+  ruleContent: string;
+  createdAt: string;
+}
+
+/** Revoke a standing grant. The workspace's sessions ask about that call again from their
+ *  next dispatch on; a session already running keeps what its runtime was started with. */
+export const revokeWorkspacePermissionRule = (workspaceId: string, ruleId: string) =>
+  api(`/workspaces/${workspaceId}/permission-rules/${ruleId}`, { method: 'DELETE' });
 
 /** Allow or deny a pending tool-permission approval; the runner's long-poll
  *  delivers the decision back to claude's --permission-prompt-tool. For an

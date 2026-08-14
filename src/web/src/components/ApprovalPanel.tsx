@@ -16,10 +16,10 @@ function planText(input: unknown): string {
   return '';
 }
 
-// Derive the session-scoped rules for "allow + remember same kind", or [] when none
-// apply: questions/plans aren't repeatable. A Bash line yields one rule per distinct
-// sub-command prefix (so `cd x && git add …` remembers both, not just the leading `cd`);
-// other tools get a single tool-wide rule (no ruleContent).
+// Derive the rules for "always allow", or [] when none apply: questions/plans aren't
+// repeatable. A Bash line yields one rule per distinct sub-command prefix (so `cd x && git
+// add …` remembers both, not just the leading `cd`); other tools get a single tool-wide rule
+// (no ruleContent).
 function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   if (a.toolName === 'AskUserQuestion' || isPlan(a)) return [];
   if (a.toolName === 'Bash') {
@@ -103,12 +103,13 @@ export function ApprovalPanel({
   onChatAbout?: (id: string, question: string) => void;
 }): JSX.Element {
   const isQuestion = approval.toolName === 'AskUserQuestion';
-  // "Allow + remember same kind" for the rest of the session (claude's engine matches
-  // future calls). Empty for questions/plans and Bash commands with no clean prefix; a
-  // compound Bash line yields one rule per distinct sub-command.
+  // "Always allow" — the running session stops asking (claude's engine matches future calls),
+  // and the rule is kept on this session's workspace so its other sessions start with it too.
+  // Empty for questions/plans and Bash commands with no clean prefix; a compound Bash line
+  // yields one rule per distinct sub-command.
   const rules = isQuestion ? [] : rememberRulesFor(approval);
-  // Plain card: Enter approves; ⌘/Ctrl + Enter approves-and-remembers (only when that
-  // option exists). Questions have no submit hotkey — they submit only via the Submit button.
+  // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
+  // Questions have no submit hotkey — they submit only via the Submit button.
   useApproveHotkey(active && !isQuestion, () => onDecide(approval.id, 'allow'), { requireMod: false });
   useApproveHotkey(active && !isQuestion && rules.length > 0, () => {
     if (rules.length) onDecide(approval.id, 'allow', undefined, undefined, rules);
@@ -141,10 +142,10 @@ export function ApprovalPanel({
         {rules.length > 0 && (
           <button
             className="approval-btn approve-always"
-            title={`Auto-approve calls like this for the rest of this session: ${ruleNames(rules).join(', ')}`}
+            title={`Stop asking about calls like this — here and in this workspace's other sessions: ${ruleNames(rules).join(', ')}. Revocable in the workspace's settings.`}
             onClick={() => onDecide(approval.id, 'allow', undefined, undefined, rules)}
           >
-            Approve, and auto-allow future <code className="approval-rule">{rememberLabel(rules)}</code>
+            Always allow <code className="approval-rule">{rememberLabel(rules)}</code>
             {active && <span className="approval-btn-kbd">{SHORTCUT_HINT}</span>}
           </button>
         )}
