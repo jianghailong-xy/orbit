@@ -134,12 +134,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     function connect(): void {
       dropped = false;
       lastMsgAt = Date.now();
-      // `idFormat=public` mirrors the header authedFetch sends: the control plane carries session
-      // and workspace ids that get compared against ids from REST payloads, so the two transports
-      // have to spell them the same way. EventSource has no headers, hence the query parameter.
-      es = new EventSource(
-        `/api/events?access_token=${encodeURIComponent(getToken() ?? '')}&idFormat=public`,
-      );
+      es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}`);
       es.onopen = () => {
         fails = 0;
         lastMsgAt = Date.now();

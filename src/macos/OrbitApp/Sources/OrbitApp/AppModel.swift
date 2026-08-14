@@ -1426,9 +1426,17 @@ final class AppModel {
         let ordered = orderedAgents
         // Prefer the agent you last used (persisted via `selectedAgentID`) so a cold launch reopens
         // your context; fall back to the first agent, or Runners onboarding when there are none.
+        // Compared through `PublicID.storageKey` because the two sides come from different eras:
+        // `last` was written by whichever build ran before this one, while `$0.id` is however the
+        // server spells ids today (docs/public-id-migration-design.md). A raw `==` would silently
+        // stop matching across that change — no error, the app would just quietly forget which
+        // agent you were in and land on the first one.
+        // Note it selects the MATCHED AGENT's id, not the remembered string: they can be the same
+        // agent in two spellings, and everything downstream compares this against ids as the
+        // server spells them today.
         if let last = UserDefaults.standard.string(forKey: Self.lastAgentKey),
-           ordered.contains(where: { $0.id == last }) {
-            selectedAgentID = last
+           let match = ordered.first(where: { PublicID.storageKey($0.id) == PublicID.storageKey(last) }) {
+            selectedAgentID = match.id
         } else if let first = ordered.first?.id {
             selectedAgentID = first
         } else {

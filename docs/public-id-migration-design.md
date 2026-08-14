@@ -1,6 +1,6 @@
 # 设计文档:把 base62 public id 变成 API 的 id(方案 A)
 
-状态:草案 · 2026-08-14 · **Phase 0 / 1 / 2 已落地**(分类清单 · 双向覆盖测试 · 客户端版本上报 · 服务端双发 · 三端拼写无关)· **Phase 3 服务端机制已落地但无客户端启用**(改为逐客户端 opt-in,默认行为完全不变)· phase 4(删 UUID 那半)须等 `client_version` 有数据 · **全部未部署**
+状态:草案 · 2026-08-14 · **Phase 0–3 已落地**(分类清单 · 双向覆盖测试 · 客户端版本上报 · 服务端双发 · 客户端拼写无关 · **`id` 无条件为 public id,runner 协议除外**)· Phase 0–2 已部署,**Phase 3 的无条件翻转未部署** · phase 4(删 UUID 孪生字段)须等 `client_version` 有数据
 作者:Claude(应 jianghailong 要求)
 影响面:`src/apiserver`(响应侧拦截器 + 字段清单)、`src/web`、`src/ios`、`src/macos`、`src/runner-go`
 关联:`src/apiserver/src/common/public-id.ts`(入方向规则)、`src/apiserver/src/common/workspace-alias.interceptor.ts`(同型迁移的先例)
@@ -99,29 +99,29 @@ schema 里有 90 个 `@db.Uuid` 列、37 个不同字段名。**但"是 UUID 列
 
 验证:web 432/432、runner `go test ./...` 全绿、新增 storageKey/idCodec/runner 三组键归一测试。Swift 的 128 位 base62 解码**用 20000 个随机 id 与 `@orbit/shared` 对拍过**(逐行转写成 JS 比对,零不符,含溢出与前导零边界),但 Swift 本身**未编译**——需要 client CI。
 
-**Phase 3 —— 翻转 `id` 本身**·**服务端机制已落地,无客户端启用**
+**Phase 3 —— 翻转 `id` 本身**·**已落地**
 
-原计划是"等版本下限说明旧构建消失后全局翻转"。改成了**按客户端逐请求选择加入**:客户端发 `X-Orbit-Id-Format: public`,该响应里 `id` 及所有 public id 字段就是 base62;不发的一律照旧。
+**最终形态:无条件翻转,没有协商。** `id` 就是 public id,不需要任何 header 或 query 去要。
 
-为什么让客户端声明而不是服务端按 `X-Orbit-Client` 版本推断:版本阈值要配、要解析、要比较,每一步都是一次对"某个没人记得的构建"猜错的机会——一个开了一个月的浏览器标签页是在它主人刷新时升级,不是在某个配置说升级时。**客户端是唯一知道自己能解析什么的一方,所以由它来说。** `client_version` 于是专职回答另一个问题——UUID 那条路什么时候能删——这本来就是它建出来的目的。
+(中间曾做过一版逐客户端 opt-in header,后被移除——一旦每个客户端都要发那个头,协商本身就只是噪音。)
 
-好处是这条路没有"翻转日":每端各自准备好各自 opt-in,出问题只回滚那一端,不需要全局闸门,也不需要赌。
+**唯一的例外是 runner 协议(`/api/runner/*`),它保持 UUID。** 这不是兼容垫片,是**协议边界**:runner 上的 id 不是任何人会去链接的地址,而是**键**——它把 id 直接写进文件系统路径和 git ref 名(`refs/orbit-base/<id>`),旁边还并排走着逐字节比较的租约/围栏令牌。翻转它们不是改格式,是给**已经存在于本服务器管不到的机器磁盘上的状态重新做键**。
 
-**web 已 opt-in(本轮完成)。**
+写这段时线上 `runner.version` 显示还有一台停在 **0.1.98**,比教会 runner 归一化拼写的那个版本落后十八个发布。对它而言,翻转会让在飞会话的 base ref 变成孤儿,而且是最安静的那种故障:不报错,只是之后每次 diff 都基于错的 commit。
 
-做法不是逐个改比较,而是**把 web 的内部规范拼写整体换成 public id**——这样路由参数和 API id 两侧自然同拼写,那 103 处比较**一处未动**:
+这条边界没有过期日期要惦记,也不依赖任何人升级。
+
+**web 的改造。** 做法不是逐个改比较,而是**把 web 的内部规范拼写整体换成 public id**——这样路由参数和 API id 两侧自然同拼写,那 103 处比较**一处未动**:
 
 - `routeId()` 取代路由边界上的 `decodeId()`(12 处):把参数归一成 public id(旧的裸 UUID 书签照样能用)
-- 三条传输全部 opt-in:REST 发头;**两条 SSE 发 query**
 - `decodeId` 保留,只服务于必须跨翻转保持稳定的存储键(`transcriptStore`)
 
-**服务端为此补了 query 形式的 opt-in。** `EventSource` 根本设不了头(这也是 token 被迫走 `?access_token=` 的原因)。没有它,opt-in 的 web 会从 REST 拿到 base62、从自己的事件流拿到 UUID——一个页面里同一个 session 两种拼写,正是这次迁移要消灭的状态。
+**原生端(iOS/macOS)的改造:** 它们的 id 全部来自服务器、也没有地址栏,所以拼写翻转本身不需要它们配合。真正要改的是**跨"纪元"比较**的地方——一侧是旧构建写下的持久值,另一侧是服务器今天的拼写:
 
-⚠️ **部署耦合(重要):** web 的 opt-in **不能先于**服务端的 `idFormat` query 支持上线。当前线上的 apiserver 只有 header 形式,没有 query 形式——两者必须同批部署。测试 `the public-id opt-in covers every transport` 钉住了 REST 与 SSE 必须成对,但钉不住跨服务的版本顺序。
+- `AppModel.swift` 冷启动恢复"上次用的 agent":`UserDefaults` 里存的 id 与 API 的 id 直接 `==`。拼写一变就静默失配,app 不报错,只是忘记你在哪个 agent 里、落到第一个。改成两侧都过 `PublicID.storageKey`,并且**选中的是匹配到的 agent 的当前 id**,不是记住的那个旧拼写字符串(否则下游比较会二次失配)。
+- 转写缓存的文件名在 phase 2 已经归一,升级后仍能命中旧快照。
 
-**原生端与 runner:建议不 opt-in。** 它们的 id 只有一个来源(服务器)、也没有地址栏,翻转拼写对它们零收益、纯风险;存储键在 phase 2 已经与拼写无关了。**只有 web 从中受益,因为只有 web 有 URL**——这恰好是"逐客户端 opt-in"比"全局翻转"对的地方。
-
-**原先记录的前提(现已解决):** 不是加个 header 就行。web 目前把 UUID 当内部规范拼写——路由参数经 `decodeId` 归一成 UUID,再与 API 给的 `id` 比较。一旦 opt-in,`s.id` 变 base62 而 `selectedId` 仍是 UUID,这些比较会**静默**恒假:
+**为什么必须整体换而不能只翻一半(原始分析,现已解决):** web 原本把 UUID 当内部规范拼写——路由参数经 `decodeId` 归一成 UUID,再与 API 给的 `id` 比较。服务端一翻转,`s.id` 变 base62 而 `selectedId` 仍是 UUID,这些比较就会**静默**恒假:
 
 - `WorkspaceView.tsx:1255` `sessions.find((s) => s.id === selectedId)`
 - `WorkspaceView.tsx:1286` `sessionDetailQ.data?.id === selectedId`
@@ -129,7 +129,7 @@ schema 里有 90 个 `@db.Uuid` 列、37 个不同字段名。**但"是 UUID 列
 
 全库 103 处 id 比较,其中 20 处涉及路由派生的 id。选定 base62 为内部拼写后,这 20 处两侧同时变成 base62,**因此一处都不用改**——`RunnerEngines.test.tsx` 的 fixture 是唯一暴露出来的,因为它绕过服务器直接注入 UUID id,正好演示了拼写不一致时故障有多安静:焦点行什么都不标,不报错。
 
-验证(已做):默认形状不变、opt-in 后 `id`/嵌套/数组均翻转且 `toUuid(id)` 仍指向同一行、非 UUID 值不被改写,以及 doc 要求的那条——**opt-in 状态下围栏令牌逐字节不变、往返穿过 `::uuid` 路径后仍相等**。
+验证(已做):`id`/嵌套/数组均翻转且 `toUuid(id)` 仍指向同一行、非 UUID 值不被改写、runner 协议整条路径保持 UUID(且仍收到孪生字段),以及本文要求的那条——**围栏令牌逐字节不变、往返穿过 `::uuid` 路径后仍相等**。
 
 **Phase 4 —— 删掉孪生字段和 `encodeId`/`decodeId`。**
 

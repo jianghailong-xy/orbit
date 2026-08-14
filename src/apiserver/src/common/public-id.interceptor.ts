@@ -93,37 +93,33 @@ function addTwins(value: unknown, replaceSource: boolean, depth = 0): unknown {
 }
 
 /**
- * Phase 3's opt-in. A client that can read base62 in `id` asks for it per request; everything
- * else keeps getting the UUID it has always got.
+ * The one boundary that is NOT the public id's: the runner protocol.
  *
- * WHY THE CLIENT DECLARES IT rather than the server inferring it from `X-Orbit-Client`: a version
- * threshold has to be configured, parsed and compared, and every one of those is a way to guess
- * wrong about a build nobody can recall — a browser tab open since last month upgrades when its
- * owner reloads, not when a config says so. The client is the only party that knows what it can
- * parse, so it is the party that says. `client_version` then answers the *other* question — when
- * the UUID path can be deleted — which is what it was built for.
+ * Everywhere else, `id` is the public id, unconditionally — no header, no negotiation, one
+ * spelling. `/api/runner/*` is different in kind, not in version: the ids on it are not addresses
+ * anybody links to (a runner has no URL bar), they are **keys**. A runner writes them straight
+ * into filesystem paths and git ref names (`refs/orbit-base/<id>`), and alongside them travel the
+ * lease/fence tokens that are compared byte-for-byte.
+ *
+ * Which makes flipping them not a formatting change but a re-keying of state that already exists
+ * on disk on machines this server does not control. `runner.version` shows the field is not
+ * uniform — there was a runner on 0.1.98 when this was written, eighteen releases behind the one
+ * that taught runners to normalize the spelling. For that one, a flip would orphan a live
+ * session's base ref, and the failure is the quiet kind: no error, every later diff just computed
+ * against the wrong commit.
+ *
+ * So the machine protocol keeps UUIDs and the user-facing API is entirely public ids. That is a
+ * protocol boundary rather than a compatibility shim, and it has no expiry date to forget.
  */
-const FORMAT_HEADER = 'x-orbit-id-format';
-
-/** The same opt-in, as a query parameter, for the one transport that cannot send a header:
- *  `EventSource` has no headers at all, which is why the SSE routes already carry their bearer
- *  token in the query (`?access_token=`). Without this a client that opted in would get base62
- *  ids from REST and UUIDs from its own event stream — two spellings for one session inside one
- *  page, which is the exact mixed-spelling state this migration exists to avoid. */
-const FORMAT_QUERY = 'idFormat';
-
-function wantsPublicIds(
-  request: { headers?: Record<string, unknown>; query?: Record<string, unknown> } | undefined,
-): boolean {
-  return (
-    request?.headers?.[FORMAT_HEADER] === 'public' || request?.query?.[FORMAT_QUERY] === 'public'
-  );
+function isRunnerProtocol(request: { originalUrl?: unknown; url?: unknown } | undefined): boolean {
+  const path = request?.originalUrl ?? request?.url;
+  return typeof path === 'string' && path.startsWith('/api/runner/');
 }
 
 @Injectable()
 export class PublicIdInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const replaceSource = wantsPublicIds(context.switchToHttp().getRequest());
+    const replaceSource = !isRunnerProtocol(context.switchToHttp().getRequest());
     return next.handle().pipe(map((body) => addTwins(body, replaceSource)));
   }
 }

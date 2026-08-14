@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { completeSession, sessionEventsUrl } from '../api';
+import { completeSession } from '../api';
 import { workspaceSessionCountsQuery, sessionsQuery } from './queries';
 
 const apiMock = vi.hoisted(() => vi.fn());
@@ -71,7 +71,6 @@ describe('canonical session lifecycle API', () => {
       headers: {
         'content-type': 'application/json',
         'x-orbit-client': expect.stringMatching(/^web\/\S+$/),
-        'x-orbit-id-format': 'public',
       },
       body: undefined,
     });
@@ -108,18 +107,5 @@ describe('canonical session lifecycle API', () => {
     expect(rows.map((row) => row.id)).toEqual(['done-1']);
     expect(apiMock).toHaveBeenNthCalledWith(1, '/sessions?view=completed');
     expect(apiMock).toHaveBeenNthCalledWith(2, '/sessions?view=archived');
-  });
-});
-
-// REST opts into the public-id format with a header; EventSource cannot send one, so the SSE URLs
-// carry the same opt-in as a query parameter. They have to move together: if only one opts in, a
-// session arrives spelled one way over REST and the other way over its own event stream, and the
-// reducer that merges them stops recognizing its own rows. Neither half fails loudly, so this
-// asserts the pairing rather than trusting it.
-describe('the public-id opt-in covers every transport', () => {
-  it('puts idFormat on the session event stream, matching the header authedFetch sends', () => {
-    vi.stubGlobal('localStorage', { getItem: vi.fn(() => 'tok'), setItem: vi.fn(), removeItem: vi.fn() });
-    expect(sessionEventsUrl('341DOGTVEs0Fk0gAn1mje')).toContain('idFormat=public');
-    expect(sessionEventsUrl('341DOGTVEs0Fk0gAn1mje', 42)).toContain('idFormat=public');
   });
 });
