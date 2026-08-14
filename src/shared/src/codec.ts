@@ -80,6 +80,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'targetRunnerId',
   'taskId',
   'dependsOnTaskId',
+  'verifiesTaskId',
   'batchId',
   'listId',
   'tagId',
