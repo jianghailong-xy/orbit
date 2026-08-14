@@ -392,7 +392,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("prompt is required", true)
 		}
 		body := map[string]interface{}{"prompt": prompt}
-		copyIfPresent(body, args, "title", "model", "provider")
+		copyIfPresent(body, args, "title", "model", "provider", "permissionMode")
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
@@ -898,7 +898,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"title":     str,
 					"model":     str,
 					"provider":  map[string]interface{}{"type": "string", "description": "Run this session on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit to start where the target agent's project last started — an agent has no provider of its own."},
-					"wait":      map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
+					"permissionMode": map[string]interface{}{
+						"type":        "string",
+						"enum":        []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"},
+						"description": "How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask, \"dontAsk\"/\"bypassPermissions\" never ask. Omit to use the owner's account default. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching.",
+					},
+					"wait": map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
 				}, "prompt"),
 			},
 			map[string]interface{}{

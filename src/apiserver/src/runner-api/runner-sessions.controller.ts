@@ -106,6 +106,7 @@ export class RunnerSessionsController {
       title?: string;
       model?: string;
       provider?: string;
+      permissionMode?: string;
     },
   ) {
     if (isHeadlessCaller(parentSessionId)) {

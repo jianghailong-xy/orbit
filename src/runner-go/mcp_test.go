@@ -433,6 +433,62 @@ func TestMCPSessionCompleteUsesCompleteSessionEndpoint(t *testing.T) {
 	}
 }
 
+// The permission posture belongs to the run, and a spawned run is the one nobody is sitting in
+// front of: an orchestrator that knows its sub-task is read-only (plan) or unattended (dontAsk)
+// has to be able to say so instead of taking whatever the account defaults to. A param the schema
+// advertises but callTool drops is silently ignored, so assert both ends.
+func TestMCPSessionCreateCarriesPermissionMode(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, true), "session_create")
+	schema, _ := props["permissionMode"].(map[string]interface{})
+	if schema["type"] != "string" {
+		t.Fatalf("session_create permissionMode schema = %#v", props["permissionMode"])
+	}
+	offered, _ := schema["enum"].([]string)
+	for _, want := range []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"} {
+		found := false
+		for _, mode := range offered {
+			found = found || mode == want
+		}
+		if !found {
+			t.Fatalf("session_create permissionMode enum %#v is missing %q", offered, want)
+		}
+	}
+
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotBody = nil
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_, _ = w.Write([]byte(`{"id":"child","status":"PENDING"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{
+		t:                  NewTransport(srv.URL, "runner-token"),
+		sessionID:          "caller-session",
+		orchestrationToken: "session-token",
+		allowOrchestration: true,
+	}
+	res := mcp.callTool("session_create", map[string]interface{}{
+		"prompt":         "audit the migration, change nothing",
+		"permissionMode": "plan",
+	})
+	if res["isError"] == true {
+		t.Fatalf("session_create returned an error: %#v", res["content"])
+	}
+	if gotBody["permissionMode"] != "plan" {
+		t.Fatalf("session_create body permissionMode = %#v", gotBody["permissionMode"])
+	}
+
+	// Omitted must stay omitted: the account default is the server's to apply, and a runner that
+	// filled in a mode of its own would overrule it on every spawn.
+	if res := mcp.callTool("session_create", map[string]interface{}{"prompt": "ship it"}); res["isError"] == true {
+		t.Fatalf("session_create returned an error: %#v", res["content"])
+	}
+	if _, ok := gotBody["permissionMode"]; ok {
+		t.Fatalf("session_create invented a permissionMode: %#v", gotBody["permissionMode"])
+	}
+}
+
 func TestSessionSettled(t *testing.T) {
 	for _, s := range []string{"PENDING", "RUNNING", ""} {
 		if sessionSettled(s) {

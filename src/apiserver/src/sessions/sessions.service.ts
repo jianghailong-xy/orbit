@@ -529,6 +529,9 @@ export class SessionsService {
       title?: string;
       model?: string;
       provider?: string;
+      /** The child's own permission posture. Omitted, create() materializes the account default —
+       *  the spawn does NOT inherit the parent's mode, which is per-run and not per-tree. */
+      permissionMode?: string;
     },
   ): Promise<{
     id: string;
@@ -545,6 +548,17 @@ export class SessionsService {
     provider: string;
   }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
+    // The caller is a model, not a form with a picker: an invented mode would be stored verbatim
+    // and only surface when the claim hands it to the CLI, which fails the child's very first
+    // turn. Refuse it here, naming the modes that exist.
+    if (dto.permissionMode !== undefined) {
+      const modes = Object.values(PermissionMode) as string[];
+      if (!modes.includes(dto.permissionMode)) {
+        throw new BadRequestException(
+          `unknown permissionMode "${dto.permissionMode}"; use one of: ${modes.join(', ')}`,
+        );
+      }
+    }
     const parent = await this.prisma.session.findFirst({
       where: { id: parentSessionId, ownerId },
       select: {
@@ -623,7 +637,15 @@ export class SessionsService {
       ownerId,
       // An explicit provider is the child's binding; create() checks the caller can dispatch it.
       // Omitted, the child starts where the target project last started.
-      { prompt: dto.prompt, title: dto.title, workspaceId, model: dto.model, provider: dto.provider, effort },
+      {
+        prompt: dto.prompt,
+        title: dto.title,
+        workspaceId,
+        model: dto.model,
+        provider: dto.provider,
+        permissionMode: dto.permissionMode,
+        effort,
+      },
       {
         // Orchestrated children appear in Open like any other session; the
         // parentSessionId link is what marks them as spawned/orchestrated.
