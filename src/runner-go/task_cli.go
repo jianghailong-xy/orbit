@@ -170,6 +170,7 @@ Options:
   --instructions TEXT             standing instructions spliced into every task run in this list
   --instructions-file -           read those instructions from stdin
   --paused true|false             hold or resume dispatch; runs already in flight are untouched
+  --verify-on-done true|false     file a verification run when a task here reports DONE
   --max-concurrent N              cap this list's concurrently running tasks
   --clear-max-concurrent          remove that cap
   --foreman-workspace-id ID       workspace that runs this list's coordination when it stalls
@@ -1037,6 +1038,7 @@ func cliTaskListUpdate(args []string, in io.Reader, out io.Writer) error {
 	instructions := fs.String("instructions", "", "standing instructions for every task in the list")
 	instructionsFile := fs.String("instructions-file", "", "read instructions from a file, or - for stdin")
 	paused := fs.String("paused", "", "true|false — hold or resume dispatch for the whole list")
+	verifyOnDone := fs.String("verify-on-done", "", "true|false — file a verification run when a task here reports DONE")
 	maxConcurrent := fs.Int("max-concurrent", 0, "cap the list's concurrently running tasks")
 	clearMaxConcurrent := fs.Bool("clear-max-concurrent", false, "remove the concurrency cap")
 	foremanWorkspace := fs.String("foreman-workspace-id", "", "workspace that runs this list's coordination")
@@ -1075,6 +1077,16 @@ func cliTaskListUpdate(args []string, in io.Reader, out io.Writer) error {
 			body["paused"] = false
 		default:
 			return fmt.Errorf("--paused must be true or false")
+		}
+	}
+	if flagWasSet(fs, "verify-on-done") {
+		switch *verifyOnDone {
+		case "true":
+			body["verifyOnDone"] = true
+		case "false":
+			body["verifyOnDone"] = false
+		default:
+			return fmt.Errorf("--verify-on-done must be true or false")
 		}
 	}
 	if *clearMaxConcurrent {
@@ -1182,7 +1194,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_get", Argv: []string{"orbit", "task-list", "get"}, Usage: "orbit task-list get LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}},
-	{Tool: "tasklist_update", Argv: []string{"orbit", "task-list", "update"}, Usage: "orbit task-list update LIST_ID [options]", Arguments: []string{"[list-id] (required)", "--title <text>", "--instructions <text> | --instructions-file -", "--paused[=true|false]", "--max-concurrent <n> | --clear-max-concurrent", "--foreman-workspace-id <id> | --clear-foreman", "--foreman-stall-minutes <n>", "--note <text>", "--json"}, Description: "Change a task list's dispatch policy. In a session the change is attributed to this agent (like the MCP path); headless it falls back to the runner owner. Every change is recorded as a restorable revision.", Mutates: true},
+	{Tool: "tasklist_update", Argv: []string{"orbit", "task-list", "update"}, Usage: "orbit task-list update LIST_ID [options]", Arguments: []string{"[list-id] (required)", "--title <text>", "--instructions <text> | --instructions-file -", "--paused[=true|false]", "--verify-on-done[=true|false]", "--max-concurrent <n> | --clear-max-concurrent", "--foreman-workspace-id <id> | --clear-foreman", "--foreman-stall-minutes <n>", "--note <text>", "--json"}, Description: "Change a task list's dispatch policy. In a session the change is attributed to this agent (like the MCP path); headless it falls back to the runner owner. Every change is recorded as a restorable revision.", Mutates: true},
 	{Tool: "tasklist_delete", Argv: []string{"orbit", "task-list", "delete"}, Usage: "orbit task-list delete LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}, Description: "Delete a task list. Its tasks are not deleted — they are detached and become listless; the grouping, its standing instructions and its policy revisions are what go, and that cannot be undone. To stop dispatch without discarding them, pass --paused true to task-list update instead.", Mutates: true},
 }
 

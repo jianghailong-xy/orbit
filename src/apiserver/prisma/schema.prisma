@@ -1018,6 +1018,12 @@ model TaskList {
   /// (a wedged session holding a task, a livelocked merge, a quota outage nobody was told about)
   /// looks identical from outside and none of them raises an error anywhere.
   foremanStallMinutes Int?      @map("foreman_stall_minutes")
+  /// File a verification run whenever a task in this list reports DONE.
+  ///
+  /// Off by default because it doubles a list's runs, and because the check is only worth its
+  /// cost where a false "done" is expensive. It is opt-in per list rather than global for the
+  /// same reason the concurrency cap is: the right answer differs per campaign.
+  verifyOnDone        Boolean   @default(false) @map("verify_on_done")
 
   tasks     Task[]
   revisions TaskListRevision[]
@@ -1053,6 +1059,7 @@ model TaskListRevision {
   maxConcurrent       Int?    @map("max_concurrent")
   foremanWorkspaceId  String? @map("foreman_workspace_id") @db.Uuid
   foremanStallMinutes Int?    @map("foreman_stall_minutes")
+  verifyOnDone        Boolean @default(false) @map("verify_on_done")
 
   /// Why this change was made, in words. Optional, but it is the field that makes the history
   /// readable rather than merely complete.
@@ -1114,6 +1121,14 @@ model Task {
   // *work* is done, and the foreman is not doing it), and an unfinished one suppresses further
   // foreman dispatch for that list, so a stall cannot mint a new coordinator every minute.
   isForeman        Boolean     @default(false) @map("is_foreman")
+  /// When set, this task exists to check another task's claim of completion, and names the task
+  /// it checks. Non-null carries the same two consequences as isForeman — no list instructions,
+  /// and never itself verified — plus the thing a boolean could not: it identifies the subject,
+  /// so "is this already being checked" and "how many times has this been checked" are exact
+  /// rather than inferred.
+  verifiesTaskId   String?     @map("verifies_task_id") @db.Uuid
+  verifies         Task?       @relation("TaskVerification", fields: [verifiesTaskId], references: [id], onDelete: Cascade)
+  verifiedBy       Task[]      @relation("TaskVerification")
   // Best-effort dedup of a redelivered turn's re-created tasks: a hash of (session, turn, title,
   // description), set only when the create happens inside a live turn (see TasksService). @unique
   // gives a Postgres unique index, which by default treats NULLs as distinct — so the many tasks
@@ -1137,6 +1152,9 @@ model Task {
   @@index([listId])
   @@index([status])
   @@index([creatorType, creatorId])
+  /// Both dispatcher questions about a verification — "is one already in flight for this
+  /// subject" and "how many has it had" — key on this column.
+  @@index([verifiesTaskId])
   @@map("task")
 }
 

@@ -414,7 +414,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// Only the keys the caller actually sent: a partial edit must not blank the rest of the
 		// policy, and the server distinguishes absent from null.
 		copyIfPresent(body, args, "title", "instructions", "note", "foremanWorkspaceId")
-		copyIfPresent(body, args, "paused", "maxConcurrent", "foremanStallMinutes")
+		copyIfPresent(body, args, "paused", "maxConcurrent", "foremanStallMinutes", "verifyOnDone")
 		if len(body) == 0 {
 			return toolResult("nothing to update", true)
 		}
@@ -950,6 +950,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"title":               str,
 				"instructions":        str,
 				"paused":              map[string]interface{}{"type": "boolean"},
+				"verifyOnDone":        map[string]interface{}{"type": "boolean"},
 				"maxConcurrent":       map[string]interface{}{"type": "integer"},
 				"foremanWorkspaceId":  str,
 				"foremanStallMinutes": map[string]interface{}{"type": "integer"},

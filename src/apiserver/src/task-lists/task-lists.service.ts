@@ -199,6 +199,7 @@ export class TaskListsService {
     const policy = {
       ...(dto.paused !== undefined ? { paused: dto.paused } : {}),
       ...(dto.maxConcurrent !== undefined ? { maxConcurrent: dto.maxConcurrent } : {}),
+      ...(dto.verifyOnDone !== undefined ? { verifyOnDone: dto.verifyOnDone } : {}),
       ...(dto.foremanWorkspaceId !== undefined
         ? { foremanWorkspaceId: dto.foremanWorkspaceId }
         : {}),
@@ -263,6 +264,7 @@ export class TaskListsService {
               maxConcurrent: true,
               foremanWorkspaceId: true,
               foremanStallMinutes: true,
+              verifyOnDone: true,
             },
           });
           await tx.taskListRevision.create({
@@ -292,6 +294,7 @@ export class TaskListsService {
             maxConcurrent: list.maxConcurrent,
             foremanWorkspaceId: list.foremanWorkspaceId,
             foremanStallMinutes: list.foremanStallMinutes,
+            verifyOnDone: list.verifyOnDone,
             note: recordAs.note ?? null,
             authorType: recordAs.author?.type ?? CreatorType.USER,
             authorId: recordAs.author?.id ?? ownerId,
@@ -323,6 +326,7 @@ export class TaskListsService {
         maxConcurrent: true,
         foremanWorkspaceId: true,
         foremanStallMinutes: true,
+        verifyOnDone: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -395,6 +399,7 @@ export class TaskListsService {
         maxConcurrent: target.maxConcurrent,
         foremanWorkspaceId: target.foremanWorkspaceId,
         foremanStallMinutes: target.foremanStallMinutes,
+        verifyOnDone: target.verifyOnDone,
       },
       { note: note ?? `Restored v${version}`, author },
     );

@@ -232,6 +232,14 @@ export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
 // Past MAX_CONSECUTIVE_FOREMEN the list is left alone until something actually runs in it: a
 // coordinator that has failed this many times is reporting a problem it cannot solve, and the
 // next identical run is not what surfaces it.
+// How many times one task may be sent back by verification before it is left for a human.
+//
+// A rejected verification puts the subject back to IN_PROGRESS, which lets it run again, reach
+// DONE again, and be verified again — an unbounded loop unless something counts. Two rounds is
+// enough for "the agent misread the task the first time" and short of "these two disagree about
+// what done means", which is the case a third identical round does not settle.
+export const MAX_VERIFICATIONS_PER_TASK = 2;
+
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
 
@@ -2219,8 +2227,100 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.triggerDependents(ownerId, id).catch((e) =>
         this.logger.warn(`triggerDependents failed for task ${id}: ${e?.message ?? e}`),
       );
+      // Second opinion on the claim just made. Best-effort for the same reason as above: a task
+      // that reports itself done has done so, and failing that write because we could not file a
+      // check would lose the report to protect the audit of it.
+      await this.fileVerification(ownerId, id).catch((e) =>
+        this.logger.warn(`verification dispatch for task ${id} failed: ${e?.message ?? e}`),
+      );
     }
     return updated;
+  }
+
+  /**
+   * File a run that checks whether `taskId` actually did what it says it did.
+   *
+   * Asynchronous, and it does not gate the DONE it follows: the task genuinely reported itself
+   * finished, and a verification is a second opinion, not a precondition. A rejected check puts
+   * the subject back to IN_PROGRESS through the ordinary task_update the verifier already has —
+   * no separate verdict API, and the rejection is a normal, readable task event.
+   *
+   * Skipped for the tasks that would make it recursive or pointless: a verification run itself, a
+   * foreman, a task whose list has not opted in, and one that has already been checked
+   * MAX_VERIFICATIONS_PER_TASK times.
+   */
+  private async fileVerification(ownerId: string, taskId: string): Promise<void> {
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: {
+        id: true,
+        title: true,
+        listId: true,
+        isForeman: true,
+        verifiesTaskId: true,
+        list: { select: { verifyOnDone: true } },
+        assignee: { select: { id: true, runnerId: true } },
+      },
+    });
+    // A verification of a verification has nothing left to check, and a foreman's output is a
+    // diagnosis rather than a unit of work with an acceptance criterion.
+    if (!task || task.isForeman || task.verifiesTaskId) return;
+    if (!task.list?.verifyOnDone) return;
+    if (!task.assignee?.runnerId) return;
+    const already = await this.prisma.task.count({ where: { verifiesTaskId: taskId } });
+    if (already >= MAX_VERIFICATIONS_PER_TASK) {
+      this.logger.log(
+        `verification skipped for task ${taskId} — already checked ${already} time(s)`,
+      );
+      return;
+    }
+    const verification = await this.prisma.task.create({
+      data: {
+        title: `[VERIFY] ${task.title}`.slice(0, 200),
+        description: this.buildVerificationBrief(task.title, taskId),
+        ownerId,
+        listId: task.listId,
+        assigneeId: task.assignee.id,
+        verifiesTaskId: taskId,
+        // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.
+        autoRunWhenReady: false,
+        creatorType: CreatorType.USER,
+        creatorId: ownerId,
+      },
+      select: { id: true },
+    });
+    await this.execute(ownerId, verification.id);
+    this.logger.log(`verification ${verification.id} filed for task ${taskId}`);
+  }
+
+  /**
+   * The verifier's brief.
+   *
+   * It leads with the evidence check because that is the one that has actually caught something
+   * here: a task in this deployment was marked done with a comment claiming acceptance had
+   * passed, while all 18 of its runs had failed without executing a turn. Asking "is there any
+   * trace of this work happening" is cheap, and it is a different question from "is the work
+   * correct" — worth asking first, because a no makes the second question moot.
+   *
+   * It is told to reject by putting the subject back to IN_PROGRESS, which is the state a failed
+   * run already lands on, so a rejected task rejoins the normal flow instead of needing one of
+   * its own.
+   */
+  private buildVerificationBrief(title: string, taskId: string): string {
+    return (
+      `任务「${title}」（id: ${taskId}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
+      `这是一次性的验收任务，不要替它把活干了，也不要长时间运行或轮询。\n\n` +
+      `请按以下顺序核实：\n` +
+      `1. 先问「有没有干过的证据」：用 task_get 读该任务的运行记录与评论。若它根本没有成功执行过、` +
+      `或声称的完成与运行记录对不上，这一条就足以判定不通过，无需再看内容。\n` +
+      `2. 再问「干得对不对」：对照任务描述里的验收标准，检查实际产物（文件、命令输出、提交等）是否存在且符合要求。` +
+      `只认你亲自查到的证据，不要采信任务评论里的自述。\n\n` +
+      `结论处理：\n` +
+      `- 通过：用 task_comment 在**该任务**下写明你核实了什么、依据是什么，然后把**本验收任务**置为 DONE。\n` +
+      `- 不通过：用 task_comment 在**该任务**下写清缺什么、证据是什么，用 task_update 把**该任务**状态改回 IN_PROGRESS，` +
+      `再把**本验收任务**置为 DONE。\n\n` +
+      `注意区分两个任务：核实结论写在被验收的任务上，状态回退也改它；本验收任务无论结论如何都应置为 DONE。`
+    );
   }
 
   /**
@@ -2891,6 +2991,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         status: true,
         listId: true,
         isForeman: true,
+        verifiesTaskId: true,
         list: { select: { paused: true, maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
@@ -2970,11 +3071,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     title: string;
     description?: string | null;
     isForeman?: boolean;
+    verifiesTaskId?: string | null;
     list?: { instructions?: string | null } | null;
   }): string {
-    // A foreman is coordinating the list, not performing its work, so the standing instructions
-    // — which say how that work is done — would be noise at best and misdirection at worst.
-    const instructions = task.isForeman ? undefined : task.list?.instructions?.trim();
+    // Neither a foreman nor a verifier is performing the list's work — one coordinates it, the
+    // other checks it — so the standing instructions, which say how that work is done, would be
+    // noise at best and misdirection at worst. For a verifier it is worse than noise: handing it
+    // the work procedure is the surest way to get it to do the job itself instead of judging it,
+    // which launders a failure into a pass.
+    const systemRun = task.isForeman === true || task.verifiesTaskId != null;
+    const instructions = systemRun ? undefined : task.list?.instructions?.trim();
     return (
       `请开始执行任务「${task.title}」。\n\n` +
       (task.description ? `任务描述：\n${task.description}\n\n` : '') +
@@ -3012,6 +3118,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
         // different prompt depending on which button started it.
         isForeman: true,
+        verifiesTaskId: true,
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },

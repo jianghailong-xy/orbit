@@ -12,6 +12,7 @@ const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 function promptFor(task: {
   description?: string | null;
   isForeman?: boolean;
+  verifiesTaskId?: string | null;
   list?: { instructions?: string | null } | null;
 }) {
   const created: any[][] = [];
@@ -27,6 +28,7 @@ function promptFor(task: {
         listId: task.list ? 'list-1' : null,
         list: task.list ? { paused: false, maxConcurrent: null, ...task.list } : null,
         isForeman: false,
+        verifiesTaskId: null,
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         ...task,
       }),
@@ -126,4 +128,19 @@ test('a foreman task is not given the list instructions', async () => {
   const text = await prompt();
   assert.ok(!text.includes('作业指导'), text);
   assert.ok(text.includes('列表已停滞 30 分钟。'), text);
+});
+
+test('a verification task is not given the list instructions either', async () => {
+  // Same reason as the foreman: those say how the list's *work* is done, and a verifier is
+  // checking that work rather than performing it. Handing it the work procedure is also the
+  // surest way to get it to do the job itself instead of judging it — which would launder a
+  // failure into a pass.
+  const prompt = await promptFor({
+    description: '核实任务 X 是否真的完成。',
+    verifiesTaskId: 'subject-task',
+    list: { instructions: '须去重、断点续传，并按 Content-Length 校验。' },
+  });
+  const text = await prompt();
+  assert.ok(!text.includes('作业指导'), text);
+  assert.ok(text.includes('核实任务 X 是否真的完成。'), text);
 });

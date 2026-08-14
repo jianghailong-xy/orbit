@@ -45,6 +45,8 @@ export class UpdateTaskListDto {
    * policy field — a rename produces no revision to attach it to.
    */
   @IsOptional() @IsString() @MaxLength(500) note?: string;
+  /** File a verification run whenever a task in this list reports DONE. Doubles the list's runs. */
+  @IsOptional() @IsBoolean() verifyOnDone?: boolean;
   /** Workspace that runs this list's coordination when it stalls; null clears it. */
   @IsOptional() @IsUUID() foremanWorkspaceId?: string | null;
   /**
