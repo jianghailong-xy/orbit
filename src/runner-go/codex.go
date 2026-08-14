@@ -536,8 +536,9 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 		emit(evToolResult, map[string]interface{}{
 			"toolUseId": fallbackID(id, itemType),
 			// The app-server carries shell output under `aggregatedOutput`; the
-			// exec stream under output/stdout/stderr.
-			"content": firstString(item, "aggregatedOutput", "output", "stdout", "stderr", "text"),
+			// exec stream under output/stdout/stderr. A declined command produced no
+			// output at all, so say why the card is empty rather than showing nothing.
+			"content": codexResultContent(item, "Denied — the command did not run."),
 			"isError": codexItemIsError(item),
 		})
 	case strings.Contains(lower, "filechange") || strings.Contains(lower, "file_change") || strings.Contains(lower, "patch"):
@@ -549,6 +550,10 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 				"input": map[string]interface{}{"files": files},
 			})
 			return
+		}
+		if diff == "" && codexItemIsError(item) {
+			// Same as a declined command: the patch was refused, so there is no diff to show.
+			diff = codexResultContent(item, "Denied — the patch was not applied.")
 		}
 		emit(evToolResult, map[string]interface{}{
 			"toolUseId": fallbackID(id, itemType),
@@ -770,5 +775,22 @@ func codexItemIsError(item map[string]interface{}) bool {
 		return b
 	}
 	status := strings.ToLower(firstString(item, "status", "outcome"))
-	return status == "failed" || status == "error"
+	// `declined` is what Codex reports for a command or patch Orbit refused on the user's behalf
+	// (CommandExecutionStatus/PatchApplyStatus). Reading only failed/error rendered a refusal as a
+	// green success card, so the transcript said the opposite of what the user had just decided.
+	return status == "failed" || status == "error" || status == "declined"
+}
+
+// codexResultContent is the tool card's body: the item's own output, or — when Orbit refused it
+// on the user's behalf — a sentence saying so. A declined item carries no output to explain
+// itself, and an empty red card leaves the user guessing why nothing happened.
+func codexResultContent(item map[string]interface{}, declinedMessage string) string {
+	output := firstString(item, "aggregatedOutput", "output", "stdout", "stderr", "text")
+	if output != "" {
+		return output
+	}
+	if strings.ToLower(firstString(item, "status", "outcome")) == "declined" {
+		return declinedMessage
+	}
+	return output
 }

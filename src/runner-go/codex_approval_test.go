@@ -199,3 +199,71 @@ func TestBridgeCodexApprovalFailsClosedOnCancelledContext(t *testing.T) {
 		t.Fatal("a cancelled approval was granted")
 	}
 }
+
+// A refused command came back as a GREEN success card with an empty body: Codex reports the
+// refusal as status "declined", which codexItemIsError did not recognize, so the transcript
+// contradicted the decision the user had just made. Both stream casings must read as an error
+// and explain themselves.
+func TestHandleCodexItemRendersADeclinedCommandAsRefused(t *testing.T) {
+	for _, itemType := range []string{"commandExecution", "command_execution"} {
+		item := map[string]interface{}{
+			"type": itemType, "id": "exec-1",
+			"command":          "/bin/bash -lc 'touch /tmp/probe'",
+			"status":           "declined",
+			"aggregatedOutput": "",
+		}
+		done := captureCodexItem(item, true)
+		if len(done) != 1 || done[0].typ != evToolResult {
+			t.Fatalf("%s completed = %+v, want one tool_result", itemType, done)
+		}
+		if done[0].payload["isError"] != true {
+			t.Fatalf("%s isError = %#v, want true", itemType, done[0].payload["isError"])
+		}
+		if content, _ := done[0].payload["content"].(string); !strings.Contains(content, "did not run") {
+			t.Fatalf("%s content = %q, want an explanation", itemType, content)
+		}
+	}
+}
+
+// A declined patch has no diff to show, for the same reason.
+func TestHandleCodexItemRendersADeclinedPatchAsRefused(t *testing.T) {
+	item := map[string]interface{}{"type": "fileChange", "id": "patch-1", "status": "declined"}
+	done := captureCodexItem(item, true)
+	if len(done) != 1 || done[0].payload["isError"] != true {
+		t.Fatalf("completed = %+v, want an errored tool_result", done)
+	}
+	if content, _ := done[0].payload["content"].(string); !strings.Contains(content, "not applied") {
+		t.Fatalf("content = %q, want an explanation", content)
+	}
+}
+
+// A real failure must keep its own output; only the empty declined case is substituted.
+func TestHandleCodexItemKeepsRealFailureOutput(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "commandExecution", "id": "exec-2",
+		"status": "failed", "aggregatedOutput": "bash: nope: command not found\n",
+	}
+	done := captureCodexItem(item, true)
+	if done[0].payload["isError"] != true || done[0].payload["content"] != "bash: nope: command not found\n" {
+		t.Fatalf("failure result = %#v", done[0].payload)
+	}
+}
+
+// Codex logs an ERROR line for a refusal the user chose. That is the bridge working, so it must
+// not surface as a red error block — while genuine failures still do.
+func TestCodexStderrRefusalFilter(t *testing.T) {
+	refusal := `2026-08-14T08:02:28.299610Z ERROR codex_core::tools::router: error=exec_command failed for ` +
+		"`/bin/bash -lc 'touch /tmp/probe'`" + `: CreateProcess { message: "Rejected(\"rejected by user\")" }`
+	if !codexStderrIsExpectedRefusal(refusal) {
+		t.Fatal("the user's own refusal was not recognized")
+	}
+	for _, keep := range []string{
+		`2026-08-14T08:02:28Z ERROR codex_core::tools::router: error=exec_command failed: Permission denied`,
+		`2026-08-14T08:02:28Z ERROR codex_core: stream disconnected`,
+		`2026-08-14T08:02:28Z  INFO codex_core: rejected by user`, // not an ERROR line
+	} {
+		if codexStderrIsExpectedRefusal(keep) {
+			t.Fatalf("a line that must stay visible was filtered: %s", keep)
+		}
+	}
+}

@@ -647,6 +647,22 @@ func turnAttachmentRefs(atts []TurnAttachment) []map[string]interface{} {
 	return refs
 }
 
+// codexStderrIsExpectedRefusal recognizes the internal log Codex writes when a tool call was
+// refused. Answering "decline" is the approval bridge working, not a fault, but Codex reports it
+// at ERROR level and the runner mirrors stderr into the transcript — so a user who had just
+// pressed Deny was shown a red Rust panic-looking line for the outcome they chose. The refusal
+// itself stays visible: the tool card now reads "Denied — the command did not run".
+//
+// Deliberately narrow. It matches only a rejection that names the user, so a genuine exec failure
+// (permissions, missing binary, sandbox) still reaches the transcript intact.
+func codexStderrIsExpectedRefusal(line string) bool {
+	if !strings.Contains(line, "ERROR") {
+		return false
+	}
+	lower := strings.ToLower(line)
+	return strings.Contains(lower, "rejected by user") || strings.Contains(lower, "rejected(\\\"rejected by user")
+}
+
 // codexApprovalPolicy is the `approvalPolicy` Codex is started with, derived from the session's
 // permission mode. This is what makes an "ask me first" mode mean that on Codex too: `untrusted`
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
@@ -791,7 +807,11 @@ func startCodexAppServer(ctx context.Context, job *ClaimedSession, execDir, stat
 		s := bufio.NewScanner(stderr)
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": stripANSI(s.Text()) + "\n"})
+			line := stripANSI(s.Text())
+			if codexStderrIsExpectedRefusal(line) {
+				continue
+			}
+			emit(evSystem, map[string]interface{}{"stderr": line + "\n"})
 		}
 	}()
 	return app, nil
