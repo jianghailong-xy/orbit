@@ -63,12 +63,25 @@ private extension View {
             }
     }
 
-    /// One of the card's decisions. iOS runs them at `.large` — ~44pt tall, the touch minimum, where
-    /// the default control size draws ~34 — and full width, because they stack there. macOS keeps
-    /// its native control size and lets each button hug its label in a row.
+    /// One of the card's decisions. iOS runs them at `.large` — ~50pt tall, comfortably over the
+    /// touch minimum, where the default control size draws ~34. macOS keeps its native size.
     @ViewBuilder func approvalAction() -> some View {
         #if os(iOS)
-        controlSize(.large).frame(maxWidth: .infinity)
+        controlSize(.large)
+        #else
+        self
+        #endif
+    }
+
+    /// The *label* of a card action, stretched to the card's width on iOS. It has to be the label:
+    /// a bordered button draws its capsule around the label, so `.frame(maxWidth: .infinity)` applied
+    /// outside `.buttonStyle` widens only the layout frame and leaves the capsule hugging its text,
+    /// centred in the gap — which is exactly what shipped in v0.1.2-beta.22 (Submit and "Chat about
+    /// this" came out as two centred pills of different widths instead of one stacked column).
+    /// macOS keeps its labels hugging, so a row of buttons still reads as buttons.
+    @ViewBuilder func approvalActionLabel() -> some View {
+        #if os(iOS)
+        frame(maxWidth: .infinity)
         #else
         self
         #endif
@@ -189,9 +202,11 @@ struct ToolApprovalCard: View {
     }
 
     private var allowButton: some View {
-        Button("Allow") { decide(console, approval, .allow) }
-            .buttonStyle(.borderedProminent)
-            .approvalAction()
+        Button { decide(console, approval, .allow) } label: {
+            Text("Allow").approvalActionLabel()
+        }
+        .buttonStyle(.borderedProminent)
+        .approvalAction()
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.
@@ -199,15 +214,18 @@ struct ToolApprovalCard: View {
         Button {
             decide(console, approval, .allow, remember: true)
         } label: {
-            Text("Allow & remember ") + Text(Approvals.rememberLabel(rule)).font(.orbitMono)
+            (Text("Allow & remember ") + Text(Approvals.rememberLabel(rule)).font(.orbitMono))
+                .approvalActionLabel()
         }
         .buttonStyle(.bordered)
         .approvalAction()
     }
     private var denyButton: some View {
-        Button("Deny", role: .destructive) { decide(console, approval, .deny) }
-            .buttonStyle(.bordered)
-            .approvalAction()
+        Button(role: .destructive) { decide(console, approval, .deny) } label: {
+            Text("Deny").approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+        .approvalAction()
     }
 }
 
@@ -277,9 +295,11 @@ struct QuestionCard: View {
     }
 
     private var submitButton: some View {
-        Button("Submit") {
+        Button {
             decide(console, approval, .allow,
                    answers: Approvals.buildAnswers(questions, selections: selections, custom: custom))
+        } label: {
+            Text("Submit").approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
         .approvalAction()
@@ -293,6 +313,7 @@ struct QuestionCard: View {
                                    question: Approvals.chatReplyLabel(questions))
         } label: {
             Label("Chat about this", systemImage: "bubble.left.and.bubble.right")
+                .approvalActionLabel()
         }
         .buttonStyle(.bordered)
         .approvalAction()
@@ -395,13 +416,17 @@ struct PlanCard: View {
     // "Approve & run" over a bare "Approve": approving a plan doesn't just accept it, it leaves plan
     // mode and starts the work (web parity).
     private var approveButton: some View {
-        Button("Approve & run") { decide(console, approval, .allow) }
-            .buttonStyle(.borderedProminent)
-            .approvalAction()
+        Button { decide(console, approval, .allow) } label: {
+            Text("Approve & run").approvalActionLabel()
+        }
+        .buttonStyle(.borderedProminent)
+        .approvalAction()
     }
     private var keepPlanningButton: some View {
-        Button("Keep planning", role: .cancel) { decide(console, approval, .deny) }
-            .buttonStyle(.bordered)
-            .approvalAction()
+        Button(role: .cancel) { decide(console, approval, .deny) } label: {
+            Text("Keep planning").approvalActionLabel()
+        }
+        .buttonStyle(.bordered)
+        .approvalAction()
     }
 }
