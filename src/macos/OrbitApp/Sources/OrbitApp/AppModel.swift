@@ -140,6 +140,16 @@ final class AppModel {
     /// those passes (and once more for `selectedSessionInRecents`).
     private(set) var recentSessions: [Session] = []
 
+    /// The Open sessions blocked on an approval, and agentID → how many of them each agent holds —
+    /// what the "needs you" banner and the drawer's per-agent badge read. Derived from the same
+    /// applied snapshot as `recentSessions`, and for the same reason: the drawer stays mounted behind
+    /// the content card and re-reads its rows on every body pass, so a computed property would
+    /// re-scan the whole Open list once per row per pass. `needsYouSessions` holds whole records (not
+    /// ids) because the banner needs the target's agent name and id to navigate; it is the handful of
+    /// blocked rows, not the list.
+    private(set) var needsYouSessions: [Session] = []
+    private(set) var agentNeedsYou: [String: Int] = [:]
+
     /// The compact drawer lists the open session twice when its runner group is expanded — once as the
     /// owning agent's row (`selectedAgentID`) and once as its Recents row (`selectedAgentSessionID`) —
     /// which lit both pills. This flags when the session is genuinely a Recents row, so the agent row can
@@ -346,6 +356,8 @@ final class AppModel {
         signedIn = false
         sessions = []
         recentSessions = []
+        needsYouSessions = []
+        agentNeedsYou = [:]
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
@@ -751,6 +763,8 @@ final class AppModel {
         if list != sessions {
             sessions = list
             recentSessions = RecentsLogic.recent(list, limit: list.count)
+            needsYouSessions = SessionGrouping.group(list).needsYou
+            agentNeedsYou = NeedsYouLogic.byAgent(list)
             // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
             // here instead of leaving it to fetch the identical payload on its own timer.
             agents?.applyOpenSnapshot(list)
@@ -903,6 +917,27 @@ final class AppModel {
         // the new selection doesn't match). Flags this as a Recents-opened console so the compact shell
         // frees the left edge for the drawer-open swipe. See `consoleFromRecents`.
         recentsConsoleSessionID = s.id
+        selectedAgentSessionID = s.id
+    }
+
+    /// The "needs you" banner's state for a screen showing `focused` (nil from a list, which shows no
+    /// one session). Cheap enough to read per body pass — it filters the handful of blocked rows, not
+    /// the Open list, which `applySessionSnapshot` already narrowed.
+    func needsYouBanner(excluding focused: String?) -> NeedsYouBanner? {
+        NeedsYouLogic.banner(waiting: needsYouSessions, excluding: focused)
+    }
+
+    /// Open the session the banner points at. Same navigation as a Recents tap, minus the Recents
+    /// marker: a banner tap didn't come from the drawer, so the console it lands on keeps the system
+    /// back-swipe instead of yielding the edge to the drawer gesture. A stale marker from an earlier
+    /// Recents tap is cleared by `selectedAgentSessionID`'s observer, which drops it as soon as the
+    /// selection moves off that session.
+    func openNeedsYouSession(_ s: Session) {
+        selectedSection = .agents
+        if let agentID = s.agent?.id ?? s.agentId, selectedAgentID != agentID {
+            selectedAgentID = agentID
+        }
+        composingAgentSession = false
         selectedAgentSessionID = s.id
     }
 

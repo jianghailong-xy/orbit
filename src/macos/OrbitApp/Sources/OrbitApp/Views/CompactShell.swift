@@ -871,7 +871,14 @@ private struct NavigationDrawer: View {
     }
 
     /// A compact agent row: just the name (which already carries the "@ provider" suffix, so it
-    /// disambiguates on its own) plus a disabled pill. Tapping jumps straight to the agent.
+    /// disambiguates on its own) plus a disabled pill, and an amber count when some of this agent's
+    /// sessions are blocked on an approval. Tapping jumps straight to the agent.
+    ///
+    /// The badge is the *quiet* half of the needs-you story — it answers "which workspace", not
+    /// "go now": `NeedsYouBannerView` already carries the urgency and the one-tap jump from wherever
+    /// the user actually is. That's why there is deliberately no roll-up on the runner rows above and
+    /// no dot on the hamburger: a collapsed machine group hiding a badge costs nothing when nobody
+    /// has to hunt through the tree, and restating one fact on four surfaces is noise, not emphasis.
     private func agentRow(_ agent: Agent) -> some View {
         // Yield the pill to the Recents row when the open session is listed there, so the same session
         // isn't highlighted twice (agent row + Recents). Without a Recents row the agent row keeps it.
@@ -897,6 +904,18 @@ private struct NavigationDrawer: View {
                             .background(.quaternary, in: Capsule())
                     }
                     Spacer(minLength: 0)
+                    if let waiting = model.agentNeedsYou[agent.id], waiting > 0 {
+                        // Amber on an amber wash, mirroring web's `.tp-count.needs-you` — a count in
+                        // the row's trailing slot, not an alarm.
+                        Text("\(waiting)")
+                            .font(.orbitMeta.weight(.semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Color.orange.opacity(0.15), in: Capsule())
+                            .accessibilityLabel("\(waiting) waiting for you")
+                    }
                 }
             }
         }

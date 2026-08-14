@@ -180,6 +180,13 @@ struct AgentPanes: View {
                     placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Search sessions")
         .task(id: searchQuery) { await runSearch() }
+        // "Another session needs you", above the rows. This is the *only* instance at regular width
+        // (the console beside it stays quiet), so it excludes whatever that console is showing —
+        // whose approval card is already on screen. On compact, backing out of a console clears the
+        // selection, so nothing is excluded from the list's own screen.
+        .safeAreaInset(edge: .top, spacing: 0) {
+            NeedsYouBannerView(excluding: app.selectedAgentSessionID)
+        }
         #endif
         // Reload when either the agent or the view changes (one key so a fast switch coalesces), so
         // external changes (new sessions, status transitions made from the web) show up without
