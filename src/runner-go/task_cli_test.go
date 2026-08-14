@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -547,9 +549,13 @@ func TestTaskCLIRefusesInsecureCredentialStorageWithoutMutatingIt(t *testing.T) 
 	}
 }
 
-func TestTaskCLIListFiltersResponse(t *testing.T) {
+// The filters belong in the query string: filtering here meant downloading every task the owner
+// has just to drop most of them.
+func TestTaskCLIListSendsFiltersToServer(t *testing.T) {
+	var gotQuery url.Values
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[{"id":"open","status":"OPEN","listId":"l1"},{"id":"done","status":"DONE","listId":"l1"}]`))
+		gotQuery = r.URL.Query()
+		_, _ = w.Write([]byte(`[{"id":"open","status":"OPEN","listId":"l1"}]`))
 	}))
 	defer srv.Close()
 	configureCLITestRunner(t, srv.URL)
@@ -558,9 +564,23 @@ func TestTaskCLIListFiltersResponse(t *testing.T) {
 	if err := cmdTaskCLI([]string{"list", "--status", "OPEN", "--list-id", "l1", "--json"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
+	if gotQuery.Get("status") != "OPEN" || gotQuery.Get("listId") != "l1" {
+		t.Fatalf("query = %v", gotQuery)
+	}
+	if gotQuery.Get("limit") != strconv.Itoa(defaultTaskListLimit) {
+		t.Fatalf("limit = %q, want the default %d", gotQuery.Get("limit"), defaultTaskListLimit)
+	}
 	var tasks []map[string]interface{}
 	if err := json.Unmarshal(out.Bytes(), &tasks); err != nil || len(tasks) != 1 || tasks[0]["id"] != "open" {
-		t.Fatalf("filtered tasks = %#v, err %v", tasks, err)
+		t.Fatalf("tasks = %#v, err %v", tasks, err)
+	}
+}
+
+func TestTaskCLIListRejectsLimitOverCap(t *testing.T) {
+	var out bytes.Buffer
+	err := cmdTaskCLI([]string{"list", "--limit", strconv.Itoa(maxTaskListLimit + 1)}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "--limit must be between") {
+		t.Fatalf("limit error = %v", err)
 	}
 }
 

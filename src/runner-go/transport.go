@@ -641,9 +641,26 @@ func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, 
 	return &out, nil
 }
 
-func (t *Transport) listTasks() (json.RawMessage, error) {
+// listTasks filters and caps server-side. Fetching every task to filter here means downloading
+// the owner's whole task history — descriptions included — on each call, which is slow enough to
+// time out mid-body on a large account and lands in an agent's context as tens of megabytes.
+func (t *Transport) listTasks(status, listID string, limit int) (json.RawMessage, error) {
+	q := url.Values{}
+	if status != "" {
+		q.Set("status", status)
+	}
+	if listID != "" {
+		q.Set("listId", listID)
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	path := "/runner/tasks"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
 	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/tasks", nil, &out, taskOpTimeout)
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
 	return out, err
 }
 

@@ -69,9 +69,31 @@ export class RunnerTasksController {
     return this.tasks.createMany(runner.ownerId, dto, creator, sessionId);
   }
 
+  /**
+   * Filtered/paged when the caller asks (`status`, `listId`, `limit`), because the unfiltered
+   * list is every task the owner ever created, description included — tens of megabytes for a
+   * heavy account, which the CLI has to buffer whole before it can filter client-side. The
+   * filtered form answers from the same page query the browser uses, so the rows carry no
+   * description (that is what `task get` is for).
+   *
+   * A caller that passes nothing still gets the full list: runners older than this endpoint's
+   * filters do their own filtering and must not silently see a truncated one.
+   */
   @Get('tasks')
-  listTasks(@CurrentRunner() runner: Runner) {
-    return this.tasks.list(runner.ownerId);
+  async listTasks(
+    @CurrentRunner() runner: Runner,
+    @Query('status') status?: string,
+    @Query('listId', PublicIdPipe) listId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!status && !listId && !limit) return this.tasks.list(runner.ownerId);
+    const page = await this.tasks.listPage(runner.ownerId, {
+      status,
+      listId,
+      limit,
+      counts: 'none',
+    });
+    return page.items;
   }
 
   @Get('tasks/:id')

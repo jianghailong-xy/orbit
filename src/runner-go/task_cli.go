@@ -10,10 +10,17 @@ import (
 	"strings"
 )
 
+// Task list paging, mirroring the apiserver's own page defaults. The endpoint used to return an
+// owner's entire task history in one body; both callers now ask for a bounded page.
+const (
+	defaultTaskListLimit = 100
+	maxTaskListLimit     = 200
+)
+
 const taskHelp = `orbit task — manage Orbit tasks
 
 Usage:
-  orbit task list [--status STATUS] [--list-id ID] [--json]
+  orbit task list [--status STATUS] [--list-id ID] [--limit N] [--json]
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
   orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
@@ -42,7 +49,10 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--limit N] [--json]
+
+Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
+task in full). --limit defaults to 100 and may not exceed 200.
 `,
 	"get": `orbit task get — get a task, its comments, and linked sessions
 
@@ -503,6 +513,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task list")
 	status := fs.String("status", "", "task status")
 	listID := fs.String("list-id", "", "task list id")
+	limit := fs.Int("limit", defaultTaskListLimit, "maximum tasks to return")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -516,15 +527,23 @@ func cliTaskList(args []string, out io.Writer) error {
 	if flagWasSet(fs, "status") && *status == "" {
 		return fmt.Errorf("--status cannot be empty")
 	}
+	if *limit < 1 || *limit > maxTaskListLimit {
+		return fmt.Errorf("--limit must be between 1 and %d", maxTaskListLimit)
+	}
 	t, err := cliTransport()
 	if err != nil {
 		return err
 	}
-	raw, err := t.listTasks()
+	raw, err := t.listTasks(*status, *listID, *limit)
 	if err != nil {
 		return fmt.Errorf("list tasks: %w", err)
 	}
-	return writeCLIRawJSON(out, filterTasks(raw, *status, *listID), *jsonOut)
+	// A full page is the one case where the answer is silently partial, and stdout has to stay
+	// parseable — so say so on stderr instead.
+	if countJSONArray(raw) >= *limit {
+		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id or raise --limit\n", *limit)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
 func cliTaskGet(args []string, out io.Writer) error {
@@ -1112,7 +1131,7 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = []cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--limit N] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--limit <n> (default 100, max 200)", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately.", Mutates: true},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},

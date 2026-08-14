@@ -593,7 +593,7 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 			"isError":   codexItemIsError(item),
 		})
 	case strings.Contains(lower, "tool"):
-		name := firstString(item, "toolName", "name", "tool_name")
+		name := codexToolItemName(item)
 		if !completed {
 			emit(evToolUse, map[string]interface{}{
 				"id":    fallbackID(id, itemType),
@@ -610,6 +610,21 @@ func handleCodexItem(msg map[string]interface{}, emit emitFn, result *codexTurnR
 	default:
 		logUnhandledStreamKind("codex", itemType)
 	}
+}
+
+// codexToolItemName names a tool card. An app-server `mcpToolCall` splits the name across
+// `server` and `tool` ({server:"orbit", tool:"task_list"}), so joining them back into
+// orbit__task_list keeps the card reading the way the pre-split `toolName` did — without it the
+// card renders with no name at all.
+func codexToolItemName(item map[string]interface{}) string {
+	if name := firstString(item, "toolName", "name", "tool_name"); name != "" {
+		return name
+	}
+	tool := firstString(item, "tool")
+	if server := firstString(item, "server"); server != "" && tool != "" {
+		return server + "__" + tool
+	}
+	return tool
 }
 
 // codexFileChange pulls the touched paths and a combined diff out of an

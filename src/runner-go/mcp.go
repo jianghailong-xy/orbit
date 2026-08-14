@@ -196,11 +196,22 @@ const maxTaskBatchCreate = 50
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
 	switch name {
 	case "task_list":
-		raw, err := s.t.listTasks()
+		limit, err := getBoundedOptionalNumber(args, "limit", maxTaskListLimit)
+		if err != nil {
+			return toolResult(err.Error(), true)
+		}
+		if limit == 0 {
+			limit = defaultTaskListLimit
+		}
+		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), limit)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
 		}
-		return toolResult(prettyJSON(filterTasks(raw, getString(args, "status"), getString(args, "listId"))), false)
+		body := prettyJSON(raw)
+		if countJSONArray(raw) >= limit {
+			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId or raise limit.\n%s", limit, body)
+		}
+		return toolResult(body, false)
 
 	case "task_get":
 		id, ok := s.resolveTaskID(args)
@@ -796,8 +807,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's tasks. Optionally filter by status or listId.",
-			"inputSchema": obj(map[string]interface{}{"status": status, "listId": str}),
+			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status or listId.",
+			"inputSchema": obj(map[string]interface{}{
+				"status": status,
+				"listId": str,
+				"limit":  map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d, server cap %d).", defaultTaskListLimit, maxTaskListLimit)},
+			}),
 		},
 		{
 			"name":        "task_get",
@@ -1243,33 +1258,12 @@ func prettyJSON(raw json.RawMessage) string {
 	return buf.String()
 }
 
-// filterTasks applies optional client-side status/listId filtering (the list endpoint
-// returns all of the owner's tasks). Returns raw unchanged when no filter is set.
-func filterTasks(raw json.RawMessage, status, listID string) json.RawMessage {
-	if status == "" && listID == "" {
-		return raw
+// countJSONArray reports how many elements a raw JSON array holds, so a caller can tell a full
+// page from a complete answer. Anything that is not an array counts as zero.
+func countJSONArray(raw json.RawMessage) int {
+	var items []json.RawMessage
+	if json.Unmarshal(raw, &items) != nil {
+		return 0
 	}
-	var tasks []map[string]interface{}
-	if json.Unmarshal(raw, &tasks) != nil {
-		return raw
-	}
-	out := make([]map[string]interface{}, 0, len(tasks))
-	for _, tk := range tasks {
-		if status != "" {
-			if s, _ := tk["status"].(string); s != status {
-				continue
-			}
-		}
-		if listID != "" {
-			if l, _ := tk["listId"].(string); l != listID {
-				continue
-			}
-		}
-		out = append(out, tk)
-	}
-	b, err := json.Marshal(out)
-	if err != nil {
-		return raw
-	}
-	return b
+	return len(items)
 }

@@ -704,6 +704,12 @@ func codexApprovalPolicy(permissionMode string) string {
 // kimiAutomaticPermissionOption. The second result reports whether the mode decided at all;
 // otherwise the request goes to the user.
 func codexAutomaticApproval(permissionMode string, request codexApprovalRequest) (allowed, decided bool) {
+	// Codex asks for MCP tool-call consent on every call, including under the `never` policy the
+	// non-asking modes run on. Decide those here: a card in a mode that promises not to interrupt
+	// would be a new prompt, and the task runs that mode exists for would wait on a human forever.
+	if request.mcpTool && codexApprovalPolicy(permissionMode) == "never" {
+		return true, true
+	}
 	switch permissionMode {
 	case "plan":
 		// Plan mode is read-only by definition: nothing it proposes may execute or edit.
@@ -727,6 +733,18 @@ func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession,
 		return allowed
 	}
 	input := map[string]interface{}{}
+	if request.mcpTool {
+		// The elicitation's own wording ("Allow the orbit MCP server to run tool …?") is what the
+		// card should read; the rest of its params are transport detail.
+		if message := firstString(params, "message"); message != "" {
+			input["message"] = message
+		}
+		if meta := mapValue(params["_meta"]); meta != nil {
+			if args, ok := meta["tool_params"]; ok {
+				input["arguments"] = args
+			}
+		}
+	}
 	for _, key := range []string{"command", "cwd", "reason", "grantRoot"} {
 		if value := firstString(params, key); value != "" {
 			input[key] = value
@@ -1300,13 +1318,21 @@ func (a *codexAppServer) deliverResponse(msg codexRPCMessage) {
 	}
 }
 
+// codexMCPElicitationMethod is how Codex forwards an MCP server's `elicitation/create`. Codex
+// asks for its own MCP tool-call consent through it — see isCodexMCPToolConsent.
+const codexMCPElicitationMethod = "mcpServer/elicitation/request"
+
 // codexApprovalRequest classifies an inbound approval so the answer uses the vocabulary that
-// request family expects. Codex ships two: the v2 thread protocol
+// request family expects. Codex ships three: the v2 thread protocol
 // (`item/commandExecution/requestApproval`, `item/fileChange/requestApproval`) answers with
-// accept/decline, while the older exec/apply-patch requests answer with approved/denied.
+// accept/decline, the older exec/apply-patch requests answer with approved/denied, and MCP
+// tool-call consent answers with an elicitation result (see codexElicitationResult).
 type codexApprovalRequest struct {
 	fileChange bool
 	legacy     bool
+	mcpTool    bool
+	// server is the MCP server behind an mcpTool request, for the card's name.
+	server string
 }
 
 func classifyCodexApproval(method string) (codexApprovalRequest, bool) {
@@ -1338,15 +1364,66 @@ func (r codexApprovalRequest) decision(allowed bool) string {
 }
 
 // toolName mirrors what codexEmitItem already calls these in the transcript, so an approval card
-// and the tool card it authorizes name the same thing.
+// and the tool card it authorizes name the same thing. MCP consent names the server rather than
+// the tool, which is all the elicitation carries — its message names the tool.
 func (r codexApprovalRequest) toolName() string {
-	if r.fileChange {
+	switch {
+	case r.mcpTool && r.server != "":
+		return "mcp__" + r.server
+	case r.mcpTool:
+		return "mcp"
+	case r.fileChange:
 		return "apply_patch"
 	}
 	return "Bash"
 }
 
+// isCodexMCPToolConsent reports whether an elicitation is Codex's own "Allow the X MCP server to
+// run tool Y?" prompt: a form whose requested schema is empty because the only answer wanted is
+// accept or decline. Codex raises it for every MCP tool call whatever the turn's approvalPolicy
+// is, so this is the one elicitation Orbit can answer with the approval card it already has.
+func isCodexMCPToolConsent(params map[string]interface{}) bool {
+	return firstString(mapValue(params["_meta"]), "codex_approval_kind") == "mcp_tool_call"
+}
+
+// codexElicitationResult is the McpServerElicitationRequestResponse Codex expects. An accepted
+// consent form answers with an empty object because its schema asked for no fields; content is
+// null only for decline.
+func codexElicitationResult(allowed bool) map[string]interface{} {
+	if allowed {
+		return map[string]interface{}{"action": "accept", "content": map[string]interface{}{}}
+	}
+	return map[string]interface{}{"action": "decline", "content": nil}
+}
+
+// answerElicitation replies to an MCP elicitation. Tool-call consent goes to the same approval
+// card commands use; anything else — a real input form, or a URL the server wants opened — has no
+// card that can collect it and is declined. Both beat the JSON-RPC error this used to return,
+// which failed the tool call outright.
+func (a *codexAppServer) answerElicitation(msg codexRPCMessage) {
+	params := rawObject(msg.Params)
+	if !isCodexMCPToolConsent(params) {
+		logln("codex elicitation declined; Orbit cannot render", firstString(params, "mode"), "elicitations")
+		_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(false)})
+		return
+	}
+	request := codexApprovalRequest{mcpTool: true, server: firstString(params, "serverName")}
+	// Same reason approvals answer on a goroutine: this runs inline on the only reader of codex's
+	// stdout, and the card blocks on a human.
+	go func() {
+		allowed := false
+		if a.approve != nil {
+			allowed = a.approve(a.ctx, request, params)
+		}
+		_ = a.write(map[string]interface{}{"id": msg.ID, "result": codexElicitationResult(allowed)})
+	}()
+}
+
 func (a *codexAppServer) handleServerRequest(msg codexRPCMessage) {
+	if msg.Method == codexMCPElicitationMethod {
+		a.answerElicitation(msg)
+		return
+	}
 	request, isApproval := classifyCodexApproval(msg.Method)
 	if !isApproval {
 		_ = a.write(map[string]interface{}{

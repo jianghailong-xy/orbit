@@ -612,6 +612,19 @@ func TestHandleCodexItemAppServerMcpTool(t *testing.T) {
 	}
 }
 
+// Codex 0.147 splits that name across `server` and `tool`, and dropped `toolName`. Reading only
+// the old field left every MCP tool card in the transcript with a blank name.
+func TestHandleCodexItemAppServerMcpToolSplitName(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "mcpToolCall", "id": "exec-9", "server": "orbit", "tool": "task_list",
+		"arguments": map[string]interface{}{"status": "CANCELLED"},
+	}
+	started := captureCodexItem(item, false)
+	if len(started) != 1 || started[0].payload["name"] != "orbit__task_list" {
+		t.Fatalf("started events = %+v, want tool_use named orbit__task_list", started)
+	}
+}
+
 // fileChange renders as an apply_patch tool: paths on the call, diff on the result.
 func TestHandleCodexItemAppServerFileChange(t *testing.T) {
 	item := map[string]interface{}{
