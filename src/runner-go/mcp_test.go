@@ -620,3 +620,66 @@ func hasMCPTool(tools []map[string]interface{}, name string) bool {
 	}
 	return false
 }
+
+func TestMCPTaskListPolicyToolsSendOnlyWhatWasSet(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	for _, name := range []string{"tasklist_get", "tasklist_update"} {
+		if !hasMCPTool(tools, name) {
+			t.Fatalf("%s missing from the base task tools", name)
+		}
+	}
+
+	var gotMethod, gotPath, gotAgent string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotAgent = r.Header.Get("X-Orbit-Agent-Id")
+		json.NewDecoder(r.Body).Decode(&body)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "workspace-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("tasklist_update", map[string]interface{}{
+		"listId":       "list-1",
+		"instructions": "按 manifest 逐个下载。",
+		"paused":       true,
+		"note":         "disk below floor",
+	})
+	if res["isError"] == true {
+		t.Fatalf("tasklist_update returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPatch || gotPath != "/api/runner/task-lists/list-1" {
+		t.Fatalf("tasklist_update hit %s %s", gotMethod, gotPath)
+	}
+	// Attribution: the revision this creates has to name the agent that made it.
+	if gotAgent != "workspace-1" {
+		t.Fatalf("agent header = %q", gotAgent)
+	}
+	// Every field the caller set must survive the trip — a silently dropped key would mean an
+	// agent believing it had changed policy that never moved.
+	if body["instructions"] != "按 manifest 逐个下载。" || body["paused"] != true ||
+		body["note"] != "disk below floor" {
+		t.Fatalf("body = %#v", body)
+	}
+	// And nothing the caller did not set: a partial edit must never blank the rest of the policy.
+	// listId included: it addresses the list in the path, and echoing it into the body would be
+	// the signature of blindly forwarding the whole argument map.
+	for _, absent := range []string{"listId", "title", "maxConcurrent", "foremanWorkspaceId", "foremanStallMinutes"} {
+		if _, ok := body[absent]; ok {
+			t.Fatalf("tasklist_update sent unset field %q: %#v", absent, body)
+		}
+	}
+}
+
+func TestMCPTaskListUpdateRequiresAListId(t *testing.T) {
+	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
+	if res := mcp.callTool("tasklist_update", map[string]interface{}{"paused": true}); res["isError"] != true {
+		t.Fatalf("tasklist_update without listId did not error: %#v", res)
+	}
+	// A call that names a list but changes nothing is a mistake worth reporting rather than an
+	// empty PATCH that records a no-op revision.
+	if res := mcp.callTool("tasklist_update", map[string]interface{}{"listId": "list-1"}); res["isError"] != true {
+		t.Fatalf("empty tasklist_update did not error: %#v", res)
+	}
+}

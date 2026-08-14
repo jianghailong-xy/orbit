@@ -34,6 +34,8 @@ const taskListHelp = `orbit task-list — manage Orbit task lists
 Usage:
   orbit task-list list [--json]
   orbit task-list create --title TITLE [--json]
+  orbit task-list get LIST_ID [--json]
+  orbit task-list update LIST_ID [options]
 `
 
 var taskActionHelp = map[string]string{
@@ -141,6 +143,31 @@ var taskListActionHelp = map[string]string{
 
 Usage:
   orbit task-list list [--json]
+`,
+	"get": `orbit task-list get — one task list's dispatch policy and progress
+
+Usage:
+  orbit task-list get LIST_ID [--json]
+`,
+	"update": `orbit task-list update — change a task list's dispatch policy
+
+Usage:
+  orbit task-list update LIST_ID [options]
+
+Options:
+  --title TEXT                    rename the list (not recorded as a policy revision)
+  --instructions TEXT             standing instructions spliced into every task run in this list
+  --instructions-file -           read those instructions from stdin
+  --paused true|false             hold or resume dispatch; runs already in flight are untouched
+  --max-concurrent N              cap this list's concurrently running tasks
+  --clear-max-concurrent          remove that cap
+  --foreman-workspace-id ID       workspace that runs this list's coordination when it stalls
+  --foreman-stall-minutes N       minutes of no activity before a foreman is filed
+  --clear-foreman                 stop filing a foreman for this list
+  --note TEXT                     why — recorded on the revision this change creates
+
+Every policy change is recorded as a restorable revision. Only the flags you pass are
+sent, so a partial edit never blanks the rest of the policy.
 `,
 	"create": `orbit task-list create — create a task list
 
@@ -291,7 +318,7 @@ func cliTaskDependencyRemove(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cmdTaskListCLI(args []string, out io.Writer) error {
+func cmdTaskListCLI(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		_, err := fmt.Fprint(out, taskListHelp)
 		return err
@@ -322,6 +349,10 @@ func cmdTaskListCLI(args []string, out io.Writer) error {
 		return cliTaskListList(args[1:], out)
 	case "create":
 		return cliTaskListCreate(args[1:], out)
+	case "get":
+		return cliTaskListGet(args[1:], out)
+	case "update":
+		return cliTaskListUpdate(args[1:], in, out)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", action, taskListHelp)
 	}
@@ -943,6 +974,110 @@ func cliTaskListList(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+func cliTaskListGet(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task-list get")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("list id is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getTaskList(id)
+	if err != nil {
+		return fmt.Errorf("get task list: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+func cliTaskListUpdate(args []string, in io.Reader, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task-list update")
+	title := fs.String("title", "", "task list title")
+	instructions := fs.String("instructions", "", "standing instructions for every task in the list")
+	instructionsFile := fs.String("instructions-file", "", "read instructions from a file, or - for stdin")
+	paused := fs.String("paused", "", "true|false — hold or resume dispatch for the whole list")
+	maxConcurrent := fs.Int("max-concurrent", 0, "cap the list's concurrently running tasks")
+	clearMaxConcurrent := fs.Bool("clear-max-concurrent", false, "remove the concurrency cap")
+	foremanWorkspace := fs.String("foreman-workspace-id", "", "workspace that runs this list's coordination")
+	clearForeman := fs.Bool("clear-foreman", false, "stop filing a foreman for this list")
+	foremanStall := fs.Int("foreman-stall-minutes", 0, "minutes of no activity before a foreman is filed")
+	note := fs.String("note", "", "why this change is being made; recorded on the revision")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("list id is required")
+	}
+	body := map[string]interface{}{}
+	// Only flags the caller actually passed are sent: a partial edit must never blank the rest of
+	// the policy, and "absent" has to stay distinguishable from "cleared".
+	if flagWasSet(fs, "title") {
+		body["title"] = *title
+	}
+	text, textSet, err := readCLIText(in, *instructions, flagWasSet(fs, "instructions"),
+		*instructionsFile, flagWasSet(fs, "instructions-file"), "instructions")
+	if err != nil {
+		return err
+	}
+	if textSet {
+		body["instructions"] = text
+	}
+	if flagWasSet(fs, "paused") {
+		switch *paused {
+		case "true":
+			body["paused"] = true
+		case "false":
+			body["paused"] = false
+		default:
+			return fmt.Errorf("--paused must be true or false")
+		}
+	}
+	if *clearMaxConcurrent {
+		body["maxConcurrent"] = nil
+	} else if flagWasSet(fs, "max-concurrent") {
+		body["maxConcurrent"] = *maxConcurrent
+	}
+	if *clearForeman {
+		body["foremanWorkspaceId"] = nil
+		body["foremanStallMinutes"] = nil
+	} else {
+		if flagWasSet(fs, "foreman-workspace-id") {
+			body["foremanWorkspaceId"] = *foremanWorkspace
+		}
+		if flagWasSet(fs, "foreman-stall-minutes") {
+			body["foremanStallMinutes"] = *foremanStall
+		}
+	}
+	if flagWasSet(fs, "note") {
+		body["note"] = *note
+	}
+	if len(body) == 0 {
+		return fmt.Errorf("nothing to update")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.updateTaskList(id, os.Getenv("ORBIT_AGENT_ID"), body)
+	if err != nil {
+		return fmt.Errorf("update task list: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliTaskListCreate(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task-list create")
 	title := fs.String("title", "", "task list title")
@@ -990,6 +1125,8 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_dependency_remove", Argv: []string{"orbit", "task", "dependency-remove"}, Usage: "orbit task dependency-remove [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
+	{Tool: "tasklist_get", Argv: []string{"orbit", "task-list", "get"}, Usage: "orbit task-list get LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}},
+	{Tool: "tasklist_update", Argv: []string{"orbit", "task-list", "update"}, Usage: "orbit task-list update LIST_ID [options]", Arguments: []string{"[list-id] (required)", "--title <text>", "--instructions <text> | --instructions-file -", "--paused[=true|false]", "--max-concurrent <n> | --clear-max-concurrent", "--foreman-workspace-id <id> | --clear-foreman", "--foreman-stall-minutes <n>", "--note <text>", "--json"}, Description: "Change a task list's dispatch policy. In a session the change is attributed to this agent (like the MCP path); headless it falls back to the runner owner. Every change is recorded as a restorable revision.", Mutates: true},
 }
 
 type cliCapability struct {

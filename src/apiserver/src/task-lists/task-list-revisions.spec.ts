@@ -76,7 +76,13 @@ function makeService(initial: Partial<Revision> = {}) {
         revisions.find((r) => r.version === where.listId_version.version) ?? null,
     },
     task: { findMany: async () => [], groupBy: async () => [] },
-    session: { findMany: async () => [] },
+    // The author's session is validated against the owner before it is recorded; an id this
+    // owner does not have becomes null rather than failing the write it merely annotates.
+    session: {
+      findMany: async () => [],
+      findFirst: async ({ where }: { where: { id: string } }) =>
+        where.id === 'session-9' ? { id: 'session-9' } : null,
+    },
     user: { findMany: async () => [] },
     workspace: { findMany: async () => [] },
   } as never;

@@ -383,6 +383,36 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "tasklist_get":
+		id := getString(args, "listId")
+		if id == "" {
+			return toolResult("listId is required", true)
+		}
+		raw, err := s.t.getTaskList(id)
+		if err != nil {
+			return toolResult("get task-list failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "tasklist_update":
+		id := getString(args, "listId")
+		if id == "" {
+			return toolResult("listId is required", true)
+		}
+		body := map[string]interface{}{}
+		// Only the keys the caller actually sent: a partial edit must not blank the rest of the
+		// policy, and the server distinguishes absent from null.
+		copyIfPresent(body, args, "title", "instructions", "note", "foremanWorkspaceId")
+		copyIfPresent(body, args, "paused", "maxConcurrent", "foremanStallMinutes")
+		if len(body) == 0 {
+			return toolResult("nothing to update", true)
+		}
+		raw, err := s.t.updateTaskList(id, s.agentID, body)
+		if err != nil {
+			return toolResult("update task-list failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "session_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -871,6 +901,34 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "tasklist_create",
 			"description": "Create a task list (group).",
 			"inputSchema": obj(map[string]interface{}{"title": str}, "title"),
+		},
+		{
+			"name": "tasklist_get",
+			"description": "Get one task list's dispatch policy and progress: its standing instructions, " +
+				"paused flag, concurrency cap, foreman settings, task counts by status, how many " +
+				"sessions are live, and when it last started anything. Returns the shape of the list, " +
+				"not its tasks — use task_list for those.",
+			"inputSchema": obj(map[string]interface{}{"listId": str}, "listId"),
+		},
+		{
+			"name": "tasklist_update",
+			"description": "Change a task list's dispatch policy. `instructions` are standing instructions " +
+				"spliced into every task run's prompt in this list, so one write changes how every " +
+				"task not yet started will be run — prefer it over editing task descriptions one by " +
+				"one. `paused` stops dispatch without touching runs already in flight. " +
+				"`maxConcurrent` caps how many of this list's tasks run at once. Send only the fields " +
+				"you mean to change, and a `note` saying why: every change is recorded as a revision " +
+				"attributed to this agent and session, and a human can restore an earlier one.",
+			"inputSchema": obj(map[string]interface{}{
+				"listId":              str,
+				"title":               str,
+				"instructions":        str,
+				"paused":              map[string]interface{}{"type": "boolean"},
+				"maxConcurrent":       map[string]interface{}{"type": "integer"},
+				"foremanWorkspaceId":  str,
+				"foremanStallMinutes": map[string]interface{}{"type": "integer"},
+				"note":                str,
+			}, "listId"),
 		},
 	}
 	if includeOrchestration {

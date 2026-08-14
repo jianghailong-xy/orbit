@@ -161,8 +161,38 @@ export class TaskListsService {
     return tasks.map((t) => ({ ...t, creatorName: names.get(t.creatorId) ?? null }));
   }
 
+  /**
+   * Cheap ownership check for the policy paths. get() loads every task in the list with its
+   * dependency state, which is the right shape for a detail page and absurd as authorization for
+   * a one-field write — a 501-task list would be read in full to set a boolean.
+   */
+  private async assertOwned(ownerId: string, id: string): Promise<void> {
+    const list = await this.prisma.taskList.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!list) throw new NotFoundException('task list not found');
+  }
+
+  /**
+   * Resolve the session a policy change was made from, keeping only one this owner really has.
+   * An unknown id becomes null rather than an error: the attribution is a breadcrumb, and losing
+   * it must not fail the write it describes.
+   */
+  private async resolveAuthorSession(
+    ownerId: string,
+    sessionId?: string | null,
+  ): Promise<string | null> {
+    if (!sessionId) return null;
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: { id: true },
+    });
+    return session?.id ?? null;
+  }
+
   async update(ownerId: string, id: string, dto: UpdateTaskListDto, author?: RevisionAuthor) {
-    await this.get(ownerId, id);
+    await this.assertOwned(ownerId, id);
     // Each field is written only when the caller sent it, so a title rename cannot silently
     // clear a pause and a pause cannot blank a title. `maxConcurrent: null` is a meaningful
     // value (uncap), which is why it is distinguished from "absent" rather than falsy-checked.
@@ -185,7 +215,13 @@ export class TaskListsService {
       ownerId,
       id,
       { ...(dto.title !== undefined ? { title: dto.title } : {}), ...policy },
-      Object.keys(policy).length > 0 ? { note: dto.note, author } : null,
+      Object.keys(policy).length > 0
+        ? {
+            note: dto.note,
+            author,
+            authorSessionId: await this.resolveAuthorSession(ownerId, author?.sessionId),
+          }
+        : null,
     );
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return list;
@@ -204,7 +240,7 @@ export class TaskListsService {
     ownerId: string,
     id: string,
     data: Record<string, unknown>,
-    recordAs: { note?: string | null; author?: RevisionAuthor } | null,
+    recordAs: { note?: string | null; author?: RevisionAuthor; authorSessionId?: string | null } | null,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -259,7 +295,7 @@ export class TaskListsService {
             note: recordAs.note ?? null,
             authorType: recordAs.author?.type ?? CreatorType.USER,
             authorId: recordAs.author?.id ?? ownerId,
-            authorSessionId: recordAs.author?.sessionId ?? null,
+            authorSessionId: recordAs.authorSessionId ?? null,
           },
         });
       }
@@ -267,9 +303,63 @@ export class TaskListsService {
     });
   }
 
+  /**
+   * A list's policy and progress without its tasks.
+   *
+   * `get()` returns every task with its dependency state, which is right for a detail page and
+   * wrong for anything reading a 500-task list to make one decision: a foreman diagnosing a
+   * stall, or an `orbit-list:` reference being expanded into a prompt. Both need the shape of
+   * the list, not its contents — and at this size the contents do not fit in a context window
+   * anyway (the deployment's task descriptions total ~11 MB).
+   */
+  async summary(ownerId: string, id: string) {
+    const list = await this.prisma.taskList.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true,
+        title: true,
+        instructions: true,
+        paused: true,
+        maxConcurrent: true,
+        foremanWorkspaceId: true,
+        foremanStallMinutes: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    if (!list) throw new NotFoundException('task list not found');
+    const [byStatus, live, lastRunAt, latestRevision] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['status'],
+        where: { listId: id },
+        _count: { _all: true },
+      }),
+      this.prisma.session.count({
+        where: { task: { listId: id }, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } },
+      }),
+      this.prisma.session.aggregate({
+        where: { task: { listId: id } },
+        _max: { createdAt: true },
+      }),
+      this.prisma.taskListRevision.aggregate({
+        where: { listId: id },
+        _max: { version: true },
+      }),
+    ]);
+    return {
+      ...list,
+      tasksByStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
+      // Sessions currently holding a slot, and when this list last started anything at all —
+      // together these are the stall signal, so a foreman can confirm what woke it.
+      liveSessions: live,
+      lastRunStartedAt: lastRunAt._max.createdAt,
+      policyVersion: latestRevision._max.version ?? null,
+    };
+  }
+
   /** This list's policy history, newest first. */
   async revisions(ownerId: string, id: string) {
-    await this.get(ownerId, id);
+    await this.assertOwned(ownerId, id);
     return this.prisma.taskListRevision.findMany({
       where: { listId: id },
       orderBy: { version: 'desc' },
@@ -291,7 +381,7 @@ export class TaskListsService {
     note?: string | null,
     author?: RevisionAuthor,
   ) {
-    await this.get(ownerId, id);
+    await this.assertOwned(ownerId, id);
     const target = await this.prisma.taskListRevision.findUnique({
       where: { listId_version: { listId: id, version } },
     });

@@ -113,7 +113,7 @@ test('createTasks batches through TasksService with the acting workspace as crea
   const controller = new RunnerTasksController(tasks, {} as never);
   const dto = { tasks: [{ title: 'S0', ref: 's0' }] } as never;
 
-  const result = await controller.createTasks(RUNNER, 'workspace-1', 'session-1', dto);
+  const result = await controller.createTasks(RUNNER, 'workspace-1', undefined, 'session-1', dto);
 
   assert.equal(result, created);
   assert.deepEqual(calls[0], { method: 'resolveAgentCreator', args: ['owner-1', 'workspace-1'] });
@@ -127,4 +127,69 @@ test('createTasks is exposed as POST tasks/batch-create', () => {
   const handler = RunnerTasksController.prototype.createTasks;
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'tasks/batch-create');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+});
+
+test('the acting workspace is read from either spelling of the header', async () => {
+  // Migration 0094 renamed the server's header with the entity, but deployed runners still send
+  // X-Orbit-Agent-Id — so every in-session write was arriving unattributed and being recorded
+  // against the runner owner. Both spellings must resolve until those binaries are replaced.
+  const seen: unknown[] = [];
+  const tasks = {
+    resolveAgentCreator: async (_owner: string, workspaceId?: string) => {
+      seen.push(workspaceId);
+      return workspaceId ? { type: 'AGENT', id: workspaceId } : undefined;
+    },
+    addComment: async () => ({ ok: true }),
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never);
+  const dto = { body: 'x' } as never;
+
+  await controller.addComment(RUNNER, undefined, 'legacy-workspace', 'task-1', dto);
+  await controller.addComment(RUNNER, 'new-workspace', undefined, 'task-1', dto);
+  // A runner sending both is mid-upgrade; the new name is the one it means.
+  await controller.addComment(RUNNER, 'new-workspace', 'legacy-workspace', 'task-1', dto);
+
+  assert.deepEqual(seen, ['legacy-workspace', 'new-workspace', 'new-workspace']);
+});
+
+test('updateList attributes the policy change to the acting workspace and session', async () => {
+  const calls: unknown[][] = [];
+  const tasks = {
+    resolveAgentCreator: async () => ({ type: 'AGENT', id: 'workspace-1' }),
+  } as never;
+  const taskLists = {
+    update: async (...args: unknown[]) => {
+      calls.push(args);
+      return { id: 'list-1' };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, taskLists);
+  const dto = { paused: true, note: 'disk below floor' } as never;
+
+  await controller.updateList(RUNNER, 'workspace-1', undefined, 'session-9', 'list-1', dto);
+
+  assert.deepEqual(calls[0], [
+    'owner-1',
+    'list-1',
+    dto,
+    { type: 'AGENT', id: 'workspace-1', sessionId: 'session-9' },
+  ]);
+});
+
+test('a headless runner update carries no agent author', async () => {
+  // No workspace header at all: the change is the runner owner's, and claiming an agent made it
+  // would put a fabricated author on a restorable revision.
+  const calls: unknown[][] = [];
+  const tasks = { resolveAgentCreator: async () => undefined } as never;
+  const taskLists = {
+    update: async (...args: unknown[]) => {
+      calls.push(args);
+      return { id: 'list-1' };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, taskLists);
+
+  await controller.updateList(RUNNER, undefined, undefined, undefined, 'list-1', {} as never);
+
+  assert.equal(calls[0][3], undefined);
 });

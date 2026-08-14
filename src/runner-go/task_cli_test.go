@@ -38,12 +38,18 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 13 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 15 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
-	// could only replace a task's whole prerequisite set, never edit one edge.
-	for _, want := range []string{"task_dependency_graph", "task_dependency_add", "task_dependency_remove"} {
+	// could only replace a task's whole prerequisite set, never edit one edge. tasklist_get /
+	// tasklist_update joined them: a list's dispatch policy was readable only as a row in
+	// tasklist_list and not writable at all, so an agent could see a list stall and do nothing
+	// about it.
+	for _, want := range []string{
+		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
+		"tasklist_get", "tasklist_update",
+	} {
 		found := false
 		for _, capability := range doc.Capabilities {
 			if capability.ID == want {
@@ -570,7 +576,7 @@ func TestTaskListCLICreate(t *testing.T) {
 	configureCLITestRunner(t, srv.URL)
 
 	var out bytes.Buffer
-	if err := cmdTaskListCLI([]string{"create", "--title", "Release", "--json"}, &out); err != nil {
+	if err := cmdTaskListCLI([]string{"create", "--title", "Release", "--json"}, strings.NewReader(""), &out); err != nil {
 		t.Fatal(err)
 	}
 	if gotPath != "/api/runner/task-lists" || gotBody["title"] != "Release" {

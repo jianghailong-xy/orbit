@@ -770,6 +770,26 @@ func (t *Transport) createTaskList(title string) (json.RawMessage, error) {
 	return out, err
 }
 
+func (t *Transport) getTaskList(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/task-lists/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// updateTaskList sends only the fields the caller set, so an agent adjusting one knob cannot
+// blank the rest. Attribution rides the same agent/session headers the task writes use.
+func (t *Transport) updateTaskList(id, agentID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	err := t.doHeaders(nil, "PATCH", "/runner/task-lists/"+url.PathEscape(id), body, &out, taskOpTimeout, agentHeader(agentID))
+	return out, err
+}
+
 // ── Session orchestration ops for the `orbit mcp` server (L3) ──────────────
 // Owner-scoped, runner-token-authenticated. Each call also carries the current session id
 // and its signed credential so the server can prove which claimed process made the request.

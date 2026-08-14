@@ -256,7 +256,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "task-list":
-		if err := cmdTaskListCLI(args[1:], os.Stdout); err != nil {
+		if err := cmdTaskListCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit task-list:", err)
 			os.Exit(1)
 		}
