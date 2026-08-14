@@ -619,6 +619,17 @@ func cliTaskAttribution() (agentID, sessionID string) {
 	return strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID")), sessionID
 }
 
+// cliCapabilityActor names who the mutating commands in the capability document will be recorded
+// as. It reads the same resolution the writes use: with no agent id the server falls back to the
+// owner even inside a session, so both halves of the pair must be present to claim agent
+// authorship.
+func cliCapabilityActor() string {
+	if agentID, sessionID := cliTaskAttribution(); agentID != "" && sessionID != "" {
+		return "agent"
+	}
+	return "runner_owner"
+}
+
 func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task create-batch")
 	tasks := fs.String("tasks", "", "JSON array of task objects")
@@ -1017,7 +1028,10 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		SessionID: strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")),
 		AgentID:   strings.TrimSpace(os.Getenv("ORBIT_AGENT_ID")),
 		TaskID:    strings.TrimSpace(os.Getenv("ORBIT_TASK_ID")),
-		Actor:     "runner_owner",
+		// Derived from the write path itself rather than restated, so the document cannot claim
+		// one author while the tasks it creates record another: in a session these commands
+		// stamp the acting agent, headless they write as the runner owner.
+		Actor: cliCapabilityActor(),
 	}
 	// A minted service credential names its own scopes, so it decides what this process may do —
 	// including inside a session, where it was passed deliberately rather than injected.

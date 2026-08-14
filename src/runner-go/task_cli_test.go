@@ -57,7 +57,9 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if doc.Registered {
 		t.Fatal("unregistered temp home reported registered")
 	}
-	if doc.Context.Actor != "runner_owner" || doc.Context.SessionID != "session-1" || doc.Context.TaskID != "task-1" {
+	// In a session these commands claim agent authorship, so the document must say "agent" —
+	// reporting runner_owner here contradicted the creatorType the same writes record.
+	if doc.Context.Actor != "agent" || doc.Context.SessionID != "session-1" || doc.Context.TaskID != "task-1" {
 		t.Fatalf("context = %#v", doc.Context)
 	}
 	for _, capability := range doc.Capabilities {
@@ -83,6 +85,26 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 				t.Fatalf("unsafe capability exposed: %q", capability.ID)
 			}
 		}
+	}
+}
+
+// The reported actor must track the write path exactly, in both directions.
+func TestCLICapabilityActorMatchesTheWritePath(t *testing.T) {
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	if got := cliCapabilityActor(); got != "agent" {
+		t.Fatalf("in-session actor = %q, want agent", got)
+	}
+	// Headless: a shared runner credential writes as the owner, and must not claim otherwise.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	if got := cliCapabilityActor(); got != "runner_owner" {
+		t.Fatalf("headless actor = %q, want runner_owner", got)
+	}
+	// A session with no agent id falls back to owner attribution server-side; say so.
+	t.Setenv("ORBIT_SESSION_ID", "session-1")
+	t.Setenv("ORBIT_AGENT_ID", "")
+	if got := cliCapabilityActor(); got != "runner_owner" {
+		t.Fatalf("agentless session actor = %q, want runner_owner", got)
 	}
 }
 
