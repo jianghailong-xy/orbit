@@ -540,7 +540,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("name is required", true)
 		}
 		body := map[string]interface{}{"name": name}
-		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
+		copyIfPresent(body, args, "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
 		raw, err := s.t.createAgent(s.sessionID, s.orchestrationToken, body)
 		if err != nil {
 			return toolResult("create agent failed: "+err.Error(), true)
@@ -556,7 +556,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("agentId is required", true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "name", "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "permissionMode", "defaultMergeTarget")
+		copyIfPresent(body, args, "name", "description", "systemPrompt", "appendSystemPrompt", "workDir", "runnerId", "enableWorktree", "env", "defaultMergeTarget")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -883,11 +883,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"additionalProperties": str,
 			"description":          "Environment variables injected into the agent's engine process, as a flat string→string map. REPLACES the whole map. Existing values are intentionally secret and are not returned by agent_list, so provide the complete desired map.",
 		}
-		permissionModeProp := map[string]interface{}{
-			"type":        "string",
-			"enum":        []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"},
-			"description": "How the agent's sessions handle tool-permission prompts. New agents default to dontAsk.",
-		}
 		mergeTargetProp := map[string]interface{}{
 			"type":        "string",
 			"description": "Branch this agent's sessions merge into by default. Omit to leave the runner's auto-detect (main, else master).",
@@ -966,7 +961,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"runnerId":           map[string]interface{}{"type": "string", "description": "Runner to bind to; defaults to the current runner."},
 					"enableWorktree":     map[string]interface{}{"type": "boolean", "description": "Run each of the agent's sessions in its own git worktree."},
 					"env":                envProp,
-					"permissionMode":     permissionModeProp,
 					"defaultMergeTarget": mergeTargetProp,
 				}, "name"),
 			},
@@ -983,7 +977,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"runnerId":           str,
 					"enableWorktree":     map[string]interface{}{"type": "boolean"},
 					"env":                envProp,
-					"permissionMode":     permissionModeProp,
 					"defaultMergeTarget": mergeTargetProp,
 				}, "agentId"),
 			},

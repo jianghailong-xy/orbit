@@ -452,7 +452,7 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 	tools := toolDescriptors(false, true)
 	for _, name := range []string{"agent_create", "agent_update"} {
 		props := mcpToolProps(tools, name)
-		for _, field := range []string{"env", "permissionMode", "defaultMergeTarget"} {
+		for _, field := range []string{"env", "defaultMergeTarget"} {
 			if props[field] == nil {
 				t.Fatalf("%s inputSchema missing %s", name, field)
 			}
@@ -463,6 +463,12 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		}
 		if props["model"] != nil {
 			t.Fatalf("%s must not expose the retired per-agent model", name)
+		}
+		// The permission posture is per session, defaulted from the account — an agent has none.
+		// The server drops the field, so advertising it would promise supervision that never
+		// arrives, which is worse than not offering it at all.
+		if props["permissionMode"] != nil {
+			t.Fatalf("%s must not expose permissionMode — it is not an agent field", name)
 		}
 	}
 
@@ -499,8 +505,8 @@ func TestMCPAgentToolsCarryAgentConfig(t *testing.T) {
 		if env, _ := gotBody["env"].(map[string]interface{}); env["FOO"] != "bar" {
 			t.Fatalf("%s body env = %#v", name, gotBody["env"])
 		}
-		if gotBody["permissionMode"] != "acceptEdits" {
-			t.Fatalf("%s body permissionMode = %#v", name, gotBody["permissionMode"])
+		if _, ok := gotBody["permissionMode"]; ok {
+			t.Fatalf("%s forwarded permissionMode, which the agent does not own: %#v", name, gotBody["permissionMode"])
 		}
 		if gotBody["defaultMergeTarget"] != "develop" {
 			t.Fatalf("%s body defaultMergeTarget = %#v", name, gotBody["defaultMergeTarget"])
