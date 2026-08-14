@@ -32,8 +32,9 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 // passes a raw UUID through, and turns everything else into a 400.
 //
 // Names that are NOT ids: `token` (share token), `userCode` (device pairing code), `seq` (an
-// integer cursor). They key by their own columns and must stay unpiped.
-const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq']);
+// integer cursor), `version` (a task list revision's per-list number, guarded by ParseIntPipe).
+// They key by their own columns and must stay unpiped.
+const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version']);
 
 // Query filters that carry an id. Kept explicit rather than pattern-matched on the name, so
 // adding one is a deliberate act rather than something a regex silently decides.

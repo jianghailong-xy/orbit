@@ -39,4 +39,13 @@ export class UpdateTaskListDto {
    * is not a cap at all.
    */
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number | null;
+  /**
+   * Why this change is being made, recorded on the revision. Ignored when the request touches no
+   * policy field — a rename produces no revision to attach it to.
+   */
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
+}
+
+export class RestoreTaskListRevisionDto {
+  @IsOptional() @IsString() @MaxLength(500) note?: string;
 }

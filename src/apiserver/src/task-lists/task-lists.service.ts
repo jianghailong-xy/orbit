@@ -7,6 +7,17 @@ import { canRun, computeDependencyState } from '../tasks/task-dependencies';
 import { TASK_LIST_SELECT } from '../tasks/tasks.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
 
+/**
+ * Who is making a policy change. Defaults to the owning user when absent, which is what the HTTP
+ * endpoints pass; an in-session agent supplies its own identity and the session it acted from, so
+ * a change made by a run can be traced back to the run that made it.
+ */
+export interface RevisionAuthor {
+  type: CreatorType;
+  id: string;
+  sessionId?: string | null;
+}
+
 @Injectable()
 export class TaskListsService {
   constructor(
@@ -150,24 +161,137 @@ export class TaskListsService {
     return tasks.map((t) => ({ ...t, creatorName: names.get(t.creatorId) ?? null }));
   }
 
-  async update(ownerId: string, id: string, dto: UpdateTaskListDto) {
+  async update(ownerId: string, id: string, dto: UpdateTaskListDto, author?: RevisionAuthor) {
     await this.get(ownerId, id);
     // Each field is written only when the caller sent it, so a title rename cannot silently
     // clear a pause and a pause cannot blank a title. `maxConcurrent: null` is a meaningful
     // value (uncap), which is why it is distinguished from "absent" rather than falsy-checked.
-    const list = await this.prisma.taskList.update({
-      where: { id },
-      data: {
-        ...(dto.title !== undefined ? { title: dto.title } : {}),
-        ...(dto.paused !== undefined ? { paused: dto.paused } : {}),
-        ...(dto.maxConcurrent !== undefined ? { maxConcurrent: dto.maxConcurrent } : {}),
-        // Blank is stored as null so "no instructions" has one representation: an empty string
-        // and null must not assemble into different prompts.
-        ...(dto.instructions !== undefined
-          ? { instructions: dto.instructions?.trim() ? dto.instructions : null }
-          : {}),
-      },
+    const policy = {
+      ...(dto.paused !== undefined ? { paused: dto.paused } : {}),
+      ...(dto.maxConcurrent !== undefined ? { maxConcurrent: dto.maxConcurrent } : {}),
+      // Blank is stored as null so "no instructions" has one representation: an empty string
+      // and null must not assemble into different prompts.
+      ...(dto.instructions !== undefined
+        ? { instructions: dto.instructions?.trim() ? dto.instructions : null }
+        : {}),
+    };
+    const list = await this.writePolicy(
+      ownerId,
+      id,
+      { ...(dto.title !== undefined ? { title: dto.title } : {}), ...policy },
+      Object.keys(policy).length > 0 ? { note: dto.note, author } : null,
+    );
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
+    return list;
+  }
+
+  /**
+   * Apply `data` to the list and, when it touches dispatch policy, record the result as the next
+   * revision — both under the list's row lock, so a concurrent writer can neither interleave
+   * with the read-modify-write nor mint the same version number.
+   *
+   * `recordAs` null means this write changed no policy (a rename), which deliberately produces
+   * no revision: history is for decisions about how the list dispatches, and padding it with
+   * renames buries them.
+   */
+  private async writePolicy(
+    ownerId: string,
+    id: string,
+    data: Record<string, unknown>,
+    recordAs: { note?: string | null; author?: RevisionAuthor } | null,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "task_list"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('task list not found');
+      if (recordAs) {
+        // A list edited for the first time has no history, so its pre-change state is recorded
+        // as v1 before the new one lands. That is what makes "restore" reach back past the
+        // first edit on the 118 lists that predate this table, without a migration inventing a
+        // revision for lists nobody has touched.
+        const existing = await tx.taskListRevision.count({ where: { listId: id } });
+        if (existing === 0) {
+          const before = await tx.taskList.findUniqueOrThrow({
+            where: { id },
+            select: { instructions: true, paused: true, maxConcurrent: true },
+          });
+          await tx.taskListRevision.create({
+            data: {
+              listId: id,
+              version: 1,
+              ...before,
+              note: 'Recorded automatically as the state before the first tracked change',
+              authorType: CreatorType.USER,
+              authorId: ownerId,
+            },
+          });
+        }
+      }
+      const list = await tx.taskList.update({ where: { id }, data });
+      if (recordAs) {
+        const max = await tx.taskListRevision.aggregate({
+          where: { listId: id },
+          _max: { version: true },
+        });
+        await tx.taskListRevision.create({
+          data: {
+            listId: id,
+            version: (max._max.version ?? 0) + 1,
+            instructions: list.instructions,
+            paused: list.paused,
+            maxConcurrent: list.maxConcurrent,
+            note: recordAs.note ?? null,
+            authorType: recordAs.author?.type ?? CreatorType.USER,
+            authorId: recordAs.author?.id ?? ownerId,
+            authorSessionId: recordAs.author?.sessionId ?? null,
+          },
+        });
+      }
+      return list;
     });
+  }
+
+  /** This list's policy history, newest first. */
+  async revisions(ownerId: string, id: string) {
+    await this.get(ownerId, id);
+    return this.prisma.taskListRevision.findMany({
+      where: { listId: id },
+      orderBy: { version: 'desc' },
+    });
+  }
+
+  /**
+   * Put the list's policy back to what `version` recorded.
+   *
+   * The restore is itself a new revision rather than a rewind that discards what came after:
+   * undoing a change is a decision too, and a history that erased its own mistakes could not
+   * answer the question it exists for. Restoring twice is therefore idempotent in effect and
+   * still visible as two entries.
+   */
+  async restoreRevision(
+    ownerId: string,
+    id: string,
+    version: number,
+    note?: string | null,
+    author?: RevisionAuthor,
+  ) {
+    await this.get(ownerId, id);
+    const target = await this.prisma.taskListRevision.findUnique({
+      where: { listId_version: { listId: id, version } },
+    });
+    if (!target) throw new NotFoundException('revision not found');
+    const list = await this.writePolicy(
+      ownerId,
+      id,
+      {
+        instructions: target.instructions,
+        paused: target.paused,
+        maxConcurrent: target.maxConcurrent,
+      },
+      { note: note ?? `Restored v${version}`, author },
+    );
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return list;
   }

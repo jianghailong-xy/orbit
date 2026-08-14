@@ -715,6 +715,7 @@ model Session {
   inboxLeaseGenerations InboxLeaseGeneration[]
   // Tasks an agent created from within this session (cf. Task.creatorSession).
   createdTasks          Task[]                 @relation("TaskCreatorSession")
+  taskListRevisions     TaskListRevision[]     @relation("TaskListRevisionAuthorSession")
   attachments           Attachment[]
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
@@ -1002,10 +1003,55 @@ model TaskList {
   // auto-running takes every free slot and starves every other list behind it.
   maxConcurrent Int?    @map("max_concurrent")
 
-  tasks Task[]
+  tasks     Task[]
+  revisions TaskListRevision[]
 
   @@index([ownerId])
   @@map("task_list")
+}
+
+/// One recorded state of a list's dispatch policy — instructions, paused, maxConcurrent.
+///
+/// A snapshot of the result, not a delta. Restoring v3 means writing v3's values back as a new
+/// revision, which works from any distance; a chain of deltas only ever undoes the last step and
+/// has to be replayed to answer "what did it look like then".
+///
+/// This exists so a policy write can be undone rather than pre-approved. The failure it is
+/// designed against is not a wrong edit but an unnoticed one: an auto-run loop ran for 21 hours
+/// because nothing recorded that anything had changed. `note` carries the reason in words —
+/// worth more than the diff, because "keep the disk safe, so gate the downloads" is what someone
+/// reading this in three months needs, and a column list cannot say it.
+///
+/// Title is deliberately not versioned: renaming a list is not a policy change, and a rename
+/// that produced a restorable revision would bury the changes that matter.
+model TaskListRevision {
+  id     String   @id @default(uuid(7)) @db.Uuid
+  listId String   @map("list_id") @db.Uuid
+  list   TaskList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  /// Monotonic per list from 1. Assigned under the list's row lock, so concurrent writers
+  /// cannot mint the same number.
+  version Int
+
+  instructions  String?
+  paused        Boolean
+  maxConcurrent Int?    @map("max_concurrent")
+
+  /// Why this change was made, in words. Optional, but it is the field that makes the history
+  /// readable rather than merely complete.
+  note String?
+
+  /// Polymorphic author, same convention as Task.creator*: a user or a workspace agent, plus the
+  /// session it was written from when an agent did it.
+  authorType      CreatorType @map("author_type")
+  authorId        String      @map("author_id") @db.Uuid
+  authorSessionId String?     @map("author_session_id") @db.Uuid
+  authorSession   Session?    @relation("TaskListRevisionAuthorSession", fields: [authorSessionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([listId, version])
+  @@index([listId, createdAt(sort: Desc)])
+  @@map("task_list_revision")
 }
 
 // A human-facing work item (unrelated to the old execution-Task dropped in 0006).
