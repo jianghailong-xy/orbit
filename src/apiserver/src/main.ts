@@ -6,6 +6,19 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 
+declare global {
+  interface BigInt {
+    toJSON(): string;
+  }
+}
+// Prisma maps BIGINT columns (e.g. Workspace.workDirFreeBytes) to native BigInt, which
+// JSON.stringify throws on by default — every response that spreads a row with one of these
+// columns 500s. JSON.stringify calls toJSON() when present, so this makes BigInt serialize
+// like any other value instead of crashing the whole endpoint.
+BigInt.prototype.toJSON = function () {
+  return this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
