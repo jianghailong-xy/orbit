@@ -295,12 +295,20 @@ const fmtTokens = (n: number): string =>
 // active turn. Older runners omit the field; keep scanning so a later missing value
 // does not blank a known reading. Derived from `events` — which holds the boot tail
 // page (so it's right on cold open) plus live appends — rather than a separate live signal.
-function lastContextTokens(events: RunEvent[]): number {
+// The window that reading is a fraction of, taken from the same event rather than looked up: the
+// runner reports both halves together (see the runner's model_window.go), because a denominator
+// resolved separately can describe a different model than the numerator it lands under — a
+// mid-session model switch, or a table that never knew this CLI's answer. Older runners send no
+// window; the caller then falls back to contextWindowFor.
+function lastContextReading(events: RunEvent[]): { tokens: number; window?: number } {
   for (let i = events.length - 1; i >= 0; i--) {
-    const ct = (events[i].payload as { contextTokens?: unknown } | undefined)?.contextTokens;
-    if (typeof ct === 'number' && ct > 0) return ct;
+    const payload = events[i].payload as { contextTokens?: unknown; contextWindow?: unknown } | undefined;
+    const ct = payload?.contextTokens;
+    if (typeof ct !== 'number' || ct <= 0) continue;
+    const cw = payload?.contextWindow;
+    return { tokens: ct, window: typeof cw === 'number' && cw > 0 ? cw : undefined };
   }
-  return 0;
+  return { tokens: 0 };
 }
 
 // Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
@@ -340,35 +348,50 @@ function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'd
 // usage — that's the subscription rate limit.
 function ContextWindowIndicator({
   tokens,
+  reportedWindow,
   model,
+  provider,
   modelCatalog,
   configured,
 }: {
   tokens: number;
+  /** The window this session reported alongside its tokens, when it did. */
+  reportedWindow?: number;
   model: string;
+  provider?: string;
   modelCatalog?: Runner['modelCatalog'];
   configured?: ConfiguredProvider[];
 }) {
-  const windowTokens = contextWindowFor(model, modelCatalog, configured);
-  // Until the engine reports occupancy there is no reading at all — a fresh session, or a first
-  // turn still running. "0%" would be a claim that the window is empty when it is in fact filling;
-  // "—" says the gauge is waiting for its first number.
+  const windowTokens = reportedWindow ?? contextWindowFor(model, modelCatalog, configured, provider);
+  // Two things can be missing, and they are not the same thing. Occupancy is missing until the
+  // engine reports it — a fresh session, or a first turn still running; "0%" would claim the
+  // window is empty when it is in fact filling. The window can be missing too, and then there is
+  // no percentage to show at all: the tokens are still a fact worth displaying, but dividing them
+  // by a guess is how this gauge spent a release reading 83% when it should have read 17%.
   const known = tokens > 0;
-  const pct = known ? Math.min(100, Math.round((tokens / windowTokens) * 100)) : 0;
+  const sized = (windowTokens ?? 0) > 0;
+  const pct = known && sized ? Math.min(100, Math.round((tokens / windowTokens!) * 100)) : 0;
+  const headline = !known ? '—' : sized ? `${pct}%` : fmtTokens(tokens);
   const pop = (
     <div className="cu-pop">
       <div className="cu-row">
         <div className="cu-head">
           <span className="cu-label">Context window</span>
-          <span className="cu-pct">{known ? `${pct}%` : '—'}</span>
+          <span className="cu-pct">{headline}</span>
         </div>
-        <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
-          <span className="runner-util-fill" style={{ width: `${pct}%` }} />
-        </div>
+        {sized && (
+          <div className={`runner-util ${pct >= 90 ? 'full' : ''}`}>
+            <span className="runner-util-fill" style={{ width: `${pct}%` }} />
+          </div>
+        )}
         <div className="cu-reset">
-          {known
-            ? `${fmtTokens(tokens)} / ${fmtTokens(windowTokens)} tokens`
-            : `Not reported yet · ${fmtTokens(windowTokens)} window`}
+          {!known
+            ? sized
+              ? `Not reported yet · ${fmtTokens(windowTokens!)} window`
+              : 'Not reported yet'
+            : sized
+              ? `${fmtTokens(tokens)} / ${fmtTokens(windowTokens!)} tokens`
+              : `${fmtTokens(tokens)} tokens · window not reported`}
         </div>
       </div>
     </div>
@@ -378,10 +401,16 @@ function ContextWindowIndicator({
     <Popover content={pop} title="Context" placement="topRight" trigger={['hover', 'click']}>
       <span
         className="composer-pill composer-usage"
-        aria-label={known ? `Context window ${pct}%` : 'Context window not reported yet'}
+        aria-label={
+          !known
+            ? 'Context window not reported yet'
+            : sized
+              ? `Context window ${pct}%`
+              : `Context ${fmtTokens(tokens)} tokens, window not reported`
+        }
       >
         <ContextRing pct={pct} tier={tier} />
-        <span className="composer-usage-pct">{known ? `${pct}%` : '—'}</span>
+        <span className="composer-usage-pct">{headline}</span>
       </span>
     </Popover>
   );
@@ -3227,7 +3256,8 @@ export function AgentView({ runner }: { runner: Runner }) {
       contextWindow:
         shownProvider === 'opencode' && shownModel === ''
           ? undefined
-          : contextWindowFor(shownModel, runner.modelCatalog, configuredProviders),
+          : (reportedContextWindow ??
+            contextWindowFor(shownModel, runner.modelCatalog, configuredProviders, shownProvider)),
       planUsageLabel: planRow?.label,
       planUsagePercent: planRow?.percent,
     });
@@ -3636,7 +3666,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       runner.runtimeDefaultModels,
     ],
   );
-  const contextTokens = lastContextTokens(events);
+  const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(events);
   // Remedy + retry for a sign-in failure card in the transcript. Retry is offered only when
   // there's actually a message to re-send and the session can take one — a trashed/missing
   // session would just throw out of the send mutation.
@@ -5358,7 +5388,14 @@ export function AgentView({ runner }: { runner: Runner }) {
           {/* Context stays visible even before the first turn reports tokens — a New Session reads
               "—". Rightmost pill, to the right of plan usage. */}
           {!(shownProvider === 'opencode' && shownModel === '') && (
-            <ContextWindowIndicator tokens={contextTokens} model={shownModel} modelCatalog={runner.modelCatalog} configured={configuredProviders} />
+            <ContextWindowIndicator
+              tokens={contextTokens}
+              reportedWindow={reportedContextWindow}
+              model={shownModel}
+              provider={shownProvider}
+              modelCatalog={runner.modelCatalog}
+              configured={configuredProviders}
+            />
           )}
         </div>
       </div>

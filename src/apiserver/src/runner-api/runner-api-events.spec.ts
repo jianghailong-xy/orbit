@@ -283,19 +283,79 @@ test('the latest turn_end sets the session context size', async () => {
         type: RunEventType.TURN_END,
         ts: '2026-08-09T01:22:21.000Z',
         turnId: 'turn-1',
-        payload: { subtype: 'success', numTurns: 1, contextTokens: 94_500 },
+        payload: { subtype: 'success', numTurns: 1, contextTokens: 94_500, contextWindow: 1_000_000 },
       },
       {
         seq: 2,
         type: RunEventType.TURN_END,
         ts: '2026-08-09T01:31:02.000Z',
         turnId: 'turn-2',
-        payload: { subtype: 'success', numTurns: 2, contextTokens: 109_879 },
+        payload: { subtype: 'success', numTurns: 2, contextTokens: 109_879, contextWindow: 1_000_000 },
       },
     ],
   });
 
   assert.equal(previewUpdate(calls).contextTokens, 109_879, 'the last one wins');
+  assert.equal(previewUpdate(calls).contextWindow, 1_000_000);
+});
+
+/**
+ * The two halves are one reading. A session that switches model mid-life reports a new pair; the
+ * denominator must move with the numerator it arrived beside, not be reduced separately — a 1M
+ * numerator under a 200k window (or the reverse) is a gauge reading over 100% or a session that
+ * looks idle when it is nearly full.
+ */
+test('the window is taken from the same event as the tokens it divides', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-09T02:00:00.000Z',
+        turnId: 'turn-1',
+        payload: { subtype: 'success', numTurns: 1, contextTokens: 620_000, contextWindow: 1_000_000 },
+      },
+      {
+        // Switched to a smaller-window model: the pair moves together.
+        seq: 2,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-09T02:10:00.000Z',
+        turnId: 'turn-2',
+        payload: { subtype: 'success', numTurns: 2, contextTokens: 12_000, contextWindow: 200_000 },
+      },
+    ],
+  });
+
+  const data = previewUpdate(calls);
+  assert.equal(data.contextTokens, 12_000);
+  assert.equal(data.contextWindow, 200_000);
+});
+
+/**
+ * A runner too old to report a window still reports tokens. Writing the numerator while leaving a
+ * previously stored denominator in place is the lesser evil: it is stale by one release, whereas
+ * blanking it would drop the reading entirely and re-open the guessing the column exists to end.
+ */
+test('a runner that reports no window still updates the token count', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.TURN_END,
+        ts: '2026-08-09T03:00:00.000Z',
+        turnId: 'turn-1',
+        payload: { subtype: 'success', numTurns: 1, contextTokens: 94_500 },
+      },
+    ],
+  });
+
+  const data = previewUpdate(calls);
+  assert.equal(data.contextTokens, 94_500);
+  assert.equal('contextWindow' in data, false);
 });
 
 test('a runtime that reports no context size leaves the stored one standing', async () => {

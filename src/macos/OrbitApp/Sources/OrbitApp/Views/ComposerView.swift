@@ -368,7 +368,9 @@ struct ComposerView: View {
                 // Context stays visible even before the first turn reports tokens — a New Session
                 // reads 0%. Rightmost pill, to the right of plan usage.
                 if !(console.provider == "opencode" && console.modelID.isEmpty) {
-                    ContextWindowIndicator(tokens: console.state.contextTokens ?? 0, model: console.modelID,
+                    ContextWindowIndicator(tokens: console.state.contextTokens ?? 0,
+                                           reportedWindow: console.state.contextWindow,
+                                           model: console.modelID, provider: console.provider,
                                            modelCatalog: console.modelCatalog,
                                            configured: console.configuredProviders)
                 }
@@ -909,21 +911,31 @@ private func fmtTokens(_ n: Int) -> String {
 /// live context occupancy (the figure Claude Code's own gauge shows).
 private struct ContextWindowIndicator: View {
     let tokens: Int
+    /// The window this session reported alongside its tokens, when it did — the runner reads it
+    /// off the CLI that produced the count, so the pair describes one model at one moment.
+    let reportedWindow: Int?
     let model: String
+    let provider: String
     let modelCatalog: RunnerModelCatalog?
     /// Configured providers' model rows carry their own context windows (from the control plane).
     let configured: [ConfiguredProvider]
     @State private var showDetail = false
 
-    private var window: Int {
-        AgentDefaults.contextWindow(for: model, catalog: modelCatalog, configured: configured)
+    private var window: Int? {
+        reportedWindow ?? AgentDefaults.contextWindow(for: model, catalog: modelCatalog,
+                                                      configured: configured, provider: provider)
     }
     /// No reading until the engine reports occupancy — a fresh session, or a first turn still
     /// running. "0%" would claim the window is empty when it is in fact filling (web parity).
     private var known: Bool { tokens > 0 }
+    /// The window can be missing on its own: nobody has reported one for this model. Then there is
+    /// no percentage to show — the count is still a fact, dividing it by a guess is not (web
+    /// parity).
+    private var sized: Bool { (window ?? 0) > 0 }
     private var pct: Int {
-        known && window > 0 ? min(100, Int((Double(tokens) / Double(window) * 100).rounded())) : 0
+        known && sized ? min(100, Int((Double(tokens) / Double(window!) * 100).rounded())) : 0
     }
+    private var headline: String { !known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens) }
 
     var body: some View {
         Button { showDetail.toggle() } label: {
@@ -931,14 +943,23 @@ private struct ContextWindowIndicator: View {
                 UsageRing(percent: pct).frame(width: 14, height: 14)
                 // See PlanUsageIndicator: pin the pill to its ideal width so a tight footer never
                 // wraps the "%" onto a second line.
-                Text(known ? "\(pct)%" : "—").foregroundStyle(.secondary).fixedSize()
+                Text(headline).foregroundStyle(.secondary).fixedSize()
             }
         }
         .buttonStyle(.plain)
-        .help(known
-              ? "Context window \(pct)% · \(fmtTokens(tokens)) / \(fmtTokens(window))"
-              : "Context window not reported yet · \(fmtTokens(window)) window")
+        .help(helpText)
         .modifier(ContextWindowDetailPresentation(isPresented: $showDetail, tokens: tokens, window: window, pct: pct, known: known))
+    }
+
+    private var helpText: String {
+        guard known else {
+            guard let window, window > 0 else { return "Context window not reported yet" }
+            return "Context window not reported yet · \(fmtTokens(window)) window"
+        }
+        guard let window, window > 0 else {
+            return "Context \(fmtTokens(tokens)) tokens · window not reported"
+        }
+        return "Context window \(pct)% · \(fmtTokens(tokens)) / \(fmtTokens(window))"
     }
 }
 
@@ -947,23 +968,33 @@ private struct ContextWindowIndicator: View {
 private struct ContextWindowDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let tokens: Int
-    let window: Int
+    let window: Int?
     let pct: Int
     let known: Bool
+
+    private var sized: Bool { (window ?? 0) > 0 }
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Context window").foregroundStyle(.secondary)
                 Spacer()
-                Text(known ? "\(pct)%" : "—").monospacedDigit()
+                Text(!known ? "—" : sized ? "\(pct)%" : fmtTokens(tokens)).monospacedDigit()
             }
-            UsageBar(percent: pct).frame(height: 4)
-            Text(known
-                 ? "\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens"
-                 : "Not reported yet · \(fmtTokens(window)) window")
-                .font(.caption).foregroundStyle(.secondary)
+            if sized { UsageBar(percent: pct).frame(height: 4) }
+            Text(detailCaption).font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private var detailCaption: String {
+        guard known else {
+            guard let window, window > 0 else { return "Not reported yet" }
+            return "Not reported yet · \(fmtTokens(window)) window"
+        }
+        guard let window, window > 0 else {
+            return "\(fmtTokens(tokens)) tokens · window not reported"
+        }
+        return "\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens"
     }
 
     func body(content: Content) -> some View {

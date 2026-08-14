@@ -108,12 +108,13 @@ export const KIMI_MODEL_OPTIONS = [
 // explicit empty option ahead of that catalog rather than guessing or borrowing Claude defaults.
 export const OPENCODE_MODEL_OPTIONS = [{ value: '', label: 'Managed by OpenCode' }];
 
-// Per-model context-window size (max input tokens), for the composer's context-usage gauge.
-// Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
-// Haiku 4.5 = 200K), and the Claude CLI has no way to report them, so they have to live here.
-// Codex models are absent on purpose — the runner catalog carries their real `context_window`
-// from `codex debug models`, so it stays right as Codex ships new models. Keep in sync with
-// Swift's knownContextWindow(for:).
+// Last-resort context windows for the composer's gauge, for a runner too old to report one of its
+// own. Not the source of truth and not maintained as if it were: the window belongs to the engine
+// that runs the model, and a table keyed on a model id cannot express it — Claude Code offers
+// `opus` and `opus[1m]` as one model with two windows, and the answer also moves with CLI version,
+// account and gateway. The runner probes its CLIs and ships the real number with each occupancy
+// reading (see the runner's model_window.go); this is what the gauge falls back to in the gap
+// before it arrives. Keep in sync with Swift's knownContextWindow(for:).
 export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-opus-5': 1_000_000,
   'claude-fable-5': 1_000_000,
@@ -121,7 +122,6 @@ export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-haiku-4-5': 200_000,
   'kimi-code/kimi-for-coding': 262_144,
 };
-export const DEFAULT_CONTEXT_WINDOW = 200_000;
 const catalogOptionsForProvider = (
   provider?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
@@ -134,25 +134,44 @@ const catalogOptionsForProvider = (
   return options?.length ? options : undefined;
 };
 
+/**
+ * The window to divide a session's context tokens by, when the session hasn't reported one.
+ *
+ * A live session ships its own — the runner reads it off the CLI that produced the tokens and
+ * sends the pair together, which is the only way the two halves are guaranteed to describe the
+ * same model at the same moment. This resolves the rest, in order of who actually knows:
+ *
+ *  1. the runner's catalogue — probed from the installed CLIs, so it follows new releases;
+ *  2. the row that configured *this* session's provider — control-plane data for a vendor whose
+ *     endpoint the runner can't probe (a BYOK gateway serving its own models);
+ *  3. the shipped table, which is a build-time guess.
+ *
+ * Returns undefined rather than a default when none of them knows. A gauge with no denominator
+ * shows the token count; a gauge with a fabricated one shows a percentage of nothing, which is
+ * how "Opus 5 at 83%" survived — every layer had an opinion and none of them had measured.
+ *
+ * `provider` scopes step 2 to the session's own row. Without it any configured provider could
+ * define the window for a session it has nothing to do with, purely by naming the same model.
+ */
 export const contextWindowFor = (
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
-): number => {
-  if (model && configured) {
-    for (const p of configured) {
-      const found = p.models.find((m) => m.value === model && typeof m.contextWindow === 'number');
-      if (found?.contextWindow) return found.contextWindow;
-    }
-  }
-  if (model && CONTEXT_WINDOW_BY_MODEL[model]) return CONTEXT_WINDOW_BY_MODEL[model];
-  if (model && modelCatalog) {
+  provider?: string | null,
+): number | undefined => {
+  if (!model) return undefined;
+  if (modelCatalog) {
     for (const rows of Object.values(modelCatalog)) {
       const found = rows?.find((m) => m.value === model && typeof m.contextWindow === 'number');
       if (found?.contextWindow) return found.contextWindow;
     }
   }
-  return DEFAULT_CONTEXT_WINDOW;
+  for (const p of configured ?? []) {
+    if (provider && p.slug !== provider) continue;
+    const found = p.models.find((m) => m.value === model && typeof m.contextWindow === 'number');
+    if (found?.contextWindow) return found.contextWindow;
+  }
+  return CONTEXT_WINDOW_BY_MODEL[model];
 };
 
 export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {

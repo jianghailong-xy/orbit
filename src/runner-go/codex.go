@@ -31,17 +31,17 @@ func codexContextTokens(usage *TokenUsage) int {
 	return usage.InputTokens + usage.OutputTokens
 }
 
-func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64) map[string]interface{} {
+func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64, job *ClaimedSession) map[string]interface{} {
 	contextTokens := result.ContextTokens
 	if contextTokens <= 0 {
 		contextTokens = codexContextTokens(result.Usage)
 	}
-	return map[string]interface{}{
+	return withContextWindow(map[string]interface{}{
 		"subtype":       result.Subtype,
 		"numTurns":      numTurns,
 		"costUsd":       costUsd,
 		"contextTokens": contextTokens,
-	}
+	}, job)
 }
 
 type codexPreparedTurn struct {
@@ -109,7 +109,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				job.RuntimeSessionID = result.RuntimeSessionID
 				writeSessionMeta(scratchDir, job, execDir)
 			}
-			emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
+			emit(evTurnEnd, codexTurnEndPayload(result, 1, 0, job))
 			liveFiles, livePatches := liveDiff(job.WT)
 			if err := completeTurn(TurnCompleteRequest{
 				TurnID:           resp.TurnID,

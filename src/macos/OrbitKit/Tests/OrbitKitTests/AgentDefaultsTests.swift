@@ -451,9 +451,9 @@ final class AgentDefaultsTests: XCTestCase {
     func testContextWindowFromConfiguredProvider() {
         XCTAssertEqual(AgentDefaults.contextWindow(for: "deepseek-v4-pro", catalog: nil, configured: [deepseek]),
                        128_000)
-        // A row without a window falls through to the static table's default.
-        XCTAssertEqual(AgentDefaults.contextWindow(for: "deepseek-v4-lite", catalog: nil, configured: [deepseek]),
-                       200_000)
+        // A row without a window and no other source: nobody knows. The gauge shows the token
+        // count rather than a percentage of a made-up denominator.
+        XCTAssertNil(AgentDefaults.contextWindow(for: "deepseek-v4-lite", catalog: nil, configured: [deepseek]))
         // Static ids are untouched by the configured list.
         XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-opus-5", catalog: nil, configured: [deepseek]),
                        1_000_000)
@@ -461,6 +461,43 @@ final class AgentDefaultsTests: XCTestCase {
                        1_000_000)
         XCTAssertEqual(AgentDefaults.contextWindow(for: "kimi-code/kimi-for-coding", catalog: nil,
                                                    configured: [deepseek]), 262_144)
+    }
+
+    /// The runner probes the CLI that will actually run the model; a provider row is a number
+    /// someone typed into the control plane. When they disagree the measurement wins — the inverse
+    /// of this ordering is how a stale 200k preset shadowed a 1M model on every Claude session.
+    func testRunnerProbeOutranksAConfiguredRowThatDisagrees() {
+        let catalog = RunnerModelCatalog(
+            claude: [RunnerModelInfo(value: "claude-opus-5", label: "Opus 5", priority: nil,
+                                     contextWindow: 1_000_000, reasoningLevels: nil,
+                                     defaultReasoningLevel: nil, serviceTiers: nil)])
+        let anthropic = ConfiguredProvider(
+            slug: "anthropic", label: "Anthropic (Claude)", runtime: "claude",
+            models: [ConfiguredProviderModel(value: "claude-opus-5", label: "Claude Opus 5",
+                                             contextWindow: 200_000)],
+            defaultModel: "claude-opus-5", presetSlug: "anthropic", modelsFromRuntime: true)
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-opus-5", catalog: catalog,
+                                                   configured: [anthropic]), 1_000_000)
+    }
+
+    /// A provider row describes its own sessions. Unscoped, any configured vendor could define the
+    /// window for a session it has nothing to do with, purely by listing the same model id.
+    func testConfiguredWindowIsScopedToTheSessionsProvider() {
+        let mine = ConfiguredProvider(
+            slug: "mine", label: "Mine", runtime: "claude",
+            models: [ConfiguredProviderModel(value: "shared-model", label: "Shared",
+                                             contextWindow: 512_000)],
+            defaultModel: nil, presetSlug: nil, modelsFromRuntime: false)
+        let other = ConfiguredProvider(
+            slug: "other", label: "Other", runtime: "claude",
+            models: [ConfiguredProviderModel(value: "shared-model", label: "Shared",
+                                             contextWindow: 128_000)],
+            defaultModel: nil, presetSlug: nil, modelsFromRuntime: false)
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "shared-model", catalog: nil,
+                                                   configured: [other, mine], provider: "mine"),
+                       512_000)
+        XCTAssertNil(AgentDefaults.contextWindow(for: "shared-model", catalog: nil,
+                                                 configured: [other, mine], provider: "unconfigured"))
     }
 
     func testCodexContextWindowComesFromRunnerCatalog() {
@@ -472,10 +509,10 @@ final class AgentDefaultsTests: XCTestCase {
                                     contextWindow: 272_000, reasoningLevels: nil,
                                     defaultReasoningLevel: nil, serviceTiers: nil)])
         XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: catalog), 272_000)
-        // Claude windows stay static — no catalog reports them.
+        // A catalog row without a window falls through to the shipped table.
         XCTAssertEqual(AgentDefaults.contextWindow(for: "claude-opus-5", catalog: catalog), 1_000_000)
-        // No catalog (runner offline / codex missing) → the generic default.
-        XCTAssertEqual(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: nil), 200_000)
+        // No catalog (runner offline / codex missing) and nothing shipped for this id: no reading.
+        XCTAssertNil(AgentDefaults.contextWindow(for: "gpt-5.5", catalog: nil))
     }
 
     func testUnknownModelContextWindowFallsBackToRunnerCatalog() {

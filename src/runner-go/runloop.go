@@ -608,7 +608,11 @@ func runLoop(cfg *RunnerConfig) bool {
 			len(catalog.OpenCode) > 0 {
 			hbModelCatalog = carryOverModelCatalog(hbModelCatalog, catalog)
 		}
+		published := hbModelCatalog
 		modelSnapshotMu.Unlock()
+		// Same catalog the heartbeat reports, handed to the running sessions: it carries each
+		// model's context window, which is the denominator they ship with every occupancy reading.
+		publishModelCatalog(published)
 	}
 	// Runtime defaults come from user-owned config/environment only, so refresh them more often
 	// without paying the catalog's process-spawn cost. Probe errors remain visible in logs, while

@@ -89,9 +89,12 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     // Fallback only (modelsFromRuntime below): the runner's probe of the installed CLI leads.
     // It still has to name the current generation — this is what a runner with no catalogue yet
     // dispatches with, and DEFAULT_MODEL_BY_PROVIDER already puts the built-in engine on Opus 5.
+    // The windows are not fallback-only, though: the context gauge reads a configured provider's
+    // row ahead of its own table, so a wrong number here is what every Claude session displays.
+    // Keep in sync with web's CONTEXT_WINDOW_BY_MODEL and Swift's knownContextWindow(for:).
     models: [
-      { value: 'claude-opus-5', label: 'Claude Opus 5', contextWindow: 200_000 },
-      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5', contextWindow: 200_000 },
+      { value: 'claude-opus-5', label: 'Claude Opus 5', contextWindow: 1_000_000 },
+      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5', contextWindow: 1_000_000 },
       { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', contextWindow: 200_000 },
     ],
     defaultModel: 'claude-opus-5',

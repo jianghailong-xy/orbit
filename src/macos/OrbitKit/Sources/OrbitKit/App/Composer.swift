@@ -360,6 +360,11 @@ public enum ComposerHostCommand {
             let pct = min(100, Int((Double(tokens) / Double(window) * 100).rounded()))
             rows.append(ComposerStatusRow(label: "Context",
                                           value: "\(pct)% (\(fmtTokens(tokens)) / \(fmtTokens(window)) tokens)"))
+        } else if let tokens = s.contextTokens, tokens > 0 {
+            // Occupancy without a window: the count is measured and worth showing, the percentage
+            // would be against a number nobody reported (web parity).
+            rows.append(ComposerStatusRow(label: "Context",
+                                          value: "\(fmtTokens(tokens)) tokens (window not reported)"))
         } else {
             rows.append(ComposerStatusRow(label: "Context", value: "not reported yet"))
         }

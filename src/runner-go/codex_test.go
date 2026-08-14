@@ -331,7 +331,7 @@ func TestCodexTurnEndPayloadIncludesContextTokens(t *testing.T) {
 			CacheCreationInputTokens: 300,
 			CacheReadInputTokens:     400,
 		},
-	}, 1, 0)
+	}, 1, 0, &ClaimedSession{})
 
 	if got["contextTokens"] != 1280 {
 		t.Fatalf("contextTokens = %v, want 1280", got["contextTokens"])
@@ -340,7 +340,7 @@ func TestCodexTurnEndPayloadIncludesContextTokens(t *testing.T) {
 		t.Fatalf("payload = %#v", got)
 	}
 
-	noUsage := codexTurnEndPayload(codexTurnResult{Subtype: "completed"}, 1, 0)
+	noUsage := codexTurnEndPayload(codexTurnResult{Subtype: "completed"}, 1, 0, &ClaimedSession{})
 	if noUsage["contextTokens"] != 0 {
 		t.Fatalf("missing usage contextTokens = %v, want 0", noUsage["contextTokens"])
 	}
@@ -354,7 +354,7 @@ func TestCodexTurnEndPayloadPrefersAppServerContextTokens(t *testing.T) {
 			InputTokens:  1200,
 			OutputTokens: 80,
 		},
-	}, 1, 0)
+	}, 1, 0, &ClaimedSession{})
 
 	if got["contextTokens"] != 91_000 {
 		t.Fatalf("contextTokens = %v, want 91000", got["contextTokens"])

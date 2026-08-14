@@ -256,7 +256,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		if result.Status == stFailed && result.Result == "" {
 			result.Result = result.Error
 		}
-		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0))
+		emit(evTurnEnd, codexTurnEndPayload(result, 1, 0, job))
 		liveFiles, livePatches := liveDiff(job.WT)
 		if err := completeTurn(TurnCompleteRequest{
 			TurnID:           snapshot.orbitTurnID,
@@ -334,7 +334,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					tokens = active.result.ContextTokens
 				}
 				activeMu.Unlock()
-				ctxPing.ping(emit, tokens)
+				ctxPing.ping(emit, tokens, job)
 			}
 		}
 	}()

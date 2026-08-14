@@ -777,8 +777,10 @@ export class SessionsService {
         // How full the context window is right now (see Session.contextTokens). A headless caller
         // driving a long-lived session rotates it before it reaches the window, and turn count is
         // a poor stand-in: one turn returning a large tool_result moves this further than a
-        // hundred short ones.
+        // hundred short ones. The window ships with it because the fraction is what the caller
+        // actually wants, and it is the half no reader can derive on its own.
         contextTokens: true,
+        contextWindow: true,
         lastAssistantText: true,
         lastUserText: true,
         lastToolUse: true,

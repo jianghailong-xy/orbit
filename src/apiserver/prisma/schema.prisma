@@ -493,6 +493,13 @@ model Session {
   // decision needs. null until a runtime reports one: never-run sessions, and runtimes that
   // don't report it yet (kimi).
   contextTokens        Int?      @map("context_tokens")
+  // What contextTokens is a fraction of: the window the engine that produced that number will
+  // actually use, reported by the runner from its own probe of that engine rather than looked up
+  // by model id. The id doesn't determine the window (`opus` and `opus[1m]` are one model with
+  // two), so the pair only means anything when both halves come from the same reading — which is
+  // why it is written from the same event and never from a table. null when the runtime doesn't
+  // report one; a reader with no window shows the token count, not a percentage of a guess.
+  contextWindow        Int?      @map("context_window")
   lastTurnAt           DateTime? @map("last_turn_at")
   cancelRequestedAt    DateTime? @map("cancel_requested_at")
   startedAt            DateTime? @map("started_at")

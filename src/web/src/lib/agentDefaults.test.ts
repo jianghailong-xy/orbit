@@ -3,7 +3,6 @@ import type { RunnerModelCatalog } from '@orbit/shared';
 import {
   clampPermissionModeForModel,
   contextWindowFor,
-  DEFAULT_CONTEXT_WINDOW,
   defaultModelForProvider,
   effectiveSessionEffort,
   effectiveSessionModel,
@@ -352,8 +351,11 @@ describe('contextWindowFor', () => {
     expect(contextWindowFor('claude-opus-5', catalog)).toBe(1_000_000);
   });
 
-  it('falls back to the default window when the catalog is missing', () => {
-    expect(contextWindowFor('gpt-5.5', null)).toBe(DEFAULT_CONTEXT_WINDOW);
+  // "I don't know" is an answer the gauge can render (it shows the token count). A default was
+  // not: 200k under a 1M model is the bug this whole chain was rebuilt around.
+  it('says nothing rather than defaulting when no source knows the window', () => {
+    expect(contextWindowFor('gpt-5.5', null)).toBeUndefined();
+    expect(contextWindowFor(null, null)).toBeUndefined();
   });
 
   it('uses runner catalog windows for models unknown to the built-in table', () => {
@@ -364,7 +366,7 @@ describe('contextWindowFor', () => {
     expect(contextWindowFor('gpt-new', catalog)).toBe(512_000);
   });
 
-  it('keeps configured provider model windows highest priority', () => {
+  it('uses a configured provider row for a vendor the runner cannot probe', () => {
     const configured: ConfiguredProvider[] = [
       {
         slug: 'custom-codex',
@@ -375,5 +377,46 @@ describe('contextWindowFor', () => {
     ];
 
     expect(contextWindowFor('gpt-5.5', null, configured)).toBe(128_000);
+  });
+
+  // The runner probes the CLI that will actually run the model; a provider row is a number
+  // someone typed into the control plane. When they disagree, the measurement wins — the
+  // inverse of this ordering is exactly how a stale 200k preset shadowed a 1M model.
+  it('prefers the runner probe over a configured row that disagrees', () => {
+    const catalog: RunnerModelCatalog = {
+      claude: [{ value: 'claude-opus-5', label: 'Opus 5', contextWindow: 1_000_000 }],
+    };
+    const configured: ConfiguredProvider[] = [
+      {
+        slug: 'anthropic',
+        label: 'Anthropic (Claude)',
+        runtime: 'claude',
+        models: [{ value: 'claude-opus-5', label: 'Claude Opus 5', contextWindow: 200_000 }],
+      },
+    ];
+
+    expect(contextWindowFor('claude-opus-5', catalog, configured)).toBe(1_000_000);
+  });
+
+  // A provider row describes its own sessions. Left unscoped, any configured vendor could define
+  // the window for a session it has nothing to do with, just by listing the same model id.
+  it('only reads the configured row belonging to this session', () => {
+    const configured: ConfiguredProvider[] = [
+      {
+        slug: 'other-gateway',
+        label: 'Other Gateway',
+        runtime: 'claude',
+        models: [{ value: 'shared-model', label: 'Shared', contextWindow: 128_000 }],
+      },
+      {
+        slug: 'mine',
+        label: 'Mine',
+        runtime: 'claude',
+        models: [{ value: 'shared-model', label: 'Shared', contextWindow: 512_000 }],
+      },
+    ];
+
+    expect(contextWindowFor('shared-model', null, configured, 'mine')).toBe(512_000);
+    expect(contextWindowFor('shared-model', null, configured, 'unconfigured')).toBeUndefined();
   });
 });

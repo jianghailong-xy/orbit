@@ -432,12 +432,13 @@ public enum AgentDefaults {
         return efforts(for: provider).contains(mapped) ? mapped : .default
     }
 
-    /// Per-model context-window size (max input tokens), for the composer's context-usage gauge.
-    /// Claude only: these are the models' true windows (Opus 5 / Fable 5 / Sonnet 5 = 1M,
-    /// Haiku 4.5 = 200K), and the Claude CLI has no way to report them, so they have to live here.
-    /// Codex models are absent on purpose — the runner catalog carries their real `context_window`
-    /// from `codex debug models`, so it stays right as Codex ships new models. Keep in sync with
-    /// web's CONTEXT_WINDOW_BY_MODEL.
+    /// Last-resort context windows for the composer's gauge, for a runner too old to report one of
+    /// its own. Not the source of truth and not maintained as if it were: the window belongs to the
+    /// engine that runs the model, and a table keyed on a model id cannot express it — Claude Code
+    /// offers `opus` and `opus[1m]` as one model with two windows, and the answer also moves with
+    /// CLI version, account and gateway. The runner probes its CLIs and ships the real number with
+    /// each occupancy reading; this is the gap-filler before it arrives. Keep in sync with web's
+    /// CONTEXT_WINDOW_BY_MODEL.
     private static func knownContextWindow(for id: String) -> Int? {
         switch id {
         case "claude-opus-5", "claude-fable-5", "claude-sonnet-5": return 1_000_000
@@ -447,24 +448,38 @@ public enum AgentDefaults {
         }
     }
 
-    public static func contextWindow(for id: String) -> Int {
-        knownContextWindow(for: id) ?? 200_000
+    public static func contextWindow(for id: String) -> Int? {
+        knownContextWindow(for: id)
     }
 
-    public static func contextWindow(for id: String, catalog: RunnerModelCatalog?) -> Int {
-        if let known = knownContextWindow(for: id) { return known }
-        return catalog?.contextWindow(for: id) ?? 200_000
+    public static func contextWindow(for id: String, catalog: RunnerModelCatalog?) -> Int? {
+        contextWindow(for: id, catalog: catalog, configured: nil, provider: nil)
     }
 
-    /// As `contextWindow(for:catalog:)`, checking the configured providers' model rows first —
-    /// their windows come from the control plane, not the runner. Mirrors web's contextWindowFor.
+    /// The window to divide a session's context tokens by, when the session hasn't reported one.
+    ///
+    /// A live session ships its own (TranscriptState.contextWindow) — the runner reads it off the
+    /// CLI that produced the tokens, which is the only way the two halves are guaranteed to
+    /// describe the same model at the same moment. This resolves the rest, in order of who knows:
+    /// the runner's probe of the installed CLIs, then the row that configured *this* session's
+    /// provider (a BYOK gateway the runner can't probe), then the shipped table.
+    ///
+    /// nil when none of them knows, rather than a default: a gauge with no denominator shows the
+    /// token count, while one with a fabricated denominator shows a percentage of nothing — which
+    /// is how a 1M model read 83% full. `provider` scopes the configured lookup to the session's
+    /// own row; unscoped, any vendor listing the same model id could define another's window.
+    /// Mirrors web's contextWindowFor.
     public static func contextWindow(for id: String, catalog: RunnerModelCatalog?,
-                                     configured: [ConfiguredProvider]?) -> Int {
-        if let window = (configured ?? []).flatMap(\.models)
+                                     configured: [ConfiguredProvider]?,
+                                     provider: String? = nil) -> Int? {
+        if id.isEmpty { return nil }
+        if let window = catalog?.contextWindow(for: id), window > 0 { return window }
+        let rows = (configured ?? []).filter { provider == nil || $0.slug == provider }
+        if let window = rows.flatMap(\.models)
             .first(where: { $0.value == id && ($0.contextWindow ?? 0) > 0 })?.contextWindow {
             return window
         }
-        return contextWindow(for: id, catalog: catalog)
+        return knownContextWindow(for: id)
     }
 
     public static let permissionModes = PermissionMode.allCases
