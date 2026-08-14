@@ -3,12 +3,12 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  IsUUID,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
+import { IsPublicId } from '../common/public-id';
 
 export class CreateTaskListDto {
   @IsString()
@@ -48,7 +48,7 @@ export class UpdateTaskListDto {
   /** File a verification run whenever a task in this list reports DONE. Doubles the list's runs. */
   @IsOptional() @IsBoolean() verifyOnDone?: boolean;
   /** Workspace that runs this list's coordination when it stalls; null clears it. */
-  @IsOptional() @IsUUID() foremanWorkspaceId?: string | null;
+  @IsOptional() @IsPublicId() foremanWorkspaceId?: string | null;
   /**
    * Minutes of no activity, with work remaining, before a foreman is filed; null disables it.
    * Floored at 5 because the sweep itself runs once a minute and a run takes longer than that to

@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { uuidToBase62 } from '@orbit/shared';
 import {
   MAX_STORED_EVENTS,
   eventsToPersist,
   rangeOf,
   sessionsToEvict,
+  storageKey,
   trimForStorage,
   type StoredEvent,
 } from './transcriptStore';
@@ -104,5 +106,27 @@ describe('sessionsToEvict', () => {
     const input = [...rows];
     sessionsToEvict(input, 1);
     expect(input.map((r) => r.sessionId)).toEqual(['oldest', 'middle', 'newest']);
+  });
+});
+
+describe('storageKey', () => {
+  const uuid = '019fcbf3-0fa8-7f83-9302-46b25389cb16';
+
+  // The whole point: the wire spelling is moving to base62, and a cache keyed by whatever
+  // spelling was current when a row was written would orphan every transcript stored before the
+  // switch — a silent "slower since the update" with no failing request to find.
+  it('keys both spellings of one session to the same row', () => {
+    expect(storageKey(uuidToBase62(uuid))).toBe(uuid);
+    expect(storageKey(uuid)).toBe(uuid);
+  });
+
+  it('normalizes a capitalized UUID, which IndexedDB would otherwise key separately', () => {
+    expect(storageKey(uuid.toUpperCase())).toBe(uuid);
+  });
+
+  // A miss is survivable; a throw on the boot path is not.
+  it('passes an unrecognizable id straight through instead of throwing', () => {
+    expect(storageKey('not an id')).toBe('not an id');
+    expect(storageKey('')).toBe('');
   });
 });

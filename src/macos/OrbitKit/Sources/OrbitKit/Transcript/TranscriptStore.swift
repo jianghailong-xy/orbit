@@ -71,8 +71,13 @@ public struct FileTranscriptStore: TranscriptPersisting {
 
     // MARK: - internals
 
+    /// Normalized before it becomes a filename: the server is moving to base62 public ids
+    /// (docs/public-id-migration-design.md), and a snapshot keyed by whichever spelling was
+    /// current when it was written would be invisible afterwards — every session silently
+    /// re-fetching its tail, which reads as "the app got slower" and not as a bug.
     private func url(for sessionID: String) -> URL {
-        directory.appendingPathComponent(sanitize(sessionID)).appendingPathExtension("json")
+        directory.appendingPathComponent(sanitize(PublicID.storageKey(sessionID)))
+            .appendingPathExtension("json")
     }
 
     /// Session ids are server UUIDs, but stay defensive: never let one escape the directory.

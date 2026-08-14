@@ -43,6 +43,8 @@ export const MAX_STORED_SESSIONS = 50;
  * keeps the NEWEST events and moves the older-pagination boundary with them, so what's left is a
  * contiguous window ending at the tail — never a hole.
  */
+import { decodeId } from './idCodec';
+
 export const MAX_STORED_EVENTS = 1000;
 
 /** The subset of the web `RunEvent` that survives a structured clone unchanged. */
@@ -117,6 +119,22 @@ export function trimForStorage(
   return { events: kept, oldestSeq: kept[0].seq, hasMoreOlder: true };
 }
 
+/**
+ * Every key this store writes is the UUID spelling, whatever spelling the caller happens to be
+ * holding.
+ *
+ * The server is moving to base62 public ids on the wire (docs/public-id-migration-design.md), which
+ * makes the id a caller has a moving target. A cache keyed by whichever spelling was current when
+ * a row was written would orphan every transcript stored before the switch: the tab refetches the
+ * whole tail, and the user reports "it got slower after the update" with no failing request behind
+ * it to find. Normalizing here rather than at each call site is what makes that impossible — a
+ * caller cannot key this store wrong by not having thought about it.
+ *
+ * Total by construction: an id that decodes to neither spelling is used as-is, because a cache
+ * miss is a survivable outcome and a throw on the boot path is not.
+ */
+export const storageKey = (id: string): string => decodeId(id) ?? id;
+
 /** Session ids to drop, least-recently-opened first, so at most `max` remain. */
 export function sessionsToEvict(
   rows: { sessionId: string; lastOpenedAt: number }[],
@@ -144,7 +162,10 @@ let flushHandle: ReturnType<typeof setTimeout> | null = null;
  * with this id, so a second account on the same browser cannot read the first one's transcripts
  * even before the wipe below runs.
  */
-export function setTranscriptUser(id: string | null): void {
+export function setTranscriptUser(raw: string | null): void {
+  // Normalized BEFORE the equality check: the same user arriving in the other spelling must read
+  // as the same user, or every switch would close the connection and drop the derived state.
+  const id = raw === null ? null : storageKey(raw);
   if (id === userId) return;
   userId = id;
   // The previous user's derived state must not survive into this one's session.
@@ -241,7 +262,8 @@ async function wipeIfUserChanged(db: IDBDatabase): Promise<void> {
  * The stored window for a session, or null on any miss — no entry, no store, a read that threw.
  * Callers treat null as "not cached" and fall through to the network.
  */
-export async function loadTranscript(sessionId: string): Promise<TranscriptSnapshot | null> {
+export async function loadTranscript(id: string): Promise<TranscriptSnapshot | null> {
+  const sessionId = storageKey(id);
   try {
     const db = await openDb();
     if (!db || !userId) return null;
@@ -283,9 +305,9 @@ export async function loadTranscript(sessionId: string): Promise<TranscriptSnaps
  * opening a transaction per token. Losing the last few events to a closed tab costs nothing — the
  * stream resumes from the highest stored seq and replays them.
  */
-export function saveTranscript(sessionId: string, snapshot: TranscriptSnapshot): void {
+export function saveTranscript(id: string, snapshot: TranscriptSnapshot): void {
   if (!userId || !idb()) return;
-  pending.set(sessionId, snapshot);
+  pending.set(storageKey(id), snapshot);
   scheduleFlush();
 }
 

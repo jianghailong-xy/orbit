@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { BadRequestException, Param, Query } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { uuidToBase62 } from '@orbit/shared';
+import { NEVER_PUBLIC_ID_FIELDS, PUBLIC_ID_FIELDS, uuidToBase62 } from '@orbit/shared';
 import { PublicIdPipe } from './public-id';
-import { CreateTaskDto } from '../tasks/dto';
+import {
+  BatchAssignDto,
+  BatchExecuteDto,
+  BatchStopDto,
+  CreateTaskCommentDto,
+  CreateTaskDto,
+} from '../tasks/dto';
+import { UpdateTaskListDto } from '../task-lists/dto';
 import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { AttachmentsController } from '../attachments/attachments.controller';
 import { AdminProvidersController } from '../providers/admin-providers.controller';
@@ -34,19 +43,15 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 // Names that are NOT ids: `token` (share token), `userCode` (device pairing code), `seq` (an
 // integer cursor), `version` (a task list revision's per-list number, guarded by ParseIntPipe).
 // They key by their own columns and must stay unpiped.
+// Deliberately a DENYLIST, and deliberately not replaced by PUBLIC_ID_FIELDS below: a route
+// param IS the address, so the rule that fails safe is "every param is an id unless this list
+// says otherwise". An allowlist would let a param nobody classified through unchecked.
 const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq', 'version']);
 
-// Query filters that carry an id. Kept explicit rather than pattern-matched on the name, so
-// adding one is a deliberate act rather than something a regex silently decides.
-const ID_QUERIES = new Set([
-  'runnerId',
-  'workspaceId',
-  'tagId',
-  'listId',
-  'assigneeId',
-  'sessionId',
-  'parentSessionId',
-]);
+// Query filters, on the other hand, are a mixed bag of ids and ordinary filters, so those do
+// read the shared classification — one list, so a name can't be an id on the way out and a
+// free-form string on the way in.
+const ID_QUERIES = PUBLIC_ID_FIELDS;
 
 const CONTROLLERS = [
   WorkspacesController,
@@ -87,6 +92,9 @@ const [PARAM, QUERY] = (() => {
 function inspect(controller: new (...args: never[]) => unknown) {
   const seen: string[] = [];
   const missing: string[] = [];
+  // Every name this controller resolves through the pipe, whether or not the rule wanted it —
+  // the input to the "a fence token is never translated" check below.
+  const piped: string[] = [];
   for (const method of Object.getOwnPropertyNames(controller.prototype as object)) {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, method) as
       | Record<string, { data?: unknown; pipes?: unknown[] }>
@@ -95,6 +103,7 @@ function inspect(controller: new (...args: never[]) => unknown) {
       const kind = Number(key.split(':')[0]);
       const name = arg.data;
       if (typeof name !== 'string') continue;
+      if ((arg.pipes ?? []).includes(PublicIdPipe)) piped.push(name);
       const wanted =
         (kind === PARAM && !NON_ID_PARAMS.has(name)) || (kind === QUERY && ID_QUERIES.has(name));
       if (!wanted) continue;
@@ -102,7 +111,7 @@ function inspect(controller: new (...args: never[]) => unknown) {
       if (!(arg.pipes ?? []).includes(PublicIdPipe)) missing.push(`${method}(${name})`);
     }
   }
-  return { seen, missing };
+  return { seen, missing, piped };
 }
 
 for (const controller of CONTROLLERS) {
@@ -112,6 +121,44 @@ for (const controller of CONTROLLERS) {
     assert.deepEqual(missing, []);
   });
 }
+
+// ── The classification is exhaustive ──────────────────────────────────────────────────────────
+// The point of failing here rather than in review: the cost of a misclassified id is not a 400
+// someone notices, it is a base62 string reaching a `::uuid` cast or a fence comparison. Adding
+// a `@db.Uuid` column is the moment to decide which it is, so the build asks then.
+const SCHEMA = readFileSync(path.resolve(__dirname, '../../prisma/schema.prisma'), 'utf8');
+const UUID_COLUMNS = new Set(
+  [...SCHEMA.matchAll(/^\s*(\w+)\s+\S+.*@db\.Uuid/gm)].map((m) => m[1]),
+);
+
+test('every @db.Uuid column is classified, and classified once', () => {
+  assert.ok(UUID_COLUMNS.size > 30, 'parsed almost no uuid columns — the schema format changed');
+  const unclassified = [...UUID_COLUMNS].filter(
+    (f) => !PUBLIC_ID_FIELDS.has(f) && !NEVER_PUBLIC_ID_FIELDS.has(f),
+  );
+  assert.deepEqual(
+    unclassified,
+    [],
+    'new @db.Uuid column(s): add each to PUBLIC_ID_FIELDS (an address a caller may hand back) ' +
+      'or NEVER_PUBLIC_ID_FIELDS (an opaque lease/fence token compared byte-for-byte)',
+  );
+  const both = [...UUID_COLUMNS].filter(
+    (f) => PUBLIC_ID_FIELDS.has(f) && NEVER_PUBLIC_ID_FIELDS.has(f),
+  );
+  assert.deepEqual(both, [], 'classified as both a public id and never one');
+});
+
+// The half that has teeth today: the output side does not encode yet, so the only way to break
+// the symmetry right now is to start DECODING a fence token — at which point the runner's echo
+// of it stops matching what the server stored.
+test('no route resolves a lease/fence token through PublicIdPipe', () => {
+  const offenders = CONTROLLERS.flatMap((c) =>
+    inspect(c as never)
+      .piped.filter((name) => NEVER_PUBLIC_ID_FIELDS.has(name))
+      .map((name) => `${c.name}(${name})`),
+  );
+  assert.deepEqual(offenders, []);
+});
 
 // Those routes pass the CLASS, not an instance, so Nest builds the pipe through its DI
 // container at boot — and anything the constructor declares becomes a dependency it has to
@@ -177,6 +224,31 @@ test('IsPublicId normalizes a base62 body id before validating it', async () => 
   assert.equal(dto.assigneeId, UUID);
   assert.equal(dto.listId, UUID);
   assert.deepEqual(dto.dependsOnTaskIds, [UUID, UUID]);
+});
+
+// The batch DTOs took a base62 id, validated it as a plain string, and handed it to Prisma — a
+// 500 on the exact ids the clients put in URLs. `UpdateTaskListDto.foremanWorkspaceId` had the
+// mirror-image bug: `@IsUUID()` refused the short spelling with a 400. Both are the shape a
+// decorator audit catches and a type-checker never will, so they get a behavioural test too.
+test('the batch DTOs accept a pasted public id', async () => {
+  const assign = plainToInstance(BatchAssignDto, { taskIds: [B62, UUID], assigneeId: B62 });
+  assert.deepEqual(await validate(assign), []);
+  assert.deepEqual(assign.taskIds, [UUID, UUID]);
+  assert.equal(assign.assigneeId, UUID);
+
+  for (const Dto of [BatchExecuteDto, BatchStopDto]) {
+    const dto = plainToInstance(Dto, { taskIds: [B62] });
+    assert.deepEqual(await validate(dto), [], Dto.name);
+    assert.deepEqual(dto.taskIds, [UUID], Dto.name);
+  }
+
+  const comment = plainToInstance(CreateTaskCommentDto, { body: 'ping', mentions: [B62] });
+  assert.deepEqual(await validate(comment), []);
+  assert.deepEqual(comment.mentions, [UUID]);
+
+  const list = plainToInstance(UpdateTaskListDto, { foremanWorkspaceId: B62 });
+  assert.deepEqual(await validate(list), []);
+  assert.equal(list.foremanWorkspaceId, UUID);
 });
 
 test('IsPublicId still rejects a body id that is neither spelling', async () => {

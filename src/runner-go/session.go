@@ -321,7 +321,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// claim payload on a cold resume while the event flusher runs concurrently.
 	// Capture the immutable id so that goroutine never races that pointer swap.
 	sessionID := job.SessionID
-	scratch := filepath.Join(runsDir(), sessionID)
+	scratch := runDir(sessionID)
 	_ = os.MkdirAll(scratch, 0o755)
 	// A newer runner process may fence this process while it is still active. Keep that
 	// signal separate from a UI cancel: lost ownership must detach without finalizing.

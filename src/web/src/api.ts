@@ -117,6 +117,11 @@ export function scheduleProactiveRefresh(): void {
   }, ms);
 }
 
+// Baked in at build time from the repo version (see vite.config.ts). Sent on every request so the
+// server can answer "is anything still in the field older than X?" before a wire format changes —
+// a browser tab left open for a month is exactly the client nothing else can see.
+declare const __APP_VERSION__: string;
+
 /** Fetch with the bearer token attached; on a 401, try one single-flight refresh + retry, and on an
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
@@ -125,6 +130,7 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
     ...init,
     headers: {
       ...init.headers,
+      'x-orbit-client': `web/${__APP_VERSION__}`,
       ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
     },
   });

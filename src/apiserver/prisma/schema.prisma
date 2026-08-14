@@ -90,6 +90,7 @@ model User {
   modelProviders   ModelProvider[] // personal (BYOK) model providers
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
+  clientVersions   ClientVersion[] // which build of each client this user is running
 
   @@map("user")
 }
@@ -132,6 +133,34 @@ model DeviceToken {
 
   @@index([userId])
   @@map("device_token")
+}
+
+/// Which build of each client a user is actually running, so "has every client in the field
+/// upgraded past X?" is a query instead of a guess.
+///
+/// It exists because the answer is currently unknowable. `WorkspaceAliasInterceptor` carries a
+/// compatibility shim whose own comment says to delete it "once every client in the field speaks
+/// `workspace*`" — and nothing in the system can tell you when that became true, so it is still
+/// running. Runners are the one client already covered (`Runner.version`, reported in the
+/// heartbeat); a browser tab nobody reloaded and a TestFlight build from last month were not
+/// covered by anything. Every wire-format migration after this one needs the same gate, so the
+/// data has to start accumulating BEFORE the migration that will consume it — measuring the tail
+/// only once you want to cut it means waiting a full upgrade cycle to see it.
+///
+/// One row per (user, client kind): the question is "what is this user's iOS app on", and a user
+/// with a current browser and a stale phone must show up as stale. Runners are deliberately NOT
+/// written here — `Runner.version` already answers for them, and a second source of truth for the
+/// same fact is how the two disagree later.
+model ClientVersion {
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'web' | 'ios' | 'macos' — the client kind, from the `X-Orbit-Client` header.
+  kind       String
+  version    String
+  lastSeenAt DateTime @updatedAt @map("last_seen_at")
+
+  @@id([userId, kind])
+  @@map("client_version")
 }
 
 // A machine the user registered via `orbit register`. Claude Code runs here.

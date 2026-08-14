@@ -403,9 +403,22 @@ func worktreesDir() string {
 func uploadsRootDir() string { return filepath.Join(machineHome(), "uploads") }
 
 // uploadsDir is one session's attachment scratch dir.
-func uploadsDir(sessionID string) string { return filepath.Join(uploadsRootDir(), sessionID) }
+//
+// Normalized, like every on-disk key here: the server is moving to base62 public ids on the wire
+// (docs/public-id-migration-design.md), so the id in a claim payload is a moving target. Keying
+// the filesystem by whatever spelling happened to arrive would strand a live session's uploads
+// the moment the server switched — the dir would still be on disk under the other name, which is
+// the kind of bug that looks like data loss and reads like nothing at all in the logs.
+func uploadsDir(sessionID string) string {
+	return filepath.Join(uploadsRootDir(), decodeSessionID(sessionID))
+}
 
-func baseRefName(sessionID string) string { return "refs/orbit-base/" + sessionID }
+// baseRefName is the git ref a session's diff is computed against. Same normalization, and it
+// matters more here than for a scratch dir: an orphaned base ref does not fail, it silently
+// re-bases every diff on the wrong commit.
+func baseRefName(sessionID string) string {
+	return "refs/orbit-base/" + decodeSessionID(sessionID)
+}
 
 // resolveBaseSha returns the base commit every session diff is computed against, healing a
 // recorded base that has gone wrong two ways:

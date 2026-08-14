@@ -139,7 +139,7 @@ export class RefreshDependencyGraphNodesDto {
 export class BatchExecuteDto {
   // The tasks to run. Tasks without a responsible workspace / bound runner are skipped
   // server-side rather than failing the batch.
-  @IsArray() @IsString({ each: true }) taskIds!: string[];
+  @IsArray() @IsPublicId({ each: true }) taskIds!: string[];
 
   // When set, caps how many of THIS batch's tasks run at once. It applies only to this
   // batch (the claim queue gates the batch's live sessions on it) and never touches any
@@ -150,7 +150,7 @@ export class BatchExecuteDto {
 export class BatchStopDto {
   // The tasks whose in-flight session (running or queued) should be cancelled. Tasks
   // with no stoppable session are silently no-ops.
-  @IsArray() @IsString({ each: true }) taskIds!: string[];
+  @IsArray() @IsPublicId({ each: true }) taskIds!: string[];
 }
 
 export class BatchDeleteDto {
@@ -160,10 +160,10 @@ export class BatchDeleteDto {
 }
 
 export class BatchAssignDto {
-  @IsArray() @IsString({ each: true }) taskIds!: string[];
+  @IsArray() @IsPublicId({ each: true }) taskIds!: string[];
 
   // The workspace to set as responsible for every selected task; null clears the assignment.
-  @IsOptional() @IsString() assigneeId?: string | null;
+  @IsOptional() @IsPublicId() assigneeId?: string | null;
 }
 
 export class CreateTaskCommentDto {
@@ -173,5 +173,5 @@ export class CreateTaskCommentDto {
 
   // Workspace ids @-mentioned in the comment. Each owned workspace is notified and triggered
   // on this task; unknown/non-owned ids are silently dropped (see TasksService).
-  @IsOptional() @IsArray() @IsString({ each: true }) mentions?: string[];
+  @IsOptional() @IsArray() @IsPublicId({ each: true }) mentions?: string[];
 }

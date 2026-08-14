@@ -49,3 +49,70 @@ export function base62ToUuid(s: string): string {
 export function toUuid(idOrPublicId: string): string {
   return UUID_RE.test(idOrPublicId) ? idOrPublicId.toLowerCase() : base62ToUuid(idOrPublicId);
 }
+
+// ── Which fields the codec is allowed to touch ────────────────────────────────────────────────
+//
+// ONE classification, read by both directions. The reason it has to be one list rather than a
+// rule applied twice: a field encoded on the way out but not decoded on the way back in is not a
+// type error anywhere — the base62 string reaches a `where` clause or a `::uuid` cast and either
+// 500s or, worse, compares unequal forever. The lease fences below are exactly that shape, and a
+// fence that never matches is how a merge wedges the whole runner.
+//
+// Every `@db.Uuid` column in the schema belongs to exactly one of these sets;
+// `public-id-coverage.spec.ts` fails the build when a new column belongs to neither.
+
+/** Fields naming a row a caller may legitimately be handed and hand back — an entity's own `id`
+ *  and every foreign key to one. Accepted in either spelling on the way in (`PublicIdPipe` /
+ *  `IsPublicId`); to be rendered base62 on the way out. */
+export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  'id',
+  'ownerId',
+  'userId',
+  'sessionId',
+  'parentSessionId',
+  'rootSessionId',
+  'creatorSessionId',
+  'authorSessionId',
+  'workspaceId',
+  'foremanWorkspaceId',
+  'runnerId',
+  'assignedRunnerId',
+  'targetRunnerId',
+  'taskId',
+  'dependsOnTaskId',
+  'batchId',
+  'listId',
+  'tagId',
+  'turnId',
+  'approvalId',
+  'assigneeId',
+  'creatorId',
+  'authorId',
+  'createdById',
+  'approvedById',
+  'decidedById',
+  'actorId',
+  'mentions',
+  // Wire-only aggregates: no column of their own, but they carry the same ids in request and
+  // response bodies, so they follow the same rule (see the `@IsPublicId({ each: true })` DTOs).
+  'tagIds',
+  'taskIds',
+  'dependsOnTaskIds',
+  'anchorTaskId',
+]);
+
+/** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
+ *  echoes them back byte-for-byte (`runner-api.controller.ts` `parseLeaseGeneration`) and the
+ *  server interpolates them into raw SQL as `::uuid`. Translating one breaks the fence silently,
+ *  so neither direction may touch them — they are not addresses, they are equality tokens. */
+export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  'generation',
+  'leaseGeneration',
+  'leaseOwner',
+  'inboxLeaseGeneration',
+  'inboxLeaseOwner',
+  'mergeOperationId',
+  'mergeOperationOwner',
+  'commitOperationId',
+  'commitOperationOwner',
+]);

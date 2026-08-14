@@ -82,6 +82,10 @@ func machineHome() string {
 func configPath() string { return filepath.Join(machineHome(), "config.json") }
 func runsDir() string    { return filepath.Join(machineHome(), "runs") }
 
+// runDir is one session's scratch dir under runsDir. The id is normalized (see uploadsDir) so the
+// directory a session writes to does not move when the server changes which id spelling it sends.
+func runDir(sessionID string) string { return filepath.Join(runsDir(), decodeSessionID(sessionID)) }
+
 // codexStateRoot contains runner-wide Codex SQLite partitions. The effective
 // CODEX_HOME selects the partition; see resolveCodexStateDir.
 func codexStateRoot() string { return filepath.Join(machineHome(), "codex-state") }

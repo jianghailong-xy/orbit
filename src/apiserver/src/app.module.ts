@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { ClientVersionInterceptor } from './common/client-version.interceptor';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { EventsModule } from './events/events.module';
@@ -39,5 +41,8 @@ import { ProvidersModule } from './providers/providers.module';
     PushModule,
     ProvidersModule,
   ],
+  // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs
+  // PrismaService injected, which only the DI container can provide.
+  providers: [{ provide: APP_INTERCEPTOR, useClass: ClientVersionInterceptor }],
 })
 export class AppModule {}

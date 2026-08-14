@@ -24,6 +24,23 @@ public final class APIClient: @unchecked Sendable {
     /// whichever way it arrived. Web parity: `MAX_EVENT_PAYLOAD`.
     public static let maxEventPayload = 2048
 
+    /// `X-Orbit-Client: ios/1.2.3`, sent on every request. The server records one row per
+    /// (user, client kind) so "is anything still in the field older than X?" is a query rather
+    /// than a guess before a wire format changes — a TestFlight build from last month upgrades
+    /// when its owner decides to, and nothing else on the server can see it. Runners are excluded
+    /// (their `version` already rides the heartbeat). Web parity: `x-orbit-client` in `api.ts`.
+    ///
+    /// One constant covers both apps: iOS builds this same OrbitKit from `../macos/OrbitKit`.
+    private static let clientHeader: String = {
+        #if os(iOS)
+        let kind = "ios"
+        #else
+        let kind = "macos"
+        #endif
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        return "\(kind)/\(version ?? "unknown")"
+    }()
+
     public let baseURL: URL
     private let tokenStore: TokenStore
     private let session: URLSession
@@ -448,6 +465,7 @@ public final class APIClient: @unchecked Sendable {
         if !query.isEmpty { comps.queryItems = query }
         var req = URLRequest(url: comps.url!)
         req.httpMethod = method
+        req.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")

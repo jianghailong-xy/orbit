@@ -1935,7 +1935,12 @@ export class RunnerApiController {
   async turnComplete(
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
-    @Body() dto: TurnCompleteRequest,
+    // `turnId` is normalized but `leaseOwner` deliberately is not: the runner echoes back a
+    // conversation-turn id the server handed it (a public id, and the only body field here that
+    // addresses a row) alongside a lease token that is compared byte-for-byte and cast `::uuid`
+    // in raw SQL. TurnCompleteRequest is an interface, so the global ValidationPipe never sees
+    // this body — without the pipe the id reaches `where: { id: dto.turnId }` exactly as sent.
+    @Body(PublicIdPipe.forFields('turnId')) dto: TurnCompleteRequest,
   ) {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const usage = dto.usage;

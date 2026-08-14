@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { PublicIdInterceptor } from './common/public-id.interceptor';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 
 declare global {
@@ -34,7 +35,9 @@ async function bootstrap() {
   );
   // Every JSON response carries both `workspace*` and `agent*` while shipped clients still speak
   // the pre-rename name. Temporary — see the interceptor.
-  app.useGlobalInterceptors(new WorkspaceAliasInterceptor());
+  // Alongside it, every public id also goes out in both spellings (`sessionId` +
+  // `sessionPublicId`) so clients can move to the short form without a flag day.
+  app.useGlobalInterceptors(new WorkspaceAliasInterceptor(), new PublicIdInterceptor());
 
   const origins = (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173')
     .split(',')

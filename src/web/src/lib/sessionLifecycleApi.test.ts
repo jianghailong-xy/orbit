@@ -66,7 +66,12 @@ describe('canonical session lifecycle API', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/session-1/complete', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      // Matched, not spelled out: authedFetch stamps the build number on every request, and
+      // pinning it here would mean a failing test on every version bump.
+      headers: {
+        'content-type': 'application/json',
+        'x-orbit-client': expect.stringMatching(/^web\/\S+$/),
+      },
       body: undefined,
     });
   });
