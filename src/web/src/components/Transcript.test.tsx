@@ -446,3 +446,60 @@ describe('shared-checkout notice', () => {
     expect(html).not.toContain('chat-notice');
   });
 });
+
+// A run of ordinary tool calls folds into one summary row, but a spawned child session is a
+// destination the reader is meant to click — folded into "Tools × 3" it is a line item of a
+// summary nobody opens.
+describe('tool run folding', () => {
+  let seq = 0;
+  const call = (name: string, input: Record<string, unknown>): RunEvent[] => {
+    const id = `t${++seq}`;
+    return [{ seq, type: 'tool_use', payload: { id, name, input } }];
+  };
+  const callWith = (name: string, input: Record<string, unknown>, content: string): RunEvent[] => {
+    const [use] = call(name, input);
+    return [use, { seq: ++seq, type: 'tool_result', payload: { toolUseId: (use.payload as any).id, content } }];
+  };
+  const render = (events: RunEvent[][]) => renderToStaticMarkup(<Transcript events={events.flat()} />);
+
+  it('keeps a spawned child session as a card of its own', () => {
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      callWith(
+        'mcp__orbit__session_create',
+        { prompt: 'go' },
+        JSON.stringify({ id: 's1', title: 'Child', status: 'PENDING', provider: 'claude' }),
+      ),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+    ]);
+
+    expect(html).toContain('chat-session-card');
+    expect(html).toContain('Child');
+    // Splitting the run on the card leaves two singles — neither reaches the fold threshold.
+    expect(html).not.toContain('chat-tool-group');
+  });
+
+  // A sub-workspace card was kept out only by its children, which arrive after the call — so it
+  // spent the start of every run inside the summary and hopped out on the first child event.
+  it('keeps a sub-workspace out of the fold before its first child event', () => {
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      call('Task', { description: 'Explore', prompt: 'look around' }),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+    ]);
+
+    expect(html).toContain('chat-tool-task');
+    expect(html).not.toContain('chat-tool-group');
+  });
+
+  it('still folds a run of plain calls', () => {
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+      callWith('Bash', { command: 'whoami' }, 'root'),
+    ]);
+
+    expect(html).toContain('chat-tool-group');
+    expect(html).toContain('Bash × 3');
+  });
+});

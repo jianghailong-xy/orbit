@@ -573,13 +573,20 @@ function groupToolRuns(nodes: Node[]): NodeListItem[] {
   return out;
 }
 
+// Calls that render as their own card — an approval, a plan, a spawned child session, a
+// sub-workspace — are never folded into a run summary: the card *is* the point, so it stays a
+// top-level row. Excluded by name rather than by what has arrived, so the row doesn't hop out of
+// the group later, when the result lands (session_create) or the first child event does (Task).
 function isGroupableTool(node: Node): node is ToolNode {
   return (
     node.kind === 'tool' &&
     node.children.length === 0 &&
     !node.id.startsWith('shell-') &&
     node.name !== 'AskUserQuestion' &&
-    node.name !== 'ExitPlanMode'
+    node.name !== 'ExitPlanMode' &&
+    node.name !== 'mcp__orbit__session_create' &&
+    node.name !== 'Task' &&
+    node.name !== 'Workspace'
   );
 }
 

@@ -88,9 +88,11 @@ describe('sessionLine', () => {
       text: 'Interrupted',
       tone: 'preview',
     });
-    // Trash (live: false) states the outcome the same way.
+    // Trash (live: false) states the outcome the same way. The word is the *run's*: every
+    // deliberate end is one neutral terminal regardless of endReason (sessionRunStateOf), and
+    // "Completed" is the filing axis — sessionLifecycleLabel says that one, next to this.
     expect(sessionLine({ status: 'CANCELLED', endReason: 'completed' }, false)).toEqual({
-      text: 'Completed',
+      text: 'Ended',
       tone: 'preview',
     });
   });
