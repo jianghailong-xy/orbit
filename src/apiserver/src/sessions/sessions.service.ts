@@ -3385,7 +3385,7 @@ export class SessionsService {
         where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
       });
       if (!SessionsService.TERMINAL.includes(current.status)) {
-        if (existing) return { turn: existing, wasCompleted: false };
+        if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
         throw SessionsService.resumeBlocked('NOT_TERMINAL');
       }
       if (
@@ -3395,7 +3395,7 @@ export class SessionsService {
       ) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
-      if (existing) return { turn: existing, wasCompleted: false };
+      if (existing) return { turn: existing, wasCompleted: false, wasRevived: false };
       if (capabilities.resumeBlockedReason) {
         throw SessionsService.resumeBlocked(capabilities.resumeBlockedReason);
       }
@@ -3496,12 +3496,26 @@ export class SessionsService {
             : {}),
         },
       });
-      return { turn, wasCompleted: (current.completedAt ?? current.archivedAt) != null };
+      return {
+        turn,
+        wasCompleted: (current.completedAt ?? current.archivedAt) != null,
+        wasRevived: true,
+      };
     });
     // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
     // and signal the control plane, so every other client moves the row out of Completed and
     // into Open without polling.
+    //
+    // A revive that never left Open has the same gap one step in from the sidebar: the row just
+    // went from a terminal status back to PENDING and nothing announces it either. The claim that
+    // follows (queue.claim, PENDING → RUNNING) publishes nothing, so the next control event this
+    // session produces is its turn_end — a whole turn later. Invisible when the sender is the one
+    // resuming (it updates itself), glaring when the server resumes on its own: AutoRetryService
+    // re-sending a quota-killed message left every open console still drawing the failure it was
+    // armed on ("Retrying automatically."), over a transcript stream that was paused at that
+    // failure and only re-opens once the client believes the session is live again.
     if (revived.wasCompleted) this.realtime.publishSessionCreated(id);
+    else if (revived.wasRevived) this.realtime.publishSessionUpdated(id);
     this.queue.notifySessionQueued();
     return { turnId: revived.turn.id, seq: revived.turn.seq };
   }

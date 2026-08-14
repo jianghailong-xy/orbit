@@ -343,6 +343,7 @@ function resumeHarness(session: Record<string, unknown>, providers: ProviderRow[
   } as never;
   const service = new SessionsService(prisma, { notifySessionQueued: () => undefined } as never, {
     publishSessionCreated: () => undefined,
+    publishSessionUpdated: () => undefined,
   } as never);
   return { service, updates };
 }

@@ -72,6 +72,20 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchProviders = (): void => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
     };
+    // One session's own detail (`['session', id]`), which every refetch above is blind to: they
+    // are lists. The console merges detail over its list row — detail is fresher and carries
+    // capabilities compact rows omit — so a stale detail masks a fresh row, and detail goes stale
+    // for exactly one reason: its query stops polling once the session is terminal. A terminal
+    // session can still come back without this tab doing anything (AutoRetryService re-sending a
+    // quota-killed message, another client resuming it), and until this refetch lands the console
+    // keeps drawing the failure it froze on — and never re-opens the transcript stream it paused
+    // there. Only ACTIVE queries refetch, so this costs one request for the session on screen and
+    // nothing at all for the others.
+    const refetchSessionDetail = (id: string): void => {
+      // Exact: the diff under `['session', id, 'diff']` is refreshed on turn_end by the console
+      // itself, and is far too expensive to re-run on every status change.
+      void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+    };
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
       tasks: refetchTasks,
@@ -90,13 +104,21 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       return ['sessions'];
     };
     const pending = new Set<string>();
-    const scheduleRefresh = (type: string): void => {
+    const pendingSessions = new Set<string>();
+    const scheduleRefresh = (type: string, sessionId?: string): void => {
       for (const g of groupsFor(type)) pending.add(g);
+      // Only the `session.*` family: those are the events that can move a session's run state,
+      // and so the ones a frozen detail has to be corrected by. An approval or a background task
+      // reaches the open console through its own transcript stream, and a task/tag/provider edit
+      // says nothing about any session's state.
+      if (sessionId && type.startsWith('session.')) pendingSessions.add(sessionId);
       if (refreshTimer) return; // coalesce a burst into one refetch
       refreshTimer = setTimeout(() => {
         refreshTimer = undefined;
         for (const g of pending) REFETCH[g]?.();
+        for (const id of pendingSessions) refetchSessionDetail(id);
         pending.clear();
+        pendingSessions.clear();
       }, REFRESH_DEBOUNCE_MS);
     };
     // Close the stream and schedule a backoff reconnect. Guarded by `dropped` so it fires once per
@@ -118,21 +140,25 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
         lastMsgAt = Date.now();
         setLive(true);
         // No sinceSeq replay — reconcile every list with a fresh snapshot on (re)connect so
-        // changes missed during the gap surface too.
+        // changes missed during the gap surface too. Any open session detail with it: the gap
+        // could have swallowed exactly the revive this tab needs to stop drawing a session as
+        // ended (see refetchSessionDetail). Prefix key, so a session id isn't needed here.
         for (const refetch of Object.values(REFETCH)) refetch();
+        void qc.invalidateQueries({ queryKey: ['session'] });
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
-        let ev: { type?: string };
+        let ev: { type?: string; sessionId?: string };
         try {
           ev = JSON.parse(e.data);
         } catch {
           return;
         }
-        // Dispatch on `type` alone: the keepalive ping is the only frame to drop, and the
-        // user-scoped library events (tag/provider/task-list) legitimately carry no sessionId.
+        // Dispatch on `type`: the keepalive ping is the only frame to drop. `sessionId` rides
+        // along as an optional extra rather than a requirement, because the user-scoped library
+        // events (tag/provider/task-list) legitimately carry none.
         if (!ev?.type || ev.type === 'ping') return;
-        scheduleRefresh(ev.type);
+        scheduleRefresh(ev.type, ev.sessionId);
       };
       es.onerror = () => drop();
     }

@@ -31,6 +31,7 @@ function makeService(
     ...overrides,
   };
   const updates: unknown[] = [];
+  const announced: string[] = [];
   let notified = 0;
   let retired = 0;
   const sessionDelegate = {
@@ -65,8 +66,14 @@ function makeService(
       notified++;
     },
   } as never;
-  const service = new SessionsService(prisma, queue, {} as never);
-  return { service, updates, notified: () => notified, retired: () => retired };
+  // The control plane is the only thing that tells other clients a terminal session came back:
+  // no STATUS event accompanies the revive, and the claim behind it publishes nothing either.
+  const realtime = {
+    publishSessionCreated: (sessionId: string) => announced.push(`created:${sessionId}`),
+    publishSessionUpdated: (sessionId: string) => announced.push(`updated:${sessionId}`),
+  } as never;
+  const service = new SessionsService(prisma, queue, realtime);
+  return { service, updates, announced, notified: () => notified, retired: () => retired };
 }
 
 const retry = { clientTurnId: 'retry-1', content: 'send after signing in' };
@@ -88,6 +95,18 @@ test('a claimed zero-turn Codex session can restart after sign-in without a runt
     reviveData.inboxLeaseOwner,
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
+});
+
+test('reviving a terminal session tells the control plane it is no longer ended', async () => {
+  const { service, announced } = makeService();
+
+  await service.resume('owner-1', 'session-1', retry);
+
+  // Nothing else does: PENDING is written inside the transaction with no STATUS event, and the
+  // claim that turns it into RUNNING publishes nothing either — so without this the next word
+  // any other client hears about this session is its turn_end, a whole turn later. That is what
+  // left an auto-retried session drawn as "Retrying automatically." while it was already running.
+  assert.deepEqual(announced, ['updated:session-1']);
 });
 
 test('a session that was never claimed still cannot restart', async () => {
@@ -136,7 +155,7 @@ test('a graceful terminal cancel remains resumable despite historical cancelRequ
 
 test('a lost resume response can retry its clientTurnId after the session became PENDING', async () => {
   const existingTurn = { id: 'already-queued-turn', seq: 7 };
-  const { service, updates, notified, retired } = makeService(
+  const { service, updates, announced, notified, retired } = makeService(
     { status: RunStatus.PENDING },
     existingTurn,
   );
@@ -147,6 +166,8 @@ test('a lost resume response can retry its clientTurnId after the session became
   assert.equal(updates.length, 0);
   assert.equal(retired(), 0);
   assert.equal(notified(), 1);
+  // Nothing was revived — the row was already PENDING — so there is no news to announce.
+  assert.deepEqual(announced, []);
 });
 
 for (const tc of [
