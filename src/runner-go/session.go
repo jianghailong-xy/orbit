@@ -1483,6 +1483,14 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			case <-procCtx.Done():
 				return
 			case <-deadline:
+				// The turn is about to lose its process with no result of its own, so say so
+				// in the transcript. Otherwise the reply simply stops: the last thing the user
+				// sees is a half-finished thought or a tool call with no output, and nothing
+				// distinguishes that from the agent still thinking. The next runner reclaims
+				// and --resumes, and the control plane re-delivers this turn as a "continue
+				// what was interrupted" prompt, so the marker is also what makes the repeated
+				// work that follows it legible.
+				emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
 				logln("drain timeout for", job.SessionID+"; tearing down mid-turn")
 				procCancel()
 				return
