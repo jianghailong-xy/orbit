@@ -12,6 +12,10 @@ interface Subject {
   /** The assignee workspace has been soft-deleted; sessions.create refuses to run in it. */
   assigneeDeleted?: boolean;
   priorVerifications?: number;
+  /** Verifications already filed that were cancelled before issuing a verdict. */
+  cancelledVerifications?: number;
+  /** Verifications filed and still running — no verdict yet, but not abandoned either. */
+  inFlightVerifications?: number;
   /**
    * The subject's sessions. Defaults to the shape a normal completion actually has at the moment
    * DONE is written: the agent's own session is still RUNNING — success is not recorded until
@@ -53,7 +57,20 @@ function makeService(subject: Subject = {}) {
       findFirst: async () => ({ ...task, status: 'IN_PROGRESS' }),
       findUnique: async () => ({ ...task, status: 'IN_PROGRESS' }),
       update: async () => ({ ...task, status: 'DONE' }),
-      count: async () => subject.priorVerifications ?? 0,
+      // Modelled as real rows with statuses and filtered like Prisma would, so which statuses the
+      // cap counts is the contract under test rather than an arithmetic the stub decides.
+      count: async ({ where }: { where: Record<string, any> }) => {
+        const rows = [
+          ...Array.from({ length: subject.priorVerifications ?? 0 }, () => 'DONE'),
+          ...Array.from({ length: subject.inFlightVerifications ?? 0 }, () => 'OPEN'),
+          ...Array.from({ length: subject.cancelledVerifications ?? 0 }, () => 'CANCELLED'),
+        ];
+        return rows.filter((st) => {
+          if (where?.status?.not !== undefined) return st !== where.status.not;
+          if (typeof where?.status === 'string') return st === where.status;
+          return true;
+        }).length;
+      },
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
         return { id: `verify-${created.length}` };
@@ -265,6 +282,46 @@ test('a soft-deleted assignee files nothing', async () => {
   // read as pending work. Six were filed this way against a workspace deleted in August, and
   // `runnerId` alone did not notice — the row keeps its binding after the delete.
   const f = makeService({ verifyOnDone: true, assigneeDeleted: true });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('a cancelled check does not spend the task\'s verification budget', async () => {
+  // It issued no verdict, so it rejected nothing and is not part of the loop the cap bounds.
+  // Six course tasks had two cancelled checks each and could not be re-verified at all.
+  const f = makeService({
+    verifyOnDone: true,
+    priorVerifications: 0,
+    cancelledVerifications: MAX_VERIFICATIONS_PER_TASK,
+  });
+
+  await f.fileFor();
+
+  assert.equal(f.created.length, 1);
+});
+
+test('checks that did issue a verdict still spend it', async () => {
+  const f = makeService({
+    verifyOnDone: true,
+    priorVerifications: MAX_VERIFICATIONS_PER_TASK,
+    cancelledVerifications: 0,
+  });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('a check still in flight counts, so a second is not filed alongside it', async () => {
+  // The cap is also the concurrency guard: two verifiers judging the same subject at once could
+  // reach opposite verdicts and race each other writing the subject's status.
+  const f = makeService({
+    verifyOnDone: true,
+    priorVerifications: 0,
+    inFlightVerifications: MAX_VERIFICATIONS_PER_TASK,
+  });
 
   await f.fileFor();
 

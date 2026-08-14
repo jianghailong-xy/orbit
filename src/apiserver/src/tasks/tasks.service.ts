@@ -2284,7 +2284,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // is no run to double. Requiring opt-in for it would mean the one case nobody would decline
     // is the one that needs asking for.
     if (!unevidenced && !task.list?.verifyOnDone) return;
-    const already = await this.prisma.task.count({ where: { verifiesTaskId: taskId } });
+    // Cancelled checks don't count. The cap exists to stop verify → reject → re-DONE → verify
+    // from looping, and a cancelled verification issued no verdict, so it rejected nothing and is
+    // not part of any loop. Counting it spends a budget it never used — the same reason a
+    // quota-killed run does not spend the auto-run budget. In-flight ones still count, which is
+    // what keeps two from being filed for the same subject at once.
+    const already = await this.prisma.task.count({
+      where: { verifiesTaskId: taskId, status: { not: TaskStatus.CANCELLED } },
+    });
     if (already >= MAX_VERIFICATIONS_PER_TASK) {
       this.logger.log(
         `verification skipped for task ${taskId} — already checked ${already} time(s)`,
