@@ -394,8 +394,7 @@ describe('tool group folded row', () => {
     payload: { id, name: 'Bash', input: { command, description } },
   });
   const done = (seq: number, toolUseId: string) => ({ seq, type: 'tool_result', payload: { toolUseId, content: 'ok' } });
-  // A running group auto-opens, so assert against the folded row alone — the expanded detail
-  // below it legitimately shows every raw command.
+  // Assert against the folded row alone — an expanded group legitimately shows every raw command.
   const foldedRow = (html: string) => html.split('chat-tool-group-detail')[0];
 
   it('names the in-flight call by purpose while the group is still running', () => {
@@ -439,6 +438,45 @@ describe('tool group folded row', () => {
     expect(html).not.toContain('Read runner logs');
     // The per-call detail is one click away, so nothing is lost — only deferred.
     expect(html).not.toContain('chat-tool-group-detail');
+  });
+
+  // Opening a group because something is running means closing it again the moment that call
+  // lands, which drops the transcript by the height of the group right where the reader is
+  // looking. Only a failure — a state that cannot revert — is worth opening on.
+  it('stays folded while running so settling cannot yank the layout', () => {
+    const events = [
+      call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
+      done(2, 't1'),
+      call(3, 't2', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
+      done(4, 't2'),
+      call(5, 't3', 'Build runner', 'go build ./...'),
+    ];
+    const runningHtml = renderToStaticMarkup(<Transcript live events={events} />);
+    const settledHtml = renderToStaticMarkup(<Transcript live events={[...events, done(6, 't3')]} />);
+
+    expect(runningHtml).not.toContain('chat-tool-group-detail');
+    // Same shape before and after the last call lands: only the row's own text changes.
+    expect(settledHtml).not.toContain('chat-tool-group-detail');
+    expect(runningHtml).toContain('1 running · 2 succeeded');
+    expect(settledHtml).toContain('3 succeeded');
+  });
+
+  it('still opens itself when a call in the group failed', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          call(1, 't1', 'List orbit CLI capabilities', 'orbit capabilities --json'),
+          done(2, 't1'),
+          call(3, 't2', 'Build runner', 'go build ./...'),
+          { seq: 4, type: 'tool_result', payload: { toolUseId: 't2', content: 'boom', isError: true } },
+          call(5, 't3', 'Read runner logs', 'journalctl -u orbit-runner | tail -50'),
+          done(6, 't3'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-tool-group-detail');
+    expect(html).toContain('1 failed');
   });
 });
 

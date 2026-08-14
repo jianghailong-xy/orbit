@@ -1785,7 +1785,12 @@ function summarizeToolGroup(nodes: ToolNode[], live?: boolean): ToolGroupSummary
     icon: sameKind ? first?.icon : <ToolOutlined />,
     tone: sameKind ? (first?.tone ?? 'default') : 'default',
     status,
-    urgent: running > 0 || failed > 0,
+    // Auto-open on failure only. Opening because a call is *running* guarantees a collapse the
+    // moment it lands — the condition is transient, so every group is destined to snap from
+    // "header + N rows" back to one line, at the live edge, while the reader is mid-sentence.
+    // A failure doesn't un-happen, so that branch opens once and stays. What a running group has
+    // to say now fits its folded row anyway: the counts plus `Running: <the call in flight>`.
+    urgent: failed > 0,
   };
 }
 
