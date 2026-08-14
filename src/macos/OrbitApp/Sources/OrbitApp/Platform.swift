@@ -62,6 +62,17 @@ enum PlatformHaptics {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         #endif
     }
+
+    /// A light tap for a press that commits to something (an approval decision, picking an answer).
+    /// Deliberately not the `.success` notification haptic: a decision is neither a success nor a
+    /// failure, and an approval card is *removed the instant it's tapped* — so without this the only
+    /// signal a phone gives back for "you just allowed a command to run" is the card disappearing,
+    /// which looks the same whether you meant it or fumbled it.
+    static func tap() {
+        #if os(iOS)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        #endif
+    }
 }
 
 extension Color {
