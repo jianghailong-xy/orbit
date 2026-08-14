@@ -257,6 +257,9 @@ struct ComposerView: View {
                     ForEach(permissionModeMenuItems, id: \.self) { mode in
                         Button {
                             console.permissionMode = mode
+                            // An explicit pick — the draft's create path remembers it as the
+                            // account default, which the untouched seed must not overwrite.
+                            console.permissionModeWasEdited = true
                             Task { await console.applyConfig(permissionMode: mode.rawValue) }
                         } label: {
                             menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)

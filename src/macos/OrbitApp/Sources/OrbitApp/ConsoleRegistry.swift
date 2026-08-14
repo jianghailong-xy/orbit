@@ -27,6 +27,11 @@ final class ConsoleRegistry {
     /// The session id rides along so the toast can be tapped back into the session it reports on; a
     /// draft console has none yet, so it passes nil.
     @ObservationIgnored var onToast: (ToastRequest, String?) -> Void = { _, _ in }
+    /// The account's synced permission default and its write-back, set once by `AppModel` and handed
+    /// to every console this registry makes — the same arrangement as `onToast`, and for the same
+    /// reason: a `ConsoleModel` needn't know about `AppModel`.
+    @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
+    @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -80,6 +85,7 @@ final class ConsoleRegistry {
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
+        wireAccountDefaults(model)
         return model
     }
 
@@ -154,7 +160,20 @@ final class ConsoleRegistry {
         let model = ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL,
                                  tokenStore: tokenStore, attachments: attachments, restoring: restored)
         model.onToast = { [weak self] request in self?.onToast(request, sessionID) }
+        wireAccountDefaults(model)
         return model
+    }
+
+    /// Hand a console the account's permission default (read late — the `user` payload primes
+    /// asynchronously) and the write-back for a Mode picked when starting a session.
+    private func wireAccountDefaults(_ model: ConsoleModel) {
+        model.accountDefaultPermissionMode = { [weak self] in
+            guard let self else { return nil }
+            return self.accountDefaultPermissionMode()
+        }
+        model.rememberDefaultPermissionMode = { [weak self] raw in
+            self?.rememberDefaultPermissionMode(raw)
+        }
     }
 
     /// Snapshot a console's reducer and write it, unless nothing advanced since the last write.

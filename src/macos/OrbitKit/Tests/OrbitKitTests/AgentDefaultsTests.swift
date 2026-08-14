@@ -115,6 +115,32 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.normalizeEffort(.medium, for: "deepseek"), .medium)
     }
 
+    /// The seed a session runs under when nobody said. Mirrors the server's `resolvePermissionMode`
+    /// (apiserver/src/common/permission-mode.ts): session intent, else the ACCOUNT default, else
+    /// Auto. Never the workspace — migration 0094 dropped that column, and reading the field the
+    /// wire still carries (always nil now) is what pinned every new session to "Don't Ask".
+    func testResolvePermissionMode() {
+        XCTAssertEqual(AgentDefaults.defaultPermissionMode, .auto)
+
+        // No stored mode anywhere: the floor, not `.default` and not `.dontAsk`.
+        XCTAssertEqual(AgentDefaults.resolvePermissionMode(session: nil, accountDefault: nil), .auto)
+        // The account default fills in for a session that stores none (task- or MCP-created).
+        XCTAssertEqual(
+            AgentDefaults.resolvePermissionMode(session: nil, accountDefault: "plan"), .plan)
+        // A stored session mode wins over the account default.
+        XCTAssertEqual(
+            AgentDefaults.resolvePermissionMode(session: "acceptEdits", accountDefault: "plan"),
+            .acceptEdits)
+        // A value neither side understands falls through rather than reaching a runtime that
+        // cannot honour it — the server does the same.
+        XCTAssertEqual(
+            AgentDefaults.resolvePermissionMode(session: nil, accountDefault: "sudo-everything"),
+            .auto)
+        XCTAssertEqual(
+            AgentDefaults.resolvePermissionMode(session: "sudo-everything", accountDefault: "plan"),
+            .plan)
+    }
+
     func testAutoPermissionModeCapabilityAndClamp() {
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-opus-5"))
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-fable-5"))

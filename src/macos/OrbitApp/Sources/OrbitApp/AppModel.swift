@@ -249,6 +249,14 @@ final class AppModel {
             self?.showToast(request.message, sessionID: sessionID,
                             detail: request.detail, tone: request.tone)
         }
+        // The permission posture a session inherits when it stores none, and where a Mode picked in
+        // the composer is remembered — both live on the account (Settings → Default permission).
+        consoleRegistry?.accountDefaultPermissionMode = { [weak self] in
+            self?.user?.preferences?.defaultPermissionMode
+        }
+        consoleRegistry?.rememberDefaultPermissionMode = { [weak self] raw in
+            self?.rememberDefaultPermissionMode(raw)
+        }
         #if os(macOS)
         runnerControl = RunnerControl(baseURL: url, tokenStore: tokenStore)
         #endif
@@ -284,6 +292,19 @@ final class AppModel {
         guard let api, user?.preferences?.defaultEffort != raw else { return }
         Task {
             if let updated = try? await api.updatePreferences(UpdatePreferencesRequest(defaultEffort: raw)) {
+                user = updated
+            }
+        }
+    }
+
+    /// Persist a Mode the user picked when starting a session as the account default (synced across
+    /// devices), so the runs nobody starts from a composer — task-launched, MCP-created — inherit it
+    /// server-side. Same fire-and-forget shape as `rememberDefaultEffort`.
+    func rememberDefaultPermissionMode(_ raw: String) {
+        guard let api, user?.preferences?.defaultPermissionMode != raw else { return }
+        Task {
+            if let updated = try? await api.updatePreferences(
+                UpdatePreferencesRequest(defaultPermissionMode: raw)) {
                 user = updated
             }
         }

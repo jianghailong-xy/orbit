@@ -146,7 +146,10 @@ struct SettingsView: View {
             loaded = true
             let p = model.user?.preferences
             theme = p?.theme ?? "system"
-            permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "default") ?? .default
+            // An unset preference is the server's floor (Auto), not Default — showing Default here
+            // would name a mode the account isn't actually running.
+            permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
+                ?? AgentDefaults.defaultPermissionMode
         }
     }
 
@@ -158,7 +161,8 @@ struct SettingsView: View {
     private func autosavePreferences() {
         let p = model.user?.preferences
         guard (p?.theme ?? "system") != theme
-            || (p?.defaultPermissionMode ?? PermissionMode.default.rawValue) != permMode.rawValue
+            || (p?.defaultPermissionMode ?? AgentDefaults.defaultPermissionMode.rawValue)
+                != permMode.rawValue
         else { return }
         Task {
             await model.savePreferences(UpdatePreferencesRequest(
