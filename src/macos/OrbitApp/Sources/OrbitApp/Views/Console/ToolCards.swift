@@ -93,8 +93,17 @@ struct ToolCardView: View {
         .overlay(alignment: .leading) { Rectangle().fill(d.tone.color).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: isOpen ? 8 : 0))
         .overlay {
-            if isOpen { RoundedRectangle(cornerRadius: 8).stroke(Color.primary.opacity(0.12), lineWidth: 1) }
+            // Faded, not inserted — see ToolGroupCardView: a view appearing is a structural change,
+            // and structural changes are what the List animates.
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                .opacity(isOpen ? 1 : 0)
         }
+        // Instant, for the same reason the folded run of them is: animating a row's height means
+        // SwiftUI interpolating its contents while the UICollectionView behind the List re-measures
+        // and animates the same cell. One body's worth of delta hid that for a long time; it was
+        // the same defect, below the threshold of notice.
+        .animation(nil, value: isOpen)
     }
 
     private var row: some View {
@@ -123,7 +132,7 @@ struct ToolCardView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard hasDetail else { return }
-            withAnimation(.easeOut(duration: 0.12)) { expanded.toggle() }
+            expanded.toggle()
         }
     }
 
