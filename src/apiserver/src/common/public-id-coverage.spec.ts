@@ -7,7 +7,7 @@ import { validate } from 'class-validator';
 import { uuidToBase62 } from '@orbit/shared';
 import { PublicIdPipe } from './public-id';
 import { CreateTaskDto } from '../tasks/dto';
-import { AgentsController } from '../agents/agents.controller';
+import { WorkspacesController } from '../workspaces/workspaces.controller';
 import { AttachmentsController } from '../attachments/attachments.controller';
 import { AdminProvidersController } from '../providers/admin-providers.controller';
 import { ProvidersController } from '../providers/providers.controller';
@@ -39,7 +39,7 @@ const NON_ID_PARAMS = new Set(['token', 'userCode', 'seq']);
 // adding one is a deliberate act rather than something a regex silently decides.
 const ID_QUERIES = new Set([
   'runnerId',
-  'agentId',
+  'workspaceId',
   'tagId',
   'listId',
   'assigneeId',
@@ -48,7 +48,7 @@ const ID_QUERIES = new Set([
 ]);
 
 const CONTROLLERS = [
-  AgentsController,
+  WorkspacesController,
   AttachmentsController,
   AdminProvidersController,
   ProvidersController,
@@ -129,7 +129,7 @@ test('PublicIdPipe is constructible by Nest with no injectable dependencies', ()
 const UUID = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
 const B62 = uuidToBase62(UUID);
 const asParam = { type: 'param', data: 'id' } as const;
-const asQuery = { type: 'query', data: 'agentId' } as const;
+const asQuery = { type: 'query', data: 'workspaceId' } as const;
 
 test('PublicIdPipe accepts both spellings of a public id', () => {
   const pipe = new PublicIdPipe();
@@ -192,10 +192,10 @@ test('IsPublicId still rejects a body id that is neither spelling', async () => 
 // a free-form idempotency key that must survive byte-for-byte or a retry stops deduping. Several
 // ride the runner protocol, where a wrong 400 breaks runners that are already installed.
 test('PublicIdPipe normalizes only the fields it was given', () => {
-  const pipe = PublicIdPipe.forFields('agentId', 'taskId');
+  const pipe = PublicIdPipe.forFields('workspaceId', 'taskId');
   const body = pipe.transform({
     prompt: 'go',
-    agentId: B62,
+    workspaceId: B62,
     taskId: UUID,
     clientTurnId: 'RETRY-KEY-1',
     toolUseId: 'toolu_01ABC',
@@ -203,7 +203,7 @@ test('PublicIdPipe normalizes only the fields it was given', () => {
   });
   assert.deepEqual(body, {
     prompt: 'go',
-    agentId: UUID,
+    workspaceId: UUID,
     taskId: UUID,
     clientTurnId: 'RETRY-KEY-1',
     toolUseId: 'toolu_01ABC',
@@ -212,8 +212,8 @@ test('PublicIdPipe normalizes only the fields it was given', () => {
 });
 
 test('PublicIdPipe refuses an undecodable id and ignores absent ones', () => {
-  const pipe = PublicIdPipe.forFields('agentId');
+  const pipe = PublicIdPipe.forFields('workspaceId');
   assert.deepEqual(pipe.transform({ prompt: 'go' }), { prompt: 'go' });
-  assert.deepEqual(pipe.transform({ prompt: 'go', agentId: '' }), { prompt: 'go', agentId: '' });
-  assert.throws(() => pipe.transform({ agentId: 'no-pe' }), { message: 'invalid agentId' });
+  assert.deepEqual(pipe.transform({ prompt: 'go', workspaceId: '' }), { prompt: 'go', workspaceId: '' });
+  assert.throws(() => pipe.transform({ workspaceId: 'no-pe' }), { message: 'invalid workspaceId' });
 });

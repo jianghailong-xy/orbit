@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Spin } from 'antd';
 import { getToken } from './api';
 import { encodeId } from './lib/idCodec';
-import { agentsQuery, runnersQuery } from './lib/queries';
-import { firstOpenableAgent } from './lib/agentOrder';
+import { workspacesQuery, runnersQuery } from './lib/queries';
+import { firstOpenableWorkspace } from './lib/workspaceOrder';
 import { AppShell, DocView, FlushView } from './components/AppShell';
-import { AgentConsole } from './components/AgentConsole';
+import { WorkspaceConsole } from './components/WorkspaceConsole';
 import { RunnerRegisterGuide } from './components/RunnerRegisterGuide';
 import { ProfilePage } from './pages/ProfilePage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -22,7 +22,7 @@ import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 
 // Backward-compat: old links nested a session under its runner with raw UUIDs
-// (`/agents/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
+// (`/workspaces/<uuid>/sessions/<uuid>`). Redirect them to the flat short URL.
 function LegacySessionRedirect() {
   const { sessionId } = useParams();
   let to = '/';
@@ -34,22 +34,22 @@ function LegacySessionRedirect() {
   return <Navigate to={to} replace />;
 }
 
-// The default landing (bare root, and where login/setup bounce to): the first agent's session
-// list — the same destination as clicking that agent in the sidebar. Resolving "the first agent"
-// needs the agents list, so this is a component (not a static <Navigate>). With no agent to open
+// The default landing (bare root, and where login/setup bounce to): the first workspace's session
+// list — the same destination as clicking that workspace in the sidebar. Resolving "the first workspace"
+// needs the workspaces list, so this is a component (not a static <Navigate>). With no workspace to open
 // yet, fall back to onboarding: a brand-new account (no runners) → the registration guide; a
-// single runner → that runner's page, where its first agent is created; several runners → the
+// single runner → that runner's page, where its first workspace is created; several runners → the
 // list, since there's a machine to pick first. BootGate pre-warms both queries, so on a fresh
 // load these read straight from cache and redirect in one shot.
 function DefaultLanding() {
-  const agents = useQuery(agentsQuery());
+  const workspaces = useQuery(workspacesQuery());
   const runners = useQuery(runnersQuery());
   const first =
-    agents.isSuccess && runners.isFetched
-      ? firstOpenableAgent(agents.data, runners.data ?? [])
+    workspaces.isSuccess && runners.isFetched
+      ? firstOpenableWorkspace(workspaces.data, runners.data ?? [])
       : undefined;
-  if (first) return <Navigate to={`/agents/${encodeId(first.id)}`} replace />;
-  if (!agents.isFetched || !runners.isFetched) {
+  if (first) return <Navigate to={`/workspaces/${encodeId(first.id)}`} replace />;
+  if (!workspaces.isFetched || !runners.isFetched) {
     return (
       <main className="app-main">
         <div className="app-view app-view--doc" style={{ padding: 48, textAlign: 'center' }}>
@@ -94,7 +94,7 @@ export function App() {
       ) : (
         <>
           {/* The app shell hosts one routed view at a time. The default landing is the first
-              agent's session list — the bare root resolves it via <DefaultLanding>, and login
+              workspace's session list — the bare root resolves it via <DefaultLanding>, and login
               redirects to it too; the task list lives at "/tasks". Each view wraps itself in its
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           <Route element={<AppShell />}>
@@ -189,13 +189,16 @@ export function App() {
                 </DocView>
               }
             />
-            {/* Both agent paths share one AgentConsole layout route, so AgentView
+            {/* Both workspace paths share one WorkspaceConsole layout route, so WorkspaceView
                 survives navigation between them without remounting. */}
-            <Route element={<AgentConsole />}>
+            <Route element={<WorkspaceConsole />}>
+              <Route path="workspaces/:id/*" />
+              {/* Pre-rename URL, still in people's bookmarks and history. */}
               <Route path="agents/:id/*" />
               <Route path="sessions/:id" />
             </Route>
           </Route>
+          <Route path="/workspaces/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
           <Route path="/agents/:id/sessions/:sessionId" element={<LegacySessionRedirect />} />
         </>
       )}

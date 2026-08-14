@@ -19,7 +19,7 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
         id: where.id,
         rootSessionId: 'root',
         spawnDepth: 0,
-        agent: { enableOrchestration: true },
+        workspace: { enableOrchestration: true },
       }),
       update: async () => ({}),
       // Two different questions about the same tree: how much of it is unfinished, and how
@@ -38,7 +38,7 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
       },
     },
     user: { findUnique: async () => null },
-    agent: { findFirst: async () => null },
+    workspace: { findFirst: async () => null },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
   (service as unknown as { create: SessionsService['create'] }).create = (async (
@@ -47,7 +47,7 @@ function makeService(tree: Tree | number, startedThisHour = 0) {
     _opts: unknown,
   ) => {
     created.push('spawned');
-    return { id: 'spawned', status: RunStatus.PENDING, title: 'spawned', agentId: null };
+    return { id: 'spawned', status: RunStatus.PENDING, title: 'spawned', workspaceId: null };
   }) as unknown as SessionsService['create'];
   return { service, created, counted: () => counted };
 }
@@ -124,7 +124,7 @@ test('unsettled work still reaches the limit', async () => {
 });
 
 /**
- * A loop in agent space — A spawns B, B messages A back with session_send, A spawns again —
+ * A loop in workspace space — A spawns B, B messages A back with session_send, A spawns again —
  * stays one level deep forever, so no depth guard can see it, and if each child finishes
  * quickly it never trips the outstanding cap either. It just burns tokens. The rate is what
  * catches this shape.

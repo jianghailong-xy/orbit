@@ -18,7 +18,7 @@ import { toUuid } from '@orbit/shared';
  * returns every indexed row and Postgres rechecks them all: measured at 533ms for a 2-character
  * Chinese query against 36.6k messages, versus 4.7ms for a 4-character one.
  *
- * Below the floor the search narrows to the short "name" columns (title, branch, agent, task) and
+ * Below the floor the search narrows to the short "name" columns (title, branch, workspace, task) and
  * skips the multi-KB bodies entirely — 4.4ms instead of 128ms on the same data. That turned out
  * to be the better product answer too, not just the faster one: one or two characters matched
  * inside a 7 KB prompt is noise (512 hits versus 51), and a query that short is nearly always a
@@ -39,7 +39,7 @@ export interface NormalizedSearchQuery {
    *  simply misses the owner-scoped primary-key lookup. This lets a short id copied from an Orbit
    *  URL resolve without trying to make PostgreSQL reproduce the Base62 codec. */
   sessionId: string | null;
-  /** A conventional 8–12 character hexadecimal UUID prefix. Agents and logs often abbreviate a
+  /** A conventional 8–12 character hexadecimal UUID prefix. Workspaces and logs often abbreviate a
    *  child id this way; the query returns every owner-scoped match rather than guessing if the
    *  prefix is ambiguous. */
   sessionIdPrefix: string | null;

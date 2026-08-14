@@ -112,7 +112,7 @@ export function parseModelCatalog(payload: unknown, presets: ProviderPreset[] = 
   return catalog;
 }
 
-/** A model a coding agent can actually be pointed at: this vendor's, tool-calling, text out. */
+/** A model a coding workspace can actually be pointed at: this vendor's, tool-calling, text out. */
 function usable(m: CatalogEntry, match: RegExp): boolean {
   if (typeof m.id !== 'string' || !match.test(m.id)) return false;
   if (m.tool_call !== true) return false;

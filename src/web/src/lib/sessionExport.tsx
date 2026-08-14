@@ -24,7 +24,7 @@ export interface ExportSession {
   createdAt?: string | null;
   startedAt?: string | null;
   lastTurnAt?: string | null;
-  agent?: { name?: string | null } | null;
+  workspace?: { name?: string | null } | null;
 }
 
 const ORBIT_ATTACHMENT_RE = /!\[[^\]]*]\(\s*<?orbit-attachment:([0-9a-zA-Z-]+)>?(?:\s+(?:"[^"]*"|'[^']*'))?\s*\)/g;
@@ -71,7 +71,7 @@ async function resolveImages(
 const escapeHtml = (s: string): string =>
   s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
-// Filesystem-safe slug from the session title / agent name for the download filename.
+// Filesystem-safe slug from the session title / workspace name for the download filename.
 const slug = (s: string): string =>
   s
     .toLowerCase()
@@ -96,7 +96,7 @@ body { margin: 0; background: var(--bg-base); color: var(--text-1);
 .orbit-export-meta { margin-top: 6px; font-size: 13px; color: var(--text-2); }
 .orbit-export-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border-subtle);
   text-align: center; font-size: 12px; color: var(--text-3); }
-.orbit-export .agent-sessions { display: block; overflow: visible; flex: none; min-height: 0; }
+.orbit-export .workspace-sessions { display: block; overflow: visible; flex: none; min-height: 0; }
 .orbit-export .chat-copy, .orbit-export .md-copy, .orbit-export .chat-more,
 .orbit-export .chat-tool-caret, .orbit-export .chat-image-mask { display: none !important; }
 .orbit-export .chat-tool-row { cursor: default !important; }
@@ -111,9 +111,9 @@ export function buildSessionHtml(
   theme: string,
 ): string {
   const title = titleFirstLine(session.title || 'Session');
-  const agentName = session.agent?.name?.trim();
+  const workspaceName = session.workspace?.name?.trim();
   const started = fmtDate(session.startedAt ?? session.createdAt);
-  const meta = [agentName, session.status?.toLowerCase(), started && `started ${started}`]
+  const meta = [workspaceName, session.status?.toLowerCase(), started && `started ${started}`]
     .filter(Boolean)
     .join('  ·  ');
 
@@ -123,7 +123,7 @@ export function buildSessionHtml(
       { value: { images } },
       createElement(
         'div',
-        { className: 'agent-sessions' },
+        { className: 'workspace-sessions' },
         createElement(Transcript, { events, live: false }),
       ),
     ),
@@ -147,7 +147,7 @@ ${EXPORT_CSS}
 <div class="orbit-export-title">${escapeHtml(title)}</div>
 ${meta ? `<div class="orbit-export-meta">${escapeHtml(meta)}</div>` : ''}
 </header>
-<div class="agent-sessions">${body}</div>
+<div class="workspace-sessions">${body}</div>
 <footer class="orbit-export-foot">Exported from Orbit${started ? ` · ${escapeHtml(new Date().toLocaleDateString())}` : ''}</footer>
 </div>
 </body>
@@ -166,7 +166,7 @@ export async function exportSessionHtml(
   const theme = document.documentElement.getAttribute('data-theme') ?? '';
   const html = buildSessionHtml(session, events, images, theme);
 
-  const name = `${slug(session.agent?.name || 'orbit')}-${slug(session.title || 'session')}-${new Date()
+  const name = `${slug(session.workspace?.name || 'orbit')}-${slug(session.title || 'session')}-${new Date()
     .toISOString()
     .slice(0, 10)}.html`;
   const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));

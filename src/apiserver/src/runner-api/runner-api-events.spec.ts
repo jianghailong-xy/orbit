@@ -145,7 +145,7 @@ test('a respawn handshake clears background work left by the previous process', 
 /**
  * Claude Code emits an `init` at the head of every query, including the self-driven turns it
  * starts for a background-task notification. Resetting on those erased the very background work
- * whose notification woke the agent — a session watching a live Monitor reported none. The
+ * whose notification woke the workspace — a session watching a live Monitor reported none. The
  * crash-recovery case that `init` used to stand in for is covered by /takeover-leases, which
  * every claim and reclaim performs.
  */
@@ -379,7 +379,7 @@ test('a runtime that reports no context size leaves the stored one standing', as
 });
 
 /**
- * A turn interrupted before the agent said anything must keep the message you sent as the list's
+ * A turn interrupted before the workspace said anything must keep the message you sent as the list's
  * preview. The interrupt and the turn end are frontier events but not *answers*, so they must not
  * write null over `lastUserText` — doing so left the row with no preview at all.
  */
@@ -552,7 +552,7 @@ test('the transcript read hands back whole payloads oldest-first', async () => {
     out.events.map((e) => e.seq),
     [1, 2],
   );
-  // A rebuilt transcript assembled from preview-sized tool bodies would rewrite the agent's
+  // A rebuilt transcript assembled from preview-sized tool bodies would rewrite the workspace's
   // own history, so this path must never truncate the way the clients' /events/page does.
   assert.equal((out.events[1].payload as { text: string }).text.length, 5000);
 });

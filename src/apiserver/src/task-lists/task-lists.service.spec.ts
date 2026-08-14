@@ -35,7 +35,7 @@ test('named task list rows expose the same dependency lock state as the main tas
       user: {
         findMany: async () => [{ id: CREATOR_ID, name: 'Owner' }],
       },
-      agent: { findMany: async () => [] },
+      workspace: { findMany: async () => [] },
     } as never,
     {} as never,
   );

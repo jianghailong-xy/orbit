@@ -20,7 +20,7 @@ function makeService(count: number, sessions: { taskId: string; status: string }
     id: `task-${index}`,
     title: `Task ${index}`,
     description: null,
-    assignee: { id: `agent-${index}`, runnerId: 'runner-1' },
+    assignee: { id: `workspace-${index}`, runnerId: 'runner-1' },
   }));
   const prisma = {
     task: { findMany: async () => tasks },
@@ -48,7 +48,7 @@ test('batchExecute bounds session initialization independently of runtime maxCon
   let maxActive = 0;
   let started = 0;
   const batches: Array<{ id: string; maxConcurrent: number } | undefined> = [];
-  (service as any).runAgentOnTask = async (...args: unknown[]) => {
+  (service as any).runWorkspaceOnTask = async (...args: unknown[]) => {
     const task = args[1] as { id: string };
     batches.push(args[5] as { id: string; maxConcurrent: number } | undefined);
     started += 1;
@@ -99,7 +99,7 @@ test('batchExecute dispatches parked sessions and skips only in-flight ones', as
     // task-4 has no session at all.
   ]);
   const dispatched: string[] = [];
-  (service as any).runAgentOnTask = async (...args: unknown[]) => {
+  (service as any).runWorkspaceOnTask = async (...args: unknown[]) => {
     const task = args[1] as { id: string };
     dispatched.push(task.id);
     return `session-${task.id}`;
@@ -134,7 +134,7 @@ test('batchExecute preserves runnable order when collecting out-of-order failure
     });
     deferred.set(`task-${index}`, { promise, resolve, reject });
   }
-  (service as any).runAgentOnTask = async (...args: unknown[]) => {
+  (service as any).runWorkspaceOnTask = async (...args: unknown[]) => {
     const task = args[1] as { id: string };
     return deferred.get(task.id)!.promise;
   };

@@ -20,7 +20,7 @@ import {
   RUNNER_ORCHESTRATION_JWT,
   RunnerOrchestrationAuthorizer,
 } from './runner-orchestration-authorizer';
-import { AgentsService } from '../agents/agents.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 
 @Module({
@@ -56,7 +56,7 @@ import { PushModule } from '../push/push.module';
     },
     ServiceTokenAuthorizer,
     TaskListsService,
-    AgentsService,
+    WorkspacesService,
   ],
 })
 export class RunnerApiModule {}

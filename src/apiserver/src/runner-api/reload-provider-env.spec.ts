@@ -45,7 +45,7 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
         ownerId: OWNER_ID,
         model: 'claude-opus-5',
         usesRuntimeDefaultModel: true,
-        agent: null,
+        workspace: null,
         assignedRunner: null,
         ...session,
       }),

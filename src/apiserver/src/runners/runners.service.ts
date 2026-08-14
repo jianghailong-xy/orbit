@@ -226,7 +226,7 @@ export class RunnersService {
 
   /**
    * Approve a device session: mint one Runner for the machine, then stash its
-   * credential. Agents are registered separately, not here.
+   * credential. Workspaces are registered separately, not here.
    */
   async approveDeviceEnrollment(ownerId: string, userCode: string) {
     this.rateLimitDeviceLookup(ownerId);

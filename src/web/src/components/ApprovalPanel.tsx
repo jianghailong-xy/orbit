@@ -183,7 +183,7 @@ function QuestionForm({
   // the user type their own answer instead of picking a listed option.
   const [custom, setCustom] = useState<Record<string, string>>({});
   // "Chat about this": rather than picking an option, the user replies conversationally
-  // in the main composer (handled by AgentView via onChatAbout). The reply still rides back
+  // in the main composer (handled by WorkspaceView via onChatAbout). The reply still rides back
   // as a `deny` message so claude reads it as in-turn feedback instead of a forced option.
   const chatLabel = questions[0]?.header || questions[0]?.question || '';
 

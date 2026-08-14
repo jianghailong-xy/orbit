@@ -26,19 +26,19 @@ import type {
 } from '@orbit/shared';
 import { api, clearToken, logoutSession } from '../api';
 import { decodeId, encodeId } from '../lib/idCodec';
-import { agentSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
+import { workspaceSessionCountsQuery, meQuery, sessionQuery } from '../lib/queries';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
-  groupAgentsByRunner,
-  orderAgentGroupsByRunners,
-  orderAgents,
-  type AgentGroup,
-} from '../lib/agentOrder';
+  groupWorkspacesByRunner,
+  orderWorkspaceGroupsByRunners,
+  orderWorkspaces,
+  type WorkspaceGroup,
+} from '../lib/workspaceOrder';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 
 // Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
-// page (Admin is appended for admins below). The agents themselves live in the "Agents"
+// page (Admin is appended for admins below). The workspaces themselves live in the "Workspaces"
 // group further down.
 const TOP = [
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
@@ -90,16 +90,16 @@ export interface Runner {
   install?: RunnerInstallState | null;
 }
 
-interface Agent {
+interface Workspace {
   id: string;
   name: string;
   // ISO-8601 creation timestamp; the sidebar falls back to it (oldest-first) for
-  // agents that have never been dragged into a custom slot.
+  // workspaces that have never been dragged into a custom slot.
   createdAt: string;
   // Drag-to-reorder slot (0-based). null until the user reorders, so it sorts last.
   position?: number | null;
-  // The machine this agent belongs to (null for config-only agents); an agent
-  // with no runner has no console to open. GET /agents embeds the runner's name/
+  // The machine this workspace belongs to (null for config-only workspaces); a workspace
+  // with no runner has no console to open. GET /workspaces embeds the runner's name/
   // displayName so the sidebar can label the runner group without a second lookup.
   runnerId?: string | null;
   runner?: { id: string; name?: string; displayName?: string | null } | null;
@@ -139,33 +139,36 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
       ? [...TOP, { key: 'admin', icon: <TeamOutlined />, label: 'Admin' }]
       : TOP;
 
-  // The open agent comes from /agents/<id>; behind a /sessions/<id> link, resolve
+  // The open workspace comes from /workspaces/<id>; behind a /sessions/<id> link, resolve
   // it from that session so its row highlights there too. The session query reuses
   // the console's cache (same key via sessionQuery), so it adds no extra request.
-  // Splat (`/*`) so a sub-route like /agents/<id>/new still resolves the agent;
-  // a bare `/agents/:id` matches exactly and would miss /new, falling back to the
-  // "Runners" highlight. params.id stays the agent id under the splat.
-  const openAgentId = decodeId(useMatch('/agents/:id/*')?.params.id);
+  // Splat (`/*`) so a sub-route like /workspaces/<id>/new still resolves the workspace;
+  // a bare `/workspaces/:id` matches exactly and would miss /new, falling back to the
+  // "Runners" highlight. params.id stays the workspace id under the splat.
+  // `agents` is the pre-rename URL people still have bookmarked.
+  const openWorkspaceId = decodeId(
+    (useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*'))?.params.id,
+  );
   const sessionId = decodeId(useMatch('/sessions/:id')?.params.id);
   const sessionQ = useQuery({
     ...sessionQuery(sessionId),
-    // Keep the previous session's data while the next one loads so activeAgentId
+    // Keep the previous session's data while the next one loads so activeWorkspaceId
     // never blips to null between sessions — otherwise the highlight flickers to
     // the top "Runners" item and back on each ArrowUp/ArrowDown.
     placeholderData: keepPreviousData,
   });
-  // Only resolve the agent from session data while we're actually on a session
+  // Only resolve the workspace from session data while we're actually on a session
   // route. keepPreviousData (above) keeps the last session's data around to avoid
-  // flicker between sessions, but that stale data would otherwise keep an agent
+  // flicker between sessions, but that stale data would otherwise keep a workspace
   // row highlighted after navigating away to a list or top-nav route.
-  const activeAgentId = openAgentId ?? (sessionId ? sessionQ.data?.agent?.id : null) ?? null;
+  const activeWorkspaceId = openWorkspaceId ?? (sessionId ? sessionQ.data?.workspace?.id : null) ?? null;
 
-  // The runner-centric routes (/runners, /runner, /agents, /sessions) keep "Runners"
-  // highlighted; an open agent highlights its own row below instead. Clicking a list item
+  // The runner-centric routes (/runners, /runner, /workspaces, /sessions) keep "Runners"
+  // highlighted; an open workspace highlights its own row below instead. Clicking a list item
   // below overrides it locally.
-  const routeKey = activeAgentId
-    ? '' // scoped to one agent — its row highlights below, no top item
-    : loc.pathname.startsWith('/agents/') ||
+  const routeKey = activeWorkspaceId
+    ? '' // scoped to one workspace — its row highlights below, no top item
+    : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/runner')
       ? 'runners'
@@ -178,7 +181,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   const [listOpen, setListOpen] = useState(true);
   const [completedOpen, setCompletedOpen] = useState(false);
   // Which runner groups are expanded. With more than one runner they default to collapsed (like the
-  // iOS drawer); the effect below keeps the open agent's group expanded, and the user toggles the rest.
+  // iOS drawer); the effect below keeps the open workspace's group expanded, and the user toggles the rest.
   const [expandedRunners, setExpandedRunners] = useState<Set<string>>(new Set());
 
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -255,36 +258,36 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
     return m;
   }, [runners.data]);
 
-  // The "Agents" list is the user's agent definitions (model + tools).
-  const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
-  // Base agent order; the runner-group order is applied below. Within each group, custom Agent
+  // The "Workspaces" list is the user's workspace definitions (model + tools).
+  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  // Base workspace order; the runner-group order is applied below. Within each group, custom Workspace
   // positions still drive the rows before the flattened ⌘1‒9 order is calculated.
-  const agentList = useMemo(() => orderAgents(agents.data ?? []), [agents.data]);
-  // Agents grouped by their machine (runner), mirroring the iOS/macOS drawer: each runner is a
-  // collapsible header and host-level agents sink to a "Shared" group. ⌘1‒9 index into the flattened
+  const workspaceList = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
+  // Workspaces grouped by their machine (runner), mirroring the iOS/macOS drawer: each runner is a
+  // collapsible header and host-level workspaces sink to a "Shared" group. ⌘1‒9 index into the flattened
   // grouped order, so the shortcut number and the on-screen position stay in lockstep.
-  const agentGroups = useMemo(
-    () => orderAgentGroupsByRunners(groupAgentsByRunner(agentList), runners.data ?? []),
-    [agentList, runners.data],
+  const workspaceGroups = useMemo(
+    () => orderWorkspaceGroupsByRunners(groupWorkspacesByRunner(workspaceList), runners.data ?? []),
+    [workspaceList, runners.data],
   );
-  const orderedAgents = useMemo(() => agentGroups.flatMap((g) => g.agents), [agentGroups]);
-  const agentOrderIndex = useMemo(
-    () => new Map(orderedAgents.map((a, i) => [a.id, i])),
-    [orderedAgents],
+  const orderedWorkspaces = useMemo(() => workspaceGroups.flatMap((g) => g.workspaces), [workspaceGroups]);
+  const workspaceOrderIndex = useMemo(
+    () => new Map(orderedWorkspaces.map((a, i) => [a.id, i])),
+    [orderedWorkspaces],
   );
-  const runnerGroupKey = (g: AgentGroup<Agent>) => g.runnerId ?? 'host';
-  // Keep the open agent's group expanded — seeded on load and re-applied on navigation — while
+  const runnerGroupKey = (g: WorkspaceGroup<Workspace>) => g.runnerId ?? 'host';
+  // Keep the open workspace's group expanded — seeded on load and re-applied on navigation — while
   // leaving every other group under the user's own toggles. A lone group is always shown expanded.
   useEffect(() => {
-    if (!activeAgentId) return;
-    const g = agentGroups.find((grp) => grp.agents.some((a) => a.id === activeAgentId));
+    if (!activeWorkspaceId) return;
+    const g = workspaceGroups.find((grp) => grp.workspaces.some((a) => a.id === activeWorkspaceId));
     if (!g) return;
     const k = runnerGroupKey(g);
     setExpandedRunners((prev) => (prev.has(k) ? prev : new Set(prev).add(k)));
-  }, [activeAgentId, agentGroups]);
-  const isRunnerExpanded = (g: AgentGroup<Agent>) =>
-    agentGroups.length <= 1 || expandedRunners.has(runnerGroupKey(g));
-  const toggleRunner = (g: AgentGroup<Agent>) => {
+  }, [activeWorkspaceId, workspaceGroups]);
+  const isRunnerExpanded = (g: WorkspaceGroup<Workspace>) =>
+    workspaceGroups.length <= 1 || expandedRunners.has(runnerGroupKey(g));
+  const toggleRunner = (g: WorkspaceGroup<Workspace>) => {
     const k = runnerGroupKey(g);
     setExpandedRunners((prev) => {
       const next = new Set(prev);
@@ -326,49 +329,49 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   });
   const unlistedCount = unlistedTasks.data?.counts?.total ?? 0;
 
-  // Per-agent Open-session tallies, counted server-side. Polls faster while anything is live.
+  // Per-workspace Open-session tallies, counted server-side. Polls faster while anything is live.
   // This used to fetch every open session and tally them here, which on an account with
   // thousands of sessions was the app's heaviest request — and it ran on a 5–15s loop for two
-  // numbers per agent. Sessions with no agent still belong to no row, as before.
+  // numbers per workspace. Sessions with no workspace still belong to no row, as before.
   const sessionCounts = useQuery({
-    ...agentSessionCountsQuery(),
+    ...workspaceSessionCountsQuery(),
     refetchInterval: controlLive
       ? false
       : (q) => ((q.state.data ?? []).some((c) => c.active > 0) ? 5_000 : 15_000),
   });
-  // The "needs you" signal per agent: how many of its Open sessions are blocked on an approval.
-  // Lets an agent row show its own attention count (and hide its ⌘ shortcut) so you can jump
-  // straight to the agent that needs you.
-  const agentNeedsYou = useMemo(
-    () => new Map((sessionCounts.data ?? []).map((c) => [c.agentId, c.needsYou])),
+  // The "needs you" signal per workspace: how many of its Open sessions are blocked on an approval.
+  // Lets a workspace row show its own attention count (and hide its ⌘ shortcut) so you can jump
+  // straight to the workspace that needs you.
+  const workspaceNeedsYou = useMemo(
+    () => new Map((sessionCounts.data ?? []).map((c) => [c.workspaceId, c.needsYou])),
     [sessionCounts.data],
   );
 
-  // Open an agent's console — the same destination the runner detail page uses.
-  // Config-only agents (no runner) have no console to open.
-  const openAgent = useCallback(
-    (a: Agent) => {
+  // Open a workspace's console — the same destination the runner detail page uses.
+  // Config-only workspaces (no runner) have no console to open.
+  const openWorkspace = useCallback(
+    (a: Workspace) => {
       if (!(a.runner?.id ?? a.runnerId)) return;
-      navigate(`/agents/${encodeId(a.id)}`);
+      navigate(`/workspaces/${encodeId(a.id)}`);
     },
     [navigate],
   );
 
-  // ⌘/Ctrl + 1‒9 opens the matching agent in the list. The modifier chord never
+  // ⌘/Ctrl + 1‒9 opens the matching workspace in the list. The modifier chord never
   // produces text input, so it fires even while a text field is focused;
   // preventDefault stops the browser's own tab-switch on the same chord.
   useEffect(() => {
-    const list = orderedAgents;
+    const list = orderedWorkspaces;
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return;
       const n = Number(e.key);
       if (!Number.isInteger(n) || n < 1 || n > 9 || n > list.length) return;
       e.preventDefault();
-      openAgent(list[n - 1]);
+      openWorkspace(list[n - 1]);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [orderedAgents, openAgent]);
+  }, [orderedWorkspaces, openWorkspace]);
 
   const renderListRow = (l: TaskList) => {
     const key = encodeId(l.id);
@@ -435,9 +438,9 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         </button>
       </div>
 
-      {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (agents,
+      {/* Collapsed-only icon rail: the fixed top-nav as icons. The dynamic lists (workspaces,
           task lists) have no icon form, so they fold away — expand to bring them back. The
-          agents themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
+          workspaces themselves stay as monogram avatars below. Shown only when collapsed, on desktop. */}
       <div className="tp-rail">
         {TOP.map((t) => (
           <div
@@ -449,17 +452,17 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             <span className="tp-ico">{t.icon}</span>
           </div>
         ))}
-        {/* The user's agents, kept reachable when collapsed: a monogram avatar each
-            (agents are entities with identity + online state + ⌘1‒9, so unlike the
+        {/* The user's workspaces, kept reachable when collapsed: a monogram avatar each
+            (workspaces are entities with identity + online state + ⌘1‒9, so unlike the
             text-titled task lists they read fine as icons). Same order, same shortcuts. */}
-        {orderedAgents.length > 0 && <div className="tp-rail-divider" />}
-        {orderedAgents.map((a, i) => {
+        {orderedWorkspaces.length > 0 && <div className="tp-rail-divider" />}
+        {orderedWorkspaces.map((a, i) => {
           const online = onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '');
           return (
             <div
               key={a.id}
-              className={`tp-rail-item ${a.id === activeAgentId ? 'active' : ''}`}
-              onClick={() => openAgent(a)}
+              className={`tp-rail-item ${a.id === activeWorkspaceId ? 'active' : ''}`}
+              onClick={() => openWorkspace(a)}
               title={i < 9 ? `${a.name}  ⌘${i + 1}` : a.name}
             >
               <span className="tp-rail-avatar">{(a.name.trim()[0] ?? '?').toUpperCase()}</span>
@@ -486,16 +489,16 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         <div className="tp-divider" />
 
         <div className="tp-group">
-          {agentGroups.map((group) => {
+          {workspaceGroups.map((group) => {
               const expanded = isRunnerExpanded(group);
-              // Host agents read as "Shared"; a real runner uses its display name, falling back to
-              // the name embedded in the agent payload until the ['runners'] cache lands.
+              // Host workspaces read as "Shared"; a real runner uses its display name, falling back to
+              // the name embedded in the workspace payload until the ['runners'] cache lands.
               const label =
                 group.runnerId == null
                   ? 'Shared'
                   : (runnerLabels.get(group.runnerId) ??
-                    group.agents[0]?.runner?.displayName ??
-                    group.agents[0]?.runner?.name ??
+                    group.workspaces[0]?.runner?.displayName ??
+                    group.workspaces[0]?.runner?.name ??
                     'Machine');
               return (
                 <div key={runnerGroupKey(group)}>
@@ -509,19 +512,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                         className={`tp-adot ${onlineRunnerIds.has(group.runnerId) ? 'online' : ''}`}
                       />
                     )}
-                    <span className="tp-count">{group.agents.length}</span>
+                    <span className="tp-count">{group.workspaces.length}</span>
                     <CaretDownOutlined className={`tp-caret ${expanded ? '' : 'collapsed'}`} />
                   </div>
                   {expanded &&
-                    group.agents.map((a) => (
-                      <AgentRow
+                    group.workspaces.map((a) => (
+                      <WorkspaceRow
                         key={a.id}
-                        agent={a}
-                        index={agentOrderIndex.get(a.id) ?? 0}
-                        active={a.id === activeAgentId}
+                        workspace={a}
+                        index={workspaceOrderIndex.get(a.id) ?? 0}
+                        active={a.id === activeWorkspaceId}
                         online={onlineRunnerIds.has(a.runner?.id ?? a.runnerId ?? '')}
-                        needsYou={agentNeedsYou.get(a.id) ?? 0}
-                        onOpen={openAgent}
+                        needsYou={workspaceNeedsYou.get(a.id) ?? 0}
+                        onOpen={openWorkspace}
                       />
                     ))}
                 </div>
@@ -536,7 +539,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         {/* "No list" is the complement of the lists below — tasks in no list at all.
             It's a peer of the Task List group, not a child of it, so it never reads
             as "a list called No list". Only shown when such tasks actually exist
-            (agent-created, or detached when a list was deleted); the usual case is
+            (workspace-created, or detached when a list was deleted); the usual case is
             none, and then it stays out of the way entirely. An icon (not a status
             dot) marks it as a view rather than a list. */}
         {unlistedCount > 0 && (
@@ -547,7 +550,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 setSel('none');
                 navigate('/lists/none');
               }}
-              title="Tasks not in any list (includes agent-created tasks and ones detached when a list was deleted)"
+              title="Tasks not in any list (includes workspace-created tasks and ones detached when a list was deleted)"
             >
               <span className="tp-ico">
                 <InboxOutlined />
@@ -648,31 +651,31 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   );
 }
 
-// One agent row under its runner group: an online dot, the agent name, and the ⌘ shortcut hint
-// (or an amber "needs you" count). A plain click opens the agent's console.
-function AgentRow({
-  agent,
+// One workspace row under its runner group: an online dot, the workspace name, and the ⌘ shortcut hint
+// (or an amber "needs you" count). A plain click opens the workspace's console.
+function WorkspaceRow({
+  workspace,
   index,
   active,
   online,
   needsYou,
   onOpen,
 }: {
-  agent: Agent;
+  workspace: Workspace;
   index: number;
   active: boolean;
   online: boolean;
   needsYou: number;
-  onOpen: (a: Agent) => void;
+  onOpen: (a: Workspace) => void;
 }) {
   return (
     <div
       className={`tp-item inset ${active ? 'active' : ''}`}
-      onClick={() => onOpen(agent)}
+      onClick={() => onOpen(workspace)}
     >
       <span className={`tp-adot ${online ? 'online' : ''}`} style={{ marginRight: 8 }} />
-      <span className="tp-label">{agent.name}</span>
-      {/* When one of this agent's sessions is waiting on you, the right slot shows an
+      <span className="tp-label">{workspace.name}</span>
+      {/* When one of this workspace's sessions is waiting on you, the right slot shows an
           amber attention count instead of the ⌘ shortcut — the "it's your turn" signal
           wins over the discoverability hint. Falls back to the shortcut when nothing's
           waiting. */}

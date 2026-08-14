@@ -72,9 +72,9 @@ export class AdminController {
     try {
       await this.prisma.user.delete({ where: { id } });
     } catch {
-      // Owned runners/agents/sessions/tasks hold FK references; Prisma throws rather
+      // Owned runners/workspaces/sessions/tasks hold FK references; Prisma throws rather
       // than cascade-delete. Surface a clear reason instead of a 500.
-      throw new ConflictException('user still owns runners, agents, or tasks — remove those first');
+      throw new ConflictException('user still owns runners, workspaces, or tasks — remove those first');
     }
     return { id, deleted: true };
   }

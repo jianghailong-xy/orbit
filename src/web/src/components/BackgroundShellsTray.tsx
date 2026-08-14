@@ -17,11 +17,11 @@ import { useToast } from '../lib/toast';
 
 /**
  * "Background processes" tray, shown above the composer like the worktree status bar. It
- * surfaces the shell processes the agent launched with Bash(run_in_background) — which are
+ * surfaces the shell processes the workspace launched with Bash(run_in_background) — which are
  * otherwise invisible (the session looks idle while a build runs in the background).
  *
  * Derived from the session's event stream (see deriveBackgroundShells): the launch + the
- * agent's Read polls, plus the runner's live output tail (background_output) and the reliable
+ * workspace's Read polls, plus the runner's live output tail (background_output) and the reliable
  * completion signal (background_task, from Claude's <task-notification>) that drives the
  * terminal icon + this toast.
  *
@@ -137,7 +137,7 @@ function BgShellRow({
             <Pre text={shell.latestOutput} threshold={16} muted />
           ) : (
             <div className="bg-shell-empty">
-              No output captured yet — the agent hasn't read this process's output.
+              No output captured yet — the workspace hasn't read this process's output.
             </div>
           )}
           <div className="bg-shell-meta" title={shell.outputPath}>

@@ -36,9 +36,9 @@ import { providersQuery } from '../lib/queries';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
-import { defaultModelForProvider, mergedProviderOptions } from '../lib/agentDefaults';
+import { defaultModelForProvider, mergedProviderOptions } from '../lib/workspaceDefaults';
 
-interface Agent {
+interface Workspace {
   id: string;
   name: string;
   appendSystemPrompt?: string | null;
@@ -51,11 +51,12 @@ interface Agent {
   enabled?: boolean;
   enableWorktree?: boolean;
   enableOrchestration?: boolean;
-  /** Defaults a new session under this agent inherits. `effort: null` = inherit the account default. */
-  permissionMode?: string | null;
+  /** Default a new session under this workspace inherits. null = inherit the account default.
+   *  The permission mode is deliberately NOT here — it belongs to the run (Session), with an
+   *  account-level default. */
   effort?: string | null;
   /** What the runner last saw at `workDir` on its own disk (refreshed each heartbeat). All null =
-   *  never probed — an older runner, or one that hasn't reported since this agent was added. */
+   *  never probed — an older runner, or one that hasn't reported since this workspace was added. */
   workDirExists?: boolean | null;
   workDirIsGit?: boolean | null;
   workDirProbedAt?: string | null;
@@ -75,8 +76,8 @@ const fmtTime = (d?: string | null): string =>
     : '—';
 
 // Runner detail / settings page. Clicking a runner lands here (not the chat
-// console) — you manage the runner and the agents that run under it. The live
-// conversation belongs to an agent, reached via each agent's "对话" button.
+// console) — you manage the runner and the workspaces that run under it. The live
+// conversation belongs to a workspace, reached via each workspace's "对话" button.
 export function RunnerDetailPage() {
   // /runners/<base62> — decode the route param to the runner's UUID.
   const runnerId = decodeId(useParams().id);
@@ -92,10 +93,10 @@ export function RunnerDetailPage() {
   });
   const runner = (runners.data ?? []).find((r) => r.id === runnerId) ?? null;
 
-  const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/agents') });
-  const agents = (agentsQ.data ?? []).filter((a) => a.runnerId === runnerId);
+  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<Workspace[]>('/workspaces') });
+  const workspaces = (workspacesQ.data ?? []).filter((a) => a.runnerId === runnerId);
   // Configured providers (custom slugs) are used to resolve the provider label and effective
-  // Runtime-owned model shown in each agent row.
+  // Runtime-owned model shown in each workspace row.
   const configuredProviders = useQuery(providersQuery()).data ?? [];
 
   // Rename / delete the runner — same API the Runners grid uses.
@@ -132,10 +133,10 @@ export function RunnerDetailPage() {
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
   });
 
-  // Add / edit an agent bound to this runner (controlled inputs, like the
+  // Add / edit a workspace bound to this runner (controlled inputs, like the
   // rename modal — avoids antd Form instance pitfalls with pre-filled edits).
   const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<Agent | null>(null);
+  const [editing, setEditing] = useState<Workspace | null>(null);
   const [fName, setFName] = useState('');
   const [fAppend, setFAppend] = useState('');
   const [fWorkDir, setFWorkDir] = useState('');
@@ -146,7 +147,7 @@ export function RunnerDetailPage() {
   // edits are tracked so Cancel can't discard them silently.
   const [advOpen, setAdvOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
-  // The runner's read-only diagnostics — folded away so the agent list owns the first screen.
+  // The runner's read-only diagnostics — folded away so the workspace list owns the first screen.
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   const saveMut = useMutation({
@@ -162,11 +163,11 @@ export function RunnerDetailPage() {
         ),
       };
       return editing
-        ? api(`/agents/${editing.id}`, { method: 'PATCH', body })
-        : api('/agents', { method: 'POST', body: { ...body, runnerId } });
+        ? api(`/workspaces/${editing.id}`, { method: 'PATCH', body })
+        : api('/workspaces', { method: 'POST', body: { ...body, runnerId } });
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['agents'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
       setFormOpen(false);
       setEditing(null);
       setDirty(false);
@@ -174,26 +175,26 @@ export function RunnerDetailPage() {
     onError: (e: Error) => message.error(e.message || 'Save failed'),
   });
   // Enable/disable is a one-field PATCH from the row menu, so it doesn't drag the whole
-  // editor open just to park an agent.
+  // editor open just to park a workspace.
   const setEnabledMut = useMutation({
     mutationFn: (v: { id: string; enabled: boolean }) =>
-      api(`/agents/${v.id}`, { method: 'PATCH', body: { enabled: v.enabled } }),
+      api(`/workspaces/${v.id}`, { method: 'PATCH', body: { enabled: v.enabled } }),
     // Say what it did: disabling now actually refuses work, and a greyed row alone doesn't
-    // tell you that. Running sessions are deliberately left alone — this parks the agent
+    // tell you that. Running sessions are deliberately left alone — this parks the workspace
     // rather than killing what it is already doing.
     onSuccess: (_d, v) => {
       message.success(
         v.enabled
-          ? 'Agent enabled.'
-          : 'Agent disabled — new sessions and task runs are refused. Running sessions continue.',
+          ? 'Workspace enabled.'
+          : 'Workspace disabled — new sessions and task runs are refused. Running sessions continue.',
       );
-      void qc.invalidateQueries({ queryKey: ['agents'] });
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
     },
     onError: (e: Error) => message.error(e.message || 'Update failed'),
   });
   const duplicateMut = useMutation({
-    mutationFn: (a: Agent) =>
-      api('/agents', {
+    mutationFn: (a: Workspace) =>
+      api('/workspaces', {
         method: 'POST',
         body: {
           name: `${a.name} copy`,
@@ -201,24 +202,23 @@ export function RunnerDetailPage() {
           workDir: a.workDir ?? undefined,
           enableWorktree: a.enableWorktree ?? false,
           enableOrchestration: a.enableOrchestration ?? false,
-          permissionMode: a.permissionMode ?? undefined,
           effort: a.effort ?? null,
           env: a.env ?? {},
           runnerId,
         },
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agents'] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
     onError: (e: Error) => message.error(e.message || 'Duplicate failed'),
   });
-  const removeAgentMut = useMutation({
-    mutationFn: (id: string) => api(`/agents/${id}`, { method: 'DELETE' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['agents'] }),
+  const removeWorkspaceMut = useMutation({
+    mutationFn: (id: string) => api(`/workspaces/${id}`, { method: 'DELETE' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
   });
 
   // Shared reset for both entry points — every field the form owns is set here, so a stale
-  // value from the previous agent can never leak into the next one.
-  const resetForm = (a: Agent | null) => {
+  // value from the previous workspace can never leak into the next one.
+  const resetForm = (a: Workspace | null) => {
     setEditing(a);
     setFName(a?.name ?? '');
     setFAppend(a?.appendSystemPrompt ?? '');
@@ -231,8 +231,8 @@ export function RunnerDetailPage() {
     setFormOpen(true);
   };
   const openCreate = () => resetForm(null);
-  const openEdit = (a: Agent) => resetForm(a);
-  const submitAgent = () => {
+  const openEdit = (a: Workspace) => resetForm(a);
+  const submitWorkspace = () => {
     if (fName.trim()) saveMut.mutate();
   };
   const discard = () => {
@@ -245,7 +245,7 @@ export function RunnerDetailPage() {
     if (!dirty) return discard();
     modal.confirm({
       title: 'Discard unsaved changes?',
-      content: "This agent's edits haven't been saved yet.",
+      content: "This workspace's edits haven't been saved yet.",
       okText: 'Discard',
       okButtonProps: { danger: true },
       cancelText: 'Keep editing',
@@ -253,12 +253,12 @@ export function RunnerDetailPage() {
       onOk: discard,
     });
   };
-  // Switching to another agent (or to the create form) goes through the same guard.
+  // Switching to another workspace (or to the create form) goes through the same guard.
   const switchTo = (open: () => void) => {
     if (!dirty) return open();
     modal.confirm({
       title: 'Discard unsaved changes?',
-      content: "This agent's edits haven't been saved yet.",
+      content: "This workspace's edits haven't been saved yet.",
       okText: 'Discard',
       okButtonProps: { danger: true },
       cancelText: 'Keep editing',
@@ -272,10 +272,10 @@ export function RunnerDetailPage() {
   const providerLabelFor = (slug: string) =>
     mergedProviderOptions(configuredProviders).find((p) => p.value === slug)?.label ?? slug;
 
-  // In-place agent editor — rendered as a card in the list (top for create, in
-  // the row itself for edit) instead of a modal, so the runner + agent list stay
+  // In-place workspace editor — rendered as a card in the list (top for create, in
+  // the row itself for edit) instead of a modal, so the runner + workspace list stay
   // in view while you edit.
-  const agentForm = (mode: 'create' | 'edit') => {
+  const workspaceForm = (mode: 'create' | 'edit') => {
     // The same derivation the row's subtitle uses — what a new session here would start on.
     const formProvider = editing?.lastProvider ?? editing?.provider ?? 'claude';
     const formModel = defaultModelForProvider(
@@ -312,7 +312,7 @@ export function RunnerDetailPage() {
       return null;
     })();
     return (
-    <div className={`rd-agent-form${mode === 'create' ? ' rd-agent-form-new' : ''}`}>
+    <div className={`rd-workspace-form${mode === 'create' ? ' rd-workspace-form-new' : ''}`}>
       <div className="rd-form-section">Essentials</div>
       <div className="rd-form-grid">
         <div className="rd-form-field">
@@ -323,7 +323,7 @@ export function RunnerDetailPage() {
               setFName(e.target.value);
               setDirty(true);
             }}
-            onPressEnter={submitAgent}
+            onPressEnter={submitWorkspace}
             placeholder="e.g. tea-cli builder"
             maxLength={60}
             autoFocus
@@ -363,12 +363,12 @@ export function RunnerDetailPage() {
         }}
       />
 
-      {/* Sits beside isolation rather than under Advanced: both answer "what is this agent
-          allowed to do", and this is the one with a security consequence — an agent that can
+      {/* Sits beside isolation rather than under Advanced: both answer "what is this workspace
+          allowed to do", and this is the one with a security consequence — a workspace that can
           drive other sessions shouldn't be a setting you have to go looking for. */}
       <SettingRow
         label="Session orchestration"
-        desc="Let this agent's sessions spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator agents."
+        desc="Let this workspace's sessions spawn and manage other sessions via the orbit MCP session tools. Off → those tools are hidden and refused. Enable only for trusted orchestrator workspaces."
         checked={fEnableOrchestration}
         onChange={(v) => {
           setFEnableOrchestration(v);
@@ -376,7 +376,7 @@ export function RunnerDetailPage() {
         }}
       />
 
-      {/* Model is not an agent field: it resolves from the runtime/provider this project last
+      {/* Model is not a workspace field: it resolves from the runtime/provider this project last
           ran on. Stated read-only because the row displays it — otherwise it reads as a setting
           someone forgot to make editable. Mode and effort are deliberately not here: they are
           per-session choices, made in the session where the context for them is. */}
@@ -447,7 +447,7 @@ export function RunnerDetailPage() {
                 setDirty(true);
               }}
               rows={4}
-              placeholder="Added to this agent's system prompt on every run (optional)"
+              placeholder="Added to this workspace's system prompt on every run (optional)"
             />
           </div>
         </div>
@@ -463,7 +463,7 @@ export function RunnerDetailPage() {
               setEnabledMut.mutate({ id: editing.id, enabled: editing.enabled === false })
             }
           >
-            {editing.enabled === false ? 'Enable agent' : 'Disable agent'}
+            {editing.enabled === false ? 'Enable workspace' : 'Disable workspace'}
           </Button>
         )}
         <div style={{ flex: 1 }} />
@@ -471,7 +471,7 @@ export function RunnerDetailPage() {
         <Button onClick={closeForm}>Cancel</Button>
         <Button
           type="primary"
-          onClick={submitAgent}
+          onClick={submitWorkspace}
           loading={saveMut.isPending}
           disabled={!fName.trim()}
         >
@@ -482,14 +482,14 @@ export function RunnerDetailPage() {
     );
   };
 
-  // One agent row — shown on its own, or kept as the header above the in-place editor.
+  // One workspace row — shown on its own, or kept as the header above the in-place editor.
   // The whole row is the way into the config: it is what people aim at, and the settings it
   // displays are the ones the editor holds. There is deliberately no console button here —
-  // the sidebar lists every agent and opens its console in one click, and this page exists to
+  // the sidebar lists every workspace and opens its console in one click, and this page exists to
   // manage the machine, not to talk to it. A second, smaller target for a different
   // destination on the same row only made the row harder to aim at; the console stays
   // reachable from the row menu.
-  const agentRow = (a: Agent) => {
+  const workspaceRow = (a: Workspace) => {
     // What this project last ran on — the same default a new session here would inherit.
     const lastProvider = a.lastProvider ?? a.provider ?? 'claude';
     const effectiveModel = defaultModelForProvider(
@@ -502,18 +502,18 @@ export function RunnerDetailPage() {
     return (
     <div
       key={a.id}
-      className={`rd-agent-row${isOpen ? ' is-open' : ''}${a.enabled === false ? ' is-disabled' : ''}`}
+      className={`rd-workspace-row${isOpen ? ' is-open' : ''}${a.enabled === false ? ' is-disabled' : ''}`}
       onClick={() => (isOpen ? closeForm() : switchTo(() => openEdit(a)))}
     >
-      <span className="rd-agent-ico">
+      <span className="rd-workspace-ico">
         <RobotOutlined />
       </span>
-      <div className="rd-agent-main">
-        <div className="rd-agent-name">
+      <div className="rd-workspace-main">
+        <div className="rd-workspace-name">
           {a.name}
           {a.enabled === false && <Tag style={{ marginLeft: 8 }}>disabled</Tag>}
         </div>
-        <div className="rd-agent-meta">
+        <div className="rd-workspace-meta">
           {providerLabelFor(lastProvider)} · {effectiveModel}
           {a.workDir ? ` · ${a.workDir}` : ''}
           {a.enableWorktree ? ' · isolated' : ''}
@@ -534,7 +534,7 @@ export function RunnerDetailPage() {
               key: 'console',
               icon: <MessageOutlined />,
               label: 'Open console',
-              onClick: () => navigate(`/agents/${encodeId(a.id)}`),
+              onClick: () => navigate(`/workspaces/${encodeId(a.id)}`),
             },
             {
               key: 'enabled',
@@ -556,14 +556,14 @@ export function RunnerDetailPage() {
               danger: true,
               onClick: () =>
                 modal.confirm({
-                  title: `Delete agent “${a.name}”?`,
+                  title: `Delete workspace “${a.name}”?`,
                   content:
-                    'The agent leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
+                    'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
                   okText: 'Delete',
                   okButtonProps: { danger: true },
                   cancelText: 'Cancel',
                   autoFocusButton: 'cancel',
-                  onOk: () => removeAgentMut.mutateAsync(a.id),
+                  onOk: () => removeWorkspaceMut.mutateAsync(a.id),
                 }),
             },
           ],
@@ -631,7 +631,7 @@ export function RunnerDetailPage() {
         modal.confirm({
           title: `Delete “${runner.displayName || runner.name}”?`,
           content:
-            'This removes the runner and its agents from your account. Re-register the machine to add it back.',
+            'This removes the runner and its workspaces from your account. Re-register the machine to add it back.',
           okText: 'Delete',
           okButtonProps: { danger: true },
           cancelText: 'Cancel',
@@ -665,7 +665,7 @@ export function RunnerDetailPage() {
       </div>
 
       {/* The machine's read-only diagnostics are reference material, not the job: they ride on
-          one line under the title so the agent list — the thing this page is for — starts above
+          one line under the title so the workspace list — the thing this page is for — starts above
           the fold. The full grid is one click away. */}
       <div className="rd-metaline">
         <span className={runner.online ? 'rd-meta-ok' : undefined}>
@@ -704,7 +704,7 @@ export function RunnerDetailPage() {
 
       <section className="rd-section">
         <div className="rd-section-head">
-          <div className="rd-section-title">Agents</div>
+          <div className="rd-section-title">Workspaces</div>
           {/* Kept in place while the create form is open — disabled rather than removed, so the
               header doesn't reflow out from under the pointer. */}
           <Button
@@ -713,30 +713,30 @@ export function RunnerDetailPage() {
             disabled={formOpen && !editing}
             onClick={() => switchTo(openCreate)}
           >
-            Add agent
+            Add workspace
           </Button>
         </div>
-        {agentsQ.isLoading ? (
+        {workspacesQ.isLoading ? (
           <div style={{ padding: 24, textAlign: 'center' }}>
             <Spin />
           </div>
-        ) : agents.length === 0 && !(formOpen && !editing) ? (
+        ) : workspaces.length === 0 && !(formOpen && !editing) ? (
           <div className="rd-empty">
-            No agents under this runner yet — add one to start a conversation.
+            No workspaces under this runner yet — add one to start a conversation.
           </div>
         ) : (
-          <div className="rd-agent-list">
+          <div className="rd-workspace-list">
             {formOpen && !editing && (
-              <div className="rd-agent-form-wrap">{agentForm('create')}</div>
+              <div className="rd-workspace-form-wrap">{workspaceForm('create')}</div>
             )}
-            {agents.map((a) =>
+            {workspaces.map((a) =>
               formOpen && editing?.id === a.id ? (
-                <div key={a.id} className="rd-agent-editing">
-                  {agentRow(a)}
-                  <div className="rd-agent-form-wrap">{agentForm('edit')}</div>
+                <div key={a.id} className="rd-workspace-editing">
+                  {workspaceRow(a)}
+                  <div className="rd-workspace-form-wrap">{workspaceForm('edit')}</div>
                 </div>
               ) : (
-                agentRow(a)
+                workspaceRow(a)
               ),
             )}
           </div>

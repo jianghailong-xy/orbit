@@ -20,9 +20,11 @@ const SIGNED_OUT: RunnerEngineHealth[] = [
 function makeService(engines: unknown, runnerOverrides: Record<string, unknown> = {}) {
   const creates: Array<Record<string, unknown>> = [];
   const prisma = {
-    agent: {
+    // create() reads the owner's account-level permission default when the caller names none.
+    user: { findUnique: async () => ({ preferences: {} }) },
+    workspace: {
       findFirst: async () => ({
-        id: 'agent-1',
+        id: 'workspace-1',
         runnerId: 'runner-1',
         enableWorktree: false,
         permissionMode: null,
@@ -31,7 +33,7 @@ function makeService(engines: unknown, runnerOverrides: Record<string, unknown> 
       }),
     },
     // The provider seed: this project last ran on claude.
-    $queryRaw: async () => [{ agent_id: 'agent-1', provider: 'claude', provider_builtin: true }],
+    $queryRaw: async () => [{ workspace_id: 'workspace-1', provider: 'claude', provider_builtin: true }],
     runner: {
       findFirst: async () => ({
         id: 'runner-1',
@@ -55,12 +57,12 @@ function makeService(engines: unknown, runnerOverrides: Record<string, unknown> 
   const realtime = {
     publishSessionCreated: () => undefined,
     publishSessionUpdated: () => undefined,
-    publishAgentChanged: () => undefined,
+    publishWorkspaceChanged: () => undefined,
   } as never;
   return { service: new SessionsService(prisma, queue, realtime), creates };
 }
 
-const PROMPT = { prompt: 'Dispatch the next Lark message', title: 'Dispatch', agentId: 'agent-1' };
+const PROMPT = { prompt: 'Dispatch the next Lark message', title: 'Dispatch', workspaceId: 'workspace-1' };
 
 test('a session bound for a signed-out runtime is refused before anything is created', async () => {
   const fixture = makeService(SIGNED_OUT);
@@ -139,7 +141,7 @@ test('a session that brings its own credentials ignores the local sign-in', () =
       signedOutEngineRefusal({
         runtime: 'claude',
         bringsOwnCredentials: false,
-        agentEnv: { [key]: 'sk-x' },
+        workspaceEnv: { [key]: 'sk-x' },
         runner,
       }),
       null,
@@ -150,7 +152,7 @@ test('a session that brings its own credentials ignores the local sign-in', () =
     signedOutEngineRefusal({
       runtime: 'claude',
       bringsOwnCredentials: false,
-      agentEnv: { ANTHROPIC_API_KEY: '  ' },
+      workspaceEnv: { ANTHROPIC_API_KEY: '  ' },
       runner,
     }),
     'a blank value is not a credential',
@@ -179,13 +181,13 @@ test('kimi needs both halves of its environment provider to skip the check', () 
   // The CLI only synthesizes its env-backed provider when the model switch and the key are both
   // set; one alone leaves it on the machine's own sign-in.
   assert.ok(
-    signedOutEngineRefusal({ runtime: 'kimi', bringsOwnCredentials: false, agentEnv: { KIMI_MODEL_NAME: 'k2' }, runner }),
+    signedOutEngineRefusal({ runtime: 'kimi', bringsOwnCredentials: false, workspaceEnv: { KIMI_MODEL_NAME: 'k2' }, runner }),
   );
   assert.equal(
     signedOutEngineRefusal({
       runtime: 'kimi',
       bringsOwnCredentials: false,
-      agentEnv: { KIMI_MODEL_NAME: 'k2', KIMI_MODEL_API_KEY: 'sk-x' },
+      workspaceEnv: { KIMI_MODEL_NAME: 'k2', KIMI_MODEL_API_KEY: 'sk-x' },
       runner,
     }),
     null,

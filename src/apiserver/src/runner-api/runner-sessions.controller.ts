@@ -18,7 +18,7 @@ import { CurrentServiceGrant, RunnerSessionAuthGuard } from './runner-session-au
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { ServiceTokenGrant, ServiceTokenScope } from './service-token.authorizer';
 
-/** No calling session => the request comes from a headless process, not from an agent. */
+/** No calling session => the request comes from a headless process, not from a workspace. */
 function isHeadlessCaller(callingSessionId: string | undefined): boolean {
   return !callingSessionId?.trim();
 }
@@ -35,9 +35,9 @@ const RUNNER_CREDENTIAL_SCOPES: readonly ServiceTokenScope[] = [
 ];
 
 /**
- * Session orchestration (L3) for in-session agents, reached by the `orbit mcp` server with the
+ * Session orchestration (L3) for in-session workspaces, reached by the `orbit mcp` server with the
  * machine's runner token. Tenant scope is the runner's owner; a spawn is attributed to the
- * PARENT session (X-Orbit-Session-Id, injected by the runner) whose agent must have
+ * PARENT session (X-Orbit-Session-Id, injected by the runner) whose workspace must have
  * orchestration enabled — SessionsService enforces that plus the depth/child-count guards.
  *
  * A caller with no X-Orbit-Session-Id at all is HEADLESS: a launchd/cron bridge that belongs to
@@ -45,7 +45,7 @@ const RUNNER_CREDENTIAL_SCOPES: readonly ServiceTokenScope[] = [
  * do depends on which credential it presents:
  *   - the machine's runner token   → get / list / send over the sessions this runner hosts
  *   - a minted service token       → exactly its scopes (which may include create), further
- *                                    narrowed to one agent when the token is pinned
+ *                                    narrowed to one workspace when the token is pinned
  * Either way the destructive verbs — interrupt, merge, end, complete — and the owner-wide search
  * stay out of reach: those still require a live calling session with orchestration enabled.
  *
@@ -79,7 +79,7 @@ export class RunnerSessionsController {
           : `${scope} requires a service token; mint one with \`orbit token mint\``,
       );
     }
-    return { assignedRunnerId: runner.id, agentId: grant?.agentId ?? null };
+    return { assignedRunnerId: runner.id, workspaceId: grant?.workspaceId ?? null };
   }
 
   private assertNoServiceToken(grant: ServiceTokenGrant | undefined): void {
@@ -94,13 +94,15 @@ export class RunnerSessionsController {
     @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
     @Headers('x-orbit-session-id') parentSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    // Inline type — nothing validates it, and `agentId` is exactly what a model copies out of an
-    // Orbit URL when told to "run this under that agent".
-    @Body(PublicIdPipe.forFields('agentId'))
+    // Inline type — nothing validates it, and `workspaceId` is exactly what a model copies out of an
+    // Orbit URL when told to "run this under that workspace".
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId'))
     dto: {
       prompt: string;
+      workspaceId?: string;
+      /** @deprecated Pre-rename name, still sent by `orbit mcp` and every shipped runner. */
       agentId?: string;
-      agentName?: string;
+      workspaceName?: string;
       title?: string;
       model?: string;
       provider?: string;
@@ -109,14 +111,14 @@ export class RunnerSessionsController {
     if (isHeadlessCaller(parentSessionId)) {
       const scope = this.headlessScope(runner, grant, 'session:create');
       // The pin is the authorization, so it is also the target: a caller cannot redirect the
-      // spawn at another agent by passing one in the body.
-      if (dto.agentId && dto.agentId !== scope.agentId) {
-        throw new ForbiddenException('this service token may only start its own agent');
+      // spawn at another workspace by passing one in the body.
+      if (dto.workspaceId && dto.workspaceId !== scope.workspaceId) {
+        throw new ForbiddenException('this service token may only start its own workspace');
       }
-      if (!scope.agentId) throw new ForbiddenException('this service token has no agent to start');
+      if (!scope.workspaceId) throw new ForbiddenException('this service token has no workspace to start');
       return this.sessions.spawnForServiceToken(
         runner.ownerId,
-        { assignedRunnerId: runner.id, agentId: scope.agentId, tokenId: grant!.tokenId },
+        { assignedRunnerId: runner.id, workspaceId: scope.workspaceId, tokenId: grant!.tokenId },
         { prompt: dto.prompt, title: dto.title, model: dto.model },
       );
     }
@@ -217,7 +219,7 @@ export class RunnerSessionsController {
   // The four lifecycle verbs below have NO headless path by design. They are the most damaging
   // thing a machine-local credential could reach and a bridge never needs them, so they are not
   // in the service-token vocabulary at all: every one of them still requires a live calling
-  // session whose agent has orchestration enabled.
+  // session whose workspace has orchestration enabled.
   @Post('sessions/:id/interrupt')
   async interruptSession(
     @CurrentRunner() runner: Runner,

@@ -20,7 +20,7 @@ export class UsersController {
 
   /**
    * Patch the current user's own preferences. The body is a partial set of keys
-   * (theme / new-agent defaults); each present key is shallow-merged into the
+   * (theme / new-workspace defaults); each present key is shallow-merged into the
    * stored JSON, so omitted keys keep their value. Returns the same shape as `me`.
    */
   @UseGuards(JwtAuthGuard)

@@ -26,7 +26,7 @@ const HEADLESS_ROUTE_NAMES = new Set(['list', 'get', 'send', 'create']);
 
 // Keep the calling session immediately after the runner in every controller method. This mirrors
 // RunnerAgentsController and, more importantly, makes it difficult to accidentally authenticate
-// the target session instead of the agent session making the orchestration request.
+// the target session instead of the workspace session making the orchestration request.
 const ROUTES: RouteCase[] = [
   {
     name: 'create',
@@ -106,7 +106,7 @@ function makeController(orchestrationEnabled: boolean) {
       if (!sessionId) throw new BadRequestException('missing session context');
       if (!credential) throw new ForbiddenException('missing orchestration credential');
       if (!orchestrationEnabled) {
-        throw new ForbiddenException('orchestration is not enabled for this agent');
+        throw new ForbiddenException('orchestration is not enabled for this workspace');
       }
     },
   };
@@ -154,14 +154,14 @@ test('all session orchestration routes reject a missing credential before doing 
   }
 });
 
-test('all session orchestration routes reject a calling session whose agent is not enabled', async () => {
+test('all session orchestration routes reject a calling session whose workspace is not enabled', async () => {
   for (const route of ROUTES) {
     const { controller, serviceCalls, authorizationCalls } = makeController(false);
     await assert.rejects(
       () => route.invoke(controller, CALLER_SESSION_ID, ORCHESTRATION_TOKEN),
       (error: unknown) =>
         error instanceof ForbiddenException &&
-        error.message === 'orchestration is not enabled for this agent',
+        error.message === 'orchestration is not enabled for this workspace',
       route.name,
     );
     assert.deepEqual(
@@ -230,7 +230,7 @@ test('headless callers reach the read and send routes scoped to the runner that 
       {
         status: 'RUNNING',
         parentSessionId: undefined,
-        scope: { assignedRunnerId: 'runner-1', agentId: null },
+        scope: { assignedRunnerId: 'runner-1', workspaceId: null },
       },
     ],
   });
@@ -240,7 +240,7 @@ test('headless callers reach the read and send routes scoped to the runner that 
   });
   assert.deepEqual(calls.at(-1), {
     method: 'getForOrchestration',
-    args: ['owner-1', TARGET_SESSION_ID, { assignedRunnerId: 'runner-1', agentId: null }],
+    args: ['owner-1', TARGET_SESSION_ID, { assignedRunnerId: 'runner-1', workspaceId: null }],
   });
 
   assert.deepEqual(
@@ -256,7 +256,7 @@ test('headless callers reach the read and send routes scoped to the runner that 
   );
   assert.deepEqual(calls.at(-2)?.args, [
     'owner-1',
-    { assignedRunnerId: 'runner-1', agentId: null },
+    { assignedRunnerId: 'runner-1', workspaceId: null },
     TARGET_SESSION_ID,
   ]);
 });
@@ -306,17 +306,17 @@ test('session orchestration detail scopes to one runner only when asked', async 
 
   await service.getForOrchestration('owner-1', TARGET_SESSION_ID, {
     assignedRunnerId: 'runner-1',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
   assert.deepEqual(query.where, {
     id: TARGET_SESSION_ID,
     ownerId: 'owner-1',
     assignedRunnerId: 'runner-1',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 });
 
-test('session orchestration detail uses an explicit allowlist and never returns agent secrets', async () => {
+test('session orchestration detail uses an explicit allowlist and never returns workspace secrets', async () => {
   let query: { where?: Record<string, unknown>; select?: Record<string, unknown> } = {};
   const prisma = {
     session: {
@@ -335,10 +335,10 @@ test('session orchestration detail uses an explicit allowlist and never returns 
   for (const field of ['shareToken', 'sharedAt', 'runtimeSessionId']) {
     assert.equal(query.select?.[field], undefined, `session detail exposed ${field}`);
   }
-  const agent = query.select?.agent as { select?: Record<string, unknown> } | undefined;
+  const workspace = query.select?.workspace as { select?: Record<string, unknown> } | undefined;
   for (const field of ['env', 'mcpConfig', 'systemPrompt', 'appendSystemPrompt', 'agentKey']) {
-    assert.equal(agent?.select?.[field], undefined, `session detail exposed agent.${field}`);
+    assert.equal(workspace?.select?.[field], undefined, `session detail exposed workspace.${field}`);
   }
-  // No agent.provider to expose: an agent holds none, and the session's own is authoritative.
-  assert.deepEqual(agent?.select, { id: true, name: true, model: true });
+  // No workspace.provider to expose: a workspace holds none, and the session's own is authoritative.
+  assert.deepEqual(workspace?.select, { id: true, name: true, model: true });
 });

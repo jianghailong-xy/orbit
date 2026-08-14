@@ -3,9 +3,9 @@ import { test } from 'node:test';
 import {
   agentProviderSeed,
   DEFAULT_AGENT_PROVIDER,
-  lastProviderByAgent,
+  lastProviderByWorkspace,
   withProviderSeed,
-} from './agent-provider';
+} from './workspace-provider';
 
 /** Captures the raw query the lookup builds, and answers with fixed rows. */
 function prismaStub(rows: unknown[] = []) {
@@ -22,10 +22,10 @@ function prismaStub(rows: unknown[] = []) {
   };
 }
 
-test('the seed is read from the project history, newest first, one row per agent', async () => {
+test('the seed is read from the project history, newest first, one row per workspace', async () => {
   const { prisma, seen } = prismaStub();
-  await lastProviderByAgent(prisma, ['a1', 'a2']);
-  // One indexed LIMIT 1 per agent. The DISTINCT ON form reads every session these agents own and
+  await lastProviderByWorkspace(prisma, ['a1', 'a2']);
+  // One indexed LIMIT 1 per workspace. The DISTINCT ON form reads every session these workspaces own and
   // sorts it — a sequential scan that grows with the table, on every client boot.
   assert.match(seen.sql ?? '', /CROSS JOIN LATERAL/);
   assert.match(seen.sql ?? '', /ORDER BY created_at DESC\s*LIMIT 1/);
@@ -35,26 +35,26 @@ test('the seed is read from the project history, newest first, one row per agent
 
 test('task-launched runs are excluded, so a pinned job cannot re-point the project', async () => {
   const { prisma, seen } = prismaStub();
-  await lastProviderByAgent(prisma, ['a1']);
+  await lastProviderByWorkspace(prisma, ['a1']);
   assert.match(seen.sql ?? '', /task_id IS NULL/);
 });
 
-test('agent-spawned children are excluded, so a scripted probe cannot re-point the project', async () => {
+test('workspace-spawned children are excluded, so a scripted probe cannot re-point the project', async () => {
   // An MCP `session_create` child picks its provider for the job it was spawned to do — e.g. a
   // throwaway "reproduce this on OpenCode" run. Counting it put OpenCode in front of a human who
   // had never chosen it, which is the same coupling `task_id IS NULL` already guards against.
   const { prisma, seen } = prismaStub();
-  await lastProviderByAgent(prisma, ['a1']);
+  await lastProviderByWorkspace(prisma, ['a1']);
   assert.match(seen.sql ?? '', /parent_session_id IS NULL/);
 });
 
 test('duplicate and empty ids collapse, and an empty list never hits the database', async () => {
   const { prisma, seen } = prismaStub();
-  await lastProviderByAgent(prisma, ['a1', 'a1', null, undefined]);
+  await lastProviderByWorkspace(prisma, ['a1', 'a1', null, undefined]);
   assert.deepEqual(seen.values, ['a1']);
 
   const empty = prismaStub();
-  assert.equal((await lastProviderByAgent(empty.prisma, [null])).size, 0);
+  assert.equal((await lastProviderByWorkspace(empty.prisma, [null])).size, 0);
   assert.equal(empty.seen.sql, undefined);
 });
 
@@ -65,14 +65,14 @@ test('a project that has never run anything starts where Orbit starts', async ()
 });
 
 test('a project that has run something starts there again', async () => {
-  const { prisma } = prismaStub([{ agent_id: 'a1', provider: 'anthropic', provider_builtin: false }]);
+  const { prisma } = prismaStub([{ workspace_id: 'a1', provider: 'anthropic', provider_builtin: false }]);
   assert.deepEqual(await agentProviderSeed(prisma, 'a1'), {
     provider: 'anthropic',
     providerBuiltin: false,
   });
 });
 
-test('agent payloads carry the derived default, not a stored one', () => {
+test('workspace payloads carry the derived default, not a stored one', () => {
   const seeds = new Map([['a1', { provider: 'codex', providerBuiltin: true }]]);
   const [ran, neverRan] = withProviderSeed(
     // `provider` here stands in for the tombstoned column: it must not win.

@@ -27,12 +27,12 @@ export class CreateTaskDto {
   title!: string;
 
   @IsOptional() @IsString() description?: string;
-  // The agent assigned to execute the task. Must be owned by the caller.
+  // The workspace assigned to execute the task. Must be owned by the caller.
   @IsOptional() @IsPublicId() assigneeId?: string;
   // The list this task belongs to. Must be owned by the caller.
   @IsOptional() @IsPublicId() listId?: string;
   @IsOptional() @IsDateString() dueDate?: string;
-  // Provider/model this task's runs use, overriding the assignee agent's own. The provider must
+  // Provider/model this task's runs use, overriding the assignee workspace's own. The provider must
   // be a built-in engine slug or one of the caller's enabled configured providers; omitted (or
   // null) inherits from the assignee, which is the historical behaviour.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
@@ -72,12 +72,12 @@ export class UpdateTaskDto {
   @IsOptional() @IsString() @MinLength(1) title?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsIn(TASK_STATUSES) status?: TaskStatus;
-  // null clears the assignment; a string (re)assigns to that agent.
+  // null clears the assignment; a string (re)assigns to that workspace.
   @IsOptional() @IsPublicId() assigneeId?: string | null;
   // null detaches from its list; a string (re)assigns to that list.
   @IsOptional() @IsPublicId() listId?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
-  // null goes back to inheriting the assignee agent's provider/model; a string pins this task's
+  // null goes back to inheriting the assignee workspace's provider/model; a string pins this task's
   // runs to that provider / model id. Omit to leave the current pin alone.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
@@ -137,7 +137,7 @@ export class RefreshDependencyGraphNodesDto {
 }
 
 export class BatchExecuteDto {
-  // The tasks to run. Tasks without a responsible agent / bound runner are skipped
+  // The tasks to run. Tasks without a responsible workspace / bound runner are skipped
   // server-side rather than failing the batch.
   @IsArray() @IsString({ each: true }) taskIds!: string[];
 
@@ -162,7 +162,7 @@ export class BatchDeleteDto {
 export class BatchAssignDto {
   @IsArray() @IsString({ each: true }) taskIds!: string[];
 
-  // The agent to set as responsible for every selected task; null clears the assignment.
+  // The workspace to set as responsible for every selected task; null clears the assignment.
   @IsOptional() @IsString() assigneeId?: string | null;
 }
 
@@ -171,7 +171,7 @@ export class CreateTaskCommentDto {
   @MinLength(1)
   body!: string;
 
-  // Agent ids @-mentioned in the comment. Each owned agent is notified and triggered
+  // Workspace ids @-mentioned in the comment. Each owned workspace is notified and triggered
   // on this task; unknown/non-owned ids are silently dropped (see TasksService).
   @IsOptional() @IsArray() @IsString({ each: true }) mentions?: string[];
 }

@@ -16,7 +16,7 @@ export class SharedController {
     private readonly attachments: AttachmentsService,
   ) {}
 
-  /** The shared session's read-only transcript (title, agent, status, events). */
+  /** The shared session's read-only transcript (title, workspace, status, events). */
   @Get(':token')
   get(@Param('token') token: string) {
     return this.sessions.getShared(token);

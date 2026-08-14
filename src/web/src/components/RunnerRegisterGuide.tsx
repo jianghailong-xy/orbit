@@ -115,18 +115,18 @@ export function RunnerRegisterGuide() {
             <div className="runner-status-text">
               <div className="runner-status-title">Runner online — “{connected.name}” is ready</div>
               <div className="runner-status-sub">
-                It's now in the sidebar under Runners. Next, give it an agent — the repo and
+                It's now in the sidebar under Runners. Next, give it a workspace — the repo and
                 working directory it runs tasks in.
               </div>
             </div>
             {/* The machine alone can't do anything yet: sessions and tasks both hang off an
-                agent, so the real next step is this runner's page, where agents are created. */}
+                workspace, so the real next step is this runner's page, where workspaces are created. */}
             <button
               className="runner-done-btn"
               onClick={() => navigate(`/runners/${encodeId(connected.id)}`)}
               type="button"
             >
-              Create an agent
+              Create a workspace
             </button>
           </div>
         ) : (

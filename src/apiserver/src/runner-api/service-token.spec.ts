@@ -17,7 +17,7 @@ const TARGET_SESSION_ID = 'target-session';
 
 function makeAuthorizer(overrides: {
   serviceToken?: Record<string, unknown> | null;
-  agent?: Record<string, unknown> | null;
+  workspace?: Record<string, unknown> | null;
   onCreate?: (data: Record<string, unknown>) => void;
   onUpdate?: (args: unknown) => void;
 }) {
@@ -34,7 +34,7 @@ function makeAuthorizer(overrides: {
         return { id: 'token-1', revokedAt: new Date() };
       },
     },
-    agent: { findFirst: async () => overrides.agent ?? null },
+    workspace: { findFirst: async () => overrides.workspace ?? null },
   };
   const jwt = new JwtService({ secret: 'test-secret' });
   return { authorizer: new ServiceTokenAuthorizer(prisma as never, jwt), jwt };
@@ -60,7 +60,7 @@ test('minting rejects unknown, destructive and empty scopes', async () => {
   }
 });
 
-test('minting bounds the lifetime and requires an agent pin for create', async () => {
+test('minting bounds the lifetime and requires a workspace pin for create', async () => {
   const { authorizer } = makeAuthorizer({});
   for (const ttlSeconds of [undefined, 0, 30, 400 * 24 * 60 * 60]) {
     await assert.rejects(
@@ -72,14 +72,14 @@ test('minting bounds the lifetime and requires an agent pin for create', async (
   await assert.rejects(
     () => authorizer.mint(RUNNER, { scopes: ['session:create'], ttlSeconds: 3600 }),
     (error: unknown) =>
-      error instanceof BadRequestException && /agent id is required/.test(error.message),
+      error instanceof BadRequestException && /workspace id is required/.test(error.message),
   );
 });
 
-test('an agent pin must name an agent that lives on the minting runner', async () => {
-  const { authorizer } = makeAuthorizer({ agent: null });
+test('a workspace pin must name a workspace that lives on the minting runner', async () => {
+  const { authorizer } = makeAuthorizer({ workspace: null });
   await assert.rejects(
-    () => authorizer.mint(RUNNER, { scopes: ['session:create'], agentId: 'agent-x', ttlSeconds: 3600 }),
+    () => authorizer.mint(RUNNER, { scopes: ['session:create'], workspaceId: 'workspace-x', ttlSeconds: 3600 }),
     (error: unknown) => error instanceof NotFoundException,
   );
 });
@@ -87,12 +87,12 @@ test('an agent pin must name an agent that lives on the minting runner', async (
 test('a minted token carries its grant and stores no secret', async () => {
   let stored: Record<string, unknown> | undefined;
   const { authorizer, jwt } = makeAuthorizer({
-    agent: { id: 'agent-1' },
+    workspace: { id: 'workspace-1' },
     onCreate: (data) => (stored = data),
   });
   const minted = await authorizer.mint(RUNNER, {
     scopes: ['session:create', 'session:get', 'session:create'],
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
     label: '  feishu bridge  ',
     ttlSeconds: 3600,
   });
@@ -107,15 +107,15 @@ test('a minted token carries its grant and stores no secret', async () => {
   const claims = jwt.verify(minted.token, { audience: 'orbit-service-token' }) as Record<string, unknown>;
   assert.equal(claims.jti, 'token-1');
   assert.equal(claims.runnerId, 'runner-1');
-  assert.equal(claims.agentId, 'agent-1');
+  assert.equal(claims.workspaceId, 'workspace-1');
   assert.deepEqual(claims.scopes, ['session:create', 'session:get']);
 });
 
 test('verification refuses a revoked, expired or moved grant', async () => {
-  const { authorizer: minter, jwt } = makeAuthorizer({ agent: { id: 'agent-1' } });
+  const { authorizer: minter, jwt } = makeAuthorizer({ workspace: { id: 'workspace-1' } });
   const minted = await minter.mint(RUNNER, {
     scopes: ['session:get'],
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
     ttlSeconds: 3600,
   });
 
@@ -129,8 +129,8 @@ test('verification refuses a revoked, expired or moved grant', async () => {
 
   // A row whose runner or pin no longer matches the signed claims is refused rather than guessed.
   for (const row of [
-    { id: 'token-1', ownerId: 'owner-1', runnerId: 'runner-2', agentId: 'agent-1', scopes: ['session:get'], runner: RUNNER },
-    { id: 'token-1', ownerId: 'owner-1', runnerId: 'runner-1', agentId: 'agent-2', scopes: ['session:get'], runner: RUNNER },
+    { id: 'token-1', ownerId: 'owner-1', runnerId: 'runner-2', workspaceId: 'workspace-1', scopes: ['session:get'], runner: RUNNER },
+    { id: 'token-1', ownerId: 'owner-1', runnerId: 'runner-1', workspaceId: 'workspace-2', scopes: ['session:get'], runner: RUNNER },
   ]) {
     const moved = makeAuthorizer({ serviceToken: row }).authorizer;
     await assert.rejects(
@@ -151,7 +151,7 @@ test('verification refuses a revoked, expired or moved grant', async () => {
 
 test('the session guard accepts a runner credential or a service token, and nothing else', async () => {
   const runnerRow = { id: 'runner-1', ownerId: 'owner-1' };
-  const grant = { tokenId: 'token-1', runner: runnerRow, scopes: ['session:get'], agentId: null };
+  const grant = { tokenId: 'token-1', runner: runnerRow, scopes: ['session:get'], workspaceId: null };
   const guard = new RunnerSessionAuthGuard(
     {
       runner: {
@@ -210,10 +210,10 @@ const CREATE_GRANT = {
   tokenId: 'token-1',
   runner: RUNNER,
   scopes: ['session:create'],
-  agentId: 'agent-1',
+  workspaceId: 'workspace-1',
 } as never;
 
-test('a create-scoped token starts only its own agent, batched under the token', async () => {
+test('a create-scoped token starts only its own workspace, batched under the token', async () => {
   const { controller, calls } = makeController();
   const created = await controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
     prompt: 'relay this',
@@ -224,7 +224,7 @@ test('a create-scoped token starts only its own agent, batched under the token',
     method: 'spawnForServiceToken',
     args: [
       'owner-1',
-      { assignedRunnerId: 'runner-1', agentId: 'agent-1', tokenId: 'token-1' },
+      { assignedRunnerId: 'runner-1', workspaceId: 'workspace-1', tokenId: 'token-1' },
       { prompt: 'relay this', title: 'from the bridge', model: undefined },
     ],
   });
@@ -234,18 +234,18 @@ test('a create-scoped token starts only its own agent, batched under the token',
     () =>
       controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
         prompt: 'relay this',
-        agentId: 'agent-2',
+        workspaceId: 'workspace-2',
       }),
-    (error: unknown) => error instanceof ForbiddenException && /only start its own agent/.test(error.message),
+    (error: unknown) => error instanceof ForbiddenException && /only start its own workspace/.test(error.message),
   );
 });
 
-test('every headless route is confined to the scopes and the agent its token carries', async () => {
+test('every headless route is confined to the scopes and the workspace its token carries', async () => {
   const readGrant = {
     tokenId: 'token-1',
     runner: RUNNER,
     scopes: ['session:get', 'session:list', 'session:send'],
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   } as never;
   const { controller, calls } = makeController();
 
@@ -253,13 +253,13 @@ test('every headless route is confined to the scopes and the agent its token car
   assert.deepEqual((calls.at(-1)?.args as never[])[1], {
     status: undefined,
     parentSessionId: undefined,
-    scope: { assignedRunnerId: 'runner-1', agentId: 'agent-1' },
+    scope: { assignedRunnerId: 'runner-1', workspaceId: 'workspace-1' },
   });
 
   await controller.getSession(RUNNER, readGrant, undefined, undefined, TARGET_SESSION_ID);
   assert.deepEqual((calls.at(-1)?.args as never[])[2], {
     assignedRunnerId: 'runner-1',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 
   await controller.sendMessage(RUNNER, readGrant, undefined, undefined, TARGET_SESSION_ID, {
@@ -285,7 +285,7 @@ test('the runner credential alone can observe and message but never create', asy
   assert.deepEqual((calls.at(-1)?.args as never[])[1], {
     status: undefined,
     parentSessionId: undefined,
-    scope: { assignedRunnerId: 'runner-1', agentId: null },
+    scope: { assignedRunnerId: 'runner-1', workspaceId: null },
   });
 
   await assert.rejects(
@@ -301,7 +301,7 @@ test('a service token can never act through the session-bound orchestration path
     tokenId: 'token-1',
     runner: RUNNER,
     scopes: ['session:get', 'session:list', 'session:send', 'session:create'],
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   } as never;
   const { controller, calls } = makeController();
   const routes: Array<[string, () => Promise<unknown>]> = [

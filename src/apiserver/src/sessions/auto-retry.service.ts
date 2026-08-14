@@ -227,7 +227,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     numTurns: number,
   ): Promise<string> {
     // The user events themselves, not a tail of the whole stream: the latest one is near the
-    // end only on a short turn. One agent turn emits hundreds of tool/system events after the
+    // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
     // message that provoked it — 400+ on the sessions that surfaced this — so a fixed window
     // of the end misses the very message a retry exists to re-send, and the session is
     // disarmed as "nothing to re-send" while the card, which reads the entire stream, is still

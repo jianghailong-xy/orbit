@@ -20,7 +20,7 @@ export class RunnerServiceTokensController {
   @Post()
   mint(
     @CurrentRunner() runner: Runner,
-    @Body() dto: { scopes?: string[]; agentId?: string; label?: string; ttlSeconds?: number },
+    @Body() dto: { scopes?: string[]; workspaceId?: string; label?: string; ttlSeconds?: number },
   ) {
     return this.serviceTokens.mint(runner, dto ?? {});
   }

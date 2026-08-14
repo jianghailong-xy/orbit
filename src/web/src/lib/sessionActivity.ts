@@ -6,11 +6,11 @@ export interface SessionActivity {
   runningBgCount?: number | null;
 }
 
-/** A parent turn may be AWAITING_INPUT while async sub-agents or background shells keep working.
+/** A parent turn may be AWAITING_INPUT while async sub-workspaces or background shells keep working.
  * Drives the status label/glyph, so a parked-but-still-working session never reads as "waiting
- * for your reply" — and so the two kinds don't read the same. A sub-agent is the agent itself
- * still working; a background shell usually isn't (agents leave dev servers and watchers up),
- * so only the former earns the working spinner. Sub-agent wins when both are live. */
+ * for your reply" — and so the two kinds don't read the same. A sub-workspace is the workspace itself
+ * still working; a background shell usually isn't (workspaces leave dev servers and watchers up),
+ * so only the former earns the working spinner. Sub-workspace wins when both are live. */
 export type OutlivingWork = 'subagent' | 'background';
 export const outlivingSessionWork = (
   session: SessionActivity | null | undefined,
@@ -20,11 +20,11 @@ export const outlivingSessionWork = (
 };
 
 /** Whether the selected session's worktree is currently transient — i.e. something is still
- * *writing* to it. That's the parent turn (`idle` tracks its boundary) plus async sub-agents,
+ * *writing* to it. That's the parent turn (`idle` tracks its boundary) plus async sub-workspaces,
  * which edit files exactly like the parent does.
  *
  * Background shells deliberately don't count, even though they're outliving work for status
- * purposes. Agents routinely leave long-lived processes up — a `vite` dev server for visual
+ * purposes. Workspaces routinely leave long-lived processes up — a `vite` dev server for visual
  * verification, a watcher, a tail — and those never exit, so their launch id never leaves
  * `runningBgShells` and the worktree gate stayed on *forever*, permanently disabling Commit for
  * that session. The failure modes aren't symmetric: a wrongly-blocked commit is unrecoverable

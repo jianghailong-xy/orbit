@@ -17,7 +17,7 @@ import {
   PROVIDER_OPTIONS,
   supportsAuto,
   type ConfiguredProvider,
-} from './agentDefaults';
+} from './workspaceDefaults';
 
 describe('Claude model capabilities', () => {
   it('knows the current tiers without a static picker list', () => {
@@ -241,12 +241,12 @@ describe('Retired models', () => {
     expect(livePinnedModel('', 'opencode', catalog)).toBe('');
   });
 
-  it('falls through a retired session pin AND a retired agent pin to the current default', () => {
-    // The reported symptom: session and agent both left on last generation's Opus.
+  it('falls through a retired session pin AND a retired workspace pin to the current default', () => {
+    // The reported symptom: session and workspace both left on last generation's Opus.
     expect(
       effectiveSessionModel('claude', 'claude-opus-5', 'claude-opus-5', catalog, undefined, {}),
     ).toBe('claude-opus-6');
-    // A live agent pin still wins over the provider default.
+    // A live workspace pin still wins over the provider default.
     expect(
       effectiveSessionModel('claude', 'claude-opus-5', 'claude-sonnet-5', catalog, undefined, {}),
     ).toBe('claude-sonnet-5');
@@ -280,14 +280,14 @@ describe('OpenCode defaults', () => {
     expect(supportsAuto('anthropic/claude-sonnet-4', 'opencode')).toBe(true);
   });
 
-  it('resolves a null session model through its agent while preserving an explicit empty value', () => {
+  it('resolves a null session model through its workspace while preserving an explicit empty value', () => {
     expect(effectiveSessionModel('opencode', null, 'anthropic/claude-sonnet-4', catalog)).toBe(
       'anthropic/claude-sonnet-4',
     );
     expect(effectiveSessionModel('opencode', '', 'anthropic/claude-sonnet-4', catalog)).toBe('');
   });
 
-  it('resolves a null session effort through its agent while preserving an explicit empty value', () => {
+  it('resolves a null session effort through its workspace while preserving an explicit empty value', () => {
     expect(effectiveSessionEffort(null, 'ultra')).toBe('ultra');
     expect(effectiveSessionEffort('', 'ultra')).toBe('');
   });

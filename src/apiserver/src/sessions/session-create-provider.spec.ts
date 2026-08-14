@@ -6,7 +6,7 @@ import { SessionsService } from './sessions.service';
  * The New Session provider picker sends its choice as `CreateSessionDto.provider`. The session row
  * is the only place dispatch reads it from, so the override has to land there — and it has to be
  * checked, since the slug arrives from the client. Without one, the session starts on whatever the
- * project last ran interactively (agents/agent-provider.ts); `lastProvider` is that history.
+ * project last ran interactively (workspaces/workspace-provider.ts); `lastProvider` is that history.
  */
 function makeService(
   lastProvider: string | null = 'claude',
@@ -16,9 +16,9 @@ function makeService(
   const creates: Array<Record<string, unknown>> = [];
   const providerQueries: unknown[] = [];
   const prisma = {
-    agent: {
+    workspace: {
       findFirst: async () => ({
-        id: 'agent-1',
+        id: 'workspace-1',
         runnerId: 'runner-1',
         enableWorktree: false,
         permissionMode: null,
@@ -26,9 +26,11 @@ function makeService(
     },
     $queryRaw: async () =>
       lastProvider
-        ? [{ agent_id: 'agent-1', provider: lastProvider, provider_builtin: lastProviderBuiltin }]
+        ? [{ workspace_id: 'workspace-1', provider: lastProvider, provider_builtin: lastProviderBuiltin }]
         : [],
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
+    // create() reads the owner's account-level permission default when the caller names none.
+    user: { findUnique: async () => ({ preferences: {} }) },
     modelProvider: {
       findFirst: async (args: unknown) => {
         providerQueries.push(args);
@@ -49,8 +51,8 @@ function makeService(
     publishSessionCreated: () => undefined,
     publishSessionUpdated: () => undefined,
     // A user-started session moves the project's provider default, so create() wakes every
-    // client's agent list too. Stubbed here only so the call lands somewhere.
-    publishAgentChanged: () => undefined,
+    // client's workspace list too. Stubbed here only so the call lands somewhere.
+    publishWorkspaceChanged: () => undefined,
   } as never;
   return { service: new SessionsService(prisma, queue, realtime), creates, providerQueries };
 }
@@ -60,7 +62,7 @@ test('omitting provider starts the session where the project last started', asyn
   await fixture.service.create('owner-1', {
     prompt: 'Fix the login timeout',
     title: 'Fix login',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 
   assert.equal(fixture.creates[0].provider, 'codex');
@@ -74,7 +76,7 @@ test('a project that has never run anything starts on claude', async () => {
   await fixture.service.create('owner-1', {
     prompt: 'Fix the login timeout',
     title: 'Fix login',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 
   assert.equal(fixture.creates[0].provider, 'claude');
@@ -87,7 +89,7 @@ test('a built-in engine slug overrides the seed without a provider lookup', asyn
     await fixture.service.create('owner-1', {
       prompt: 'Fix the login timeout',
       title: 'Fix login',
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
       provider: slug,
     });
 
@@ -102,7 +104,7 @@ test('a configured provider the caller can reach overrides the seed', async () =
   await fixture.service.create('owner-1', {
     prompt: 'Fix the login timeout',
     title: 'Fix login',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
     provider: 'deepseek',
   });
 
@@ -133,7 +135,7 @@ test('a configured provider gets a pre-generated session id only if it borrows C
     await fixture.service.create('owner-1', {
       prompt: 'Fix the login timeout',
       title: 'Fix login',
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
       provider: slug,
     });
     assert.equal(typeof fixture.creates[0].runtimeSessionId === 'string', pregenerated, slug);
@@ -145,7 +147,7 @@ test('a seeded configured provider is looked up for the runtime it borrows', asy
   await fixture.service.create('owner-1', {
     prompt: 'Fix the login timeout',
     title: 'Fix login',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 
   assert.equal(fixture.creates[0].provider, 'moonshot');
@@ -164,7 +166,7 @@ test('an unknown or unreachable provider slug is rejected, not silently ignored'
     fixture.service.create('owner-1', {
       prompt: 'Fix the login timeout',
       title: 'Fix login',
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
       provider: 'someone-elses-key',
     }),
     /provider not available/,

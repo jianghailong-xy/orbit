@@ -24,13 +24,13 @@ function runFixture(
         provider: null,
         model: null,
         ...task,
-        assignee: { id: 'agent-1', runnerId: 'runner-1' },
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
     },
     taskDependency: { findMany: async () => [] },
     session: {
-      // Two reads in runAgentOnTask: the mid-flight dedup (filters on status) and the
-      // most-recent session for this task+agent (doesn't).
+      // Two reads in runWorkspaceOnTask: the mid-flight dedup (filters on status) and the
+      // most-recent session for this task+workspace (doesn't).
       findFirst: async ({ where }: any) => (where.status ? null : (latestSession ?? null)),
     },
   } as never;
@@ -48,7 +48,7 @@ function runFixture(
   return { service, createCalls, resumeCalls };
 }
 
-test("a task with no provider/model pin dispatches nothing of its own — the run inherits the agent's", async () => {
+test("a task with no provider/model pin dispatches nothing of its own — the run inherits the workspace's", async () => {
   const f = runFixture({});
 
   await f.service.execute('owner-1', TASK_ID);

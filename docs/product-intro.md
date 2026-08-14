@@ -72,7 +72,7 @@ You can also let an agent hold the plan. Give one the orchestrator role and it w
 goal into tasks, wire up the dependencies, and hand pieces to *other* agents — starting their
 sessions, checking on them, reading what came back, leaving notes on the tasks, and searching
 across everything that's been done so far. You supervise a project instead of supervising a
-prompt. (It's off by default, per agent, and everything an orchestrator does is done under
+prompt. (It's off by default, per workspace, and everything an orchestrator does is done under
 your account, visible on the same board you're looking at.)
 
 ### Spread the work across a fleet
@@ -89,8 +89,8 @@ matched up while you're not watching.
 ### Say yes or no to the risky step
 
 An agent that never asks is a liability; an agent that asks about everything is a chore.
-Orbit gives you the dial. Pick how much freedom each agent gets, and hand it a specific
-allowlist ("you may run `kubectl`, nothing else"). Anything outside that surfaces as an
+Orbit gives you the dial. Pick how much freedom a run gets — per session, with an account-wide
+default so you set it once. Anything outside that surfaces as an
 approval card — the actual command, allow or deny, and a "don't ask me again for this" if
 you're tired of seeing it. Nothing blocks in silence waiting for a human who isn't looking.
 
@@ -110,7 +110,7 @@ you answer by pasting logs into a chat box. Your engine logins never leave those
 
 ### Pick your engine — and your account
 
-Each agent runs Claude Code, Codex, Kimi, or OpenCode, whichever you point it at. Sign in
+Each workspace runs Claude Code, Codex, Kimi, or OpenCode, whichever you point it at. Sign in
 from the UI, including from your phone. Prefer a different model vendor? Connect one with
 your own API key and the agent uses that instead.
 
@@ -122,7 +122,7 @@ show the same sessions, live.
 
 ### See what it's costing
 
-Every session reports what it spent in tokens and dollars, rolled up per agent and per user
+Every session reports what it spent in tokens and dollars, rolled up per workspace and per user
 on a dashboard. (These are the engine's own numbers — treat your provider's bill as the
 final word.)
 

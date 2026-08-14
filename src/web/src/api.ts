@@ -101,7 +101,7 @@ function jwtSubject(token: string): string | null {
  *  login, and after each refresh. Safe to call repeatedly (replaces any pending timer).
  *
  *  Also the boot-time hook that binds the persistent transcript cache to the stored session: this
- *  runs from main.tsx before the first render, so a reload has its user scope set before AgentView
+ *  runs from main.tsx before the first render, so a reload has its user scope set before WorkspaceView
  *  reads anything. */
 export function scheduleProactiveRefresh(): void {
   if (refreshTimer !== undefined) clearTimeout(refreshTimer);
@@ -243,7 +243,7 @@ export const getSessionEventFull = (id: string, seq: number): Promise<EventPageE
   api<EventPageEvent>(`/sessions/${id}/events/${seq}/full`);
 
 /** The authoritative, complete list of background shells the session ever launched (derived
- *  server-side over ALL persisted events, with output recovered from the agent's Read polls).
+ *  server-side over ALL persisted events, with output recovered from the workspace's Read polls).
  *  The loaded event window only holds the most recent launches, so the tray merges this with
  *  its live-derived overlay — see mergeBackgroundShells. */
 export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
@@ -251,14 +251,14 @@ export const getBackgroundShells = (id: string): Promise<BgShell[]> =>
 
 // ── Interactive sessions (Route B) ──
 
-/** Start a long-lived interactive session. Pick an agent (its machine + project dir
+/** Start a long-lived interactive session. Pick a workspace (its machine + project dir
  *  is derived server-side) and/or pin a runner; the first message seeds the prompt. */
 export const createInteractiveSession = (body: {
   prompt: string;
   assignedRunnerId?: string;
-  agentId?: string;
+  workspaceId?: string;
   /** Provider picked on the New Session screen: a built-in engine slug or one of the caller's
-   *  configured providers. Omitted inherits the agent's, which is the historical behaviour. */
+   *  configured providers. Omitted inherits the workspace's, which is the historical behaviour. */
   provider?: string;
   model?: string;
   permissionMode?: string;
@@ -549,7 +549,7 @@ export interface SharedEvent {
 /** A session's sanitized, read-only transcript as served to a public share-link viewer. */
 export interface SharedSession {
   title: string;
-  agentName: string | null;
+  workspaceName: string | null;
   runState?: string;
   lifecycleState?: string;
   /** Legacy API name retained during rolling upgrades. */
@@ -648,18 +648,17 @@ export interface SessionDetail {
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
   retryAttempts?: number;
-  // `defaultMergeTarget` is the branch this agent's sessions merge into by default,
+  // `defaultMergeTarget` is the branch this workspace's sessions merge into by default,
   // remembered from the last target the user switched to in the merge dropdown (null = the
-  // runner's auto-detected default). Agent-scoped, so it sticks across the agent's sessions.
-  // `permissionMode` is the agent's configured default — what the server falls back to for a
-  // session that never stored one of its own (see queue.service.ts buildSession).
-  agent: {
+  // runner's auto-detected default). Workspace-scoped, so it sticks across the workspace's sessions.
+  // No `permissionMode` here on purpose: the posture belongs to the run, defaulted from the
+  // account (UserPreferences.defaultPermissionMode).
+  workspace: {
     id: string;
     provider?: string | null;
     model?: string | null;
     effort?: string | null;
     defaultMergeTarget?: string | null;
-    permissionMode?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;
@@ -684,7 +683,7 @@ export interface SessionDetail {
   // reported (older runner / not recomputed since) → the bar keeps its mergeStatus behavior.
   branchMerged?: boolean | null;
   // The worktree's ACTUAL current HEAD branch, as last reported by the runner. Normally equals
-  // `branch`; it differs when the agent ran `git checkout -b` inside the worktree, moving the work
+  // `branch`; it differs when the workspace ran `git checkout -b` inside the worktree, moving the work
   // onto a branch Orbit isn't tracking. When it differs, the bar flags the divergence ("On <branch>
   // — not tracked") instead of a stale "✓ In main" and offers Adopt (re-points `branch` here).
   worktreeBranch?: string | null;
@@ -731,17 +730,17 @@ export const getSessionDiff = (idOrPublicId: string) =>
 export const refreshSessionDiff = (idOrPublicId: string) =>
   api<void>(`/sessions/${idOrPublicId}/diff/refresh`, { method: 'POST' });
 
-/** Enable per-session worktree isolation for an agent whose workDir isn't a git repo:
+/** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline
- *  commit) on the agent's next run, after which sessions isolate on their own branch. */
-export const enableAgentIsolation = (agentId: string) =>
-  api(`/agents/${agentId}`, { method: 'PATCH', body: { autoInitGit: true } });
+ *  commit) on the workspace's next run, after which sessions isolate on their own branch. */
+export const enableWorkspaceIsolation = (workspaceId: string) =>
+  api(`/workspaces/${workspaceId}`, { method: 'PATCH', body: { autoInitGit: true } });
 
-/** Ask this agent's runner to clean up the shared checkout it works in: the runner saves whatever
+/** Ask this workspace's runner to clean up the shared checkout it works in: the runner saves whatever
  *  the checkout is holding onto an `orbit/rescue-*` branch, then returns it to HEAD. Queued for
- *  the runner's next heartbeat; the outcome arrives on the agent's `repoCleanup`. */
-export const cleanUpAgentRepo = (agentId: string) =>
+ *  the runner's next heartbeat; the outcome arrives on the workspace's `repoCleanup`. */
+export const cleanUpWorkspaceRepo = (workspaceId: string) =>
   api<{ repoCleanup?: { status: string; branch?: string | null; message?: string | null } | null }>(
-    `/agents/${agentId}/repo-cleanup`,
+    `/workspaces/${workspaceId}/repo-cleanup`,
     { method: 'POST' },
   );

@@ -94,7 +94,7 @@ export function TaskListView() {
   const [batchOpen, setBatchOpen] = useState(false);
   const [concurrency, setConcurrency] = useState(3);
   const [assignOpen, setAssignOpen] = useState(false);
-  const [assignAgentId, setAssignAgentId] = useState<string | null>(null);
+  const [assignWorkspaceId, setAssignWorkspaceId] = useState<string | null>(null);
   // Filter and sort live in the URL (?filter=…&sort=…&dir=…) so they survive a page
   // refresh and are shareable. A param is dropped when it equals its default, keeping
   // the URL clean for the initial view.
@@ -174,7 +174,7 @@ export function TaskListView() {
     [tasks.data],
   );
   const taskPageCounts = tasks.data?.pages[0]?.counts;
-  const agents = useQuery({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
+  const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
 
   const listQ = useQuery({
     queryKey: ['task-list', listId],
@@ -453,7 +453,7 @@ export function TaskListView() {
   const openAssign = () => {
     // Pre-select the shared assignee when the whole selection already agrees, else blank.
     const ids = [...new Set(selectedRows.map((r: any) => r.assignee?.id ?? null))];
-    setAssignAgentId(ids.length === 1 ? ids[0] : null);
+    setAssignWorkspaceId(ids.length === 1 ? ids[0] : null);
     setAssignOpen(true);
   };
 
@@ -543,7 +543,7 @@ export function TaskListView() {
   };
 
   const renderRow = (r: any) => {
-    // The agent assigned to run the task (GET /tasks and the list view both include it).
+    // The workspace assigned to run the task (GET /tasks and the list view both include it).
     const assigneeName = r.assignee?.name ?? null;
     const selected = selectedTaskId === r.id;
     // Strip the shared prefix for display; the full title stays in the hover tooltip.
@@ -901,24 +901,24 @@ export function TaskListView() {
         onOk={() =>
           batchAssign.mutate({
             taskIds: selectedRows.map((r: any) => r.id),
-            assigneeId: assignAgentId,
+            assigneeId: assignWorkspaceId,
           })
         }
         confirmLoading={batchAssign.isPending}
         okText="OK"
       >
         <p style={{ marginTop: 0 }}>
-          Set the assignee (responsible agent) for <b>{selectedRows.length}</b> selected task(s).
+          Set the assignee (responsible workspace) for <b>{selectedRows.length}</b> selected task(s).
         </p>
         <Select
           allowClear
           showSearch
           optionFilterProp="label"
           style={{ width: '100%' }}
-          placeholder="Pick an agent, leave empty to clear the assignee"
-          value={assignAgentId ?? undefined}
-          onChange={(v) => setAssignAgentId(v ?? null)}
-          options={(agents.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
+          placeholder="Pick a workspace, leave empty to clear the assignee"
+          value={assignWorkspaceId ?? undefined}
+          onChange={(v) => setAssignWorkspaceId(v ?? null)}
+          options={(workspaces.data ?? []).map((a) => ({ value: a.id, label: a.name }))}
         />
       </Modal>
     </>

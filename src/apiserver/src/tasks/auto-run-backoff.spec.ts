@@ -24,8 +24,8 @@ interface Options {
   planUsage?: unknown;
 }
 
-/** Every task in these fixtures is assigned to the same agent. */
-const AGENT_ID = 'agent-1';
+/** Every task in these fixtures is assigned to the same workspace. */
+const AGENT_ID = 'workspace-1';
 
 type GroupByArgs = {
   where: {
@@ -49,7 +49,7 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
   const executed: string[] = [];
   const prisma = {
     // Two raw queries reach this stub. The READY-task scan arrives as a tagged template (an
-    // array of string parts); lastProviderByAgent — which the sweep now derives each task's
+    // array of string parts); lastProviderByWorkspace — which the sweep now derives each task's
     // provider through, the column being gone — passes a Prisma.sql object. Telling them apart
     // by shape is what lets a test still say "these tasks run on codex" in one place.
     $queryRaw: async (q: unknown) =>
@@ -57,12 +57,12 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
         ? taskIds.map((id) => ({
             id,
             ownerId: 'owner-1',
-            agentId: AGENT_ID,
+            workspaceId: AGENT_ID,
             runnerId: 'runner-1',
           }))
         : [
             {
-              agent_id: AGENT_ID,
+              workspace_id: AGENT_ID,
               provider: options.provider ?? 'codex',
               provider_builtin: true,
             },
@@ -198,7 +198,7 @@ test('a task is not dispatched while its provider quota is spent', async () => {
 });
 
 test('the quota gate applies only to the provider that is actually spent', async () => {
-  // A claude-provider agent on the same runner keeps running while codex is exhausted.
+  // A claude-provider workspace on the same runner keeps running while codex is exhausted.
   const { service, executed } = makeService(['task-claude'], [], {
     provider: 'claude',
     planUsage: quotaExhausted('codex', inHours(140)),
@@ -263,7 +263,7 @@ test('the sweep selects candidates on all five READY conditions, anchored on a D
 
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.auto_run_when_ready = true/);
-  assert.match(sql, /EXISTS \(SELECT 1 FROM agent a[\s\S]*a\.runner_id IS NOT NULL\)/);
+  assert.match(sql, /EXISTS \(SELECT 1 FROM workspace a[\s\S]*a\.runner_id IS NOT NULL\)/);
   assert.match(sql, /NOT EXISTS \([\s\S]*p\.status <> 'DONE'::task_status[\s\S]*\)/);
   // Load-bearing despite being logically implied by the two clauses around it: it is the only
   // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to

@@ -101,7 +101,7 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
   const currentSeqRef = useRef<number | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // The callbacks the parent hands down, held in refs so every callback below stays stable:
-  // AgentView re-renders on each streamed chunk, and the debounce effect must not be torn down
+  // WorkspaceView re-renders on each streamed chunk, and the debounce effect must not be torn down
   // and restarted faster than its own timer can fire.
   const loadOlderRef = useRef(loadOlder);
   const hasOlderRef = useRef(hasOlder);
@@ -146,7 +146,7 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
   }, []);
 
   /** The element a hit's card starts at: the last `data-seq` stamp at or before it, so a match
-   *  folded inside a card (a tool_result, a grouped run, a sub-agent's events) resolves to the
+   *  folded inside a card (a tool_result, a grouped run, a sub-workspace's events) resolves to the
    *  card that contains it. */
   const elementForSeq = useCallback(
     (seq: number): HTMLElement | null => {

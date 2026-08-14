@@ -54,7 +54,7 @@ export function SharedSessionPage() {
           title: data.title,
           status: sessionRunStateOf(data),
           createdAt: data.createdAt,
-          agent: { name: data.agentName },
+          workspace: { name: data.workspaceName },
         },
         data.events,
         (id) => fetchSharedAttachmentDataUrl(token, id),
@@ -93,7 +93,7 @@ export function SharedSessionPage() {
             {displayTitle}
           </div>
           <div className="share-sub">
-            {data.agentName && <span>{data.agentName}</span>}
+            {data.workspaceName && <span>{data.workspaceName}</span>}
             <span className="share-badge">Read-only</span>
           </div>
         </div>

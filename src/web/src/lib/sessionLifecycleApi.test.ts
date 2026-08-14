@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { completeSession } from '../api';
-import { agentSessionCountsQuery, sessionsQuery } from './queries';
+import { workspaceSessionCountsQuery, sessionsQuery } from './queries';
 
 const apiMock = vi.hoisted(() => vi.fn());
 
@@ -29,24 +29,24 @@ describe('canonical session lifecycle API', () => {
     },
   );
 
-  it('scopes the request and cache key by agent, tag and page size when asked', async () => {
+  it('scopes the request and cache key by workspace, tag and page size when asked', async () => {
     const query = sessionsQuery({
       runnerId: 'runner-1',
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
       view: 'open',
       tagId: 'tag-1',
       limit: 40,
     });
 
-    expect(query.queryKey).toEqual(['sessions', 'runner-1', 'agent-1', 'open', 'tag-1', 40]);
+    expect(query.queryKey).toEqual(['sessions', 'runner-1', 'workspace-1', 'open', 'tag-1', 40]);
     await (query.queryFn as () => Promise<unknown>)();
     expect(apiMock).toHaveBeenCalledWith(
-      '/sessions?runnerId=runner-1&agentId=agent-1&view=open&tagId=tag-1&limit=40',
+      '/sessions?runnerId=runner-1&workspaceId=workspace-1&view=open&tagId=tag-1&limit=40',
     );
   });
 
   it('fetches the sidebar tallies from the counts endpoint, not the session list', async () => {
-    const query = agentSessionCountsQuery();
+    const query = workspaceSessionCountsQuery();
 
     expect(query.queryKey).toEqual(['session-counts']);
     await (query.queryFn as () => Promise<unknown>)();

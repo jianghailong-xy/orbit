@@ -88,20 +88,20 @@ test('commit rejects an interrupted session that is not at a settled turn bounda
   assert.deepEqual(updates, []);
 });
 
-test('commit rejects an AWAITING_INPUT session with a running sub-agent', async () => {
-  const { service, updates } = makeService({ runningSubagents: ['agent-call-1'] });
+test('commit rejects an AWAITING_INPUT session with a running sub-workspace', async () => {
+  const { service, updates } = makeService({ runningSubagents: ['workspace-call-1'] });
 
   await assert.rejects(
     () => service.commitWorktree('owner-1', 'session-1'),
     (error: unknown) =>
       error instanceof ConflictException &&
-      error.message === 'wait for the running sub-agent to finish before committing',
+      error.message === 'wait for the running sub-workspace to finish before committing',
   );
   assert.deepEqual(updates, []);
 });
 
 test('commit is allowed while a background shell is still up', async () => {
-  // A dev server or watcher the agent left running never sends a terminal notification, so its
+  // A dev server or watcher the workspace left running never sends a terminal notification, so its
   // launch id stays in runningBgShells forever. Blocking on it made Commit permanently dead.
   const { service, updates } = makeService({ runningBgShells: ['shell-call-1'] });
 

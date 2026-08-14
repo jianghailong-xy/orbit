@@ -73,7 +73,7 @@ export function EnrollPage() {
             </p>
             <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
               <Descriptions.Item label="Runner">{info?.hostname || info?.name}</Descriptions.Item>
-              <Descriptions.Item label="Agents">{info?.name}/…</Descriptions.Item>
+              <Descriptions.Item label="Workspaces">{info?.name}/…</Descriptions.Item>
               <Descriptions.Item label="Labels">
                 {info?.labels?.length ? info.labels.map((l) => <Tag key={l}>{l}</Tag>) : '—'}
               </Descriptions.Item>
@@ -85,7 +85,7 @@ export function EnrollPage() {
                 showIcon
                 style={{ marginBottom: 16 }}
                 message={`This machine ("${info.hostname || info.name}") is already registered on your account.`}
-                description="Approving re-issues its credential and adds/updates this directory's agent. The old credential stops working; no duplicate machine is created."
+                description="Approving re-issues its credential and adds/updates this directory's workspace. The old credential stops working; no duplicate machine is created."
               />
             )}
             <Button

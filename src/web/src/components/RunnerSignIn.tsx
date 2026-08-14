@@ -350,7 +350,7 @@ export function RunnerSignIn({
       </div>
       {onUseApiKey && (
         // Both halves earn their words. "This runner" is the limit of a sign-in — the next
-        // machine to run this agent needs its own. And a key is not self-applying: it arrives
+        // machine to run this workspace needs its own. And a key is not self-applying: it arrives
         // as a provider whose models sit in the picker, so saying "account-wide" alone would
         // leave the user staring at a saved key wondering why nothing changed.
         <div className="rsi-hint">

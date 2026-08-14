@@ -18,7 +18,7 @@ import {
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
-import { DEFAULT_AGENT_PROVIDER, lastProviderByAgent } from '../agents/agent-provider';
+import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -39,11 +39,11 @@ import {
   type DependencyState,
 } from './task-dependencies';
 
-/** A polymorphic actor (user or agent) that authored a task or comment. */
+/** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
 
-/** What runAgentOnTask needs off a task to dispatch it: its identity, and the provider/model
- *  pin that overrides the assignee agent's own (null on both = inherit from the agent). */
+/** What runWorkspaceOnTask needs off a task to dispatch it: its identity, and the provider/model
+ *  pin that overrides the assignee workspace's own (null on both = inherit from the workspace). */
 type TaskRunTarget = {
   id: string;
   title: string;
@@ -99,7 +99,7 @@ export const TASK_LIST_SELECT = {
 
 /**
  * Database-side mirror of the task row's Run/Retry visibility predicate, correlated to an
- * outer `task t`: not finished, assigned to an agent that has a runner, no run already in
+ * outer `task t`: not finished, assigned to a workspace that has a runner, no run already in
  * flight, and no prerequisite still outstanding.
  *
  * Spelled as `NOT EXISTS` rather than Prisma relation filters (`sessions: { none }`,
@@ -114,7 +114,7 @@ export const TASK_LIST_SELECT = {
  */
 const RUNNABLE_TASK_SQL = Prisma.sql`
   t.status <> 'DONE'::task_status
-  AND EXISTS (SELECT 1 FROM agent a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
@@ -147,7 +147,7 @@ const RUNNABLE_TASK_SQL = Prisma.sql`
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
-  AND EXISTS (SELECT 1 FROM agent a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND EXISTS (
     SELECT 1 FROM task_dependency d
     JOIN task p ON p.id = d.depends_on_task_id
@@ -190,7 +190,7 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
 const RECONCILE_INTERVAL_MS = 60_000;
 
 // Brake on the reconciler's re-dispatch. A task it auto-runs can land straight back in
-// the candidate set: when a run dies before its agent ever moved the task to IN_PROGRESS,
+// the candidate set: when a run dies before its workspace ever moved the task to IN_PROGRESS,
 // reclaimStalledTask leaves the task OPEN (it only rewrites IN_PROGRESS), and the sweep
 // re-dispatches it a minute later. Nothing else stops that, so a failure the retry cannot
 // clear — a provider usage limit, a missing input file — becomes a once-a-minute respawn
@@ -421,17 +421,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * A task may only be assigned to an agent the same user owns — otherwise a user
-   * could point a task at another tenant's agent (cross-tenant routing). Mirrors
-   * AgentsService.assertOwnedRunner / SessionsService.assertOwnedRefs.
+   * A task may only be assigned to a workspace the same user owns — otherwise a user
+   * could point a task at another tenant's workspace (cross-tenant routing). Mirrors
+   * WorkspacesService.assertOwnedRunner / SessionsService.assertOwnedRefs.
    */
-  private async assertOwnedAgent(ownerId: string, agentId?: string | null): Promise<void> {
-    if (!agentId) return;
-    const agent = await this.prisma.agent.findFirst({
-      where: { id: agentId, ownerId, deletedAt: null },
+  private async assertOwnedWorkspace(ownerId: string, workspaceId?: string | null): Promise<void> {
+    if (!workspaceId) return;
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId, deletedAt: null },
       select: { id: true },
     });
-    if (!agent) throw new ForbiddenException('agent not found');
+    if (!workspace) throw new ForbiddenException('workspace not found');
   }
 
   /**
@@ -450,7 +450,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!configured) throw new BadRequestException('provider not available');
   }
 
-  /** A task may only be filed under a list the same user owns (cf. assertOwnedAgent). */
+  /** A task may only be filed under a list the same user owns (cf. assertOwnedWorkspace). */
   private async assertOwnedList(ownerId: string, listId?: string | null): Promise<void> {
     if (!listId) return;
     const list = await this.prisma.taskList.findFirst({
@@ -653,23 +653,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Validate an agent belongs to the owner and return it as a task/comment creator.
-   * Used by the runner MCP path to attribute work to the acting agent. Returns
-   * undefined when no agent id is supplied so callers fall back to USER attribution.
+   * Validate a workspace belongs to the owner and return it as a task/comment creator.
+   * Used by the runner MCP path to attribute work to the acting workspace. Returns
+   * undefined when no workspace id is supplied so callers fall back to USER attribution.
    */
-  async resolveAgentCreator(ownerId: string, agentId?: string): Promise<Creator | undefined> {
-    if (!agentId) return undefined;
-    const agent = await this.prisma.agent.findFirst({
-      where: { id: agentId, ownerId },
+  async resolveAgentCreator(ownerId: string, workspaceId?: string): Promise<Creator | undefined> {
+    if (!workspaceId) return undefined;
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId },
       select: { id: true },
     });
-    if (!agent) throw new ForbiddenException('agent not found');
-    return { type: CreatorType.AGENT, id: agent.id };
+    if (!workspace) throw new ForbiddenException('workspace not found');
+    return { type: CreatorType.AGENT, id: workspace.id };
   }
 
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
-    await this.assertOwnedAgent(ownerId, dto.assigneeId);
+    await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
     await this.assertUsableProvider(ownerId, dto.provider);
     // Link to the originating session only when it's one this owner has (the runner
@@ -711,7 +711,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : await this.prisma.task.create({ data });
     } catch (e) {
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
-      // pre-check above. Return the winner rather than surfacing a write conflict to the agent.
+      // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
       if (idempotencyKey && this.isDuplicateKey(e)) {
         const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
         if (existing) return existing;
@@ -740,7 +740,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       title: dto.title,
       description: dto.description,
       ownerId,
-      // Defaults to the human (user-facing API); the runner path passes the agent.
+      // Defaults to the human (user-facing API); the runner path passes the workspace.
       creatorType: creator?.type ?? CreatorType.USER,
       creatorId: creator?.id ?? ownerId,
       creatorSessionId: sessionId,
@@ -796,7 +796,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ...new Set(values.filter((value): value is string => !!value)),
     ];
     for (const assigneeId of distinct(items.map((item) => item.assigneeId)))
-      await this.assertOwnedAgent(ownerId, assigneeId);
+      await this.assertOwnedWorkspace(ownerId, assigneeId);
     for (const listId of distinct(items.map((item) => item.listId)))
       await this.assertOwnedList(ownerId, listId);
     for (const provider of distinct(items.map((item) => item.provider)))
@@ -1126,7 +1126,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * Tag each task with `running` = it has a RUNNING session (actually executing right
    * now) and `queued` = it has a PENDING session waiting for a runner slot but nothing
    * running yet. Both are the live ground truth, distinct from Task.status (an
-   * agent-maintained label that can lag): the list breathes only for `running` and
+   * workspace-maintained label that can lag): the list breathes only for `running` and
    * shows a distinct queued indicator for `queued`. One grouped query covers the whole
    * page. The list-detail view (TaskListsService) computes the same flags inline.
    */
@@ -2023,7 +2023,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             archivedAt: true,
             deletedAt: true,
             createdAt: true,
-            agent: { select: { name: true } },
+            workspace: { select: { name: true } },
           },
         },
         creatorSession: {
@@ -2066,24 +2066,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async resolveCommentAuthors(comments: TaskComment[]) {
     if (comments.length === 0) return [];
     const userIds = comments.filter((c) => c.authorType === CreatorType.USER).map((c) => c.authorId);
-    const agentIds = comments.filter((c) => c.authorType === CreatorType.AGENT).map((c) => c.authorId);
-    const [users, agents] = await Promise.all([
+    const workspaceIds = comments.filter((c) => c.authorType === CreatorType.AGENT).map((c) => c.authorId);
+    const [users, workspaces] = await Promise.all([
       userIds.length
         ? this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
         : [],
-      agentIds.length
-        ? this.prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } })
+      workspaceIds.length
+        ? this.prisma.workspace.findMany({ where: { id: { in: workspaceIds } }, select: { id: true, name: true } })
         : [],
     ]);
     const names = new Map<string, string>();
     for (const u of users) names.set(u.id, u.name);
-    for (const a of agents) names.set(a.id, a.name);
+    for (const a of workspaces) names.set(a.id, a.name);
     return comments.map((c) => ({ ...c, authorName: names.get(c.authorId) ?? null }));
   }
 
   async update(ownerId: string, id: string, dto: UpdateTaskDto) {
     const before = await this.get(ownerId, id);
-    if (dto.assigneeId) await this.assertOwnedAgent(ownerId, dto.assigneeId);
+    if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
     const dependsOnTaskIds =
@@ -2140,16 +2140,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             return task;
           });
     // A dependency replacement may target a web-created task, which has no creator session to
-    // carry the refresh. Publish it on the owner's stream so Agent/MCP and CLI replacements
+    // carry the refresh. Publish it on the owner's stream so Workspace/MCP and CLI replacements
     // refresh an already-open DAG immediately. Scalar-only updates keep their existing
-    // session-scoped event (and its agent context).
+    // session-scoped event (and its workspace context).
     if (dependsOnTaskIds !== undefined) {
       this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
     } else if (before.creatorSessionId) {
       this.realtime.publishTaskChanged(before.creatorSessionId, id);
     }
     // This is the dependency trigger point: "A 完成" is anchored on Task.status === DONE
-    // (both the user PATCH and the agent's task_update MCP flow through here). On the
+    // (both the user PATCH and the workspace's task_update MCP flow through here). On the
     // transition into DONE, release & auto-run any now-ready dependents. Best-effort: a
     // trigger failure must never fail the status write that caused it.
     if (dto.status === TaskStatus.DONE && before.status !== 'DONE') {
@@ -2165,7 +2165,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * and auto-run the ones this completion unblocked. A dependent fires only when it is
    * now fully READY (all its prerequisites DONE), still actionable (OPEN), opted into
    * auto-run, and has an assignee bound to a runner. Each run is best-effort and isolated
-   * so one failure doesn't stop the others. Downstream chains flow naturally: the agent
+   * so one failure doesn't stop the others. Downstream chains flow naturally: the workspace
    * marking that dependent DONE re-enters update() and triggers the next layer.
    */
   private async triggerDependents(ownerId: string, doneTaskId: string): Promise<void> {
@@ -2222,21 +2222,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // turn, and loading all of them (plus every one of their dependency edges) once a minute
     // only to discard them dwarfs the dispatch it exists to do.
     const rows = await this.prisma.$queryRaw<
-      { id: string; ownerId: string; agentId: string; runnerId: string | null }[]
+      { id: string; ownerId: string; workspaceId: string; runnerId: string | null }[]
     >`
-      SELECT t.id, t.owner_id AS "ownerId", a.id AS "agentId", a.runner_id AS "runnerId"
+      SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId"
       FROM task t
-      LEFT JOIN agent a ON a.id = t.assignee_id
+      LEFT JOIN workspace a ON a.id = t.assignee_id
       WHERE ${AUTO_RUN_READY_SQL}`;
     if (rows.length === 0) return;
-    // The provider is no longer a column on the agent (migration 0088) — it is derived from the
+    // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
     // project's last interactive session. One batched lookup for the whole sweep rather than a
     // correlated subquery per row, and going through the shared helper is what keeps this gate's
     // notion of "which provider will this run use" identical to the one dispatch itself applies.
     // Only the READY tasks reach here, so this stays proportional to the work, like the filter above.
-    const seeds = await lastProviderByAgent(
+    const seeds = await lastProviderByWorkspace(
       this.prisma,
-      rows.map((row) => row.agentId),
+      rows.map((row) => row.workspaceId),
     );
     // Re-nest into the shape the quota gate and the dispatch loop below read. The join above
     // can only match (the predicate requires an assignee with a runner), so assignee is never
@@ -2245,7 +2245,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       id: row.id,
       ownerId: row.ownerId,
       assignee: {
-        provider: (seeds.get(row.agentId) ?? DEFAULT_AGENT_PROVIDER).provider,
+        provider: (seeds.get(row.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider,
         runnerId: row.runnerId,
       },
     }));
@@ -2290,7 +2290,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * run dies on arrival with the provider's own "usage limit" error, so the only effect is a
    * failed session per sweep until the window resets (a weekly limit means days of them).
    *
-   * Keyed per (runner, provider) because one runner can host agents on several runtimes and
+   * Keyed per (runner, provider) because one runner can host workspaces on several runtimes and
    * only some of their quotas may be spent. Runners whose snapshot reports no exhausted
    * window — or reports one with no reset time — are simply absent: the failure backoff, not
    * this gate, handles anything we cannot put a resume time on.
@@ -2400,7 +2400,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       throw e;
     }
-    // Agent edits have no guaranteed session to publish through (the target may be web-created),
+    // Workspace edits have no guaranteed session to publish through (the target may be web-created),
     // so nudge the owner's control stream directly. The graph query lives under ['task'] and
     // refreshes together with the detail/list views. Publish before response hydration so a rare
     // post-commit read failure cannot leave other clients stale or make a retry-only conflict.
@@ -2432,12 +2432,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
     const task = await this.get(ownerId, id);
     if (!dto.body) throw new BadRequestException('body is required');
-    // Keep only ids that resolve to an agent this user owns (drop unknown/cross-tenant).
-    const mentioned = await this.resolveMentionedAgents(ownerId, dto.mentions);
+    // Keep only ids that resolve to a workspace this user owns (drop unknown/cross-tenant).
+    const mentioned = await this.resolveMentionedWorkspaces(ownerId, dto.mentions);
     const comment = await this.prisma.taskComment.create({
       data: {
         taskId: id,
-        // Defaults to the human (user-facing API); the runner path passes the agent.
+        // Defaults to the human (user-facing API); the runner path passes the workspace.
         authorType: author?.type ?? CreatorType.USER,
         authorId: author?.id ?? ownerId,
         body: dto.body,
@@ -2447,65 +2447,65 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // A new comment changes the list's comment count and the open detail view, so give it the
     // same live-refresh nudge as create()/update() — routed via the task's creator session.
     if (task.creatorSessionId) this.realtime.publishTaskChanged(task.creatorSessionId, id);
-    // Notify & trigger each mentioned agent. Best-effort: a trigger failure (e.g. the
-    // agent has no runner) must never fail the comment write.
-    for (const agent of mentioned) {
-      await this.triggerMentionedAgent(
+    // Notify & trigger each mentioned workspace. Best-effort: a trigger failure (e.g. the
+    // workspace has no runner) must never fail the comment write.
+    for (const workspace of mentioned) {
+      await this.triggerMentionedWorkspace(
         ownerId,
         { id: task.id, title: task.title, provider: task.provider, model: task.model },
-        agent,
+        workspace,
         dto.body,
       ).catch(
         (e) =>
-          this.logger.warn(`mention trigger failed for agent ${agent.id} on task ${id}: ${e?.message ?? e}`),
+          this.logger.warn(`mention trigger failed for workspace ${workspace.id} on task ${id}: ${e?.message ?? e}`),
       );
     }
     return comment;
   }
 
-  /** Filter mention ids down to agents this user owns; dedupe. Returns id + runnerId. */
-  private async resolveMentionedAgents(ownerId: string, ids?: string[]) {
+  /** Filter mention ids down to workspaces this user owns; dedupe. Returns id + runnerId. */
+  private async resolveMentionedWorkspaces(ownerId: string, ids?: string[]) {
     if (!ids?.length) return [];
     const unique = [...new Set(ids)];
-    return this.prisma.agent.findMany({
+    return this.prisma.workspace.findMany({
       where: { id: { in: unique }, ownerId },
       select: { id: true, runnerId: true },
     });
   }
 
   /**
-   * Notify & trigger a mentioned agent on the task: continue its latest resumable
-   * session for this task when one exists, otherwise start a fresh one. The agent reads
+   * Notify & trigger a mentioned workspace on the task: continue its latest resumable
+   * session for this task when one exists, otherwise start a fresh one. The workspace reads
    * the full task + comments via the orbit MCP (task_get) and replies via task_comment.
-   * Agents with no runner can't run a session, so they're skipped (comment still posts).
+   * Workspaces with no runner can't run a session, so they're skipped (comment still posts).
    */
-  private async triggerMentionedAgent(
+  private async triggerMentionedWorkspace(
     ownerId: string,
     task: TaskRunTarget,
-    agent: { id: string; runnerId: string | null },
+    workspace: { id: string; runnerId: string | null },
     body: string,
   ): Promise<void> {
-    if (!agent.runnerId) return;
+    if (!workspace.runnerId) return;
     const prompt =
       `你在任务「${task.title}」的评论区被 @ 提到。\n\n` +
       `评论内容：\n${body}\n\n` +
       `请用 task_get 查看该任务的完整信息与历史评论，并用 task_comment 在该任务下回复。`;
-    await this.runAgentOnTask(ownerId, task, agent, prompt, `回应评论：${task.title}`);
+    await this.runWorkspaceOnTask(ownerId, task, workspace, prompt, `回应评论：${task.title}`);
   }
 
   /**
-   * Run an agent against a task: continue the agent's most recent session for this task
+   * Run a workspace against a task: continue the workspace's most recent session for this task
    * when it's resumable (live, or ended-but-revivable), otherwise start a fresh one.
    * resume() throws ConflictException when the session can't be revived (never ran /
    * runner offline / not started yet) — fall back to a new session. Returns the session id.
    *
    * The task's own provider/model pin (when it has one) is what the run dispatches with,
-   * overriding the assignee agent's defaults.
+   * overriding the assignee workspace's defaults.
    */
-  private async runAgentOnTask(
+  private async runWorkspaceOnTask(
     ownerId: string,
     task: TaskRunTarget,
-    agent: { id: string; runnerId: string | null },
+    workspace: { id: string; runnerId: string | null },
     prompt: string,
     newSessionTitle: string,
     // Set only by batchExecute: tags the (re)claimed session with the batch's id +
@@ -2513,7 +2513,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // clears any stale batch membership so the session escapes a prior batch's cap.
     batch?: { id: string; maxConcurrent: number },
   ): Promise<string | undefined> {
-    if (!agent.runnerId) return undefined;
+    if (!workspace.runnerId) return undefined;
     // Dedup against a session already mid-flight (PENDING/RUNNING): don't spawn a
     // duplicate. This is the guard the resume-or-create path below lacks: a leftover
     // PENDING session (e.g. from an earlier batch the runner never claimed) makes
@@ -2529,7 +2529,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     if (occupying) return occupying.id;
     const latest = await this.prisma.session.findFirst({
-      where: { taskId: task.id, agentId: agent.id, ownerId },
+      where: { taskId: task.id, workspaceId: workspace.id, ownerId },
       orderBy: { createdAt: 'desc' },
       select: { id: true, provider: true },
     });
@@ -2559,11 +2559,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId,
       {
         prompt,
-        agentId: agent.id,
+        workspaceId: workspace.id,
         taskId: task.id,
         title: newSessionTitle.slice(0, 80),
         // Unpinned (null) fields are left off entirely so the session keeps inheriting the
-        // agent's provider/model, exactly as before these columns existed.
+        // workspace's provider/model, exactly as before these columns existed.
         ...(task.provider != null ? { provider: task.provider } : {}),
         ...(task.model != null ? { model: task.model } : {}),
       },
@@ -2576,7 +2576,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Manually kick off the task's responsible agent from the "开始执行" button: same
+   * Manually kick off the task's responsible workspace from the "开始执行" button: same
    * resume-first-else-create flow as an @-mention, but as a user-facing action, so a
    * missing assignee / runner becomes a hard error instead of a silent skip.
    */
@@ -2602,10 +2602,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           : 'Prerequisites are not all complete yet, cannot run',
       );
     }
-    if (!task.assignee) throw new BadRequestException('Assign a responsible agent to the task first');
-    if (!task.assignee.runnerId) throw new BadRequestException('The responsible agent is not bound to a runner, cannot run');
+    if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
+    if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
     const prompt = this.buildExecutePrompt(task);
-    const sessionId = await this.runAgentOnTask(
+    const sessionId = await this.runWorkspaceOnTask(
       ownerId,
       task,
       { id: task.assignee.id, runnerId: task.assignee.runnerId },
@@ -2653,7 +2653,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Run several tasks in one action. Each task's responsible agent is kicked off the
+   * Run several tasks in one action. Each task's responsible workspace is kicked off the
    * same way as {@link execute} (resume-or-create), but a missing assignee/runner skips
    * that task instead of failing the batch, and per-task errors are collected.
    *
@@ -2679,7 +2679,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
-    // task that's already running (runAgentOnTask also guards this, but surfacing it here
+    // task that's already running (runWorkspaceOnTask also guards this, but surfacing it here
     // lets us report it as skipped rather than silently dispatched).
     //
     // SINGLE_RUN_DEDUP, not TASK_OCCUPYING: this must be the same "already running"
@@ -2723,7 +2723,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const dispatch = async (t: (typeof runnable)[number]) => {
       try {
-        const sessionId = await this.runAgentOnTask(
+        const sessionId = await this.runWorkspaceOnTask(
           ownerId,
           t,
           { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
@@ -2813,9 +2813,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return { deleted: result.count };
   }
 
-  /** Set (or clear, when assigneeId is null) the responsible agent on many tasks at once. */
+  /** Set (or clear, when assigneeId is null) the responsible workspace on many tasks at once. */
   async batchAssign(ownerId: string, taskIds: string[], assigneeId?: string | null) {
-    await this.assertOwnedAgent(ownerId, assigneeId);
+    await this.assertOwnedWorkspace(ownerId, assigneeId);
     const res = await this.prisma.task.updateMany({
       where: { id: { in: taskIds }, ownerId },
       data: { assigneeId: assigneeId ?? null },

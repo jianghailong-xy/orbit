@@ -38,13 +38,13 @@ test('custom-provider', async (t) => {
     assert.equal(exec.model, 'claude-opus-5');
   });
 
-  await t.test('built-in claude: model kept, agent env passed through, no injection', () => {
+  await t.test('built-in claude: model kept, workspace env passed through, no injection', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'claude',
       customRow: null,
       sessionModel: 'claude-opus-4-8',
-      agentModel: null,
-      agentEnv: { FOO: 'bar' },
+      workspaceModel: null,
+      workspaceEnv: { FOO: 'bar' },
     });
     assert.equal(exec.provider, 'claude');
     assert.equal(exec.model, 'claude-opus-4-8');
@@ -56,7 +56,7 @@ test('custom-provider', async (t) => {
       declaredProvider: AgentProvider.CODEX,
       customRow: null,
       runtimeDefaultModels: { codex: 'gpt-runtime' },
-      agentModel: null,
+      workspaceModel: null,
       modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
     };
     assert.equal(resolveProviderExec({ ...base, sessionModel: 'gpt-catalog' }).model, 'gpt-catalog');
@@ -65,10 +65,10 @@ test('custom-provider', async (t) => {
       resolveProviderExec({
         ...base,
         sessionModel: null,
-        agentModel: 'gpt-legacy-agent',
+        workspaceModel: 'gpt-legacy-workspace',
         usesRuntimeDefaultModel: false,
       }).model,
-      'gpt-legacy-agent',
+      'gpt-legacy-workspace',
     );
     assert.equal(
       resolveProviderExec({ ...base, sessionModel: null, runtimeDefaultModels: {} }).model,
@@ -79,17 +79,17 @@ test('custom-provider', async (t) => {
         ...base,
         sessionModel: null,
         runtimeDefaultModels: {},
-        agentModel: 'gpt-legacy-agent',
+        workspaceModel: 'gpt-legacy-workspace',
         usesRuntimeDefaultModel: false,
       }).model,
-      'gpt-legacy-agent',
+      'gpt-legacy-workspace',
     );
     assert.equal(
       resolveProviderExec({
         ...base,
         sessionModel: null,
         runtimeDefaultModels: {},
-        agentModel: null,
+        workspaceModel: null,
         modelCatalog: {},
       }).model,
       'gpt-5.6-sol',
@@ -102,7 +102,7 @@ test('custom-provider', async (t) => {
       customRow: null,
       sessionModel: null,
       runtimeDefaultModels: { codex: 'claude-opus-5' },
-      agentModel: null,
+      workspaceModel: null,
       modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
     });
     assert.equal(exec.model, 'gpt-catalog');
@@ -112,7 +112,7 @@ test('custom-provider', async (t) => {
       customRow: null,
       sessionModel: null,
       runtimeDefaultModels: { codex: 'gpt-runtime' },
-      agentModel: 'claude-opus-5',
+      workspaceModel: 'claude-opus-5',
       usesRuntimeDefaultModel: false,
     });
     assert.equal(legacy.model, 'gpt-5.6-sol');
@@ -185,7 +185,7 @@ test('custom-provider', async (t) => {
       customRow: row(),
       sessionModel: null,
       runtimeDefaultModels: { claude: 'claude-opus-5' },
-      agentModel: null,
+      workspaceModel: null,
       modelCatalog: { claude: [{ value: 'claude-sonnet-5', label: 'Sonnet' }] },
     });
     assert.equal(exec.model, 'deepseek-chat');
@@ -196,8 +196,8 @@ test('custom-provider', async (t) => {
       declaredProvider: 'codex',
       customRow: null,
       sessionModel: 'claude-opus-4-8',
-      agentModel: null,
-      agentEnv: null,
+      workspaceModel: null,
+      workspaceEnv: null,
     });
     assert.equal(exec.provider, 'codex');
     assert.equal(exec.model, 'gpt-5.6-sol');
@@ -208,8 +208,8 @@ test('custom-provider', async (t) => {
       declaredProvider: 'kimi',
       customRow: null,
       sessionModel: null,
-      agentModel: null,
-      agentEnv: null,
+      workspaceModel: null,
+      workspaceEnv: null,
     });
     assert.equal(exec.provider, 'kimi');
     assert.equal(exec.model, 'kimi-code/kimi-for-coding');
@@ -229,8 +229,8 @@ test('custom-provider', async (t) => {
       declaredProvider: 'moonshot',
       customRow: kimiRow(),
       sessionModel: null,
-      agentModel: null,
-      agentEnv: { KEEP: '1' },
+      workspaceModel: null,
+      workspaceEnv: { KEEP: '1' },
     });
     assert.equal(exec.provider, 'kimi');
     assert.equal(exec.model, 'kimi-k2.7-code');
@@ -251,8 +251,8 @@ test('custom-provider', async (t) => {
       declaredProvider: 'moonshot',
       customRow: kimiRow(),
       sessionModel: 'kimi-k3',
-      agentModel: null,
-      agentEnv: null,
+      workspaceModel: null,
+      workspaceEnv: null,
     });
     // Kimi's ACP `model` option would switch the session back to the runner's own sign-in, so
     // KIMI_MODEL_NAME is the only place the picked model can reach the CLI.
@@ -260,17 +260,17 @@ test('custom-provider', async (t) => {
     assert.equal(exec.env?.KIMI_MODEL_NAME, 'kimi-k3');
   });
 
-  await t.test('built-in opencode: model and agent env pass through untouched', () => {
+  await t.test('built-in opencode: model and workspace env pass through untouched', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'opencode',
       customRow: null,
       sessionModel: 'anthropic/claude-sonnet-4-5',
-      agentModel: null,
-      agentEnv: { KEEP: '1' },
+      workspaceModel: null,
+      workspaceEnv: { KEEP: '1' },
     });
     assert.equal(exec.provider, 'opencode');
     assert.equal(exec.model, 'anthropic/claude-sonnet-4-5');
-    // Nothing is added alongside the agent's own env — the control plane injects no credential.
+    // Nothing is added alongside the workspace's own env — the control plane injects no credential.
     assert.deepEqual(exec.env, { KEEP: '1' });
   });
 
@@ -281,7 +281,7 @@ test('custom-provider', async (t) => {
       declaredProvider: 'anthropic',
       customRow: row({ presetSlug: 'anthropic', followsPreset: true, defaultModel: 'claude-opus-4-0' }),
       sessionModel: null,
-      agentModel: null,
+      workspaceModel: null,
     });
     assert.equal(exec.model, providerPreset('anthropic')!.defaultModel);
     // An explicit pick still wins over both.
@@ -289,7 +289,7 @@ test('custom-provider', async (t) => {
       declaredProvider: 'anthropic',
       customRow: row({ presetSlug: 'anthropic', followsPreset: true, defaultModel: 'claude-opus-4-0' }),
       sessionModel: 'claude-haiku-4-5-20251001',
-      agentModel: null,
+      workspaceModel: null,
     });
     assert.equal(picked.model, 'claude-haiku-4-5-20251001');
   });
@@ -348,20 +348,20 @@ test('custom-provider', async (t) => {
     assert.equal(exec.model, providerPreset('deepseek')!.defaultModel);
   });
 
-  await t.test('custom provider preserves a legacy Agent pin until claim materializes it', () => {
+  await t.test('custom provider preserves a legacy Workspace pin until claim materializes it', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row(),
       sessionModel: '  \t ',
-      agentModel: 'hidden-legacy-agent-model',
+      workspaceModel: 'hidden-legacy-workspace-model',
       usesRuntimeDefaultModel: false,
-      agentEnv: { KEEP: '1' },
+      workspaceEnv: { KEEP: '1' },
     });
     assert.equal(exec.provider, 'claude'); // runner-facing runtime
-    assert.equal(exec.model, 'hidden-legacy-agent-model');
+    assert.equal(exec.model, 'hidden-legacy-workspace-model');
     assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
     assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'sk-ds');
-    assert.equal(exec.env?.KEEP, '1'); // agent env preserved
+    assert.equal(exec.env?.KEEP, '1'); // workspace env preserved
   });
 
   await t.test('custom provider: an explicit session model wins over the provider default', () => {
@@ -369,19 +369,19 @@ test('custom-provider', async (t) => {
       declaredProvider: 'deepseek',
       customRow: row(),
       sessionModel: 'deepseek-reasoner',
-      agentModel: null,
-      agentEnv: null,
+      workspaceModel: null,
+      workspaceEnv: null,
     });
     assert.equal(exec.model, 'deepseek-reasoner');
   });
 
-  await t.test('provider env overrides a user-typed agent env of the same name', () => {
+  await t.test('provider env overrides a user-typed workspace env of the same name', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row({ baseUrl: 'https://real', apiKeyEnc: encryptSecret('realkey') }),
       sessionModel: null,
-      agentModel: null,
-      agentEnv: { ANTHROPIC_BASE_URL: 'https://user-typed' },
+      workspaceModel: null,
+      workspaceEnv: { ANTHROPIC_BASE_URL: 'https://user-typed' },
     });
     assert.equal(exec.env?.ANTHROPIC_BASE_URL, 'https://real');
     assert.equal(exec.env?.ANTHROPIC_AUTH_TOKEN, 'realkey');
@@ -394,8 +394,8 @@ test('custom-provider', async (t) => {
       declaredProvider: 'deepseek',
       customRow: row(),
       sessionModel: null,
-      agentModel: null,
-      agentEnv: null,
+      workspaceModel: null,
+      workspaceEnv: null,
     });
     assert.equal(exec.env?.ENABLE_CLAUDEAI_MCP_SERVERS, '0');
   });
@@ -406,46 +406,46 @@ test('custom-provider', async (t) => {
       declaredProvider: 'deepseek',
       customRow: row({ runtime: 'codex' }),
       sessionModel: null,
-      agentModel: null,
-      agentEnv: null,
+      workspaceModel: null,
+      workspaceEnv: null,
     });
     assert.deepEqual(Object.keys(exec.env ?? {}).sort(), ['OPENAI_API_KEY', 'OPENAI_BASE_URL']);
   });
 
-  await t.test('a disabled custom row preserves its legacy Agent pin during rolling deploy', () => {
+  await t.test('a disabled custom row preserves its legacy Workspace pin during rolling deploy', () => {
     const exec = resolveProviderExec({
       declaredProvider: 'deepseek',
       customRow: row({ enabled: false }),
       sessionModel: null,
-      agentModel: 'claude-opus-4-8',
+      workspaceModel: 'claude-opus-4-8',
       usesRuntimeDefaultModel: false,
       runtimeDefaultModels: { claude: 'claude-sonnet-5' },
-      agentEnv: { A: '1' },
+      workspaceEnv: { A: '1' },
     });
     assert.equal(exec.provider, 'claude');
     assert.equal(exec.model, 'claude-opus-4-8');
     assert.deepEqual(exec.env, { A: '1' });
   });
 
-  await t.test('new model-less sessions ignore legacy Agent pins and use Runtime defaults', () => {
+  await t.test('new model-less sessions ignore legacy Workspace pins and use Runtime defaults', () => {
     const exec = resolveProviderExec({
       declaredProvider: AgentProvider.CODEX,
       customRow: null,
       sessionModel: null,
       usesRuntimeDefaultModel: true,
-      agentModel: 'gpt-legacy-agent',
+      workspaceModel: 'gpt-legacy-workspace',
       runtimeDefaultModels: { codex: 'gpt-runtime' },
     });
     assert.equal(exec.model, 'gpt-runtime');
   });
 
-  await t.test('old-replica model-less sessions retain the old static fallback without an Agent', () => {
+  await t.test('old-replica model-less sessions retain the old static fallback without an Workspace', () => {
     const exec = resolveProviderExec({
       declaredProvider: AgentProvider.CODEX,
       customRow: null,
       sessionModel: null,
       usesRuntimeDefaultModel: false,
-      agentModel: null,
+      workspaceModel: null,
       runtimeDefaultModels: { codex: 'gpt-runtime' },
     });
     assert.equal(exec.model, 'gpt-5.6-sol');

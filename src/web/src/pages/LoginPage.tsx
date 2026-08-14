@@ -15,8 +15,8 @@ export function LoginPage() {
       const res = await api<AuthResponse>('/auth/login', { method: 'POST', body: values });
       setSession(res);
       const next = new URLSearchParams(window.location.search).get('next');
-      // Land at the root and let <DefaultLanding> resolve the destination — the first agent's
-      // session list, or onboarding (registration guide / runners) when there's no agent to open
+      // Land at the root and let <DefaultLanding> resolve the destination — the first workspace's
+      // session list, or onboarding (registration guide / runners) when there's no workspace to open
       // yet. A full reload so BootGate pre-warms that first screen behind the splash.
       location.href = next && next.startsWith('/') ? next : '/';
     } catch (err) {

@@ -195,13 +195,13 @@ test('reissue signs only after the runner still owns an eligible live session', 
           RunStatus.INTERRUPTED,
         ],
       },
-      agent: { enableOrchestration: true, deletedAt: null },
+      workspace: { enableOrchestration: true, deletedAt: null },
     },
   ]);
   assert.equal(signCalls.length, 1);
 });
 
-test('reissue denies a session that fails any live ownership or agent guard', async () => {
+test('reissue denies a session that fails any live ownership or workspace guard', async () => {
   const { authorizer, signCalls } = makeAuthorizer({ result: null });
   await assert.rejects(
     () => authorizer.reissue(RUNNER, SESSION_ID),
@@ -237,7 +237,7 @@ test('assert verifies the credential before applying the open-session database p
           RunStatus.INTERRUPTED,
         ],
       },
-      agent: { enableOrchestration: true, deletedAt: null },
+      workspace: { enableOrchestration: true, deletedAt: null },
     },
   ]);
 });

@@ -21,7 +21,7 @@ function retryFixture(status: string, updated = 1) {
         provider: null,
         model: null,
         status,
-        assignee: { id: 'agent-1', runnerId: 'runner-1' },
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
       updateMany: async (args: any) => {
         statusWrites.push(args);
@@ -87,7 +87,7 @@ test('batch-running a FAILED task clears it the same way', async () => {
           provider: null,
           model: null,
           status: 'FAILED',
-          assignee: { id: 'agent-1', runnerId: 'runner-1' },
+          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
         {
           id: 'task-open',
@@ -96,7 +96,7 @@ test('batch-running a FAILED task clears it the same way', async () => {
           provider: null,
           model: null,
           status: 'OPEN',
-          assignee: { id: 'agent-1', runnerId: 'runner-1' },
+          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
       ],
       updateMany: async (args: any) => {
@@ -109,7 +109,7 @@ test('batch-running a FAILED task clears it the same way', async () => {
   } as never;
   const realtime = { publishForUser: () => {} } as never;
   const service = new TasksService(prisma, {} as never, realtime);
-  (service as any).runAgentOnTask = async () => 'session-1';
+  (service as any).runWorkspaceOnTask = async () => 'session-1';
 
   const result = await service.batchExecute('owner-1', [TASK_ID, 'task-open']);
 

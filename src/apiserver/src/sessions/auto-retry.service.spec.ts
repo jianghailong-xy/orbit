@@ -293,7 +293,7 @@ test('does not re-send when there is nothing to re-send', async () => {
   assert.equal(rows[0].retryAt, null);
 });
 
-// The message a retry re-sends sits behind everything the agent did in response to it. Two
+// The message a retry re-sends sits behind everything the workspace did in response to it. Two
 // real sessions were disarmed as "nothing to re-send" at the moment their quota came back,
 // with the user's message 400+ events up the stream — while the transcript card, which reads
 // the whole stream, went on offering to re-send exactly that message.

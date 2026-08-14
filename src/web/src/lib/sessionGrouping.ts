@@ -1,4 +1,4 @@
-// Session-list sectioning for the agent console, mirroring the native `SessionTimeGrouping` /
+// Session-list sectioning for the workspace console, mirroring the native `SessionTimeGrouping` /
 // `SessionTagGrouping` (OrbitKit) so the web list and the iOS drawer render the same shape from the
 // same server-sorted input. Both groupers are pure and take an already console-sorted list
 // (pinned-first, then most-recent activity) — they only bucket, never reorder within a bucket.

@@ -4,7 +4,7 @@ import { Navigate, useLocation, useMatch } from 'react-router-dom';
 import { getToken } from '../api';
 import { decodeId } from '../lib/idCodec';
 import {
-  agentsQuery,
+  workspacesQuery,
   meQuery,
   providersQuery,
   runnersQuery,
@@ -13,7 +13,7 @@ import {
   sessionsQuery,
   setupStatusQuery,
 } from '../lib/queries';
-import { agentRunnerId, firstOpenableAgent } from '../lib/agentOrder';
+import { workspaceRunnerId, firstOpenableWorkspace } from '../lib/workspaceOrder';
 
 // Routes that render their own loaders and have no first-screen data to wait on.
 const BYPASS = ['/login', '/enroll', '/setup'];
@@ -31,7 +31,7 @@ const setBootProgress = (pct: number) => (window as BootWindow).__bootProgress?.
 const finishBoot = () => (window as BootWindow).__bootDone?.();
 
 // The console deep-links the splash must cover before revealing: opening one of these
-// straight from a reload lands in AgentView, whose first screen needs the runner-scoped
+// straight from a reload lands in WorkspaceView, whose first screen needs the runner-scoped
 // session data — not the global lists the home view waits on.
 type DeepLink = { kind: 'session' | 'agent'; id: string };
 
@@ -43,9 +43,9 @@ type DeepLink = { kind: 'session' | 'agent'; id: string };
  * page/sidebar, so those read straight from cache and never refetch.
  *
  * Which queries are critical depends on the landed route. The home route redirects to the first
- * agent's console, and a reload on /sessions/<id> or /agents/<id> lands in AgentView directly:
- * either way, resolve the runner (session detail, or the agents list), then warm the runner-scoped
- * Open-session list AgentView reads on load — otherwise the splash dismisses too early and the
+ * workspace's console, and a reload on /sessions/<id> or /workspaces/<id> lands in WorkspaceView directly:
+ * either way, resolve the runner (session detail, or the workspaces list), then warm the runner-scoped
+ * Open-session list WorkspaceView reads on load — otherwise the splash dismisses too early and the
  * console flashes a spinner / "Starting…" while that lands.
  *
  * Only the authenticated app pre-warms. A signed-out visitor on a real route instead
@@ -57,7 +57,8 @@ type DeepLink = { kind: 'session' | 'agent'; id: string };
 export function BootGate({ children }: { children: React.ReactNode }) {
   const loc = useLocation();
   const sessionMatch = useMatch('/sessions/:id');
-  const agentMatch = useMatch('/agents/:id/*');
+  // Two patterns, one meaning: `agents` is the pre-rename URL people still have bookmarked.
+  const workspaceMatch = useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*');
   const hasToken = !!getToken();
   const onBypass = isBypass(loc.pathname);
   // Signed-out boot on a real route: the deployment may have zero users (fresh install),
@@ -73,7 +74,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   const [deep] = useState<DeepLink | null>(() => {
     const sid = sessionMatch?.params.id ? decodeId(sessionMatch.params.id) : null;
     if (sid) return { kind: 'session', id: sid };
-    const aid = agentMatch?.params.id ? decodeId(agentMatch.params.id) : null;
+    const aid = workspaceMatch?.params.id ? decodeId(workspaceMatch.params.id) : null;
     if (aid) return { kind: 'agent', id: aid };
     return null;
   });
@@ -91,7 +92,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   // Warm the signed-in user so the nav footer's name paints with the first frame.
   // Not a readiness milestone — it must never hold the splash open.
   useQuery({ ...meQuery(), enabled: warm });
-  // Warm the configured-provider catalog so the composer's model pill has a custom agent's
+  // Warm the configured-provider catalog so the composer's model pill has a custom workspace's
   // model list on first paint. Non-blocking, like `me` — never a readiness milestone.
   useQuery({ ...providersQuery(), enabled: warm });
   // A /sessions/<id> deep link carries no runner — its session detail resolves one.
@@ -99,32 +100,32 @@ export function BootGate({ children }: { children: React.ReactNode }) {
     ...sessionQuery(deep?.kind === 'session' ? deep.id : null),
     enabled: warm && deep?.kind === 'session',
   });
-  // The agents list resolves the runner behind the first screen: for an /agents/<id> deep link,
-  // that agent; for the home route (which redirects to the first agent's console), the first
-  // openable agent. A /sessions/<id> deep link resolves its runner above, so it skips this.
-  const agents = useQuery({ ...agentsQuery(), enabled: warm && deep?.kind !== 'session' });
+  // The workspaces list resolves the runner behind the first screen: for an /workspaces/<id> deep link,
+  // that workspace; for the home route (which redirects to the first workspace's console), the first
+  // openable workspace. A /sessions/<id> deep link resolves its runner above, so it skips this.
+  const workspaces = useQuery({ ...workspacesQuery(), enabled: warm && deep?.kind !== 'session' });
   const homeFirst = deep || !runners.isFetched
     ? undefined
-    : firstOpenableAgent(agents.data ?? [], runners.data ?? []);
+    : firstOpenableWorkspace(workspaces.data ?? [], runners.data ?? []);
   const runnerId =
     deep?.kind === 'session'
       ? (sessionDetail.data?.assignedRunnerId ?? null)
       : deep?.kind === 'agent'
-        ? ((agents.data ?? []).find((a) => a.id === deep.id)?.runnerId ?? null)
-        : (homeFirst ? agentRunnerId(homeFirst) : null);
-  // AgentView's list is one agent's, so the pre-warm has to name the same agent: the deep-linked
-  // one, the open session's own, or the first agent the home route redirects to.
-  const agentId =
+        ? ((workspaces.data ?? []).find((a) => a.id === deep.id)?.runnerId ?? null)
+        : (homeFirst ? workspaceRunnerId(homeFirst) : null);
+  // WorkspaceView's list is one workspace's, so the pre-warm has to name the same workspace: the deep-linked
+  // one, the open session's own, or the first workspace the home route redirects to.
+  const workspaceId =
     deep?.kind === 'session'
-      ? (sessionDetail.data?.agent?.id ?? null)
+      ? (sessionDetail.data?.workspace?.id ?? null)
       : deep?.kind === 'agent'
         ? deep.id
         : (homeFirst?.id ?? null);
-  // The first page of the scoped Open list AgentView reads on load — same factory and page size,
+  // The first page of the scoped Open list WorkspaceView reads on load — same factory and page size,
   // so it lands in cache under the same key and the console paints in one shot instead of
   // flashing "Starting…".
   const scopedSessions = useQuery({
-    ...sessionsQuery({ runnerId, agentId, view: 'open', limit: SESSION_PAGE_SIZE }),
+    ...sessionsQuery({ runnerId, workspaceId, view: 'open', limit: SESSION_PAGE_SIZE }),
     enabled: warm && !!runnerId,
   });
 
@@ -139,10 +140,10 @@ export function BootGate({ children }: { children: React.ReactNode }) {
     const resolved = sessionDetail.isFetched;
     checks = [runners.isFetched, resolved, runnerId ? scopedSessions.isFetched : resolved];
   } else {
-    // Agent deep link OR home: the agents list resolves the (first) agent, then its scoped
-    // Open-session list. With no openable agent to wait on, the agents fetch itself is the
+    // Workspace deep link OR home: the workspaces list resolves the (first) workspace, then its scoped
+    // Open-session list. With no openable workspace to wait on, the workspaces fetch itself is the
     // final milestone, so the splash can never hang.
-    const resolved = agents.isFetched;
+    const resolved = workspaces.isFetched;
     checks = [runners.isFetched, resolved, runnerId ? scopedSessions.isFetched : resolved];
   }
   const settled = checks.filter(Boolean).length;

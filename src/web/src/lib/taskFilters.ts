@@ -10,7 +10,7 @@ export interface FilterableTask {
 
 /**
  * Mirror of the conditions POST /tasks/execute and /tasks/batch-execute skip on: no
- * responsible agent, that agent not bound to a runner, unmet prerequisites, or a run
+ * responsible workspace, that workspace not bound to a runner, unmet prerequisites, or a run
  * already in flight. Neither endpoint refuses a DONE task, so this doesn't either —
  * it is what a batch's "will run N" preview must count to agree with the dispatch.
  */

@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { NewSessionProviderHero } from './NewSessionProviderHero';
 import { providerChoices, currentProviderChoice } from '../lib/sessionProviderChoices';
-import type { ConfiguredProvider } from '../lib/agentDefaults';
+import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 import type { RunnerEngineHealth } from '@orbit/shared';
 
 const configured: ConfiguredProvider[] = [

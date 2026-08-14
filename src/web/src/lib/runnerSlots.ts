@@ -44,7 +44,7 @@ export interface QueuedGate {
  *
  * The server names the gate, because only it can: a session can sit queued while the runner it
  * belongs to is half idle — its own run is full, or the batch it was dispatched with is — and
- * from one agent's page of the list there is no way to tell. Falls back to the runner-capacity
+ * from one workspace's page of the list there is no way to tell. Falls back to the runner-capacity
  * reading for payloads from a server that predates the field.
  */
 export function pendingSlotDescription(

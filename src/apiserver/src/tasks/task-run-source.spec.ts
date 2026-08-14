@@ -10,7 +10,7 @@ test('a fresh task run creates an Active-list session', async () => {
         id: 'task-1',
         title: 'Ship it',
         description: null,
-        assignee: { id: 'agent-1', runnerId: 'runner-1' },
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
     },
     taskDependency: { findMany: async () => [] },

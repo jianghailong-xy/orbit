@@ -1,16 +1,16 @@
 // Escaped, never written literally: a source file carrying a raw NUL is itself the hazard this
-// module exists for — reading one is how an agent's tool_result picks one up.
+// module exists for — reading one is how a workspace's tool_result picks one up.
 const NUL = '\u0000';
 
 /**
  * Strip NUL (U+0000) out of anything a runner reports.
  *
  * Postgres accepts no NUL in `text` or `jsonb` — it fails the statement with 22P05
- * ("unsupported Unicode escape sequence"). An agent only has to read one binary file for its
+ * ("unsupported Unicode escape sequence"). A workspace only has to read one binary file for its
  * tool_result to carry one, and that single event used to fail the whole `run_event` insert.
  * The runner replays a rejected batch in order and treats 5xx as retryable without a ceiling,
  * so every later event for that session queued up behind the poison one — permanently, and
- * without a log line on either side. The transcript froze while the agent kept working.
+ * without a log line on either side. The transcript froze while the workspace kept working.
  *
  * A byte the database cannot store is worth less than the stream it blocks, so it is dropped
  * here, at the edge, before anything derives from the payload.

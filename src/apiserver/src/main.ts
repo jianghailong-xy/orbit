@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -18,6 +19,9 @@ async function bootstrap() {
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }),
   );
+  // Every JSON response carries both `workspace*` and `agent*` while shipped clients still speak
+  // the pre-rename name. Temporary — see the interceptor.
+  app.useGlobalInterceptors(new WorkspaceAliasInterceptor());
 
   const origins = (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173')
     .split(',')

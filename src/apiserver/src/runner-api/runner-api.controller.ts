@@ -76,7 +76,7 @@ import {
   WorktreesRemovableResponse,
   gracefulEndStatus,
 } from '@orbit/shared';
-import { lastProviderByAgent, withProviderSeed } from '../agents/agent-provider';
+import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
 import {
   normalizeBuiltinPermissionMode,
@@ -109,6 +109,7 @@ import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
+import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import {
   isTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -155,7 +156,7 @@ const TERMINAL: RunStatus[] = [RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.
 // late event tails and heartbeat snapshots must remain streamable while it waits to claim.
 // Keep this distinct from LIVE: /complete must never finalize a freshly queued PENDING turn.
 const OPEN = OPEN_SESSION_STATUSES;
-// Frontier events that count as the agent *answering* the pending user message, and so clear the
+// Frontier events that count as the workspace *answering* the pending user message, and so clear the
 // denormalized `lastUserText` the session list previews. Deliberately narrow: a turn ending, a
 // user interrupt, an error or a system/status handshake all end the turn without answering, and
 // clearing on those left a session interrupted before its first reply with nothing to preview.
@@ -249,7 +250,7 @@ export class RunnerApiController {
       throw new UnauthorizedException('enrollment token expired');
     }
 
-    // One Runner for the machine, reused if it already exists. Agents are
+    // One Runner for the machine, reused if it already exists. Workspaces are
     // registered separately, not here. The token is single-use.
     const ownerId = enrollment.ownerId;
     const runnerName = dto.name;
@@ -354,7 +355,7 @@ export class RunnerApiController {
     throw new Error('could not allocate a unique user code');
   }
 
-  /** `orbit status` — the runner's own record + derived online flag + its agents. */
+  /** `orbit status` — the runner's own record + derived online flag + its workspaces. */
   @UseGuards(RunnerAuthGuard)
   @Get('me')
   async me(
@@ -370,7 +371,7 @@ export class RunnerApiController {
     },
   ) {
     const fresh = !!runner.lastHeartbeatAt && Date.now() - runner.lastHeartbeatAt.getTime() < OFFLINE_AFTER_MS;
-    const agents = await this.prisma.agent.findMany({
+    const workspaces = await this.prisma.workspace.findMany({
       where: { runnerId: runner.id, deletedAt: null },
       select: {
         id: true,
@@ -380,12 +381,12 @@ export class RunnerApiController {
       },
       orderBy: { name: 'asc' },
     });
-    // `orbit status` prints a provider per agent, and the column is gone (migration 0088), so
-    // derive it the same way every other agent payload does rather than dropping the field —
-    // a runner in the field reads it (RunnerAgent.Provider) and would just print nothing.
+    // `orbit status` prints a provider per workspace, and the column is gone (migration 0088), so
+    // derive it the same way every other workspace payload does rather than dropping the field —
+    // a runner in the field reads it (RunnerWorkspace.Provider) and would just print nothing.
     const seeded = withProviderSeed(
-      agents,
-      await lastProviderByAgent(this.prisma, agents.map((a) => a.id)),
+      workspaces,
+      await lastProviderByWorkspace(this.prisma, workspaces.map((a) => a.id)),
     );
     return {
       id: runner.id,
@@ -396,7 +397,7 @@ export class RunnerApiController {
       version: runner.version,
       labels: runner.labels,
       maxConcurrent: runner.maxConcurrent,
-      agents: seeded.map((a) => ({
+      workspaces: seeded.map((a) => ({
         id: a.id,
         name: a.name,
         provider: a.provider,
@@ -475,7 +476,7 @@ export class RunnerApiController {
           dto?.runtimeDefaultModels == null
             ? undefined
             : (sanitizeRuntimeDefaultModels(dto.runtimeDefaultModels) as Prisma.InputJsonValue),
-        // State of the shared checkouts this machine's agents work in, so the UI can warn once
+        // State of the shared checkouts this machine's workspaces work in, so the UI can warn once
         // that a wedged checkout is blocking every merge here. Omitted by older runners (keep the
         // last snapshot); sanitized in as well as out, since it drives a claim about a machine.
         repoHealth:
@@ -587,14 +588,14 @@ export class RunnerApiController {
         // Next heartbeat retries; the status bar tolerates a one-cycle lag.
       }
     }
-    // Record what the runner found at each agent's working directory, so the config form can
-    // report a bad path at edit time. Scoped to this runner's own agents: a probe names an
-    // agent id, and only the machine that runs it can say anything about its disk.
+    // Record what the runner found at each workspace's working directory, so the config form can
+    // report a bad path at edit time. Scoped to this runner's own workspaces: a probe names an
+    // workspace id, and only the machine that runs it can say anything about its disk.
     if (dto?.agentDirProbes?.length) {
       try {
         await Promise.all(
           dto.agentDirProbes.slice(0, 200).map((p) =>
-            this.prisma.agent.updateMany({
+            this.prisma.workspace.updateMany({
               where: { id: p.agentId, runnerId: runner.id, deletedAt: null },
               data: {
                 workDirExists: p.exists,
@@ -641,11 +642,11 @@ export class RunnerApiController {
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
-      // runner never has to hold an agent list of its own. Last of the block on purpose: it is
+      // runner never has to hold a workspace list of its own. Last of the block on purpose: it is
       // the only entry here that is a plain listing rather than a one-slot relay, and everything
       // after a throw in this try is skipped until the next heartbeat.
       agentDirs = (
-        await this.prisma.agent.findMany({
+        await this.prisma.workspace.findMany({
           where: { runnerId: runner.id, deletedAt: null, workDir: { not: null } },
           select: { id: true, workDir: true },
           take: 200,
@@ -980,8 +981,10 @@ export class RunnerApiController {
     const sessions = await this.prisma.session.findMany({
       where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
       include: {
-        agent: true,
+        workspace: true,
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+        // The account-level permission default, which replaced the per-workspace one.
+        owner: { select: { preferences: true } },
       },
     });
     const openCodeSessions = sessions.filter(
@@ -1018,7 +1021,7 @@ export class RunnerApiController {
       if (!supportsTerminalHandoff && isTerminalResumeHandoffOwner(s.inboxLeaseOwner)) {
         continue;
       }
-      const agent = s.agent;
+      const workspace = s.workspace;
       const declared = s.provider ?? null;
       // Custom provider borrows a built-in runtime — resolve the runner-facing provider, model,
       // and injected env so a resumed session keeps talking to the configured endpoint. Owner
@@ -1040,9 +1043,9 @@ export class RunnerApiController {
           sessionModel,
           usesRuntimeDefaultModel: s.usesRuntimeDefaultModel,
           runtimeDefaultModels: s.assignedRunner?.runtimeDefaultModels,
-          agentModel: agent?.model,
+          workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
-          agentEnv: agent?.env as Record<string, string> | null,
+          workspaceEnv: workspace?.env as Record<string, string> | null,
         });
       let exec = resolveExec(s.model);
       // Same materialization as the claim path: an unset model is snapshotted, and one the runtime
@@ -1065,8 +1068,7 @@ export class RunnerApiController {
         }
       }
       const provider = exec.provider;
-      const permissionMode =
-        (s.permissionMode as PermissionMode) ?? (agent?.permissionMode as PermissionMode) ?? PermissionMode.DONT_ASK;
+      const permissionMode = resolvePermissionMode(s.permissionMode, s.owner);
       const runtime = reclaimRuntimeIds({
         provider,
         sessionId: s.id,
@@ -1079,32 +1081,29 @@ export class RunnerApiController {
       });
       // The stored session model wins over Runtime/ModelProvider defaults, so a resumed process
       // keeps the model it was created with; cross-provider ids are still coerced safely.
-      const agentCfg: AgentExecConfig = {
+      const workspaceCfg: AgentExecConfig = {
         provider,
         model: exec.model,
-        appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
-        systemPrompt: agent?.systemPrompt ?? undefined,
-        allowedTools: (agent?.allowedTools as string[] | null) ?? [],
-        disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
+        appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
+        systemPrompt: workspace?.systemPrompt ?? undefined,
+        allowedTools: [...ALWAYS_ALLOWED_TOOLS],
+        disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           exec.model,
           permissionMode,
           customRow?.enabled === true,
         ),
-        // Per-session effort wins; otherwise use the agent's effort setting.
+        // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only
         // valid against the assigned runner's reported catalog for this model.
         effort: normalizeEffortForRuntimeModel(
           provider,
-          s.effort ?? agent?.effort,
+          s.effort ?? workspace?.effort,
           exec.model,
           s.assignedRunner?.modelCatalog,
         ),
-        maxTurns: agent?.maxTurns ?? undefined,
-        maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
-        mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
-        // Includes a custom provider's injected baseUrl/key (else just the agent's env).
+        // Includes a custom provider's injected baseUrl/key (else just the workspace's env).
         env: exec.env,
       };
       // Reclaim must still return a cancelled/deleted live runtime so the runner can drain it,
@@ -1117,8 +1116,8 @@ export class RunnerApiController {
         s.deletedAt === null &&
         s.cancelRequestedAt === null &&
         OPEN.includes(s.status) &&
-        agent?.deletedAt === null &&
-        agent.enableOrchestration;
+        workspace?.deletedAt === null &&
+        workspace.enableOrchestration;
       out.push({
         sessionId: s.id,
         status: s.status as SharedRunStatus,
@@ -1128,14 +1127,14 @@ export class RunnerApiController {
         title: s.title,
         sessionUuid: runtime.sessionUuid,
         maxSeq: agg._max.seq ?? 0,
-        agent: agentCfg,
-        workDir: agent?.workDir ?? undefined,
+        agent: workspaceCfg,
+        workDir: workspace?.workDir ?? undefined,
         branch: s.branch ?? undefined,
-        autoInitGit: agent?.autoInitGit ?? undefined,
+        autoInitGit: workspace?.autoInitGit ?? undefined,
         // cf. the claim path: the branch this session merges into, so a restarted runner
         // still judges "already merged" against it rather than main.
-        mergeTarget: s.mergeTarget ?? agent?.defaultMergeTarget ?? undefined,
-        agentId: s.agentId ?? undefined,
+        mergeTarget: s.mergeTarget ?? workspace?.defaultMergeTarget ?? undefined,
+        agentId: s.workspaceId ?? undefined,
         taskId: s.taskId ?? undefined,
         allowOrchestration,
         orchestrationToken: allowOrchestration
@@ -1237,7 +1236,7 @@ export class RunnerApiController {
         WHERE "inbox_lease_generation"."session_id" = EXCLUDED."session_id"
       `;
       // Rotating the owner means a different process now supervises this session, so the one
-      // that launched its background shells and sub-agents is gone and took them with it. Clear
+      // that launched its background shells and sub-workspaces is gone and took them with it. Clear
       // the running sets here as well as on a runtime handshake (see bgReset): `init`/`resumed`
       // only fire when an engine actually starts, which for a session that parks and is never
       // resumed is never — leaving it reading "N background processes running" for the rest of
@@ -1745,7 +1744,7 @@ export class RunnerApiController {
         provider: true,
         providerBuiltin: true,
         usesRuntimeDefaultModel: true,
-        agent: { select: { model: true, env: true } },
+        workspace: { select: { model: true, env: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
       },
     });
@@ -1765,9 +1764,9 @@ export class RunnerApiController {
       sessionModel: session.model,
       usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
       runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-      agentModel: session.agent?.model,
+      workspaceModel: session.workspace?.model,
       modelCatalog: session.assignedRunner?.modelCatalog,
-      agentEnv: session.agent?.env as Record<string, string> | null,
+      workspaceEnv: session.workspace?.env as Record<string, string> | null,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
     // previous provider's variables must still go, which an empty map is how the runner is told.
@@ -1889,7 +1888,7 @@ export class RunnerApiController {
           retryAt: true,
         },
       });
-      // A turn that failed mid-run (e.g. an API/content-filter error the agent couldn't
+      // A turn that failed mid-run (e.g. an API/content-filter error the workspace couldn't
       // recover from — the runner reports such turns as FAILED) would otherwise park at
       // AWAITING_INPUT, which is indistinguishable from an ordinary idle session: the list
       // says "Waiting for your reply" and the failure is invisible until you open the
@@ -2113,7 +2112,7 @@ export class RunnerApiController {
     // live (below) but DON'T persist them — the full reply is durably saved as the
     // trailing `assistant` / `thinking` event, so replay/refresh still shows complete
     // text without piling up rows. background_output is the live tail of a background
-    // shell's file — same deal (ephemeral animation; the durable record is the agent's
+    // shell's file — same deal (ephemeral animation; the durable record is the workspace's
     // own Read snapshots + the background_task completion event).
     const durable = events.filter(
       (e) =>
@@ -2194,7 +2193,7 @@ export class RunnerApiController {
           return !acc || e.seq > acc.seq ? { seq: e.seq, text } : acc;
         }, null);
       // Denormalize the "frontier" activity for the sidebar's live status line. The
-      // highest-seq durable event is the agent's latest known state: a tool_use means a
+      // highest-seq durable event is the workspace's latest known state: a tool_use means a
       // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
       // other frontier (assistant text, tool_result, turn end) means no tool is running
       // → clear it. Batches arrive in seq order, so the latest batch's frontier is the
@@ -2210,8 +2209,8 @@ export class RunnerApiController {
       // (left(…, PREVIEW_LEN)).
       let pendingUserText: string | null | undefined;
       for (const e of durable) {
-        // Sub-agent (Task/Agent) events carry the spawning call's parentToolUseId. Skip
-        // them: while a sub-agent runs, its own tool_use/tool_result would clobber then
+        // Sub-workspace (Task/Workspace) events carry the spawning call's parentToolUseId. Skip
+        // them: while a sub-workspace runs, its own tool_use/tool_result would clobber then
         // clear the parent's frontier, dropping the sidebar out of "Running…" even though
         // the parent's Task call is still in flight. The parent's own tool_use has no
         // parentToolUseId, so it stays the frontier until its tool_result lands.
@@ -2347,17 +2346,17 @@ export class RunnerApiController {
         })
         .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
         .filter(Boolean);
-      // Sub-agents (Task/Agent tool) run async: the launch tool_result ("Async agent launched")
+      // Sub-workspaces (Task/Workspace tool) run async: the launch tool_result ("Async workspace launched")
       // lands immediately and the parent then streams its own top-scope system progress events,
-      // so lastToolUse can't stay 'Agent'. Track in-flight sub-agents the same way as background
+      // so lastToolUse can't stay 'Workspace'. Track in-flight sub-workspaces the same way as background
       // shells — by their launch tool_use id, cleared by the same terminal background_task
-      // (bgEnded) — so the list can show "Running Agent…" the whole time one runs. Only top-level
-      // launches count; a sub-agent's own nested tool_use carries parentToolUseId, so skip those.
+      // (bgEnded) — so the list can show "Running Workspace…" the whole time one runs. Only top-level
+      // launches count; a sub-workspace's own nested tool_use carries parentToolUseId, so skip those.
       const subStarted = events
         .filter(
           (e) =>
             e.type === RunEventType.TOOL_USE &&
-            ['Task', 'Agent'].includes(String((e.payload as { name?: string }).name ?? '')) &&
+            ['Task', 'Workspace'].includes(String((e.payload as { name?: string }).name ?? '')) &&
             !(e.payload as { parentToolUseId?: string }).parentToolUseId,
         )
         .map((e) => String((e.payload as { id?: unknown }).id ?? ''))
@@ -2372,12 +2371,12 @@ export class RunnerApiController {
         )
         .map((e) => String((e.payload as { toolUseId?: unknown }).toolUseId ?? ''))
         .filter(Boolean);
-      // A *synchronous* sub-agent (Task/Agent run inline) reports completion as its own top-level
+      // A *synchronous* sub-workspace (Task/Workspace run inline) reports completion as its own top-level
       // tool_result, never a <task-notification> — so without this it stays in runningSubagents
-      // forever and the list is stuck on "Running Agent…". A sub-agent's own nested tool_results
-      // carry parentToolUseId (skip those), and an async agent's immediate "Async agent launched"
+      // forever and the list is stuck on "Running Workspace…". A sub-workspace's own nested tool_results
+      // carry parentToolUseId (skip those), and an async workspace's immediate "Async workspace launched"
       // ack is also a top-level tool_result for its id — but that one runs on and is cleared later
-      // by its terminal background_task (bgEnded), so exclude it. Any non-sub-agent tool_result id
+      // by its terminal background_task (bgEnded), so exclude it. Any non-sub-workspace tool_result id
       // here is harmless: it's simply absent from runningSubagents, so array_remove is a no-op.
       const subEnded = events
         .filter(
@@ -2416,13 +2415,13 @@ export class RunnerApiController {
       for (const id of subStarted) {
         await tx.$executeRaw`UPDATE "session" SET "running_subagents" = array_append(array_remove("running_subagents", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
       }
-      // A terminal background_task id belongs to either a background shell or a sub-agent;
+      // A terminal background_task id belongs to either a background shell or a sub-workspace;
       // array_remove is a no-op on the set that doesn't hold it, so clear from both.
       for (const id of bgEnded) {
         await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_remove("running_bg_shells", ${id}), "running_subagents" = array_remove("running_subagents", ${id}) WHERE "id" = ${sessionId}::uuid`;
       }
-      // Clear synchronously-completed sub-agents in one guarded write. The `&&` overlap check means
-      // ordinary (non-sub-agent) tool_results — the vast majority — match no rows and never rewrite
+      // Clear synchronously-completed sub-workspaces in one guarded write. The `&&` overlap check means
+      // ordinary (non-sub-workspace) tool_results — the vast majority — match no rows and never rewrite
       // the hot session row.
       if (subEnded.length > 0) {
         await tx.$executeRaw`
@@ -2537,10 +2536,10 @@ export class RunnerApiController {
           // checkout is clean — the bar shows Merge (not Commit) for the ended session.
           worktreeDirty: false,
           // The session is ending — Claude (and its background children) are gone, so neither
-          // the background-shell set nor any in-flight sub-agent (Task/Agent) can still be live.
-          // Clearing runningSubagents here is the teardown backstop for a sub-agent that never got
-          // its own terminal signal (e.g. an async agent killed with the session), so the list
-          // can't stay stuck on "Running Agent…".
+          // the background-shell set nor any in-flight sub-workspace (Task/Workspace) can still be live.
+          // Clearing runningSubagents here is the teardown backstop for a sub-workspace that never got
+          // its own terminal signal (e.g. an async workspace killed with the session), so the list
+          // can't stay stuck on "Running Workspace…".
           runningBgShells: [],
           runningSubagents: [],
           ...(quotaRetryAt ? { retryAt: quotaRetryAt } : {}),
@@ -2568,11 +2567,11 @@ export class RunnerApiController {
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
-      // Abnormal end (FAILED/CANCELLED): if the agent never got to finalize its
+      // Abnormal end (FAILED/CANCELLED): if the workspace never got to finalize its
       // task, reclaim a now-stalled IN_PROGRESS task so it stops looking like it's
       // still running. A genuine FAILED run lands the task at FAILED (needs a human);
       // a CANCELLED (user end) goes back to OPEN (retryable). SUCCEEDED is left alone —
-      // the agent owns DONE.
+      // the workspace owns DONE.
       if (current.taskId && effectiveStatus !== RunStatus.SUCCEEDED) {
         await reclaimStalledTask(
           tx,
@@ -2924,12 +2923,12 @@ export class RunnerApiController {
     if (!runtimeSessionId) {
       throw new NotFoundException('session has no runtime session ID');
     }
-    const agent = session.agentId ? await this.prisma.agent.findUnique({ where: { id: session.agentId } }) : null;
+    const workspace = session.workspaceId ? await this.prisma.workspace.findUnique({ where: { id: session.workspaceId } }) : null;
     return {
       provider,
       sessionUuid: runtimeSessionId,
       runtimeSessionId,
-      workDir: agent?.workDir ?? null,
+      workDir: workspace?.workDir ?? null,
       title: session.title,
     };
   }
@@ -2941,7 +2940,7 @@ export class RunnerApiController {
    * "No conversation found with session ID".
    *
    * Payloads come back WHOLE: unlike the clients' `/events/page`, a rebuilt transcript assembled
-   * from preview-truncated tool output would silently rewrite the agent's own history. Paged on
+   * from preview-truncated tool output would silently rewrite the workspace's own history. Paged on
    * `after` so a long session streams in bounded chunks.
    */
   @UseGuards(RunnerAuthGuard)

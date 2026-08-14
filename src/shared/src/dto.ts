@@ -1,3 +1,17 @@
+// The wire contract shared by the control plane, the Go runner, the web app and the native
+// clients.
+//
+// NOTE ON `agent*` NAMES. The entity formerly called Agent is now a Workspace (migration 0094):
+// it names a machine and a checkout, and holds no prompt, tools or permission posture — the
+// actor is the Session and the word `agent` belongs to it. Everything on the server, in the
+// database and in the web app was renamed. THIS FILE WAS NOT, deliberately: these are the field
+// names already baked into shipped iOS/macOS builds, browser tabs nobody reloaded and runners
+// that have not self-updated. Renaming them here renames them on the wire, which is a hard break
+// for every one of those. So `agentId`, `agent`, `agentName`, `agentIds` and `AgentExecConfig`
+// stay, and the server serves both spellings (WorkspaceAliasInterceptor) until the field has
+// rolled over. Read `agent*` here as "workspace, under its shipped name".
+//
+// `AgentProvider` is unrelated to either — it is the runtime (claude | codex | kimi | opencode).
 import {
   AgentProvider,
   PermissionMode,

@@ -34,7 +34,7 @@ export function AppShell() {
       </header>
       <TasksSidePanel open={navOpen} />
       {navOpen && <div className="app-nav-backdrop" onClick={() => setNavOpen(false)} />}
-      {/* The ⌘K session palette. Mounted here (not in the agent console) so the shortcut works
+      {/* The ⌘K session palette. Mounted here (not in the workspace console) so the shortcut works
           from every route, including the task list and settings pages. */}
       <SessionSearch />
       <Outlet />
@@ -45,7 +45,7 @@ export function AppShell() {
 
 // Layout contract primitives a routed view wraps itself in. A view fills the main
 // region; DocView adds the page gutter and owns its scroll (the document-style views),
-// while FlushView is full-bleed (the agent console / runner install guide). The task
+// while FlushView is full-bleed (the workspace console / runner install guide). The task
 // list is the exception — it renders its own <main> so its detail panel can sit as a
 // third column beside it — so it uses neither wrapper.
 export function DocView({ children }: { children: ReactNode }) {

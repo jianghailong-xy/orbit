@@ -4,18 +4,21 @@ export interface CreateSessionDto {
   /** First user message — seeds the session's first turn. */
   prompt: string;
   /** Compose the session from a `!cmd` draft: seed the first turn as a 'shell' turn
-   *  (run `prompt` on the runner, bypassing the agent runtime) instead of a normal message. The
+   *  (run `prompt` on the runner, bypassing the workspace runtime) instead of a normal message. The
    *  runtime still spawns and idles; the command's output becomes context for the next message. */
   shell?: boolean;
-  /** The runner this session is pinned to. Optional when `agentId` is given —
-   *  the runner is then derived from the agent's machine. */
+  /** The runner this session is pinned to. Optional when `workspaceId` is given —
+   *  the runner is then derived from the workspace's machine. */
   assignedRunnerId?: string;
+  workspaceId?: string;
+  /** @deprecated The same field under its pre-rename name, still sent by every shipped client.
+   *  `workspaceId` wins when both are present; the controller collapses them. */
   agentId?: string;
   /** Optional parent work item this session runs under. */
   taskId?: string;
   /** Per-session provider override, picked on the New Session screen: a built-in engine
    *  ("claude"/"codex"/"kimi"/"opencode") or one of the caller's configured ModelProvider
-   *  slugs. Omitted keeps the historical behaviour — the session inherits its agent's
+   *  slugs. Omitted keeps the historical behaviour — the session inherits its workspace's
    *  provider. An unknown or foreign slug is rejected rather than silently falling back,
    *  so a session never dispatches with an identity the caller can't use. */
   provider?: string;

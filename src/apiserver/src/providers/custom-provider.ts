@@ -123,16 +123,16 @@ export function resolveProviderExec(args: {
    * endpoint, whose model space this describes (see runtimeCatalogDefault). */
   runtimeDefaultModels?: unknown;
   /**
-   * Legacy per-Agent pin. New clients never write this field, but a model-less Session created
+   * Legacy per-Workspace pin. New clients never write this field, but a model-less Session created
    * or claimed by an old API replica must keep the pre-0079 model through a rolling deployment.
    * The claim path immediately snapshots this fallback onto Session.model.
    */
-  agentModel?: string | null;
+  workspaceModel?: string | null;
   /** Runtime-reported catalog on the assigned runner; its first model is the final dynamic
    * fallback before the shared static default. Ignored for configured providers, except those on
    * the runtime CLI's own endpoint (see runtimeCatalogDefault). */
   modelCatalog?: unknown;
-  agentEnv?: Record<string, string> | null;
+  workspaceEnv?: Record<string, string> | null;
 }): {
   provider: AgentProvider;
   model: string;
@@ -141,28 +141,28 @@ export function resolveProviderExec(args: {
    *  re-materializes on this, so the row stops naming a model the session isn't running. */
   retiredPin?: boolean;
 } {
-  const { customRow, sessionModel, agentModel, agentEnv } = args;
+  const { customRow, sessionModel, workspaceModel, workspaceEnv } = args;
   const legacyInheritance = args.usesRuntimeDefaultModel === false;
   if (customRow && customRow.enabled) {
     const runtime = execRuntime(args);
     const pin = firstNonBlank(sessionModel);
     const retired = retiredPin(customRow, runtime, args, pin);
     // A custom provider's model space is its own; never coerce it through the claude/gpt
-    // prefix guard. Agent.model is only a rolling-deploy bridge for model-less sessions made
+    // prefix guard. Workspace.model is only a rolling-deploy bridge for model-less sessions made
     // by old replicas; current clients put their choice directly on Session.model.
     const model =
       (retired ? undefined : pin) ||
-      firstNonBlank(legacyInheritance ? agentModel : undefined) ||
+      firstNonBlank(legacyInheritance ? workspaceModel : undefined) ||
       runtimeCatalogDefault(customRow, runtime, args) ||
       presetDefaultModel(customRow) ||
       DEFAULT_MODEL_BY_PROVIDER[runtime];
     return {
       provider: runtime,
       model,
-      // Provider env wins over any user-set agent env (e.g. a hand-typed ANTHROPIC_BASE_URL).
+      // Provider env wins over any user-set workspace env (e.g. a hand-typed ANTHROPIC_BASE_URL).
       // The kimi runtime also reads the model from here, so it can only be built once the
       // model above is resolved.
-      env: { ...(agentEnv ?? {}), ...injectedEnv(customRow, model) },
+      env: { ...(workspaceEnv ?? {}), ...injectedEnv(customRow, model) },
       ...(retired ? { retiredPin: true } : {}),
     };
   }
@@ -170,18 +170,18 @@ export function resolveProviderExec(args: {
   // each runner carries its own `claude auth login`, and a session that finds it missing surfaces
   // the sign-in card (RunnerSignIn) rather than the control plane holding a credential for it.
   const provider = execRuntime(args);
-  const env = agentEnv ?? undefined;
+  const env = workspaceEnv ?? undefined;
   const pin = firstNonBlank(sessionModel);
   const retired = retiredPin(null, provider, args, pin);
   const explicitSessionModel = retired ? undefined : pin;
   // An explicit per-session selection retains the historical safety behavior: a clearly
   // cross-provider id is coerced straight to the static provider default. During a rolling
-  // deployment, old replicas can still create a model-less Session that expects Agent.model;
+  // deployment, old replicas can still create a model-less Session that expects Workspace.model;
   // preserve that one-time inheritance ahead of new Runtime defaults. Queue claim snapshots it
-  // onto Session.model, and current Agent create/update paths never write a new pin.
-  const legacyAgentModel = legacyInheritance ? firstNonBlank(agentModel) : undefined;
+  // onto Session.model, and current Workspace create/update paths never write a new pin.
+  const legacyWorkspaceModel = legacyInheritance ? firstNonBlank(workspaceModel) : undefined;
   const inheritedModel = legacyInheritance
-    ? modelForProvider(provider, legacyAgentModel)
+    ? modelForProvider(provider, legacyWorkspaceModel)
     : firstCompatibleModel(
         provider,
         savedRuntimeDefaultModel(args.runtimeDefaultModels, provider),

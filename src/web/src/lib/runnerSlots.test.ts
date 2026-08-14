@@ -75,7 +75,7 @@ describe('why a queued session has not started', () => {
   });
 
   it('uses the numbers the server judged on, not the ones this page can see', () => {
-    // The list holds one agent's page; the runner-wide count it can derive is not the count
+    // The list holds one workspace's page; the runner-wide count it can derive is not the count
     // the claim actually compared against.
     expect(
       pendingSlotDescription(2, 16, {

@@ -51,7 +51,7 @@ import { decodeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import { useControlPlaneLive } from '../lib/useControlPlane';
 import {
-  agentsQuery,
+  workspacesQuery,
   type Me,
   meQuery,
   providersQuery,
@@ -82,7 +82,7 @@ import {
   normalizeEffortForProvider,
   providerIdentityResolved,
   supportsAuto,
-} from '../lib/agentDefaults';
+} from '../lib/workspaceDefaults';
 import {
   LOCAL_SLASH_ITEMS,
   isLocalSlashCommand,
@@ -125,8 +125,8 @@ import {
   createInteractiveSession,
   decideApproval,
   deleteSession,
-  cleanUpAgentRepo,
-  enableAgentIsolation,
+  cleanUpWorkspaceRepo,
+  enableWorkspaceIsolation,
   getBackgroundShells,
   getSession,
   interruptSession,
@@ -580,6 +580,7 @@ const bgRunningLabel = (n: number): string =>
 
 // "Running Agent" / "Running N agents" — shown while a session is working and has a sub-agent
 // (Task/Agent tool) in flight (server-tracked runningSubagentCount, from Session.runningSubagents).
+// These are the RUNTIME's own sub-agents, unrelated to a Workspace.
 // The async Agent tool_result lands at once, so lastToolUse can't carry this on its own.
 const subagentRunningLabel = (n: number): string =>
   n > 1 ? `Running ${n} agents` : 'Running Agent';
@@ -591,17 +592,17 @@ const subagentRunningLabel = (n: number): string =>
 // (Session.engineTurnActive), since only the event stream can see it; absent when talking to an
 // older control plane, which simply keeps the old parked reading. Both cases get the same glyph,
 // header word and list line — without this the row says "Waiting for your reply" over a session
-// the user can watch working. Outranks parkedWorkLabel below: this is the agent itself
+// the user can watch working. Outranks parkedWorkLabel below: this is the workspace itself
 // generating, not something it left running behind a finished turn.
 const isGenerating = (s: any, state: string): boolean =>
   state === 'RUNNING' || (state === 'AWAITING_INPUT' && s.engineTurnActive === true);
 
-// Live background work that outlives a parked (AWAITING_INPUT) turn — an async sub-agent
-// (Task/Agent) and/or background shells. Returns the label to surface (sub-agent wins) with
+// Live background work that outlives a parked (AWAITING_INPUT) turn — an async sub-workspace
+// (Task/Workspace) and/or background shells. Returns the label to surface (sub-workspace wins) with
 // the kind behind it, or null when the session is genuinely idle. Shared by the list line,
 // status glyph and header so all three agree a parked-but-still-working session isn't
-// "waiting for your reply" — and agree on how emphatically to say so: a sub-agent is the
-// agent still working, while a background shell is usually a dev server or watcher the agent
+// "waiting for your reply" — and agree on how emphatically to say so: a sub-workspace is the
+// workspace still working, while a background shell is usually a dev server or watcher the workspace
 // deliberately left up, which keeps reporting for the rest of the session's life.
 type ParkedWork = { text: string; kind: OutlivingWork };
 const parkedWorkLabel = (s: any): ParkedWork | null => {
@@ -627,12 +628,12 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   if (live && isGenerating(s, state)) {
     if ((s.pendingApprovals ?? 0) > 0) return { text: 'Waiting for approval', tone: 'approval' };
     if (s.lastToolUse) return { text: `Running ${fmtTool(s.lastToolUse)}…`, tone: 'running' };
-    // A sub-agent in flight: lastToolUse is already cleared (the async Agent tool_result +
+    // A sub-workspace in flight: lastToolUse is already cleared (the async Workspace tool_result +
     // the parent's own system progress events), so surface it explicitly instead of falling
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
       return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
-    // A turn just started and the agent hasn't replied yet: show the message you just sent (the
+    // A turn just started and the workspace hasn't replied yet: show the message you just sent (the
     // server sets lastUserText while the user turn is the frontier and clears it the moment a
     // reply or tool lands) instead of the now-stale previous reply. It's content, not status —
     // the spinner already carries "working" — so it takes the muted preview tone, not blue.
@@ -641,8 +642,8 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
     return { text: 'Running…', tone: 'running' };
   }
   if (live && state === 'QUEUED') return { text: PENDING_SLOT_LABEL, tone: 'queued' };
-  // Parked (AWAITING_INPUT) but still doing background work — a sub-agent and/or background
-  // shells that outlive the turn — so it doesn't read as idle. A spawned sub-agent parks the
+  // Parked (AWAITING_INPUT) but still doing background work — a sub-workspace and/or background
+  // shells that outlive the turn — so it doesn't read as idle. A spawned sub-workspace parks the
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
@@ -704,8 +705,8 @@ export function StatusIcon({ session }: { session: any }) {
   }
   if (state === 'AWAITING_INPUT') {
     const work = parkedWorkLabel(session);
-    // A sub-agent is the agent itself still working, so it keeps the working spinner. A
-    // background shell isn't: agents routinely leave a dev server or watcher up, and it never
+    // A sub-workspace is the workspace itself still working, so it keeps the working spinner. A
+    // background shell isn't: workspaces routinely leave a dev server or watcher up, and it never
     // exits, so spinning at it would mark the session busy for the rest of its life and drown
     // out the sessions that really are working. It gets a static, muted terminal-prompt glyph
     // (the native port's SF `terminal`) and keeps its label.
@@ -816,13 +817,13 @@ function TranscriptSkeleton() {
   );
 }
 
-// Remembers the session the user last had open per agent (agent id → session id). Switching
-// away to another agent and back reopens that conversation instead of the agent's most-recent
+// Remembers the session the user last had open per workspace (workspace id → session id). Switching
+// away to another workspace and back reopens that conversation instead of the workspace's most-recent
 // one. In-memory only (a full reload deep-links via the URL) and at module scope so it survives
-// AgentView remounts across runner switches.
-const lastSessionByAgent = new Map<string, string>();
+// WorkspaceView remounts across runner switches.
+const lastSessionByWorkspace = new Map<string, string>();
 
-export function AgentView({ runner }: { runner: Runner }) {
+export function WorkspaceView({ runner }: { runner: Runner }) {
   const { modal } = AntApp.useApp();
   const message = useToast();
   const qc = useQueryClient();
@@ -833,11 +834,12 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [pendingSessionOperations, setPendingSessionOperations] = useState<
     Record<string, PendingSessionOperation>
   >({});
-  // The signed-in user, for the account-synced default effort (seeds a new session's Effort
-  // pill; written on change below). Cached/deduped with the nav footer's `me`.
+  // The signed-in user, for the account-synced defaults (Effort and — since the mode moved off
+  // Workspace — the permission Mode a new session starts in). Cached/deduped with the nav footer.
   const me = useQuery(meQuery());
+  const accountDefaultPermissionMode = me.data?.preferences?.defaultPermissionMode;
   // Configured providers (custom slugs borrowing a built-in runtime) merged into the composer's
-  // model list + context-window sizing when the open session/agent uses one. Cached/deduped
+  // model list + context-window sizing when the open session/workspace uses one. Cached/deduped
   // app-wide by React Query; empty until it loads (then the model pill's options fill in).
   const configuredProvidersQuery = useQuery(providersQuery());
   const configuredProviders = configuredProvidersQuery.data ?? [];
@@ -864,12 +866,13 @@ export function AgentView({ runner }: { runner: Runner }) {
   useLayoutEffect(() => {
     if (editingTitle) setTitleInputW((titleMirrorRef.current?.offsetWidth ?? 0) + 2);
   }, [editingTitle, titleDraft]);
-  // /agents/<id> names the agent this console is scoped to: the picker is locked
-  // to it and the session list is filtered to that agent's conversations.
-  // /agents/<id>/new is the "compose a new session" draft state (the splat is 'new').
-  const agentMatch = useMatch('/agents/:id/*');
-  const lockedAgentId = decodeId(agentMatch?.params.id);
-  const composingRoute = (agentMatch?.params['*'] ?? '') === 'new';
+  // /workspaces/<id> names the workspace this console is scoped to: the picker is locked
+  // to it and the session list is filtered to that workspace's conversations.
+  // /workspaces/<id>/new is the "compose a new session" draft state (the splat is 'new').
+  // Two patterns, one meaning: `agents` is the pre-rename URL people still have bookmarked.
+  const workspaceMatch = useMatch('/workspaces/:id/*') ?? useMatch('/agents/:id/*');
+  const lockedWorkspaceId = decodeId(workspaceMatch?.params.id);
+  const composingRoute = (workspaceMatch?.params['*'] ?? '') === 'new';
   // Below the mobile breakpoint the two panes stack one-at-a-time; a couple of layout
   // choices (the auto-open redirect, the in-pane back button) key off this.
   const isMobile = useIsMobile();
@@ -942,7 +945,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // React Query publishes isPending through a batched render; this synchronous lock closes the
   // small window where a second full-selection PUT could otherwise start before items disable.
   const tagSaveInFlight = useRef(false);
-  const [agentId, setAgentId] = useState<string | undefined>(undefined);
+  const [workspaceId, setWorkspaceId] = useState<string | undefined>(undefined);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [approvals, setApprovals] = useState<ApprovalInfo[]>([]); // pending tool-permission requests
   // "Chat about this" on a pending AskUserQuestion routes the next composer send back to
@@ -955,7 +958,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const [queued, setQueued] = useState<QueuedTurn[]>([]); // messages sent while a turn was running
   const [localStatusCards, setLocalStatusCards] = useState<LocalStatusCard[]>([]);
   // The apiserver's authoritative background-shell list (all launches + output recovered from the
-  // agent's Read polls). The loaded event window only holds recent launches, so the tray merges
+  // workspace's Read polls). The loaded event window only holds recent launches, so the tray merges
   // this complete set with its live-derived overlay — see BackgroundShellsTray.
   const [serverBgShells, setServerBgShells] = useState<BgShell[]>([]);
   // Per-session cache of the server /background scan. The tray is cleared to [] on every switch, so
@@ -1137,7 +1140,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     const topY = el.getBoundingClientRect().top;
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued)'),
-    ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-agent transcript
+    ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
     let cur: HTMLElement | null = null;
     for (const b of bubbles) {
       if (b.getBoundingClientRect().bottom <= topY + 1) cur = b;
@@ -1184,11 +1187,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // The list is scoped by `view`. Keep Completed loaded while one of its transcripts is
   // open; every other open session resolves from Open, where live sessions live.
   const effectiveView = selectedId ? (view === 'completed' ? 'completed' : 'open') : view;
-  // The agent whose conversation list this column is. The route names it on /agents/<id>;
+  // The workspace whose conversation list this column is. The route names it on /workspaces/<id>;
   // a /sessions/<id> deep link doesn't, so it's latched from the open session once that
   // resolves (see the effect below) — the query itself is scoped by it, so it can't be
   // derived further down where the list it would depend on is built.
-  const [scopeAgentId, setScopeAgentId] = useState<string | null>(lockedAgentId ?? null);
+  const [scopeWorkspaceId, setScopeWorkspaceId] = useState<string | null>(lockedWorkspaceId ?? null);
   // How much of the list is loaded. One page on open; scrolling toward the end widens the
   // window (see loadMoreSessions), which re-keys the query to the larger page.
   const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
@@ -1196,7 +1199,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
     runnerId: runner.id,
-    agentId: scopeAgentId,
+    workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
     limit: sessionLimit,
@@ -1254,11 +1257,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // never commit onto a different session.
   useEffect(() => setEditingTitle(false), [selectedId]);
   // Detail of the open session, keyed the same as TasksSidePanel so React Query dedupes
-  // the fetch. Its only job here is to resolve the session's agent the instant it's opened:
+  // the fetch. Its only job here is to resolve the session's workspace the instant it's opened:
   // a freshly created session isn't in the list query yet (so `selected` is null), but its
-  // detail is primed synchronously in send.onSuccess, so this keeps `scopeAgentId` stable
-  // across the /agents/<id>/new → /sessions/<id> navigation. Without it the list briefly
-  // un-scopes (shows every agent's sessions) until the list refetch lands.
+  // detail is primed synchronously in send.onSuccess, so this keeps `scopeWorkspaceId` stable
+  // across the /workspaces/<id>/new → /sessions/<id> navigation. Without it the list briefly
+  // un-scopes (shows every workspace's sessions) until the list refetch lands.
   const sessionDetailQ = useQuery({
     ...sessionQuery(selectedId),
     placeholderData: keepPreviousData,
@@ -1281,7 +1284,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
   const selectedFromDetail = useMemo(() => {
     const d = detailForSelected as any;
-    // A freshly-created session primes only id/runner/agent into this cache; keep the
+    // A freshly-created session primes only id/runner/workspace into this cache; keep the
     // existing "Starting..." placeholder until the real detail/list row supplies title/status.
     if (
       !d ||
@@ -1465,28 +1468,28 @@ export function AgentView({ runner }: { runner: Runner }) {
         selectedLifecycleState === 'COMPLETED' || selectedLifecycleState === 'TRASH',
       )
     : false;
-  // The session list (always visible in the left column) is scoped to one agent so
-  // it reads as a conversation with that agent. On /agents/<id> that's the locked
-  // agent; on a /sessions/<id> deep link the URL carries no agent, so fall back to
-  // the selected session's own agent. Feeds the query above (hence the state), which is
+  // The session list (always visible in the left column) is scoped to one workspace so
+  // it reads as a conversation with that workspace. On /workspaces/<id> that's the locked
+  // workspace; on a /sessions/<id> deep link the URL carries no workspace, so fall back to
+  // the selected session's own workspace. Feeds the query above (hence the state), which is
   // why the client-side filter below stays: it covers the frame before the re-scoped
-  // list lands, and the case where no agent resolves at all.
-  const resolvedAgentId =
-    lockedAgentId ?? selected?.agent?.id ?? detailForSelected?.agent?.id ?? null;
-  useEffect(() => setScopeAgentId(resolvedAgentId), [resolvedAgentId]);
+  // list lands, and the case where no workspace resolves at all.
+  const resolvedWorkspaceId =
+    lockedWorkspaceId ?? selected?.workspace?.id ?? detailForSelected?.workspace?.id ?? null;
+  useEffect(() => setScopeWorkspaceId(resolvedWorkspaceId), [resolvedWorkspaceId]);
   const visibleSessions = useMemo(() => {
-    let list = resolvedAgentId ? sessions.filter((s) => s.agent?.id === resolvedAgentId) : sessions;
+    let list = resolvedWorkspaceId ? sessions.filter((s) => s.workspace?.id === resolvedWorkspaceId) : sessions;
     // The tag filter is the query's too; re-applying it here keeps arrow-nav, auto-select and
     // "open the next session after completing" stepping through exactly what's on screen even
     // in the frame before a just-changed filter's rows land.
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
-  }, [sessions, resolvedAgentId, tagFilter]);
+  }, [sessions, resolvedWorkspaceId, tagFilter]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
   const hasMoreSessions = (sessionsQ.data?.length ?? 0) >= sessionLimit;
-  // The column has nothing to show yet for this scope (a switch to an agent not in cache), or
+  // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
   // flash anything over rows that are already correct.
@@ -1495,13 +1498,13 @@ export function AgentView({ runner }: { runner: Runner }) {
     if (!hasMoreSessions || sessionsQ.isFetching) return;
     setSessionLimit((n) => n + SESSION_PAGE_SIZE);
   }, [hasMoreSessions, sessionsQ.isFetching]);
-  // A new scope starts at one page again: a window grown by scrolling deep into one agent's
-  // history must not make the next agent (or view, or tag) fetch just as deep.
+  // A new scope starts at one page again: a window grown by scrolling deep into one workspace's
+  // history must not make the next workspace (or view, or tag) fetch just as deep.
   useEffect(() => {
     setSessionLimit(SESSION_PAGE_SIZE);
-  }, [runner.id, scopeAgentId, effectiveView, tagFilter]);
+  }, [runner.id, scopeWorkspaceId, effectiveView, tagFilter]);
   // The server pages what the column shows, but a frame where the client narrows further (an
-  // agent that hasn't resolved into the query yet) can hold too few visible rows to be
+  // workspace that hasn't resolved into the query yet) can hold too few visible rows to be
   // scrollable — and without a scroll there is nothing to trigger the next page. Top it up here.
   useEffect(() => {
     if (visibleSessions.length >= SESSION_PAGE_SIZE) return;
@@ -1545,23 +1548,23 @@ export function AgentView({ runner }: { runner: Runner }) {
   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions), [sections]);
 
   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
-  // none selected we're composing a new session — explicitly (/agents/<id>/new),
+  // none selected we're composing a new session — explicitly (/workspaces/<id>/new),
   // while browsing Completed/Trash (nothing openable there), or implicitly
   // when the Open list is empty (the first-run empty state).
   const composing =
     !selectedId &&
     (composingRoute || view !== 'open' || (sessionsQ.isSuccess && visibleSessions.length === 0));
 
-  // Remember the open session as this agent's last-viewed one, so returning to the agent
-  // (an agent-switch away and back, or clicking it in the sidebar) restores it below.
+  // Remember the open session as this workspace's last-viewed one, so returning to the workspace
+  // (a workspace-switch away and back, or clicking it in the sidebar) restores it below.
   useEffect(() => {
-    const agentId = selected?.agent?.id;
-    if (selectedId && agentId) lastSessionByAgent.set(agentId, selectedId);
-  }, [selectedId, selected?.agent?.id]);
+    const workspaceId = selected?.workspace?.id;
+    if (selectedId && workspaceId) lastSessionByWorkspace.set(workspaceId, selectedId);
+  }, [selectedId, selected?.workspace?.id]);
 
-  // Default landing: opening /agents/<id> in Open (no session, not the /new draft)
+  // Default landing: opening /workspaces/<id> in Open (no session, not the /new draft)
   // opens a session so the right pane is never blank. Prefer the one the user last had open
-  // for this agent (remembered above) — reopening where they left off — and fall back to the
+  // for this workspace (remembered above) — reopening where they left off — and fall back to the
   // most recent when there's no memory (or it's since been completed/trashed out of view).
   // replace() keeps it out of history; Completed/Trash never auto-open.
   useEffect(() => {
@@ -1569,7 +1572,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     // button (it returns here, which would immediately redirect into a session again).
     if (isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
-    const remembered = scopeAgentId ? lastSessionByAgent.get(scopeAgentId) : undefined;
+    const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
     const target = visibleSessions.find((s) => s.id === remembered) ?? visibleSessions[0];
     if (target) navigate(`/sessions/${encodeId(target.id)}`, { replace: true });
   }, [
@@ -1579,7 +1582,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     view,
     sessionsQ.isSuccess,
     visibleSessions,
-    scopeAgentId,
+    scopeWorkspaceId,
     navigate,
   ]);
 
@@ -1628,52 +1631,52 @@ export function AgentView({ runner }: { runner: Runner }) {
     listRef.current?.querySelector('.session-row.active')?.scrollIntoView({ block: 'nearest' });
   }, [selectedId]);
 
-  // Agents belonging to this machine runner — each is a project dir + coding tool.
+  // Workspaces belonging to this machine runner — each is a project dir + coding tool.
   // Picking one tells the server where (which dir) to run a new session.
-  const agentsQ = useQuery(agentsQuery());
-  const agentsForRunner = useMemo(
-    () => (agentsQ.data ?? []).filter((a) => a.runnerId === runner.id),
-    [agentsQ.data, runner.id],
+  const workspacesQ = useQuery(workspacesQuery());
+  const workspacesForRunner = useMemo(
+    () => (workspacesQ.data ?? []).filter((a) => a.runnerId === runner.id),
+    [workspacesQ.data, runner.id],
   );
-  const lockedAgent = useMemo(
-    () => (lockedAgentId ? (agentsForRunner.find((a) => a.id === lockedAgentId) ?? null) : null),
-    [agentsForRunner, lockedAgentId],
+  const lockedWorkspace = useMemo(
+    () => (lockedWorkspaceId ? (workspacesForRunner.find((a) => a.id === lockedWorkspaceId) ?? null) : null),
+    [workspacesForRunner, lockedWorkspaceId],
   );
-  // The agent picked for a NEW session. An existing session keeps its owning agent separately.
-  const pickedAgent = useMemo(
-    () => agentsForRunner.find((a) => a.id === agentId) ?? null,
-    [agentsForRunner, agentId],
+  // The workspace picked for a NEW session. An existing session keeps its owning workspace separately.
+  const pickedWorkspace = useMemo(
+    () => workspacesForRunner.find((a) => a.id === workspaceId) ?? null,
+    [workspacesForRunner, workspaceId],
   );
-  // When scoped to a specific agent (/agents/<id>) lock the pick to it; otherwise
-  // default to the runner's first agent, keeping a valid pick across runner switches.
+  // When scoped to a specific workspace (/workspaces/<id>) lock the pick to it; otherwise
+  // default to the runner's first workspace, keeping a valid pick across runner switches.
   useEffect(() => {
-    if (lockedAgentId) {
-      setAgentId(lockedAgentId);
+    if (lockedWorkspaceId) {
+      setWorkspaceId(lockedWorkspaceId);
       return;
     }
-    setAgentId((prev) =>
-      prev && agentsForRunner.some((a) => a.id === prev) ? prev : agentsForRunner[0]?.id,
+    setWorkspaceId((prev) =>
+      prev && workspacesForRunner.some((a) => a.id === prev) ? prev : workspacesForRunner[0]?.id,
     );
-  }, [agentsForRunner, lockedAgentId]);
+  }, [workspacesForRunner, lockedWorkspaceId]);
 
-  // The New Session provider pick, scoped to the agent it was made under: switching agents means
-  // switching projects, so the previous pick must not follow. Kept as {agentId, provider} rather
+  // The New Session provider pick, scoped to the workspace it was made under: switching workspaces means
+  // switching projects, so the previous pick must not follow. Kept as {workspaceId, provider} rather
   // than reset by an effect so the stale value is never readable for a render.
   const [draftProviderPick, setDraftProviderPick] = useState<{
-    agentId?: string;
+    workspaceId?: string;
     provider: string;
   } | null>(null);
   const draftProvider =
-    draftProviderPick && draftProviderPick.agentId === agentId ? draftProviderPick.provider : null;
+    draftProviderPick && draftProviderPick.workspaceId === workspaceId ? draftProviderPick.provider : null;
   // The provider a NEW session would run: an explicit pick, else what this project last ran on.
-  // `lastProvider` is derived server-side from the agent's most recent interactive session — an
-  // agent holds no provider of its own (apiserver agents/agent-provider.ts). `provider` is the
+  // `lastProvider` is derived server-side from the workspace's most recent interactive session — an
+  // workspace holds no provider of its own (apiserver workspaces/workspace-provider.ts). `provider` is the
   // deprecated alias of the same derived value, still served for older native builds.
   const pickedProvider: string =
-    draftProvider ?? pickedAgent?.lastProvider ?? pickedAgent?.provider ?? 'claude';
+    draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
-  // draft pick is scoped to its agent. There is nothing to PATCH while a session is ended, so
+  // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
   // this rides along with the resume that revives it — the same route Model/Mode/Effort take.
   const [endedProviderPick, setEndedProviderPick] = useState<{
     sessionId: string;
@@ -1701,41 +1704,38 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Claude's commands and skills are meaningless in that session — don't offer them, and
   // don't gate sending on them. `/status` is ours and stays.
   const codexComposer = !supportsRunnerSlashAssets(shownProvider);
-  // The selected session's permission mode as the SERVER resolves it: its own stored mode,
-  // else the owning agent's, else dontAsk (queue.service.ts buildSession). Reading the session
-  // row alone would show "Don't Ask" for every session that never stored one — and since the
-  // pills are authoritative on send, resuming one would then WRITE that dontAsk over the
-  // agent's real mode. The agent's mode comes from the detail (full agent row) or the agents
-  // list, whichever has landed.
+  // The selected session's permission mode as the SERVER resolves it: its own stored mode, else
+  // the owner's account default, else Auto (common/permission-mode.ts). Reading the session row
+  // alone would show one fixed mode for every session that never stored one — and since the pills
+  // are authoritative on send, resuming one would then WRITE that mode over what the account
+  // actually asked for. The mode is deliberately NOT a workspace field: a checkout wants Plan for
+  // a risky migration and Auto for a test fix, so the posture belongs to the run.
   const effectivePermissionMode: string =
-    selected?.permissionMode ??
-    detailForSelected?.agent?.permissionMode ??
-    agentsForRunner.find((a) => a.id === selected?.agent?.id)?.permissionMode ??
-    'dontAsk';
-  const selectedAgentFromList = agentsForRunner.find((a) => a.id === selected?.agent?.id);
-  // Which agent this console is about: the open session's, else the one a new session would use.
+    selected?.permissionMode ?? accountDefaultPermissionMode ?? 'auto';
+  const selectedWorkspaceFromList = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
+  // Which workspace this console is about: the open session's, else the one a new session would use.
   // Its heartbeat-reported checkout drives the "this machine is wedged" notice above the bar.
-  const consoleAgentId: string | undefined = selected?.agent?.id ?? agentId;
-  const consoleAgentRepoHealth =
-    (agentsForRunner.find((a) => a.id === consoleAgentId)?.repoHealth as
+  const consoleWorkspaceId: string | undefined = selected?.workspace?.id ?? workspaceId;
+  const consoleWorkspaceRepoHealth =
+    (workspacesForRunner.find((a) => a.id === consoleWorkspaceId)?.repoHealth as
       | { root: string; state: string; paths?: string[]; branch?: string }
       | null
       | undefined) ?? null;
   const effectiveSelectedModel = effectiveSessionModel(
     shownProvider,
     selected?.model,
-    detailForSelected?.agent?.model ?? selected?.agent?.model ?? selectedAgentFromList?.model,
+    detailForSelected?.workspace?.model ?? selected?.workspace?.model ?? selectedWorkspaceFromList?.model,
     runner.modelCatalog,
     configuredProviders,
     runner.runtimeDefaultModels,
   );
   const effectiveSelectedEffort = effectiveSessionEffort(
     selected?.effort,
-    detailForSelected?.agent?.effort ?? selected?.agent?.effort ?? selectedAgentFromList?.effort,
+    detailForSelected?.workspace?.effort ?? selected?.workspace?.effort ?? selectedWorkspaceFromList?.effort,
   );
 
   // Same fallback chain as the permission mode above: a session that never stored a model of its
-  // own runs the owning agent's model, so the picker must show that — not the provider default.
+  // own runs the owning workspace's model, so the picker must show that — not the provider default.
   // A pin the runtime has retired drops out of the chain (livePinnedModel), so a session left on
   // last generation's model seeds the current default instead of an id that is no longer offered.
   const selectedModelDefault = selected
@@ -1747,8 +1747,8 @@ export function AgentView({ runner }: { runner: Runner }) {
         runner.runtimeDefaultModels,
       ) ??
       livePinnedModel(
-        detailForSelected?.agent?.model ??
-          agentsForRunner.find((a) => a.id === selected.agent?.id)?.model,
+        detailForSelected?.workspace?.model ??
+          workspacesForRunner.find((a) => a.id === selected.workspace?.id)?.model,
         shownProvider,
         runner.modelCatalog,
         configuredProviders,
@@ -1767,17 +1767,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (!selected || live) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
-    const owningAgent = agentsForRunner.find((a) => a.id === selected.agent?.id);
+    const owningWorkspace = workspacesForRunner.find((a) => a.id === selected.workspace?.id);
     setEffort(
       normalizeEffortForProvider(
         provider,
-        selected.effort ?? detailForSelected?.agent?.effort ?? owningAgent?.effort ?? '',
+        selected.effort ?? detailForSelected?.workspace?.effort ?? owningWorkspace?.effort ?? '',
       ),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, live]);
 
-  const pickedModelDefault = pickedAgent
+  const pickedModelDefault = pickedWorkspace
     ? defaultModelForProvider(
         pickedProvider,
         runner.modelCatalog,
@@ -1826,7 +1826,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const providerNoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current); }, []);
   const pickDraftProvider = (slug: string): void => {
-    setDraftProviderPick({ agentId, provider: slug });
+    setDraftProviderPick({ workspaceId, provider: slug });
     const picked = providerChoicesForRunner.find((c) => c.slug === slug);
     // The pick binds this session and nothing else. Later sessions follow it only because the
     // default is read back from what this project last ran — no config is being rewritten.
@@ -1841,11 +1841,11 @@ export function AgentView({ runner }: { runner: Runner }) {
   // never carries into the new one's namespace.
   const modelContextKey = selectedId
     ? `session:${selectedId}`
-    : `draft:${runner.id}:${agentId ?? 'none'}:${pickedProvider}`;
+    : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedProvider}`;
   const modelSeed = selectedId ? (!live ? selectedModelDefault : null) : pickedModelDefault;
 
   // A late Runtime catalog/configured-provider response may refine the seed for an untouched
-  // picker. Once the user chooses any model, ignore seed changes until the Agent/Session context
+  // picker. Once the user chooses any model, ignore seed changes until the Workspace/Session context
   // changes. Dirty is explicit rather than inferred from value equality: choosing the same value
   // is still an intentional choice.
   useEffect(() => {
@@ -1855,7 +1855,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   }, [modelContextKey, modelSeed]);
 
   // A new session defaults to Auto — the app-level default (DEFAULT_PERMISSION_MODE) — rather
-  // than inheriting the picked agent's stored mode, which still governs task-launched runs
+  // than inheriting the picked workspace's stored mode, which still governs task-launched runs
   // server-side. Clamp when the effective provider/model can't run Auto, as elsewhere.
   const pickedModeSeed =
     PERMISSION_TO_MODE[
@@ -1913,21 +1913,21 @@ export function AgentView({ runner }: { runner: Runner }) {
     shownProviderCapabilitiesResolved,
   ]);
 
-  // A fresh session seeds its effort with the most specific default available: the picked agent's
+  // A fresh session seeds its effort with the most specific default available: the picked workspace's
   // own effort (set on the Runner page) first, else the account-level default-effort preference
   // (synced across devices — the iOS/macOS clients seed the same fallback). `??` treats only
-  // null/undefined as "unset", so an agent explicitly set to Default ('') stays Default rather than
+  // null/undefined as "unset", so a workspace explicitly set to Default ('') stays Default rather than
   // falling through. Reacts to `me` loading so the pill fills once preferences arrive.
   useEffect(() => {
     if (selectedId) return;
     const provider = pickedProvider;
-    const candidate = pickedAgent?.effort ?? me.data?.preferences?.defaultEffort ?? '';
-    // A picked provider owns its own model space, so its default model — not the agent's, which
+    const candidate = pickedWorkspace?.effort ?? me.data?.preferences?.defaultEffort ?? '';
+    // A picked provider owns its own model space, so its default model — not the workspace's, which
     // belongs to the provider being switched away from — is what the effort must be legal for.
     const selectedModel = draftProvider
       ? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders)
       : (livePinnedModel(
-          pickedAgent?.model,
+          pickedWorkspace?.model,
           provider,
           runner.modelCatalog,
           configuredProviders,
@@ -1938,15 +1938,15 @@ export function AgentView({ runner }: { runner: Runner }) {
     selectedId,
     pickedProvider,
     draftProvider,
-    pickedAgent?.model,
-    pickedAgent?.effort,
+    pickedWorkspace?.model,
+    pickedWorkspace?.effort,
     me.data?.preferences?.defaultEffort,
     runner.modelCatalog,
   ]);
 
   // Slot accounting is turn-based: only RUNNING occupies maxConcurrent. A warm or
   // cold AWAITING_INPUT session remains open for replies without blocking another turn.
-  // Slots are a whole-runner budget, and this list holds one agent's page of it, so the
+  // Slots are a whole-runner budget, and this list holds one workspace's page of it, so the
   // runner's own server-side count is the number; the list is only a fallback for a
   // payload that predates it.
   const slotUsage = useMemo(
@@ -2462,7 +2462,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       turnId?: string;
       queuedItem?: QueuedTurn;
       created?: boolean;
-      /** The provider this create actually sent, for the remember-on-the-agent write-back. */
+      /** The provider this create actually sent, for the remember-on-the-workspace write-back. */
       provider?: string;
       /** The explicitly picked permission mode, for the same write-back. */
       permissionMode?: string;
@@ -2588,24 +2588,24 @@ export function AgentView({ runner }: { runner: Runner }) {
       const created = await createInteractiveSession({
         prompt: content,
         assignedRunnerId: runner.id,
-        agentId,
-        // Only an explicit pick travels: leaving it off keeps the server's inherit-from-agent
+        workspaceId,
+        // Only an explicit pick travels: leaving it off keeps the server's inherit-from-workspace
         // path, so a session started without touching the hero behaves exactly as before.
         provider: draftProvider ?? undefined,
         model: createModel,
         permissionMode: createPermissionMode,
-        // Send even '' (Default) explicitly: the composer already seeds the pill from the agent's
+        // Send even '' (Default) explicitly: the composer already seeds the pill from the workspace's
         // default, so the pill is authoritative — an explicit Default must stick, not fall back to
-        // the agent's effort server-side (session.effort ?? agent.effort). Task runs omit it, so
-        // those still inherit the agent default.
+        // the workspace's effort server-side (session.effort ?? workspace.effort). Task runs omit it, so
+        // those still inherit the workspace default.
         effort: wireEffort,
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
       });
-      // Only an *edited* Mode is worth remembering on the agent: the untouched seed is the Auto
+      // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
-      // it), and writing that back would erase the agent's real stored mode.
+      // it), and writing that back would erase the workspace's real stored mode.
       return {
         id: created.id,
         created: true,
@@ -2618,34 +2618,33 @@ export function AgentView({ runner }: { runner: Runner }) {
     ) => {
       pushHistory(id, vars.shell ? `!${vars.content}` : vars.content); // record under the resolved session id, new sessions included
       // For a freshly created session, prime its detail cache so the sidebar resolves
-      // its agent row synchronously. Otherwise activeAgentId (TasksSidePanel) falls
-      // back to keepPreviousData — the previously open session's agent — and the
-      // highlight blips to that agent until this session's fetch lands. Mirrors
+      // its workspace row synchronously. Otherwise activeWorkspaceId (TasksSidePanel) falls
+      // back to keepPreviousData — the previously open session's workspace — and the
+      // highlight blips to that workspace until this session's fetch lands. Mirrors
       // getSession's shape; the background refetch fills in the rest.
       if (created)
         qc.setQueryData(sessionQuery(id).queryKey, {
           id,
           assignedRunnerId: runner.id,
-          agent: agentId ? { id: agentId } : null,
+          workspace: workspaceId ? { id: workspaceId } : null,
         });
       // The provider pick is deliberately not written back — see DRAFT_PROVIDER_PREFIX. The session
-      // carries its own binding, and the agent's default keeps meaning "what this project starts
+      // carries its own binding, and the workspace's default keeps meaning "what this project starts
       // on", including for the runs nobody is watching.
       //
       // The Mode pick is different: without a write-back it lived on that one session only, and
-      // every task-launched run inherits agent.permissionMode server-side, so an edited pick is
-      // written back for those (new sessions themselves always default to Auto). Best-effort: a
-      // failed PATCH costs a remembered default, never a wrong dispatch.
-      if (created && sentMode && agentId) {
-        const patchedAgentId = agentId;
-        qc.setQueryData<any[]>(agentsQuery().queryKey, (old) =>
-          old?.map((a) => (a.id === patchedAgentId ? { ...a, permissionMode: sentMode } : a)),
+      // a task-launched run inherits the ACCOUNT default server-side, so an edited pick is written
+      // back there — one place, not one per checkout, which is the point of the move off Workspace.
+      // Best-effort: a failed PATCH costs a remembered default, never a wrong dispatch.
+      if (created && sentMode && sentMode !== accountDefaultPermissionMode) {
+        qc.setQueryData<any>(meQuery().queryKey, (old: any) =>
+          old ? { ...old, preferences: { ...old.preferences, defaultPermissionMode: sentMode } } : old,
         );
-        void api(`/agents/${patchedAgentId}`, {
+        void api('/users/me/preferences', {
           method: 'PATCH',
-          body: { permissionMode: sentMode },
+          body: { defaultPermissionMode: sentMode },
         })
-          .then(() => qc.invalidateQueries({ queryKey: agentsQuery().queryKey }))
+          .then(() => qc.invalidateQueries({ queryKey: meQuery().queryKey }))
           .catch(() => {});
       }
       navigate(`/sessions/${encodeId(id)}`);
@@ -2780,9 +2779,9 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Completing/trashing the Open session drops it from the Open list. Keep the
   // selection at the same row: step to the next session down (or the previous one
   // when we just completed the last row) so the cursor stays put instead of jumping
-  // to the top of the list. With nothing left to land on, fall back to the agent's
+  // to the top of the list. With nothing left to land on, fall back to the workspace's
   // list (same move as the tab switcher) — that re-scopes the left column (a null
-  // `selected` would collapse `scopeAgentId` and leak every agent's sessions) and
+  // `selected` would collapse `scopeWorkspaceId` and leak every workspace's sessions) and
   // shows its empty/compose state. A non-open row leaves the conversation untouched.
   const leaveIfOpen = (id: string): void => {
     if (id !== selectedId) return;
@@ -2792,14 +2791,14 @@ export function AgentView({ runner }: { runner: Runner }) {
       navigate(`/sessions/${encodeId(next.id)}`);
       return;
     }
-    const a = scopeAgentId ?? agentsForRunner[0]?.id;
-    navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
-  // After leaveIfOpen re-scopes to the agent, the auto-open effect picks that agent's
+  // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
   // completed/trashed until the refetch lands. Drop it now so auto-open can't re-select
-  // the removed session (which would null out `selected`, collapse the agent scope, and
-  // leak every agent's sessions into the list). The invalidate below still reconciles.
+  // the removed session (which would null out `selected`, collapse the workspace scope, and
+  // leak every workspace's sessions into the list). The invalidate below still reconciles.
   const dropFromLists = (id: string): void => {
     qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
       Array.isArray(old) ? old.filter((s) => s.id !== id) : old,
@@ -2970,38 +2969,38 @@ export function AgentView({ runner }: { runner: Runner }) {
       void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
     },
   });
-  // Enable worktree isolation for a non-git agent: flip autoInitGit so the runner `git
+  // Enable worktree isolation for a non-git workspace: flip autoInitGit so the runner `git
   // init`s the workDir on the next run (the shared-nogit nudge clears once a run isolates).
   const enableIsoMut = useMutation({
-    mutationFn: (agentId: string) => enableAgentIsolation(agentId),
+    mutationFn: (workspaceId: string) => enableWorkspaceIsolation(workspaceId),
     onSuccess: () =>
       message.success('Isolation enabled — the next run will initialize git and isolate.'),
     onError: (e: Error) => message.error(e.message),
   });
-  const askEnableIsolation = (agentId: string) =>
+  const askEnableIsolation = (workspaceId: string) =>
     modal.confirm({
       title: 'Enable worktree isolation?',
       content:
-        "This initializes a git repo in the agent's working directory (a default .gitignore" +
+        "This initializes a git repo in the workspace's working directory (a default .gitignore" +
         ' + a baseline commit of the existing files) on its next run, so concurrent sessions' +
         ' each get their own branch instead of sharing the directory.',
       okText: 'Enable',
       // Swallow a rejected enable (onError already toasts) so confirm() closes cleanly
       // instead of leaving an unhandled promise rejection.
-      onOk: () => enableIsoMut.mutateAsync(agentId).catch(() => {}),
+      onOk: () => enableIsoMut.mutateAsync(workspaceId).catch(() => {}),
     });
   // Repair the machine's shared checkout when the runner reports it stuck mid-merge (which blocks
   // every session's merge there). Async like the others: the runner does it on its next heartbeat,
-  // and refetching agents is what clears the warning, since repoHealth rides that payload.
+  // and refetching workspaces is what clears the warning, since repoHealth rides that payload.
   const repoCleanupMut = useMutation({
-    mutationFn: (agentId: string) => cleanUpAgentRepo(agentId),
+    mutationFn: (workspaceId: string) => cleanUpWorkspaceRepo(workspaceId),
     onSuccess: () => {
       message.success('Cleaning up the checkout — the runner picks this up on its next heartbeat.');
-      void qc.invalidateQueries({ queryKey: agentsQuery().queryKey });
+      void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
     },
     onError: (e: Error) => message.error(e.message),
   });
-  const askCleanUpRepo = (agentId: string, root: string) =>
+  const askCleanUpRepo = (workspaceId: string, root: string) =>
     modal.confirm({
       title: 'Clean up this checkout?',
       content:
@@ -3009,7 +3008,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         ' untracked files — to a new orbit/rescue-… branch, then return the checkout to its last' +
         ' commit so merges work again. Nothing is discarded, and the rescue branch is never deleted.',
       okText: 'Save and clean up',
-      onOk: () => repoCleanupMut.mutateAsync(agentId).catch(() => {}),
+      onOk: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
     });
   // Merge this session's worktree branch into main on the runner that ran it. Async: the
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
@@ -3040,11 +3039,11 @@ export function AgentView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
-  // Resolve a merge conflict in-session: revive the session so its own agent rebases the branch
+  // Resolve a merge conflict in-session: revive the session so its own workspace rebases the branch
   // onto the target that conflicted and fixes the conflicts (it has the context for its own
   // changes); the rebase bakes the resolution into the branch's commits, so the runner's rebase
   // merge then fast-forwards cleanly. resume() clears the stale mergeStatus, so the bar offers
-  // "Merge to <target>" again once the agent finishes.
+  // "Merge to <target>" again once the workspace finishes.
   const resolveMut = useMutation({
     mutationFn: (vars: SessionToastTarget & { branch: string; target: string }) =>
       resumeSession(
@@ -3259,7 +3258,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         : selectedMissing
           ? 'not found'
           : null,
-      agentName: shownAgentName,
+      workspaceName: shownWorkspaceName,
       provider: shownProvider,
       model: shownModel,
       permissionMode: shownMode,
@@ -3352,11 +3351,11 @@ export function AgentView({ runner }: { runner: Runner }) {
     }
     send.mutate({ content: c, images: readyImages });
   };
-  // Open the new-session draft for this agent. A /sessions/<id> URL carries no
-  // agent, so resolve it from the open session (scopeAgentId), then the first agent.
+  // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
+  // workspace, so resolve it from the open session (scopeWorkspaceId), then the first workspace.
   const goNew = (): void => {
-    const a = scopeAgentId ?? agentsForRunner[0]?.id;
-    navigate(a ? `/agents/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`);
+    const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+    navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`);
     // No setText here: the per-target switch effect restores the saved 'new' draft, and
     // blanking would instead clobber the *outgoing* session's draft (text hasn't moved yet).
     // Drop the caret into the composer so the task can be typed straight away — both the
@@ -3495,10 +3494,10 @@ export function AgentView({ runner }: { runner: Runner }) {
   // The `+` menu opens the picker scoped to one asset kind; null (manual `/` typing) shows both.
   const [slashScope, setSlashScope] = useState<'command' | 'skill' | null>(null);
   const slashToken = getSlashToken(text);
-  // Scope the `/` menu to the composer's agent: host-level assets (no agentId — e.g.
-  // ~/.claude or the runner's default dir) plus the assets of the agent this session
-  // runs as. A live session's agent is fixed; a draft uses the picked agent.
-  const composerAgentId = live ? selected?.agent?.id : agentId;
+  // Scope the `/` menu to the composer's workspace: host-level assets (no workspaceId — e.g.
+  // ~/.claude or the runner's default dir) plus the assets of the workspace this session
+  // runs as. A live session's workspace is fixed; a draft uses the picked workspace.
+  const composerWorkspaceId = live ? selected?.workspace?.id : workspaceId;
   const slashItems = useMemo<ComposerSlashItem[]>(
     () => [
       ...LOCAL_SLASH_ITEMS,
@@ -3508,7 +3507,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           description: c.description,
           type: 'command' as const,
           provider: c.provider,
-          agentId: c.agentId,
+          workspaceId: c.agentId,
           builtin: c.builtin,
         })),
         ...(runner.skills ?? []).map((s) => ({
@@ -3516,16 +3515,16 @@ export function AgentView({ runner }: { runner: Runner }) {
           description: s.description,
           type: 'skill' as const,
           provider: s.provider,
-          agentId: s.agentId,
+          workspaceId: s.agentId,
           builtin: s.builtin,
         })),
       ].filter(
         (it) =>
           slashAssetMatchesProvider(it.provider, shownProvider) &&
-          (!it.agentId || it.agentId === composerAgentId),
+          (!it.workspaceId || it.workspaceId === composerWorkspaceId),
       )),
     ],
-    [runner.commands, runner.skills, composerAgentId, codexComposer, shownProvider],
+    [runner.commands, runner.skills, composerWorkspaceId, codexComposer, shownProvider],
   );
   const slashMatches = useMemo(() => {
     const items = runner.online ? slashItems : slashItems.filter((it) => it.type === 'local');
@@ -3549,10 +3548,10 @@ export function AgentView({ runner }: { runner: Runner }) {
     setSlashDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // ── `@` agent-mention autocomplete ─────────────────────────────────────────
-  // Type `@` to reference another agent on this runner; picking one inserts
+  // ── `@` workspace-mention autocomplete ─────────────────────────────────────────
+  // Type `@` to reference another workspace on this runner; picking one inserts
   // `@<name> ` as plain text. The in-session orchestrator reads the mention from
-  // the turn (sent verbatim) and can hand work off to that agent via its session
+  // the turn (sent verbatim) and can hand work off to that workspace via its session
   // tools — so this is purely a composer convenience with no separate send path.
   // Mirrors the `/` menu above and the task-comment mention menu (TaskDetailPanel).
   const [mentionIndex, setMentionIndex] = useState(0);
@@ -3561,7 +3560,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const mentionMatches = useMemo(() => {
     if (mentionToken === null) return [];
     const q = mentionToken.toLowerCase();
-    return agentsForRunner
+    return workspacesForRunner
       .filter((a) => a.name.toLowerCase().includes(q))
       .sort((a, b) => {
         const pa = a.name.toLowerCase().startsWith(q) ? 0 : 1;
@@ -3569,7 +3568,7 @@ export function AgentView({ runner }: { runner: Runner }) {
         return pa - pb || a.name.localeCompare(b.name);
       })
       .slice(0, 8);
-  }, [agentsForRunner, mentionToken]);
+  }, [workspacesForRunner, mentionToken]);
   useEffect(() => {
     setMentionIndex(0);
   }, [mentionToken]);
@@ -3582,7 +3581,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
   const pickMention = (name: string): void => {
     // Replace only the trailing `@token` ($1 preserves the start-or-whitespace before it),
-    // so picking an agent mid-message doesn't clobber text typed earlier.
+    // so picking a workspace mid-message doesn't clobber text typed earlier.
     setText(text.replace(/(^|\s)@([^\s@]*)$/, `$1@${name} `));
     setMentionDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
@@ -3596,7 +3595,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setTimeout(() => taRef.current?.focus(), 0);
   };
   // The draft is a `!cmd` shell command, not a message: onSend routes it raw to the runner,
-  // bypassing the agent. Mirrors that branch's condition exactly (it reads the trimmed text,
+  // bypassing the workspace. Mirrors that branch's condition exactly (it reads the trimmed text,
   // and a reply-to-question draft resolves an approval instead), so the composer only turns
   // red when the send really would be a shell turn.
   const shellMode = !replyTo && text.trim().startsWith('!');
@@ -3606,7 +3605,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     setText((t) => (t.startsWith('!') ? t : `!${t}`));
     setTimeout(() => taRef.current?.focus(), 0);
   };
-  // The exact inverse: drop the `!` so the draft goes back to being a message for the agent.
+  // The exact inverse: drop the `!` so the draft goes back to being a message for the workspace.
   // This is what the `❯` replacing the `+` does in shell mode — a mode you can enter needs a
   // way out that isn't "select the character and delete it". Leading whitespace goes too,
   // since shellMode reads the trimmed text (`  !ls` is shell mode just as much as `!ls`).
@@ -3622,17 +3621,17 @@ export function AgentView({ runner }: { runner: Runner }) {
   };
   // A LIVE session's pills show its stored choice (editable any time the runner is
   // online — see configEditable); otherwise they're editable and reflect local state.
-  const selectedAgent = agentsForRunner.find((a) => a.id === selected?.agent?.id);
+  const selectedWorkspace = workspacesForRunner.find((a) => a.id === selected?.workspace?.id);
   const effectiveModel = effectiveSessionModel(
     shownProvider,
     selected?.model,
-    detailForSelected?.agent?.model ?? selectedAgent?.model,
+    detailForSelected?.workspace?.model ?? selectedWorkspace?.model,
     runner.modelCatalog,
     configuredProviders,
     runner.runtimeDefaultModels,
   );
   const effectiveEffort =
-    selected?.effort ?? detailForSelected?.agent?.effort ?? selectedAgent?.effort ?? '';
+    selected?.effort ?? detailForSelected?.workspace?.effort ?? selectedWorkspace?.effort ?? '';
   const shownModel: string = live ? effectiveModel : model;
   const catalogModelOptions = shownProviderCapabilitiesResolved
     ? modelOptionsForProvider(shownProvider, runner.modelCatalog, configuredProviders)
@@ -3654,7 +3653,7 @@ export function AgentView({ runner }: { runner: Runner }) {
   // Where this session could move without changing CLI. Offered on the two routes that actually
   // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
   // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
-  // session that can't be resumed would start a NEW session on send, where the agent decides. A
+  // session that can't be resumed would start a NEW session on send, where the workspace decides. A
   // single entry means there is nowhere to go, and the pill stays out of the composer entirely —
   // the common case, one Claude sign-in and no configured providers.
   const providerSwitchChoices = useMemo(
@@ -3800,19 +3799,19 @@ export function AgentView({ runner }: { runner: Runner }) {
   // online to act on it). A change made mid-turn doesn't abort the running turn: the
   // server defers the re-spawn until the turn finishes, so it applies on the next turn —
   // same as a queued message. When not live they're freely editable (pre-session config).
-  // Agent stays fixed once the session exists (it's never re-assigned on resume).
+  // Workspace stays fixed once the session exists (it's never re-assigned on resume).
   const configEditable = selectedTrashed || selectedMissing ? false : live ? runner.online : true;
-  // An existing session's agent is fixed (live or recycled/terminal); only a brand-new
+  // An existing session's workspace is fixed (live or recycled/terminal); only a brand-new
   // compose draft reflects the local pick.
-  const shownAgentId: string | undefined = selected ? (selected.agent?.id ?? undefined) : agentId;
-  // The agent can't be switched once the session exists (live or terminal), nor when the
-  // view is locked to one agent. In those cases the Select is dropped from the controls row
-  // entirely — the agent is already named in the header and the sidebar.
-  const agentReadOnly = !!selected || !!lockedAgentId;
-  const shownAgentName =
-    agentsForRunner.find((a) => a.id === shownAgentId)?.name ??
-    selected?.agent?.name ??
-    lockedAgent?.name;
+  const shownWorkspaceId: string | undefined = selected ? (selected.workspace?.id ?? undefined) : workspaceId;
+  // The workspace can't be switched once the session exists (live or terminal), nor when the
+  // view is locked to one workspace. In those cases the Select is dropped from the controls row
+  // entirely — the workspace is already named in the header and the sidebar.
+  const workspaceReadOnly = !!selected || !!lockedWorkspaceId;
+  const shownWorkspaceName =
+    workspacesForRunner.find((a) => a.id === shownWorkspaceId)?.name ??
+    selected?.workspace?.name ??
+    lockedWorkspace?.name;
   // Per-control hints derived from the same state that drives enable/disable, so the help
   // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
   // Empty string = no tooltip, which keeps idle controls free of hover noise.
@@ -3831,9 +3830,9 @@ export function AgentView({ runner }: { runner: Runner }) {
     setHeaderMenuOpen(false);
   }, [selectedId]);
   // Title shown above the session list (and in the draft header). /sessions/<id>
-  // has no agent in the URL, so fall back to the open session's agent, then runner.
-  const headAgentName =
-    lockedAgent?.name ?? selected?.agent?.name ?? runner.displayName ?? runner.name;
+  // has no workspace in the URL, so fall back to the open session's workspace, then runner.
+  const headWorkspaceName =
+    lockedWorkspace?.name ?? selected?.workspace?.name ?? runner.displayName ?? runner.name;
   // The view the header names (and the menu check-marks).
   const shownView: SessionView = effectiveView;
   // Switching view while a session transcript is open closes it: the open session belongs
@@ -3841,8 +3840,8 @@ export function AgentView({ runner }: { runner: Runner }) {
   const switchView = (next: SessionView): void => {
     setView(next);
     if (!selectedId) return;
-    const a = scopeAgentId ?? agentsForRunner[0]?.id;
-    navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
   };
   const activeTag = tagFilter ? (sessionTags.find((t) => t.id === tagFilter) ?? null) : null;
   // Selection reads on the trailing edge, not in a leading icon column. The tag names already
@@ -3956,7 +3955,7 @@ export function AgentView({ runner }: { runner: Runner }) {
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
   const headSub = composing
-    ? `${headAgentName} · New session`
+    ? `${headWorkspaceName} · New session`
     : selected
       ? [
           headRunWord,
@@ -3983,14 +3982,14 @@ export function AgentView({ runner }: { runner: Runner }) {
             ? 'Reply to Claude’s question…'
             : selectedId
               ? 'Reply…'
-              : 'Send this agent a task…';
+              : 'Send this workspace a task…';
 
   return (
-    <div className={`agent-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
+    <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
       <aside className="session-col" style={{ width: colWidth }}>
         <div className="session-col-head">
-          <span className={`agent-status-dot ${runner.online ? 'online' : ''}`} />
-          <span className="session-col-title">{headAgentName}</span>
+          <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+          <span className="session-col-title">{headWorkspaceName}</span>
           {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
               chip row — both read as clutter in a narrow column, and Open is nearly always
               the answer. The trigger names the current view so a list scoped to
@@ -4030,7 +4029,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>
         <div
-          className="agent-sessions session-col-list"
+          className="workspace-sessions session-col-list"
           ref={listRef}
           onScroll={onSessionListScroll}
         >
@@ -4239,7 +4238,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             </Fragment>
           ))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
-              fetch (or a switch to an agent not yet cached) shows progress rather than an
+              fetch (or a switch to a workspace not yet cached) shows progress rather than an
               abrupt end of list. */}
           {loadingSessions && (
             <div className="session-list-more">
@@ -4257,7 +4256,7 @@ export function AgentView({ runner }: { runner: Runner }) {
       />
 
       <div
-        className="agent-view"
+        className="workspace-view"
         onDragEnter={onSessionDragEnter}
         onDragOver={onSessionDragOver}
         onDragLeave={onSessionDragLeave}
@@ -4265,43 +4264,43 @@ export function AgentView({ runner }: { runner: Runner }) {
       >
         {/* Drop-to-upload hint covering the whole session pane while files are dragged over it. */}
         {dragging && (
-          <div className="agent-dropzone">
+          <div className="workspace-dropzone">
             <PaperClipOutlined /> Drop files to upload
           </div>
         )}
-        <div className="agent-header">
+        <div className="workspace-header">
           {isMobile && (
             <button
               type="button"
-              className="agent-back-mobile"
+              className="workspace-back-mobile"
               aria-label="Back to sessions"
               onClick={() => {
-                const a = scopeAgentId ?? agentsForRunner[0]?.id;
-                navigate(a ? `/agents/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+                const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+                navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
               }}
             >
               <ArrowLeftOutlined />
             </button>
           )}
-          <div className="agent-header-main">
+          <div className="workspace-header-main">
             {selected?.taskId && !composing && (
               <button
                 type="button"
-                className="agent-header-task"
+                className="workspace-header-task"
                 title={`Back to task · ${selected.taskTitle ?? ''}`}
                 onClick={() => navigate(`/tasks/${encodeId(selected.taskId)}`)}
               >
                 <ArrowLeftOutlined />
-                <span className="agent-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>
+                <span className="workspace-header-task-name">{selected.taskTitle ?? 'Back to task'}</span>
               </button>
             )}
             {editingTitle && selected && !composing ? (
               <>
-                <span ref={titleMirrorRef} className="agent-name-mirror" aria-hidden="true">
+                <span ref={titleMirrorRef} className="workspace-name-mirror" aria-hidden="true">
                   {titleDraft || ' '}
                 </span>
                 <input
-                  className="agent-name-input"
+                  className="workspace-name-input"
                   style={{ width: titleInputW }}
                   autoFocus
                   value={titleDraft}
@@ -4336,7 +4335,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               </>
             ) : (
               <div
-                className="agent-name"
+                className="workspace-name"
                 {...(selected && !selectedTrashed && !composing
                   ? {
                       onDoubleClick: () => {
@@ -4349,10 +4348,10 @@ export function AgentView({ runner }: { runner: Runner }) {
               >
                 {composing
                   ? 'New session'
-                  : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headAgentName))}
+                  : (selected?.title ?? (selectedMissing ? 'Session not found' : selectedId ? 'Starting…' : headWorkspaceName))}
               </div>
             )}
-            <div className="agent-sub">{headSub}</div>
+            <div className="workspace-sub">{headSub}</div>
           </div>
           {selected && !composing && (
             <>
@@ -4516,13 +4515,13 @@ export function AgentView({ runner }: { runner: Runner }) {
           </button>
         )}
 
-        <div className="agent-scroll-wrap">
+        <div className="workspace-scroll-wrap">
           {selectedMissing ? (
-            <div className="agent-sessions" ref={scrollRef}>
+            <div className="workspace-sessions" ref={scrollRef}>
               <div className="chat-note">Session not found.</div>
             </div>
           ) : selectedId ? (
-            <div className="agent-sessions" ref={scrollRef}>
+            <div className="workspace-sessions" ref={scrollRef}>
               {loadingOlder && <div className="chat-note chat-loading-older">Loading earlier messages…</div>}
               {placeholder === 'queued' && (
                 <div className="chat-queued-state">
@@ -4604,7 +4603,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   </span>
                 </div>
               ))}
-              {placeholder === 'waiting' && <div className="chat-note">Waiting for the agent…</div>}
+              {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}
               {selected &&
                 selectedTrashed &&
                 (() => {
@@ -4660,11 +4659,11 @@ export function AgentView({ runner }: { runner: Runner }) {
               )}
             </div>
           ) : composing ? (
-            // The provider hero is centered as a hero only while it's alone: .agent-draft is a
+            // The provider hero is centered as a hero only while it's alone: .workspace-draft is a
             // centering flex row, so once /status prints a card it would sit beside the hero instead
             // of under it. With cards the pane falls back to plain transcript flow.
             <div
-              className={`agent-sessions${localStatusCards.length ? '' : ' agent-draft'}`}
+              className={`workspace-sessions${localStatusCards.length ? '' : ' workspace-draft'}`}
               ref={scrollRef}
             >
               <NewSessionProviderHero
@@ -4672,8 +4671,8 @@ export function AgentView({ runner }: { runner: Runner }) {
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
                 runnerId={runner.id}
-                // Nothing to choose until we know which agent (and so which project) this runs in.
-                disabled={!pickedAgent}
+                // Nothing to choose until we know which workspace (and so which project) this runs in.
+                disabled={!pickedWorkspace}
                 note={providerSwitchNote}
               />
               {localStatusCards.map((card) => (
@@ -4681,7 +4680,7 @@ export function AgentView({ runner }: { runner: Runner }) {
               ))}
             </div>
           ) : (
-            <div className="agent-sessions" />
+            <div className="workspace-sessions" />
           )}
           {selectedId && (
             <SessionFind
@@ -4699,7 +4698,7 @@ export function AgentView({ runner }: { runner: Runner }) {
           )}
         </div>
 
-      <div className="agent-composer">
+      <div className="workspace-composer">
         {/* Image previews sit above the worktree status bar so a staged screenshot reads
             as part of the message you're about to send, not buried under the diff chip. */}
         {images.length > 0 && (
@@ -4751,7 +4750,7 @@ export function AgentView({ runner }: { runner: Runner }) {
             )}
           </div>
         )}
-        {/* Background processes the agent launched (Bash run_in_background) — invisible
+        {/* Background processes the workspace launched (Bash run_in_background) — invisible
             otherwise. Derived from this session's events; hidden when there are none. */}
         {selectedId && !selectedTrashed && (
           <BackgroundShellsTray events={events} live={live} serverShells={serverBgShells} />
@@ -4768,8 +4767,8 @@ export function AgentView({ runner }: { runner: Runner }) {
           turnActive={isSessionTurnActive(selected, !!live, idle)}
           enabling={enableIsoMut.isPending}
           onEnableIsolation={
-            detailForSelected?.agent?.id
-              ? () => askEnableIsolation(detailForSelected.agent!.id)
+            detailForSelected?.workspace?.id
+              ? () => askEnableIsolation(detailForSelected.workspace!.id)
               : undefined
           }
           merging={mergeMut.isPending}
@@ -4815,13 +4814,13 @@ export function AgentView({ runner }: { runner: Runner }) {
                   })
               : undefined
           }
-          // The shared checkout behind this console. Attached to the agent (not the session):
+          // The shared checkout behind this console. Attached to the workspace (not the session):
           // it's the machine's state, and every session here fails the same way when it's stuck.
-          repoHealth={consoleAgentRepoHealth}
+          repoHealth={consoleWorkspaceRepoHealth}
           cleaningRepo={repoCleanupMut.isPending}
           onCleanUpRepo={
-            consoleAgentId && consoleAgentRepoHealth
-              ? () => askCleanUpRepo(consoleAgentId, consoleAgentRepoHealth.root)
+            consoleWorkspaceId && consoleWorkspaceRepoHealth
+              ? () => askCleanUpRepo(consoleWorkspaceId, consoleWorkspaceRepoHealth.root)
               : undefined
           }
         />
@@ -4872,7 +4871,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   <span className="composer-slash-type">
                     {it.type === 'skill' ? 'skill' : it.type === 'local' ? 'local' : 'cmd'}
                   </span>
-                  {it.agentId && <span className="composer-slash-type">project</span>}
+                  {it.workspaceId && <span className="composer-slash-type">project</span>}
                   {it.description && <span className="composer-slash-desc">{it.description}</span>}
                 </div>
               ))}
@@ -4894,7 +4893,7 @@ export function AgentView({ runner }: { runner: Runner }) {
                   onMouseEnter={() => setMentionIndex(i)}
                 >
                   <span className="composer-slash-name">@{a.name}</span>
-                  <span className="composer-slash-type">agent</span>
+                  <span className="composer-slash-type">workspace</span>
                 </div>
               ))}
             </div>
@@ -5152,20 +5151,20 @@ export function AgentView({ runner }: { runner: Runner }) {
           )}
         </div>
         <div className="composer-pills">
-          {/* The agent is only a Select when it can actually be picked (new, unlocked
+          {/* The workspace is only a Select when it can actually be picked (new, unlocked
               session); once read-only it shows as a static pill left of Model below. */}
-          {!agentReadOnly && (
-            <Tooltip title="Agent" open={hoverTipOpen}>
-              <span className="composer-pill composer-pill-agent">
+          {!workspaceReadOnly && (
+            <Tooltip title="Workspace" open={hoverTipOpen}>
+              <span className="composer-pill composer-pill-workspace">
                 <Select
                   size="small"
                   variant="borderless"
                   suffixIcon={null}
-                  value={shownAgentId}
-                  onChange={setAgentId}
-                  options={agentsForRunner.map((a) => ({ value: a.id, label: a.name }))}
+                  value={shownWorkspaceId}
+                  onChange={setWorkspaceId}
+                  options={workspacesForRunner.map((a) => ({ value: a.id, label: a.name }))}
                   placeholder="Default"
-                  disabled={live || !!lockedAgentId}
+                  disabled={live || !!lockedWorkspaceId}
                   popupMatchSelectWidth={false}
                 />
               </span>

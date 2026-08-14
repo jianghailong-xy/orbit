@@ -7,7 +7,7 @@ import { QueueService } from './queue.service';
 function harness(
   sessionModel: string | null,
   options: {
-    agentModel?: string | null;
+    workspaceModel?: string | null;
     casWinnerModel?: string;
     usesRuntimeDefaultModel?: boolean;
   } = {},
@@ -29,15 +29,15 @@ function harness(
     inboxLeaseOwner: null,
     branch: null,
     mergeTarget: null,
-    agentId: '33333333-3333-4333-8333-333333333333',
+    workspaceId: '33333333-3333-4333-8333-333333333333',
     taskId: null,
     assignedRunner: {
       runtimeDefaultModels: { codex: 'gpt-runtime-default' },
       modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
     },
-    agent: {
+    workspace: {
       provider: 'codex',
-      model: options.agentModel ?? null,
+      model: options.workspaceModel ?? null,
       env: null,
       workDir: null,
       autoInitGit: false,
@@ -126,14 +126,14 @@ test('a session model the runtime retired is re-materialized to what it now runs
   assert.match(materializeQueries[0], /"model" IS NOT DISTINCT FROM /);
 });
 
-test('a legacy Agent model is bridged once and materialized for rolling compatibility', async () => {
+test('a legacy Workspace model is bridged once and materialized for rolling compatibility', async () => {
   const { queue, modelWrites } = harness(null, {
-    agentModel: 'gpt-legacy-agent',
+    workspaceModel: 'gpt-legacy-workspace',
     usesRuntimeDefaultModel: false,
   });
   const claimed = await build(queue);
-  assert.equal(claimed.agent.model, 'gpt-legacy-agent');
-  assert.deepEqual(modelWrites, ['gpt-legacy-agent']);
+  assert.equal(claimed.agent.model, 'gpt-legacy-workspace');
+  assert.deepEqual(modelWrites, ['gpt-legacy-workspace']);
 });
 
 test('a concurrent Session model PATCH wins a failed materialization CAS', async () => {

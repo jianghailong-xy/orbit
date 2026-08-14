@@ -6,7 +6,7 @@ import { EventsModule } from './events/events.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { AgentsModule } from './agents/agents.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
 import { TasksModule } from './tasks/tasks.module';
@@ -27,7 +27,7 @@ import { ProvidersModule } from './providers/providers.module';
     QueueModule,
     AuthModule,
     UsersModule,
-    AgentsModule,
+    WorkspacesModule,
     SessionsModule,
     SessionTagsModule,
     TasksModule,

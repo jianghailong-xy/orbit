@@ -11,7 +11,7 @@ import {
   mergedProviderOptions,
   modelOptionsForProvider,
   type ConfiguredProvider,
-} from '../lib/agentDefaults';
+} from '../lib/workspaceDefaults';
 import { encodeId } from '../lib/idCodec';
 import { providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
@@ -88,7 +88,7 @@ const initial = (name?: string | null): string => (name ?? '?').trim().charAt(0)
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // rehype plugin: after the comment markdown is parsed, wrap each standalone
-// `@<owned agent name>` in a text node with a `.tdp-mention` chip. Skips code/pre
+// `@<owned workspace name>` in a text node with a `.tdp-mention` chip. Skips code/pre
 // so mentions inside code spans stay literal. `names` is sorted longest-first so
 // "@Bot2" wins over "@Bot"; the trailing `(?![\w])` blocks substrings.
 const rehypeMentions = (names: string[]) => () => (tree: any) => {
@@ -141,11 +141,11 @@ export interface TaskSummary {
   dueDate?: string | null;
 }
 
-interface AgentRow {
+interface WorkspaceRow {
   id: string;
   name: string;
   runnerId?: string | null;
-  /** The agent's own provider — what a task with no pin of its own inherits. */
+  /** The workspace's own provider — what a task with no pin of its own inherits. */
   provider?: string | null;
 }
 
@@ -279,9 +279,9 @@ export function TaskDetailPanel({
   const [dependencyViewOverride, setDependencyViewOverride] = useState<'graph' | 'list' | null>(null);
   useEffect(() => setDependencyViewOverride(null), [taskId]);
 
-  // Owner's agents, for @-mention autocomplete and to label/trigger mentions.
-  const agentsQ = useQuery({ queryKey: ['agents'], queryFn: () => api<AgentRow[]>('/agents') });
-  const agentList = useMemo(() => agentsQ.data ?? [], [agentsQ.data]);
+  // Owner's workspaces, for @-mention autocomplete and to label/trigger mentions.
+  const workspacesQ = useQuery({ queryKey: ['workspaces'], queryFn: () => api<WorkspaceRow[]>('/workspaces') });
+  const workspaceList = useMemo(() => workspacesQ.data ?? [], [workspacesQ.data]);
 
   // Owner's task lists, to move this task into a list (or detach it to 未分组).
   const taskListsQ = useQuery({
@@ -289,17 +289,17 @@ export function TaskDetailPanel({
     queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
 
-  // The provider/model override pickers below need the same two sources the agent and New
+  // The provider/model override pickers below need the same two sources the workspace and New
   // Session pickers use: the owner's configured (BYOK) providers, and the model catalogue the
   // assignee's runner reported — model ids are per-machine, so they come from that runner.
   const providersQ = useQuery(providersQuery());
   const runnersQ = useQuery(runnersQuery());
   const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
-  const assigneeAgent = agentList.find((a) => a.id === task?.assignee?.id);
-  const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeAgent?.runnerId);
+  const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
+  const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
   // The provider whose model space the Model picker lists: the task's own pin when it has one,
-  // otherwise the assignee agent's — so the models offered always match what the run will use.
-  const effectiveProvider = q.data?.provider ?? assigneeAgent?.provider ?? null;
+  // otherwise the assignee workspace's — so the models offered always match what the run will use.
+  const effectiveProvider = q.data?.provider ?? assigneeWorkspace?.provider ?? null;
   const modelOptions = useMemo(
     () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
     [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
@@ -314,11 +314,11 @@ export function TaskDetailPanel({
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Tell the user which mentioned agents got triggered (those bound to a runner can
+  // Tell the user which mentioned workspaces got triggered (those bound to a runner can
   // actually run; the rest are recorded on the comment but not started).
   const notifyMentions = (ids: string[]) => {
     if (!ids.length) return;
-    const picked = agentList.filter((a) => ids.includes(a.id));
+    const picked = workspaceList.filter((a) => ids.includes(a.id));
     const triggerable = picked.filter((a) => a.runnerId);
     const noRunner = picked.filter((a) => !a.runnerId);
     const parts: string[] = [];
@@ -328,7 +328,7 @@ export function TaskDetailPanel({
     if (parts.length) message.info(parts.join('; '));
   };
 
-  // Reassign (or clear, when null) the task's responsible agent. Refresh both the
+  // Reassign (or clear, when null) the task's responsible workspace. Refresh both the
   // open detail and the list row that shows the assignee.
   const updateAssignee = useMutation({
     mutationFn: (assigneeId: string | null) =>
@@ -341,7 +341,7 @@ export function TaskDetailPanel({
   });
 
   // Pin (or clear, when null) the provider/model this task's runs use instead of the assignee
-  // agent's. Clearing the provider clears the model with it: a model id only means anything
+  // workspace's. Clearing the provider clears the model with it: a model id only means anything
   // inside one provider's model space, so leaving it behind would pin a stale id.
   const updateRunTarget = useMutation({
     mutationFn: (body: { provider?: string | null; model?: string | null }) =>
@@ -366,12 +366,12 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
-  // "开始执行": tell the task's responsible agent to start (or continue) a session on it.
+  // "开始执行": tell the task's responsible workspace to start (or continue) a session on it.
   // The backend validates assignee + runner; refresh the panel so the new run shows up.
   const execute = useMutation({
     mutationFn: () => api(`/tasks/${taskId}/execute`, { method: 'POST' }),
     onSuccess: () => {
-      message.success('Assignee agent triggered');
+      message.success('Assignee workspace triggered');
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
@@ -477,7 +477,7 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
-  // Safety net for the "agent forgot to mark DONE" case (see §6.3): mark the task done
+  // Safety net for the "workspace forgot to mark DONE" case (see §6.3): mark the task done
   // so its waiting dependents are released (and auto-run).
   const markDone = useMutation({
     mutationFn: () => api(`/tasks/${taskId}`, { method: 'PATCH', body: { status: 'DONE' } }),
@@ -500,18 +500,18 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
-  // An agent is mentioned when `@<name>` appears as a standalone token in the body.
+  // A workspace is mentioned when `@<name>` appears as a standalone token in the body.
   const mentionTokenRe = (name: string) => new RegExp(`(?:^|\\s)@${escapeRegExp(name)}(?![\\w])`);
   const submit = () => {
     const body = draft.trim();
     if (!body) return;
-    const mentions = agentList.filter((a) => mentionTokenRe(a.name).test(body)).map((a) => a.id);
+    const mentions = workspaceList.filter((a) => mentionTokenRe(a.name).test(body)).map((a) => a.id);
     addComment.mutate({ body, mentions });
   };
 
   // ── `@` mention autocomplete ───────────────────────────────────────────────
-  // Mirrors the composer's `/` command menu (AgentView): while the caret sits right
-  // after an `@token`, show owned agents; picking one inserts `@<name> ` (the trailing
+  // Mirrors the composer's `/` command menu (WorkspaceView): while the caret sits right
+  // after an `@token`, show owned workspaces; picking one inserts `@<name> ` (the trailing
   // space drops the token regex, so the menu auto-hides).
   const taRef = useRef<any>(null);
   const [caret, setCaret] = useState(0);
@@ -525,7 +525,7 @@ export function TaskDetailPanel({
   const mentionMatches = useMemo(() => {
     if (mentionToken === null) return [];
     const query = mentionToken.toLowerCase();
-    return agentList
+    return workspaceList
       .filter((a) => a.name.toLowerCase().includes(query))
       .sort((a, b) => {
         const pa = a.name.toLowerCase().startsWith(query) ? 0 : 1;
@@ -533,7 +533,7 @@ export function TaskDetailPanel({
         return pa - pb || a.name.localeCompare(b.name);
       })
       .slice(0, 8);
-  }, [agentList, mentionToken]);
+  }, [workspaceList, mentionToken]);
   useEffect(() => {
     setMentionIndex(0);
     setMentionDismissed(false);
@@ -541,8 +541,8 @@ export function TaskDetailPanel({
   const showMention = mentionToken !== null && !mentionDismissed && mentionMatches.length > 0;
   const mentionIdx = mentionMatches.length ? Math.min(mentionIndex, mentionMatches.length - 1) : 0;
 
-  const pickMention = (agent: AgentRow) => {
-    const before = draft.slice(0, caret).replace(/(^|\s)@([^\s@]*)$/, `$1@${agent.name} `);
+  const pickMention = (workspace: WorkspaceRow) => {
+    const before = draft.slice(0, caret).replace(/(^|\s)@([^\s@]*)$/, `$1@${workspace.name} `);
     const next = before + draft.slice(caret);
     setDraft(next);
     setMentionDismissed(false);
@@ -556,11 +556,11 @@ export function TaskDetailPanel({
     }, 0);
   };
 
-  // Wrap each standalone `@<owned agent name>` in the body with a mention chip. Longer
+  // Wrap each standalone `@<owned workspace name>` in the body with a mention chip. Longer
   // names first so "@Bot2" wins over "@Bot"; the trailing `(?![\w])` blocks substrings.
   const mentionNames = useMemo(
-    () => agentList.map((a) => a.name).filter(Boolean).sort((a, b) => b.length - a.length),
-    [agentList],
+    () => workspaceList.map((a) => a.name).filter(Boolean).sort((a, b) => b.length - a.length),
+    [workspaceList],
   );
   const mentionPlugin = useMemo(() => rehypeMentions(mentionNames), [mentionNames]);
 
@@ -623,7 +623,7 @@ export function TaskDetailPanel({
   const needsDoneConfirm =
     dependedOnBy.length > 0 && task?.status !== 'DONE' && hasSucceededSession;
 
-  // Need a responsible agent to execute; the runner check is enforced by the backend.
+  // Need a responsible workspace to execute; the runner check is enforced by the backend.
   const canExecute = !!task?.assignee;
   // "Running" = the trigger request is in flight, or the task has a busy (queued/running)
   // session. The button shows this state and stays disabled throughout — which also
@@ -636,7 +636,7 @@ export function TaskDetailPanel({
       ? 'Prerequisite cancelled — resolve it first'
       : 'Waiting for prerequisites'
     : !canExecute
-      ? 'Assign an agent first'
+      ? 'Assign a workspace first'
       : running
         ? 'Task running…'
         : '';
@@ -763,10 +763,10 @@ export function TaskDetailPanel({
                 allowClear
                 showSearch
                 optionFilterProp="label"
-                loading={agentsQ.isLoading || updateAssignee.isPending}
+                loading={workspacesQ.isLoading || updateAssignee.isPending}
                 disabled={updateAssignee.isPending}
                 popupMatchSelectWidth={false}
-                options={agentList.map((a) => ({ value: a.id, label: a.name }))}
+                options={workspaceList.map((a) => ({ value: a.id, label: a.name }))}
                 onChange={(val) => updateAssignee.mutate(val ?? null)}
               />
             </div>
@@ -778,7 +778,7 @@ export function TaskDetailPanel({
                 value={q.data?.provider ?? undefined}
                 // Unpinned is the normal case, so say what it actually does rather than "None".
                 placeholder={
-                  assigneeAgent ? `Assignee's (${assigneeAgent.provider ?? 'claude'})` : "Assignee's"
+                  assigneeWorkspace ? `Assignee's (${assigneeWorkspace.provider ?? 'claude'})` : "Assignee's"
                 }
                 allowClear
                 showSearch
@@ -803,7 +803,7 @@ export function TaskDetailPanel({
                 loading={runnersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
                 popupMatchSelectWidth={false}
-                // A model the catalogue doesn't name (an id pinned by an agent or the API) still
+                // A model the catalogue doesn't name (an id pinned by a workspace or the API) still
                 // has to render as itself rather than vanish from the box.
                 options={
                   q.data?.model && !modelOptions.some((o) => o.value === q.data.model)
@@ -965,7 +965,7 @@ export function TaskDetailPanel({
           {q.data?.description && (
             <section className="tdp-section">
               <div className="tdp-section-title">Description</div>
-              {/* Descriptions are written as agent-ready prompts — headings, lists, fenced code —
+              {/* Descriptions are written as workspace-ready prompts — headings, lists, fenced code —
                   so render them as Markdown. `breaks` because they're hand-laid-out text: the
                   panel used to show them pre-wrapped, and CommonMark's soft break would collapse
                   a plain multi-line description into one run-on paragraph. */}
@@ -991,10 +991,10 @@ export function TaskDetailPanel({
                   >
                     <span className={`tdp-dot ${state}`} />
                     <div className="tdp-session-main">
-                      {/* Agent leads — it's what tells two runs of the same task apart; the
+                      {/* Workspace leads — it's what tells two runs of the same task apart; the
                           system-generated title just repeats the task name. */}
                       <div className="tdp-session-title">
-                        {s.agent?.name || s.title || 'Untitled session'}
+                        {s.workspace?.name || s.title || 'Untitled session'}
                       </div>
                       <div className="tdp-session-sub">{fmt(s.createdAt)}</div>
                     </div>
@@ -1072,7 +1072,7 @@ export function TaskDetailPanel({
             setCaret(e.target.selectionStart ?? e.target.value.length);
           }}
           onSelect={(e) => setCaret((e.target as HTMLTextAreaElement).selectionStart ?? 0)}
-          placeholder="Add a comment…  type @ to mention an agent  (⌘/Ctrl + Enter to send)"
+          placeholder="Add a comment…  type @ to mention a workspace  (⌘/Ctrl + Enter to send)"
           autoSize={{ minRows: 1, maxRows: 4 }}
           onKeyDown={(e) => {
             if (showMention) {

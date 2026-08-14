@@ -11,7 +11,7 @@ import { useIsMobile } from '../lib/useMediaQuery';
 import { useToast } from '../lib/toast';
 
 /**
- * Where an agent's model comes from — two kinds of identity, in the order a new user has them.
+ * Where a workspace's model comes from — two kinds of identity, in the order a new user has them.
  *
  * First the engines signed in on their own machines (RunnerEngines): those spend the subscription
  * signed into that runner and need nothing pasted, which is what most sessions actually run on.
@@ -130,7 +130,7 @@ export function ProvidersPage() {
             Providers
           </h1>
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Where your agents&apos; models come from — the CLIs signed in on your machines, and the
+            Where your workspaces&apos; models come from — the CLIs signed in on your machines, and the
             API keys on your account.
           </div>
         </div>

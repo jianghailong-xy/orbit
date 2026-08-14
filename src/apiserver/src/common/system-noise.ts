@@ -7,7 +7,7 @@ import { RunEventType } from '@orbit/shared';
  * (`thinking_tokens`, `status`, `task_progress`, …) that nothing renders — the macOS reducer
  * files them under "lifecycle noise — no transcript item", and web only ever looks for
  * `resumed`. `init`/`resumed` are the two with real consumers: runtimeInitSessionId reads the
- * runtime's own session id off them, and `resumed` clears the running background/sub-agent sets.
+ * runtime's own session id off them, and `resumed` clears the running background/sub-workspace sets.
  */
 const MEANINGFUL_SYSTEM_SUBTYPES = new Set(['init', 'resumed']);
 

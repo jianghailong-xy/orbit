@@ -15,9 +15,9 @@ import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
 /**
- * Task/TaskList management for in-session agents, reached by the `orbit mcp` server
+ * Task/TaskList management for in-session workspaces, reached by the `orbit mcp` server
  * with the machine's runner token. Tenant scope is the runner's owner; work is
- * attributed to the acting agent (passed via X-Orbit-Agent-Id), validated to belong
+ * attributed to the acting workspace (passed via X-Orbit-Workspace-Id), validated to belong
  * to that owner. Mirrors TasksController but swaps JWT/user for runner-token/owner.
  */
 @UseGuards(RunnerAuthGuard)
@@ -31,11 +31,11 @@ export class RunnerTasksController {
   @Post('tasks')
   async createTask(
     @CurrentRunner() runner: Runner,
-    @Headers('x-orbit-agent-id') agentId: string | undefined,
+    @Headers('x-orbit-workspace-id') workspaceId: string | undefined,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateTaskDto,
   ) {
-    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);
+    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, workspaceId);
     return this.tasks.create(runner.ownerId, dto, creator, sessionId);
   }
 
@@ -43,11 +43,11 @@ export class RunnerTasksController {
   @Post('tasks/batch-create')
   async createTasks(
     @CurrentRunner() runner: Runner,
-    @Headers('x-orbit-agent-id') agentId: string | undefined,
+    @Headers('x-orbit-workspace-id') workspaceId: string | undefined,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Body() dto: CreateTasksBatchDto,
   ) {
-    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);
+    const creator = await this.tasks.resolveAgentCreator(runner.ownerId, workspaceId);
     return this.tasks.createMany(runner.ownerId, dto, creator, sessionId);
   }
 
@@ -111,11 +111,11 @@ export class RunnerTasksController {
   @Post('tasks/:id/comments')
   async addComment(
     @CurrentRunner() runner: Runner,
-    @Headers('x-orbit-agent-id') agentId: string | undefined,
+    @Headers('x-orbit-workspace-id') workspaceId: string | undefined,
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: CreateTaskCommentDto,
   ) {
-    const author = await this.tasks.resolveAgentCreator(runner.ownerId, agentId);
+    const author = await this.tasks.resolveAgentCreator(runner.ownerId, workspaceId);
     return this.tasks.addComment(runner.ownerId, id, dto, author);
   }
 

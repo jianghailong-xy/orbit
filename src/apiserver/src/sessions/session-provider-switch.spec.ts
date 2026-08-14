@@ -60,7 +60,7 @@ function harness(
         permissionMode: 'default',
         usesRuntimeDefaultModel: true,
         numTurns: 1,
-        agent: null,
+        workspace: null,
         assignedRunner: null,
         ...session,
       }),

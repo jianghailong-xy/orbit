@@ -69,7 +69,7 @@ function reclaimRow(id: string, provider: AgentProvider, status: string) {
     status,
     cancelRequestedAt: null,
     error: null,
-    agent: null,
+    workspace: null,
     ownerId: RUNNER.ownerId,
     model: 'pinned-model',
     usesRuntimeDefaultModel: true,

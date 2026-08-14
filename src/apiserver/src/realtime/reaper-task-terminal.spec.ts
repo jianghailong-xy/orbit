@@ -41,7 +41,7 @@ for (const [taskStatus, expectedReason, movesToCompleted, runnerStatus] of [
             cancelRequestedAt: null,
             endReason: null,
             task: { status: taskStatus },
-            agent: { provider: 'claude' },
+            workspace: { provider: 'claude' },
             assignedRunner: {
               status: runnerStatus,
               lastHeartbeatAt: new Date(),

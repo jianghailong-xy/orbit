@@ -1,7 +1,7 @@
 /**
  * Persistent (L2) transcript cache, backed by IndexedDB.
  *
- * AgentView already keeps an in-memory L1 (`transcriptCache`, a Map): switching back to a session
+ * WorkspaceView already keeps an in-memory L1 (`transcriptCache`, a Map): switching back to a session
  * visited earlier in the same page load paints from it synchronously, in the same commit, with no
  * request at all. That Map dies on reload, so a refresh, a new tab, or coming back tomorrow re-pays
  * the whole tail page. This store is the same cache with a longer life — L1 stays exactly as it is
@@ -14,7 +14,7 @@
  * resume the stream there" recovers the gap with no invalidation policy to get wrong. That is the
  * same contract L1 runs on; this changes the storage medium, not the semantics.
  *
- * Deliberately NOT persisted: the React Query control-plane reads (session list, agents, runners).
+ * Deliberately NOT persisted: the React Query control-plane reads (session list, workspaces, runners).
  * Those carry run status, unread and pending-approval counts — replaying them from disk trades one
  * ~58KB request for a window where the UI confidently shows an ended session as RUNNING.
  *
@@ -55,7 +55,7 @@ export interface StoredEvent {
   truncated?: boolean;
 }
 
-/** One session's stored window — mirrors AgentView's TranscriptCacheEntry. */
+/** One session's stored window — mirrors WorkspaceView's TranscriptCacheEntry. */
 export interface TranscriptSnapshot {
   events: StoredEvent[];
   /** seq of the earliest stored event (null = nothing stored). */

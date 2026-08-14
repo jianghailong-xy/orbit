@@ -480,7 +480,7 @@ export function RunnerEngines() {
           </div>
           <h4>Already pay for Claude, Codex or Kimi?</h4>
           <p>
-            Add a runner and sign its CLIs in — your agents then run on the subscription you
+            Add a runner and sign its CLIs in — your workspaces then run on the subscription you
             already have, with no API key.
           </p>
           <Link to="/runners">

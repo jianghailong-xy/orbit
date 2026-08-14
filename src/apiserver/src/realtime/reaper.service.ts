@@ -174,8 +174,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
-        // Session.provider is NOT NULL, so there is nothing to inherit here — and an agent
-        // holds no provider to inherit from (agent-provider.ts).
+        // Session.provider is NOT NULL, so there is nothing to inherit here — and a workspace
+        // holds no provider to inherit from (workspace-provider.ts).
         const provider = normalizeRuntimeProvider(s.provider, s.providerBuiltin);
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         const runtimeStartupGrace =
@@ -246,7 +246,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
    * log/publish detail and no error is written. `resetTaskTo` is how a now-stalled
    * IN_PROGRESS task is reclaimed: OPEN for a retryable end (dead/partitioned runner,
    * unhonored cancel) or FAILED for a genuine run failure. A SUCCEEDED finish leaves the
-   * task alone — the agent owns DONE.
+   * task alone — the workspace owns DONE.
    */
   private async forceFinalize(
     sessionId: string,

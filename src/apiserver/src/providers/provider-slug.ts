@@ -14,7 +14,7 @@ const FALLBACK = 'provider';
 
 /**
  * The identifier a provider dispatches under, derived from what the user actually chose: the
- * vendor they picked, or the name they typed. It's never asked for and never shown — Agent and
+ * vendor they picked, or the name they typed. It's never asked for and never shown — Workspace and
  * Session store it, so it has to exist and has to be stable, but which string it is concerns
  * nobody outside the database.
  */
@@ -25,7 +25,7 @@ export function slugBase(input: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   if (!s) return FALLBACK;
-  // Must start with a letter (the shape Agent.provider has always had).
+  // Must start with a letter (the shape Workspace.provider has always had).
   return /^[a-z]/.test(s) ? s : `p-${s}`;
 }
 

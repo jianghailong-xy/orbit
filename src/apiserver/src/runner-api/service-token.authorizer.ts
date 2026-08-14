@@ -37,15 +37,15 @@ export type ServiceTokenGrant = {
   tokenId: string;
   runner: Runner;
   scopes: ServiceTokenScope[];
-  /** When set, every route this token reaches is confined to this one agent. */
-  agentId: string | null;
+  /** When set, every route this token reaches is confined to this one workspace. */
+  workspaceId: string | null;
 };
 
 type ServiceTokenClaims = {
   jti?: string;
   runnerId?: string;
   ownerId?: string;
-  agentId?: string | null;
+  workspaceId?: string | null;
   scopes?: string[];
   purpose?: string;
 };
@@ -91,24 +91,24 @@ export class ServiceTokenAuthorizer {
    */
   async mint(
     runner: Pick<Runner, 'id' | 'ownerId'>,
-    dto: { scopes?: string[]; agentId?: string; label?: string; ttlSeconds?: number },
+    dto: { scopes?: string[]; workspaceId?: string; label?: string; ttlSeconds?: number },
   ) {
     const scopes = this.parseScopes(dto.scopes);
     const ttlSeconds = this.parseTtl(dto.ttlSeconds);
     // A create-capable token is the one that can start work of its own accord, so it must name
-    // the single agent it may start. get/list/send stay optionally pinned: a bridge that only
+    // the single workspace it may start. get/list/send stay optionally pinned: a bridge that only
     // observes usually watches more than one session.
-    if (scopes.includes('session:create') && !dto.agentId) {
-      throw new BadRequestException('an agent id is required for the session:create scope');
+    if (scopes.includes('session:create') && !dto.workspaceId) {
+      throw new BadRequestException('a workspace id is required for the session:create scope');
     }
-    if (dto.agentId) await this.assertAgentOnRunner(runner, dto.agentId);
+    if (dto.workspaceId) await this.assertWorkspaceOnRunner(runner, dto.workspaceId);
 
     const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
     const row = await this.prisma.serviceToken.create({
       data: {
         ownerId: runner.ownerId,
         runnerId: runner.id,
-        agentId: dto.agentId ?? null,
+        workspaceId: dto.workspaceId ?? null,
         label: dto.label?.trim() || null,
         scopes,
         expiresAt,
@@ -118,7 +118,7 @@ export class ServiceTokenAuthorizer {
       {
         runnerId: runner.id,
         ownerId: runner.ownerId,
-        agentId: row.agentId,
+        workspaceId: row.workspaceId,
         scopes,
         purpose: SERVICE_TOKEN_PURPOSE,
       },
@@ -130,7 +130,7 @@ export class ServiceTokenAuthorizer {
       id: row.id,
       token,
       scopes,
-      agentId: row.agentId,
+      workspaceId: row.workspaceId,
       label: row.label,
       expiresAt: row.expiresAt,
     };
@@ -154,7 +154,7 @@ export class ServiceTokenAuthorizer {
       where: { id: claims.jti, revokedAt: null, expiresAt: { gt: new Date() } },
       include: { runner: true },
     });
-    // Revoked, expired server-side, or deleted along with its runner/agent: the signature is
+    // Revoked, expired server-side, or deleted along with its runner/workspace: the signature is
     // valid but the grant is gone, and the row is the authority on that.
     if (!row) throw new UnauthorizedException('service token is revoked or expired');
     // The claims are signed, so a mismatch means the row moved under a still-valid signature
@@ -162,7 +162,7 @@ export class ServiceTokenAuthorizer {
     if (row.runnerId !== claims.runnerId || row.ownerId !== claims.ownerId) {
       throw new UnauthorizedException('invalid service token');
     }
-    if ((row.agentId ?? null) !== (claims.agentId ?? null)) {
+    if ((row.workspaceId ?? null) !== (claims.workspaceId ?? null)) {
       throw new UnauthorizedException('invalid service token');
     }
     // Not awaited: recording use must never make a valid request fail or wait on a write.
@@ -173,7 +173,7 @@ export class ServiceTokenAuthorizer {
       tokenId: row.id,
       runner: row.runner,
       scopes: this.parseScopes(row.scopes),
-      agentId: row.agentId,
+      workspaceId: row.workspaceId,
     };
   }
 
@@ -185,18 +185,18 @@ export class ServiceTokenAuthorizer {
         id: true,
         label: true,
         scopes: true,
-        agentId: true,
+        workspaceId: true,
         expiresAt: true,
         revokedAt: true,
         lastUsedAt: true,
         createdAt: true,
-        agent: { select: { name: true } },
+        workspace: { select: { name: true } },
       },
     });
     const now = Date.now();
-    return rows.map(({ agent, ...row }) => ({
+    return rows.map(({ workspace, ...row }) => ({
       ...row,
-      agentName: agent?.name ?? null,
+      workspaceName: workspace?.name ?? null,
       status: row.revokedAt ? 'revoked' : row.expiresAt.getTime() <= now ? 'expired' : 'active',
     }));
   }
@@ -240,12 +240,12 @@ export class ServiceTokenAuthorizer {
     return ttl;
   }
 
-  /** An agent pin only means anything if that agent runs on this machine. */
-  private async assertAgentOnRunner(runner: Pick<Runner, 'id' | 'ownerId'>, agentId: string) {
-    const agent = await this.prisma.agent.findFirst({
-      where: { id: agentId, ownerId: runner.ownerId, runnerId: runner.id, deletedAt: null },
+  /** A workspace pin only means anything if that workspace runs on this machine. */
+  private async assertWorkspaceOnRunner(runner: Pick<Runner, 'id' | 'ownerId'>, workspaceId: string) {
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, ownerId: runner.ownerId, runnerId: runner.id, deletedAt: null },
       select: { id: true },
     });
-    if (!agent) throw new NotFoundException('agent not found on this runner');
+    if (!workspace) throw new NotFoundException('workspace not found on this runner');
   }
 }

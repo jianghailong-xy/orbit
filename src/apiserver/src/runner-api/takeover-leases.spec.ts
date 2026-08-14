@@ -90,7 +90,7 @@ test('takeover CAS retires the observed process generation and installs the new 
 });
 
 test('takeover clears background work left behind by the process it replaces', async () => {
-  // The predecessor's shells and sub-agents are its children, so the handoff is the moment
+  // The predecessor's shells and sub-workspaces are its children, so the handoff is the moment
   // they stop existing. Without this a session that parks and is never resumed keeps a stale
   // "N background processes running" forever: no `init`/`resumed` handshake ever follows.
   const h = harness(OLD_OWNER, GENERATION);

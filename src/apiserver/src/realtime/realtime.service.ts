@@ -97,9 +97,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   private connecting = false;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private stopped = false;
-  /** sessionId → {ownerId, agentId}, for scoping the user-stream (GET /api/events) without a
+  /** sessionId → {ownerId, workspaceId}, for scoping the user-stream (GET /api/events) without a
    *  DB hit per event. Bounded LRU; the control subset is low-volume so it's near-100% hits. */
-  private readonly ownerCache = new Map<string, { ownerId: string; agentId: string | null }>();
+  private readonly ownerCache = new Map<string, { ownerId: string; workspaceId: string | null }>();
   private static readonly OWNER_CACHE_MAX = 10_000;
   /** Hub key prefix for user-scoped events (see publishForUser). Session ids are UUIDs, so this
    *  namespace can never collide with one. */
@@ -357,15 +357,15 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** An agent the owner can see was created or updated via MCP. Published on the calling
+  /** A workspace the owner can see was created or updated via MCP. Published on the calling
    *  (orchestrator) session — the only session context that path has — so it rides the same hub
    *  and resolves to that owner; streamForUser maps it to ControlEventType.AGENT_CHANGED. */
-  publishAgentChanged(sessionId: string, agentId: string): void {
+  publishWorkspaceChanged(sessionId: string, workspaceId: string): void {
     this.publish(sessionId, {
       seq: 0,
       type: RunEventType.AGENT_CHANGED,
       ts: new Date().toISOString(),
-      payload: { agentId },
+      payload: { workspaceId },
     });
   }
 
@@ -439,8 +439,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // User-scoped library events (publishForUser) are keyed `user:<ownerId>`, not by a session:
     // route them by that id and ship an empty sessionId — no owner lookup, nothing to summarize.
     // Most user-keyed events are libraries (tags/lists/providers), but task dependency edits
-    // also have no reliable creator-session anchor: an agent may edit a task the web created.
-    // Task/agent change nudges are therefore allowed too; session-derived event families remain
+    // also have no reliable creator-session anchor: a workspace may edit a task the web created.
+    // Task/workspace change nudges are therefore allowed too; session-derived event families remain
     // on the normal owner-resolution path below.
     const userKeyed = sessionId.startsWith(RealtimeService.USER_SCOPE);
     if (userKeyed) {
@@ -535,9 +535,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         data = { taskId: String(ev.payload.taskId ?? '') };
         break;
       case ControlEventType.AGENT_CHANGED:
-        // Same: a nudge to refetch the owner's agent list. The id here is the CHANGED agent —
-        // the envelope's `agentId` stays the calling session's agent.
-        data = { agentId: String(ev.payload.agentId ?? '') };
+        // Same: a nudge to refetch the owner's workspace list. The id here is the CHANGED workspace —
+        // the envelope's `agentId` stays the calling session's workspace.
+        data = { agentId: String(ev.payload.workspaceId ?? '') };
         break;
       case ControlEventType.APPROVAL_REQUESTED:
       case ControlEventType.APPROVAL_RESOLVED:
@@ -549,13 +549,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       default:
         return null;
     }
-    return { type, sessionId, agentId: meta.agentId, ts: ev.ts ?? new Date().toISOString(), data };
+    return { type, sessionId, agentId: meta.workspaceId, ts: ev.ts ?? new Date().toISOString(), data };
   }
 
-  /** Resolve (and cache) a session's owner + agent. Bounded LRU; a miss is one indexed lookup. */
+  /** Resolve (and cache) a session's owner + workspace. Bounded LRU; a miss is one indexed lookup. */
   private async resolveOwner(
     sessionId: string,
-  ): Promise<{ ownerId: string; agentId: string | null } | null> {
+  ): Promise<{ ownerId: string; workspaceId: string | null } | null> {
     const hit = this.ownerCache.get(sessionId);
     if (hit) {
       this.ownerCache.delete(sessionId); // re-insert to mark most-recently-used
@@ -564,10 +564,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
     const row = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { ownerId: true, agentId: true },
+      select: { ownerId: true, workspaceId: true },
     });
     if (!row) return null;
-    const meta = { ownerId: row.ownerId, agentId: row.agentId ?? null };
+    const meta = { ownerId: row.ownerId, workspaceId: row.workspaceId ?? null };
     this.ownerCache.set(sessionId, meta);
     if (this.ownerCache.size > RealtimeService.OWNER_CACHE_MAX) {
       const oldest = this.ownerCache.keys().next().value; // Map iterates in insertion order
@@ -599,9 +599,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         assignedRunner: {
           select: { id: true, status: true, lastHeartbeatAt: true },
         },
-        agentId: true,
+        workspaceId: true,
         lastTurnAt: true,
-        agent: { select: { id: true, name: true, model: true, effort: true } },
+        workspace: { select: { id: true, name: true, model: true, effort: true } },
       },
     });
     if (!s) return null;
@@ -624,13 +624,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       lifecycleState,
       filingState,
       capabilities,
-      agentId: s.agentId ?? null,
-      agent: s.agent
+      agentId: s.workspaceId ?? null,
+      agent: s.workspace
         ? {
-            id: s.agent.id,
-            name: s.agent.name ?? null,
-            model: s.agent.model ?? null,
-            effort: s.agent.effort ?? null,
+            id: s.workspace.id,
+            name: s.workspace.name ?? null,
+            model: s.workspace.model ?? null,
+            effort: s.workspace.effort ?? null,
           }
         : null,
       pendingApprovals,
@@ -719,7 +719,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * Branch merges this runner should perform: sessions it ran (assignedRunnerId) that the
    * user asked to merge into main (mergeStatus='pending'). At-least-once — redelivered each
    * heartbeat until the runner reports an outcome that flips mergeStatus off 'pending'. The
-   * workDir comes from the session's agent; the runner resolves the repo root from it.
+   * workDir comes from the session's workspace; the runner resolves the repo root from it.
    */
   async drainMergeRequests(runnerId: string, leaseOwner: string): Promise<MergeCommand[]> {
     const sessions = await this.prisma.session.findMany({
@@ -750,12 +750,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         mergeOperationId: true,
         mergeOperationOwner: true,
         status: true,
-        agent: { select: { workDir: true } },
+        workspace: { select: { workDir: true } },
       },
     });
     const claimed = await Promise.all(
       sessions
-        .filter((s) => s.branch && s.agent?.workDir && s.mergeOperationId)
+        .filter((s) => s.branch && s.workspace?.workDir && s.mergeOperationId)
         .map(async (s): Promise<MergeCommand | null> => {
           const claim = await this.prisma.session.updateMany({
             where: {
@@ -779,7 +779,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             operationId: s.mergeOperationId!,
             leaseOwner,
             branch: s.branch!,
-            workDir: s.agent!.workDir!,
+            workDir: s.workspace!.workDir!,
             ...(s.mergeTarget ? { targetBranch: s.mergeTarget } : {}),
           };
         }),
@@ -803,7 +803,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         OR: [
           {
             // Same idle predicate the commit request was queued under (see
-            // SessionsService.commitWorktree): the parent turn and sub-agents write the
+            // SessionsService.commitWorktree): the parent turn and sub-workspaces write the
             // checkout, background shells (dev servers, watchers) don't gate it.
             inboxLeaseOwner: leaseOwner,
             status: RunStatus.AWAITING_INPUT,

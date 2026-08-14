@@ -42,9 +42,9 @@ export interface EnginePreflightRunner {
   engines: unknown;
 }
 
-function bringsOwnEnvCredential(engine: LoginEngine, agentEnv: unknown): boolean {
-  if (!agentEnv || typeof agentEnv !== 'object') return false;
-  const env = agentEnv as Record<string, unknown>;
+function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
+  if (!workspaceEnv || typeof workspaceEnv !== 'object') return false;
+  const env = workspaceEnv as Record<string, unknown>;
   const has = (key: string) => typeof env[key] === 'string' && env[key].trim() !== '';
   const spec = CREDENTIAL_ENV_KEYS[engine];
   return 'all' in spec ? spec.all.every(has) : spec.any.some(has);
@@ -65,7 +65,7 @@ function bringsOwnEnvCredential(engine: LoginEngine, agentEnv: unknown): boolean
  * Everything ambiguous stays a `null` — a session that fails at spawn with an actionable message
  * is a far better outcome than one refused for a state we misread:
  *   - the session brings its own credential (a configured provider's API key, or one set on the
- *     agent's environment) → the CLI's local login is not what will run it;
+ *     workspace's environment) → the CLI's local login is not what will run it;
  *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself);
  *   - the runner has never reported this engine, or reports `unknown` (its probe couldn't answer —
  *     which is deliberately NOT a claim of a sign-out), or reports it as not installed (the runner
@@ -78,14 +78,14 @@ export function signedOutEngineRefusal(args: {
   runtime: string;
   /** True when a configured ModelProvider will inject its key at dispatch (custom-provider.ts). */
   bringsOwnCredentials: boolean;
-  /** The agent's custom environment, which the runner layers onto the engine process. */
-  agentEnv?: unknown;
+  /** The workspace's custom environment, which the runner layers onto the engine process. */
+  workspaceEnv?: unknown;
   runner: EnginePreflightRunner;
   nowMs?: number;
 }): string | null {
   if (args.bringsOwnCredentials) return null;
   if (!isLoginEngine(args.runtime)) return null;
-  if (bringsOwnEnvCredential(args.runtime, args.agentEnv)) return null;
+  if (bringsOwnEnvCredential(args.runtime, args.workspaceEnv)) return null;
 
   const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;
   const online =

@@ -7,16 +7,18 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
   const previousNamingKey = process.env.DEEPSEEK_API_KEY;
   delete process.env.DEEPSEEK_API_KEY;
   let createdData: Record<string, unknown> | undefined;
-  const agent = { id: 'agent-1', enableWorktree: false, permissionMode: 'acceptEdits' };
+  const workspace = { id: 'workspace-1', enableWorktree: false, permissionMode: 'acceptEdits' };
   const prisma = {
-    agent: { findFirst: async () => agent },
+    workspace: { findFirst: async () => workspace },
+    // create() reads the owner's account-level permission default when the caller names none.
+    user: { findUnique: async () => ({ preferences: {} }) },
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
     // The project last ran on OpenCode, and that history row predates provider_builtin (false).
     // That is the case worth keeping here — it is the one create() resolves by looking the slug
     // up in modelProvider — so the stub has to answer that lookup. No row matches "opencode", so
     // no runtime is borrowed and the built-in OpenCode runtime stands.
     $queryRaw: async () => [
-      { agent_id: 'agent-1', provider: AgentProvider.OPENCODE, provider_builtin: false },
+      { workspace_id: 'workspace-1', provider: AgentProvider.OPENCODE, provider_builtin: false },
     ],
     modelProvider: { findFirst: async () => null },
     session: {
@@ -36,9 +38,9 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
   const queue = { notifySessionQueued: () => undefined } as never;
   const realtime = {
     publishSessionCreated: () => undefined,
-    // create() also refreshes the agent list — a user-started session moves the project's
+    // create() also refreshes the workspace list — a user-started session moves the project's
     // provider default.
-    publishAgentChanged: () => undefined,
+    publishWorkspaceChanged: () => undefined,
   } as never;
   const service = new SessionsService(prisma, queue, realtime);
 
@@ -47,7 +49,7 @@ test('creating an OpenCode session does not preseed a Claude runtime id', async 
       title: 'OpenCode session',
       prompt: 'Use OpenCode',
       assignedRunnerId: 'runner-1',
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
       model: 'anthropic/claude-sonnet-4-5',
       effort: 'max',
     });

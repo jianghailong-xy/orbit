@@ -43,7 +43,7 @@ test('canonical lifecycle views query completed_at while legacy names remain ali
   assert.equal(statements[5], statements[2]);
 });
 
-test('agent scope, tag filter and page size narrow the query, and stay off it when unasked', async () => {
+test('workspace scope, tag filter and page size narrow the query, and stay off it when unasked', async () => {
   const statements: string[] = [];
   const prisma = {
     $queryRaw: async (query: { sql: string }) => {
@@ -55,17 +55,17 @@ test('agent scope, tag filter and page size narrow the query, and stay off it wh
   const ownerId = '00000000-0000-0000-0000-000000000001';
 
   await service.list(ownerId, {
-    agentId: '00000000-0000-0000-0000-000000000002',
+    workspaceId: '00000000-0000-0000-0000-000000000002',
     tagId: '00000000-0000-0000-0000-000000000003',
     limit: 40,
   });
   // A client that asks for none of them (every native client) still gets the whole list.
   await service.list(ownerId, {});
 
-  assert.match(statements[0], /AND s\.agent_id = \?::uuid/);
+  assert.match(statements[0], /AND s\.workspace_id = \?::uuid/);
   assert.match(statements[0], /stl\.tag_id = \?::uuid/);
   assert.match(statements[0], /LIMIT \?::int/);
-  assert.doesNotMatch(statements[1], /AND s\.agent_id/);
+  assert.doesNotMatch(statements[1], /AND s\.workspace_id/);
   // (the per-row tags aggregate mentions stl.tag_id too, hence matching on the filter's own form)
   assert.doesNotMatch(statements[1], /stl\.tag_id = \?::uuid/);
   assert.doesNotMatch(statements[1], /LIMIT/);

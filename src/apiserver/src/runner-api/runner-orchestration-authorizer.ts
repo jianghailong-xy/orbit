@@ -43,9 +43,9 @@ type OrchestrationClaims = {
  * Authorizes runner-token calls made on behalf of an in-session orchestrator.
  *
  * ORBIT_ALLOW_ORCHESTRATION is a discovery/runtime UX gate, not an authorization
- * boundary: an agent can alter its child-process environment. The control plane
+ * boundary: a workspace can alter its child-process environment. The control plane
  * therefore verifies a signed credential bound to the calling session and runner,
- * then re-checks the session and its current agent configuration for every request.
+ * then re-checks the session and its current workspace configuration for every request.
  * A discovered session id alone is therefore insufficient. The runner's OS account is
  * still the trust boundary: sibling processes that can inspect each other's environments
  * or runner config are not isolated from one another.
@@ -138,7 +138,7 @@ export class RunnerOrchestrationAuthorizer {
         deletedAt: null,
         cancelRequestedAt: null,
         status: { in: OPEN_SESSION_STATUSES },
-        agent: { enableOrchestration: true, deletedAt: null },
+        workspace: { enableOrchestration: true, deletedAt: null },
       },
       select: { id: true },
     });

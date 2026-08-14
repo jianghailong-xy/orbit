@@ -5,7 +5,7 @@ import {
   modelOptionsForProvider,
   runtimeForProvider,
   type ConfiguredProvider,
-} from './agentDefaults';
+} from './workspaceDefaults';
 
 /**
  * What the New Session provider picker shows: the runner's own signed-in engines first, then the
@@ -15,7 +15,7 @@ import {
  *
  * Engines are exactly the slugs a runner can sign into (LoginEngine in @orbit/shared). `opencode`
  * is a fourth AgentProvider but not a login engine, so it never appears as a choice — it only
- * shows up as the current pick when an agent is already set to it.
+ * shows up as the current pick when a workspace is already set to it.
  */
 export const ENGINE_SLUGS = [
   AgentProvider.CLAUDE,
@@ -222,8 +222,8 @@ export function sameRuntimeChoices(
 }
 
 /**
- * The choice to show as current. The agent's own provider normally resolves to a row above, but
- * two cases don't: an agent set to `opencode`, and one pointing at a provider that has since been
+ * The choice to show as current. The workspace's own provider normally resolves to a row above, but
+ * two cases don't: a workspace set to `opencode`, and one pointing at a provider that has since been
  * removed or disabled. Both still have to render something truthful rather than silently reading
  * as Claude, so they get a synthesized entry.
  */

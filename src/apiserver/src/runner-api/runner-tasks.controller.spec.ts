@@ -97,13 +97,13 @@ test('runner dependency routes expose bounded read and granular writes', () => {
   }
 });
 
-test('createTasks batches through TasksService with the acting agent as creator', async () => {
+test('createTasks batches through TasksService with the acting workspace as creator', async () => {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   const created = [{ id: 'task-1', ref: 's0' }];
   const tasks = {
     resolveAgentCreator: async (...args: unknown[]) => {
       calls.push({ method: 'resolveAgentCreator', args });
-      return { type: 'AGENT', id: 'agent-1' };
+      return { type: 'AGENT', id: 'workspace-1' };
     },
     createMany: async (...args: unknown[]) => {
       calls.push({ method: 'createMany', args });
@@ -113,13 +113,13 @@ test('createTasks batches through TasksService with the acting agent as creator'
   const controller = new RunnerTasksController(tasks, {} as never);
   const dto = { tasks: [{ title: 'S0', ref: 's0' }] } as never;
 
-  const result = await controller.createTasks(RUNNER, 'agent-1', 'session-1', dto);
+  const result = await controller.createTasks(RUNNER, 'workspace-1', 'session-1', dto);
 
   assert.equal(result, created);
-  assert.deepEqual(calls[0], { method: 'resolveAgentCreator', args: ['owner-1', 'agent-1'] });
+  assert.deepEqual(calls[0], { method: 'resolveAgentCreator', args: ['owner-1', 'workspace-1'] });
   assert.deepEqual(calls[1], {
     method: 'createMany',
-    args: ['owner-1', dto, { type: 'AGENT', id: 'agent-1' }, 'session-1'],
+    args: ['owner-1', dto, { type: 'AGENT', id: 'workspace-1' }, 'session-1'],
   });
 });
 

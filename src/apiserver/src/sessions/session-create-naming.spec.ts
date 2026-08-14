@@ -43,17 +43,19 @@ function makeService(enableWorktree = true) {
   const updates: unknown[] = [];
   const realtimeEvents: string[] = [];
   const prisma = {
-    agent: {
+    workspace: {
       findFirst: async () => ({
-        id: 'agent-1',
+        id: 'workspace-1',
         runnerId: 'runner-1',
         enableWorktree,
         permissionMode: null,
       }),
     },
     // The provider a new session inherits now comes from the project's last interactive run.
-    $queryRaw: async () => [{ agent_id: 'agent-1', provider: 'codex', provider_builtin: true }],
+    $queryRaw: async () => [{ workspace_id: 'workspace-1', provider: 'codex', provider_builtin: true }],
     runner: { findFirst: async () => ({ id: 'runner-1' }) },
+    // create() reads the owner's account-level permission default when the caller names none.
+    user: { findUnique: async () => ({ preferences: {} }) },
     task: { findFirst: async () => ({ id: 'task-1' }) },
     session: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
@@ -77,9 +79,9 @@ function makeService(enableWorktree = true) {
   const realtime = {
     publishSessionCreated: () => realtimeEvents.push('created'),
     publishSessionUpdated: () => realtimeEvents.push('updated'),
-    // Not part of what this spec watches (see realtimeEvents): create() also refreshes the agent
+    // Not part of what this spec watches (see realtimeEvents): create() also refreshes the workspace
     // list, because a user-started session moves the project's provider default.
-    publishAgentChanged: () => undefined,
+    publishWorkspaceChanged: () => undefined,
   } as never;
 
   return {
@@ -105,7 +107,7 @@ test('an explicit title creates synchronously without calling DeepSeek', async (
     await fixture.service.create('owner-1', {
       prompt: '请开始执行任务',
       title: 'Execute task: Shipping fix',
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
       taskId: 'task-1',
     });
 
@@ -122,12 +124,12 @@ test('an explicit title creates synchronously without calling DeepSeek', async (
   }
 });
 
-test('a worktree-disabled agent keeps a null branch', async () => {
+test('a worktree-disabled workspace keeps a null branch', async () => {
   const fixture = makeService(false);
   await fixture.service.create('owner-1', {
     prompt: '请开始执行任务',
     title: 'Execute task',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 
   assert.equal(fixture.creates[0].branch, null);
@@ -141,7 +143,7 @@ test('a runtime null title is treated as omitted instead of failing branch creat
     await fixture.service.create('owner-1', {
       prompt: 'Fix the login timeout',
       title: null as unknown as string,
-      agentId: 'agent-1',
+      workspaceId: 'workspace-1',
     });
 
     assert.equal(fixture.creates[0].title, 'Fix the login timeout');
@@ -169,7 +171,7 @@ test('an unnamed session returns its fallback immediately and only beautifies it
     const session = await withDeadline(
       fixture.service.create('owner-1', {
         prompt: '\n  修复登录超时  \n更多详情',
-        agentId: 'agent-1',
+        workspaceId: 'workspace-1',
       }),
     );
     await waitUntil(() => resolveFetch !== undefined, 'background DeepSeek request did not start');

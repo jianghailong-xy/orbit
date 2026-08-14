@@ -137,13 +137,13 @@ test('runnable filter is applied before pagination with the same rules as the Ru
   await service.listPage(OWNER_ID, { status: 'RUNNABLE' });
 
   // The page ranking and the badge count must both gate on all four Run-button conditions:
-  // not finished, assigned to an agent with a runner, nothing already in flight, no
+  // not finished, assigned to a workspace with a runner, nothing already in flight, no
   // outstanding prerequisite. Spelled as NOT EXISTS so PostgreSQL can short-circuit per row.
   assert.equal(raw.statements.length, 2);
   for (const sql of raw.statements) {
     assert.match(sql, /t\.owner_id = \$\d+::uuid/);
     assert.match(sql, /t\.status <> 'DONE'::task_status/);
-    assert.match(sql, /EXISTS \(SELECT 1 FROM agent a[\s\S]*a\.runner_id IS NOT NULL\)/);
+    assert.match(sql, /EXISTS \(SELECT 1 FROM workspace a[\s\S]*a\.runner_id IS NOT NULL\)/);
     assert.match(
       sql,
       /NOT EXISTS \([\s\S]*FROM session s[\s\S]*'PENDING'::run_status, 'RUNNING'::run_status/,

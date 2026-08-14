@@ -11,7 +11,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     public var title: String {
         switch self {
         case .tasks:    return "Tasks"
-        case .agents:   return "Agents"
+        case .agents:   return "Workspaces"
         case .skills:   return "Skills"
         case .runners:  return "Runners"
         case .settings: return "Settings"

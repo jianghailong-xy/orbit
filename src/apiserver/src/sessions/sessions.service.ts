@@ -33,8 +33,12 @@ import {
   SessionState,
   type SessionSearchHit,
 } from '@orbit/shared';
-import { agentProviderSeed } from '../agents/agent-provider';
+import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  accountDefaultPermissionMode,
+  resolvePermissionMode,
+} from '../common/permission-mode';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -92,17 +96,17 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
 }
 
 /**
- * How far a headless caller may see: always one runner, optionally one agent within it. Built
+ * How far a headless caller may see: always one runner, optionally one workspace within it. Built
  * from the credential, never from anything the caller passes, and applied identically to reads
  * and to sends so no route can accidentally be broader than another.
  */
-export type RunnerSessionScope = { assignedRunnerId: string; agentId?: string | null };
+export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: string | null };
 
 function runnerScopeWhere(scope: RunnerSessionScope | undefined) {
   if (!scope) return {};
   return {
     assignedRunnerId: scope.assignedRunnerId,
-    ...(scope.agentId ? { agentId: scope.agentId } : {}),
+    ...(scope.workspaceId ? { workspaceId: scope.workspaceId } : {}),
   };
 }
 
@@ -162,13 +166,13 @@ export class SessionsService {
   ) {}
 
   /**
-   * Ensure any agent/runner a session references belongs to the caller — without
+   * Ensure any workspace/runner a session references belongs to the caller — without
    * this a user could pin a session to another tenant's runner and have Claude
    * Code execute on a machine they don't own (cross-tenant RCE).
    */
   private async assertOwnedRefs(
     ownerId: string,
-    refs: { agentId?: string; assignedRunnerId?: string },
+    refs: { workspaceId?: string; assignedRunnerId?: string },
   ): Promise<void> {
     if (refs.assignedRunnerId) {
       const runner = await this.prisma.runner.findFirst({
@@ -177,12 +181,12 @@ export class SessionsService {
       });
       if (!runner) throw new ForbiddenException('runner not found');
     }
-    if (refs.agentId) {
-      const agent = await this.prisma.agent.findFirst({
-        where: { id: refs.agentId, ownerId, deletedAt: null },
+    if (refs.workspaceId) {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { id: refs.workspaceId, ownerId, deletedAt: null },
         select: { id: true },
       });
-      if (!agent) throw new ForbiddenException('agent not found');
+      if (!workspace) throw new ForbiddenException('workspace not found');
     }
   }
 
@@ -204,74 +208,80 @@ export class SessionsService {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
-    // the chosen agent's machine (agents belong to a runner) — picking an agent is
+    // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
     // The session's provider identity: a built-in ("claude"/"codex"/"opencode") or a custom
-    // slug ("deepseek"). Stored verbatim; runtime is derived below. An agent holds no provider of
+    // slug ("deepseek"). Stored verbatim; runtime is derived below. A workspace holds no provider of
     // its own — absent an explicit pick this is seeded from what the project last ran on.
     let provider: string = AgentProvider.CLAUDE;
     let providerBuiltin = true;
-    // Per-agent worktree toggle: default off. An agent with it turned off (the default)
+    // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
     // makes its sessions run with no branch, so the runner runs them in the shared workDir.
     let enableWorktree = false;
-    // The agent's configured permission mode, materialized onto the session below when the
+    // The owner's account-level permission default, materialized onto the session below when the
     // caller picked none (MCP spawns, task runs — the web/native composers always send one).
-    // The claim resolves session ?? agent ?? dontAsk anyway, so this doesn't change what the
-    // runner spawns with; it stops a NULL column from *reading* as "Don't Ask" in every
-    // client's Mode pill — a stale pill that the next resume writes back, silently
-    // downgrading a session that was really running the agent's mode.
-    let agentPermissionMode: string | undefined;
-    // The agent's own environment, which may carry the provider credential that makes the
+    // The claim resolves session ?? account ?? auto anyway, so this doesn't change what the
+    // runner spawns with; it stops a NULL column from *reading* as one particular mode in every
+    // client's Mode pill — a stale pill that the next resume writes back, silently changing a
+    // session that was really running the account's mode.
+    // Only looked up when the caller named no mode: the web/native composers always send one,
+    // so the common path stays at the query count it had before this moved off the workspace.
+    const accountPermissionMode = dto.permissionMode
+      ? undefined
+      : accountDefaultPermissionMode(
+          await this.prisma.user.findUnique({
+            where: { id: ownerId },
+            select: { preferences: true },
+          }),
+        );
+    // The workspace's own environment, which may carry the provider credential that makes the
     // runner's engine sign-in irrelevant — see the sign-in preflight below.
-    let agentEnv: unknown;
-    if (!assignedRunnerId && dto.agentId) {
-      const agent = await this.prisma.agent.findFirst({
-        where: { id: dto.agentId, ownerId, deletedAt: null },
+    let workspaceEnv: unknown;
+    if (!assignedRunnerId && dto.workspaceId) {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { id: dto.workspaceId, ownerId, deletedAt: null },
         select: {
           runnerId: true,
           enableWorktree: true,
-          permissionMode: true,
           enabled: true,
           env: true,
         },
       });
-      if (!agent) throw new ForbiddenException('agent not found');
+      if (!workspace) throw new ForbiddenException('workspace not found');
       // Every way a session gets started — composer, task run, orchestrated spawn — funnels
       // through here, so this one check is what makes "disabled" mean anything. Kept separate
-      // from the not-found path: the agent exists and its config is intact, which is exactly
+      // from the not-found path: the workspace exists and its config is intact, which is exactly
       // what the caller needs to hear to know it can be switched back on.
       //
       // Tested against `false` rather than falsiness: the column is non-nullable with a
       // default, so a real row is always a boolean, and only an explicit "off" should refuse.
-      if (agent.enabled === false) throw new ForbiddenException('agent is disabled');
-      assignedRunnerId = agent.runnerId ?? undefined;
-      enableWorktree = agent.enableWorktree;
-      agentPermissionMode = agent.permissionMode;
-      agentEnv = agent.env;
-    } else if (dto.agentId) {
-      const agent = await this.prisma.agent.findFirst({
-        where: { id: dto.agentId, ownerId, deletedAt: null },
-        select: { enableWorktree: true, permissionMode: true, enabled: true, env: true },
+      if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+      assignedRunnerId = workspace.runnerId ?? undefined;
+      enableWorktree = workspace.enableWorktree;
+      workspaceEnv = workspace.env;
+    } else if (dto.workspaceId) {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { id: dto.workspaceId, ownerId, deletedAt: null },
+        select: { enableWorktree: true, enabled: true, env: true },
       });
-      if (!agent) throw new ForbiddenException('agent not found');
-      if (agent.enabled === false) throw new ForbiddenException('agent is disabled');
-      enableWorktree = agent.enableWorktree;
-      agentPermissionMode = agent.permissionMode;
-      agentEnv = agent.env;
+      if (!workspace) throw new ForbiddenException('workspace not found');
+      if (workspace.enabled === false) throw new ForbiddenException('workspace is disabled');
+      enableWorktree = workspace.enableWorktree;
+      workspaceEnv = workspace.env;
     }
     if (!assignedRunnerId) {
-      throw new BadRequestException('pick an agent bound to a runner, or pass assignedRunnerId');
+      throw new BadRequestException('pick a workspace bound to a runner, or pass assignedRunnerId');
     }
     // No explicit pick: start where this project last started. Derived, not stored — see
-    // agent-provider.ts for why an agent holds no provider of its own.
-    if (!dto.provider && dto.agentId) {
-      ({ provider, providerBuiltin } = await agentProviderSeed(this.prisma, dto.agentId));
+    // workspace-provider.ts for why a workspace holds no provider of its own.
+    if (!dto.provider && dto.workspaceId) {
+      ({ provider, providerBuiltin } = await agentProviderSeed(this.prisma, dto.workspaceId));
     }
     // The runtime a configured provider borrows, which is what decides the pre-generated session
     // id below — its slug says nothing about which CLI ends up running it.
     let borrowedRuntime: string | null = null;
-    // An explicit provider (the New Session picker) overrides what the agent would have
+    // An explicit provider (the New Session picker) overrides what the workspace would have
     // contributed. Resolved here rather than trusted: a built-in engine slug is always fine,
     // and anything else has to be a provider this caller can actually dispatch with.
     if (dto.provider) {
@@ -289,7 +299,7 @@ export class SessionsService {
         borrowedRuntime = configured.runtime;
       }
     } else if (!providerBuiltin) {
-      // Inherited from the agent, so it hasn't been looked up yet. A row that has since been
+      // Inherited from the workspace, so it hasn't been looked up yet. A row that has since been
       // deleted or disabled leaves this null: dispatch falls back to Claude, and so does the
       // runtime below.
       const configured = await this.prisma.modelProvider.findFirst({
@@ -298,7 +308,7 @@ export class SessionsService {
       });
       borrowedRuntime = configured?.runtime ?? null;
     }
-    await this.assertOwnedRefs(ownerId, { agentId: dto.agentId, assignedRunnerId });
+    await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
     // Linking to a task: it must belong to the same user (no cross-tenant linking).
     if (dto.taskId) {
       const task = await this.prisma.task.findFirst({
@@ -345,7 +355,7 @@ export class SessionsService {
       signedOutEngineRefusal({
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
-        agentEnv,
+        workspaceEnv,
         runner: targetRunner,
       });
     if (refusal) throw new ConflictException(refusal);
@@ -365,9 +375,9 @@ export class SessionsService {
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
-        permissionMode: dto.permissionMode ?? agentPermissionMode,
+        permissionMode: dto.permissionMode ?? accountPermissionMode,
         effort: normalizeEffortForProvider(runtime, dto.effort),
-        agentId: dto.agentId,
+        workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
         // A task session must remain discoverable in Open even if an internal caller
@@ -407,14 +417,14 @@ export class SessionsService {
     // clients see it appear without polling.
     this.realtime.publishSessionCreated(session.id);
     // A session a person started *is* the project's new provider default — the derivation reads
-    // exactly these rows (agents/agent-provider.ts) — so every client's cached agent payload just
+    // exactly these rows (workspaces/workspace-provider.ts) — so every client's cached workspace payload just
     // went stale. Nothing else announced that: `session.created` refreshes session lists, not the
-    // agent list, so a native client kept seeding New Session from whatever ran before until the
-    // app was relaunched. Web only hid the bug by refetching agents on window focus.
-    // Gated on the same rows the derivation reads, so a task run or an agent-spawned child — which
+    // workspace list, so a native client kept seeding New Session from whatever ran before until the
+    // app was relaunched. Web only hid the bug by refetching workspaces on window focus.
+    // Gated on the same rows the derivation reads, so a task run or a workspace-spawned child — which
     // deliberately cannot move the default — doesn't wake every client for nothing.
-    if (session.agentId && !session.taskId && !session.parentSessionId) {
-      this.realtime.publishAgentChanged(session.id, session.agentId);
+    if (session.workspaceId && !session.taskId && !session.parentSessionId) {
+      this.realtime.publishWorkspaceChanged(session.id, session.workspaceId);
     }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
     // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
@@ -443,7 +453,7 @@ export class SessionsService {
     }
   }
 
-  // ── L3 orchestration: an in-session agent spawning/managing OTHER sessions ──
+  // ── L3 orchestration: an in-session workspace spawning/managing OTHER sessions ──
   // The runner-token session_* tools are the only callers. Resource containment is
   // SPAWN_TREE_OUTSTANDING (how much unfinished work a tree may hold) and the tree
   // concurrency cap (how fast it drains) — both counted on the tree, both self-releasing.
@@ -468,7 +478,7 @@ export class SessionsService {
    * How many sessions one tree may start per hour.
    *
    * The outstanding cap bounds how *large* a tree gets; this bounds how *fast* it churns.
-   * They catch different failures. A loop in agent space — A spawns B, B messages A back
+   * They catch different failures. A loop in workspace space — A spawns B, B messages A back
    * with session_send, A spawns again — never trips the outstanding cap if each child
    * finishes quickly, and never trips the depth guard at all because it stays one level
    * deep. It just burns tokens forever. Depth was supposed to prevent recursion and cannot
@@ -480,8 +490,8 @@ export class SessionsService {
   private static readonly SPAWN_TREE_RATE = 60;
 
   /**
-   * Spawn a child session from a parent session's agent (orbit mcp `session_create`). The
-   * parent's agent must have orchestration enabled; the child is attributed to the parent
+   * Spawn a child session from a parent session's workspace (orbit mcp `session_create`). The
+   * parent's workspace must have orchestration enabled; the child is attributed to the parent
    * (parentSessionId) and joins the parent's spawn tree so fan-out stays concurrency-capped.
    * Enforces the depth guard. Returns a compact handle to poll via get().
    */
@@ -490,6 +500,9 @@ export class SessionsService {
     parentSessionId: string,
     dto: {
       prompt: string;
+      workspaceId?: string;
+      workspaceName?: string;
+      /** @deprecated Pre-rename names, still sent by `orbit mcp` and every shipped runner. */
       agentId?: string;
       agentName?: string;
       title?: string;
@@ -506,6 +519,7 @@ export class SessionsService {
     /** @deprecated Compatibility representation of lifecycleState. */
     filingState: SessionFilingState;
     title: string;
+    /** Wire name kept: `orbit mcp` renders this straight back to the calling model. */
     agentName: string | null;
     provider: string;
   }> {
@@ -516,12 +530,12 @@ export class SessionsService {
         id: true,
         rootSessionId: true,
         spawnDepth: true,
-        agent: { select: { enableOrchestration: true } },
+        workspace: { select: { enableOrchestration: true } },
       },
     });
     if (!parent) throw new NotFoundException('parent session not found');
-    if (!parent.agent?.enableOrchestration) {
-      throw new ForbiddenException('orchestration is not enabled for this agent');
+    if (!parent.workspace?.enableOrchestration) {
+      throw new ForbiddenException('orchestration is not enabled for this workspace');
     }
     if (parent.spawnDepth >= SessionsService.MAX_SPAWN_DEPTH) {
       throw new ForbiddenException(`spawn depth limit (${SessionsService.MAX_SPAWN_DEPTH}) reached`);
@@ -533,7 +547,7 @@ export class SessionsService {
     const rootSessionId = parent.rootSessionId ?? parentSessionId;
     // Admission control, separate from the tree's concurrency cap: that one paces how fast the
     // tree drains, this one refuses to let it grow further. The refusal is the point — it is
-    // the only backpressure the calling agent ever sees. Queuing silently instead would leave
+    // the only backpressure the calling workspace ever sees. Queuing silently instead would leave
     // it believing the work was dispatched while the backlog grows without bound.
     //
     // Unsettled, not open: a child parked at AWAITING_INPUT has already handed back its result
@@ -574,19 +588,21 @@ export class SessionsService {
         data: { rootSessionId },
       });
     }
-    // Resolve an @-mentioned agent name to its id (owner-scoped). An explicit agentId wins.
-    const agentId =
-      dto.agentId ?? (dto.agentName ? await this.resolveAgentByName(ownerId, dto.agentName) : undefined);
-    // Give the child a real effort like a normal new session would (the target agent's own
+    // Resolve an @-mentioned workspace name to its id (owner-scoped). An explicit workspaceId wins.
+    const wantId = dto.workspaceId ?? dto.agentId;
+    const wantName = dto.workspaceName ?? dto.agentName;
+    const workspaceId =
+      wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
+    // Give the child a real effort like a normal new session would (the target workspace's own
     // effort, else the owner's account default). create() normalizes it per provider (codex maps
     // max→xhigh). Without this the child's effort is empty, so a codex child falls back to the
     // runner's codex config default — which can be invalid for its model → 400 on the first turn.
-    const effort = await this.resolveDefaultEffort(ownerId, agentId);
+    const effort = await this.resolveDefaultEffort(ownerId, workspaceId);
     const created = await this.create(
       ownerId,
       // An explicit provider is the child's binding; create() checks the caller can dispatch it.
       // Omitted, the child starts where the target project last started.
-      { prompt: dto.prompt, title: dto.title, agentId, model: dto.model, provider: dto.provider, effort },
+      { prompt: dto.prompt, title: dto.title, workspaceId, model: dto.model, provider: dto.provider, effort },
       {
         // Orchestrated children appear in Open like any other session; the
         // parentSessionId link is what marks them as spawned/orchestrated.
@@ -594,10 +610,10 @@ export class SessionsService {
         tree: { rootSessionId, depth: parent.spawnDepth + 1 },
       },
     );
-    // Surface the target agent's name + provider so the web/native transcript can render a
-    // rich "session created" card (title · agent · provider) that links to the child.
-    const targetAgent = created.agentId
-      ? await this.prisma.agent.findFirst({ where: { id: created.agentId }, select: { name: true } })
+    // Surface the target workspace's name + provider so the web/native transcript can render a
+    // rich "session created" card (title · workspace · provider) that links to the child.
+    const targetWorkspace = created.workspaceId
+      ? await this.prisma.workspace.findFirst({ where: { id: created.workspaceId }, select: { name: true } })
       : null;
     return {
       id: created.id,
@@ -608,22 +624,22 @@ export class SessionsService {
       lifecycleState: created.lifecycleState,
       filingState: created.filingState,
       title: created.title,
-      agentName: targetAgent?.name ?? null,
+      agentName: targetWorkspace?.name ?? null,
       provider: created.provider,
     };
   }
 
-  /** The effort a normal new session under this agent would inherit: the agent's own effort if
+  /** The effort a normal new session under this workspace would inherit: the workspace's own effort if
    *  set, else the owner's account default (UserPreferences.defaultEffort). create() normalizes
    *  it per provider. Returns undefined only when neither is set. */
-  private async resolveDefaultEffort(ownerId: string, agentId?: string): Promise<string | undefined> {
-    if (agentId) {
-      const agent = await this.prisma.agent.findFirst({
-        where: { id: agentId, ownerId, deletedAt: null },
+  private async resolveDefaultEffort(ownerId: string, workspaceId?: string): Promise<string | undefined> {
+    if (workspaceId) {
+      const workspace = await this.prisma.workspace.findFirst({
+        where: { id: workspaceId, ownerId, deletedAt: null },
         select: { effort: true },
       });
       // Empty is an explicit "use this model's default" choice, not a missing value.
-      if (agent && agent.effort !== null) return agent.effort;
+      if (workspace && workspace.effort !== null) return workspace.effort;
     }
     const user = await this.prisma.user.findUnique({
       where: { id: ownerId },
@@ -633,15 +649,15 @@ export class SessionsService {
     return prefs.defaultEffort || undefined;
   }
 
-  /** Resolve an @-mentioned agent name to its id within the owner. Throws on no/ambiguous match. */
-  private async resolveAgentByName(ownerId: string, name: string): Promise<string> {
-    const matches = await this.prisma.agent.findMany({
+  /** Resolve an @-mentioned workspace name to its id within the owner. Throws on no/ambiguous match. */
+  private async resolveWorkspaceByName(ownerId: string, name: string): Promise<string> {
+    const matches = await this.prisma.workspace.findMany({
       where: { ownerId, name, deletedAt: null },
       select: { id: true },
       take: 2,
     });
-    if (matches.length === 0) throw new BadRequestException(`no agent named "${name}"`);
-    if (matches.length > 1) throw new BadRequestException(`multiple agents named "${name}"; use agentId`);
+    if (matches.length === 0) throw new BadRequestException(`no workspace named "${name}"`);
+    if (matches.length > 1) throw new BadRequestException(`multiple workspaces named "${name}"; use workspaceId`);
     return matches[0].id;
   }
 
@@ -650,7 +666,7 @@ export class SessionsService {
    * calling session to bind a signed credential to. Their reach is therefore capped at the
    * sessions that runner already hosts — it receives their prompts and streams their output, so
    * observing or messaging one grants no authority the machine did not already have. Sessions on
-   * any other runner stay invisible. A service token may narrow this further to a single agent.
+   * any other runner stay invisible. A service token may narrow this further to a single workspace.
    */
   async assertHostedByRunner(ownerId: string, scope: RunnerSessionScope, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
@@ -664,8 +680,8 @@ export class SessionsService {
 
   /**
    * Start a session for a headless caller holding a session:create service token. Unlike
-   * spawnFromSession there is no parent to inherit from, so the agent pin on the token is the
-   * whole authorization: the agent must live on the runner the token was minted for.
+   * spawnFromSession there is no parent to inherit from, so the workspace pin on the token is the
+   * whole authorization: the workspace must live on the runner the token was minted for.
    *
    * Every session one token starts shares a batch keyed on that token, so a bridge stuck in a
    * loop queues behind itself instead of flooding the machine — the same bound spawned children
@@ -673,13 +689,13 @@ export class SessionsService {
    */
   async spawnForServiceToken(
     ownerId: string,
-    scope: { assignedRunnerId: string; agentId: string; tokenId: string },
+    scope: { assignedRunnerId: string; workspaceId: string; tokenId: string },
     dto: { prompt: string; title?: string; model?: string },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
-    const agent = await this.prisma.agent.findFirst({
+    const workspace = await this.prisma.workspace.findFirst({
       where: {
-        id: scope.agentId,
+        id: scope.workspaceId,
         ownerId,
         runnerId: scope.assignedRunnerId,
         deletedAt: null,
@@ -687,11 +703,11 @@ export class SessionsService {
       },
       select: { id: true, name: true },
     });
-    if (!agent) throw new NotFoundException('agent not found on this runner');
-    const effort = await this.resolveDefaultEffort(ownerId, agent.id);
+    if (!workspace) throw new NotFoundException('workspace not found on this runner');
+    const effort = await this.resolveDefaultEffort(ownerId, workspace.id);
     const created = await this.create(
       ownerId,
-      { prompt: dto.prompt, title: dto.title, agentId: agent.id, model: dto.model, effort },
+      { prompt: dto.prompt, title: dto.title, workspaceId: workspace.id, model: dto.model, effort },
       { batch: { id: scope.tokenId, maxConcurrent: SERVICE_TOKEN_CONCURRENCY } },
     );
     return {
@@ -703,14 +719,14 @@ export class SessionsService {
       lifecycleState: created.lifecycleState,
       filingState: created.filingState,
       title: created.title,
-      agentName: agent.name,
+      agentName: workspace.name,
       provider: created.provider,
     };
   }
 
   /** Owner-scoped session list for orchestration (orbit mcp `session_list`): compact rows with
    *  optional status / parent filter. Distinct from the UI `list` below (view tabs, previews).
-   *  `scope` narrows the list to one runner's (optionally one agent's) sessions for headless
+   *  `scope` narrows the list to one runner's (optionally one workspace's) sessions for headless
    *  callers. */
   async listForOrchestration(
     ownerId: string,
@@ -732,7 +748,7 @@ export class SessionsService {
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
-        agentId: true,
+        workspaceId: true,
         parentSessionId: true,
         lastAssistantText: true,
         lastTurnAt: true,
@@ -745,10 +761,10 @@ export class SessionsService {
   }
 
   /**
-   * Owner-scoped detail returned to an orchestrating agent. Keep this deliberately
-   * narrower than the UI detail query: the full Agent row contains injected env,
+   * Owner-scoped detail returned to an orchestrating workspace. Keep this deliberately
+   * narrower than the UI detail query: the full Workspace row contains injected env,
    * MCP config, prompts, and other configuration that must not become model output.
-   * `scope` narrows it to one runner's (optionally one agent's) sessions for headless callers.
+   * `scope` narrows it to one runner's (optionally one workspace's) sessions for headless callers.
    */
   async getForOrchestration(ownerId: string, id: string, scope?: RunnerSessionScope) {
     const session = await this.prisma.session.findFirst({
@@ -764,7 +780,7 @@ export class SessionsService {
         provider: true,
         model: true,
         effort: true,
-        agentId: true,
+        workspaceId: true,
         parentSessionId: true,
         taskId: true,
         assignedRunnerId: true,
@@ -802,7 +818,7 @@ export class SessionsService {
         mergedAt: true,
         branchMerged: true,
         worktreeBranch: true,
-        agent: { select: { id: true, name: true, model: true } },
+        workspace: { select: { id: true, name: true, model: true } },
         assignedRunner: { select: { id: true, name: true } },
       },
     });
@@ -820,7 +836,7 @@ export class SessionsService {
    *
    * Three tiers:
    *  - id — a full UUID or Base62 public id matched exactly, or an 8–12 hex UUID prefix.
-   *  - metadata — title / prompt / last reply / branch on the session row, plus the joined agent
+   *  - metadata — title / prompt / last reply / branch on the session row, plus the joined workspace
    *    and task names. Trigram-indexed (migration 0068) and runs for any query length.
    *  - conversation text — the durable `user` + `assistant` events. Gated on CONTENT_MIN_CHARS;
    *    see search-query.ts for why that floor is the index's, not a product decision.
@@ -854,8 +870,8 @@ export class SessionsService {
       id: string;
       title: string;
       status: RunStatus;
-      agentId: string | null;
-      agentName: string | null;
+      workspaceId: string | null;
+      workspaceName: string | null;
       runnerId: string | null;
       taskId: string | null;
       taskTitle: string | null;
@@ -898,13 +914,13 @@ export class SessionsService {
     // a field reported as the match with a snippet that doesn't contain the query.
     //
     // Below the floor the two long bodies drop out of the list entirely, so a short query can't
-    // reach them through ANY branch (a session admitted by its agent's name would otherwise still
+    // reach them through ANY branch (a session admitted by its workspace's name would otherwise still
     // be labelled 'prompt' and hand back a snippet cut from a 7 KB body).
     const pattern = norm?.pattern ?? '';
     const fields: { field: SessionSearchHit['matchField']; col: Prisma.Sql; test: Prisma.Sql }[] = [
       // Base62 is decoded in normalizeSearchQuery; comparing the resulting UUID lets the primary
       // key resolve the exact child session without adding a database-side Base62 implementation.
-      // Agents/logs also abbreviate UUIDs to their first 8–12 hex characters, handled by the
+      // Workspaces/logs also abbreviate UUIDs to their first 8–12 hex characters, handled by the
       // second predicate. An abbreviation's match text is the full UUID so a collision is visible.
       {
         field: 'id',
@@ -976,7 +992,7 @@ export class SessionsService {
             WHERE s.owner_id = ${ownerId}::uuid
               AND s.id = ${norm.sessionId}::uuid
             UNION
-            -- Agents and logs commonly shorten a UUID to its first 8–12 hex characters. At this
+            -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
             -- scale an owner-scoped scan is cheap; if a prefix ever collides, return both rows so
             -- the caller can disambiguate instead of silently choosing the wrong child.
             SELECT s.id
@@ -996,12 +1012,12 @@ export class SessionsService {
             WHERE s.owner_id = ${ownerId}::uuid
               AND ${sessionPredicate}
             UNION
-            -- Joined names resolve against their own tiny tables first (~10 agents, ~500 tasks),
+            -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
             -- leaving the session side a cheap uuid comparison. Folding these into the session
-            -- index instead would mean reindexing every session whenever an agent is renamed.
+            -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
-              AND s.agent_id IN (SELECT id FROM agent WHERE name ILIKE ${norm.pattern})
+              AND s.workspace_id IN (SELECT id FROM workspace WHERE name ILIKE ${norm.pattern})
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
@@ -1014,7 +1030,7 @@ export class SessionsService {
               ${matchTextCase}  AS match_text
             FROM meta_ids mi
             JOIN session s ON s.id = mi.id
-            LEFT JOIN agent a ON a.id = s.agent_id
+            LEFT JOIN workspace a ON a.id = s.workspace_id
             LEFT JOIN task  t ON t.id = s.task_id
             -- Concatenating the columns with a space invents adjacencies that don't exist: a
             -- query spanning the seam ("foo bar" where the title ends in "foo" and the prompt
@@ -1037,8 +1053,8 @@ export class SessionsService {
           )
           SELECT
             s.id, s.title, s.status,
-            a.id   AS "agentId",
-            a.name AS "agentName",
+            a.id   AS "workspaceId",
+            a.name AS "workspaceName",
             s.assigned_runner_id AS "runnerId",
             s.task_id AS "taskId",
             t.title   AS "taskTitle",
@@ -1060,7 +1076,7 @@ export class SessionsService {
             ) AS "snippet"
           FROM hit h
           JOIN session s ON s.id = h.session_id
-          LEFT JOIN agent a ON a.id = s.agent_id
+          LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           ORDER BY
             CASE h.match_field
@@ -1080,8 +1096,8 @@ export class SessionsService {
       : await this.prisma.$queryRaw<Row[]>(Prisma.sql`
           SELECT
             s.id, s.title, s.status,
-            a.id   AS "agentId",
-            a.name AS "agentName",
+            a.id   AS "workspaceId",
+            a.name AS "workspaceName",
             s.assigned_runner_id AS "runnerId",
             s.task_id AS "taskId",
             t.title   AS "taskTitle",
@@ -1094,7 +1110,7 @@ export class SessionsService {
             'recent'::text AS "matchField",
             NULL::text AS "snippet"
           FROM session s
-          LEFT JOIN agent a ON a.id = s.agent_id
+          LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
             AND s.deleted_at IS NULL
@@ -1107,7 +1123,7 @@ export class SessionsService {
         id: r.id,
         title: r.title,
         status: r.status,
-        agent: r.agentId ? { id: r.agentId, name: r.agentName ?? '' } : null,
+        agent: r.workspaceId ? { id: r.workspaceId, name: r.workspaceName ?? '' } : null,
         runnerId: r.runnerId,
         taskId: r.taskId,
         taskTitle: r.taskTitle,
@@ -1128,24 +1144,24 @@ export class SessionsService {
   }
 
   /**
-   * Per-agent tallies over the Open list: how many of an agent's sessions are mid-turn, and how
-   * many are blocked on an approval. The nav sidebar shows one number per agent and used to
+   * Per-workspace tallies over the Open list: how many of a workspace's sessions are mid-turn, and how
+   * many are blocked on an approval. The nav sidebar shows one number per workspace and used to
    * derive them by fetching every open session — the heaviest poll in the app once an account
    * has thousands. Same definitions as the list payload, including that only a RUNNING session
-   * can hold a live approval (see `list`). Sessions with no agent belong to no row and are
+   * can hold a live approval (see `list`). Sessions with no workspace belong to no row and are
    * skipped, exactly as the sidebar skipped them.
    */
-  async agentSessionCounts(ownerId: string) {
+  async workspaceSessionCounts(ownerId: string) {
     const open = {
       ownerId,
       completedAt: null,
       archivedAt: null,
       deletedAt: null,
-      agentId: { not: null },
+      workspaceId: { not: null },
     } as const;
     const [active, blocked] = await Promise.all([
       this.prisma.session.groupBy({
-        by: ['agentId'],
+        by: ['workspaceId'],
         where: { ...open, status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } },
         _count: { _all: true },
       }),
@@ -1155,22 +1171,22 @@ export class SessionsService {
       // well — and those sit at AWAITING_INPUT for the whole turn.
       this.prisma.session.findMany({
         where: { ...open, ...GENERATING_SESSION_FILTER, approvals: { some: { status: 'PENDING' } } },
-        select: { agentId: true },
+        select: { workspaceId: true },
       }),
     ]);
-    const counts = new Map<string, { agentId: string; active: number; needsYou: number }>();
-    const row = (agentId: string) => {
-      const existing = counts.get(agentId);
+    const counts = new Map<string, { workspaceId: string; active: number; needsYou: number }>();
+    const row = (workspaceId: string) => {
+      const existing = counts.get(workspaceId);
       if (existing) return existing;
-      const fresh = { agentId, active: 0, needsYou: 0 };
-      counts.set(agentId, fresh);
+      const fresh = { workspaceId, active: 0, needsYou: 0 };
+      counts.set(workspaceId, fresh);
       return fresh;
     };
     for (const group of active) {
-      if (group.agentId) row(group.agentId).active = group._count._all;
+      if (group.workspaceId) row(group.workspaceId).active = group._count._all;
     }
     for (const session of blocked) {
-      if (session.agentId) row(session.agentId).needsYou += 1;
+      if (session.workspaceId) row(session.workspaceId).needsYou += 1;
     }
     return [...counts.values()];
   }
@@ -1179,7 +1195,7 @@ export class SessionsService {
     ownerId: string,
     filters: {
       runnerId?: string;
-      agentId?: string;
+      workspaceId?: string;
       tagId?: string;
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
       limit?: number;
@@ -1208,11 +1224,11 @@ export class SessionsService {
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
-    // The web console's session column is one agent's conversation list, so it scopes the
+    // The web console's session column is one workspace's conversation list, so it scopes the
     // query rather than filtering a runner-wide list client-side — otherwise a page of rows
-    // could be all *other* agents' sessions and read as an empty (or stalled) list.
-    const agentFilter = filters.agentId
-      ? Prisma.sql`AND s.agent_id = ${filters.agentId}::uuid`
+    // could be all *other* workspaces' sessions and read as an empty (or stalled) list.
+    const workspaceFilter = filters.workspaceId
+      ? Prisma.sql`AND s.workspace_id = ${filters.workspaceId}::uuid`
       : Prisma.empty;
     // Same reasoning for the list's tag filter: narrowing a page client-side can leave too few
     // rows to fill (or scroll) the column while the matches sit in pages nobody asked for.
@@ -1273,10 +1289,10 @@ export class SessionsService {
       runningBgCount: number;
       runningSubagentCount: number;
       engineTurnActive: boolean;
-      agentId: string | null;
-      agentName: string | null;
-      agentModel: string | null;
-      agentEffort: string | null;
+      workspaceId: string | null;
+      workspaceName: string | null;
+      workspaceModel: string | null;
+      workspaceEffort: string | null;
       runnerId: string | null;
       runnerName: string | null;
       runnerStatus: string | null;
@@ -1331,10 +1347,10 @@ export class SessionsService {
         cardinality(s.running_bg_shells)::int AS "runningBgCount",
         cardinality(s.running_subagents)::int AS "runningSubagentCount",
         s.engine_turn_active AS "engineTurnActive",
-        a.id    AS "agentId",
-        a.name  AS "agentName",
-        a.model AS "agentModel",
-        a.effort AS "agentEffort",
+        a.id    AS "workspaceId",
+        a.name  AS "workspaceName",
+        a.model AS "workspaceModel",
+        a.effort AS "workspaceEffort",
         s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
         r.status AS "runnerStatus",
@@ -1345,7 +1361,7 @@ export class SessionsService {
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
       FROM session s
-      LEFT JOIN agent a  ON a.id = s.agent_id
+      LEFT JOIN workspace a  ON a.id = s.workspace_id
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
       LEFT JOIN task t   ON t.id = s.task_id
       -- Which gate is holding a queued session, and against what numbers. "Waiting for a free
@@ -1390,13 +1406,13 @@ export class SessionsService {
       ) q ON s.status = 'PENDING' AND s.cancel_requested_at IS NULL
       WHERE s.owner_id = ${ownerId}::uuid
         ${runnerFilter}
-        ${agentFilter}
+        ${workspaceFilter}
         ${tagFilter}
         AND (${visibility})
       ORDER BY ${orderBy}
       ${pageLimit}
     `);
-    // Re-nest agent/assignedRunner to keep the same response shape as the typed query.
+    // Re-nest workspace/assignedRunner to keep the same response shape as the typed query.
     const sessions = rows.map((r) =>
       withSessionCapabilities({
         id: r.id,
@@ -1430,8 +1446,8 @@ export class SessionsService {
         runningBgCount: r.runningBgCount,
         runningSubagentCount: r.runningSubagentCount,
         engineTurnActive: r.engineTurnActive,
-        agent: r.agentId
-          ? { id: r.agentId, name: r.agentName, model: r.agentModel, effort: r.agentEffort }
+        workspace: r.workspaceId
+          ? { id: r.workspaceId, name: r.workspaceName, model: r.workspaceModel, effort: r.workspaceEffort }
           : null,
         assignedRunnerId: r.runnerId,
         assignedRunner: r.runnerId
@@ -1469,7 +1485,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
-        agent: true,
+        workspace: true,
         assignedRunner: {
           select: { id: true, name: true, status: true, lastHeartbeatAt: true },
         },
@@ -1587,7 +1603,7 @@ export class SessionsService {
   /**
    * Resolve a public share token to its sanitized, read-only transcript. NO ownerId — the
    * unguessable token IS the capability. Returns only what a viewer needs to render the
-   * conversation (title, agent name, status, the event stream); never ownership, billing,
+   * conversation (title, workspace name, status, the event stream); never ownership, billing,
    * runner internals, or worktree/merge state. A trashed (deletedAt) session stops resolving.
    */
   async getShared(token: string) {
@@ -1602,7 +1618,7 @@ export class SessionsService {
         archivedAt: true,
         deletedAt: true,
         createdAt: true,
-        agent: { select: { name: true } },
+        workspace: { select: { name: true } },
       },
     });
     if (!session) throw new NotFoundException('shared session not found');
@@ -1614,7 +1630,7 @@ export class SessionsService {
     });
     return {
       title: session.title,
-      agentName: session.agent?.name ?? null,
+      workspaceName: session.workspace?.name ?? null,
       status: stateful.status,
       runStatus: stateful.runStatus,
       sessionState: stateful.sessionState,
@@ -1835,7 +1851,7 @@ export class SessionsService {
 
   // A background shell with no terminal signal is still "running" only while the session is live;
   // once it's settled the shell can't still be running, so it reads as "unknown" (see
-  // classifyShellStatus). Mirrors the web tray's liveness (AgentView `TERMINAL`).
+  // classifyShellStatus). Mirrors the web tray's liveness (WorkspaceView `TERMINAL`).
   private static readonly TERMINAL_STATUSES: RunStatus[] = [
     RunStatus.SUCCEEDED,
     RunStatus.FAILED,
@@ -1844,7 +1860,7 @@ export class SessionsService {
 
   /**
    * The authoritative, complete list of background shells the session ever launched — every
-   * Bash(run_in_background), with output recovered from the agent's persisted Read polls of the
+   * Bash(run_in_background), with output recovered from the workspace's persisted Read polls of the
    * `.output` file. Derived server-side over ALL of the session's persisted events (not just the
    * client's loaded tail window), so the "Background processes" tray shows the same complete list
    * on every client regardless of how much transcript is loaded. Reuses the exact derivation the
@@ -2638,14 +2654,14 @@ export class SessionsService {
    * stored on `mergeTarget` and relayed to the runner. Omitted/empty → the default (the runner
    * auto-detects main, else master). A target equal to the session's own branch is rejected.
    *
-   * An explicit target is also remembered on the session's agent (`defaultMergeTarget`), so
-   * switching the target sticks across all of that agent's sessions — the next merge button
+   * An explicit target is also remembered on the session's workspace (`defaultMergeTarget`), so
+   * switching the target sticks across all of that workspace's sessions — the next merge button
    * defaults to it. Cleared back to the auto-detect default is not offered here (picking main
    * from the dropdown re-records main).
    */
   async mergeToMain(ownerId: string, id: string, targetBranch?: string) {
     const target = targetBranch?.trim() || null;
-    const agentId = await this.prisma.$transaction(async (tx) => {
+    const workspaceId = await this.prisma.$transaction(async (tx) => {
       // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
       // all linearize on this row. An old click therefore cannot create a fresh
       // operation after the session has already entered a new turn epoch.
@@ -2688,12 +2704,12 @@ export class SessionsService {
           branchMerged: null,
         },
       });
-      return session.agentId;
+      return session.workspaceId;
     });
-    // Remember an explicitly chosen target on the agent so every session of it defaults there.
-    if (target && agentId) {
-      await this.prisma.agent.update({
-        where: { id: agentId },
+    // Remember an explicitly chosen target on the workspace so every session of it defaults there.
+    if (target && workspaceId) {
+      await this.prisma.workspace.update({
+        where: { id: workspaceId },
         data: { defaultMergeTarget: target },
       });
     }
@@ -2703,11 +2719,11 @@ export class SessionsService {
   /**
    * Queue a "commit this idle session's uncommitted worktree changes onto its branch" for the
    * runner that's hosting it. The checkout is only stable between turns: committing while the
-   * top-level turn or a sub-agent is still running can capture a half-built snapshot.
-   * `AWAITING_INPUT` plus an empty sub-agent set is therefore the authoritative server-side gate;
+   * top-level turn or a sub-workspace is still running can capture a half-built snapshot.
+   * `AWAITING_INPUT` plus an empty sub-workspace set is therefore the authoritative server-side gate;
    * the UI's disabled button is only a convenience, not the safety boundary.
    *
-   * Running background shells (`runningBgShells`) are NOT part of the gate. Agents leave
+   * Running background shells (`runningBgShells`) are NOT part of the gate. Workspaces leave
    * long-lived processes up — dev servers, watchers — which never exit, so their launch ids never
    * clear and gating on them disabled Commit permanently for that session. A commit racing a
    * background writer is re-committable; a permanently blocked one isn't.
@@ -2730,7 +2746,7 @@ export class SessionsService {
       throw new ConflictException('wait for the current turn to finish before committing');
     }
     if (session.runningSubagents.length > 0) {
-      throw new ConflictException('wait for the running sub-agent to finish before committing');
+      throw new ConflictException('wait for the running sub-workspace to finish before committing');
     }
     if (!session.assignedRunnerId) {
       throw new ConflictException('no runner is associated with this session');
@@ -2785,7 +2801,7 @@ export class SessionsService {
 
   /**
    * Adopt the worktree's ACTUAL current HEAD branch as the session's tracked branch. When the
-   * agent ran `git checkout -b` inside the worktree, the work moved onto a branch Orbit wasn't
+   * workspace ran `git checkout -b` inside the worktree, the work moved onto a branch Orbit wasn't
    * tracking — `session.branch` still names the original (often already-merged) branch, so the bar
    * shows "On <worktreeBranch> — not tracked" instead of a stale "✓ In main". Adopting re-points
    * `branch` to that HEAD so Merge / diff / the "in main" verdict all act on the real work.
@@ -3129,7 +3145,7 @@ export class SessionsService {
     // Still live — a normal turn belongs on the running process, not a revive. But a
     // "Resolve in session" rebase reaches resume() on a live session too: the bar offers it
     // while the session is still AWAITING_INPUT, and its whole point is to clear the failed
-    // merge so the bar offers Merge afresh once the agent rebases. The revive path below does
+    // merge so the bar offers Merge afresh once the workspace rebases. The revive path below does
     // that for ended sessions (mergeStatus: null); mirror it here, since createTurn doesn't.
     // Only a *settled* outcome is stale. createTurn performs that cleanup under
     // its Session row lock so it cannot erase an operation queued after this fast read.
@@ -3438,8 +3454,10 @@ export class SessionsService {
       const session = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          agent: true,
+          workspace: true,
           assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+          // The account-level permission default, which replaced the per-workspace one.
+          owner: { select: { preferences: true } },
         },
       });
       if (SessionsService.TERMINAL.includes(session.status)) {
@@ -3453,15 +3471,13 @@ export class SessionsService {
         sessionModel: dto.model ?? (next.keepsModel ? session.model : null),
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-        agentModel: session.agent?.model,
+        workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
-        agentEnv: session.agent?.env as Record<string, string> | null,
+        workspaceEnv: session.workspace?.env as Record<string, string> | null,
       });
       const requestedPermissionMode =
         (dto.permissionMode as PermissionMode | undefined) ??
-        (session.permissionMode as PermissionMode | null) ??
-        (session.agent?.permissionMode as PermissionMode | null) ??
-        PermissionMode.DONT_ASK;
+        resolvePermissionMode(session.permissionMode, session.owner);
       const normalizedPermissionMode = normalizeBuiltinPermissionMode(
         exec.provider,
         exec.model,

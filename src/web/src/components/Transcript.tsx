@@ -88,12 +88,12 @@ export interface ExportMode {
 }
 export const ExportCtx = createContext<ExportMode | null>(null);
 
-// Jump-to-session for the "session created" card (mcp__orbit__session_create result). AgentView
+// Jump-to-session for the "session created" card (mcp__orbit__session_create result). WorkspaceView
 // provides a navigator; the shared/public page and static export leave it null so the card
 // renders non-clickable there (a logged-out or offline viewer can't open another session).
 export const SessionNavCtx = createContext<((rawId: string) => void) | null>(null);
 
-// Refetch one event's untrimmed payload by seq. AgentView provides it; the shared/public page
+// Refetch one event's untrimmed payload by seq. WorkspaceView provides it; the shared/public page
 // leaves it null, since that endpoint never clips (nothing there is ever `truncated`).
 export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null>(null);
 
@@ -101,7 +101,7 @@ export const EventFullCtx = createContext<((seq: number) => Promise<any>) | null
  * What a sign-in failure card should tell this session's viewer, and how to act on it. The
  * remedy depends on where the credentials live, which the transcript can't know: a built-in
  * provider runs on the runner's own runtime login (fix it on that machine), any
- * other slug is a configured API key (fix it in Providers). AgentView supplies this; the
+ * other slug is a configured API key (fix it in Providers). WorkspaceView supplies this; the
  * shared/public page and the static export leave it null, so the card there degrades to the
  * diagnosis alone — a logged-out viewer can neither sign that runner in nor retry.
  */
@@ -209,7 +209,7 @@ function ImagePreviewProvider({ children }: { children: ReactNode }) {
 // ── grouped transcript tree ────────────────────────────────────────────────
 // The raw event stream is flat. Two relationships have to be reconstructed to
 // render like Claude Code: a tool_result belongs to its tool_use, and every
-// event a sub-agent produced (Task tool) carries the spawning call's id in
+// event a sub-workspace produced (Task tool) carries the spawning call's id in
 // payload.parentToolUseId and must nest under that call.
 
 type ToolNode = {
@@ -283,7 +283,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // result can't be matched by id. Fall back to the most recently opened tool that
   // still has no result — results arrive right after their call in those streams.
   let lastOpenTool: ToolNode | undefined;
-  // Sub-agent events land inside their spawning Task's children; everything else
+  // Sub-workspace events land inside their spawning Task's children; everything else
   // (and any event whose parent we haven't seen) goes to the top level.
   const into = (parentId?: string): Node[] => {
     if (parentId) {
@@ -338,7 +338,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   //
   // Keyed on the line minus its leading timestamp: the engines that log at all stamp every line,
   // so raw text is unique per occurrence and nothing would ever fold. Folding across parents
-  // (rather than per sub-agent) is deliberate — one process writes the stderr, and which tool
+  // (rather than per sub-workspace) is deliberate — one process writes the stderr, and which tool
   // call happened to be open when it flushed is incidental.
   const stderrSeen = new Map<string, ErrorNode>();
   const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
@@ -446,7 +446,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         }
         break;
       }
-      // turn_end is emitted only for the top-level turn (never inside a sub-agent).
+      // turn_end is emitted only for the top-level turn (never inside a sub-workspace).
       case 'turn_end':
         roots.push({ kind: 'divider', seq: ev.seq });
         break;
@@ -498,7 +498,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
 // result yet renders a spinner rather than a (misleading) terminal marker.
 //
 // memo'd on (events, live): streaming text/thinking deltas and the 4s/15s status
-// polls all live in sibling state on AgentView and don't touch `events`, so the
+// polls all live in sibling state on WorkspaceView and don't touch `events`, so the
 // whole transcript subtree is skipped on those re-renders — it only rebuilds when
 // an actual event is appended.
 export const Transcript = memo(function Transcript({
@@ -593,7 +593,7 @@ function StandaloneResult({ node }: { node: ResultNode }) {
 
 // `data-seq` marks where each event's card starts, so ⌘F can scroll to a hit the server found by
 // seq. Only these top-level roots carry it: a lookup takes the last stamp at or before the target,
-// which resolves anything folded inside one (a tool_result, a grouped run, a sub-agent's events)
+// which resolves anything folded inside one (a tool_result, a grouped run, a sub-workspace's events)
 // to the card that contains it.
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   switch (node.kind) {
@@ -660,7 +660,7 @@ const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
 /**
  * A sign-in failure, rendered as a remedy rather than an error line. The runtime reports it as
  * ordinary assistant text ("Failed to authenticate: OAuth session expired…"), which reads like
- * the agent's own reply and tells the user nothing about what to do — so this card names the
+ * the workspace's own reply and tells the user nothing about what to do — so this card names the
  * machine, signs it back in from here, and offers to re-send once it is.
  *
  * Three shapes, because the remedy depends on where the credentials live (see AuthErrorHelp):
@@ -741,7 +741,7 @@ export type AutoRetryVariant = 'quota' | 'apiError';
 
 /**
  * What an auto-retry card needs beyond the message itself: when the pending retry fires, and
- * how to take it over. AgentView supplies this; the shared/public page leaves it null, so the
+ * how to take it over. WorkspaceView supplies this; the shared/public page leaves it null, so the
  * card there degrades to the diagnosis alone (a logged-out viewer can neither retry nor disarm).
  */
 export interface AutoRetryHelp {
@@ -1584,7 +1584,7 @@ function Thinking({ text, seq }: { text: string; seq?: number }) {
 
 // ── tool calls ──────────────────────────────────────────────────────────────
 // Each tool renders as a single folded row (icon · name · summary · status);
-// clicking expands to show the call body, any sub-agent transcript, and the
+// clicking expands to show the call body, any sub-workspace transcript, and the
 // result. Failed calls open by default so an error is never hidden behind a fold.
 function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // A `!`-shell command the user ran (runner tags its tool_use id `shell-…`) renders as a
@@ -1593,7 +1593,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   const exp = useContext(ExportCtx);
   // A plan or a question to the user is the point of the turn — open it by
   // default; errors also auto-open; a result carrying an image (a screenshot the
-  // agent produced for the user) opens so the picture shows without a click. A
+  // workspace produced for the user) opens so the picture shows without a click. A
   // static export opens every card (nothing can be un-folded after the fact).
   // Deliberately keyed on the *preview* result: images are never clipped, so this
   // can't depend on the refetch below (which is itself gated on being open).
@@ -1631,7 +1631,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     () => describeTool(node.name, input, isShell, answer),
     [node.name, input, isShell, answer],
   );
-  const isSubAgent = node.name === 'Task' || node.name === 'Agent';
+  const isSubWorkspace = node.name === 'Task' || node.name === 'Workspace';
   const p = path ? splitPath(path) : null;
   const hasDetail = !!body || node.children.length > 0 || !!node.result;
   // While an AskUserQuestion or ExitPlanMode is still awaiting the user, the
@@ -1650,7 +1650,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   return (
     <div
       data-seq={node.seq}
-      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubAgent ? ' chat-tool-task' : ''}${
+      className={`chat-tool-card chat-tone-${tone ?? 'default'}${isSubWorkspace ? ' chat-tool-task' : ''}${
         hasDetail && open ? ' is-open' : ''
       }`}
     >
@@ -1683,7 +1683,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
             </div>
           )}
           {node.result && (
-            <ToolResult seq={node.seq} content={resultContent} isError={node.result.isError} compact markdown={isSubAgent} />
+            <ToolResult seq={node.seq} content={resultContent} isError={node.result.isError} compact markdown={isSubWorkspace} />
           )}
         </div>
       )}
@@ -1918,7 +1918,7 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
     case 'ToolSearch':
       return { label: 'ToolSearch', icon: <ApiOutlined />, tone: 'read', summary: i.query, summaryMono: true, body: hasKeys(i) ? <KeyVals obj={i} /> : undefined };
     case 'Task':
-    case 'Agent':
+    case 'Workspace':
       return {
         label: `${name}${i.subagent_type ? ` · ${i.subagent_type}` : ''}`,
         icon: <PartitionOutlined />,
@@ -1981,7 +1981,7 @@ function ToolResult({
   content: any;
   isError?: boolean;
   compact?: boolean;
-  // A Task (sub-agent) result is the agent's prose report — render it as Markdown,
+  // A Task (sub-workspace) result is the workspace's prose report — render it as Markdown,
   // like Claude Code Web, rather than raw monospace. Raw tool output stays monospace.
   markdown?: boolean;
 }) {
@@ -2235,7 +2235,7 @@ function SessionCreateCard({ result }: { result: any }) {
   const clickable = !!nav;
   return (
     <div
-      className={`chat-session-card chat-tone-agent${clickable ? ' is-clickable' : ''}`}
+      className={`chat-session-card chat-tone-workspace${clickable ? ' is-clickable' : ''}`}
       onClick={clickable ? () => nav!(s.id) : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
@@ -2247,7 +2247,7 @@ function SessionCreateCard({ result }: { result: any }) {
       <span className="chat-session-card-main">
         <span className="chat-session-card-title">{s.title || 'New session'}</span>
         <span className="chat-session-card-meta">
-          {s.agentName && <span className="chat-session-card-agent">{s.agentName}</span>}
+          {s.workspaceName && <span className="chat-session-card-workspace">{s.workspaceName}</span>}
           {s.provider && <span className="chat-session-card-provider">{s.provider}</span>}
           {s.status && <span className="chat-session-card-status">{String(s.status).toLowerCase()}</span>}
         </span>

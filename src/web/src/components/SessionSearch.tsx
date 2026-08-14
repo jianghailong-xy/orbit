@@ -8,10 +8,10 @@ import { encodeId } from '../lib/idCodec';
 import { sessionSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
 import { sessionLifecycleStateOf } from '../lib/sessionState';
-import { StatusIcon, statusLabel } from './AgentView';
+import { StatusIcon, statusLabel } from './WorkspaceView';
 
 // Matches the server's CONTENT_MIN_CHARS. Below it the search only matches names (session title,
-// branch, agent, task) — the palette says so rather than letting the narrower result set read as
+// branch, workspace, task) — the palette says so rather than letting the narrower result set read as
 // "nothing else exists".
 const CONTENT_MIN_CHARS = 3;
 
@@ -48,7 +48,7 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
   reply: 'last reply',
   message: 'message',
   branch: 'branch',
-  agent: 'agent',
+  agent: 'workspace',
   task: 'task',
 };
 
@@ -56,7 +56,7 @@ const MATCH_LABEL: Partial<Record<SessionSearchHit['matchField'], string>> = {
 /**
  * The ⌘K session palette. Mounted once by the app shell, so it works from every route.
  *
- * It searches across everything the sidebar can't reach in one place: every agent, every runner,
+ * It searches across everything the sidebar can't reach in one place: every workspace, every runner,
  * and the Completed / Trash scopes as well as Open. With an empty query it lists
  * recents, which makes the same keystroke a fast session switcher.
  */
@@ -230,7 +230,7 @@ export function SessionSearch() {
                   {badge && <span className="ssearch-badge">{badge}</span>}
                 </div>
                 <div className="ssearch-meta">
-                  {hit.agent?.name && <span className="ssearch-agent">{hit.agent.name}</span>}
+                  {hit.agent?.name && <span className="ssearch-workspace">{hit.agent.name}</span>}
                   <span>{statusLabel(hit)}</span>
                   {matchLabel && <span className="ssearch-in">in {matchLabel}</span>}
                 </div>
@@ -254,7 +254,7 @@ export function SessionSearch() {
             search message text.
           </span>
         ) : (
-          <span>{trimmed ? 'Searching IDs, titles, messages, agents and tasks' : 'Recent sessions'}</span>
+          <span>{trimmed ? 'Searching IDs, titles, messages, workspaces and tasks' : 'Recent sessions'}</span>
         )}
         <span className="ssearch-keys">
           <kbd>↑↓</kbd> navigate <kbd>↵</kbd> open <kbd>esc</kbd> close

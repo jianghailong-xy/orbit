@@ -2,7 +2,7 @@
  * How the transcript pane paints while it is catching up: what stands in for an empty pane, and
  * how much of a freshly fetched page to render in the first frame.
  *
- * Both decisions used to live as sprawling inline conditions in AgentView's JSX, where the four
+ * Both decisions used to live as sprawling inline conditions in WorkspaceView's JSX, where the four
  * empty-pane cases could only be told apart by reading three overlapping boolean chains. They are
  * here so each case can be stated once and tested.
  */
@@ -14,7 +14,7 @@
  *   states that, and outranks everything else because it is a real status, not a loading state.
  * - `skeleton` — a tail page is in flight for a session with no cached transcript. Not knowing yet
  *   whether the session is empty or merely unloaded, the honest placeholder is "loading".
- * - `waiting` — the load finished and the session really is empty, but it is live: the agent has
+ * - `waiting` — the load finished and the session really is empty, but it is live: the workspace has
  *   genuinely not said anything yet.
  * - `null` — nothing to say (there are events, or the session is ended and empty).
  */

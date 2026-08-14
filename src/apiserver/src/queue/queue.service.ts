@@ -17,6 +17,7 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
+import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -216,8 +217,10 @@ export class QueueService {
     const session = await this.prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
       include: {
-        agent: true,
+        workspace: true,
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+        // The account-level permission default, which replaced the per-workspace one.
+        owner: { select: { preferences: true } },
       },
     });
     // Resume only when the runtime actually established its conversation — i.e. the
@@ -262,7 +265,7 @@ export class QueueService {
     const maxSeq =
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
-    const agent = session.agent;
+    const workspace = session.workspace;
     const declared = session.provider ?? null;
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
@@ -283,9 +286,9 @@ export class QueueService {
         sessionModel,
         usesRuntimeDefaultModel: session.usesRuntimeDefaultModel,
         runtimeDefaultModels: session.assignedRunner?.runtimeDefaultModels,
-        agentModel: agent?.model,
+        workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
-        agentEnv: agent?.env as Record<string, string> | null,
+        workspaceEnv: workspace?.env as Record<string, string> | null,
       });
     let exec = resolveExec(session.model);
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
@@ -315,10 +318,7 @@ export class QueueService {
       }
     }
     const provider = exec.provider;
-    const permissionMode =
-      (session.permissionMode as PermissionMode) ??
-      (agent?.permissionMode as PermissionMode) ??
-      PermissionMode.DONT_ASK;
+    const permissionMode = resolvePermissionMode(session.permissionMode, session.owner);
     // Claude spawns with a pre-generated --session-id, so a Claude row without one has no
     // conversation the runtime could resume — it was created before the column existed, or
     // its id was minted by a different runtime. Generate a fresh UUID, persist it, reset
@@ -345,26 +345,26 @@ export class QueueService {
       leaseOwner: session.inboxLeaseOwner ?? undefined,
       title: session.title,
       prompt: session.prompt,
-      // The project directory the runtime runs in comes from the session's agent.
-      workDir: agent?.workDir ?? undefined,
+      // The project directory the runtime runs in comes from the session's workspace.
+      workDir: workspace?.workDir ?? undefined,
       // Per-session worktree branch (generated at creation); the runner isolates the
       // session in a `git worktree` on this branch when workDir is a git repo.
       branch: session.branch ?? undefined,
-      // Agent opt-in: auto-`git init` a non-git workDir so it can be isolated.
-      autoInitGit: agent?.autoInitGit ?? undefined,
-      // The branch this session merges into — its own recorded target, else the agent's
+      // Workspace opt-in: auto-`git init` a non-git workDir so it can be isolated.
+      autoInitGit: workspace?.autoInitGit ?? undefined,
+      // The branch this session merges into — its own recorded target, else the workspace's
       // remembered default (what the status bar's Merge button offers). Lets the runner
       // judge "already merged" against that branch instead of main.
-      mergeTarget: session.mergeTarget ?? agent?.defaultMergeTarget ?? undefined,
+      mergeTarget: session.mergeTarget ?? workspace?.defaultMergeTarget ?? undefined,
       sessionUuid,
       maxSeq,
       resume,
       // Injected into the runtime process so the `orbit mcp` server knows its context.
-      agentId: session.agentId ?? undefined,
+      agentId: session.workspaceId ?? undefined,
       taskId: session.taskId ?? undefined,
-      // Mirror the agent's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
-      // and `orbit mcp` exposes the session_* tools only for enabled agents.
-      allowOrchestration: agent?.enableOrchestration ?? false,
+      // Mirror the workspace's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
+      // and `orbit mcp` exposes the session_* tools only for enabled workspaces.
+      allowOrchestration: workspace?.enableOrchestration ?? false,
       // Lets `orbit mcp` shrink its wait budget with depth, so a nested session_create(wait)
       // cannot outlast the one waiting on it.
       spawnDepth: session.spawnDepth,
@@ -373,10 +373,10 @@ export class QueueService {
         // Resolved above: a per-session override, Runtime default/catalog value (coerced for
         // built-ins so the runner never execs `codex -m claude-*`), or ModelProvider default.
         model: exec.model,
-        appendSystemPrompt: agent?.appendSystemPrompt ?? undefined,
-        systemPrompt: agent?.systemPrompt ?? undefined,
-        allowedTools: (agent?.allowedTools as string[] | null) ?? [],
-        disallowedTools: (agent?.disallowedTools as string[] | null) ?? [],
+        appendSystemPrompt: workspace?.appendSystemPrompt ?? undefined,
+        systemPrompt: workspace?.systemPrompt ?? undefined,
+        allowedTools: [...ALWAYS_ALLOWED_TOOLS],
+        disallowedTools: (workspace?.disallowedTools as string[] | null) ?? [],
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their
         // vendor-defined model space is exempt from the Claude allow-list though.
@@ -386,20 +386,17 @@ export class QueueService {
           permissionMode,
           customRow?.enabled === true,
         ),
-        // Per-session effort wins; otherwise use the agent's effort setting.
+        // Per-session effort wins; otherwise use the workspace's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned
         // runner's catalog is known — an account default carried over from another runtime
         // would otherwise reach the CLI as an unsupported `--variant`.
         effort: normalizeEffortForRuntimeModel(
           provider,
-          session.effort ?? agent?.effort,
+          session.effort ?? workspace?.effort,
           exec.model,
           session.assignedRunner?.modelCatalog,
         ),
-        maxTurns: agent?.maxTurns ?? undefined,
-        maxBudgetUsd: agent?.maxBudgetUsd ?? undefined,
-        mcpConfig: (agent?.mcpConfig as Record<string, unknown> | null) ?? undefined,
-        // Includes a custom provider's injected baseUrl/key (else just the agent's env).
+        // Includes a custom provider's injected baseUrl/key (else just the workspace's env).
         env: exec.env,
       },
     };

@@ -10,7 +10,7 @@ import type { BgShell } from '@orbit/shared';
 
 /**
  * Fold the server's authoritative list (`server` — every shell the session ever launched, with
- * output recovered from the agent's persisted Read polls) together with the list derived from the
+ * output recovered from the workspace's persisted Read polls) together with the list derived from the
  * currently-loaded event window (`live` — fewer shells, but the freshest tail for anything still
  * running and any launch that streamed in after the server fetch).
  *

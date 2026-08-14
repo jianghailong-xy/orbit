@@ -17,7 +17,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     isolationStatus: 'worktree',
     branch: 'orbit/session',
     assignedRunnerId: 'runner-1',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
     mergeStatus: null,
     commitStatus: null,
     commitOperationOwner: null,
@@ -25,7 +25,7 @@ function harness(overrides: Record<string, unknown> = {}) {
   };
   const lockCalls: unknown[][] = [];
   const writes: unknown[] = [];
-  const agentWrites: unknown[] = [];
+  const workspaceWrites: unknown[] = [];
   const tx = {
     $queryRaw: async (...args: unknown[]) => {
       lockCalls.push(args);
@@ -41,9 +41,9 @@ function harness(overrides: Record<string, unknown> = {}) {
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
-    agent: {
+    workspace: {
       update: async (args: unknown) => {
-        agentWrites.push(args);
+        workspaceWrites.push(args);
       },
     },
   } as never;
@@ -51,7 +51,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     service: new SessionsService(prisma, {} as never, {} as never),
     lockCalls,
     writes,
-    agentWrites,
+    workspaceWrites,
   };
 }
 
@@ -77,7 +77,7 @@ test('merge queueing reads and writes the Session under one owner-scoped FOR UPD
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
   );
   assert.equal(data.mergeOperationOwner, null);
-  assert.deepEqual(h.agentWrites, []);
+  assert.deepEqual(h.workspaceWrites, []);
 });
 
 for (const tc of [

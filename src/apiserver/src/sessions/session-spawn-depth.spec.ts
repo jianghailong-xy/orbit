@@ -9,7 +9,7 @@ type SessionRow = { rootSessionId: string | null; spawnDepth: number };
 
 function makeService(
   rows: Record<string, SessionRow>,
-  defaults?: { agentEffort?: string | null; accountEffort?: string },
+  defaults?: { workspaceEffort?: string | null; accountEffort?: string },
 ) {
   const createdFrom: string[] = [];
   const createdDtos: Array<{ effort?: string }> = [];
@@ -19,7 +19,7 @@ function makeService(
     session: {
       findFirst: async ({ where }: { where: { id: string } }) =>
         rows[where.id]
-          ? { id: where.id, ...rows[where.id], agent: { enableOrchestration: true } }
+          ? { id: where.id, ...rows[where.id], workspace: { enableOrchestration: true } }
           : null,
       update: async ({
         where,
@@ -40,9 +40,9 @@ function makeService(
           ? { preferences: { defaultEffort: defaults.accountEffort } }
           : null,
     },
-    agent: {
+    workspace: {
       findFirst: async () =>
-        defaults && 'agentEffort' in defaults ? { effort: defaults.agentEffort } : null,
+        defaults && 'workspaceEffort' in defaults ? { effort: defaults.workspaceEffort } : null,
     },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
@@ -55,7 +55,7 @@ function makeService(
     createdFrom.push(opts.parentSessionId ?? '');
     createdDtos.push(dto as { effort?: string });
     createdTrees.push(opts.tree);
-    return { id: 'spawned', status: RunStatus.PENDING, title: 'spawned', agentId: null };
+    return { id: 'spawned', status: RunStatus.PENDING, title: 'spawned', workspaceId: null };
   }) as SessionsService['create'];
   return { service, createdFrom, createdDtos, createdTrees, rootWrites };
 }
@@ -125,15 +125,15 @@ test('a tree may now decompose past the old two-level wall', async () => {
   assert.deepEqual(createdTrees, [{ rootSessionId: 'root', depth: 3 }]);
 });
 
-test('an explicit empty agent effort wins over the account default for a spawned session', async () => {
+test('an explicit empty workspace effort wins over the account default for a spawned session', async () => {
   const { service, createdDtos } = makeService(
     { root: { rootSessionId: null, spawnDepth: 0 } },
-    { agentEffort: '', accountEffort: 'high' },
+    { workspaceEffort: '', accountEffort: 'high' },
   );
 
   await service.spawnFromSession('owner', 'root', {
     prompt: 'work',
-    agentId: 'agent-1',
+    workspaceId: 'workspace-1',
   });
 
   assert.equal(createdDtos[0].effort, '');

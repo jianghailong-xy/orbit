@@ -10,7 +10,7 @@ const RUNNER_ORDER = [
   { id: 'runner-4', position: 3 },
 ];
 
-test('reorderRunners handles agentless runners, filters invalid ids, and appends omissions', async () => {
+test('reorderRunners handles workspaceless runners, filters invalid ids, and appends omissions', async () => {
   const positions = new Map(RUNNER_ORDER.map(({ id, position }) => [id, position]));
   const findManyArgs: Array<Record<string, unknown>> = [];
   const updates: Array<{ id: string; position: number }> = [];
@@ -59,7 +59,7 @@ test('reorderRunners handles agentless runners, filters invalid ids, and appends
       groupBy: async () => [],
     },
     $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
-    // Deliberately no `agent` mock: runner ordering must not depend on querying agents.
+    // Deliberately no `workspace` mock: runner ordering must not depend on querying workspaces.
   } as unknown as PrismaService;
 
   const result = await new RunnersService(prisma).reorderRunners('owner-1', [

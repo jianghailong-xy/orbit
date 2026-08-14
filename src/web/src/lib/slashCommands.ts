@@ -6,7 +6,7 @@ export interface ComposerSlashItem {
   type?: ComposerSlashItemType;
   /** Runtime that owns this item. Absent runner assets are legacy Claude entries. */
   provider?: string | null;
-  agentId?: string | null;
+  workspaceId?: string | null;
   /** Registered by the runtime itself (built-in skill, plugin skill, namespaced
    *  command) rather than found on disk — sorted below the user's own assets. */
   builtin?: boolean;
@@ -20,7 +20,7 @@ export interface LocalStatusSnapshot {
   maxConcurrent?: number | null;
   sessionTitle?: string | null;
   sessionStatus?: string | null;
-  agentName?: string | null;
+  workspaceName?: string | null;
   provider?: string | null;
   model?: string | null;
   permissionMode?: string | null;
@@ -136,7 +136,7 @@ export function localStatusRows(s: LocalStatusSnapshot): LocalStatusRow[] {
       ? `${s.sessionTitle}${s.sessionStatus ? ` (${s.sessionStatus})` : ''}`
       : 'New session draft',
   });
-  if (s.agentName) rows.push({ label: 'Agent', value: s.agentName });
+  if (s.workspaceName) rows.push({ label: 'Workspace', value: s.workspaceName });
   if (s.provider) rows.push({ label: 'Provider', value: s.provider });
   if (s.model) rows.push({ label: 'Model', value: s.model });
   if (s.permissionMode) rows.push({ label: 'Permission', value: s.permissionMode });

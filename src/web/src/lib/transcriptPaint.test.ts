@@ -31,8 +31,8 @@ describe('transcriptPlaceholder', () => {
     ).toBe('skeleton');
   });
 
-  it('does not claim to be waiting on the agent while it is really waiting on the fetch', () => {
-    // Before: an empty pane + "Waiting for the agent…" were the only two outcomes, and a live
+  it('does not claim to be waiting on the workspace while it is really waiting on the fetch', () => {
+    // Before: an empty pane + "Waiting for the workspace…" were the only two outcomes, and a live
     // session mid-load got the wrong one.
     const loading = { ...base, eventCount: 0, seeding: true };
     expect(transcriptPlaceholder(loading)).toBe('skeleton');

@@ -6,7 +6,7 @@ import {
   type SessionLifecycleView,
 } from './sessionState';
 import type { SessionTagRef } from './sessionGrouping';
-import type { ConfiguredProvider } from './agentDefaults';
+import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
 
 export type { ConfiguredProvider };
@@ -40,8 +40,8 @@ export const setupStatusQuery = () =>
     queryFn: () => api<{ needsSetup: boolean }>('/auth/setup-status'),
   });
 
-export const agentsQuery = () =>
-  queryOptions({ queryKey: ['agents'], queryFn: () => api<any[]>('/agents') });
+export const workspacesQuery = () =>
+  queryOptions({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
 
 /** Control-plane–configured providers (custom slugs borrowing a built-in runtime), de-sensitized
  *  for the pickers. Merged with the built-in claude/codex in the provider/model dropdowns; any
@@ -69,7 +69,7 @@ export const presetModelsQuery = () =>
     staleTime: 5 * 60_000,
   });
 
-/** Per-account UI preferences (theme + new-agent defaults). Mirrors the apiserver's
+/** Per-account UI preferences (theme + new-workspace defaults). Mirrors the apiserver's
  *  UpdatePreferencesDto; every key is optional and falls back to an app default. */
 export interface UserPreferences {
   theme?: 'system' | 'light' | 'dark';
@@ -100,8 +100,8 @@ export const meQuery = () =>
   });
 
 /**
- * Session list, optionally scoped to a runner, an agent, a tag, a lifecycle view and a page
- * size. The key mirrors the query string one-to-one — `['sessions', runnerId, agentId, view,
+ * Session list, optionally scoped to a runner, a workspace, a tag, a lifecycle view and a page
+ * size. The key mirrors the query string one-to-one — `['sessions', runnerId, workspaceId, view,
  * tagId, limit]` — so every scope is its own cache entry while the broad `['sessions']` prefix
  * still invalidates them all.
  */
@@ -123,7 +123,7 @@ const LEGACY_SESSION_VIEW: Record<SessionLifecycleView, 'active' | 'archived' | 
 
 async function fetchSessions(
   runnerId: string | null,
-  agentId: string | null,
+  workspaceId: string | null,
   view: SessionListView | null,
   tagId: string | null,
   limit: number | null,
@@ -131,7 +131,7 @@ async function fetchSessions(
   const path = (requestedView: string | null): string => {
     const qs = new URLSearchParams();
     if (runnerId) qs.set('runnerId', runnerId);
-    if (agentId) qs.set('agentId', agentId);
+    if (workspaceId) qs.set('workspaceId', workspaceId);
     if (requestedView) qs.set('view', requestedView);
     if (tagId) qs.set('tagId', tagId);
     if (limit) qs.set('limit', String(limit));
@@ -153,41 +153,41 @@ async function fetchSessions(
 export const sessionsQuery = (
   opts: {
     runnerId?: string | null;
-    agentId?: string | null;
+    workspaceId?: string | null;
     view?: SessionListView | null;
     tagId?: string | null;
     limit?: number | null;
   } = {},
 ) => {
   const runnerId = opts.runnerId ?? null;
-  const agentId = opts.agentId ?? null;
+  const workspaceId = opts.workspaceId ?? null;
   const view = opts.view ?? null;
   const tagId = opts.tagId ?? null;
   const limit = opts.limit ?? null;
   return queryOptions({
-    queryKey: ['sessions', runnerId, agentId, view, tagId, limit] as const,
-    queryFn: () => fetchSessions(runnerId, agentId, view, tagId, limit),
+    queryKey: ['sessions', runnerId, workspaceId, view, tagId, limit] as const,
+    queryFn: () => fetchSessions(runnerId, workspaceId, view, tagId, limit),
   });
 };
 
-/** One agent's Open-session tallies, as returned by `GET /sessions/counts`. */
-export interface AgentSessionCounts {
-  agentId: string;
+/** One workspace's Open-session tallies, as returned by `GET /sessions/counts`. */
+export interface WorkspaceSessionCounts {
+  workspaceId: string;
   /** Sessions with a turn in flight (RUNNING or queued). */
   active: number;
-  /** Sessions blocked on an approval — the nav sidebar's per-agent attention badge. */
+  /** Sessions blocked on an approval — the nav sidebar's per-workspace attention badge. */
   needsYou: number;
 }
 
 /**
- * Per-agent Open-session tallies for the nav sidebar's badges. Its own key (not a `['sessions']`
+ * Per-workspace Open-session tallies for the nav sidebar's badges. Its own key (not a `['sessions']`
  * scope) so the list's optimistic row edits, which patch every `['sessions']` entry, can't reach
  * these rows; the control-plane stream invalidates it alongside them.
  */
-export const agentSessionCountsQuery = () =>
+export const workspaceSessionCountsQuery = () =>
   queryOptions({
     queryKey: ['session-counts'] as const,
-    queryFn: () => api<AgentSessionCounts[]>('/sessions/counts'),
+    queryFn: () => api<WorkspaceSessionCounts[]>('/sessions/counts'),
   });
 
 /**
@@ -237,7 +237,7 @@ export const sessionTagsQuery = () =>
   });
 
 /**
- * One session's detail — resolves the runner/agent behind a `/sessions/:id` deep link.
+ * One session's detail — resolves the runner/workspace behind a `/sessions/:id` deep link.
  * Shares its key with the row in the list query so the two dedupe. Disabled when there
  * is no id; call sites tighten `enabled` further as needed.
  */

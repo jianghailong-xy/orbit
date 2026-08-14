@@ -16,7 +16,7 @@ const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 type Row = {
   id: string;
   ownerId: string;
-  agentId: string | null;
+  workspaceId: string | null;
   title: string | null;
   status: string;
   endReason?: string | null;
@@ -34,7 +34,7 @@ type Row = {
     lastHeartbeatAt: Date | null;
   } | null;
   lastTurnAt: Date | null;
-  agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
+  workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
 };
 
 // Fake just the Prisma surface streamForUser touches: session.findUnique (owner + summary —
@@ -51,7 +51,7 @@ function fakePrisma(rows: Record<string, Row>, pendingApprovals = 0): PrismaServ
 const rowA: Row = {
   id: 'sessA',
   ownerId: 'userA',
-  agentId: 'agentA',
+  workspaceId: 'workspaceA',
   title: 'Fix bug',
   status: RunStatus.RUNNING,
   cancelRequestedAt: null,
@@ -65,7 +65,7 @@ const rowA: Row = {
     lastHeartbeatAt: new Date(),
   },
   lastTurnAt: new Date('2026-06-26T00:00:00.000Z'),
-  agent: { id: 'agentA', name: 'builder', model: 'opus', effort: 'high' },
+  workspace: { id: 'workspaceA', name: 'builder', model: 'opus', effort: 'high' },
 };
 
 // Do NOT call onModuleInit — that would open a real pg LISTEN connection. The constructor only
@@ -94,7 +94,7 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   const ev = got[0];
   assert.equal(ev.type, 'session.updated');
   assert.equal(ev.sessionId, 'sessA');
-  assert.equal(ev.agentId, 'agentA');
+  assert.equal(ev.agentId, 'workspaceA');
   const data = ev.data as Record<string, unknown>;
   assert.equal(data.id, 'sessA');
   assert.equal(data.title, 'Fix bug');
@@ -115,7 +115,7 @@ test('a STATUS event reaches the owner as session.updated with a full summary', 
   assert.equal(data.pendingApprovals, 3);
   assert.equal(data.lastTurnAt, '2026-06-26T00:00:00.000Z');
   assert.deepEqual(data.agent, {
-    id: 'agentA',
+    id: 'workspaceA',
     name: 'builder',
     model: 'opus',
     effort: 'high',
@@ -298,14 +298,14 @@ test('publishTaskChanged surfaces as task.changed with the taskId, scoped to the
   assert.equal(theirs.length, 0);
 });
 
-test('publishAgentChanged surfaces as agent.changed with the changed agentId', async () => {
+test('publishWorkspaceChanged surfaces as workspace.changed with the changed workspaceId', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const mine: ControlEvent[] = [];
   const theirs: ControlEvent[] = [];
   const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
   const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
 
-  svc.publishAgentChanged('sessA', 'agentNew');
+  svc.publishWorkspaceChanged('sessA', 'workspaceNew');
   await delay(30);
   subA.unsubscribe();
   subB.unsubscribe();
@@ -313,9 +313,9 @@ test('publishAgentChanged surfaces as agent.changed with the changed agentId', a
   assert.equal(mine.length, 1);
   assert.equal(mine[0].type, 'agent.changed');
   assert.equal(mine[0].sessionId, 'sessA');
-  // `data.agentId` is the CREATED agent; the envelope's stays the calling session's agent.
-  assert.deepEqual(mine[0].data, { agentId: 'agentNew' });
-  assert.equal(mine[0].agentId, 'agentA');
+  // `data.agentId` is the CREATED workspace; the envelope's stays the calling session's workspace.
+  assert.deepEqual(mine[0].data, { agentId: 'workspaceNew' });
+  assert.equal(mine[0].agentId, 'workspaceA');
   assert.equal(theirs.length, 0);
 });
 
@@ -393,7 +393,7 @@ test('lifecycle signals never enter a per-session transcript stream', async () =
     SessionLifecycleState.COMPLETED,
   );
   svc.publishTaskChanged('sessA', 'task123');
-  svc.publishAgentChanged('sessA', 'agentNew');
+  svc.publishWorkspaceChanged('sessA', 'workspaceNew');
   svc.publishSessionUpdated('sessA');
   svc.publishForUser('userA', RunEventType.TAG_CHANGED, 'tag1');
   svc.publish('sessA', { seq: 3, type: RunEventType.STATUS, ts: 't', payload: {} });

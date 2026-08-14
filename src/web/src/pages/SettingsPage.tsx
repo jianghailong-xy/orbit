@@ -5,7 +5,7 @@ import { api } from '../api';
 import { meQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
-import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/agentDefaults';
+import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
 
 // One labelled row: title + hint on the left, the control on the right.
 function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
@@ -29,7 +29,8 @@ function Field({ label, hint, children }: { label: string; hint: string; childre
 }
 
 // Personal preferences. Appearance is account-synced via the theme context; the permission
-// default pre-fills the runner's new-agent form and persists per account.
+// default is what a new session starts in when the composer names no mode (it used to live per
+// workspace — see common/permission-mode.ts for why the posture belongs to the run).
 export function SettingsPage() {
   const message = useToast();
   const qc = useQueryClient();
@@ -80,8 +81,11 @@ export function SettingsPage() {
         </Field>
       </Card>
 
-      <Card title="Agent defaults">
-        <Field label="Default permission mode" hint="The mode a new agent starts in.">
+      <Card title="Session defaults">
+        <Field
+          label="Default permission mode"
+          hint="The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
+        >
           <Select
             style={{ width: 200 }}
             value={defaultMode}

@@ -30,7 +30,7 @@ function makeService(options: { ownedTasks?: string[] } = {}) {
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
-    agent: { findFirst: async () => ({ id: 'agent-1' }) },
+    workspace: { findFirst: async () => ({ id: 'workspace-1' }) },
     taskList: { findFirst: async () => ({ id: 'list-1' }) },
     modelProvider: { findFirst: async () => ({ slug: 'custom' }) },
     session: { findFirst: async () => null },

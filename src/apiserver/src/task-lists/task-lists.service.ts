@@ -133,20 +133,20 @@ export class TaskListsService {
     const userIds = [
       ...new Set(tasks.filter((t) => t.creatorType === CreatorType.USER).map((t) => t.creatorId)),
     ];
-    const agentIds = [
+    const workspaceIds = [
       ...new Set(tasks.filter((t) => t.creatorType === CreatorType.AGENT).map((t) => t.creatorId)),
     ];
-    const [users, agents] = await Promise.all([
+    const [users, workspaces] = await Promise.all([
       userIds.length
         ? this.prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } })
         : [],
-      agentIds.length
-        ? this.prisma.agent.findMany({ where: { id: { in: agentIds } }, select: { id: true, name: true } })
+      workspaceIds.length
+        ? this.prisma.workspace.findMany({ where: { id: { in: workspaceIds } }, select: { id: true, name: true } })
         : [],
     ]);
     const names = new Map<string, string>();
     for (const u of users) names.set(u.id, u.name);
-    for (const a of agents) names.set(a.id, a.name);
+    for (const a of workspaces) names.set(a.id, a.name);
     return tasks.map((t) => ({ ...t, creatorName: names.get(t.creatorId) ?? null }));
   }
 

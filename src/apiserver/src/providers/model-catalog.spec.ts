@@ -55,7 +55,7 @@ test('model-catalog', async (t) => {
     for (const shipped of moonshot.models) assert.ok(values.includes(shipped.value));
   });
 
-  await t.test('skips models a coding agent cannot drive, and other vendors\' ids', () => {
+  await t.test('skips models a coding workspace cannot drive, and other vendors\' ids', () => {
     const catalog = parseModelCatalog(
       payload([
         model({ id: 'kimi-k3', name: 'Kimi K3', release_date: '2026-07-16' }),

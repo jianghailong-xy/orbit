@@ -12,9 +12,9 @@ export const TASK_OCCUPYING: RunStatus[] = [
 
 /**
  * Backstop for a stalled task. When a session ends abnormally (FAILED/CANCELLED),
- * the task its agent left at IN_PROGRESS would otherwise stay "in progress" forever
+ * the task its workspace left at IN_PROGRESS would otherwise stay "in progress" forever
  * with nothing actually running — the list shows a perpetual running indicator.
- * Task.status is an agent-owned label (see TasksService.withRunning), so we only
+ * Task.status is a workspace-owned label (see TasksService.withRunning), so we only
  * nudge it back: if NO other session for the task is still occupying it, move
  * IN_PROGRESS -> `resetTo` so the abandoned work surfaces. `resetTo` is OPEN for a
  * retryable end (user cancel / runner offline) — back to the actionable pool — or
@@ -44,12 +44,12 @@ export async function reclaimStalledTask(
  * Record a run failure as a comment on the task, so the failure and its reason surface
  * on the task's own timeline instead of being buried in the session transcript (a run
  * that died on a Claude API/content-filter error otherwise just parks silently). The
- * comment is attributed to the task's assignee agent — the agent meant to run it —
+ * comment is attributed to the task's assignee workspace — the workspace meant to run it —
  * falling back to the task's creator when there is no assignee.
  *
  * Call from the same transaction that finalizes a task-bound session as FAILED, gated on
  * that finalization actually happening (so one failure -> one comment). Independent of
- * the task's own status, so it also covers a run that died before its agent ever moved
+ * the task's own status, so it also covers a run that died before its workspace ever moved
  * the task to IN_PROGRESS.
  */
 export async function postRunFailureComment(

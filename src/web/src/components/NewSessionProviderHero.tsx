@@ -48,7 +48,7 @@ function hexAlpha(hex: string, alpha: number): string {
  *
  * Collapsed to a single identity by default — provider is a sticky choice, so showing every
  * option on every new session would charge the full visual cost for the rare switch. The list
- * opens on click, and the pick is remembered on the agent, so the common path is: read it, ignore
+ * opens on click, and the pick is remembered on the workspace, so the common path is: read it, ignore
  * it, start typing.
  */
 export function NewSessionProviderHero({

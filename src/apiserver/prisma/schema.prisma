@@ -77,7 +77,7 @@ model User {
   claudeOauthTokenEnc   String?   @map("claude_oauth_token_enc")
   claudeOauthTokenSetAt DateTime? @map("claude_oauth_token_set_at")
 
-  agents           Agent[]
+  workspaces       Workspace[]
   runners          Runner[]
   enrollmentTokens EnrollmentToken[]
   serviceTokens    ServiceToken[]
@@ -232,8 +232,8 @@ model Runner {
   installMode    String?   @map("install_mode")
 
   sessions Session[]
-  // Agents `orbit register` minted for this machine (one per project dir + tool).
-  agents   Agent[]
+  // Workspaces `orbit register` minted for this machine (one per project dir + tool).
+  workspaces Workspace[]
   // Narrow, revocable credentials minted for headless processes on this machine.
   serviceTokens ServiceToken[]
 
@@ -260,10 +260,10 @@ model ServiceToken {
   // The machine this token acts on. Its reach never crosses to another runner's sessions.
   runnerId   String    @map("runner_id") @db.Uuid
   runner     Runner    @relation(fields: [runnerId], references: [id], onDelete: Cascade)
-  // Optional single-agent pin. Required when the token may create sessions, so a leaked bridge
-  // token can only ever start the one agent it was minted for.
-  agentId    String?   @map("agent_id") @db.Uuid
-  agent      Agent?    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  // Optional single-workspace pin. Required when the token may create sessions, so a leaked
+  // bridge token can only ever start sessions in the one workspace it was minted for.
+  workspaceId String?  @map("workspace_id") @db.Uuid
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   // Human label shown by `orbit token list`, so an unused token can be identified before revoking.
   label      String?
   // Enumerated capabilities: session:get | session:list | session:send | session:create. The
@@ -324,59 +324,61 @@ model DeviceEnrollment {
   @@map("device_enrollment")
 }
 
-// An agent definition: how to drive a local coding runtime for a class of sessions.
-model Agent {
+// A workspace: one checkout on one machine, plus how to branch and merge inside it.
+//
+// It is a PLACE, not an actor — the actor is the Session (one live coding-runtime process) and
+// the body of work is the Task graph. Everything that is a policy decision rather than a
+// property of the checkout lives elsewhere on purpose: the permission posture is per-run
+// (Session.permissionMode) with an account-level default (UserPreferences.defaultPermissionMode),
+// and tool allowlists / MCP servers are machine or account concerns, not directory ones.
+model Workspace {
   id                  String    @id @default(uuid(7)) @db.Uuid
   name                String
   description         String?
-  // An agent holds no provider: it names a machine and a project directory, while the provider is
-  // a per-session binding (Session.provider, fixed for that session's lifetime). The default a new
-  // session inherits is derived from what this project last ran — see agents/agent-provider.ts.
-  // Legacy per-agent model pin. New sessions resolve from their Runtime/ModelProvider; migration
+  // A workspace holds no provider: it names a machine and a project directory, while the provider
+  // is a per-session binding (Session.provider, fixed for that session's lifetime). The default a
+  // new session inherits is derived from what this workspace last ran — see
+  // workspaces/workspace-provider.ts.
+  // Legacy per-workspace model pin. New sessions resolve from their Runtime/ModelProvider; migration
   // 0079 copied old pins into existing sessions. Temporarily retained as a rolling-deploy bridge
   // for model-less sessions written by old replicas; first claim snapshots it onto Session.model.
   model               String?
   appendSystemPrompt  String?   @map("append_system_prompt")
   systemPrompt        String?   @map("system_prompt")
-  allowedTools        Json      @default("[]") @map("allowed_tools")
   disallowedTools     Json      @default("[]") @map("disallowed_tools")
-  permissionMode      String    @default("dontAsk") @map("permission_mode")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
-  maxTurns            Int?      @map("max_turns")
-  maxBudgetUsd        Float?    @map("max_budget_usd")
-  mcpConfig           Json?     @map("mcp_config")
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId      String?   @map("target_runner_id") @db.Uuid
   targetLabels        String[]  @default([]) @map("target_labels")
-  // The machine (Runner) this agent belongs to, set when `orbit register` mints it;
-  // null for hand-made config agents. Cascade so unregistering a machine drops them.
+  // The machine (Runner) this workspace lives on, set when `orbit register` mints it;
+  // null for hand-made config workspaces. Cascade so unregistering a machine drops them.
   runnerId            String?   @map("runner_id") @db.Uuid
   runner              Runner?   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
-  // The project directory claude runs in for this agent, and its coding-tool key.
+  // The project directory the runtime runs in for this workspace, and its coding-tool key.
   workDir             String?   @map("work_dir")
-  // Custom environment variables injected into this agent's claude process (string map).
+  // Custom environment variables injected into this workspace's runtime process (string map).
   env                 Json?     @map("env")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
   // baseline commit) on the next claim so its sessions can be worktree-isolated. Opt-in
-  // per agent — the web "Enable isolation" action on a non-git run flips this on.
+  // per workspace — the web "Enable isolation" action on a non-git run flips this on.
   autoInitGit         Boolean   @default(false) @map("auto_init_git")
-  // Whether this agent's sessions each run in their own per-session git worktree. Default off, so a
-  // new agent's sessions run directly in workDir with no isolation unless the user opts in. Off → a
-  // session gets no `branch` and the runner runs it directly in workDir with no worktree (the agent's
-  // concurrent sessions then share one working tree); the merge/commit/diff machinery is skipped
-  // since there's no isolated branch.
+  // Whether this workspace's sessions each run in their own per-session git worktree. Default off,
+  // so a new workspace's sessions run directly in workDir with no isolation unless the user opts
+  // in. Off → a session gets no `branch` and the runner runs it directly in workDir with no
+  // worktree (the workspace's concurrent sessions then share one working tree); the
+  // merge/commit/diff machinery is skipped since there's no isolated branch.
   enableWorktree      Boolean   @default(false) @map("enable_worktree")
-  // Opt-in per agent (default off): may this agent's in-session coding agent spawn and manage
-  // OTHER sessions via the `orbit mcp` session_* tools (L3 orchestration)? Off → those tools
-  // aren't exposed and the runner-token spawn endpoint refuses.
+  // Opt-in per workspace (default off): may this workspace's in-session coding agent spawn and
+  // manage OTHER sessions via the `orbit mcp` session_* tools (L3 orchestration)? Off → those
+  // tools aren't exposed and the runner-token spawn endpoint refuses.
   enableOrchestration Boolean   @default(false) @map("enable_orchestration")
-  // The branch this agent's sessions merge into by default, remembered from the last time the
+  // The branch this workspace's sessions merge into by default, remembered from the last time the
   // user switched targets in the status bar's merge dropdown. Null → the runner's auto-detect
-  // (main, else master). Agent-scoped so a chosen target sticks across all the agent's sessions.
+  // (main, else master). Workspace-scoped so a chosen target sticks across all its sessions.
   defaultMergeTarget  String?   @map("default_merge_target")
   // What the runner last saw at `workDir` on its own disk, refreshed each heartbeat. The config
   // form reads these to say whether the path is actually there and whether it can be worktree-
@@ -389,23 +391,23 @@ model Agent {
   ownerId             String    @map("owner_id") @db.Uuid
   owner               User      @relation(fields: [ownerId], references: [id])
   createdAt           DateTime  @default(now()) @map("created_at")
-  // Soft delete: deleting an agent stamps this instead of removing the row, so its
+  // Soft delete: deleting a workspace stamps this instead of removing the row, so its
   // sessions/tasks stay linked (no orphaning) and it can be restored. NULL = live;
   // every user-facing listing filters on `deletedAt: null`. Runtime lookups by a live
-  // session's agentId intentionally don't filter, so in-flight sessions keep running.
+  // session's workspaceId intentionally don't filter, so in-flight sessions keep running.
   deletedAt           DateTime? @map("deleted_at")
   // Sidebar display order set by drag-to-reorder; NULL sorts last (after positioned
-  // agents, by createdAt) so existing/new agents stay oldest-first until reordered.
+  // workspaces, by createdAt) so existing/new ones stay oldest-first until reordered.
   position            Int?      @map("position")
 
   sessions      Session[]
-  assignedTasks Task[] // tasks assigned to this agent to execute
-  // Service tokens pinned to this agent (see ServiceToken).
+  assignedTasks Task[] // tasks assigned to run in this workspace
+  // Service tokens pinned to this workspace (see ServiceToken).
   serviceTokens ServiceToken[]
 
   @@index([ownerId])
   @@index([runnerId])
-  @@map("agent")
+  @@map("workspace")
 }
 
 // A first-class interactive chat session (Route B): a long-lived conversation
@@ -421,8 +423,8 @@ model Session {
   creator              User      @relation("SessionCreator", fields: [creatorId], references: [id])
   assignedRunnerId     String?   @map("assigned_runner_id") @db.Uuid
   assignedRunner       Runner?   @relation(fields: [assignedRunnerId], references: [id])
-  agentId              String?   @map("agent_id") @db.Uuid
-  agent                Agent?    @relation(fields: [agentId], references: [id])
+  workspaceId          String?   @map("workspace_id") @db.Uuid
+  workspace            Workspace? @relation(fields: [workspaceId], references: [id])
   // Optional parent work item; deleting the Task detaches but keeps the session.
   taskId               String?   @map("task_id") @db.Uuid
   task                 Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
@@ -669,9 +671,9 @@ model Session {
   tagLinks              SessionTagLink[]
 
   @@index([assignedRunnerId, status])
-  // "what did this project last run on", the derived seed a new session inherits when the caller
-  // names no provider (agents/agent-provider.ts).
-  @@index([agentId, createdAt(sort: Desc)])
+  // "what did this workspace last run on", the derived seed a new session inherits when the
+  // caller names no provider (workspaces/workspace-provider.ts).
+  @@index([workspaceId, createdAt(sort: Desc)])
   @@index([batchId, status])
   @@index([parentSessionId])
   // The claim queue's tree cap: a tree's active turns.
@@ -954,9 +956,9 @@ model Task {
   // detail page link back to its origin run.
   creatorSessionId String?     @map("creator_session_id") @db.Uuid
   creatorSession   Session?    @relation("TaskCreatorSession", fields: [creatorSessionId], references: [id], onDelete: SetNull)
-  // The agent assigned to execute it (real FK, optional).
+  // The workspace this task runs in when executed (real FK, optional).
   assigneeId       String?     @map("assignee_id") @db.Uuid
-  assignee         Agent?      @relation(fields: [assigneeId], references: [id])
+  assignee         Workspace?  @relation(fields: [assigneeId], references: [id])
   // Optional parent list grouping; deleting the list detaches but keeps the task.
   listId           String?     @map("list_id") @db.Uuid
   list             TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)

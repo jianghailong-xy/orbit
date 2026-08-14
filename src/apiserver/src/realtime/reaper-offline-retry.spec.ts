@@ -40,7 +40,7 @@ function sweepWithOfflineRunner(taskId: string | null) {
           cancelRequestedAt: null,
           endReason: null,
           task: taskId ? { status: TaskStatus.IN_PROGRESS } : null,
-          agent: { provider: 'claude', providerBuiltin: true },
+          workspace: { provider: 'claude', providerBuiltin: true },
           // Three missed heartbeats: what the reaper reads as gone.
           assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date(Date.now() - 120_000) },
         },

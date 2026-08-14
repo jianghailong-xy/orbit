@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isSessionTurnActive, outlivingSessionWork } from './sessionActivity';
 
 describe('session activity', () => {
-  it('keeps a parked parent active while a sub-agent is still running', () => {
+  it('keeps a parked parent active while a sub-workspace is still running', () => {
     const session = { runningSubagentCount: 1, runningBgCount: 0 };
 
     expect(outlivingSessionWork(session)).toBe('subagent');
@@ -14,12 +14,12 @@ describe('session activity', () => {
 
     // Still not idle for the status line — but a left-up dev server never exits, so it neither
     // holds the worktree gate (and Commit) closed for the rest of the session's life nor reads
-    // as the agent working.
+    // as the workspace working.
     expect(outlivingSessionWork(session)).toBe('background');
     expect(isSessionTurnActive(session, true, true)).toBe(false);
   });
 
-  it('lets a sub-agent outrank a background shell when both are live', () => {
+  it('lets a sub-workspace outrank a background shell when both are live', () => {
     expect(outlivingSessionWork({ runningSubagentCount: 1, runningBgCount: 2 })).toBe('subagent');
   });
 

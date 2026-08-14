@@ -17,7 +17,7 @@ function runningSession(overrides: Record<string, unknown> = {}) {
     cancelRequestedAt: null,
     endReason: null,
     task: null,
-    agent: { provider: AgentProvider.CLAUDE },
+    workspace: { provider: AgentProvider.CLAUDE },
     assignedRunner: { status: 'ONLINE', lastHeartbeatAt: new Date() },
     ...overrides,
   };

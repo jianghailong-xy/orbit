@@ -168,7 +168,7 @@ test('reclaim enables orchestration only when capability and every live guard ma
     id: string,
     enableOrchestration: boolean,
     overrides: Record<string, unknown> = {},
-    agentOverrides: Record<string, unknown> = {},
+    workspaceOverrides: Record<string, unknown> = {},
   ) => ({
     id,
     ownerId: 'owner-1',
@@ -185,9 +185,9 @@ test('reclaim enables orchestration only when capability and every live guard ma
     effort: null,
     branch: null,
     mergeTarget: null,
-    agentId: `agent-${id}`,
+    workspaceId: `workspace-${id}`,
     taskId: null,
-    agent: {
+    workspace: {
       provider: 'codex',
       model: null,
       env: null,
@@ -205,7 +205,7 @@ test('reclaim enables orchestration only when capability and every live guard ma
       defaultMergeTarget: null,
       enableOrchestration,
       deletedAt: null,
-      ...agentOverrides,
+      ...workspaceOverrides,
     },
     ...overrides,
   });
@@ -218,7 +218,7 @@ test('reclaim enables orchestration only when capability and every live guard ma
       session('foreign-owner-session', true, { ownerId: 'owner-2' }),
       session('other-runner-session', true, { assignedRunnerId: 'runner-2' }),
       session('finished-session', true, { status: RunStatus.SUCCEEDED }),
-      session('deleted-agent-session', true, {}, { deletedAt: new Date() }),
+      session('deleted-workspace-session', true, {}, { deletedAt: new Date() }),
     ],
   });
 

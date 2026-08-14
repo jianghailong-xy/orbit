@@ -19,16 +19,16 @@ function fakeTx(task: unknown) {
   return { tx: tx as any, created };
 }
 
-test('failure comment is attributed to the assignee agent when set', async () => {
+test('failure comment is attributed to the assignee workspace when set', async () => {
   const { tx, created } = fakeTx({
-    assigneeId: 'agent-1',
+    assigneeId: 'workspace-1',
     creatorType: CreatorType.USER,
     creatorId: 'user-1',
   });
   await postRunFailureComment(tx, 'task-1', 'API Error: blocked');
   assert.equal(created.length, 1);
   assert.equal(created[0].authorType, CreatorType.AGENT);
-  assert.equal(created[0].authorId, 'agent-1');
+  assert.equal(created[0].authorId, 'workspace-1');
   assert.equal(created[0].taskId, 'task-1');
   assert.match(created[0].body, /API Error: blocked/);
 });

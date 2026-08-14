@@ -238,7 +238,7 @@ struct RunnerDetailContent: View {
                 }
             }
 
-            Section("Agents") {
+            Section("Workspaces") {
                 let ags = runners.agents(forRunner: runner.id)
                 if ags.isEmpty {
                     Text("No agents on this runner.").font(.orbitLabel).foregroundStyle(.secondary)

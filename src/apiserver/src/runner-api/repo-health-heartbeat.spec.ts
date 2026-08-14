@@ -17,9 +17,9 @@ function harness(row: Record<string, unknown> = {}) {
       },
       findUnique: async () => row,
     },
-    // The heartbeat also lists this runner's agents (the workDir probe targets). It shares one
+    // The heartbeat also lists this runner's workspaces (the workDir probe targets). It shares one
     // try/catch with the relays, so a missing stub here would swallow them instead of failing.
-    agent: { findMany: async () => [] },
+    workspace: { findMany: async () => [] },
   } as never;
   const realtime = {
     drainCancellations: async () => [],
@@ -51,7 +51,7 @@ test('heartbeat stores the reported checkout health, dropping unusable entries',
           branch: 'main',
           state: 'unmerged',
           paths: ['src/a.swift'],
-          agentIds: ['agent-1', 'agent-2'],
+          agentIds: ['workspace-1', 'workspace-2'],
         },
         { root: '/root/other', state: 'not-a-state' }, // unknown state → dropped, not repaired
         { state: 'clean' }, // no root → dropped
@@ -65,7 +65,7 @@ test('heartbeat stores the reported checkout health, dropping unusable entries',
       state: 'unmerged',
       branch: 'main',
       paths: ['src/a.swift'],
-      agentIds: ['agent-1', 'agent-2'],
+      agentIds: ['workspace-1', 'workspace-2'],
     },
   ]);
 });
@@ -108,7 +108,7 @@ test('an abandoned cleanup is swept instead of blocking the next attempt', async
 test('a cleanup result corrects the stored health for that checkout', async () => {
   const h = harness({
     repoHealth: [
-      { root: '/root/orbit', state: 'unmerged', paths: ['src/a.swift'], agentIds: ['agent-1'] },
+      { root: '/root/orbit', state: 'unmerged', paths: ['src/a.swift'], agentIds: ['workspace-1'] },
       { root: '/root/other', state: 'dirty', paths: ['x.txt'] },
     ],
   });
@@ -123,7 +123,7 @@ test('a cleanup result corrects the stored health for that checkout', async () =
     },
   );
   assert.deepEqual(h.row.repoHealth, [
-    { root: '/root/orbit', state: 'clean', paths: [], agentIds: ['agent-1'] },
+    { root: '/root/orbit', state: 'clean', paths: [], agentIds: ['workspace-1'] },
     { root: '/root/other', state: 'dirty', paths: ['x.txt'] },
   ]);
   assert.equal(h.row.repoCleanupBranch, 'orbit/rescue-abc1234');

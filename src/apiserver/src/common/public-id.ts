@@ -28,8 +28,8 @@ import { toUuid } from '@orbit/shared';
  * One class covers all three positions, and which one it is decides required-vs-optional — so
  * the distinction can't be got wrong by reaching for the wrong pipe:
  *   `@Param('id', PublicIdPipe)`                     — required; an empty segment is a 400
- *   `@Query('agentId', PublicIdPipe)`                — optional; absent stays absent
- *   `@Body(PublicIdPipe.forFields('agentId')) dto: T`    — for bodies class-validator never sees
+ *   `@Query('workspaceId', PublicIdPipe)`                — optional; absent stays absent
+ *   `@Body(PublicIdPipe.forFields('workspaceId')) dto: T`    — for bodies class-validator never sees
  * DTO *classes* declare it as a field decorator instead: `@IsPublicId()`.
  */
 @Injectable()
@@ -43,7 +43,7 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
    *  constructor empty is what lets one class serve both forms. */
   private fields?: readonly string[];
 
-  /** Body form: `@Body(PublicIdPipe.forFields('agentId'))`. */
+  /** Body form: `@Body(PublicIdPipe.forFields('workspaceId'))`. */
   static forFields(...fields: string[]): PublicIdPipe {
     const pipe = new PublicIdPipe();
     pipe.fields = fields;

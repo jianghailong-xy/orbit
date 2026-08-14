@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sessionLine } from './AgentView';
+import { sessionLine } from './WorkspaceView';
 
 /**
  * The session row's second line. Kept in step with the native port
@@ -57,8 +57,8 @@ describe('sessionLine', () => {
   });
 
   /**
-   * A turn interrupted before the agent said anything leaves the message you sent standing — the
-   * server only clears `lastUserText` once the agent actually answers — and it outranks the older
+   * A turn interrupted before the workspace said anything leaves the message you sent standing — the
+   * server only clears `lastUserText` once the workspace actually answers — and it outranks the older
    * reply below it.
    */
   it('shows an unanswered message ahead of the previous reply', () => {

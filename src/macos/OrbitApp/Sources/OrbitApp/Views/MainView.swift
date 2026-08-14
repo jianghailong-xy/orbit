@@ -28,14 +28,14 @@ struct MainView: View {
 }
 
 /// UI-only selection for the source-list sidebar: a top-level section, or — nested under the
-/// "Agents" row — a specific agent. (The web keeps the agent list in a middle column; on macOS we
+/// "Workspaces" row — a specific agent. (The web keeps the agent list in a middle column; on macOS we
 /// fold it into the sidebar so picking an agent goes straight to its detail, dropping a column.)
 enum SidebarSelection: Hashable {
     case section(AppSection)
     case agent(String)
 }
 
-/// The leftmost rail, now a source list: top-level sections, with "Agents" expandable to its
+/// The leftmost rail, now a source list: top-level sections, with "Workspaces" expandable to its
 /// runner-grouped agents (the list that used to live in the middle column). Admin is role-gated.
 /// Section list + gating come from OrbitKit's `AppSection`.
 struct SectionSidebar: View {
@@ -44,7 +44,7 @@ struct SectionSidebar: View {
     @State private var agentsExpanded = true
 
     /// Bridge the two model fields (`selectedSection` + `selectedAgentID`) to the List's single
-    /// selection. The "Agents" parent only expands/collapses (it isn't tagged), so `.agents` is
+    /// selection. The "Workspaces" parent only expands/collapses (it isn't tagged), so `.agents` is
     /// reached by selecting an agent — which is also the only way it carries a detail.
     private var selection: Binding<SidebarSelection?> {
         Binding(

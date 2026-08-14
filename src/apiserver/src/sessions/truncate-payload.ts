@@ -48,7 +48,7 @@ function clipDeep(v: unknown, cap: number, cut: { hit: boolean }): unknown {
 /**
  * Clip a tool_result's `content`. Claude delivers it as a plain string or as an array of blocks;
  * only the text of a text block is clipped. Image blocks pass through whole — their base64 IS
- * what the user sees (a screenshot the agent produced), and half a base64 string renders as a
+ * what the user sees (a screenshot the workspace produced), and half a base64 string renders as a
  * broken image rather than a preview.
  */
 function clipContent(content: unknown, cap: number, cut: { hit: boolean }): unknown {

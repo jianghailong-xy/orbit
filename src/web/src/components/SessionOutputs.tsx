@@ -40,7 +40,7 @@ for (const [name, lang] of Object.entries({
  * Worktree status bar shown directly above the composer: the branch this session's work
  * lives on + its diff, collapsed to one line by default and expandable to the changed-file
  * list. The diff updates live each turn (uncommitted working-tree state) and settles to the
- * committed branch once the session ends. For a session whose agent dir isn't a git repo it
+ * committed branch once the session ends. For a session whose workspace dir isn't a git repo it
  * morphs into an amber "not isolated" nudge with a one-click enable.
  *
  * Clicking a file opens a right-side drawer with that file's unified diff (lazily fetched
@@ -72,7 +72,7 @@ export function SessionOutputs({
    *  the Commit-vs-Merge choice instead — for live and ended sessions alike. */
   committed?: boolean;
   /** True while a turn is actively in flight (live session, not awaiting input). The branch
-   *  state is then transient — possibly a mid-turn committed checkpoint the agent will build
+   *  state is then transient — possibly a mid-turn committed checkpoint the workspace will build
    *  on — so the bar holds "Merge to main" (hidden) and "Commit" (disabled) until the turn
    *  finishes; committing a half-built mid-turn tree would capture an inconsistent snapshot. */
   turnActive?: boolean;
@@ -84,9 +84,9 @@ export function SessionOutputs({
    *  else master). The outcome surfaces via detail.mergeStatus/mergeError (parent polls). */
   onMergeToMain?: (target?: string) => void;
   merging?: boolean;
-  /** Provided by the parent; on a conflict, resumes the session so its agent rebases the branch
+  /** Provided by the parent; on a conflict, resumes the session so its workspace rebases the branch
    *  onto the merge target and resolves the conflicts (after which the merge fast-forwards).
-   *  Receives the branch that conflicted, so the agent rebases onto the right one. */
+   *  Receives the branch that conflicted, so the workspace rebases onto the right one. */
   onResolveInSession?: (target: string) => void;
   resolving?: boolean;
   /** Provided by the parent (owns the mutation); enables the "Commit" button shown while the
@@ -98,7 +98,7 @@ export function SessionOutputs({
    *  re-points the session to that branch so Merge/diff act on the real work. */
   onAdopt?: () => void;
   adopting?: boolean;
-  /** Heartbeat-reported state of the shared checkout this session's agent works in. Null when the
+  /** Heartbeat-reported state of the shared checkout this session's workspace works in. Null when the
    *  runner is older than the report or the workDir isn't a git repo — both read as "unknown", so
    *  nothing is shown. A half-finished merge left in there blocks every merge on the machine, which
    *  is worth saying once here rather than as N identical per-session failures. */
@@ -181,9 +181,9 @@ export function SessionOutputs({
   const showCommit = dirtyKnown && detail.worktreeDirty === true && !committed;
   const mergeReady = dirtyKnown ? !showCommit : !!committed;
   // Hold "Merge to main" while a turn is in flight: a clean worktree mid-turn is just a
-  // transient checkpoint the agent is still building on, not finished work ready for main.
+  // transient checkpoint the workspace is still building on, not finished work ready for main.
   const showMerge = mergeReady && !turnActive;
-  // Branch divergence: the agent ran `git checkout -b` inside the worktree, so its real HEAD
+  // Branch divergence: the workspace ran `git checkout -b` inside the worktree, so its real HEAD
   // (worktreeBranch) is no longer the branch Orbit tracks. Merge/diff/the "in main" verdict all
   // refer to the (often already-merged) tracked branch, which is misleading — so in the merge slot
   // we surface the untracked branch + an Adopt action instead of a stale "✓ In main" / Merge button.
@@ -244,7 +244,7 @@ export function SessionOutputs({
               busy={merging}
               targets={detail.mergeTargets ?? []}
               mergeTarget={detail.mergeTarget}
-              agentDefaultTarget={detail.agent?.defaultMergeTarget}
+              workspaceDefaultTarget={detail.workspace?.defaultMergeTarget}
               alreadyMerged={detail.branchMerged === true}
               onMerge={onMergeToMain}
               onResolveInSession={onResolveInSession}
@@ -321,7 +321,7 @@ const REPO_STATE_LABEL: Record<string, string> = {
  * The machine-level warning above the worktree bar.
  *
  * Sessions are isolated in their own worktrees, but they all fork from — and merge back into —
- * one shared checkout, and nothing stops an agent from stepping into it (that's where the
+ * one shared checkout, and nothing stops a workspace from stepping into it (that's where the
  * toolchain lives) or from popping a repo-global stash there. When that leaves a half-finished
  * merge behind, every session's "Merge to main" on the machine fails with what reads like its own
  * problem. This says it once, names the checkout, and offers the repair.
@@ -407,7 +407,7 @@ function AdoptButton({
  *  committed: the left segment merges into the default target (main, else master), and a caret
  *  opens a dropdown of the repo's other branches (mergeTargets) to merge into instead. Drives
  *  off the server-reported mergeStatus: idle → the split button; pending → "Merging…"; merged →
- *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the agent rebases the
+ *  a ✓ chip (naming the target); conflict → "Resolve in session" (resume so the workspace rebases the
  *  branch onto the target and fixes the conflicts); error →
  *  "Retry merge" (a precondition failure like a dirty main that a rebase can't fix — re-runs the
  *  same target). The failure detail + a copyable rebase fallback live in the expandable file
@@ -419,7 +419,7 @@ function MergeButton({
   busy,
   targets,
   mergeTarget,
-  agentDefaultTarget,
+  workspaceDefaultTarget,
   alreadyMerged,
   onMerge,
   onResolveInSession,
@@ -433,10 +433,10 @@ function MergeButton({
   targets: string[];
   /** The branch the last merge targeted (null = the auto-detected default). */
   mergeTarget?: string | null;
-  /** The agent's remembered default target (set when the user last switched in the dropdown).
+  /** The workspace's remembered default target (set when the user last switched in the dropdown).
    *  Wins over main/master as the left-segment default — but only while it's still a reported
    *  target, so a renamed/deleted branch falls back cleanly. */
-  agentDefaultTarget?: string | null;
+  workspaceDefaultTarget?: string | null;
   /** The branch tip is already in the default target (the runner's is-ancestor check). With no
    *  Orbit merge in flight (idle status) this shows a quiet "✓ In main" chip instead of a Merge
    *  button — the work already landed (e.g. an out-of-band command-line push). */
@@ -476,11 +476,11 @@ function MergeButton({
       </span>
     );
   }
-  // The left-segment default: the agent's remembered target if it's still on offer, else main,
+  // The left-segment default: the workspace's remembered target if it's still on offer, else main,
   // else master, else the first reported branch; undefined means "let the runner auto-detect"
   // (the original behavior, and the older-runner case where `targets` is empty). Retry re-runs
   // the SAME target that failed; a fresh merge uses the default.
-  const remembered = agentDefaultTarget && targets.includes(agentDefaultTarget) ? agentDefaultTarget : undefined;
+  const remembered = workspaceDefaultTarget && targets.includes(workspaceDefaultTarget) ? workspaceDefaultTarget : undefined;
   const defaultTarget =
     remembered ?? (targets.includes('main') ? 'main' : targets.includes('master') ? 'master' : targets[0]);
   const failed = status === 'conflict' || status === 'error';
@@ -492,7 +492,7 @@ function MergeButton({
     status === 'conflict'
       ? 'Merge conflict — aborted, working tree left clean. Resolve it from the panel below.'
       : mergeError || 'Merge failed — see the panel below.';
-  // Resolve-in-session has the agent rebase the branch onto the merge target and fix the
+  // Resolve-in-session has the workspace rebase the branch onto the merge target and fix the
   // conflicts — the only useful action after a *conflict*, whatever the target: the merge aborted
   // cleanly and moved neither tip, so retrying it replays the same rebase and conflicts
   // identically. An 'error' outcome is different — a precondition failure (a dirty target
@@ -509,7 +509,7 @@ function MergeButton({
           <>
             {failureHint}
             <br />
-            Resume the session to have its agent rebase onto {conflictTarget} and resolve it.
+            Resume the session to have its workspace rebase onto {conflictTarget} and resolve it.
           </>
         }
       >

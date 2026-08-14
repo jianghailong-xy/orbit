@@ -6,7 +6,7 @@ import {
   providerChoices,
   sameRuntimeChoices,
 } from './sessionProviderChoices';
-import type { ConfiguredProvider } from './agentDefaults';
+import type { ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
 
 const deepseek: ConfiguredProvider = {

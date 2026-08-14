@@ -1087,7 +1087,7 @@ private struct TaskDetailContent: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                TextField("Add a comment… type @Agent to mention", text: $newComment, axis: .vertical)
+                TextField("Add a comment… type @Workspace to mention", text: $newComment, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
                 Button {

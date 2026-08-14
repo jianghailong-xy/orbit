@@ -17,7 +17,7 @@ type ModelOption = { value: string; label: string };
 
 /**
  * A control-plane–configured provider (from GET /api/providers): a custom identity (its own
- * slug/label + model list) that borrows a built-in runtime. Its slug lands in an agent/session's
+ * slug/label + model list) that borrows a built-in runtime. Its slug lands in a workspace/session's
  * `provider` field just like a built-in, so it's merged into the pickers alongside claude/codex.
  */
 export interface ConfiguredProvider {
@@ -296,12 +296,12 @@ export const livePinnedModel = (
 };
 
 /** Match the server's session dispatch precedence without treating OpenCode's empty sentinel as
- * missing: a session override wins, then its owning agent, then the provider-managed default.
+ * missing: a session override wins, then its owning workspace, then the provider-managed default.
  * A retired pin on either drops out, exactly as it does at dispatch. */
 export const effectiveSessionModel = (
   provider: string,
   sessionModel?: string | null,
-  agentModel?: string | null,
+  workspaceModel?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
@@ -310,7 +310,7 @@ export const effectiveSessionModel = (
     livePinnedModel(model, provider, modelCatalog, configured, runtimeDefaultModels);
   return (
     live(sessionModel) ??
-    live(agentModel) ??
+    live(workspaceModel) ??
     defaultModelForProvider(provider, modelCatalog, configured, runtimeDefaultModels)
   );
 };
@@ -318,8 +318,8 @@ export const effectiveSessionModel = (
 /** Match the server's session dispatch precedence for reasoning effort. Empty is explicit. */
 export const effectiveSessionEffort = (
   sessionEffort?: string | null,
-  agentEffort?: string | null,
-): string => sessionEffort ?? agentEffort ?? '';
+  workspaceEffort?: string | null,
+): string => sessionEffort ?? workspaceEffort ?? '';
 
 // Reasoning effort is provider-specific. Claude supports "max"; Codex's
 // Responses API effort values top out at "xhigh", with "minimal" also available.
@@ -437,7 +437,7 @@ export const normalizeEffortForProvider = (
   return allowed ? normalized : '';
 };
 
-// The permission mode a new session of the agent starts in.
+// The permission mode a new session of the workspace starts in.
 export const MODE_OPTIONS = [
   { value: 'default', label: 'Default' },
   { value: 'plan', label: 'Plan' },

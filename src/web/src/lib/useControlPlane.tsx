@@ -42,7 +42,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
 
     const refetchSessions = (): void => {
       void qc.invalidateQueries({ queryKey: ['sessions'] });
-      // The sidebar's per-agent tallies are derived from the same rows, but keyed apart so the
+      // The sidebar's per-workspace tallies are derived from the same rows, but keyed apart so the
       // list's optimistic edits can't touch them — so they need their own invalidation here.
       void qc.invalidateQueries({ queryKey: ['session-counts'] });
     };
@@ -57,11 +57,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       void qc.invalidateQueries({ queryKey: ['task-lists'] });
       void qc.invalidateQueries({ queryKey: ['task'] });
     };
-    // The agent list (sidebar, pickers, agent page). Like the task queries it only refetches on an
-    // `agent.*` event or on reconnect — it has no interval poll at all, so before this an agent
-    // created/updated through MCP (agent_create/agent_update) only appeared after a page reload.
-    const refetchAgents = (): void => {
-      void qc.invalidateQueries({ queryKey: ['agents'] });
+    // The workspace list (sidebar, pickers, workspace page). Like the task queries it only refetches on an
+    // `workspace.*` event or on reconnect — it has no interval poll at all, so before this a workspace
+    // created/updated through MCP (workspace_create/workspace_update) only appeared after a page reload.
+    const refetchWorkspaces = (): void => {
+      void qc.invalidateQueries({ queryKey: ['workspaces'] });
     };
     // The owner's tag library and the deployment's provider catalog: both are edited elsewhere
     // (tags on the native clients, providers in the admin area) and neither polls, so push is the
@@ -75,16 +75,16 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
       tasks: refetchTasks,
-      agents: refetchAgents,
+      workspaces: refetchWorkspaces,
       tags: refetchTags,
       providers: refetchProviders,
     };
     // Which cache groups an event dirties. An event is only ever a nudge to refetch (never a
-    // delta), so this is a plain type-prefix → group map. Note the pairs: an agent rename and a
+    // delta), so this is a plain type-prefix → group map. Note the pairs: a workspace rename and a
     // tag recolor both change what the SESSION list rows render, so they refresh that too.
     const groupsFor = (type: string): string[] => {
       if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
-      if (type.startsWith('agent.')) return ['agents', 'sessions'];
+      if (type.startsWith('workspace.')) return ['workspaces', 'sessions'];
       if (type.startsWith('tag.')) return ['tags', 'sessions'];
       if (type.startsWith('provider.')) return ['providers'];
       return ['sessions'];

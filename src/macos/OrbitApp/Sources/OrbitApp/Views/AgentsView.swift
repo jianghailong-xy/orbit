@@ -635,7 +635,7 @@ struct NewSessionView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Agent: \(agent.name). Switch")
+        .accessibilityLabel("Workspace: \(agent.name). Switch")
     }
 
     /// Engines first, then this account's configured providers. Built from the draft's own
@@ -994,7 +994,7 @@ struct AgentFormContent: View {
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This removes the agent from your Agents list. Its sessions are kept.")
+            Text("This removes the workspace from your Workspaces list. Its sessions are kept.")
         }
     }
 

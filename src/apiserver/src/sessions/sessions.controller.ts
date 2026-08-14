@@ -67,21 +67,25 @@ export class SessionsController {
   ) {}
 
   // CreateSessionDto is an interface, so the global ValidationPipe never sees it and its ids
-  // reach Prisma raw. These three are the ones a caller types or pastes — an agent or runner
+  // reach Prisma raw. These three are the ones a caller types or pastes — a workspace or runner
   // copied out of a client URL, a task id from a tool result — so they arrive base62 as often
   // as not.
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(PublicIdPipe.forFields('agentId', 'assignedRunnerId', 'taskId')) dto: CreateSessionDto,
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId'))
+    dto: CreateSessionDto,
   ) {
-    return this.sessions.create(user.userId, dto);
+    // `agentId` is the pre-rename name every shipped client still sends.
+    return this.sessions.create(user.userId, { ...dto, workspaceId: dto.workspaceId ?? dto.agentId });
   }
 
   @Get()
   list(
     @CurrentUser() user: AuthUser,
     @Query('runnerId', PublicIdPipe) runnerId?: string,
+    @Query('workspaceId', PublicIdPipe) workspaceId?: string,
+    /** @deprecated Pre-rename name of `workspaceId`; still sent by every shipped client. */
     @Query('agentId', PublicIdPipe) agentId?: string,
     @Query('tagId', PublicIdPipe) tagId?: string,
     // Keep accepting the removed `system` scope for installed older clients. The service
@@ -94,18 +98,18 @@ export class SessionsController {
     const parsed = Number(limit);
     return this.sessions.list(user.userId, {
       runnerId,
-      agentId,
+      workspaceId: workspaceId ?? agentId,
       tagId,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
     });
   }
 
-  // Per-agent Open-session tallies for the nav sidebar's attention badges. Also above
+  // Per-workspace Open-session tallies for the nav sidebar's attention badges. Also above
   // `@Get(':id')`, for the same declaration-order reason as `search` below.
   @Get('counts')
   counts(@CurrentUser() user: AuthUser) {
-    return this.sessions.agentSessionCounts(user.userId);
+    return this.sessions.workspaceSessionCounts(user.userId);
   }
 
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
@@ -343,7 +347,7 @@ export class SessionsController {
 
   /**
    * The authoritative, complete list of background shells the session ever launched (every
-   * Bash(run_in_background), with output recovered from the agent's Read polls). Derived over ALL
+   * Bash(run_in_background), with output recovered from the workspace's Read polls). Derived over ALL
    * persisted events, so the "Background processes" tray shows the same complete list on every
    * client regardless of how much transcript is loaded. Clients merge this with a live-derived
    * overlay for the freshest tail of anything still running.

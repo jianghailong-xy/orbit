@@ -84,11 +84,11 @@ export function readRunnerRepoHealth(value: unknown): RunnerRepoHealth[] {
   return sanitizeRunnerRepoHealth(value) ?? [];
 }
 
-/** The checkout an agent works in, or null when this runner never reported one for it (an older
+/** The checkout a workspace works in, or null when this runner never reported one for it (an older
  *  runner, or a workDir that isn't a git repo — isolation already reports that per session). */
-export function repoHealthForAgent(
+export function repoHealthForWorkspace(
   reports: RunnerRepoHealth[],
-  agentId: string,
+  workspaceId: string,
 ): RunnerRepoHealth | null {
-  return reports.find((r) => r.agentIds?.includes(agentId)) ?? null;
+  return reports.find((r) => r.agentIds?.includes(workspaceId)) ?? null;
 }

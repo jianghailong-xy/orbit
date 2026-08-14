@@ -5,7 +5,7 @@ import {
   type PlanUsageSnapshot,
   type PlanUsageWindow,
 } from '@orbit/shared';
-import type { ConfiguredProvider } from './agentDefaults';
+import type { ConfiguredProvider } from './workspaceDefaults';
 
 export interface PlanUsageDisplayRow {
   key: string;

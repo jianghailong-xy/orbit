@@ -18,7 +18,7 @@ worktree** so concurrent sessions never clobber each other's files. A **task** i
 unit of work (optionally with dependencies and a task-list) that spawns such a session on a
 runner.
 
-- **Control plane** (`src/apiserver`) — NestJS + Prisma + PostgreSQL. Owns users, agents,
+- **Control plane** (`src/apiserver`) — NestJS + Prisma + PostgreSQL. Owns users, workspaces,
   sessions + conversation turns, tasks (the queue) with task-lists and dependency DAGs,
   runs, runners, tool-approvals, attachments, and cost/usage aggregation. It never holds an
   engine *login* — a runtime's own OAuth/session credentials stay on the runner. The one
@@ -26,14 +26,14 @@ runner.
   with AES-256-GCM under `PROVIDER_SECRET_KEY` and injected into the engine process at spawn.
 - **Runner** (`src/runner-go`) — a small static Go CLI (~6 MB, no runtime needed).
   `orbit register` enrolls a machine via browser approval; `orbit run` long-polls for
-  assigned work and drives the agent's selected local runtime (Claude Code, Codex, Kimi, or
+  assigned work and drives the workspace's selected local runtime (Claude Code, Codex, Kimi, or
   OpenCode), feeding user turns over an inbox long-poll while preserving the runtime conversation.
   Streams normalized events + token/cost back to the control plane, runs each session in its own
   **git worktree**, drains gracefully on restart, and checks for control-plane updates at
   startup and periodically while running; a live update stops new claims and drains sessions
   before replacing the process. It also keeps the installed engine CLIs up to date on a daily
   auto-update pass.
-- **Web** (`src/web`) — Vite + React + Ant Design. Grouped task lists, agent CRUD, a live
+- **Web** (`src/web`) — Vite + React + Ant Design. Grouped task lists, workspace CRUD, a live
   **chat console** (SSE) with in-flight **tool-approval** cards, image/file attachments,
   runner enrollment, a Skills browser, a cost dashboard, ⌘K cross-session search, dark mode,
   and a mobile-responsive layout.
@@ -64,7 +64,7 @@ Highlights:
   transcript streams back over the existing event → SSE path. No WebSocket (the gateway
   strips `Upgrade`). A killed runner reattaches via the server-generated session UUID and
   `claude --resume`. See [`docs/interactive-claude-runner-design.md`](docs/interactive-claude-runner-design.md).
-- **Worktree isolation** — each session runs in its own `git worktree`, so concurrent agents
+- **Worktree isolation** — each session runs in its own `git worktree`, so concurrent sessions
   on one repo don't trample each other's edits; the tree is reclaimed when the session ends.
 - **Queue** — the `Task` table *is* the queue. Runners claim work atomically with
   `SELECT … FOR UPDATE SKIP LOCKED`; a long-poll waits on an enqueue signal. A heartbeat
@@ -91,7 +91,7 @@ Highlights:
 
 - Node.js ≥ 20 (uses global `fetch`)
 - Docker (for local Postgres) — or any reachable PostgreSQL 16
-- On each runner machine: the runtime selected by its agents — **Claude Code**, **Codex**,
+- On each runner machine: the runtime selected by its workspaces — **Claude Code**, **Codex**,
   **Kimi**, or **OpenCode** — installed and authenticated. Use Claude's `/login` (or
   `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`), `codex login`, `kimi login`, or
   `opencode auth login`, respectively. Credentials stay on the runner machine; `orbit doctor`
@@ -120,7 +120,7 @@ npm run dev:web
 
 There's no self-service signup. On a fresh deployment, the web UI sends the first visitor to
 a one-time `/setup` screen that creates the first account (which becomes ADMIN); provision
-any further users from the admin **Users** page. Then log in, open the UI, create an agent,
+any further users from the admin **Users** page. Then log in, open the UI, create a workspace,
 and follow the in-app guide to register a runner machine.
 
 ### Deploy the full stack (Docker Compose)
@@ -139,7 +139,7 @@ rebuild and recreate only the services that changed — the `upgrade` skill auto
 
 ### Run a runner (on the machine that should execute tasks)
 
-On a machine with the runtime(s) your agents will use installed and authenticated (see
+On a machine with the runtime(s) your workspaces will use installed and authenticated (see
 Prerequisites). Replace `orbit.example.com` with your deployment's origin (baked in at build time
 via `PUBLIC_ORIGIN`; the UI's **Add a runner** page prints these commands pre-filled for you):
 
@@ -165,7 +165,7 @@ queue it, and watch the live stream — or start an interactive session and chat
 agent directly.
 
 The registered binary also exposes the agent-safe Task/TaskList surface for shell
-automation and, for orchestration-enabled agents, the MCP-equivalent Session surface.
+automation and, for orchestration-enabled workspaces, the MCP-equivalent Session surface.
 Results are pretty-printed by default; pass `--json` for compact JSON:
 
 ```bash
@@ -175,7 +175,7 @@ orbit task create --title "Check deployment" --description "Verify health and lo
 orbit task update <task-id> --status DONE --json
 orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
-orbit session create --prompt "Review the change" --agent-name reviewer --json
+orbit session create --prompt "Review the change" --agent-name reviewer --json  # --agent-name: pre-rename CLI flag for a workspace
 orbit session get <session-id> --json
 orbit session send <session-id> --message "Please add a regression test" --json
 orbit session complete <session-id> --json
@@ -183,7 +183,7 @@ orbit session complete <session-id> --json
 
 Each Claude/Codex/Kimi/OpenCode session receives a short discovery instruction pointing at the
 resolved absolute binary path and `capabilities --json`. Claude receives approval-free
-rules for Task/TaskList and, only when enabled for that agent, Session action prefixes;
+rules for Task/TaskList and, only when enabled for that workspace, Session action prefixes;
 Codex, Kimi and OpenCode receive the same context without replacing provider/project defaults.
 Native Orbit MCP tools remain the preferred path when available.
 
@@ -191,7 +191,7 @@ Inside an Orbit task session, task commands may omit the task id and use
 `ORBIT_TASK_ID`. Session commands always require an explicit target id. Spawning a session,
 the lifecycle verbs (`interrupt`, `merge`, `end`, `complete`) and the owner-wide `search`
 additionally require a live caller
-session whose current agent has `enableOrchestration`; the runner receives a signed,
+session whose current workspace has `enableOrchestration`; the runner receives a signed,
 session-bound credential and every request is re-authorized by the control plane.
 Credential support is negotiated explicitly, so an older runner safely disables orchestration
 instead of exposing tools whose calls can only fail. The proof lives in a private per-session
@@ -230,10 +230,10 @@ echo "$event" | orbit session send <session-id> --message-file - --json
 
 Starting a session headlessly takes more than the machine credential. The runner token sits in
 plaintext in `~/.orbit/config.json` and authenticates every claim, so promoting it to "may spawn
-any agent with any prompt" would make one leaked file equal arbitrary execution. `orbit token
+any workspace with any prompt" would make one leaked file equal arbitrary execution. `orbit token
 mint` instead issues a **service token**: a signed credential that enumerates its scopes
 (`session:get`, `session:list`, `session:send`, `session:create` — the destructive verbs are not
-in the vocabulary at all), is pinned to a single agent whenever it may create, expires on its
+in the vocabulary at all), is pinned to a single workspace whenever it may create, expires on its
 own, and is revoked individually without re-registering the machine. Minting takes the runner
 credential, so a service token can never mint another; the token is a JWT whose `jti` is its row
 id, so the database stores no secret and revocation takes effect on the next request rather than
@@ -247,7 +247,7 @@ orbit token list --json                                 # scope · pin · expiry
 orbit token revoke <token-id>                           # effective immediately
 
 # in the launchd job, with ORBIT_SERVICE_TOKEN set from the mint above
-orbit session create --prompt "$event" --json           # starts the pinned agent, on this runner
+orbit session create --prompt "$event" --json           # starts the pinned workspace, on this runner
 ```
 
 ## Cost & tokens
@@ -289,7 +289,7 @@ task CRUD + queue + execution, **task-lists and dependency DAGs**, per-session *
 isolation** with commit/merge from the UI, graceful runner drain + a heartbeat reaper,
 image/file attachments, a Skills browser, cost/token rollups, a dark / mobile-responsive UI,
 a **user-level realtime control-plane stream**, **cross-session ⌘K search**, **configurable
-model providers** (BYOK), an MCP surface for session/task/agent orchestration, and **native
+model providers** (BYOK), an MCP surface for session/task/workspace orchestration, and **native
 macOS + iOS clients** with APNs push.
 
 Not yet: cron / recurring schedules and external task sources (e.g. Feishu/Lark) — designed

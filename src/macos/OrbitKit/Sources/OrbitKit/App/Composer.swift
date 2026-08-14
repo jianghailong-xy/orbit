@@ -343,7 +343,7 @@ public enum ComposerHostCommand {
             rows.append(ComposerStatusRow(label: "Session", value: "New session draft"))
         }
         if let agent = s.agentName, !agent.isEmpty {
-            rows.append(ComposerStatusRow(label: "Agent", value: agent))
+            rows.append(ComposerStatusRow(label: "Workspace", value: agent))
         }
         if let provider = s.provider, !provider.isEmpty {
             rows.append(ComposerStatusRow(label: "Provider", value: provider))

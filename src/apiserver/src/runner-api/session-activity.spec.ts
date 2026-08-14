@@ -17,7 +17,7 @@ test('system events emitted during a turn still count as activity', () => {
   assert.equal(hasSessionActivity([{ type: RunEventType.SYSTEM, turnId: 'turn-1' }]), true);
 });
 
-test('session-level agent and background events count as activity', () => {
+test('session-level workspace and background events count as activity', () => {
   assert.equal(hasSessionActivity([{ type: RunEventType.ASSISTANT }]), true);
   assert.equal(hasSessionActivity([{ type: RunEventType.BACKGROUND_TASK }]), true);
 });
