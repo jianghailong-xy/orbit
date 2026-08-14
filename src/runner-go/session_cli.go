@@ -44,6 +44,12 @@ Options:
   --agent-name NAME        Resolve an agent by name
   --title TITLE
   --model MODEL
+  --provider SLUG          Built-in engine (claude, codex, kimi, opencode) or a configured
+                           provider slug; defaults to where the agent's project last started
+  --permission-mode MODE   How much the session may do unattended: default, acceptEdits,
+                           plan, auto, dontAsk or bypassPermissions. Defaults to the
+                           owner's account setting; the ask-me modes park the session
+                           on an approval card until a human answers
   --wait[=BOOL]            Wait until the first turn settles
   --json
 
@@ -98,7 +104,7 @@ Usage:
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--provider <claude|codex|kimi|opencode|configured slug>", "--permission-mode <default|acceptEdits|plan|auto|dontAsk|bypassPermissions>", "--wait[=true|false]", "--json"}, Mutates: true},
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
@@ -348,6 +354,8 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 	agentName := fs.String("agent-name", "", "target agent name")
 	title := fs.String("title", "", "session title")
 	model := fs.String("model", "", "session model")
+	provider := fs.String("provider", "", "session provider slug")
+	permissionMode := fs.String("permission-mode", "", "session permission mode")
 	wait := fs.Bool("wait", false, "wait until the first turn settles")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
@@ -399,6 +407,20 @@ func cliSessionCreate(args []string, in io.Reader, out io.Writer, ctx cliOrchest
 			return fmt.Errorf("--model cannot be empty")
 		}
 		body["model"] = *model
+	}
+	if flagWasSet(fs, "provider") {
+		if strings.TrimSpace(*provider) == "" {
+			return fmt.Errorf("--provider cannot be empty")
+		}
+		body["provider"] = *provider
+	}
+	// The mode itself is left for the server to check: it owns the list, and both spawn paths
+	// answer with the modes that exist. Only "the flag was given but says nothing" is local.
+	if flagWasSet(fs, "permission-mode") {
+		if strings.TrimSpace(*permissionMode) == "" {
+			return fmt.Errorf("--permission-mode cannot be empty")
+		}
+		body["permissionMode"] = *permissionMode
 	}
 	t, err := cliSessionTransport(ctx)
 	if err != nil {

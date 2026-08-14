@@ -70,7 +70,7 @@ func TestSessionCLICapabilitiesMatchMCPAndFollowOrchestrationGate(t *testing.T) 
 		"session_complete":  true,
 	}
 	requiredArguments := map[string][]string{
-		"create":    {"--prompt", "--prompt-file -", "--agent-id", "--agent-name", "--title", "--model", "--wait", "--json"},
+		"create":    {"--prompt", "--prompt-file -", "--agent-id", "--agent-name", "--title", "--model", "--provider", "--permission-mode", "--wait", "--json"},
 		"list":      {"--status", "--parent-session-id", "--json"},
 		"search":    {"--query", "--limit", "--json"},
 		"get":       {"[session-id]", "--json"},
@@ -147,15 +147,17 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 	}{
 		{
 			name:       "create",
-			args:       []string{"create", "--prompt-file", "-", "--agent-id", "agent-2", "--title", "Review", "--model", "model-2", "--json"},
+			args:       []string{"create", "--prompt-file", "-", "--agent-id", "agent-2", "--title", "Review", "--model", "model-2", "--provider", "codex", "--permission-mode", "plan", "--json"},
 			stdin:      "inspect the change\n",
 			method:     http.MethodPost,
 			requestURI: "/api/runner/sessions",
 			wantBody: map[string]interface{}{
-				"prompt":  "inspect the change\n",
-				"agentId": "agent-2",
-				"title":   "Review",
-				"model":   "model-2",
+				"prompt":         "inspect the change\n",
+				"agentId":        "agent-2",
+				"title":          "Review",
+				"model":          "model-2",
+				"provider":       "codex",
+				"permissionMode": "plan",
 			},
 		},
 		{
@@ -660,6 +662,8 @@ func TestSessionCLIValidatesArgumentsAndRejectsArbitraryFiles(t *testing.T) {
 		{name: "missing prompt", args: []string{"create"}, wantError: "--prompt or --prompt-file - is required"},
 		{name: "two agent selectors", args: []string{"create", "--prompt", "x", "--agent-id", "a", "--agent-name", "b"}, wantError: "cannot be used together"},
 		{name: "prompt path", args: []string{"create", "--prompt-file", "/etc/passwd"}, wantError: "accepts only '-' (stdin)"},
+		// An empty mode would otherwise reach the server as "" and read as an explicit choice.
+		{name: "blank permission mode", args: []string{"create", "--prompt", "x", "--permission-mode", " "}, wantError: "--permission-mode cannot be empty"},
 		{name: "missing search query", args: []string{"search"}, wantError: "--query is required"},
 		{name: "invalid status", args: []string{"list", "--status", "UNKNOWN"}, wantError: "status must be one of"},
 		{name: "missing message", args: []string{"send", "child"}, wantError: "--message or --message-file - is required"},

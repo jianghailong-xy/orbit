@@ -104,6 +104,20 @@ function assertPromptSize(text: string, field: 'prompt' | 'message'): void {
  */
 export type RunnerSessionScope = { assignedRunnerId: string; workspaceId?: string | null };
 
+/**
+ * Guards the two spawn paths a machine drives — `orbit mcp` / `orbit session create` and the
+ * headless service-token bridge. Their caller is a model or a script, not a form with a picker, so
+ * an invented mode would be stored verbatim and only surface when the claim hands it to the CLI:
+ * far from the call that caused it, on the new session's very first turn.
+ */
+function assertKnownPermissionMode(mode: string | undefined): void {
+  if (mode === undefined) return;
+  const modes = Object.values(PermissionMode) as string[];
+  if (!modes.includes(mode)) {
+    throw new BadRequestException(`unknown permissionMode "${mode}"; use one of: ${modes.join(', ')}`);
+  }
+}
+
 function runnerScopeWhere(scope: RunnerSessionScope | undefined) {
   if (!scope) return {};
   return {
@@ -548,17 +562,7 @@ export class SessionsService {
     provider: string;
   }> {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
-    // The caller is a model, not a form with a picker: an invented mode would be stored verbatim
-    // and only surface when the claim hands it to the CLI, which fails the child's very first
-    // turn. Refuse it here, naming the modes that exist.
-    if (dto.permissionMode !== undefined) {
-      const modes = Object.values(PermissionMode) as string[];
-      if (!modes.includes(dto.permissionMode)) {
-        throw new BadRequestException(
-          `unknown permissionMode "${dto.permissionMode}"; use one of: ${modes.join(', ')}`,
-        );
-      }
-    }
+    assertKnownPermissionMode(dto.permissionMode);
     const parent = await this.prisma.session.findFirst({
       where: { id: parentSessionId, ownerId },
       select: {
@@ -733,9 +737,10 @@ export class SessionsService {
   async spawnForServiceToken(
     ownerId: string,
     scope: { assignedRunnerId: string; workspaceId: string; tokenId: string },
-    dto: { prompt: string; title?: string; model?: string },
+    dto: { prompt: string; title?: string; model?: string; permissionMode?: string },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
+    assertKnownPermissionMode(dto.permissionMode);
     const workspace = await this.prisma.workspace.findFirst({
       where: {
         id: scope.workspaceId,
@@ -750,7 +755,14 @@ export class SessionsService {
     const effort = await this.resolveDefaultEffort(ownerId, workspace.id);
     const created = await this.create(
       ownerId,
-      { prompt: dto.prompt, title: dto.title, workspaceId: workspace.id, model: dto.model, effort },
+      {
+        prompt: dto.prompt,
+        title: dto.title,
+        workspaceId: workspace.id,
+        model: dto.model,
+        permissionMode: dto.permissionMode,
+        effort,
+      },
       { batch: { id: scope.tokenId, maxConcurrent: SERVICE_TOKEN_CONCURRENCY } },
     );
     return {

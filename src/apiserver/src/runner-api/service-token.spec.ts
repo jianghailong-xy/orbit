@@ -225,9 +225,21 @@ test('a create-scoped token starts only its own workspace, batched under the tok
     args: [
       'owner-1',
       { assignedRunnerId: 'runner-1', workspaceId: 'workspace-1', tokenId: 'token-1' },
-      { prompt: 'relay this', title: 'from the bridge', model: undefined },
+      { prompt: 'relay this', title: 'from the bridge', model: undefined, permissionMode: undefined },
     ],
   });
+
+  // A cron bridge is the least-watched caller there is, so the mode it picks has to reach the
+  // spawn rather than being dropped on the way — `orbit session create --permission-mode` is the
+  // same flag whether or not the process happens to be inside a session.
+  await controller.createSession(RUNNER, CREATE_GRANT, undefined, undefined, {
+    prompt: 'nightly sweep',
+    permissionMode: 'dontAsk',
+  });
+  assert.equal(
+    (calls.at(-1)?.args[2] as { permissionMode?: string }).permissionMode,
+    'dontAsk',
+  );
 
   // The pin is the authorization, so the body cannot redirect the spawn elsewhere.
   await assert.rejects(

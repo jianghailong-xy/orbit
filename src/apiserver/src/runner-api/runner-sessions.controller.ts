@@ -120,7 +120,7 @@ export class RunnerSessionsController {
       return this.sessions.spawnForServiceToken(
         runner.ownerId,
         { assignedRunnerId: runner.id, workspaceId: scope.workspaceId, tokenId: grant!.tokenId },
-        { prompt: dto.prompt, title: dto.title, model: dto.model },
+        { prompt: dto.prompt, title: dto.title, model: dto.model, permissionMode: dto.permissionMode },
       );
     }
     this.assertNoServiceToken(grant);
