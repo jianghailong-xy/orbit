@@ -276,6 +276,46 @@ type Node =
 // ERROR codex_core::util: …"). Dropped when deciding whether two lines say the same thing.
 const LEADING_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z?\s*/;
 
+// The whole of that preamble: stamp, level, and the module that logged it. Only what follows is
+// written for a person — the rest is the engine's own bookkeeping, and at ~60 characters it pushes
+// the actual sentence off the row. Split off so the row can lead with the message and keep the
+// original one hover away.
+const TRACING_LINE = /^(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s+(TRACE|DEBUG|INFO|WARN|ERROR)\s+([\w:]+):\s+([\s\S]+)$/;
+
+type EngineLogLine = { level: string; source: string; text: string };
+
+function parseEngineLogLine(line: string): EngineLogLine | undefined {
+  const m = TRACING_LINE.exec(line);
+  return m ? { level: m[2], source: m[3], text: m[4] } : undefined;
+}
+
+// A bare URL in an engine's log line ("See the sandbox prerequisites: https://…") is advice you
+// are meant to follow, so make it followable. Only http(s) is linked, and the line is rendered as
+// plain text otherwise — a log line is not Markdown, and running it through a Markdown renderer
+// would eat the punctuation engines log in.
+const URL_IN_TEXT = /https?:\/\/[^\s<>"')\]]+/g;
+
+function linkifyLogText(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let at = 0;
+  for (const m of text.matchAll(URL_IN_TEXT)) {
+    const start = m.index ?? 0;
+    // The full stop that ends the sentence is not part of the URL: engines log "See https://…/x."
+    // and linking the dot too gives a 404. What is trimmed stays in the text.
+    const url = m[0].replace(/[.,;:!?]+$/, '');
+    if (!url) continue;
+    if (start > at) out.push(text.slice(at, start));
+    out.push(
+      <a key={start} href={url} rel="noreferrer" target="_blank">
+        {url}
+      </a>,
+    );
+    at = start + url.length;
+  }
+  if (at < text.length) out.push(text.slice(at));
+  return out;
+}
+
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
   const byId = new Map<string, ToolNode>();
@@ -622,13 +662,22 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
           ⊘ interrupted
         </div>
       );
-    case 'error':
+    case 'error': {
+      // An engine's own log line is its running commentary — often advice that ends in "…in the
+      // meantime", not this turn dying. Shown at the level the engine itself logged, with the
+      // stamp and module it wrote for its log kept in the tooltip. Anything without that preamble
+      // is the runner's own account of why a turn failed and stays loud.
+      const log = parseEngineLogLine(node.message);
       return (
-        <div className="chat-error" data-seq={node.seq}>
-          ✖ {node.message}
+        <div className="chat-error" data-level={log?.level} data-seq={node.seq} title={log && node.message}>
+          <span className="chat-error-mark">
+            {!log || log.level === 'ERROR' ? '✖' : log.level === 'WARN' ? '⚠' : '·'}
+          </span>
+          <span className="chat-error-text">{log ? linkifyLogText(log.text) : node.message}</span>
           {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
         </div>
       );
+    }
     case 'notice':
       return (
         <div className="chat-notice" data-seq={node.seq}>

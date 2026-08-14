@@ -311,6 +311,11 @@ func codexProviderArgs(agentEnv map[string]string) []string {
 // and disable the Claude-only permission bridge, so explicitly forward the full context.
 const codexOrbitMCPEnvVarsConfig = `mcp_servers.orbit.env_vars=["ORBIT_HOME","ORBIT_SESSION_ID","ORBIT_AGENT_ID","ORBIT_TASK_ID","ORBIT_ALLOW_ORCHESTRATION","ORBIT_MCP_PERMISSION_PROMPT"]`
 
+// codexOrbitMCPServer is the name the config keys below register Orbit's own MCP server under —
+// the `serverName` Codex then reports on an elicitation, which is how an approval tells Orbit's
+// own control-plane tools apart from a third-party server's.
+const codexOrbitMCPServer = "orbit"
+
 func appendCodexOrbitMCPConfig(args []string, exe string) []string {
 	if exe == "" {
 		return args

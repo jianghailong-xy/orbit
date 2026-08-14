@@ -710,6 +710,15 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 	if request.mcpTool && codexApprovalPolicy(permissionMode) == "never" {
 		return true, true
 	}
+	// Auto means the model decides when to ask — but Codex's MCP consent is not the model's
+	// judgement, it fires on every MCP tool call regardless. Left to the card, Auto would raise a
+	// prompt for each `task_list`, which is not the posture that mode describes. Orbit answers it
+	// for the server Orbit itself registers and scopes to this owner; a third-party MCP server
+	// still reaches the user, and the modes whose whole point is being consulted (default,
+	// acceptEdits) still ask about every server.
+	if request.mcpTool && permissionMode == "auto" && request.server == codexOrbitMCPServer {
+		return true, true
+	}
 	switch permissionMode {
 	case "plan":
 		// Plan mode is read-only by definition: nothing it proposes may execute or edit.

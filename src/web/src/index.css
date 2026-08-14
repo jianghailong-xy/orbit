@@ -4815,7 +4815,35 @@ body {
 .chat-error {
   color: var(--error);
   font-size: 13px;
+  line-height: 1.5;
   margin: 6px 0;
+  /* Mark in its own column so a wrapped sentence lines up under itself rather than under the
+     glyph, and so a logged URL breaks instead of stretching the row. */
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.chat-error-mark {
+  flex: none;
+}
+/* A parsed engine log line (data-level set) is the engine talking to its own log, not the turn
+   failing: the level keeps its colour on the mark, while the sentence — often a paragraph of
+   advice with a link — reads as secondary text instead of a wall of red. */
+.chat-error[data-level] .chat-error-text {
+  color: var(--text-2);
+}
+.chat-error[data-level='WARN'] .chat-error-mark {
+  color: var(--warning);
+}
+.chat-error[data-level='INFO'] .chat-error-mark,
+.chat-error[data-level='DEBUG'] .chat-error-mark,
+.chat-error[data-level='TRACE'] .chat-error-mark {
+  color: var(--text-2);
+}
+.chat-error-text a {
+  color: inherit;
+  text-decoration: underline;
 }
 /* How many identical repeats of this line folded into it. Rides at the end of the line, dimmer
    than the message: it is a fact about the log, not part of what the engine said. */

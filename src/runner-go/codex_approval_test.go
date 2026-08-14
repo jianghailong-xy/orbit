@@ -295,19 +295,41 @@ func TestHandleServerRequestDeclinesUnrenderableElicitation(t *testing.T) {
 // Codex asks for MCP consent even under "never", the policy the non-asking modes run on. Those
 // modes have to answer it themselves: an unattended task run has no human to wait for.
 func TestCodexAutomaticApprovalAnswersMCPConsentInSilentModes(t *testing.T) {
-	mcpTool := codexApprovalRequest{mcpTool: true, server: "orbit"}
+	mcpTool := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer}
 	for _, mode := range []string{"dontAsk", "bypassPermissions", ""} {
 		if allowed, decided := codexAutomaticApproval(mode, mcpTool); !decided || !allowed {
 			t.Errorf("%q/mcpTool = (%v, %v), want allowed without asking", mode, allowed, decided)
 		}
 	}
-	for _, mode := range []string{"default", "auto", "acceptEdits"} {
+	for _, mode := range []string{"default", "acceptEdits"} {
 		if _, decided := codexAutomaticApproval(mode, mcpTool); decided {
 			t.Errorf("%q/mcpTool must reach the user", mode)
 		}
 	}
 	if allowed, decided := codexAutomaticApproval("plan", mcpTool); !decided || allowed {
 		t.Errorf("plan/mcpTool = (%v, %v), want denied without asking", allowed, decided)
+	}
+}
+
+// Codex raises consent for every MCP tool call whatever the policy, so under Auto — "the model
+// decides when to ask" — Orbit's own control-plane tools would each cost a card the mode never
+// promised. Auto answers for Orbit's server only; another server's tools still reach the user.
+func TestCodexAutomaticApprovalAnswersOrbitMCPConsentUnderAuto(t *testing.T) {
+	orbit := codexApprovalRequest{mcpTool: true, server: codexOrbitMCPServer}
+	if allowed, decided := codexAutomaticApproval("auto", orbit); !decided || !allowed {
+		t.Errorf("auto/orbit mcpTool = (%v, %v), want allowed without asking", allowed, decided)
+	}
+	thirdParty := codexApprovalRequest{mcpTool: true, server: "acme"}
+	if _, decided := codexAutomaticApproval("auto", thirdParty); decided {
+		t.Error("auto/third-party mcpTool must reach the user")
+	}
+	// The exemption is for MCP consent, not for Auto at large: commands still follow the policy
+	// Codex was started with.
+	if _, decided := codexAutomaticApproval("auto", codexApprovalRequest{}); decided {
+		t.Error("auto/command must not be auto-approved")
+	}
+	if _, decided := codexAutomaticApproval("default", orbit); decided {
+		t.Error("default/orbit mcpTool must still reach the user")
 	}
 }
 

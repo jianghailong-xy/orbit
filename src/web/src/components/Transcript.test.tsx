@@ -279,9 +279,63 @@ describe('engine stderr', () => {
       <Transcript events={[stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT))]} />,
     );
 
-    expect(html).toContain(`ERROR codex_core::util: ${MISSING_OUTPUT}`);
+    expect(html).toContain(MISSING_OUTPUT);
     expect(html).not.toContain('[31m');
     expect(html).not.toContain('[0m');
+  });
+
+  // The stamp, level and module are ~60 characters of the engine's own bookkeeping in front of
+  // the sentence a person is meant to read. The row leads with the sentence; the raw line stays
+  // reachable in the tooltip, and the level it was logged at drives the row's tone instead of
+  // every engine log line reading as a failed turn.
+  it('leads with the message and keeps the log preamble in the tooltip', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, codexLine('2026-08-12T15:31:40.112363Z', MISSING_OUTPUT))]} />,
+    );
+
+    expect(html).toContain(`>${MISSING_OUTPUT}<`);
+    expect(html).toContain('data-level="ERROR"');
+    expect(html).toContain('title="2026-08-12T15:31:40.112363Z ERROR codex_core::util:');
+  });
+
+  it('carries a warning at its own level rather than as an error', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[stderrEvent(1, '2026-08-14T14:31:13.780609Z WARN codex_app_server: sandbox is degraded\n')]}
+      />,
+    );
+
+    expect(html).toContain('data-level="WARN"');
+    expect(html).toContain('sandbox is degraded');
+  });
+
+  // "See the sandbox prerequisites: https://…" is advice you are meant to follow.
+  it('links a URL the engine logged', () => {
+    const url = 'https://developers.openai.com/codex/concepts/sandboxing#prerequisites';
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            `2026-08-14T14:31:13.780609Z ERROR codex_app_server: Codex could not find bubblewrap on PATH. See ${url}. Codex will use the bundled bubblewrap in the meantime.\n`,
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).toContain(`href="${url}"`);
+    expect(html).toContain('in the meantime.');
+  });
+
+  // A line with no tracing preamble is the runner's own account of why the turn failed — it must
+  // not be quietened along with the engines' log chatter.
+  it('leaves an unprefixed runner line loud', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, 'No conversation found with session ID: abc\n')]} />,
+    );
+
+    expect(html).not.toContain('data-level');
+    expect(html).toContain('✖');
   });
 
   // The same complaint is re-logged on every request for the rest of the conversation — 217
