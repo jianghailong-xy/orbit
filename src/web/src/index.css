@@ -1700,7 +1700,7 @@ body {
   font-size: 11.5px;
   color: var(--text-3);
 }
-.rd-agent-list {
+.rd-workspace-list {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-subtle);
@@ -1710,12 +1710,12 @@ body {
 }
 /* One panel with hairline dividers between rows, instead of boxing each row —
    denser and faster to scan. */
-.rd-agent-list > * + * {
+.rd-workspace-list > * + * {
   border-top: 1px solid var(--border-subtle);
 }
 /* The row is the click target for its config — the settings it shows are the ones the
    editor holds, so aiming at the row is the natural move. */
-.rd-agent-row {
+.rd-workspace-row {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1723,16 +1723,16 @@ body {
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.rd-agent-row:hover,
-.rd-agent-row.is-open {
+.rd-workspace-row:hover,
+.rd-workspace-row.is-open {
   background: var(--bg-hover);
 }
-.rd-agent-row.is-disabled .rd-agent-ico {
+.rd-workspace-row.is-disabled .rd-workspace-ico {
   background: var(--fill-muted);
   color: var(--text-4);
 }
-.rd-agent-row.is-disabled .rd-agent-name,
-.rd-agent-row.is-disabled .rd-agent-meta {
+.rd-workspace-row.is-disabled .rd-workspace-name,
+.rd-workspace-row.is-disabled .rd-workspace-meta {
   color: var(--text-4);
 }
 /* Quiet by default: the caret appears on hover, or stays while this row's editor is open,
@@ -1745,15 +1745,15 @@ body {
     opacity 0.15s ease,
     transform 0.18s ease;
 }
-.rd-agent-row:hover .rd-row-caret {
+.rd-workspace-row:hover .rd-row-caret {
   opacity: 1;
 }
-.rd-agent-row.is-open .rd-row-caret {
+.rd-workspace-row.is-open .rd-row-caret {
   opacity: 1;
   color: var(--text-2);
   transform: rotate(180deg);
 }
-.rd-agent-ico {
+.rd-workspace-ico {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1764,16 +1764,16 @@ body {
   color: var(--brand);
   flex: none;
 }
-.rd-agent-main {
+.rd-workspace-main {
   flex: 1;
   min-width: 0;
 }
-.rd-agent-name {
+.rd-workspace-name {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-1);
 }
-.rd-agent-meta {
+.rd-workspace-meta {
   font-size: 12px;
   color: var(--text-3);
   margin-top: 2px;
@@ -1799,13 +1799,13 @@ body {
   flex: 0 0 38%;
 }
 /* In-place agent editor card — replaces the old modal; lives inside the list. */
-.rd-agent-form {
+.rd-workspace-form {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-raised);
   padding: 16px 16px 14px;
 }
-.rd-agent-form-new {
+.rd-workspace-form-new {
   box-shadow: inset 3px 0 0 var(--brand);
 }
 /* Two-column grid for the short fields; long fields below span full width. */
@@ -1953,34 +1953,34 @@ body {
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
    it, the two merged into one bordered card. */
-.rd-agent-editing {
+.rd-workspace-editing {
   overflow: hidden;
   box-shadow: inset 3px 0 0 var(--brand);
 }
-.rd-agent-editing > .rd-agent-row {
+.rd-workspace-editing > .rd-workspace-row {
   border: none;
   border-radius: 0;
   background: transparent;
 }
-.rd-agent-editing > .rd-agent-form-wrap > .rd-agent-form {
+.rd-workspace-editing > .rd-workspace-form-wrap > .rd-workspace-form {
   border: none;
   border-radius: 0;
   border-top: 1px solid var(--border-subtle);
 }
 /* Create form sits inline at the top of the panel — shed its own card frame too. */
-.rd-agent-list > .rd-agent-form-wrap > .rd-agent-form {
+.rd-workspace-list > .rd-workspace-form-wrap > .rd-workspace-form {
   border: none;
   border-radius: 0;
   background: transparent;
 }
 /* Expand the editor open: grow its row track 0fr→1fr while fading in, so the
    rows below slide down smoothly. (Collapse is immediate — React unmounts it.) */
-.rd-agent-form-wrap {
+.rd-workspace-form-wrap {
   display: grid;
   grid-template-rows: 1fr;
   animation: rd-form-expand 0.2s ease;
 }
-.rd-agent-form-wrap > * {
+.rd-workspace-form-wrap > * {
   min-height: 0;
   overflow: hidden;
 }
@@ -1995,7 +1995,7 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .rd-agent-form-wrap {
+  .rd-workspace-form-wrap {
     animation: none;
   }
 }
@@ -2214,12 +2214,12 @@ body {
 }
 
 /* ---- Agent console: two-pane master-detail (session list | conversation) ---- */
-.agent-split {
+.workspace-split {
   display: flex;
   height: 100%;
   min-height: 0;
   /* One gutter token drives every horizontal gap. It lives on the panes (.session-col /
-     .agent-view), not here, so page edge → list → divider → conversation stay symmetric:
+     .workspace-view), not here, so page edge → list → divider → conversation stay symmetric:
      each pane is inset --pane-gutter on both sides and the divider (zero margin) centers
      itself in the two panes' padding. The wrapper keeps no padding so the divider (a flex
      child) still stretches the full panel height. A symmetric layout forces the centre seam
@@ -2488,24 +2488,24 @@ body {
   background: var(--brand-tint-hover);
   --row-bg: var(--brand-tint-hover);
 }
-.agent-draft {
+.workspace-draft {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 /* ---- Agent detail view (conversation pane) ---- */
-.agent-view {
+.workspace-view {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 16px var(--pane-gutter);
-  /* Anchor the drag-and-drop overlay (.agent-dropzone) to the whole pane. */
+  /* Anchor the drag-and-drop overlay (.workspace-dropzone) to the whole pane. */
   position: relative;
 }
-.agent-header {
+.workspace-header {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2513,21 +2513,21 @@ body {
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
-.agent-status-dot {
+.workspace-status-dot {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: var(--dot-idle);
   flex: none;
 }
-.agent-status-dot.online {
+.workspace-status-dot.online {
   background: var(--success-solid);
 }
-.agent-header-main {
+.workspace-header-main {
   flex: 1;
   min-width: 0;
 }
-.agent-name {
+.workspace-name {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-1);
@@ -2535,9 +2535,9 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Inline rename editor that replaces .agent-name on double-click — matches the title's
+/* Inline rename editor that replaces .workspace-name on double-click — matches the title's
    type so the swap is seamless, with a brand underline to signal edit mode. */
-.agent-name-input {
+.workspace-name-input {
   display: block;
   box-sizing: content-box;
   /* width is set inline from the mirror (fits the text); cap so a long title stops at the
@@ -2555,8 +2555,8 @@ body {
   background: transparent;
   outline: none;
 }
-/* Off-screen twin of .agent-name-input used only to measure the text width. */
-.agent-name-mirror {
+/* Off-screen twin of .workspace-name-input used only to measure the text width. */
+.workspace-name-mirror {
   position: absolute;
   left: -9999px;
   top: 0;
@@ -2567,7 +2567,7 @@ body {
   font-size: 18px;
   font-weight: 600;
 }
-.agent-header-task {
+.workspace-header-task {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2581,16 +2581,16 @@ body {
   color: var(--text-3);
   cursor: pointer;
 }
-.agent-header-task:hover {
+.workspace-header-task:hover {
   color: var(--brand);
 }
-.agent-header-task-name {
+.workspace-header-task-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.agent-sub {
+.workspace-sub {
   font-size: 12.5px;
   color: var(--text-3);
   margin-top: 2px;
@@ -3199,7 +3199,7 @@ body {
 .wt-merge-where {
   color: var(--text-3, var(--text-2));
 }
-.agent-header-count {
+.workspace-header-count {
   font-size: 13px;
   color: var(--text-2);
   flex: none;
@@ -3216,20 +3216,20 @@ body {
 }
 /* Wraps the scroll area so the floating "jump to bottom" button can anchor to its
    bottom edge (= just above the composer) without overlapping the input. */
-.agent-scroll-wrap {
+.workspace-scroll-wrap {
   flex: 1;
   min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
 }
-.agent-sessions {
+.workspace-sessions {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
 /* Find in session (⌘F). Floats over the top-right of the transcript, browser-find style, and
-   sits outside .agent-sessions so its own text is never part of what it searches. */
+   sits outside .workspace-sessions so its own text is never part of what it searches. */
 .find-bar {
   position: absolute;
   top: 12px;
@@ -3748,7 +3748,7 @@ body {
 .runner-done-btn:hover {
   background: var(--invert-surface-hover);
 }
-.agent-composer {
+.workspace-composer {
   flex: none;
   border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
@@ -3776,7 +3776,7 @@ body {
 }
 /* Drop-to-upload hint: covers the whole session pane while files are dragged over it. Sits
    inset from the pane edges with a translucent scrim so the conversation still shows through. */
-.agent-dropzone {
+.workspace-dropzone {
   position: absolute;
   inset: 12px;
   z-index: 20;
@@ -7019,41 +7019,41 @@ body {
   }
 
   /* Agent console: stack the two panes, showing one at a time, each full width. */
-  .agent-split {
+  .workspace-split {
     --pane-gutter: 14px;
   }
   .session-col {
     width: 100% !important;
     padding-top: 12px;
   }
-  .agent-view {
+  .workspace-view {
     padding-top: 12px;
   }
   .session-resizer {
     display: none;
   }
-  .agent-split.show-conversation .session-col {
+  .workspace-split.show-conversation .session-col {
     display: none;
   }
-  .agent-split:not(.show-conversation) .agent-view {
+  .workspace-split:not(.show-conversation) .workspace-view {
     display: none;
   }
   /* When a conversation is open, its in-pane header (← · title · ⋯) already carries the
      back nav, identity, live state, and actions — so the global "Orbit" bar stacked above
      it is pure redundancy. Drop it and reclaim its 48px band (the ← returns to the session
      list, where the ☰ menu still lives, so global nav stays one tap away). */
-  .app-shell:has(.agent-split.show-conversation) .app-topbar {
+  .app-shell:has(.workspace-split.show-conversation) .app-topbar {
     display: none;
   }
-  .app-shell:has(.agent-split.show-conversation) .app-main {
+  .app-shell:has(.workspace-split.show-conversation) .app-main {
     padding-top: 0;
   }
   /* As the sole top bar the header sits a touch tighter than the roomy desktop version. */
-  .agent-split.show-conversation .agent-header {
+  .workspace-split.show-conversation .workspace-header {
     padding-bottom: 10px;
   }
   /* In-pane back button: leaves the open conversation for the session list. */
-  .agent-back-mobile {
+  .workspace-back-mobile {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -7068,7 +7068,7 @@ body {
     font-size: 16px;
     cursor: pointer;
   }
-  .agent-back-mobile:hover {
+  .workspace-back-mobile:hover {
     background: var(--bg-hover);
     color: var(--text-1);
   }
