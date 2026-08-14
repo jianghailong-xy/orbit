@@ -2259,13 +2259,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         isForeman: true,
         verifiesTaskId: true,
         list: { select: { verifyOnDone: true } },
-        assignee: { select: { id: true, runnerId: true } },
+        assignee: { select: { id: true, runnerId: true, deletedAt: true } },
       },
     });
     // A verification of a verification has nothing left to check, and a foreman's output is a
     // diagnosis rather than a unit of work with an acceptance criterion.
     if (!task || task.isForeman || task.verifiesTaskId) return;
-    if (!task.assignee?.runnerId) return;
+    // A runner-bound assignee that still exists. `deletedAt` matters as much as `runnerId`:
+    // sessions.create refuses a soft-deleted workspace, so filing here would leave an OPEN task
+    // that can never run and reads as pending work forever. Six of those were filed against a
+    // workspace deleted in August before this check existed.
+    if (!task.assignee?.runnerId || task.assignee.deletedAt) return;
     // Did anything actually run? `numTurns > 0` and not "has a SUCCEEDED session": at the moment
     // an agent writes DONE its own session is still RUNNING, so success is not yet recorded —
     // but its turns are. The task that motivated all of this had 18 sessions and numTurns 0 on

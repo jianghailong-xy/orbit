@@ -9,6 +9,8 @@ interface Subject {
   verifiesTaskId?: string | null;
   verifyOnDone?: boolean;
   assigned?: boolean;
+  /** The assignee workspace has been soft-deleted; sessions.create refuses to run in it. */
+  assigneeDeleted?: boolean;
   priorVerifications?: number;
   /**
    * The subject's sessions. Defaults to the shape a normal completion actually has at the moment
@@ -37,7 +39,14 @@ function makeService(subject: Subject = {}) {
     isForeman: subject.isForeman ?? false,
     verifiesTaskId: subject.verifiesTaskId ?? null,
     list: { verifyOnDone: subject.verifyOnDone ?? true },
-    assignee: subject.assigned === false ? null : { id: 'workspace-1', runnerId: 'runner-1' },
+    assignee:
+      subject.assigned === false
+        ? null
+        : {
+            id: 'workspace-1',
+            runnerId: 'runner-1',
+            deletedAt: subject.assigneeDeleted ? new Date() : null,
+          },
   };
   const prisma = {
     task: {
@@ -245,6 +254,17 @@ test('evidence is turns executed, not a session that already succeeded', async (
     verifyOnDone: false,
     sessions: [{ status: 'RUNNING', numTurns: 7 }],
   });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('a soft-deleted assignee files nothing', async () => {
+  // sessions.create refuses a deleted workspace, so the verification would sit OPEN forever and
+  // read as pending work. Six were filed this way against a workspace deleted in August, and
+  // `runnerId` alone did not notice — the row keeps its binding after the delete.
+  const f = makeService({ verifyOnDone: true, assigneeDeleted: true });
 
   await f.fileFor();
 
