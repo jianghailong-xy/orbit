@@ -227,6 +227,14 @@ struct TranscriptView: View {
                 }
             }
             .listStyle(.plain)
+            // A transcript row is content, not a table cell, so drop the 44pt floor a List applies
+            // by default. That floor is why a folded tool card appeared to jump upward on the tap
+            // that opened it: folded, the card is ~32pt and the List padded the cell to 44 and
+            // centred it, sitting the header ~6pt low; expanded, the row is far past the floor, so
+            // the header snapped back to where it always belonged. Nothing above it moved, which is
+            // what ruled out a scroll. Every short row in the transcript was paying the same 12pt —
+            // including the 1pt scroll-anchor row at the tail.
+            .environment(\.defaultMinListRowHeight, 0)
             .scrollContentBackground(.hidden)   // show the window background, not the List's own
             #if os(iOS)
             // Turn OFF the scroll view's touch delay so an in-list control (the jump-to-latest disc, the
