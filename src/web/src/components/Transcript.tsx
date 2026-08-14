@@ -2242,7 +2242,7 @@ function SessionCreateCard({ result }: { result: any }) {
   const clickable = !!nav;
   return (
     <div
-      className={`chat-session-card chat-tone-workspace${clickable ? ' is-clickable' : ''}`}
+      className={`chat-session-card chat-tone-agent${clickable ? ' is-clickable' : ''}`}
       onClick={clickable ? () => nav!(s.id) : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}

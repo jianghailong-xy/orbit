@@ -475,6 +475,10 @@ describe('tool run folding', () => {
 
     expect(html).toContain('chat-session-card');
     expect(html).toContain('Child');
+    // The tone class is what carries --tone, and the card's left accent is `3px solid var(--tone)`
+    // — with an unknown tone name the whole border shorthand is dropped and the stripe vanishes.
+    // Only the names the stylesheet defines will do (see .chat-tone-* in index.css).
+    expect(html).toContain('chat-tone-agent');
     // Splitting the run on the card leaves two singles — neither reaches the fold threshold.
     expect(html).not.toContain('chat-tool-group');
   });
