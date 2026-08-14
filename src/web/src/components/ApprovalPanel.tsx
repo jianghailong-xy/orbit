@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
-import { bashCommandRules } from '../lib/bashRules';
+import { bashCommandRules } from '@orbit/shared';
 
 // claude routes plan-mode "exit?" through the same permission tool as any other gated
 // call; ExitPlanMode is the one worth a rich render (its input carries the plan).

@@ -857,10 +857,12 @@ function WorkspacePermissionRules({ workspaceId }: { workspaceId: string }) {
               />
             </div>
           ))}
-          {/* Says where it does NOT apply, because the alternative is a user reading this list
-              as the whole truth about a Codex or OpenCode session. */}
+          {/* The two mechanisms differ in WHEN they take effect, which is the part a user can
+              be surprised by: Claude is handed the rules when it starts, so a revoke reaches a
+              running session only on its next start. */}
           <div className="rd-rule-empty">
-            Applied when the session runs on Claude, from its next start on.
+            Handed to Claude when a session starts, and checked by Orbit when Codex or Kimi asks.
+            A command skips the prompt only when every part of it is covered.
           </div>
         </>
       )}

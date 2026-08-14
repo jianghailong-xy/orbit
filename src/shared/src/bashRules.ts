@@ -1,4 +1,10 @@
-import type { PermissionRule } from '../api';
+import type { PermissionRule } from './dto';
+
+// Shared rather than client-side because the same decomposition has to run twice, at two ends
+// of a rule's life: once in the client that DERIVES a rule from a command a human approved, and
+// once in the control plane that decides whether a later command is COVERED by that rule. Two
+// implementations would drift, and a drift here means a rule quietly grants something other than
+// what it was created from.
 
 // Split a shell command into its top-level sub-commands at unquoted ; && || | and
 // newlines, so every real command in a compound line can get its own allow rule — claude

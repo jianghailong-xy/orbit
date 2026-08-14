@@ -110,7 +110,12 @@ import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { readRunnerRepoHealth, sanitizeRunnerRepoHealth } from '../common/runner-repo-health';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
-import { dispatchAllowedTools } from '../common/permission-rules';
+import {
+  AUTO_ALLOWED_MESSAGE,
+  dispatchAllowedTools,
+  ruleCoversApproval,
+  serverMatchedRuntime,
+} from '../common/permission-rules';
 import {
   isTerminalResumeHandoffOwner,
   pendingWorktreeOperationMayBeExecuting,
@@ -1792,7 +1797,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id);
     const existing = dto.toolUseId
       ? await this.prisma.approval.findUnique({
           where: {
@@ -1800,6 +1805,10 @@ export class RunnerApiController {
           },
         })
       : null;
+    // A call this workspace has permanently allowed is answered here instead of waking a human
+    // to re-answer a settled question. Recorded as a decided approval with no decider, which is
+    // what makes an automatic allow tellable from a human one afterwards.
+    const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
     const approval =
       existing ??
       (await this.prisma.approval.create({
@@ -1808,9 +1817,14 @@ export class RunnerApiController {
           toolName: dto.toolName,
           input: (dto.input ?? {}) as Prisma.InputJsonValue,
           toolUseId: dto.toolUseId ?? null,
+          ...(autoAllowed
+            ? { status: 'ALLOWED', decidedAt: new Date(), message: AUTO_ALLOWED_MESSAGE }
+            : {}),
         },
       }));
-    if (!existing) {
+    // An already-answered approval raises no card and buzzes no phone: not interrupting is the
+    // entire point of having granted it.
+    if (!existing && !autoAllowed) {
       this.realtime.publish(sessionId, {
         seq: 0,
         type: RunEventType.APPROVAL_REQUEST,
@@ -1827,6 +1841,36 @@ export class RunnerApiController {
       void this.push.notifyApprovalRequest(sessionId, approval.toolName);
     }
     return { id: approval.id, status: approval.status as ApprovalStatus };
+  }
+
+  /**
+   * Whether this session's workspace already permanently allows the call being asked about.
+   *
+   * The rules are the same rows claude receives as `--allowedTools`; this is how the runtimes
+   * that take no allowlist get the same standing grants. Every uncertain case answers false and
+   * the human is asked, exactly as before.
+   */
+  private async standingGrantCovers(
+    session: { workspaceId: string | null; provider: string | null; providerBuiltin: boolean; ownerId: string },
+    dto: ApprovalCreateRequest,
+  ): Promise<boolean> {
+    if (!session.workspaceId) return false;
+    // A configured (BYOK) slug borrows a built-in runtime, and it is the runtime that will run
+    // the command — so resolve it rather than judging the label the session was created with.
+    let runtime = normalizeRuntimeProvider(session.provider, session.providerBuiltin);
+    if (!isBuiltinProvider(session.provider, session.providerBuiltin)) {
+      const customRow = await this.prisma.modelProvider.findFirst({
+        where: { slug: session.provider!, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        select: { runtime: true },
+      });
+      runtime = normalizeRuntimeProvider(customRow?.runtime, true);
+    }
+    if (!serverMatchedRuntime(runtime)) return false;
+    const rules = await this.prisma.workspacePermissionRule.findMany({
+      where: { workspaceId: session.workspaceId },
+      select: { toolName: true, ruleContent: true },
+    });
+    return ruleCoversApproval(runtime, dto.toolName, dto.input, rules);
   }
 
   /** Long-poll one approval until a human decides (window elapsed undecided → PENDING). */

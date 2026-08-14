@@ -3,6 +3,7 @@ export * from './events';
 export * from './background';
 export * from './dto';
 export * from './permissionSemantics';
+export * from './bashRules';
 export * from './codec';
 export * from './realtime';
 export * from './models';
