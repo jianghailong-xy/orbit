@@ -43,10 +43,27 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
    *  constructor empty is what lets one class serve both forms. */
   private fields?: readonly string[];
 
+  /** Values this pipe hands through untouched instead of decoding — see `allowing`. */
+  private sentinels?: ReadonlySet<string>;
+
   /** Body form: `@Body(PublicIdPipe.forFields('workspaceId'))`. */
   static forFields(...fields: string[]): PublicIdPipe {
     const pipe = new PublicIdPipe();
     pipe.fields = fields;
+    return pipe;
+  }
+
+  /** Query form for a filter that also has non-id sentinel values:
+   *  `@Query('listId', PublicIdPipe.allowing('none'))`.
+   *
+   *  Base62's alphabet is every alnum, so a word-shaped sentinel is itself a *valid* public id —
+   *  it decodes to a uuid nothing is filed under rather than throwing. `?listId=none` ("tasks in
+   *  no list") became `00000000-0000-0000-0000-000000b52c46`, so the endpoint answered empty and
+   *  the sidebar bucket that is the only way into those tasks stopped rendering. A sentinel has to
+   *  be declared here, at the decode, because downstream it is indistinguishable from a real id. */
+  static allowing(...sentinels: string[]): PublicIdPipe {
+    const pipe = new PublicIdPipe();
+    pipe.sentinels = new Set(sentinels);
     return pipe;
   }
 
@@ -59,6 +76,7 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
       if (metadata?.type === 'query') return undefined;
       throw new BadRequestException(`invalid ${metadata?.data ?? 'id'}`);
     }
+    if (this.sentinels?.has(value)) return value;
     return resolve(value, metadata?.data);
   }
 

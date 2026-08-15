@@ -89,6 +89,12 @@ const [PARAM, QUERY] = (() => {
   return [kindOf('p'), kindOf('q')];
 })();
 
+// A route binds the pipe either as the CLASS (Nest instantiates it) or as an instance from one of
+// the static factories. Both run the same `transform`, so both count as resolved — matching only
+// the class would push a route that declares a sentinel back into `missing`.
+const resolvesPublicId = (pipes: unknown[]) =>
+  pipes.some((p) => p === PublicIdPipe || p instanceof PublicIdPipe);
+
 function inspect(controller: new (...args: never[]) => unknown) {
   const seen: string[] = [];
   const missing: string[] = [];
@@ -103,12 +109,12 @@ function inspect(controller: new (...args: never[]) => unknown) {
       const kind = Number(key.split(':')[0]);
       const name = arg.data;
       if (typeof name !== 'string') continue;
-      if ((arg.pipes ?? []).includes(PublicIdPipe)) piped.push(name);
+      if (resolvesPublicId(arg.pipes ?? [])) piped.push(name);
       const wanted =
         (kind === PARAM && !NON_ID_PARAMS.has(name)) || (kind === QUERY && ID_QUERIES.has(name));
       if (!wanted) continue;
       seen.push(`${method}(${name})`);
-      if (!(arg.pipes ?? []).includes(PublicIdPipe)) missing.push(`${method}(${name})`);
+      if (!resolvesPublicId(arg.pipes ?? [])) missing.push(`${method}(${name})`);
     }
   }
   return { seen, missing, piped };
@@ -197,6 +203,36 @@ test('PublicIdPipe rejects an id Prisma would 500 on, and names it', () => {
   // Base62's alphabet is every alnum, so a short all-alnum word IS a valid public id — it just
   // decodes to a uuid nothing is filed under. That's a 404's job, not the pipe's.
   assert.equal(pipe.transform('nope', asParam), '00000000-0000-0000-0000-000000b52cc2');
+});
+
+// …which is exactly why a filter whose vocabulary includes a word-shaped sentinel has to declare
+// it. A sentinel that decodes cleanly produces no error anywhere: it becomes a uuid nothing is
+// filed under, the query answers empty, and the feature just quietly stops existing.
+test('PublicIdPipe hands a declared sentinel through and still decodes ids', () => {
+  const pipe = PublicIdPipe.allowing('none');
+  const asListId = { type: 'query', data: 'listId' } as const;
+  assert.equal(pipe.transform('none', asListId), 'none');
+  assert.equal(pipe.transform(B62, asListId), UUID);
+  assert.equal(pipe.transform(UUID, asListId), UUID);
+  // Undeclared words keep decoding — the exemption is per-value, not a blanket opt-out.
+  assert.equal(pipe.transform('nope', asListId), '00000000-0000-0000-0000-000000b52cc2');
+  assert.throws(() => pipe.transform('not a uuid', asListId), BadRequestException);
+});
+
+// The regression, guarded where it happened — at the route, not at the service. `?listId=none`
+// means "tasks in no list"; once the pipe decoded it to 000…b52c46 the endpoint answered empty,
+// and since the web/macOS "No list" sidebar row only renders when that count is > 0, every
+// unlisted task (the shape an agent creates by default) became unreachable in the UI.
+// `task-list-pagination.spec.ts` stayed green throughout: it calls `listPage` directly.
+test('the tasks page route keeps the listId=none sentinel intact', () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, TasksController, 'listPage') as Record<
+    string,
+    { data?: unknown; pipes?: unknown[] }
+  >;
+  const arg = Object.values(args).find((a) => a.data === 'listId');
+  const pipe = (arg?.pipes ?? []).find((p) => p instanceof PublicIdPipe) as PublicIdPipe | undefined;
+  assert.ok(pipe, 'listId must bind a PublicIdPipe instance that exempts the sentinel');
+  assert.equal(pipe.transform('none', { type: 'query', data: 'listId' }), 'none');
 });
 
 // The one behaviour that differs by position, and the reason it isn't a caller's choice: a

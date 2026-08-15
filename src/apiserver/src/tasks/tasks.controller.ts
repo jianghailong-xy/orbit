@@ -49,7 +49,9 @@ export class TasksController {
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: string,
-    @Query('listId', PublicIdPipe) listId?: string,
+    // `none` is this filter's sentinel for "tasks in no list", not an id — and it is also valid
+    // base62, so without the exemption it decodes to a uuid no list has.
+    @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
     @Query('assigneeId', PublicIdPipe) assigneeId?: string,
     @Query('q') q?: string,
     @Query('counts') counts?: string,
