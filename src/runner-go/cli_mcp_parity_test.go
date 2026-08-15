@@ -17,6 +17,9 @@ var cliParityExemptTools = map[string]string{
 var cliParityParamAlias = map[string]string{
 	"dependsOnTaskId":  "--depends-on",
 	"dependsOnTaskIds": "--depends-on",
+	// One array of {op, taskId, dependsOnTaskId} over MCP; at a terminal the same batch is typed
+	// as repeated --add A:B / --remove C:D, because nobody hand-writes JSON into a flag.
+	"ops": "--add",
 }
 
 // The CLI and the MCP server are two doors onto the same API, and `orbit capabilities` is what an

@@ -47,6 +47,15 @@ export class CreateTaskDto {
 /** How many tasks one batch-create call may write. Mirrored in the runner's MCP tool schema. */
 export const TASK_BATCH_CREATE_MAX = 50;
 
+/**
+ * How many edges one DAG proposal may rewrite.
+ *
+ * A cap on how much a single approval can be made to mean. Fifty is well past any restructure a
+ * person reads and judges in one card; past that the honest description of what they are doing is
+ * clicking approve on a number rather than on a change.
+ */
+export const MAX_DAG_OPS = 50;
+
 export class CreateTaskBatchItemDto extends CreateTaskDto {
   // Caller-supplied label for THIS item, used only to wire dependencies up inside the batch
   // (see dependsOnRefs) since the real ids don't exist yet. Never stored.
@@ -66,6 +75,25 @@ export class CreateTasksBatchDto {
   @ValidateNested({ each: true })
   @Type(() => CreateTaskBatchItemDto)
   tasks!: CreateTaskBatchItemDto[];
+}
+
+export class DagOpDto {
+  @IsIn(['add', 'remove']) op!: 'add' | 'remove';
+  /** The dependent. Must belong to the list being restructured. */
+  @IsPublicId() taskId!: string;
+  /** The prerequisite. May live in another list — cross-list waits are an ordinary shape. */
+  @IsPublicId() dependsOnTaskId!: string;
+}
+
+export class ProposeDagDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_DAG_OPS)
+  @ValidateNested({ each: true })
+  @Type(() => DagOpDto)
+  ops!: DagOpDto[];
+  /** Why, carried onto the approval card. The reason a human can judge the change at all. */
+  @IsOptional() @IsString() @MaxLength(2000) note?: string;
 }
 
 export class UpdateTaskDto {

@@ -424,6 +424,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "tasklist_propose_dag":
+		return s.proposeDag(args)
+
 	case "tasklist_delete":
 		id := getString(args, "listId")
 		if id == "" {
@@ -626,6 +629,98 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 
 	default:
 		return toolResult("unknown tool: "+name, true)
+	}
+}
+
+// dagApprovalToolName is what the approval is filed under, and what the web keys its typed card
+// off. Not an `mcp__orbit__` name: this is not the engine's permission prompt for a tool call, it
+// is Orbit asking about a change of its own, and a card that rendered it as "allow this tool?"
+// would put the decision in the wrong frame.
+const dagApprovalToolName = "orbit_dag_change"
+
+// proposeDag runs a DAG restructure past a human before writing any of it.
+//
+// The approval is raised explicitly rather than left to the engine's own permission gating,
+// because that gating is a function of the session's permission mode: on a session running
+// permissively the write would land silently, and "silently" is the one thing a batch that can
+// release forty tasks into the dispatcher must never be. One card for the whole batch, carrying
+// the server-computed impact — the human is approving what results, not fourteen edge writes.
+func (s *mcpServer) proposeDag(args map[string]interface{}) map[string]interface{} {
+	if s.sessionID == "" {
+		return toolResult("no session context (ORBIT_SESSION_ID unset)", true)
+	}
+	listID := getString(args, "listId")
+	if listID == "" {
+		return toolResult("listId is required", true)
+	}
+	ops, ok := args["ops"].([]interface{})
+	if !ok || len(ops) == 0 {
+		return toolResult("ops is required and must be a non-empty array", true)
+	}
+	body := map[string]interface{}{"ops": ops}
+	if note := getString(args, "note"); note != "" {
+		body["note"] = note
+	}
+	preview, err := s.t.dagPreview(listID, body)
+	if err != nil {
+		return toolResult("dag preview failed: "+err.Error(), true)
+	}
+	// A batch that cannot be applied is not a decision to put in front of a human — it is a
+	// mistake to hand straight back, with the cycle named so it can be fixed in one more turn.
+	var p struct {
+		Cycle []struct {
+			Title string `json:"title"`
+		} `json:"cycle"`
+		EffectiveCount int `json:"effectiveCount"`
+		NoopCount      int `json:"noopCount"`
+	}
+	if err := json.Unmarshal(preview, &p); err == nil {
+		if len(p.Cycle) > 0 {
+			titles := make([]string, 0, len(p.Cycle))
+			for _, c := range p.Cycle {
+				titles = append(titles, c.Title)
+			}
+			return toolResult("rejected: these changes would create a cycle: "+strings.Join(titles, " -> "), true)
+		}
+		if p.EffectiveCount == 0 {
+			return toolResult("nothing to do: every proposed edge is already in the state you asked for ("+
+				strconv.Itoa(p.NoopCount)+" no-op(s)). Re-read the graph with task_dependency_graph before proposing again.", true)
+		}
+	}
+	input := map[string]interface{}{"listId": listID, "ops": ops, "preview": json.RawMessage(preview)}
+	if note := getString(args, "note"); note != "" {
+		input["note"] = note
+	}
+	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
+		"toolName": dagApprovalToolName,
+		"input":    input,
+	})
+	if err != nil {
+		return toolResult("could not register approval: "+err.Error(), true)
+	}
+	// Unbounded, exactly like permissionPrompt: this asks a human who may be asleep, and a
+	// deadline here would turn "not answered yet" into a silent abandonment of the restructure.
+	for {
+		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
+		if err != nil {
+			return toolResult("approval poll failed: "+err.Error(), true)
+		}
+		switch dec.Status {
+		case "ALLOWED":
+			applied, err := s.t.dagApply(listID, body)
+			if err != nil {
+				// Approved but unapplicable: the graph moved while the card was open. Say so
+				// plainly — the alternative is an agent that believes it restructured the list.
+				return toolResult("approved, but applying failed: "+err.Error(), true)
+			}
+			return toolResult(prettyJSON(applied), false)
+		case "DENIED":
+			msg := dec.Message
+			if msg == "" {
+				msg = "denied by the user"
+			}
+			return toolResult("the human rejected this DAG change: "+msg, false)
+		}
 	}
 }
 
@@ -961,6 +1056,30 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"foremanStallMinutes": map[string]interface{}{"type": "integer"},
 				"note":                str,
 			}, "listId"),
+		},
+		{
+			"name": "tasklist_propose_dag",
+			"description": "Propose a batch of dependency changes to a list's DAG, for a human to " +
+				"approve. Use this to restructure — re-point prerequisites, parallelise a chain, " +
+				"insert a blocking task — instead of task_dependency_add/remove one edge at a time: " +
+				"the batch is previewed, approved and applied as one unit, so dispatch never sees a " +
+				"half-rewritten graph and starts the wrong work. This BLOCKS until the human decides. " +
+				"They see what you are writing plus what results from it — above all which tasks " +
+				"become runnable, because those start within the minute. `note` is what they judge " +
+				"it by: say what the restructure is for, not what the edges are.",
+			"inputSchema": obj(map[string]interface{}{
+				"listId": str,
+				"ops": map[string]interface{}{
+					"type":        "array",
+					"description": "Each edge to add or remove. `taskId` waits on `dependsOnTaskId`. The dependent must be in this list; the prerequisite may be anywhere.",
+					"items": obj(map[string]interface{}{
+						"op":              map[string]interface{}{"type": "string", "enum": []string{"add", "remove"}},
+						"taskId":          str,
+						"dependsOnTaskId": str,
+					}, "op", "taskId", "dependsOnTaskId"),
+				},
+				"note": str,
+			}, "listId", "ops"),
 		},
 		{
 			"name": "tasklist_delete",

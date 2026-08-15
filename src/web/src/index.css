@@ -6107,6 +6107,90 @@ body {
   max-height: none;
   overflow: visible;
 }
+/* ── DAG change card ──────────────────────────────────────────────────────────────────────
+   The consequence first and largest: a batch reading "remove 4 edges" is unremarkable until
+   you know it releases 40 tasks, and those start on the next sweep. */
+.dag-approval {
+  padding: 4px 0 8px;
+}
+.dag-approval-note {
+  margin: 0 0 10px;
+  color: var(--text-1);
+}
+.dag-approval-impact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.dag-impact {
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.dag-impact--run {
+  background: color-mix(in srgb, var(--success, #52c41a) 14%, transparent);
+  color: var(--success, #389e0d);
+  font-weight: 600;
+}
+.dag-impact--block {
+  background: color-mix(in srgb, var(--warning, #faad14) 16%, transparent);
+  color: var(--warning-fg, #ad6800);
+  font-weight: 600;
+}
+.dag-approval-caption {
+  margin: 0 0 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dag-approval-ops,
+.dag-approval-changes {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  font-size: 12.5px;
+}
+.dag-op {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 0;
+}
+.dag-op-verb {
+  width: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.dag-op--add .dag-op-verb {
+  color: var(--brand);
+}
+.dag-op.is-noop {
+  opacity: 0.55;
+}
+.dag-op-noop {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.dag-approval-changes li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.dag-change-move {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.dag-approval-foot {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 11.5px;
+}
 .approval-input {
   white-space: pre-wrap;
   word-break: break-word;

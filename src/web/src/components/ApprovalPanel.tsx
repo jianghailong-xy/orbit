@@ -8,6 +8,35 @@ import { bashCommandRules } from '@orbit/shared';
 // call; ExitPlanMode is the one worth a rich render (its input carries the plan).
 const isPlan = (a: ApprovalInfo): boolean => a.toolName === 'ExitPlanMode';
 
+// Orbit's own ask, not the engine's permission prompt for a tool call: a batch of dependency
+// edits, raised by tasklist_propose_dag with the server-computed impact attached. Rendered richly
+// because the ops are not the decision — what results from them is.
+const isDagChange = (a: ApprovalInfo): boolean => a.toolName === 'orbit_dag_change';
+
+interface DagPreview {
+  listTitle?: string;
+  ops?: Array<{
+    op: 'add' | 'remove';
+    taskTitle?: string;
+    dependsOnTitle?: string;
+    noop?: boolean;
+  }>;
+  changes?: Array<{ taskId: string; title?: string; from: string; to: string }>;
+  becomingRunnable?: number;
+  becomingBlocked?: number;
+  effectiveCount?: number;
+  edgesBefore?: number;
+  edgesAfter?: number;
+}
+
+function dagInput(input: unknown): { preview: DagPreview; note: string } {
+  const obj = (input ?? {}) as { preview?: DagPreview; note?: unknown };
+  return {
+    preview: obj.preview ?? {},
+    note: typeof obj.note === 'string' ? obj.note : '',
+  };
+}
+
 function planText(input: unknown): string {
   if (input && typeof input === 'object' && 'plan' in input) {
     const p = (input as { plan?: unknown }).plan;
@@ -21,7 +50,10 @@ function planText(input: unknown): string {
 // add …` remembers both, not just the leading `cd`); other tools get a single tool-wide rule
 // (no ruleContent).
 function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
-  if (a.toolName === 'AskUserQuestion' || isPlan(a)) return [];
+  // A DAG change joins questions and plans in having no repeatable form. "Always allow
+  // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
+  // whole point of the card is that each batch releases a different set of tasks.
+  if (a.toolName === 'AskUserQuestion' || isPlan(a) || isDagChange(a)) return [];
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'
@@ -120,23 +152,28 @@ export function ApprovalPanel({
     );
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
+  const dag = isDagChange(approval) ? dagInput(approval.input) : null;
   return (
     <div className="approval-card">
       <div className="approval-head">
         {isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
-          : `🔓 Approve tool call: ${approval.toolName}`}
+          : dag
+            ? `🔗 Confirm: restructure dependencies in ${dag.preview.listTitle ?? 'this list'}?`
+            : `🔓 Approve tool call: ${approval.toolName}`}
       </div>
       <div className={`approval-body${plan ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown remarkPlugins={[remarkGfm]}>{plan}</Markdown>
+        ) : dag ? (
+          <DagChangeBody note={dag.note} preview={dag.preview} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
       </div>
       <div className="approval-actions">
         <button className="approval-btn approve" onClick={() => onDecide(approval.id, 'allow')}>
-          {isPlan(approval) ? 'Approve & run' : 'Approve'}
+          {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : 'Approve'}
           {active && <span className="approval-btn-kbd">{ENTER_HINT}</span>}
         </button>
         {rules.length > 0 && (
@@ -150,9 +187,72 @@ export function ApprovalPanel({
           </button>
         )}
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
-          {isPlan(approval) ? 'Keep planning' : 'Reject'}
+          {isPlan(approval) ? 'Keep planning' : dag ? 'Leave the graph alone' : 'Reject'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * What a dependency restructure would do, in the order a person decides in.
+ *
+ * The consequence leads, because it is the part that is not visible in the ops. A batch reading
+ * "remove 4 edges" is unremarkable until you know it releases 40 tasks, and the sweep collects
+ * those within the minute — the edges are what is written, the released tasks are what happens.
+ */
+function DagChangeBody({ note, preview }: { note: string; preview: DagPreview }): JSX.Element {
+  const runnable = preview.becomingRunnable ?? 0;
+  const blocked = preview.becomingBlocked ?? 0;
+  const ops = preview.ops ?? [];
+  return (
+    <div className="dag-approval">
+      {note && <p className="dag-approval-note">{note}</p>}
+      <div className="dag-approval-impact">
+        {runnable > 0 && (
+          <span className="dag-impact dag-impact--run">
+            {runnable} task{runnable === 1 ? '' : 's'} become runnable — these start on the next sweep
+          </span>
+        )}
+        {blocked > 0 && (
+          <span className="dag-impact dag-impact--block">
+            {blocked} task{blocked === 1 ? ' stops' : 's stop'} being runnable
+          </span>
+        )}
+        {runnable === 0 && blocked === 0 && (
+          <span className="dag-impact">No task changes state — this only rewrites edges</span>
+        )}
+      </div>
+      {ops.length > 0 && <p className="dag-approval-caption">Edges written</p>}
+      <ul className="dag-approval-ops">
+        {ops.map((o, i) => (
+          <li key={i} className={`dag-op dag-op--${o.op}${o.noop ? ' is-noop' : ''}`}>
+            <span className="dag-op-verb">{o.op === 'add' ? '+' : '−'}</span>
+            <span className="dag-op-text">
+              {o.taskTitle} {o.op === 'add' ? 'waits on' : 'no longer waits on'} {o.dependsOnTitle}
+            </span>
+            {o.noop && <span className="dag-op-noop">already so</span>}
+          </li>
+        ))}
+      </ul>
+      {(preview.changes?.length ?? 0) > 0 && (
+        <>
+        <p className="dag-approval-caption">Tasks that change state as a result</p>
+        <ul className="dag-approval-changes">
+          {preview.changes!.map((c) => (
+            <li key={c.taskId}>
+              <span className="dag-change-title">{c.title ?? c.taskId}</span>
+              <span className="dag-change-move">
+                {c.from} → {c.to}
+              </span>
+            </li>
+          ))}
+        </ul>
+        </>
+      )}
+      <p className="dag-approval-foot">
+        {preview.edgesBefore} → {preview.edgesAfter} edges
+      </p>
     </div>
   );
 }

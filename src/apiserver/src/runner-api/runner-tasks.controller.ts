@@ -8,6 +8,7 @@ import {
   CreateTaskCommentDto,
   CreateTaskDto,
   CreateTasksBatchDto,
+  ProposeDagDto,
   UpdateTaskDto,
 } from '../tasks/dto';
 import { TasksService } from '../tasks/tasks.service';
@@ -205,6 +206,32 @@ export class RunnerTasksController {
       dto,
       creator ? { type: creator.type, id: creator.id, sessionId } : undefined,
     );
+  }
+
+  /**
+   * What a proposed batch of dependency edits would do. Pure read — it writes nothing, and it is
+   * what fills the approval card the human decides on.
+   */
+  @Post('task-lists/:id/dag-preview')
+  previewDag(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ProposeDagDto,
+  ) {
+    return this.tasks.previewDag(runner.ownerId, id, dto.ops);
+  }
+
+  /**
+   * Apply that batch. Called only after the human allowed it, and re-validated here rather than
+   * trusting the preview: an approval happens at human speed and the graph may have moved.
+   */
+  @Post('task-lists/:id/dag-apply')
+  applyDag(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ProposeDagDto,
+  ) {
+    return this.tasks.applyDag(runner.ownerId, id, dto.ops);
   }
 
   /**

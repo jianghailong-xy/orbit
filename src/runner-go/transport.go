@@ -813,6 +813,28 @@ func (t *Transport) updateTaskList(id, agentID, sessionID string, body map[strin
 	return out, err
 }
 
+// dagPreview asks what a batch of dependency edits would do. Writes nothing; the answer is what
+// fills the approval card.
+func (t *Transport) dagPreview(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-preview", body, &out, taskOpTimeout)
+	return out, err
+}
+
+// dagApply commits that batch, after a human allowed it. The server re-validates rather than
+// trusting the preview: approval happens at human speed and the graph may have moved.
+func (t *Transport) dagApply(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/task-lists/"+url.PathEscape(id)+"/dag-apply", body, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) deleteTaskList(id string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

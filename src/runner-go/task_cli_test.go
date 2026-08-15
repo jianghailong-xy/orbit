@@ -40,7 +40,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 16 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 17 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -48,10 +48,11 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// tasklist_update joined them: a list's dispatch policy was readable only as a row in
 	// tasklist_list and not writable at all, so an agent could see a list stall and do nothing
 	// about it. tasklist_delete closed the last gap: an agent could make lists but never
-	// clean up the ones it made.
+	// clean up the ones it made. tasklist_propose_dag is the batch form of the trio: a restructure
+	// applied one edge at a time leaves the graph, for a moment, in a state the sweep will act on.
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
-		"tasklist_get", "tasklist_update", "tasklist_delete",
+		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {
@@ -643,6 +644,26 @@ func TestTaskCLIRejectsPathLikeTaskIDs(t *testing.T) {
 		err := cmdTaskCLI([]string{"get", id, "--json"}, strings.NewReader(""), &out)
 		if err == nil || !strings.Contains(err.Error(), "single safe path segment") {
 			t.Fatalf("task id %q error = %v", id, err)
+		}
+	}
+}
+
+// parseDagEdge is where a typed batch becomes ops, and a wrong split silently proposes an edge
+// between two ids nobody named.
+func TestParseDagEdge(t *testing.T) {
+	op, err := parseDagEdge("add", "3H8pGALtipnCnHud4zBiky:6ba7b810-9dad-11d1-80b4-00c04fd430c8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if op["taskId"] != "3H8pGALtipnCnHud4zBiky" || op["dependsOnTaskId"] != "6ba7b810-9dad-11d1-80b4-00c04fd430c8" {
+		t.Fatalf("split wrong: %v", op)
+	}
+	if op["op"] != "add" {
+		t.Fatalf("op not carried: %v", op)
+	}
+	for _, bad := range []string{"", "onlyone", ":missing-left", "missing-right:"} {
+		if _, err := parseDagEdge("remove", bad); err == nil {
+			t.Fatalf("%q was accepted as an edge", bad)
 		}
 	}
 }

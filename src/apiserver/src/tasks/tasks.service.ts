@@ -28,6 +28,7 @@ import {
   CreateTaskCommentDto,
   CreateTaskDto,
   CreateTasksBatchDto,
+  MAX_DAG_OPS,
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
@@ -39,6 +40,7 @@ import {
   wouldReplacementCreateCycle,
   type DependencyState,
 } from './task-dependencies';
+import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -239,6 +241,7 @@ export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
 // enough for "the agent misread the task the first time" and short of "these two disagree about
 // what done means", which is the case a third identical round does not settle.
 export const MAX_VERIFICATIONS_PER_TASK = 2;
+
 
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
@@ -2892,6 +2895,153 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     return held;
+  }
+
+  /**
+   * What a batch of dependency edits would do, without doing any of it.
+   *
+   * The half of a DAG proposal a human actually reads. The edge list says what is being written;
+   * the state changes say what happens as a result — above all which tasks become runnable, since
+   * the sweep collects those within the minute and starts spending real runs on them. A
+   * restructure that reads as a tidy-up and quietly releases forty tasks is the outcome an
+   * approval exists to catch, and it is invisible in the ops themselves.
+   *
+   * Cycles are checked over the owner's whole graph, not the list's: dependencies cross lists, so
+   * a list-local check would pass a batch that closes a loop through a task somewhere else and
+   * wedge the completion trigger for good.
+   */
+  async previewDag(ownerId: string, listId: string, ops: DagOp[]) {
+    if (ops.length === 0) throw new BadRequestException('no dependency changes proposed');
+    if (ops.length > MAX_DAG_OPS) {
+      throw new BadRequestException(`at most ${MAX_DAG_OPS} dependency changes at a time`);
+    }
+    const list = await this.prisma.taskList.findFirst({
+      where: { id: listId, ownerId },
+      select: { id: true, title: true },
+    });
+    if (!list) throw new NotFoundException('task list not found');
+    for (const op of ops) {
+      if (op.taskId === op.dependsOnTaskId) {
+        throw new BadRequestException('A task cannot depend on itself');
+      }
+    }
+    const referenced = [...new Set(ops.flatMap((o) => [o.taskId, o.dependsOnTaskId]))];
+    await this.assertOwnedTasks(ownerId, referenced);
+    // The dependent must be in the list being restructured — that is what makes "this list's DAG"
+    // a well-defined thing to approve. Prerequisites may live anywhere the owner owns, because a
+    // task waiting on one in another list is an ordinary and useful shape.
+    const dependents = [...new Set(ops.map((o) => o.taskId))];
+    const inList = await this.prisma.task.count({
+      where: { id: { in: dependents }, listId },
+    });
+    if (inList !== dependents.length) {
+      throw new BadRequestException('every edited task must belong to the list being restructured');
+    }
+    const current = await this.prisma.taskDependency.findMany({
+      where: { task: { ownerId } },
+      select: { taskId: true, dependsOnTaskId: true },
+    });
+    const { effective, noop } = effectiveOps(current, ops);
+    const after = resultingEdges(current, ops);
+    const cycle = findCycle(after);
+    // Statuses for everything whose state could move: the tasks in the batch, plus every
+    // prerequisite of every one of them on either side of the change. Bounded by the batch, not
+    // by the list — a 250-task list is not worth loading to describe an edit to three of them.
+    const touched = new Set(referenced);
+    for (const e of [...current, ...after]) {
+      if (touched.has(e.taskId)) touched.add(e.dependsOnTaskId);
+    }
+    const tasks = await this.prisma.task.findMany({
+      where: { id: { in: [...touched] }, ownerId },
+      select: { id: true, title: true, status: true },
+    });
+    const titleOf = new Map(tasks.map((t) => [t.id, t.title]));
+    const changes = stateChanges(
+      current,
+      after,
+      new Map(tasks.map((t) => [t.id, t.status as TaskStatus])),
+    ).filter((c) => titleOf.has(c.taskId));
+    const name = (id: string) => titleOf.get(id) ?? id;
+    return {
+      listId: list.id,
+      listTitle: list.title,
+      ops: ops.map((o) => ({
+        op: o.op,
+        taskId: o.taskId,
+        taskTitle: name(o.taskId),
+        dependsOnTaskId: o.dependsOnTaskId,
+        dependsOnTitle: name(o.dependsOnTaskId),
+        noop: noop.includes(o),
+      })),
+      effectiveCount: effective.length,
+      // Named, not just counted: a batch that is entirely no-ops means the proposer is working
+      // from a stale read of the graph, which is exactly when nobody should be approving it.
+      noopCount: noop.length,
+      cycle: cycle?.map((id) => ({ taskId: id, title: name(id) })) ?? null,
+      changes: changes.map((c) => ({ ...c, title: name(c.taskId) })),
+      becomingRunnable: changes.filter((c) => c.to === 'READY' || c.to === 'NONE').length,
+      becomingBlocked: changes.filter((c) => c.to === 'BLOCKED' || c.to === 'BLOCKED_FAILED').length,
+      edgesBefore: current.length,
+      edgesAfter: after.length,
+    };
+  }
+
+  /**
+   * Apply a batch of dependency edits atomically.
+   *
+   * Re-validated here rather than trusted from the preview: a proposal is approved by a human at
+   * human speed, and the graph it described may have moved in between. The whole batch is written
+   * under the same owner-wide lock the single-edge paths take, so no dispatch decision is made
+   * against a half-applied restructure — which is the reason this exists as a batch at all.
+   */
+  async applyDag(ownerId: string, listId: string, ops: DagOp[]) {
+    const preview = await this.previewDag(ownerId, listId, ops);
+    if (preview.cycle) {
+      throw new BadRequestException(
+        `These changes would create a cycle: ${preview.cycle.map((c) => c.title).join(' → ')}`,
+      );
+    }
+    const applied = await this.prisma.$transaction(async (tx) => {
+      await this.lockDependencyGraph(tx, ownerId);
+      // The graph is re-read inside the lock and re-checked whole. The preview above is for the
+      // human; this is the one that decides, and between them a concurrent edit may have made the
+      // batch illegal.
+      const current = await tx.taskDependency.findMany({
+        where: { task: { ownerId } },
+        select: { taskId: true, dependsOnTaskId: true },
+      });
+      const cycle = findCycle(resultingEdges(current, ops));
+      if (cycle) {
+        throw new ConflictException(
+          'the graph changed while this was awaiting approval, and these changes would now create a cycle',
+        );
+      }
+      const removals = ops.filter((o) => o.op === 'remove');
+      const additions = effectiveOps(current, ops).effective.filter((o) => o.op === 'add');
+      for (const op of removals) {
+        await tx.taskDependency.deleteMany({
+          where: { taskId: op.taskId, dependsOnTaskId: op.dependsOnTaskId },
+        });
+      }
+      // Only the additions that are not already there, so an approval applied twice — a retried
+      // tool call, a re-delivered turn — settles instead of colliding on the unique key.
+      if (additions.length > 0) {
+        await tx.taskDependency.createMany({
+          data: additions.map((o) => ({ taskId: o.taskId, dependsOnTaskId: o.dependsOnTaskId })),
+          skipDuplicates: true,
+        });
+      }
+      return { removed: removals.length, added: additions.length };
+    });
+    // The DAG view and every task list refresh off the owner's stream; a restructure may touch
+    // tasks with no creator session to publish through.
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, listId);
+    // Releasing a task is only half of it: the sweep would collect the newly-runnable ones within
+    // the minute anyway, and running it now makes the approval feel like it did something.
+    await this.reconcileReadyTasks().catch((e) =>
+      this.logger.warn(`reconcile after DAG change failed: ${e instanceof Error ? e.message : e}`),
+    );
+    return { ...applied, preview };
   }
 
   /** Add a "task depends on dependsOnTaskId" edge; rejects self-deps and cycles. */

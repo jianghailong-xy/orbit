@@ -377,6 +377,8 @@ func cmdTaskListCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskListUpdate(args[1:], in, out)
 	case "delete":
 		return cliTaskListDelete(args[1:], out)
+	case "propose-dag":
+		return cliTaskListProposeDag(args[1:], out)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", action, taskListHelp)
 	}
@@ -1146,6 +1148,90 @@ func cliTaskListCreate(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+// cliStringList collects a flag given more than once, which is how a batch of edges is typed.
+type cliStringList []string
+
+func (l *cliStringList) String() string { return strings.Join(*l, ",") }
+
+func (l *cliStringList) Set(v string) error {
+	*l = append(*l, v)
+	return nil
+}
+
+// cliTaskListProposeDag is the CLI door onto the same batch, and it deliberately does NOT raise
+// an approval: the approval exists to interpose a human between an *agent* and the graph, and at
+// a terminal the human is already the one typing. So it previews by default and writes with
+// --apply, which is the shape a person actually wants — look, then commit.
+func cliTaskListProposeDag(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task-list propose-dag")
+	var adds, removes cliStringList
+	fs.Var(&adds, "add", "add edge TASK_ID:DEPENDS_ON_ID (repeatable)")
+	fs.Var(&removes, "remove", "remove edge TASK_ID:DEPENDS_ON_ID (repeatable)")
+	note := fs.String("note", "", "why this restructure")
+	apply := fs.Bool("apply", false, "write the change instead of only previewing it")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("list id is required")
+	}
+	ops := []interface{}{}
+	for _, spec := range adds {
+		op, err := parseDagEdge("add", spec)
+		if err != nil {
+			return err
+		}
+		ops = append(ops, op)
+	}
+	for _, spec := range removes {
+		op, err := parseDagEdge("remove", spec)
+		if err != nil {
+			return err
+		}
+		ops = append(ops, op)
+	}
+	if len(ops) == 0 {
+		return fmt.Errorf("at least one --add or --remove is required")
+	}
+	body := map[string]interface{}{"ops": ops}
+	if *note != "" {
+		body["note"] = *note
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	var raw json.RawMessage
+	if *apply {
+		raw, err = t.dagApply(id, body)
+	} else {
+		raw, err = t.dagPreview(id, body)
+	}
+	if err != nil {
+		return fmt.Errorf("propose dag: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// parseDagEdge reads TASK_ID:DEPENDS_ON_ID. Ids are base62 or uuid, neither of which contains a
+// colon, so splitting on the last one is unambiguous.
+func parseDagEdge(op, spec string) (map[string]interface{}, error) {
+	i := strings.LastIndex(spec, ":")
+	if i <= 0 || i == len(spec)-1 {
+		return nil, fmt.Errorf("--%s expects TASK_ID:DEPENDS_ON_ID, got %q", op, spec)
+	}
+	return map[string]interface{}{
+		"op":              op,
+		"taskId":          spec[:i],
+		"dependsOnTaskId": spec[i+1:],
+	}, nil
+}
+
 func cliTaskListDelete(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task-list delete")
@@ -1195,6 +1281,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_get", Argv: []string{"orbit", "task-list", "get"}, Usage: "orbit task-list get LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}},
 	{Tool: "tasklist_update", Argv: []string{"orbit", "task-list", "update"}, Usage: "orbit task-list update LIST_ID [options]", Arguments: []string{"[list-id] (required)", "--title <text>", "--instructions <text> | --instructions-file -", "--paused[=true|false]", "--verify-on-done[=true|false]", "--max-concurrent <n> | --clear-max-concurrent", "--foreman-workspace-id <id> | --clear-foreman", "--foreman-stall-minutes <n>", "--note <text>", "--json"}, Description: "Change a task list's dispatch policy. In a session the change is attributed to this agent (like the MCP path); headless it falls back to the runner owner. Every change is recorded as a restorable revision.", Mutates: true},
+	{Tool: "tasklist_propose_dag", Argv: []string{"orbit", "task-list", "propose-dag"}, Usage: "orbit task-list propose-dag LIST_ID --add A:B [--remove C:D] [--apply] [--json]", Arguments: []string{"[list-id] (required)", "--add <task-id>:<depends-on-id> (repeatable, sets ops)", "--remove <task-id>:<depends-on-id> (repeatable, sets ops)", "--note <text>", "--apply", "--json"}, Description: "Preview a batch of dependency changes to a list's DAG, and with --apply write it. Unlike the MCP tool this raises no approval — at a terminal the human is already the one deciding. The preview names what would be written and, more usefully, which tasks change dependency state as a result.", Mutates: true},
 	{Tool: "tasklist_delete", Argv: []string{"orbit", "task-list", "delete"}, Usage: "orbit task-list delete LIST_ID [--json]", Arguments: []string{"[list-id] (required)", "--json"}, Description: "Delete a task list. Its tasks are not deleted — they are detached and become listless; the grouping, its standing instructions and its policy revisions are what go, and that cannot be undone. To stop dispatch without discarding them, pass --paused true to task-list update instead.", Mutates: true},
 }
 
