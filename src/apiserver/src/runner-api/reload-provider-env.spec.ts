@@ -61,6 +61,7 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn.bind(controller);
 }

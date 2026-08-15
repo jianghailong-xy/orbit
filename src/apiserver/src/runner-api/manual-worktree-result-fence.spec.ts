@@ -36,6 +36,7 @@ function harness(row: Record<string, unknown>) {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     ),
     writes,
     transactionCalls: () => transactionCalls,

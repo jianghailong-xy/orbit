@@ -29,7 +29,7 @@ test('legacy claim explains the pending OpenCode stall without stranding other w
     },
   } as never;
   const realtime = { publishSessionCreated: (id: string) => published.push(id) } as never;
-  const controller = new RunnerApiController(prisma, queue, realtime, {} as never, {} as never);
+  const controller = new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never);
 
   assert.equal(await controller.claim(RUNNER, undefined, 'claude,codex'), null);
   // The OpenCode row is marked so the UI can say why it is stuck...
@@ -51,6 +51,7 @@ test('current claim advertises OpenCode directly to the atomic queue gate', asyn
   const controller = new RunnerApiController(
     { session: { findMany: async () => assert.fail('capable runner should not need a preflight') } } as never,
     queue,
+    {} as never,
     {} as never,
     {} as never,
     {} as never,
@@ -113,7 +114,7 @@ test('legacy reclaim omits OpenCode rows and keeps every other checkout', async 
     },
   );
   const realtime = { publishSessionCreated: (id: string) => published.push(id) } as never;
-  const controller = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never);
+  const controller = new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never);
 
   const res = await controller.reclaim(RUNNER, undefined, 'claude,codex');
   // A 426 here is not retryable on the runner and would stop the whole process, so the
@@ -131,7 +132,7 @@ test('a capable reclaim keeps the OpenCode row in the snapshot', async () => {
   const prisma = reclaimPrisma([reclaimRow('session-1', AgentProvider.OPENCODE, 'AWAITING_INPUT')], () =>
     assert.fail('a capable runner needs no upgrade marking'),
   );
-  const controller = new RunnerApiController(prisma, {} as never, {} as never, {} as never, {} as never);
+  const controller = new RunnerApiController(prisma, {} as never, {} as never, {} as never, {} as never, {} as never);
 
   const res = await controller.reclaim(RUNNER, undefined, 'claude,codex,opencode');
   assert.deepEqual(

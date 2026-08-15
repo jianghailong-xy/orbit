@@ -99,6 +99,7 @@ function harness(options: HarnessOptions = {}) {
       realtime,
       {} as never,
       {} as never,
+      {} as never,
     ),
     rawCalls,
     transactions: () => transactions,

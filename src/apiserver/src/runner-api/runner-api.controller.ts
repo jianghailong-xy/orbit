@@ -104,6 +104,7 @@ import { engineTurnActiveAfter } from './engine-turn';
 import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
@@ -253,6 +254,7 @@ export class RunnerApiController {
     private readonly realtime: RealtimeService,
     private readonly push: PushService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
+    private readonly references: ReferenceExpansionService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1726,6 +1728,22 @@ export class RunnerApiController {
               fileName: a.fileName ?? undefined,
             }));
           }
+          // `#`-references become context here, at delivery, rather than when the message was
+          // stored: the transcript keeps what the person typed, and the summary is computed at
+          // the moment the run receives it. A 500-task list's counts move every minute, so one
+          // expanded at send time would arrive already stale with no way for the agent to tell.
+          //
+          // Only on the first delivery of a message turn. A re-delivery is replaced wholesale by
+          // buildResumeContinuation above, and interrupt/end/diff/shell turns are instructions to
+          // the runner rather than text a model reads.
+          // Scoped to the session's owner, not the runner: a reference resolves only against
+          // what the person sending it may already see, so a stray id from elsewhere expands to
+          // nothing rather than leaking another tenant's list into a prompt.
+          const owner = await tx.session.findUnique({
+            where: { id: sessionId },
+            select: { ownerId: true },
+          });
+          if (owner) content = (await this.references.expand(owner.ownerId, content)) ?? content;
         }
       } else if (t.kind !== 'shell') {
         // Control turns are fire-and-forget: ack on delivery so a stale one cannot

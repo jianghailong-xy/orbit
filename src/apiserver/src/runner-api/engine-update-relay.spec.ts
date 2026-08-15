@@ -157,7 +157,7 @@ function controllerHarness(runnerRow: Record<string, unknown>) {
     drainCommitRequests: async () => [],
   } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never),
     updates,
     row: () => current,
   };

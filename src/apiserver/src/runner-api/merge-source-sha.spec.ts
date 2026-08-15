@@ -21,6 +21,7 @@ function controller(prisma: unknown) {
     { notifyInbox: () => undefined, publish: () => undefined } as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 }
 

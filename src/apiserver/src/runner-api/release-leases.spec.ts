@@ -67,6 +67,7 @@ function makeController(
       realtime,
       {} as never,
       {} as never,
+      {} as never,
     ),
     lockCall: () => lockCall,
     notifiedSessionId: () => notifiedSessionId,
