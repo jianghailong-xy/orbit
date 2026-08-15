@@ -101,6 +101,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'taskIds',
   'dependsOnTaskIds',
   'anchorTaskId',
+  'attachmentIds',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

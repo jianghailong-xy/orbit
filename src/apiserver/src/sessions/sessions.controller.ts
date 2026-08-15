@@ -73,7 +73,7 @@ export class SessionsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId'))
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds'))
     dto: CreateSessionDto,
   ) {
     // `agentId` is the pre-rename name every shipped client still sends.
@@ -158,7 +158,7 @@ export class SessionsController {
   turn(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: SessionTurnDto,
+    @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionTurnDto,
   ) {
     return this.sessions.createTurn(user.userId, id, dto);
   }
@@ -185,7 +185,7 @@ export class SessionsController {
   resume(
     @CurrentUser() user: AuthUser,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: SessionResumeDto,
+    @Body(PublicIdPipe.forFields('attachmentIds')) dto: SessionResumeDto,
   ) {
     return this.sessions.resume(user.userId, id, dto);
   }

@@ -68,8 +68,12 @@ export class PublicIdPipe implements PipeTransform<unknown, unknown> {
     if (!body || typeof body !== 'object') return body;
     const record = body as Record<string, unknown>;
     for (const field of this.fields!) {
-      if (!isPresent(record[field])) continue;
-      record[field] = resolve(record[field], field);
+      const value = record[field];
+      if (Array.isArray(value)) {
+        record[field] = value.map((item) => resolve(item, field));
+      } else if (isPresent(value)) {
+        record[field] = resolve(value, field);
+      }
     }
     return body;
   }
