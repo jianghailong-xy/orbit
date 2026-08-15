@@ -292,6 +292,13 @@ export class TaskListsService {
         }
       }
       const list = await tx.taskList.update({ where: { id }, data });
+      // Project the pause onto the tasks it governs, in the same transaction that sets it. This
+      // is the write that makes `Task.dispatchHold` true rather than merely stored: the dispatch
+      // path reads only the task, so a pause that failed to land here would be a pause that does
+      // nothing. Only on an actual pause change — a title rename must not rewrite 55k rows.
+      if ('paused' in data) {
+        await tx.task.updateMany({ where: { listId: id }, data: { dispatchHold: list.paused } });
+      }
       if (recordAs) {
         const max = await tx.taskListRevision.aggregate({
           where: { listId: id },
@@ -596,13 +603,14 @@ export class TaskListsService {
    * Delete a list and stop the work it was driving.
    *
    * Tasks are detached (list_id -> null) by the SET NULL FK, not deleted — that part is
-   * deliberate, and it is why the stop has to be written into the tasks themselves. The auto-run
-   * sweep is deployment-wide and its only list-level gate is `paused` (see AUTO_RUN_READY_SQL);
-   * a detached task matches no list row, so deleting a list used to *remove the brake* while
-   * leaving the engine running, and the orphans could never be paused again. 112 lists deleted
-   * here in August left 27,783 tasks in exactly that state, re-dispatched once a minute for a
-   * fortnight and saturating a runner. Deleting a list must stop its work at least as firmly as
-   * pausing one does.
+   * deliberate, and it is why the stop has to be written into the tasks themselves. 112 lists
+   * deleted here in August left 27,783 tasks re-dispatching once a minute for a fortnight,
+   * saturating a runner, because nothing in the delete said anything about running.
+   *
+   * Deletion cannot be a way to express intent about behaviour — it is the removal of the thing
+   * that holds intent, so on its own it can only destroy the ability to say "stop". That is why
+   * this is a compound operation and not a cascade: the intent is transferred onto the tasks
+   * first (they are the only rows that survive), and only then does the list go.
    */
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
@@ -613,9 +621,15 @@ export class TaskListsService {
     });
     // Only the automatic dispatch goes: status and dependency edges are left alone, so a
     // detached task is still there to read and still startable by hand.
+    //
+    // The hold is released in the same write. A hold is the list's, and this is the list ceasing
+    // to exist — leaving it set would produce a task that can neither auto-run nor be started nor
+    // ever be resumed, which is a wedge rather than a stop. Disarming and releasing together say
+    // the one thing that is actually true: nothing will start this on its own any more, and a
+    // person still can.
     await this.prisma.task.updateMany({
-      where: { ownerId, listId: id, autoRunWhenReady: true },
-      data: { autoRunWhenReady: false },
+      where: { ownerId, listId: id },
+      data: { autoRunWhenReady: false, dispatchHold: false },
     });
     await this.prisma.taskList.delete({ where: { id } });
     // In-flight runs, torn down only after the tasks can no longer be re-dispatched — the other

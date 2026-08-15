@@ -116,9 +116,11 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
     task: { listId: LIST_ID },
     status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
   });
+  // Disarmed *and* released. The hold belonged to the list that is going away, so leaving it set
+  // would leave tasks that can neither start themselves, be started, nor ever be resumed.
   assert.deepEqual(updateArgs, {
-    where: { ownerId: OWNER_ID, listId: LIST_ID, autoRunWhenReady: true },
-    data: { autoRunWhenReady: false },
+    where: { ownerId: OWNER_ID, listId: LIST_ID },
+    data: { autoRunWhenReady: false, dispatchHold: false },
   });
 });
 

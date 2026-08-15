@@ -8,7 +8,8 @@ const EXISTING_TASK = '22222222-2222-4222-8222-222222222222';
 
 type Written = { id: string; data: Record<string, unknown> };
 
-function makeService(options: { ownedTasks?: string[] } = {}) {
+function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } = {}) {
+  const paused = new Set(options.pausedLists ?? []);
   const created: Written[] = [];
   const edges: Array<{ taskId: string; dependsOnTaskId: string }> = [];
   const owned = new Set(options.ownedTasks ?? [EXISTING_TASK]);
@@ -31,7 +32,11 @@ function makeService(options: { ownedTasks?: string[] } = {}) {
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
     workspace: { findFirst: async () => ({ id: 'workspace-1' }) },
-    taskList: { findFirst: async () => ({ id: 'list-1' }) },
+    taskList: {
+      findFirst: async () => ({ id: 'list-1' }),
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.filter((id) => paused.has(id)).map((id) => ({ id })),
+    },
     modelProvider: { findFirst: async () => ({ slug: 'custom' }) },
     session: { findFirst: async () => null },
     task: {
@@ -141,5 +146,25 @@ test('an empty or oversized batch is rejected', async () => {
       tasks: Array.from({ length: TASK_BATCH_CREATE_MAX + 1 }, () => item({})),
     }),
     new RegExp(`at most ${TASK_BATCH_CREATE_MAX} tasks`),
+  );
+});
+
+test('a task filed into a paused list is born held', async () => {
+  const { service, created } = makeService({ pausedLists: ['list-paused'] });
+
+  await service.createMany(OWNER, {
+    tasks: [
+      item({ title: 'into the paused list', listId: 'list-paused' }),
+      item({ title: 'into a running list', listId: 'list-open' }),
+      item({ title: 'no list at all' }),
+    ],
+  });
+
+  // Otherwise "pause the list" means "pause the tasks that happened to exist when I clicked",
+  // and a campaign still being written keeps dispatching around its own stop — which is exactly
+  // what a batch create into a paused list is.
+  assert.deepEqual(
+    created.map((row) => row.data.dispatchHold),
+    [true, false, false],
   );
 });
