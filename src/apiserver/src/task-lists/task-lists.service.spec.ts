@@ -58,3 +58,91 @@ test('named task list rows expose the same dependency lock state as the main tas
     failed: { dependencyState: 'BLOCKED_FAILED', blocked: true },
   });
 });
+
+test('deleting a list disarms its tasks before tearing down their runs', async () => {
+  const calls: string[] = [];
+  let updateArgs: any;
+  let sessionWhere: unknown;
+  const service = new TaskListsService(
+    {
+      taskList: {
+        findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks: [] }),
+        delete: async () => {
+          calls.push('deleteList');
+          return { id: LIST_ID };
+        },
+      },
+      session: {
+        groupBy: async () => [],
+        findMany: async (args: any) => {
+          calls.push('findSessions');
+          sessionWhere = args.where;
+          return [{ id: 'session-a' }, { id: 'session-b' }];
+        },
+      },
+      task: {
+        updateMany: async (args: any) => {
+          calls.push('disarm');
+          updateArgs = args;
+          return { count: 2 };
+        },
+      },
+      taskDependency: { findMany: async () => [] },
+      user: { findMany: async () => [] },
+      workspace: { findMany: async () => [] },
+    } as never,
+    { publishForUser: () => undefined } as never,
+    {
+      cancel: async (_ownerId: string, id: string) => {
+        calls.push(`cancel:${id}`);
+        return true;
+      },
+    } as never,
+  );
+
+  assert.deepEqual(await service.remove(OWNER_ID, LIST_ID), { ok: true });
+  // The sessions have to be read while the tasks still point at the list, and the tasks have to
+  // stop being auto-run before anything is cancelled — the other order lets the sweep re-dispatch
+  // whatever it catches in between.
+  assert.deepEqual(calls, [
+    'findSessions',
+    'disarm',
+    'deleteList',
+    'cancel:session-a',
+    'cancel:session-b',
+  ]);
+  assert.deepEqual(sessionWhere, {
+    ownerId: OWNER_ID,
+    task: { listId: LIST_ID },
+    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+  });
+  assert.deepEqual(updateArgs, {
+    where: { ownerId: OWNER_ID, listId: LIST_ID, autoRunWhenReady: true },
+    data: { autoRunWhenReady: false },
+  });
+});
+
+test('a runner that will not answer does not fail the delete', async () => {
+  let deleted = false;
+  const service = new TaskListsService(
+    {
+      taskList: {
+        findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks: [] }),
+        delete: async () => {
+          deleted = true;
+          return { id: LIST_ID };
+        },
+      },
+      session: { groupBy: async () => [], findMany: async () => [{ id: 'session-a' }] },
+      task: { updateMany: async () => ({ count: 1 }) },
+      taskDependency: { findMany: async () => [] },
+      user: { findMany: async () => [] },
+      workspace: { findMany: async () => [] },
+    } as never,
+    { publishForUser: () => undefined } as never,
+    { cancel: async () => { throw new Error('runner offline'); } } as never,
+  );
+
+  assert.deepEqual(await service.remove(OWNER_ID, LIST_ID), { ok: true });
+  assert.equal(deleted, true);
+});
