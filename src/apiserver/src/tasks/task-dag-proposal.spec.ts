@@ -188,6 +188,19 @@ test('an addition already present is not written again', async () => {
   assert.equal(written.filter((w) => w.kind === 'create').length, 1);
 });
 
+test('a removal of an edge that is not there is not counted as a removal', async () => {
+  // Found by re-applying an already-applied batch against the deployment: `added` was filtered
+  // through effectiveOps and `removed` was not, so a no-op remove still reported "removed 1".
+  // The count is what the agent repeats back to the human, and claiming a write that did not
+  // happen is the precise kind of false confidence this feature exists to prevent.
+  const { service, written } = serviceWith({ edges: [] });
+
+  const result = await service.applyDag(OWNER, LIST, [rm(A, B)]);
+
+  assert.equal(result.removed, 0);
+  assert.deepEqual(written, []);
+});
+
 test('applying refuses when the graph moved under an open approval', async () => {
   // The one the re-validation exists for: a human decides at human speed, and another edit in
   // between can turn a legal batch into one that closes a loop.

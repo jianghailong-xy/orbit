@@ -3016,8 +3016,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           'the graph changed while this was awaiting approval, and these changes would now create a cycle',
         );
       }
-      const removals = ops.filter((o) => o.op === 'remove');
-      const additions = effectiveOps(current, ops).effective.filter((o) => o.op === 'add');
+      // Both sides go through effectiveOps, not just the additions. An approval can be applied
+      // twice — a retried tool call, a re-delivered turn — and the second time neither half should
+      // claim to have written anything: `removed`/`added` are what the agent repeats back to the
+      // human, and a count that includes a delete matching no rows reports a change that did not
+      // happen. It also saves the pointless round trip.
+      const effective = effectiveOps(current, ops).effective;
+      const removals = effective.filter((o) => o.op === 'remove');
+      const additions = effective.filter((o) => o.op === 'add');
       for (const op of removals) {
         await tx.taskDependency.deleteMany({
           where: { taskId: op.taskId, dependsOnTaskId: op.dependsOnTaskId },
