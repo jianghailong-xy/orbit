@@ -73,6 +73,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'rootSessionId',
   'creatorSessionId',
   'authorSessionId',
+  'ownerSessionId',
   'workspaceId',
   'foremanWorkspaceId',
   'runnerId',

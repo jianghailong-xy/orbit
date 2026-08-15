@@ -86,7 +86,7 @@ function makeService(initial: Partial<Revision> = {}) {
     user: { findMany: async () => [] },
     workspace: { findMany: async () => [] },
   } as never;
-  const service = new TaskListsService(prisma, { publishForUser() {} } as never);
+  const service = new TaskListsService(prisma, { publishForUser() {} } as never, {} as never);
   // get() is authorization plus a heavy detail read; these tests are about the revision
   // bookkeeping around it.
   (service as unknown as { get: unknown }).get = async () => ({ ...list });

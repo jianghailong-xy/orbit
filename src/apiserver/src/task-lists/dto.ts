@@ -57,6 +57,14 @@ export class UpdateTaskListDto {
   @IsOptional() @IsInt() @Min(5) foremanStallMinutes?: number | null;
 }
 
+export class OpenTaskListConsoleDto {
+  /**
+   * Where to run the conversation. Optional: it falls back to the list's foreman workspace, which
+   * is already the one this list's coordination runs in.
+   */
+  @IsOptional() @IsPublicId() workspaceId?: string;
+}
+
 export class RestoreTaskListRevisionDto {
   @IsOptional() @IsString() @MaxLength(500) note?: string;
 }

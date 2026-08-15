@@ -3,6 +3,7 @@ import { CreatorType, RunStatus, TaskStatus } from '@prisma/client';
 import { RunEventType, TaskStatus as SharedTaskStatus } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { canRun, computeDependencyState } from '../tasks/task-dependencies';
 import { TASK_LIST_SELECT } from '../tasks/tasks.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
@@ -25,6 +26,8 @@ export class TaskListsService {
     // @Global RealtimeModule. A list has no session to hang an event off (the MCP tasklist_create
     // path included), so these push user-scoped — see RealtimeService.publishForUser.
     private readonly realtime: RealtimeService,
+    // Only the console opens sessions; nothing on the dispatch path goes through here.
+    private readonly sessions: SessionsService,
   ) {}
 
   async create(ownerId: string, dto: CreateTaskListDto) {
@@ -359,6 +362,90 @@ export class TaskListsService {
       lastRunStartedAt: lastRunAt._max.createdAt,
       policyVersion: latestRevision._max.version ?? null,
     };
+  }
+
+  /**
+   * The conversation this list is steered from, opening one if it has none it can still use.
+   *
+   * Resolve-or-create rather than create-on-demand: the point of the binding is that returning to
+   * a list returns to the same conversation, with the reasoning behind every earlier policy
+   * change still in it.
+   *
+   * A bound session is reused even when it has FAILED — that is a terminal state Orbit can revive
+   * with a new turn, and its history is the thing worth keeping. Only a session the user put in
+   * Trash, or one deleted out from under the pointer, earns a replacement: those are the two
+   * cases where the conversation is genuinely gone rather than merely finished.
+   */
+  async console(
+    ownerId: string,
+    id: string,
+    workspaceId?: string,
+  ): Promise<{ sessionId: string; created: boolean }> {
+    const list = await this.prisma.taskList.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true,
+        title: true,
+        ownerSessionId: true,
+        foremanWorkspaceId: true,
+        ownerSession: { select: { id: true, deletedAt: true } },
+      },
+    });
+    if (!list) throw new NotFoundException('task list not found');
+    // Trashed, not merely ended. Reviving a session out of Trash behind the user's back would
+    // undo a deletion they performed deliberately.
+    if (list.ownerSession && !list.ownerSession.deletedAt) {
+      return { sessionId: list.ownerSession.id, created: false };
+    }
+    // The foreman's workspace is the sensible default: it is already the one this list's
+    // coordination runs in. An explicit argument wins, and with neither there is nowhere to open
+    // a conversation — which is a caller error rather than something to guess at.
+    const runIn = workspaceId ?? list.foremanWorkspaceId;
+    if (!runIn) {
+      throw new BadRequestException(
+        'no workspace to open the console in — pass workspaceId or set the list a foreman',
+      );
+    }
+    const session = await this.sessions.create(
+      ownerId,
+      {
+        workspaceId: runIn,
+        title: `调度：${list.title}`.slice(0, 80),
+        prompt: this.buildConsoleOpening(list.title, list.id),
+      },
+      { source: 'user' },
+    );
+    // Written after the session exists, so a failed create leaves no dangling pointer.
+    await this.prisma.taskList.update({
+      where: { id },
+      data: { ownerSessionId: session.id },
+    });
+    this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
+    return { sessionId: session.id, created: true };
+  }
+
+  /**
+   * The opening message of a list's console.
+   *
+   * Self-contained, because the agent reading it has no idea which list it is in or that a
+   * console is a thing. It names the list, points at the two read tools, and — the part that
+   * matters — states the standing instructions lever explicitly, since editing task descriptions
+   * one at a time is the obvious move and the wrong one at this scale.
+   */
+  private buildConsoleOpening(title: string, listId: string): string {
+    return (
+      `你是任务列表「${title}」（id: ${listId}）的调度会话。\n\n` +
+      `这里用来观察和调整这个列表怎么跑，不是用来替它干活的。请先用 tasklist_get 读一遍它当前的策略与进度，` +
+      `再用 task_list 看任务分布，然后简短汇报现状即可，不要自行改动任何东西。\n\n` +
+      `之后我会用自然语言提要求，你用 tasklist_update 落到策略上。可调的有：\n` +
+      `- instructions：本列表所有任务通用的作业指导，会在派发时拼进每个任务的运行 prompt。` +
+      `**要改"这类活该怎么干"，改这里，不要逐个改任务描述** —— 一次写入对所有尚未开跑的任务生效。\n` +
+      `- paused：暂停/恢复整个列表的派发；已经在跑的不受影响。\n` +
+      `- maxConcurrent：这个列表最多同时跑几个任务。\n` +
+      `- verifyOnDone：任务报完成时是否自动派一次独立验收。\n` +
+      `- foremanWorkspaceId / foremanStallMinutes：列表停滞多久后自动派一个协调任务来诊断。\n\n` +
+      `每次改动都请带上 note 说明原因：改动会记成可回滚的版本，而三个月后有用的是"为什么"，不是"改了哪个字段"。`
+    );
   }
 
   /** This list's policy history, newest first. */

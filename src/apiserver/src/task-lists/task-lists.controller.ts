@@ -12,7 +12,12 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
-import { CreateTaskListDto, RestoreTaskListRevisionDto, UpdateTaskListDto } from './dto';
+import {
+  CreateTaskListDto,
+  OpenTaskListConsoleDto,
+  RestoreTaskListRevisionDto,
+  UpdateTaskListDto,
+} from './dto';
 import { TaskListsService } from './task-lists.service';
 
 @UseGuards(JwtAuthGuard)
@@ -38,6 +43,21 @@ export class TaskListsController {
   @Patch(':id')
   update(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() dto: UpdateTaskListDto) {
     return this.taskLists.update(user.userId, id, dto);
+  }
+
+  /**
+   * Open (or return) the conversation this list is steered from.
+   *
+   * POST because it may create a session, and idempotent in the way that matters: calling it
+   * twice returns the same conversation rather than opening a second one.
+   */
+  @Post(':id/console')
+  openConsole(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: OpenTaskListConsoleDto,
+  ) {
+    return this.taskLists.console(user.userId, id, dto?.workspaceId);
   }
 
   /** This list's dispatch-policy history, newest first. */

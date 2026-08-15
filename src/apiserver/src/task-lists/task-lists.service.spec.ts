@@ -38,6 +38,8 @@ test('named task list rows expose the same dependency lock state as the main tas
       workspace: { findMany: async () => [] },
     } as never,
     {} as never,
+    // Only the list console opens sessions; this spec never reaches it.
+    {} as never,
   );
 
   const result = await service.get(OWNER_ID, LIST_ID);

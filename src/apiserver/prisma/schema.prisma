@@ -746,6 +746,7 @@ model Session {
   // Tasks an agent created from within this session (cf. Task.creatorSession).
   createdTasks          Task[]                 @relation("TaskCreatorSession")
   taskListRevisions     TaskListRevision[]     @relation("TaskListRevisionAuthorSession")
+  consoleForLists       TaskList[]             @relation("TaskListConsole")
   attachments           Attachment[]
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
@@ -1053,6 +1054,20 @@ model TaskList {
   /// cost where a false "done" is expensive. It is opt-in per list rather than global for the
   /// same reason the concurrency cap is: the right answer differs per campaign.
   verifyOnDone        Boolean   @default(false) @map("verify_on_done")
+
+  /// The conversation this list is steered from — where a human says "pause it", "drop the
+  /// concurrency to 2", "here is what changed about how these should be run", and an agent turns
+  /// that into policy writes.
+  ///
+  /// A pointer, never a dependency. Nothing on the dispatch path reads it: the sweep, the claim
+  /// gate and the foreman all work exactly the same whether it is set, stale or null. That
+  /// separation is the whole design — a console session that could stall a campaign by dying
+  /// would be the resident supervisor this architecture spent P3 avoiding, and this deployment
+  /// already has the cautionary case (one session created 43 lists and ~21,500 tasks, then sat
+  /// FAILED). SetNull on delete for the same reason: losing the conversation loses the entry
+  /// point and nothing else.
+  ownerSessionId      String?   @map("owner_session_id") @db.Uuid
+  ownerSession        Session?  @relation("TaskListConsole", fields: [ownerSessionId], references: [id], onDelete: SetNull)
 
   tasks     Task[]
   revisions TaskListRevision[]

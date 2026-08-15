@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SessionsModule } from '../sessions/sessions.module';
-import { TaskListsService } from '../task-lists/task-lists.service';
+import { TaskListsModule } from '../task-lists/task-lists.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -24,13 +24,15 @@ import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
 
 @Module({
-  // TasksService is imported from TasksModule rather than re-provided here: a second
-  // provider entry would give this module its own instance, and TasksService owns a
-  // singleton-ish timer (the auto-run reconcile sweep), which would then run twice per
-  // interval and dispatch every ready task twice. TaskListsService still only needs the
-  // global PrismaService. PushModule provides PushService so the approval-create handler
-  // can notify the session owner's iOS devices.
-  imports: [SessionsModule, PushModule, TasksModule],
+  // TasksService and TaskListsService are imported from their own modules rather than
+  // re-provided here: a second provider entry gives this module its own instance, and that is
+  // how the auto-run reconcile sweep once ran twice per interval and dispatched every ready
+  // task twice. TaskListsService used to need nothing but the global PrismaService, which is
+  // why it was listed as a provider — it now injects SessionsService for the list console, so
+  // a duplicate would be two objects disagreeing about which session a list is steered from.
+  // PushModule provides PushService so the approval-create handler can notify the session
+  // owner's iOS devices.
+  imports: [SessionsModule, PushModule, TasksModule, TaskListsModule],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
   controllers: [
@@ -55,7 +57,6 @@ import { PushModule } from '../push/push.module';
       useFactory: createServiceTokenJwt,
     },
     ServiceTokenAuthorizer,
-    TaskListsService,
     WorkspacesService,
   ],
 })
