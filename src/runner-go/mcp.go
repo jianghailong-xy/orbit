@@ -933,7 +933,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"description": "Get one task list's dispatch policy and progress: its standing instructions, " +
 				"paused flag, concurrency cap, foreman settings, task counts by status, how many " +
 				"sessions are live, and when it last started anything. Returns the shape of the list, " +
-				"not its tasks — use task_list for those.",
+				"not its tasks — use task_list for those. `failuresByCause` attributes this list's " +
+				"failed runs to what actually broke, so the right lever gets pulled: `quota` means " +
+				"wait or switch provider, `infrastructure` means a runner was down, `contentFilter` " +
+				"means the request itself was refused, `unattributed` needs a human. Note that none " +
+				"of these is fixed by rewriting instructions — check the attribution before " +
+				"concluding a campaign has a prompt problem.",
 			"inputSchema": obj(map[string]interface{}{"listId": str}, "listId"),
 		},
 		{

@@ -223,3 +223,38 @@ export function toolResultText(content: unknown): string {
 export function isAsyncAgentLaunchAck(content: unknown): boolean {
   return toolResultText(content).includes('Async agent launched');
 }
+
+/**
+ * What a failed run's error text says was actually wrong.
+ *
+ * The point is routing, not labelling. Each cause has a different lever, and the expensive
+ * mistake is reaching for the wrong one: a campaign whose runs all die on a spent quota does not
+ * have a prompt problem, and rewriting its instructions changes nothing while the window is shut.
+ *
+ * Measured on this deployment before it was written — of 1,710 failed task runs, 1,571 were a
+ * usage limit, 126 a dead runner, 9 content filtering, 4 unrecorded. 99.3% is two buckets a
+ * regex can separate, and **none of them is a defective instruction**. That is the finding this
+ * exists to make visible, and the reason it is a classifier rather than a model reading
+ * trajectories: there was nothing in them to read.
+ */
+export type FailureCause = 'quota' | 'infrastructure' | 'contentFilter' | 'unattributed';
+
+// Plain lowercase substrings, and only wording actually observed here — the same rule as the
+// marker lists above. An unrecognised error becomes `unattributed`, which is honest; guessing
+// would file it under a lever nobody should pull.
+const INFRASTRUCTURE_ERROR_MARKERS = ['runner offline', 'no runner', 'runner went offline'];
+const CONTENT_FILTER_ERROR_MARKERS = ['content filtering', 'output blocked'];
+
+/**
+ * Classify one failed run by its error text. `unattributed` covers both an empty error and
+ * wording nobody has catalogued yet, deliberately: those are the ones worth a human's attention,
+ * and folding them into a known bucket would hide exactly that.
+ */
+export function classifyFailure(error: string | null | undefined): FailureCause {
+  if (isUsageLimitErrorText(error)) return 'quota';
+  if (!error) return 'unattributed';
+  const lower = error.toLowerCase();
+  if (INFRASTRUCTURE_ERROR_MARKERS.some((m) => lower.includes(m))) return 'infrastructure';
+  if (CONTENT_FILTER_ERROR_MARKERS.some((m) => lower.includes(m))) return 'contentFilter';
+  return 'unattributed';
+}

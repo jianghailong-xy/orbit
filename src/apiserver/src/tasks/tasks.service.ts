@@ -2669,7 +2669,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `任务列表「${title}」已停滞约 ${minutes} 分钟：仍有未完成的任务，但没有任何任务在运行，也没有新的运行被发起。\n\n` +
       `请诊断原因并处理，然后结束本次运行。这是一次性的协调任务，不要保持长时间运行或轮询。\n\n` +
       `建议的排查顺序：\n` +
-      `1. 用 tasklist_get / task_list 查看该列表的任务状态分布，找出卡在哪一层。\n` +
+      `1. 用 tasklist_get / task_list 查看该列表的任务状态分布，找出卡在哪一层。` +
+      `**先看 failuresByCause**：它把已发生的失败按"真正坏了什么"归了类（quota / infrastructure / ` +
+      `contentFilter / unattributed）。这几类没有一类是靠改作业指导能修的——先看归因，再决定动哪个杠杆，` +
+      `不要一上来就怀疑 prompt 写得不好。\n` +
       `2. 常见原因：前置任务永远不会完成、负责的 workspace 未绑定 runner、provider 配额耗尽、磁盘低于下限、上一次运行的会话仍占着任务却已无进展。\n` +
       `3. 能在列表策略层面解决的（并发上限、暂停、作业指导），直接调整；需要改任务或依赖的，用 task_update / 依赖相关工具处理。\n` +
       `4. 如果原因不在系统内（例如需要人清理磁盘、重新登录、补充配额），用 task_comment 写清结论和所需的人工动作。\n\n` +

@@ -151,3 +151,48 @@ test('the binding is written only after the session exists', async () => {
 
   assert.deepEqual(order, ['create', 'bind']);
 });
+
+test('the summary attributes failures, and always reports every bucket', async () => {
+  // Every bucket present even at zero: a caller reading `failuresByCause.quota` must not have to
+  // distinguish "no quota failures" from "this server is too old to say", and an absent key is
+  // how that distinction gets lost.
+  const sessions = [
+    { error: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage" },
+    { error: "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage" },
+    { error: 'runner offline' },
+    { error: null },
+  ];
+  const prisma = {
+    taskList: {
+      findFirst: async () => ({
+        id: LIST_ID,
+        title: 'L',
+        instructions: null,
+        paused: false,
+        maxConcurrent: null,
+        foremanWorkspaceId: null,
+        foremanStallMinutes: null,
+        verifyOnDone: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
+    },
+    task: { groupBy: async () => [] },
+    session: {
+      count: async () => 0,
+      aggregate: async () => ({ _max: { createdAt: null } }),
+      findMany: async () => sessions,
+    },
+    taskListRevision: { aggregate: async () => ({ _max: { version: null } }) },
+  } as never;
+  const service = new TaskListsService(prisma, { publishForUser() {} } as never, {} as never);
+
+  const summary = await service.summary(OWNER, LIST_ID);
+
+  assert.deepEqual(summary.failuresByCause, {
+    quota: 2,
+    infrastructure: 1,
+    contentFilter: 0,
+    unattributed: 1,
+  });
+});

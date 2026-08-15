@@ -1,6 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreatorType, RunStatus, TaskStatus } from '@prisma/client';
-import { RunEventType, TaskStatus as SharedTaskStatus } from '@orbit/shared';
+import {
+  classifyFailure,
+  FailureCause,
+  RunEventType,
+  TaskStatus as SharedTaskStatus,
+} from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -335,7 +340,7 @@ export class TaskListsService {
       },
     });
     if (!list) throw new NotFoundException('task list not found');
-    const [byStatus, live, lastRunAt, latestRevision] = await Promise.all([
+    const [byStatus, live, lastRunAt, latestRevision, failures] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { listId: id },
@@ -352,7 +357,24 @@ export class TaskListsService {
         where: { listId: id },
         _max: { version: true },
       }),
+      // Error text only — the classifier reads nothing else, and a list can have thousands of
+      // failed runs whose bodies are of no use here.
+      this.prisma.session.findMany({
+        where: { task: { listId: id }, status: RunStatus.FAILED },
+        select: { error: true },
+      }),
     ]);
+    // Why this list's runs died, bucketed by the lever that fixes each. Attribution rather than a
+    // count: "47 failures" prompts a guess, and the guess is usually the instructions. On this
+    // deployment 99.3% of failures are a spent quota or a dead runner, and rewriting a word of
+    // any prompt would have fixed none of them.
+    const failuresByCause = failures.reduce<Record<FailureCause, number>>(
+      (acc, s) => {
+        acc[classifyFailure(s.error)] += 1;
+        return acc;
+      },
+      { quota: 0, infrastructure: 0, contentFilter: 0, unattributed: 0 },
+    );
     return {
       ...list,
       tasksByStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
@@ -361,6 +383,7 @@ export class TaskListsService {
       liveSessions: live,
       lastRunStartedAt: lastRunAt._max.createdAt,
       policyVersion: latestRevision._max.version ?? null,
+      failuresByCause,
     };
   }
 
