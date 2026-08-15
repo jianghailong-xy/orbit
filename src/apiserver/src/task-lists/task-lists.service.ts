@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreatorType, RunStatus, TaskStatus } from '@prisma/client';
 import {
   classifyFailure,
@@ -9,6 +9,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import { canRun, computeDependencyState } from '../tasks/task-dependencies';
 import { TASK_LIST_SELECT } from '../tasks/tasks.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
@@ -26,12 +27,15 @@ export interface RevisionAuthor {
 
 @Injectable()
 export class TaskListsService {
+  private readonly logger = new Logger(TaskListsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     // @Global RealtimeModule. A list has no session to hang an event off (the MCP tasklist_create
     // path included), so these push user-scoped — see RealtimeService.publishForUser.
     private readonly realtime: RealtimeService,
-    // Only the console opens sessions; nothing on the dispatch path goes through here.
+    // The console opens sessions and remove() cancels them; nothing on the dispatch path
+    // goes through here.
     private readonly sessions: SessionsService,
   ) {}
 
@@ -588,10 +592,42 @@ export class TaskListsService {
     return list;
   }
 
+  /**
+   * Delete a list and stop the work it was driving.
+   *
+   * Tasks are detached (list_id -> null) by the SET NULL FK, not deleted — that part is
+   * deliberate, and it is why the stop has to be written into the tasks themselves. The auto-run
+   * sweep is deployment-wide and its only list-level gate is `paused` (see AUTO_RUN_READY_SQL);
+   * a detached task matches no list row, so deleting a list used to *remove the brake* while
+   * leaving the engine running, and the orphans could never be paused again. 112 lists deleted
+   * here in August left 27,783 tasks in exactly that state, re-dispatched once a minute for a
+   * fortnight and saturating a runner. Deleting a list must stop its work at least as firmly as
+   * pausing one does.
+   */
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
-    // Tasks are detached (list_id -> null) by the SET NULL FK, not deleted.
+    // Read while the tasks still point at the list — after the delete they are unfindable by it.
+    const running = await this.prisma.session.findMany({
+      where: { ownerId, task: { listId: id }, status: { in: TASK_OCCUPYING } },
+      select: { id: true },
+    });
+    // Only the automatic dispatch goes: status and dependency edges are left alone, so a
+    // detached task is still there to read and still startable by hand.
+    await this.prisma.task.updateMany({
+      where: { ownerId, listId: id, autoRunWhenReady: true },
+      data: { autoRunWhenReady: false },
+    });
     await this.prisma.taskList.delete({ where: { id } });
+    // In-flight runs, torn down only after the tasks can no longer be re-dispatched — the other
+    // order re-runs whatever the sweep catches in between. Best-effort, as in
+    // TasksService.batchStop: a runner that will not answer must not fail the delete.
+    for (const session of running) {
+      await this.sessions
+        .cancel(ownerId, session.id)
+        .catch((e) =>
+          this.logger.warn(`list ${id} delete: cancelling session ${session.id} failed: ${e}`),
+        );
+    }
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return { ok: true };
   }
