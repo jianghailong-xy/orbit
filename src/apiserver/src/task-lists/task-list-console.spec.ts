@@ -12,6 +12,8 @@ interface Bound {
   foremanWorkspaceId?: string | null;
   /** This list's tasks, as assignee -> count, for the borrow-a-workspace fallback. */
   assignees?: Array<{ id: string; count: number; deleted?: boolean }>;
+  /** Somebody else binds this session id between our read and our write. */
+  raceWinner?: string;
 }
 
 function makeService(bound: Bound = {}) {
@@ -25,12 +27,23 @@ function makeService(bound: Bound = {}) {
       bound.foremanWorkspaceId === undefined ? 'workspace-foreman' : bound.foremanWorkspaceId,
     ownerSession: bound.session ?? null,
   };
+  let bindings = 0;
   const prisma = {
     taskList: {
-      findFirst: async () => list,
+      findFirst: async () => (bindings > 0 && bound.raceWinner ? { ...list, ownerSessionId: bound.raceWinner } : list),
       update: async ({ data }: { data: Record<string, unknown> }) => {
         written.push(data);
         return { ...list, ...data };
+      },
+      // A compare-and-swap: it writes only while the pointer still holds what the caller read.
+      // Modelled honestly — a stub that always reported success would make the race test pass
+      // with the swap replaced by an unconditional update, which is the bug itself.
+      updateMany: async ({ where, data }: any) => {
+        bindings += 1;
+        const current = bound.raceWinner ?? list.ownerSessionId;
+        if (where.ownerSessionId !== current) return { count: 0 };
+        written.push(data);
+        return { count: 1 };
       },
     },
     task: {
@@ -46,16 +59,22 @@ function makeService(bound: Bound = {}) {
       },
     },
   } as never;
+  const ended: string[] = [];
   const sessions = {
     create: async (...args: any[]) => {
       created.push(args);
       return { id: 'session-new' };
+    },
+    end: async (_owner: string, id: string) => {
+      ended.push(id);
+      return { ok: true };
     },
   } as never;
   const service = new TaskListsService(prisma, { publishForUser() {} } as never, sessions);
   return {
     created,
     written,
+    ended,
     open: (workspaceId?: string) => service.console(OWNER, LIST_ID, workspaceId),
   };
 }
@@ -189,9 +208,9 @@ test('the binding is written only after the session exists', async () => {
         foremanWorkspaceId: 'workspace-foreman',
         ownerSession: null,
       }),
-      update: async () => {
+      updateMany: async () => {
         order.push('bind');
-        return {};
+        return { count: 1 };
       },
     },
   } as never;
@@ -252,4 +271,35 @@ test('the summary attributes failures, and always reports every bucket', async (
     contentFilter: 0,
     unattributed: 1,
   });
+});
+
+
+test('two people opening the console at once land in the same conversation', async () => {
+  // Both read it unbound, both create, both write. Before the swap the last writer won and the
+  // other's session was left created, bound to nothing, sitting in the workspace forever — and
+  // the two people were talking to different consoles about the same list.
+  const f = makeService({ raceWinner: 'session-theirs' });
+
+  const out = await f.open();
+
+  assert.equal(out.sessionId, 'session-theirs');
+  assert.equal(out.created, false);
+});
+
+test('the session that lost the race is ended, not left running', async () => {
+  const f = makeService({ raceWinner: 'session-theirs' });
+
+  await f.open();
+
+  assert.deepEqual(f.ended, ['session-new']);
+});
+
+test('the winner writes the pointer exactly once', async () => {
+  const f = makeService({ foremanWorkspaceId: 'workspace-foreman' });
+
+  const out = await f.open();
+
+  assert.equal(out.created, true);
+  assert.deepEqual(f.written, [{ ownerSessionId: 'session-new' }]);
+  assert.deepEqual(f.ended, []);
 });

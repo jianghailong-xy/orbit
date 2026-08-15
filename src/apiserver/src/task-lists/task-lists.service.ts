@@ -456,11 +456,40 @@ export class TaskListsService {
       },
       { source: 'user' },
     );
-    // Written after the session exists, so a failed create leaves no dangling pointer.
-    await this.prisma.taskList.update({
-      where: { id },
+    // Written after the session exists, so a failed create leaves no dangling pointer — and as a
+    // compare-and-swap against the pointer this call read, not an unconditional write. Two people
+    // opening the console at once both saw it unbound, and both wrote: last writer won and the
+    // other's session was left created, bound to nothing, sitting in the workspace forever.
+    //
+    // The condition is the value we read rather than "still null", because the reuse path above
+    // also replaces a *trashed* session — swapping on what we saw covers both without a second
+    // branch.
+    //
+    // A row lock across the create would avoid the wasted session entirely, and is the pattern
+    // writePolicy uses on this same row. Not here: sessions.create is heavy, Prisma's interactive
+    // transactions time out at five seconds, and holding a lock across it trades a rare harmless
+    // race for a less rare and far more confusing failure.
+    const claimed = await this.prisma.taskList.updateMany({
+      where: { id, ownerSessionId: list.ownerSessionId },
       data: { ownerSessionId: session.id },
     });
+    if (claimed.count === 0) {
+      // Somebody else bound one in between. Adopt theirs — the point of this endpoint is that
+      // repeat clicks land in the same conversation, so returning a second one would defeat it.
+      const winner = await this.prisma.taskList.findFirst({
+        where: { id, ownerId },
+        select: { ownerSessionId: true },
+      });
+      if (winner?.ownerSessionId) {
+        // End the one this call made rather than deleting it. Its opening turn may already be
+        // running, and tearing down a live session to tidy up is worse than leaving a finished
+        // one that says what it was.
+        await this.sessions
+          .end(ownerId, session.id)
+          .catch(() => undefined);
+        return { sessionId: winner.ownerSessionId, created: false };
+      }
+    }
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return { sessionId: session.id, created: true };
   }
