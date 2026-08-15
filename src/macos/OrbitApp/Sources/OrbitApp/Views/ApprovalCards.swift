@@ -175,17 +175,52 @@ struct ToolApprovalCard: View {
         return nil
     }
 
+    /// Orbit's own asks carry a server-computed preview of what would happen. Without rendering it
+    /// the card showed a tool name and nothing else — somebody was being asked to approve fifty
+    /// tasks they could not see.
+    private var batch: BatchApprovalPreview? {
+        guard Approvals.isTaskBatch(toolName: approval.toolName ?? ""), let input = approval.input
+        else { return nil }
+        return Approvals.batchPreview(from: input)
+    }
+    private var dag: DagApprovalPreview? {
+        guard Approvals.isDagChange(toolName: approval.toolName ?? ""), let input = approval.input
+        else { return nil }
+        return Approvals.dagPreview(from: input)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
-                           tone: .orange, badge: approval.toolName ?? "Tool")
-            if let command {
-                ToolBodyView(kind: .command(command))
-            } else if let subject {
-                Text(subject)
-                    .font(.orbitMono).foregroundStyle(.secondary)
-                    .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its filename
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if let batch {
+                ApprovalHeader(symbol: "square.stack.3d.up.fill",
+                               title: "Create \(batch.taskCount) task\(batch.taskCount == 1 ? "" : "s")?",
+                               tone: .orange, badge: "new tasks")
+                OrbitAskBody(impact: Approvals.batchImpactLines(batch),
+                             note: "",
+                             detail: batch.lists.isEmpty ? "" : "into \(batch.lists.joined(separator: ", "))"
+                                 + (batch.edges > 0 ? " · \(batch.edges) dependency edge\(batch.edges == 1 ? "" : "s")" : ""),
+                             rows: batch.titles,
+                             more: batch.titlesTruncated)
+            } else if let dag {
+                ApprovalHeader(symbol: "point.3.connected.trianglepath.dotted",
+                               title: "Restructure dependencies in \(dag.listTitle)?",
+                               tone: .orange, badge: "dependencies")
+                OrbitAskBody(impact: Approvals.dagImpactLines(dag),
+                             note: dag.note,
+                             detail: "\(dag.edgesBefore) → \(dag.edgesAfter) edges",
+                             rows: dag.ops.map { $0.noop ? "\($0.sentence) (already so)" : $0.sentence },
+                             more: 0)
+            } else {
+                ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
+                               tone: .orange, badge: approval.toolName ?? "Tool")
+                if let command {
+                    ToolBodyView(kind: .command(command))
+                } else if let subject {
+                    Text(subject)
+                        .font(.orbitMono).foregroundStyle(.secondary)
+                        .lineLimit(3).truncationMode(.middle)   // a path keeps its root AND its filename
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             ApprovalActions {
                 allowButton
@@ -198,7 +233,7 @@ struct ToolApprovalCard: View {
 
     private var allowButton: some View {
         Button { decide(console, approval, .allow) } label: {
-            Text("Allow").approvalActionLabel()
+            Text(batch != nil ? "Create them" : dag != nil ? "Apply changes" : "Allow").approvalActionLabel()
         }
         .buttonStyle(.borderedProminent)
     }
@@ -215,9 +250,47 @@ struct ToolApprovalCard: View {
     }
     private var denyButton: some View {
         Button(role: .destructive) { decide(console, approval, .deny) } label: {
-            Text("Deny").approvalActionLabel()
+            Text(batch != nil ? "Create nothing" : dag != nil ? "Leave the graph alone" : "Deny")
+                .approvalActionLabel()
         }
         .buttonStyle(.bordered)
+    }
+}
+
+/// The body shared by Orbit's two own asks: the consequence first and largest, then the reason,
+/// then the rows it is made of. The counts are the decision — the titles look identical whether a
+/// batch costs one run or none — so the rows come last and are capped.
+private struct OrbitAskBody: View {
+    let impact: [String]
+    let note: String
+    let detail: String
+    let rows: [String]
+    let more: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !note.isEmpty {
+                Text(note).font(.orbitProse).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ForEach(impact, id: \.self) { line in
+                Text(line)
+                    .font(.orbitLabel).fontWeight(.semibold)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 7))
+            }
+            if !detail.isEmpty {
+                Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                Text("• \(row)")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if more > 0 {
+                Text("+\(more) more").font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

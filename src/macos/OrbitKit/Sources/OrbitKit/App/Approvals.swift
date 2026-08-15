@@ -27,6 +27,14 @@ public enum Approvals {
 
     public static func isQuestion(toolName: String) -> Bool { toolName == "AskUserQuestion" }
     public static func isPlan(toolName: String) -> Bool { toolName == "ExitPlanMode" }
+    /// Orbit's own asks, raised by the runner's MCP tools rather than by the engine's permission
+    /// prompt: a batch of new tasks, and a restructure of a list's dependency graph. Both carry a
+    /// server-computed `preview` of what would happen, and both are rendered as their own card.
+    public static func isTaskBatch(toolName: String) -> Bool { toolName == "orbit_task_batch" }
+    public static func isDagChange(toolName: String) -> Bool { toolName == "orbit_dag_change" }
+    public static func isOrbitAsk(toolName: String) -> Bool {
+        isTaskBatch(toolName: toolName) || isDagChange(toolName: toolName)
+    }
 
     /// Classify an approval into the card it renders as. Keyed on `toolName` — the reliable
     /// signal the control plane always sends — because the question/plan data is nested under
@@ -126,7 +134,13 @@ public enum Approvals {
     /// get a tool-wide rule (no `ruleContent`). The running session stops asking, and the control
     /// plane keeps the rule on that session's workspace so its other sessions start with it too.
     public static func rememberRule(toolName: String, input: JSONValue) -> PermissionRule? {
-        if isQuestion(toolName: toolName) || isPlan(toolName: toolName) { return nil }
+        // Orbit's own asks have no repeatable form. Every batch creates a different set of tasks
+        // and every restructure releases a different set, so "always allow" would be a standing
+        // yes to whatever comes next — which is the gate switched off, not a preference. Web
+        // refuses it for the same reason; without this the two clients disagree about whether the
+        // approval can be waived, and the weaker one wins.
+        if isQuestion(toolName: toolName) || isPlan(toolName: toolName)
+            || isOrbitAsk(toolName: toolName) { return nil }
         if toolName == "Bash" {
             guard let cmd = input["command"]?.stringValue, let prefix = bashPrefix(cmd) else { return nil }
             return PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*")
