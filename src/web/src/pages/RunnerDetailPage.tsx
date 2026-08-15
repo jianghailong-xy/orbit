@@ -32,7 +32,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, revokeWorkspacePermissionRule } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
+import { meQuery, providersQuery, workspacePermissionRulesQuery } from '../lib/queries';
 import { RunnerEnginesSection } from '../components/RunnerEnginesSection';
 import type { Runner } from '../components/TasksSidePanel';
 import { useToast } from '../lib/toast';
@@ -98,6 +98,11 @@ export function RunnerDetailPage() {
   // Configured providers (custom slugs) are used to resolve the provider label and effective
   // Runtime-owned model shown in each workspace row.
   const configuredProviders = useQuery(providersQuery()).data ?? [];
+  // The account's "grant orchestration to new agents" answer (Settings). Read here because this
+  // form posts every field explicitly — an unseeded switch would send `false` and quietly beat
+  // the default the user just set.
+  const orchestrationDefault =
+    useQuery(meQuery()).data?.preferences?.defaultEnableOrchestration ?? false;
 
   // Rename / delete the runner — same API the Runners grid uses.
   const [renaming, setRenaming] = useState(false);
@@ -224,7 +229,7 @@ export function RunnerDetailPage() {
     setFAppend(a?.appendSystemPrompt ?? '');
     setFWorkDir(a?.workDir ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
-    setFEnableOrchestration(a?.enableOrchestration ?? false);
+    setFEnableOrchestration(a ? (a.enableOrchestration ?? false) : orchestrationDefault);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setAdvOpen(false);
     setDirty(false);

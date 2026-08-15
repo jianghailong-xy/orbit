@@ -69,3 +69,10 @@ export class UpdateWorkspaceDto {
 export class ReorderWorkspacesDto {
   @IsArray() @IsString({ each: true }) ids!: string[];
 }
+
+// Grant (or revoke) session orchestration on every workspace this account owns at once. Still a
+// per-workspace grant — this writes each row, so a workspace can be flipped back on its own
+// afterwards — it just spares the user one visit per workspace.
+export class SetOrchestrationDto {
+  @IsBoolean() enabled!: boolean;
+}

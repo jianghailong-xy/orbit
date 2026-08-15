@@ -141,8 +141,27 @@ test('enableOrchestration and enabled are still dropped (human-only, web UI)', a
     enableOrchestration: true,
     enabled: false,
   } as never);
-  assert.equal('enableOrchestration' in (seen.create ?? {}), false);
+  // Pinned off, not merely dropped: an absent field now means "seed from the account default",
+  // so leaving it out would hand an orchestrator that ticked the box a second orchestrator.
+  assert.equal(seen.create?.enableOrchestration, false);
   assert.equal('enabled' in (seen.create ?? {}), false);
+});
+
+test('an orchestrator that names no value still cannot inherit the account default', async () => {
+  const { controller, seen } = makeController();
+  await controller.createWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, { name: 'child' });
+  assert.equal(seen.create?.enableOrchestration, false);
+});
+
+test('updating a workspace leaves its existing grant alone', async () => {
+  const { controller, seen } = makeController();
+  await controller.updateWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, 'a1', {
+    name: 'renamed',
+    enableOrchestration: true,
+  } as never);
+  // Absent is the right answer here — Prisma leaves the column untouched, so an orchestrator can
+  // neither grant the capability nor strip it from a workspace a human already decided about.
+  assert.equal('enableOrchestration' in (seen.update ?? {}), false);
 });
 
 test('drops permissionMode — a workspace has no permission posture to set', async () => {

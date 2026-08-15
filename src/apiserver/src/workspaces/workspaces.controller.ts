@@ -12,7 +12,12 @@ import { PublicIdPipe } from '../common/public-id';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { WorkspacesService } from './workspaces.service';
-import { CreateWorkspaceDto, ReorderWorkspacesDto, UpdateWorkspaceDto } from './dto';
+import {
+  CreateWorkspaceDto,
+  ReorderWorkspacesDto,
+  SetOrchestrationDto,
+  UpdateWorkspaceDto,
+} from './dto';
 
 @UseGuards(JwtAuthGuard)
 // Both paths are live on purpose: `workspaces` is the name, `agents` is what every already-
@@ -37,6 +42,14 @@ export class WorkspacesController {
   @Post('reorder')
   reorder(@CurrentUser() user: AuthUser, @Body() dto: ReorderWorkspacesDto) {
     return this.workspaces.reorder(user.userId, dto.ids);
+  }
+
+  /** Flip session orchestration on every workspace this account owns. Static path, so it must be
+   *  declared ahead of the `:id` routes. Human-only by construction: this is a JWT route, and the
+   *  runner/MCP surface (runner-agents.controller) drops the field entirely. */
+  @Post('orchestration')
+  setOrchestration(@CurrentUser() user: AuthUser, @Body() dto: SetOrchestrationDto) {
+    return this.workspaces.setOrchestrationForAll(user.userId, dto.enabled);
   }
 
   @Get(':id')

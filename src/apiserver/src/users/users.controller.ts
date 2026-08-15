@@ -37,6 +37,8 @@ export class UsersController {
     if (dto.defaultEffort !== undefined) merged.defaultEffort = dto.defaultEffort;
     if (dto.notifySessionFinished !== undefined)
       merged.notifySessionFinished = dto.notifySessionFinished;
+    if (dto.defaultEnableOrchestration !== undefined)
+      merged.defaultEnableOrchestration = dto.defaultEnableOrchestration;
     return this.prisma.user.update({
       where: { id: user.userId },
       data: { preferences: merged as Prisma.InputJsonValue },

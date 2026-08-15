@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, Segmented, Select, Switch } from 'antd';
+import { Button, Card, Popconfirm, Segmented, Select, Space, Switch } from 'antd';
 import { api } from '../api';
-import { meQuery, type Me, type UserPreferences } from '../lib/queries';
+import { meQuery, workspacesQuery, type Me, type UserPreferences } from '../lib/queries';
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { useToast } from '../lib/toast';
 import { DEFAULT_PERMISSION_MODE, MODE_OPTIONS } from '../lib/workspaceDefaults';
@@ -50,6 +50,26 @@ export function SettingsPage() {
     onError: (e: Error) => message.error(e.message || 'Failed to save'),
   });
 
+  // Counted, not guessed: the account default only governs agents made from now on, so the one
+  // thing this page has to answer honestly is how many existing agents actually hold the grant.
+  const workspaces = useQuery(workspacesQuery());
+  const agents: { enableOrchestration?: boolean }[] = workspaces.data ?? [];
+  const orchestrating = agents.filter((a) => a.enableOrchestration).length;
+
+  // Writes every agent's own switch in one call. Deliberately not a master switch: each agent
+  // keeps its own grant afterwards, so one can still be revoked without disarming the rest.
+  const applyToAll = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api<{ updated: number }>('/workspaces/orchestration', { method: 'POST', body: { enabled } }),
+    onSuccess: (r, enabled) => {
+      void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
+      message.success(
+        `${enabled ? 'Enabled' : 'Disabled'} on ${r.updated} agent${r.updated === 1 ? '' : 's'}.`,
+      );
+    },
+    onError: (e: Error) => message.error(e.message || 'Failed to apply'),
+  });
+
   return (
     <div style={{ maxWidth: 560, margin: '0 auto' }}>
       <h1 className="page-title">Settings</h1>
@@ -81,7 +101,7 @@ export function SettingsPage() {
         </Field>
       </Card>
 
-      <Card title="Session defaults">
+      <Card title="Session defaults" style={{ marginBottom: 16 }}>
         <Field
           label="Default permission mode"
           hint="The mode a new session starts in, unless the composer picks another. Account-wide: the mode is a property of the run, not of the workspace it runs in."
@@ -93,6 +113,54 @@ export function SettingsPage() {
             onChange={(v) => save.mutate({ defaultPermissionMode: v })}
             loading={save.isPending}
           />
+        </Field>
+      </Card>
+
+      {/* Orchestration is granted per agent — the authorizer reads that agent's own switch on
+          every claim and every spawn, so it stays revocable one agent at a time. What lives here
+          is the paperwork: a default for agents you make next, and a way to set them all at once
+          instead of opening every agent's editor in turn. */}
+      <Card title="Session orchestration">
+        <Field
+          label="Grant it to new agents"
+          hint="An agent you create from now on starts able to spawn and manage other sessions via the orbit MCP session tools. Existing agents are untouched."
+        >
+          <Switch
+            checked={prefs.defaultEnableOrchestration ?? false}
+            onChange={(v) => save.mutate({ defaultEnableOrchestration: v })}
+            loading={save.isPending}
+          />
+        </Field>
+        <Field
+          label="Apply to existing agents"
+          hint={
+            workspaces.isLoading
+              ? 'Loading your agents…'
+              : `${orchestrating} of ${agents.length} can orchestrate now. Each keeps its own switch afterwards.`
+          }
+        >
+          <Space>
+            <Popconfirm
+              title={`Let all ${agents.length} agents orchestrate?`}
+              description="Every agent's sessions will be able to spawn and drive other sessions. Grant this only if you trust what each of them runs."
+              okText="Turn on for all"
+              onConfirm={() => applyToAll.mutate(true)}
+            >
+              <Button disabled={agents.length === 0} loading={applyToAll.isPending}>
+                Turn on for all
+              </Button>
+            </Popconfirm>
+            {/* No confirm on the way out: this is the account's kill switch, and a switch you
+                have to argue with is one you cannot reach in a hurry. */}
+            <Button
+              danger
+              disabled={orchestrating === 0}
+              loading={applyToAll.isPending}
+              onClick={() => applyToAll.mutate(false)}
+            >
+              Turn off for all
+            </Button>
+          </Space>
         </Field>
       </Card>
     </div>

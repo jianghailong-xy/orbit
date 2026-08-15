@@ -90,10 +90,13 @@ export class RunnerAgentsController {
     const sanitized = this.sanitize(body, runner.id);
     if (!sanitized.name) throw new BadRequestException('name is required');
     // Bind to the calling runner by default so the new workspace can actually run sessions.
-    const workspace = await this.workspaces.create(
-      runner.ownerId,
-      sanitized as CreateWorkspaceDto,
-    );
+    // enableOrchestration is pinned off rather than left absent: absent means "seed from the
+    // account default", which would let an orchestrator mint itself a second orchestrator — the
+    // very escalation `sanitize` drops the field to prevent. The grant stays a human act.
+    const workspace = await this.workspaces.create(runner.ownerId, {
+      ...sanitized,
+      enableOrchestration: false,
+    } as CreateWorkspaceDto);
     // Push it to the owner's control-plane stream so their workspace list shows it live instead of
     // only after a manual reload — the workspace-side mirror of TasksService's publishTaskChanged.
     // Scoped via the calling session, which assertOrchestrator returned as this owner's.

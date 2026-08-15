@@ -90,6 +90,9 @@ export interface UserPreferences {
   /** Whether a session settling — finished on its own, or failed for good — pushes an alert to
    *  this account's registered devices. Absent means on; only opting out is ever written. */
   notifySessionFinished?: boolean;
+  /** Whether a newly created agent starts with session orchestration granted. Seeds the new
+   *  agent's own switch — the grant that gets enforced stays on the agent. Absent means off. */
+  defaultEnableOrchestration?: boolean;
 }
 
 export interface Me {
