@@ -1054,6 +1054,51 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
 }
 
+// How often the shutdown drain re-checks whether the in-flight turns have finished.
+const drainPollInterval = 150 * time.Millisecond
+
+// watchShutdownDrain is one claude supervisor's runner-shutdown watcher. It stops the inbox
+// poller (no new turns), gives whatever was already fed to claude `timeout` to finish and ack
+// — `pending` empties as the stdout reader acks each `result` — and then tears the process
+// down via procCancel. The caller detaches without finalizing, so the next runner reclaims and
+// --resumes. An idle session (`pending` empty) detaches at once.
+//
+// A turn still unfinished at the deadline loses its process without a result of its own, so it
+// is marked interrupted in the transcript first. Otherwise the reply simply stops: the last
+// thing the user sees is a half-finished thought or a tool call whose output never came, and
+// nothing distinguishes that from the agent still thinking. The control plane then re-delivers
+// the turn as a "carry on from where you were interrupted" prompt, so the marker is also what
+// makes the repeated work that follows it legible.
+//
+// Returns as soon as the process is gone on its own (procCtx done): there is nothing left to
+// tear down, and that turn's own crash path — not this one — owns what to report.
+func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan string,
+	timeout time.Duration, pollCancel, procCancel context.CancelFunc,
+	emit emitFn, sessionID string) {
+	select {
+	case <-procCtx.Done():
+		return
+	case <-shutdownCtx.Done():
+	}
+	pollCancel()
+	tk := time.NewTicker(drainPollInterval)
+	defer tk.Stop()
+	deadline := time.After(timeout)
+	for len(pending) > 0 {
+		select {
+		case <-tk.C:
+		case <-procCtx.Done():
+			return
+		case <-deadline:
+			emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
+			logln("drain timeout for", sessionID+"; tearing down mid-turn")
+			procCancel()
+			return
+		}
+	}
+	procCancel()
+}
+
 // runClaudeSessionProcess spawns ONE claude process and drives it until the session
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
 // reload). ended=false means the caller should re-spawn: reload=true for a requested
@@ -1463,41 +1508,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 	}()
 
-	// Drain watcher: on runner shutdown, stop pulling new turns and let any in-flight
-	// turn finish + ack (pending drains as the stdout reader acks each `result`), then
-	// tear claude down. The caller detaches without finalizing, so the next runner
-	// reclaims + --resumes. Idle sessions (pending empty) detach at once.
-	go func() {
-		select {
-		case <-procCtx.Done():
-			return
-		case <-shutdownCtx.Done():
-		}
-		pollCancel()
-		tk := time.NewTicker(150 * time.Millisecond)
-		defer tk.Stop()
-		deadline := time.After(shutdownDrainTimeout)
-		for len(pending) > 0 {
-			select {
-			case <-tk.C:
-			case <-procCtx.Done():
-				return
-			case <-deadline:
-				// The turn is about to lose its process with no result of its own, so say so
-				// in the transcript. Otherwise the reply simply stops: the last thing the user
-				// sees is a half-finished thought or a tool call with no output, and nothing
-				// distinguishes that from the agent still thinking. The next runner reclaims
-				// and --resumes, and the control plane re-delivers this turn as a "continue
-				// what was interrupted" prompt, so the marker is also what makes the repeated
-				// work that follows it legible.
-				emit(evInterrupt, map[string]interface{}{"reason": "runner_restart"})
-				logln("drain timeout for", job.SessionID+"; tearing down mid-turn")
-				procCancel()
-				return
-			}
-		}
-		procCancel()
-	}()
+	go watchShutdownDrain(procCtx, shutdownCtx, pending, shutdownDrainTimeout,
+		pollCancel, procCancel, emit, job.SessionID)
 
 	// Stdout reader (this goroutine): normalize messages; on each per-turn `result`
 	// ack the oldest fed message turn via /turn-complete.
