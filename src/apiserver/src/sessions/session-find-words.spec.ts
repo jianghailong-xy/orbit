@@ -8,10 +8,10 @@ import { SessionsService } from './sessions.service';
  * for why that order is forced (precision, and a trigram index that a two-character Chinese word
  * cannot use).
  *
- * The two get there differently, and that difference is what these tests pin. In-session find
- * evaluates both rules in one scan, because the scan IS its cost; the palette runs the phrase
- * query first and only asks the broader question when it came back empty, because its phrase
- * query is index-driven and cheap.
+ * Both ask the cheap question first and the expensive one only when it came back empty. For the
+ * palette that is because its phrase query is index-driven; for in-session find it is because the
+ * words of a query admit far more of a session than the phrase does, and everything they admit is
+ * carried through a sort and a window count (13.1s against 2.0s on a 111k-event session).
  */
 
 const OWNER_ID = 'c111a556-1094-4e98-90d0-f5f7fa74544c';
@@ -42,44 +42,54 @@ const palette = (query: string, results?: unknown[][]) =>
 
 // ── in-session find (⌘F) ──────────────────────────────────────────────────────────────────────
 
-test('find admits every word, then keeps only the phrase rows when there are any', async () => {
-  const [sql] = await findIn('confirm directory');
-  // Widest possible admission…
-  assert.match(sql.sql, /\(text ILIKE \?\) AND \(text ILIKE \?\)/);
-  assert.ok(sql.values.includes('%confirm%'));
-  assert.ok(sql.values.includes('%directory%'));
-  // …narrowed back to the phrase whenever the session contains it, in the same scan.
-  assert.match(sql.sql, /WHERE exact OR NOT \(SELECT bool_or\(exact\) FROM matched\)/);
-  assert.ok(sql.values.includes('%confirm directory%'), 'the phrase test itself');
+test('find asks for the phrase first, and a hit costs nothing more', async () => {
+  // The regression this pins: a widened scan that also evaluates the phrase makes the common
+  // case — the phrase is right there — pay for every row the words admit.
+  const sql = await findIn('confirm directory', [[{ seq: 1, total: 1 }]]);
+  assert.equal(sql.length, 1);
+  assert.ok(sql[0].values.includes('%confirm directory%'));
+  assert.ok(!sql[0].values.includes('%confirm%'));
+  assert.doesNotMatch(sql[0].sql, /AND \(text ILIKE/, 'the phrase pass is one ILIKE');
+});
+
+test('find broadens to words only once the phrase found nothing', async () => {
+  const sql = await findIn('confirm directory');
+  assert.equal(sql.length, 2);
+  assert.match(sql[1].sql, /\(text ILIKE \?\) AND \(text ILIKE \?\)/);
+  assert.ok(sql[1].values.includes('%confirm%'));
+  assert.ok(sql[1].values.includes('%directory%'));
+  assert.ok(!sql[1].values.includes('%confirm directory%'));
 });
 
 test('find segments a Chinese query into words', async () => {
-  const [sql] = await findIn('会话列表排序');
-  assert.ok(sql.values.includes('%会话%'));
-  assert.ok(sql.values.includes('%列表%'));
-  assert.ok(sql.values.includes('%排序%'));
+  const [, wide] = await findIn('会话列表排序');
+  assert.ok(wide.values.includes('%会话%'));
+  assert.ok(wide.values.includes('%列表%'));
+  assert.ok(wide.values.includes('%排序%'));
 });
 
-test('a one-word find is a single ILIKE, as it always was', async () => {
-  const [sql] = await findIn('merge');
-  assert.doesNotMatch(sql.sql, /AND \(text ILIKE/);
-  assert.ok(sql.values.includes('%merge%'));
+test('a one-word find runs once and is a single ILIKE, as it always was', async () => {
+  const sql = await findIn('merge');
+  assert.equal(sql.length, 1, 'nothing broader to try');
+  assert.doesNotMatch(sql[0].sql, /AND \(text ILIKE/);
+  assert.ok(sql[0].values.includes('%merge%'));
 });
 
 test("find's snippet prefers the whole phrase and falls back to the longest word", async () => {
   // strpos returns 0 when the phrase isn't there verbatim, which is exactly the row the word
   // fallback admitted — so the window has to be cut around a word instead of at character 1.
-  const [sql] = await findIn('the working directory');
-  assert.match(sql.sql, /coalesce\(\s*nullif\(strpos\(lower\(text\), lower\(\?\)\), 0\),/);
-  assert.ok(sql.values.includes('the working directory'), 'phrase anchor');
-  assert.ok(sql.values.includes('directory'), 'longest-word anchor');
+  const [, wide] = await findIn('the working directory');
+  assert.match(wide.sql, /coalesce\(\s*nullif\(strpos\(lower\(text\), lower\(\?\)\), 0\),/);
+  assert.ok(wide.values.includes('the working directory'), 'phrase anchor');
+  assert.ok(wide.values.includes('directory'), 'longest-word anchor');
 });
 
 test('find strips markdown marks from the query before splitting it', async () => {
   // What the user read is "the merge button"; what is stored is the markdown source.
-  const [sql] = await findIn('the **merge** button');
-  assert.ok(sql.values.includes('%merge%'));
-  assert.ok(!sql.values.some((v) => typeof v === 'string' && v.includes('*')));
+  const [phrase, wide] = await findIn('the **merge** button');
+  assert.ok(phrase.values.includes('%the merge button%'));
+  assert.ok(wide.values.includes('%merge%'));
+  assert.ok(!wide.values.some((v) => typeof v === 'string' && v.includes('*')));
 });
 
 test('a query of nothing but marks or whitespace runs no search at all', async () => {

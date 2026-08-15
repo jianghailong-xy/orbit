@@ -1931,14 +1931,14 @@ export class SessionsService {
    * preview) isn't in the client's DOM at all even when it is loaded.
    *
    * A plain scan, deliberately: bounded to one session, the partial index that skips noise
-   * events leaves only renderable rows — 258 of 27k in the largest session here, p99 789 — so
-   * the ILIKE runs over a few hundred payloads. Measured 26ms warm / 98ms cold on that largest
-   * session. That's also why CONTENT_MIN_CHARS doesn't apply: the global palette's floor exists
+   * events leaves only renderable rows — p99 789 — so the ILIKE usually runs over a few hundred
+   * payloads. That's also why CONTENT_MIN_CHARS doesn't apply: the global palette's floor exists
    * because a sub-trigram pattern makes pg_trgm recheck every indexed row in the *deployment*,
    * which a single session's few hundred rows can't reproduce.
    *
    * Matching is the same two-step the palette uses (see `broaden`): the phrase, and — only when
    * the session doesn't contain it — every word of it, so half-remembering a line still finds it.
+   * The scan is what costs, so the second step is a second query; `eventRows` says why.
    */
   async searchEvents(
     userId: string,
@@ -1957,13 +1957,47 @@ export class SessionsService {
     const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) return { q: '', total: 0, hits: [] };
     const take = Math.min(Math.max(Math.trunc(limit ?? 100), 1), 200);
-    // The widest thing this query could match: every word of it, ANDed. Both rules are evaluated
-    // in the one scan below — unlike the palette, which pays for a second query, because here the
-    // scan IS the cost and a second one would double it on exactly the keystrokes that find
-    // nothing yet.
-    const widened = broaden(norm) ?? norm;
+    let rows = await this.eventRows(id, norm, take);
+    if (rows.length === 0) {
+      const wide = broaden(norm);
+      if (wide) rows = await this.eventRows(id, wide, take);
+    }
+
+    return {
+      q: norm.raw,
+      total: rows[0]?.total ?? 0,
+      hits: rows.map((r) => ({
+        seq: r.seq,
+        type: r.type,
+        toolName: r.toolName ?? null,
+        ts: r.ts,
+        // Collapsed for the same reason the palette collapses: a window cut out of a markdown
+        // body or a JSON blob is full of newlines and would render as an accordion.
+        snippet: (r.snippet ?? '').replace(/\s+/g, ' ').trim(),
+      })),
+    };
+  }
+
+  /**
+   * One pass of in-session find, for whichever form of the query it is handed.
+   *
+   * Deliberately one scan per form rather than one scan answering both. Evaluating the phrase
+   * inside a widened scan looks cheaper — one round trip instead of two — but it makes the
+   * *common* case pay the widened price: the words of a query match far more of a session than
+   * the phrase does, and everything they admit has to be carried through the sort and the window
+   * count. On this deployment's largest session (111k renderable events) that was 13.1s against
+   * the 2.0s the phrase alone costs. Asking the cheap question first, and the expensive one only
+   * when it came back empty, is the same shape the palette uses and for the same reason.
+   */
+  private async eventRows(
+    id: string,
+    norm: NormalizedSearchQuery,
+    take: number,
+  ): Promise<
+    { seq: number; type: string; toolName: string | null; ts: Date; total: number; snippet: string | null }[]
+  > {
     const words = Prisma.join(
-      widened.patterns.map(
+      norm.patterns.map(
         (term) =>
           Prisma.sql`(${Prisma.join(
             term.map((p) => Prisma.sql`text ILIKE ${p}`),
@@ -1972,8 +2006,7 @@ export class SessionsService {
       ),
       ' AND ',
     );
-
-    const rows = await this.prisma.$queryRaw<
+    return this.prisma.$queryRaw<
       { seq: number; type: string; toolName: string | null; ts: Date; total: number; snippet: string | null }[]
     >(Prisma.sql`
       WITH body AS (
@@ -2005,33 +2038,6 @@ export class SessionsService {
         FROM run_event
         WHERE session_id = ${id}::uuid
           AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
-      ),
-      -- MATERIALIZED so the phrase test below reads this once instead of re-running the whole
-      -- concat-and-strip over the session a second time.
-      matched AS MATERIALIZED (
-        SELECT
-          seq, type, created_at, payload, text,
-          text ILIKE ${norm.pattern} AS exact,
-          -- Same ±60 window as the ⌘K palette, and for the same reason: a match can sit deep
-          -- inside a multi-KB body, so the cut has to happen in SQL. strpos is literal while
-          -- ILIKE is not, which is why the pattern escapes % and _ (see search-query.ts).
-          --
-          -- The whole phrase first, so a row that has it verbatim shows it; strpos returns 0
-          -- when it doesn't, and the window falls back to the query's longest word, which the
-          -- WHERE guarantees is in there somewhere.
-          substr(
-            text,
-            greatest(
-              1,
-              coalesce(
-                nullif(strpos(lower(text), lower(${norm.raw})), 0),
-                strpos(lower(text), lower(${widened.anchor}))
-              ) - 60
-            ),
-            length(${norm.raw}) + 120
-          ) AS snippet
-        FROM body
-        WHERE ${words}
       )
       SELECT
         seq,
@@ -2041,29 +2047,29 @@ export class SessionsService {
         -- Counted over every match, not just the page: the UI says "100 of 240" rather than
         -- implying the capped list is all there is. Window functions run before LIMIT.
         (count(*) OVER ())::int AS "total",
-        snippet AS "snippet"
-      FROM matched
-      -- Phrase first, words only as a fallback: while the session holds the phrase itself, the
-      -- rows that merely mention its words are noise, and this list has a hard cap that they
-      -- would eat into. Once it doesn't, they are the whole point.
-      WHERE exact OR NOT (SELECT bool_or(exact) FROM matched)
+        -- Same ±60 window as the ⌘K palette, and for the same reason: a match can sit deep
+        -- inside a multi-KB body, so the cut has to happen in SQL. strpos is literal while
+        -- ILIKE is not, which is why the pattern escapes % and _ (see search-query.ts).
+        --
+        -- The whole phrase first, so a row that has it verbatim shows it; strpos returns 0 when
+        -- it doesn't — which is the normal case on a broadened pass — and the window falls back
+        -- to the anchor, which the WHERE guarantees is in there somewhere.
+        substr(
+          text,
+          greatest(
+            1,
+            coalesce(
+              nullif(strpos(lower(text), lower(${norm.raw})), 0),
+              strpos(lower(text), lower(${norm.anchor}))
+            ) - 60
+          ),
+          length(${norm.raw}) + 120
+        ) AS "snippet"
+      FROM body
+      WHERE ${words}
       ORDER BY seq DESC
       LIMIT ${take}::int
     `);
-
-    return {
-      q: norm.raw,
-      total: rows[0]?.total ?? 0,
-      hits: rows.map((r) => ({
-        seq: r.seq,
-        type: r.type,
-        toolName: r.toolName ?? null,
-        ts: r.ts,
-        // Collapsed for the same reason the palette collapses: a window cut out of a markdown
-        // body or a JSON blob is full of newlines and would render as an accordion.
-        snippet: (r.snippet ?? '').replace(/\s+/g, ' ').trim(),
-      })),
-    };
   }
 
   /**
