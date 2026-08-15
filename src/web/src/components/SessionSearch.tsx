@@ -173,8 +173,11 @@ export function SessionSearch() {
 
   const trimmed = debounced.trim();
   const tooShortForContent = trimmed.length > 0 && search.data?.contentSearched === false;
-  // Clamped: the server is the authority on the floor, so if it ever reports contentSearched:false
-  // for a query that already looks long enough, the hint still reads sensibly instead of "type -1".
+  // Two things produce contentSearched:false and they need different sentences: a query still
+  // being typed, and a long query the server had to broaden into words that are individually
+  // below the floor (a Chinese query segments into 2-character words). Only the first is fixed by
+  // typing more.
+  const isShort = [...trimmed].length < CONTENT_MIN_CHARS;
   const missingChars = Math.max(1, CONTENT_MIN_CHARS - [...trimmed].length);
   // The palette shows one page and has no way to ask for a second, so a capped result set has to
   // say so — otherwise "20 hits" for a common word reads as the whole answer.
@@ -257,8 +260,16 @@ export function SessionSearch() {
       <div className="ssearch-foot">
         {tooShortForContent ? (
           <span className="ssearch-hint-warn">
-            Matching names only — type {missingChars} more character{missingChars === 1 ? '' : 's'} to
-            search message text.
+            {isShort ? (
+              <>
+                Matching names only — type {missingChars} more character
+                {missingChars === 1 ? '' : 's'} to search message text.
+              </>
+            ) : (
+              <>
+                No exact match — matching names by word. Message text needs the exact phrase.
+              </>
+            )}
           </span>
         ) : (
           <span>

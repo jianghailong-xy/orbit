@@ -21,11 +21,13 @@ const OWNER_ID = 'c111a556-1094-4e98-90d0-f5f7fa74544c';
 const STRIP_TAIL = ", '*', ''), '`', '')";
 const stripped = (col: string): string => `replace(replace(${col}${STRIP_TAIL}`;
 
+/** The search's FIRST statement — the phrase query. Answering with no rows makes the caller
+ *  broaden to words and ask again (see `broaden`), and it is the phrase form the strip is about. */
 const captureSearch = async (query: string): Promise<Prisma.Sql> => {
   let captured: Prisma.Sql | undefined;
   const prisma = {
     $queryRaw: async (sql: Prisma.Sql) => {
-      captured = sql;
+      captured ??= sql;
       return [];
     },
   };

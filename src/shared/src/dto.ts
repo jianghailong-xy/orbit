@@ -1213,8 +1213,10 @@ export interface EventSearchHit {
   /** The tool's name for a tool_use/tool_result hit, null otherwise. */
   toolName: string | null;
   ts: string | Date;
-  /** A whitespace-collapsed window around the match. Located by the client the same way the ⌘K
-   *  palette does — by finding the query inside the finished snippet, not by a carried offset. */
+  /** A whitespace-collapsed window around the match — around the whole phrase where the event
+   *  contains it, and around the query's longest word otherwise, since a hit only has to mention
+   *  every word. What to mark is found by the client inside the finished snippet, the same way the
+   *  ⌘K palette does: collapsing shifts every position, so no offset can be carried. */
   snippet: string;
 }
 

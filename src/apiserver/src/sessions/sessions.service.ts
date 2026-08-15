@@ -52,7 +52,12 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
 import { enqueueBeautifyTitle, makeBranchName, titleFromPrompt } from './naming';
-import { normalizeSearchQuery, type NormalizedSearchQuery, stripEmphasis } from './search-query';
+import {
+  broaden,
+  normalizeSearchQuery,
+  type NormalizedSearchQuery,
+  stripEmphasis,
+} from './search-query';
 import { notNoiseSql } from '../common/system-noise';
 import {
   SERVICE_TOKEN_CONCURRENCY,
@@ -915,8 +920,19 @@ export class SessionsService {
       const recents = await this.searchRows(ownerId, null, take);
       return { q: '', contentSearched: false, total: recents.total, hits: recents.hits };
     }
-    const { hits, total } = await this.searchRows(ownerId, norm, take);
-    return { q: norm.raw, contentSearched: norm.searchContent, total, hits };
+    const first = await this.searchRows(ownerId, norm, take);
+    if (first.total > 0) {
+      return { q: norm.raw, contentSearched: norm.searchContent, total: first.total, hits: first.hits };
+    }
+    // Nothing contains the phrase. Rather than answer "no results" for a query that only got a
+    // word wrong, ask the broader question — see `broaden` for why this is a second query and not
+    // the first one's WHERE clause. The palette's own debounce keeps this off most keystrokes.
+    const wide = broaden(norm);
+    if (!wide) {
+      return { q: norm.raw, contentSearched: norm.searchContent, total: 0, hits: [] };
+    }
+    const { hits, total } = await this.searchRows(ownerId, wide, take);
+    return { q: norm.raw, contentSearched: wide.searchContent, total, hits };
   }
 
   /**
@@ -954,6 +970,24 @@ export class SessionsService {
       total?: number;
     };
 
+    // "This text matches the query": one ILIKE against the phrase, or every term ANDed once the
+    // query has been broadened (with a term's alternatives ORed — see SearchTerm). Every predicate
+    // in this statement goes through here, so the tiers can never disagree about what a match is —
+    // and each ILIKE stays its own indexable condition, which is what lets the planner BitmapAnd
+    // them (measured 24ms for three words against 43ms for one, since ANDing narrows the candidate
+    // set). Parenthesized because `retest` ORs the results together.
+    const matches = (col: Prisma.Sql): Prisma.Sql =>
+      Prisma.sql`(${Prisma.join(
+        (norm?.patterns ?? [['']]).map(
+          (term) =>
+            Prisma.sql`(${Prisma.join(
+              term.map((p) => Prisma.sql`${col} ILIKE ${p}`),
+              ' OR ',
+            )})`,
+        ),
+        ' AND ',
+      )})`;
+
     // The conversation-text tier is composed in or out HERE, at SQL-build time, rather than being
     // gated by a `AND ${norm.searchContent}` bind parameter inside the query. A parameter can't be
     // folded away when the plan is prepared, so the sub-3-character case would still execute the
@@ -979,7 +1013,7 @@ export class SessionsService {
               JOIN session s ON s.id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
                 AND e.type IN ('user', 'assistant')
-                AND ${stripMarks(Prisma.sql`e.payload->>'text'`)} ILIKE ${norm.pattern}
+                AND ${matches(stripMarks(Prisma.sql`e.payload->>'text'`))}
               ORDER BY e.session_id, e.seq DESC
             ) c
           `
@@ -993,7 +1027,6 @@ export class SessionsService {
     // Below the floor the two long bodies drop out of the list entirely, so a short query can't
     // reach them through ANY branch (a session admitted by its workspace's name would otherwise still
     // be labelled 'prompt' and hand back a snippet cut from a 7 KB body).
-    const pattern = norm?.pattern ?? '';
     type Field = {
       field: SessionSearchHit['matchField'];
       /** What the fenced sub-select in `meta` projects for this field — evaluated once per row. */
@@ -1011,7 +1044,7 @@ export class SessionsService {
     const textField = (field: Field['field'], col: Prisma.Sql): Field => ({
       field,
       proj: Prisma.sql`${stripMarks(col)} AS ${Prisma.raw(`"${field}"`)}`,
-      test: Prisma.sql`${Prisma.raw(`x."${field}"`)} ILIKE ${pattern}`,
+      test: matches(Prisma.raw(`x."${field}"`)),
       col: Prisma.raw(`x."${field}"`),
     });
     const fields: Field[] = [
@@ -1061,16 +1094,17 @@ export class SessionsService {
     // (128ms) to return 512 mostly-meaningless hits. Matching the short name columns instead is
     // 4.4ms and returns 51 — see CONTENT_MIN_CHARS.
     const sessionPredicate = norm?.searchContent
-      ? Prisma.sql`
-          ${stripMarks(Prisma.sql`
+      ? matches(
+          stripMarks(Prisma.sql`
             coalesce(s.title, '') || ' ' ||
             coalesce(s.prompt, '') || ' ' ||
             coalesce(s.last_assistant_text, '') || ' ' ||
             coalesce(s.branch, '')
-          `)} ILIKE ${pattern}`
+          `),
+        )
       : Prisma.sql`(
-          ${stripMarks(Prisma.sql`s.title`)} ILIKE ${pattern}
-          OR ${stripMarks(Prisma.sql`s.branch`)} ILIKE ${pattern}
+          ${matches(stripMarks(Prisma.sql`s.title`))}
+          OR ${matches(stripMarks(Prisma.sql`s.branch`))}
         )`;
 
     const rows = norm
@@ -1110,13 +1144,13 @@ export class SessionsService {
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
               AND s.workspace_id IN (
-                SELECT id FROM workspace WHERE ${stripMarks(Prisma.sql`name`)} ILIKE ${norm.pattern}
+                SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
               AND s.task_id IN (
-                SELECT id FROM task WHERE ${stripMarks(Prisma.sql`title`)} ILIKE ${norm.pattern}
+                SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
           ),
           meta AS (
@@ -1177,9 +1211,19 @@ export class SessionsService {
               -- while ILIKE is not, which is exactly why the pattern escapes % and _ (see
               -- search-query.ts) — otherwise the two could disagree and strpos would return 0.
               -- greatest()/least() keep the window in range if they ever do disagree anyway.
+              --
+              -- On a broadened query the phrase is genuinely absent, which is the normal case
+              -- rather than a disagreement: the window then follows the longest word, which every
+              -- admitted row does contain.
               substr(
                 h.match_text,
-                greatest(1, strpos(lower(h.match_text), lower(${norm.raw})) - 60),
+                greatest(
+                  1,
+                  coalesce(
+                    nullif(strpos(lower(h.match_text), lower(${norm.raw})), 0),
+                    strpos(lower(h.match_text), lower(${norm.anchor}))
+                  ) - 60
+                ),
                 length(${norm.raw}) + 120
               ) AS "snippet",
               -- Which field matched, as a WEIGHT rather than a lexicographic bucket. Ordering by
@@ -1892,6 +1936,9 @@ export class SessionsService {
    * session. That's also why CONTENT_MIN_CHARS doesn't apply: the global palette's floor exists
    * because a sub-trigram pattern makes pg_trgm recheck every indexed row in the *deployment*,
    * which a single session's few hundred rows can't reproduce.
+   *
+   * Matching is the same two-step the palette uses (see `broaden`): the phrase, and — only when
+   * the session doesn't contain it — every word of it, so half-remembering a line still finds it.
    */
   async searchEvents(
     userId: string,
@@ -1910,6 +1957,21 @@ export class SessionsService {
     const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) return { q: '', total: 0, hits: [] };
     const take = Math.min(Math.max(Math.trunc(limit ?? 100), 1), 200);
+    // The widest thing this query could match: every word of it, ANDed. Both rules are evaluated
+    // in the one scan below — unlike the palette, which pays for a second query, because here the
+    // scan IS the cost and a second one would double it on exactly the keystrokes that find
+    // nothing yet.
+    const widened = broaden(norm) ?? norm;
+    const words = Prisma.join(
+      widened.patterns.map(
+        (term) =>
+          Prisma.sql`(${Prisma.join(
+            term.map((p) => Prisma.sql`text ILIKE ${p}`),
+            ' OR ',
+          )})`,
+      ),
+      ' AND ',
+    );
 
     const rows = await this.prisma.$queryRaw<
       { seq: number; type: string; toolName: string | null; ts: Date; total: number; snippet: string | null }[]
@@ -1943,6 +2005,33 @@ export class SessionsService {
         FROM run_event
         WHERE session_id = ${id}::uuid
           AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
+      ),
+      -- MATERIALIZED so the phrase test below reads this once instead of re-running the whole
+      -- concat-and-strip over the session a second time.
+      matched AS MATERIALIZED (
+        SELECT
+          seq, type, created_at, payload, text,
+          text ILIKE ${norm.pattern} AS exact,
+          -- Same ±60 window as the ⌘K palette, and for the same reason: a match can sit deep
+          -- inside a multi-KB body, so the cut has to happen in SQL. strpos is literal while
+          -- ILIKE is not, which is why the pattern escapes % and _ (see search-query.ts).
+          --
+          -- The whole phrase first, so a row that has it verbatim shows it; strpos returns 0
+          -- when it doesn't, and the window falls back to the query's longest word, which the
+          -- WHERE guarantees is in there somewhere.
+          substr(
+            text,
+            greatest(
+              1,
+              coalesce(
+                nullif(strpos(lower(text), lower(${norm.raw})), 0),
+                strpos(lower(text), lower(${widened.anchor}))
+              ) - 60
+            ),
+            length(${norm.raw}) + 120
+          ) AS snippet
+        FROM body
+        WHERE ${words}
       )
       SELECT
         seq,
@@ -1952,16 +2041,12 @@ export class SessionsService {
         -- Counted over every match, not just the page: the UI says "100 of 240" rather than
         -- implying the capped list is all there is. Window functions run before LIMIT.
         (count(*) OVER ())::int AS "total",
-        -- Same ±60 window as the ⌘K palette, and for the same reason: a match can sit deep
-        -- inside a multi-KB body, so the cut has to happen in SQL. strpos is literal while
-        -- ILIKE is not, which is why the pattern escapes % and _ (see search-query.ts).
-        substr(
-          text,
-          greatest(1, strpos(lower(text), lower(${norm.raw})) - 60),
-          length(${norm.raw}) + 120
-        ) AS "snippet"
-      FROM body
-      WHERE text ILIKE ${norm.pattern}
+        snippet AS "snippet"
+      FROM matched
+      -- Phrase first, words only as a fallback: while the session holds the phrase itself, the
+      -- rows that merely mention its words are noise, and this list has a hard cap that they
+      -- would eat into. Once it doesn't, they are the whole point.
+      WHERE exact OR NOT (SELECT bool_or(exact) FROM matched)
       ORDER BY seq DESC
       LIMIT ${take}::int
     `);

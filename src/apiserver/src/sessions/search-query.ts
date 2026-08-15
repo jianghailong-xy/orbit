@@ -1,4 +1,4 @@
-import { toUuid } from '@orbit/shared';
+import { type SearchTerm, searchTerms, toUuid } from '@orbit/shared';
 
 /**
  * Query normalization for session search (GET /sessions/search).
@@ -34,6 +34,20 @@ export interface NormalizedSearchQuery {
   raw: string;
   /** `%…%`, with LIKE metacharacters escaped, for the ILIKE comparison. */
   pattern: string;
+  /** What a row must match: every group, and within a group any one alternative. A single group
+   *  of one — the phrase — as normalized; one group per term after {@link broaden}. */
+  patterns: string[][];
+  /** The terms the query would broaden to, unescaped, or `[]` when there is nothing broader to
+   *  try (one term, or nothing but CJK particles). */
+  terms: SearchTerm[];
+  /** Where a snippet is cut when the text doesn't contain `raw` verbatim — which only happens
+   *  once broadened. The longest term that has no alternatives, because that is the longest
+   *  string an admitted row is guaranteed to contain; anchoring on "the" would window the top of
+   *  a 7 KB body instead of the part the user was looking for. */
+  anchor: string;
+  /** Whether this is the broadened form. Carried so the caller can tell the two apart without
+   *  comparing pattern arrays, and so a broadened query is never broadened again. */
+  byWord: boolean;
   /** `…%` — the same escaped query anchored to the start, for the ranking's prefix bonus. A hit
    *  whose text BEGINS with the query is a much stronger signal than one that merely contains it
    *  somewhere, and it is the cheapest match-quality signal available to a substring search. */
@@ -75,6 +89,45 @@ const decodeSessionId = (s: string): string | null => {
  */
 export const stripEmphasis = (s: string): string => s.replace(/[*`]/g, '');
 
+/** How many words of a query are actually matched on. Past a handful the AND has long since
+ *  narrowed to one row, and each extra word is another ILIKE over every body it reaches — so a
+ *  pasted paragraph costs a bounded number of passes rather than one per word. */
+const MAX_WORDS = 8;
+
+/**
+ * The same query, matched word by word instead of as one phrase — what both searches fall back to
+ * when the phrase itself is nowhere. Returns null when there is nothing broader to try.
+ *
+ * Phrase first, words second, rather than always matching by word. Two reasons, and they point the
+ * same way:
+ *
+ *  - Precision. A row that contains the phrase is a better answer than one that merely mentions
+ *    its words, and the palette has no paging — broadening unconditionally lets the second kind
+ *    crowd out the first.
+ *  - The trigram index. `%会话%` and `%列表%` carry no whole trigram, so a Chinese query broadened
+ *    into two-character words can't use session_search_trgm at all: measured 866ms of parallel
+ *    sequential scan against 19.7ms for the phrase. Paying that only when the phrase found nothing
+ *    turns a permanent 44x regression into a one-off cost on a search that was about to come back
+ *    empty anyway.
+ */
+export function broaden(norm: NormalizedSearchQuery): NormalizedSearchQuery | null {
+  if (norm.byWord || norm.terms.length < 2) return null;
+  return {
+    ...norm,
+    byWord: true,
+    patterns: norm.terms.map((term) => term.map((w) => `%${escapeLike(w)}%`)),
+    // The floor again, now per word rather than per query, and for exactly the reason it exists:
+    // the long bodies are only reachable through a trigram index, and a word below the floor
+    // can't drive one. Broadening "会话列表排序" into 2-character words and letting it reach
+    // conversation text measured 1.9s of parallel sequential scan; against the short name columns
+    // it stays interactive, and the phrase query above already searched the bodies properly.
+    // English words clear the floor as a matter of course, so this only bites on CJK.
+    searchContent:
+      norm.searchContent &&
+      norm.terms.every((term) => term.every((w) => [...w].length >= CONTENT_MIN_CHARS)),
+  };
+}
+
 /**
  * Normalize a raw `q`. Returns null for an empty/whitespace-only query — the caller answers that
  * with recents rather than running a search that would match every row.
@@ -82,9 +135,19 @@ export const stripEmphasis = (s: string): string => s.replace(/[*`]/g, '');
 export function normalizeSearchQuery(q: string | undefined | null): NormalizedSearchQuery | null {
   const raw = (q ?? '').trim().slice(0, MAX_QUERY_CHARS);
   if (raw.length === 0) return null;
+  const terms = searchTerms(raw).slice(0, MAX_WORDS);
+  // Only a term with no alternatives is certain to be in every admitted row, so only those can
+  // anchor a snippet. Falls back to the query itself when there are none — as it also does for a
+  // one-word query, where the phrase and the anchor are the same string and the snippet's
+  // coalesce never reaches past the first.
+  const solid = terms.filter((t) => t.length === 1).map((t) => t[0]);
   return {
     raw,
     pattern: `%${escapeLike(raw)}%`,
+    patterns: [[`%${escapeLike(raw)}%`]],
+    terms,
+    anchor: solid.length ? solid.reduce((a, b) => (b.length > a.length ? b : a)) : raw,
+    byWord: false,
     prefixPattern: `${escapeLike(raw)}%`,
     sessionId: decodeSessionId(raw),
     sessionIdPrefix: /^[0-9a-f]{8,12}$/i.test(raw) ? raw.toLowerCase() : null,

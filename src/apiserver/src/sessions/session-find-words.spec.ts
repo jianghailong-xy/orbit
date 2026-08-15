@@ -1,0 +1,128 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { Prisma } from '@prisma/client';
+import { SessionsService } from './sessions.service';
+
+/**
+ * Both searches match the phrase first and every word of it only as a fallback — see `broaden`
+ * for why that order is forced (precision, and a trigram index that a two-character Chinese word
+ * cannot use).
+ *
+ * The two get there differently, and that difference is what these tests pin. In-session find
+ * evaluates both rules in one scan, because the scan IS its cost; the palette runs the phrase
+ * query first and only asks the broader question when it came back empty, because its phrase
+ * query is index-driven and cheap.
+ */
+
+const OWNER_ID = 'c111a556-1094-4e98-90d0-f5f7fa74544c';
+const SESSION_ID = '915d27d1-b92f-4cc6-819f-174ff5be13a9';
+
+/** Capture every statement a search issues, answering each with `results`. */
+const capture = async (
+  run: (s: SessionsService) => Promise<unknown>,
+  results: unknown[][] = [],
+): Promise<Prisma.Sql[]> => {
+  const sql: Prisma.Sql[] = [];
+  const prisma = {
+    session: { findFirst: async () => ({ id: SESSION_ID }) },
+    $queryRaw: async (q: Prisma.Sql) => {
+      sql.push(q);
+      return results[sql.length - 1] ?? [];
+    },
+  };
+  await run(new SessionsService(prisma as never, {} as never, {} as never));
+  return sql;
+};
+
+const findIn = (query: string, results?: unknown[][]) =>
+  capture((s) => s.searchEvents(OWNER_ID, SESSION_ID, query), results);
+
+const palette = (query: string, results?: unknown[][]) =>
+  capture((s) => s.search(OWNER_ID, query, 20), results);
+
+// ── in-session find (⌘F) ──────────────────────────────────────────────────────────────────────
+
+test('find admits every word, then keeps only the phrase rows when there are any', async () => {
+  const [sql] = await findIn('confirm directory');
+  // Widest possible admission…
+  assert.match(sql.sql, /\(text ILIKE \?\) AND \(text ILIKE \?\)/);
+  assert.ok(sql.values.includes('%confirm%'));
+  assert.ok(sql.values.includes('%directory%'));
+  // …narrowed back to the phrase whenever the session contains it, in the same scan.
+  assert.match(sql.sql, /WHERE exact OR NOT \(SELECT bool_or\(exact\) FROM matched\)/);
+  assert.ok(sql.values.includes('%confirm directory%'), 'the phrase test itself');
+});
+
+test('find segments a Chinese query into words', async () => {
+  const [sql] = await findIn('会话列表排序');
+  assert.ok(sql.values.includes('%会话%'));
+  assert.ok(sql.values.includes('%列表%'));
+  assert.ok(sql.values.includes('%排序%'));
+});
+
+test('a one-word find is a single ILIKE, as it always was', async () => {
+  const [sql] = await findIn('merge');
+  assert.doesNotMatch(sql.sql, /AND \(text ILIKE/);
+  assert.ok(sql.values.includes('%merge%'));
+});
+
+test("find's snippet prefers the whole phrase and falls back to the longest word", async () => {
+  // strpos returns 0 when the phrase isn't there verbatim, which is exactly the row the word
+  // fallback admitted — so the window has to be cut around a word instead of at character 1.
+  const [sql] = await findIn('the working directory');
+  assert.match(sql.sql, /coalesce\(\s*nullif\(strpos\(lower\(text\), lower\(\?\)\), 0\),/);
+  assert.ok(sql.values.includes('the working directory'), 'phrase anchor');
+  assert.ok(sql.values.includes('directory'), 'longest-word anchor');
+});
+
+test('find strips markdown marks from the query before splitting it', async () => {
+  // What the user read is "the merge button"; what is stored is the markdown source.
+  const [sql] = await findIn('the **merge** button');
+  assert.ok(sql.values.includes('%merge%'));
+  assert.ok(!sql.values.some((v) => typeof v === 'string' && v.includes('*')));
+});
+
+test('a query of nothing but marks or whitespace runs no search at all', async () => {
+  assert.equal((await findIn('***')).length, 0);
+  assert.equal((await findIn('   ')).length, 0);
+});
+
+// ── the ⌘K palette ────────────────────────────────────────────────────────────────────────────
+
+test('the palette asks for the phrase first, and stops there when it finds anything', async () => {
+  const sql = await palette('confirm directory', [[{ id: SESSION_ID, total: 1 }]]);
+  assert.equal(sql.length, 1, 'a hit must not cost a second query');
+  assert.ok(sql[0].values.includes('%confirm directory%'));
+  assert.ok(!sql[0].values.includes('%confirm%'));
+});
+
+test('the palette broadens to words only once the phrase found nothing', async () => {
+  const sql = await palette('confirm directory');
+  assert.equal(sql.length, 2);
+  assert.ok(sql[1].values.includes('%confirm%'));
+  assert.ok(sql[1].values.includes('%directory%'));
+  assert.ok(!sql[1].values.includes('%confirm directory%'));
+});
+
+test('the broadened palette query ANDs the words in every tier', async () => {
+  const [, wide] = await palette('the merge button');
+  // Conversation text, the session-side predicate, and the joined name tiers each have to ask
+  // the same question, or a row admitted by one tier is dropped by the re-test in another.
+  const ands = wide.sql.match(/ILIKE \?\) AND \(/g) ?? [];
+  assert.ok(ands.length >= 6, `expected every tier to AND its words, saw ${ands.length}`);
+  assert.equal(wide.values.filter((v) => v === '%merge%').length >= 3, true);
+});
+
+test('a palette query with nothing broader to try runs once', async () => {
+  assert.equal((await palette('merge')).length, 1);
+  assert.equal((await palette('的')).length, 1);
+});
+
+test("the palette's snippet falls back to the longest word too", async () => {
+  const [, wide] = await palette('the working directory');
+  assert.match(
+    wide.sql,
+    /coalesce\(\s*nullif\(strpos\(lower\(h\.match_text\), lower\(\?\)\), 0\),/,
+  );
+  assert.ok(wide.values.includes('directory'));
+});

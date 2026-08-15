@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { CONTENT_MIN_CHARS, normalizeSearchQuery, stripEmphasis } from './search-query';
+import { broaden, CONTENT_MIN_CHARS, normalizeSearchQuery, stripEmphasis } from './search-query';
 
 test('empty / whitespace-only -> null (caller answers with recents)', () => {
   assert.equal(normalizeSearchQuery(''), null);
@@ -71,6 +71,81 @@ test('stripEmphasis drops markdown marks but keeps identifier characters', () =>
   assert.equal(stripEmphasis('file_path'), 'file_path');
   assert.equal(stripEmphasis('snake_case_name'), 'snake_case_name');
   assert.equal(stripEmphasis('plain text'), 'plain text');
+});
+
+test('a normalized query matches the phrase, exactly as it always did', () => {
+  assert.deepEqual(normalizeSearchQuery('confirm directory')?.patterns, [['%confirm directory%']]);
+  assert.equal(normalizeSearchQuery('confirm directory')?.byWord, false);
+});
+
+test('broaden asks for each word separately, so filler and word order stop mattering', () => {
+  const norm = normalizeSearchQuery('confirm directory');
+  assert.ok(norm);
+  const wide = broaden(norm);
+  assert.deepEqual(wide?.patterns, [['%confirm%'], ['%directory%']]);
+  assert.equal(wide?.byWord, true);
+  // `raw` is untouched: it is what the snippet still looks for first, and what the client echoes.
+  assert.equal(wide?.raw, 'confirm directory');
+});
+
+test('broaden segments Chinese, which has no spaces to split on', () => {
+  const norm = normalizeSearchQuery('会话列表排序');
+  assert.ok(norm);
+  assert.deepEqual(broaden(norm)?.patterns, [['%会话%'], ['%列表%'], ['%排序%']]);
+});
+
+test('a term with alternatives becomes an OR group inside the AND', () => {
+  // 数据库优化 segments to 数据 + a run of stray characters; requiring the run joined finds
+  // nothing, so any of its adjacent pairs will do.
+  const wide = broaden(normalizeSearchQuery('数据库优化')!);
+  assert.deepEqual(wide?.patterns, [['%数据%'], ['%库优%', '%优化%']]);
+  // Only the certain term can anchor a snippet — the row need not contain either alternative in
+  // particular.
+  assert.equal(wide?.anchor, '数据');
+});
+
+test('broadening re-applies the trigram floor per word', () => {
+  // A word below the floor drives no index, so letting 2-character Chinese words reach the
+  // conversation bodies is a 1.9s sequential scan (29ms against the name columns instead). The
+  // phrase query that ran first did search those bodies, and it is the one with an index.
+  assert.equal(normalizeSearchQuery('会话列表排序')?.searchContent, true);
+  assert.equal(broaden(normalizeSearchQuery('会话列表排序')!)?.searchContent, false);
+  // English words clear the floor as a matter of course, so nothing narrows there.
+  assert.equal(broaden(normalizeSearchQuery('the merge button')!)?.searchContent, true);
+  // A single short word among long ones is enough to pull the tier out.
+  assert.equal(broaden(normalizeSearchQuery('an important message')!)?.searchContent, false);
+});
+
+test('there is nothing to broaden to when the query is one word', () => {
+  // Also the guard that keeps a fruitless search from being run twice.
+  assert.equal(broaden(normalizeSearchQuery('merge')!), null);
+  assert.equal(broaden(normalizeSearchQuery('file_path')!), null);
+  // A CJK particle on its own segments to nothing, so there is no broader question to ask.
+  assert.equal(broaden(normalizeSearchQuery('的')!), null);
+  // And a broadened query is never broadened again.
+  assert.equal(broaden(broaden(normalizeSearchQuery('the merge button')!)!), null);
+});
+
+test('broaden anchors the snippet on the longest word', () => {
+  // Anchoring on "the" would cut the window at the top of a 7 KB body instead of at the part the
+  // user was looking for.
+  assert.equal(normalizeSearchQuery('the working directory')?.anchor, 'directory');
+  // One word: the anchor is the query, and the snippet's coalesce never reaches past the phrase.
+  assert.equal(normalizeSearchQuery('merge')?.anchor, 'merge');
+});
+
+test('broaden escapes LIKE metacharacters per word, and leaves the anchor literal', () => {
+  const wide = broaden(normalizeSearchQuery('100% a_b')!);
+  assert.deepEqual(wide?.patterns, [['%100\\%%'], ['%a\\_b%']]);
+  // anchor and raw feed strpos(), which is a literal search.
+  assert.equal(wide?.anchor, '100%');
+});
+
+test('the word count is capped, so a pasted paragraph is a bounded number of passes', () => {
+  // Dropping the tail only widens what the fallback matches, and the phrase query ran first
+  // regardless.
+  const many = normalizeSearchQuery(Array.from({ length: 30 }, (_, i) => `w${i}`).join(' '));
+  assert.equal(broaden(many!)?.patterns.length, 8);
 });
 
 test('a stripped query still escapes LIKE metacharacters', () => {

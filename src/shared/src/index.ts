@@ -10,6 +10,7 @@ export * from './models';
 export * from './planUsage';
 export * from './providerPresets';
 export * from './retry';
+export * from './searchTerms';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the

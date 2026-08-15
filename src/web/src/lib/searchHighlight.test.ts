@@ -71,3 +71,34 @@ describe('splitHighlight', () => {
     }
   });
 });
+
+describe('splitHighlight, on a snippet the phrase is absent from', () => {
+  it('marks each word instead — the row was admitted by the words', () => {
+    const segs = splitHighlight('Confirm the working directory', 'confirm directory');
+    expect(segs.filter((s) => s.match).map((s) => s.text)).toEqual(['Confirm', 'directory']);
+    expect(rejoin(segs)).toBe('Confirm the working directory');
+  });
+
+  it('still prefers the phrase where it is present', () => {
+    const segs = splitHighlight('Confirm the working directory', 'the working directory');
+    expect(segs.filter((s) => s.match).map((s) => s.text)).toEqual(['the working directory']);
+  });
+
+  it('marks the longer word where two of them overlap', () => {
+    const segs = splitHighlight('there and then', 'the there');
+    expect(segs.filter((s) => s.match).map((s) => s.text)).toEqual(['there', 'the']);
+    expect(rejoin(segs)).toBe('there and then');
+  });
+
+  it('marks the words of a segmented Chinese query', () => {
+    const segs = splitHighlight('修复了合并问题', '修复合并');
+    expect(segs.filter((s) => s.match).map((s) => s.text)).toEqual(['修复', '合并']);
+    expect(rejoin(segs)).toBe('修复了合并问题');
+  });
+
+  it('falls back to plain text when no word is present', () => {
+    expect(splitHighlight('nothing here', 'zzz yyy')).toEqual([
+      { text: 'nothing here', match: false },
+    ]);
+  });
+});

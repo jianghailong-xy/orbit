@@ -19,6 +19,11 @@ import { relTime } from './Transcript';
  * showing of it: it loads back to a hit that isn't in the window yet, scrolls to it, and paints
  * every occurrence in view through the CSS Custom Highlight API — Ranges, never injected `<mark>`
  * elements, because the transcript is React-rendered and streams while you read it.
+ *
+ * A hit is an event mentioning every word of the query, not one holding the query verbatim: people
+ * search from memory, and even a phrase copied out of a rendered reply rarely survives the trip
+ * back to the markdown source it was stored as. Both halves match that way — the server picks the
+ * events, `queryWords` paints the words.
  */
 
 const HL_ALL = 'orbit-find';
