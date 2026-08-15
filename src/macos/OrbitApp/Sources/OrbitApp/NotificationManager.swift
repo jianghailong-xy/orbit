@@ -10,6 +10,11 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     /// Fired (on the main actor) when the user acts on a notification.
     var onIntent: ((AppIntent) -> Void)?
 
+    /// Fired (on the main actor) for an approval that lands while Orbit is the foreground app on
+    /// iOS, where it is re-stated as the app's own card instead of a system banner (see
+    /// `willPresent`). Carries the session and the push's own line, "Needs your reply · Bash".
+    var onForegroundApproval: ((String, String) -> Void)?
+
     /// The session whose console is on screen, kept current by `AppModel.syncConsoleFocus`. The
     /// notification *logic* already skips this session (`SessionDelta.diff`'s `focusedSessionID`) —
     /// but the server's APNs approval push can't know what you are looking at, so on iOS an approval
@@ -92,16 +97,45 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         await MainActor.run { self.onIntent?(intent) }
     }
 
-    /// Show banners even when Orbit is the foreground app — except for the session already filling
-    /// the screen, whose alert would land on top of the card it is announcing. That one is still
-    /// *delivered* (`.list`), so it sits in Notification Center for as long as it's unanswered and
-    /// the badge still counts it; only the interruption is dropped.
+    /// What an alert does while Orbit is the app you're looking at.
+    ///
+    /// **iOS: never a banner.** A pushed approval landing over the app drew a full-width system
+    /// banner in the very strip the in-app toast occupies — two differently shaped cards competing
+    /// for one place on screen, and, since the toast learned to be flicked away, giving the same
+    /// upward swipe opposite meanings (a banner tucks itself into Notification Center; a toast is
+    /// gone for good). So the foreground speaks one language. The alert is still *delivered* —
+    /// `.list` keeps it in Notification Center and the badge still counts it — and an approval,
+    /// the one kind that's blocking somebody, comes back as the app's own card via
+    /// `onForegroundApproval`. A settled run gets no card: in the foreground that outcome is
+    /// already on screen in the list, the row's status and the transcript itself.
+    ///
+    /// **macOS keeps the banner.** Its notifications land in a screen corner rather than over the
+    /// window, so nothing competes there, and the app can be frontmost with every window closed
+    /// (the menu-bar tray) — where an in-app card would have nowhere to appear at all.
+    ///
+    /// Either way the session already filling the screen is left alone: its console shows the
+    /// approval card itself, so restating it is noise on top of the thing it announces.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification) async
         -> UNNotificationPresentationOptions {
-        let session = notification.request.content.userInfo[Notifications.keySession] as? String
+        let content = notification.request.content
+        let session = content.userInfo[Notifications.keySession] as? String
         let focused = await MainActor.run { self.focusedSessionID }
+        #if os(iOS)
+        if let session, session != focused,
+           content.categoryIdentifier == Notifications.approvalCategory {
+            let line = content.body
+            await MainActor.run { self.onForegroundApproval?(session, line) }
+            // The sound stays, alone of the banner's parts: it's the one that still reaches you
+            // with the app open on a desk you aren't looking at, and being audio it can't collide
+            // with anything on screen. Nothing else is loud enough to warrant it — a settled run
+            // is not blocking anybody.
+            return [.list, .sound]
+        }
+        return [.list]
+        #else
         if let session, session == focused { return [.list] }
         return [.banner, .sound, .list]
+        #endif
     }
 }
