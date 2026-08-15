@@ -448,7 +448,13 @@ public struct TranscriptReducer: Sendable, Codable {
         flushStreaming()
         markOutageOver()          // the session went on — whatever was waiting on a retry no longer is
         let cid = str(ev, "clientTurnId")
-        let body = str(ev, "text") ?? str(ev, "content") ?? ""
+        // What the runner echoes is what it was *given*, which includes anything delivery appended
+        // (a `#`-reference expansion, a list's condition board). Split at ingest rather than at
+        // render, because `echoes` below falls back to comparing this against the text the person
+        // typed: an unsplit body never matches, so a referencing message would strand its
+        // optimistic bubble on "Sending…" and append a duplicate next to it.
+        let delivered = splitDeliveredMessage(str(ev, "text") ?? str(ev, "content") ?? "")
+        let body = delivered.text
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -478,6 +484,7 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.pending = false
                 if let tid = ev.turnId { b.turnId = tid }    // adopt the id if we matched by text
                 if !body.isEmpty { b.text = body }
+                b.injected = delivered.injected
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 state.items[i] = .user(b)
@@ -485,7 +492,8 @@ public struct TranscriptReducer: Sendable, Codable {
             return
         }
         state.items.append(.user(UserBubble(id: nextID(), text: body, attachments: atts, ts: ev.ts,
-                                            clientTurnId: cid, turnId: ev.turnId, pending: false)))
+                                            clientTurnId: cid, turnId: ev.turnId, pending: false,
+                                            injected: delivered.injected)))
     }
 
     private mutating func appendInterrupt(seq: Int) {

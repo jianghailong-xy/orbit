@@ -336,6 +336,48 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items[0].asUser?.pending, false)
     }
 
+    /// The text-fallback match has to compare against what the person typed, not against what the
+    /// runner was handed. Delivery appends a `#`-reference expansion or a list's condition board to
+    /// the body it echoes, so an unsplit comparison never matches an untagged optimistic bubble —
+    /// the message would sit on "Sending…" forever with a duplicate of itself underneath.
+    func testOptimisticUserReconcilesWhenDeliveryAppendedContext() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c9", text: "帮我看下 #FineWeb 为什么卡住了")
+
+        // No clientTurnId echoed and no turnId tagged yet: the text fallback is the only match left.
+        let echoed = """
+            帮我看下 #FineWeb 为什么卡住了
+
+            <referenced-list id="l1">
+              标题   FineWeb CC-MAIN-2025-26
+            </referenced-list>
+            """
+        r.apply(RunEvent(seq: 10, type: .user, payload: .object(["text": .string(echoed)])))
+
+        XCTAssertEqual(r.state.items.count, 1, "must reconcile, not duplicate")
+        XCTAssertEqual(r.state.items[0].asUser?.pending, false)
+        XCTAssertEqual(r.state.items[0].asUser?.text, "帮我看下 #FineWeb 为什么卡住了")
+        XCTAssertEqual(r.state.items[0].asUser?.injected.count, 1)
+    }
+
+    /// The bubble keeps what was typed; Orbit's own context rides alongside it so the view can name
+    /// it without putting it inside somebody's sentence.
+    func testDurableUserEventSplitsAppendedContextOutOfTheBubble() {
+        var r = TranscriptReducer()
+
+        let echoed = """
+            这个列表现在什么情况？
+
+            <list-conditions list="l1" title="FineWeb">
+              配额挡住派发｜累计 47 次
+            </list-conditions>
+            """
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string(echoed)])))
+
+        XCTAssertEqual(r.state.items[0].asUser?.text, "这个列表现在什么情况？")
+        XCTAssertEqual(r.state.items[0].asUser?.injected.count, 1)
+    }
+
     /// Regression (the reported iOS bug): the durable `user` event can beat the POST /turns response
     /// that assigns the turnId — iOS runs SSE and REST on separate connection pools, so their
     /// ordering isn't guaranteed. The optimistic bubble is still untagged (turnId nil) when the event

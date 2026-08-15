@@ -111,10 +111,15 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// of its own. Replaces the "Sending…"/"Queued" indicator with "Not delivered" instead of
     /// leaving a message that is going nowhere looking like it is still on its way.
     public var undelivered: Bool
+    /// What delivery appended to this message — a `#`-reference expansion, a list's condition
+    /// board — kept verbatim and out of `text`. The runner echoes what it *received*, so without
+    /// this separation Orbit's own generated context sits inside the person's bubble as if they
+    /// had typed it. Named on one line by the view; see `splitDeliveredMessage`.
+    public var injected: [String]
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
-                undelivered: Bool = false) {
+                undelivered: Bool = false, injected: [String] = []) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -124,12 +129,13 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.pending = pending
         self.queued = queued
         self.undelivered = undelivered
+        self.injected = injected
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
+        case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered, injected
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -142,6 +148,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
         pending = (try? c.decodeIfPresent(Bool.self, forKey: .pending)) ?? false
         queued = (try? c.decodeIfPresent(Bool.self, forKey: .queued)) ?? false
         undelivered = (try? c.decodeIfPresent(Bool.self, forKey: .undelivered)) ?? false
+        injected = (try? c.decodeIfPresent([String].self, forKey: .injected)) ?? []
     }
 }
 

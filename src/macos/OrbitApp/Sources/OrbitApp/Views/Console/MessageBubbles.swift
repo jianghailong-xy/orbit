@@ -16,6 +16,7 @@ struct UserBubbleView: View {
     /// Nil for every settled/inline bubble, so the Cancel affordance shows on queued turns alone.
     var onCancelQueued: (() -> Void)? = nil
     @State private var expanded = false
+    @State private var showInjected = false
     @State private var hovering = false
     @State private var copied = false
     // Collapse a giant pasted bubble: one huge Text lays out synchronously and stalls the UI.
@@ -62,6 +63,28 @@ struct UserBubbleView: View {
                 if long {
                     Button(expanded ? "Show less" : "Show more") { expanded.toggle() }
                         .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                // What delivery appended, named rather than shown. Hiding it outright would trade
+                // one problem for a worse one — the agent answering about a quota outage nobody
+                // appears to have raised — so it stays reachable, by tap here because there is no
+                // hover to put a tooltip on (web uses one).
+                if !bubble.injected.isEmpty {
+                    Button {
+                        showInjected.toggle()
+                    } label: {
+                        Text("⊕ Orbit attached: \(describeInjected(bubble.injected))")
+                            .font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    if showInjected {
+                        Text(bubble.injected.joined(separator: "\n\n"))
+                            .font(.orbitLabel.monospaced())
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 10).padding(.vertical, 6)
+                            .background(.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                    }
                 }
                 meta
             }
