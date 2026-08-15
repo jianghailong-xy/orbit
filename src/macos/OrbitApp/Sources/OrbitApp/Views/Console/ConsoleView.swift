@@ -35,30 +35,32 @@ struct ConsoleView: View {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
                     TranscriptView(console: console)
-                    // Errors only, and sticky until the ✕ — this band is in flow, so anything that
-                    // comes and goes on a timer here shoves the composer around while the user is
-                    // typing in it. Confirmations belong in the toast host (see `showToast`).
-                    if let msg = console.statusMessage {
-                        HStack {
-                            Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
-                            Spacer()
-                            Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
-                                .buttonStyle(.plain).foregroundStyle(.secondary)
-                        }
-                        .padding(.horizontal, 16).padding(.vertical, 4)
-                        .background(.bar)
-                    }
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
-                    // Staged attachments, background tray, git bar, composer — web's order
+                    // Error, staged attachments, background tray, git bar, composer — web's order
                     // (`workspace-composer`). The image you just added tops the stack rather than
                     // sitting between the tray and the composer, where it read as another piece of
-                    // session chrome instead of part of the message about to be sent.
-                    ComposerAttachmentsView(console: console)
-                    BackgroundTrayView(procs: console.state.background)
-                    WorktreeBar(console: console)
-                    ComposerView(console: console)
+                    // session chrome instead of part of the message about to be sent. The band owns
+                    // the gutter and the gaps; members only say whether they are on screen.
+                    ComposerBand {
+                        // Errors only, and sticky until the ✕ — this row is in flow, so anything that
+                        // comes and goes on a timer here shoves the composer around while the user is
+                        // typing in it. Confirmations belong in the toast host (see `showToast`).
+                        if let msg = console.statusMessage {
+                            HStack {
+                                Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(6)
+                                Spacer()
+                                Button { console.statusMessage = nil } label: { Image(systemName: "xmark") }
+                                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                            }
+                            .padding(.bottom, .composerBandGap)
+                        }
+                        ComposerAttachmentsView(console: console)
+                        BackgroundTrayView(procs: console.state.background)
+                        WorktreeBar(console: console)
+                        ComposerView(console: console)
+                    }
                 }
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)

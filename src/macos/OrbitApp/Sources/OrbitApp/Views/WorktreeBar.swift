@@ -50,7 +50,7 @@ struct WorktreeBar: View {
         .padding(.horizontal, 10).padding(.vertical, 8)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.orange.opacity(0.4)))
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
+        .padding(.bottom, .composerBandGap)
     }
 
     // MARK: - worktree pill
@@ -100,9 +100,13 @@ struct WorktreeBar: View {
         // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
         // bars share `min-height: 30`) so the stack above the composer reads as one system.
         .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
-        .background(.bar, in: RoundedRectangle(cornerRadius: 8))
+        // The same subtle tint the tray uses, NOT `.bar`: the two are peers in the stack and have to
+        // read as one surface, and `.bar` here is now the enclosing band's own material — the pill
+        // would dissolve into its background (web parity: `.wt-bar` and `.bg-tray` are both
+        // `--bg-subtle`).
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
-        .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
+        .padding(.bottom, .composerBandGap)
     }
 
     @ViewBuilder
@@ -684,7 +688,7 @@ struct BackgroundTrayView: View {
             .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
-            .padding(.horizontal, 16).padding(.bottom, 8)
+            .padding(.bottom, .composerBandGap)
         }
     }
 

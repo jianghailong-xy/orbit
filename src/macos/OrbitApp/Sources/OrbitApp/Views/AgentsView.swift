@@ -562,20 +562,22 @@ struct NewSessionView: View {
                 }
             }
 
-            Divider()
-            // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
-            if let msg = draft.statusMessage {
-                HStack {
-                    Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
-                    Spacer()
-                    Button { draft.statusMessage = nil } label: { Image(systemName: "xmark") }
-                        .buttonStyle(.plain).foregroundStyle(.secondary)
+            // Same band as the live console (its `Divider` replaces the one that used to be hand-rolled
+            // here), so the draft composer and the real one are inset and spaced identically.
+            ComposerBand {
+                // createSession failures surface on the draft's statusMessage (mirrors ConsoleView).
+                if let msg = draft.statusMessage {
+                    HStack {
+                        Text(msg).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(2)
+                        Spacer()
+                        Button { draft.statusMessage = nil } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.plain).foregroundStyle(.secondary)
+                    }
+                    .padding(.bottom, .composerBandGap)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 4)
-                .background(.bar)
+                ComposerAttachmentsView(console: draft)
+                ComposerView(console: draft, autoFocus: true)
             }
-            ComposerAttachmentsView(console: draft)
-            ComposerView(console: draft, autoFocus: true)
         }
         #if os(iOS)
         // The agent is *where* the session runs — a standing context, not a per-session choice, so
