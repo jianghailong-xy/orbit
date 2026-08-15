@@ -77,16 +77,30 @@ function serviceWith(world: World) {
   return { service, written };
 }
 
-test('a preview reports which tasks become runnable, which is what is being approved', async () => {
+test('removing a task\'s last prerequisite frees it but does not start it', async () => {
+  // The trap this card exists to avoid, and one it fell into itself. BLOCKED -> NONE reads like a
+  // release; the sweep requires a prerequisite that is DONE, so a task with none left is never
+  // auto-started. Counting it as runnable promised runs that never happened.
   const { service } = serviceWith({ edges: [{ taskId: A, dependsOnTaskId: B }] });
 
   const preview = await service.previewDag(OWNER, LIST, [rm(A, B)]);
 
-  assert.equal(preview.becomingRunnable, 1);
+  assert.equal(preview.becomingRunnable, 0);
+  assert.equal(preview.becomingManual, 1);
   assert.deepEqual(
     preview.changes.map((c) => [c.title, c.from, c.to]),
     [['A', 'BLOCKED', 'NONE']],
   );
+});
+
+test('a task released by a prerequisite that is already DONE does start', async () => {
+  // The genuine release: it keeps a prerequisite, and that prerequisite is finished.
+  const { service } = serviceWith({ edges: [{ taskId: A, dependsOnTaskId: B }] });
+
+  const preview = await service.previewDag(OWNER, LIST, [rm(A, B), add(A, C)]);
+
+  assert.equal(preview.becomingRunnable, 1);
+  assert.equal(preview.becomingManual, 0);
 });
 
 test('a preview names tasks by title, since ids are not what a human approves', async () => {
@@ -254,8 +268,8 @@ function batchService(world: {
   return service;
 }
 
-test('a chain of fifty starts exactly one run, and the preview says so', async () => {
-  // The number the card leads with. Fifty titles look the same whether they cost 1 run or 50.
+test('a chain of fifty starts nothing until its root is started by hand', async () => {
+  // Its root has no prerequisites, so the sweep never picks it up; the other 49 wait on it.
   const tasks = Array.from({ length: 50 }, (_, i) => ({
     title: `step ${i}`,
     ref: `s${i}`,
@@ -266,34 +280,42 @@ test('a chain of fifty starts exactly one run, and the preview says so', async (
   const p = await batchService().previewCreateMany(OWNER, { tasks } as never);
 
   assert.equal(p.taskCount, 50);
-  assert.equal(p.startingNow, 1);
+  assert.equal(p.startingNow, 0);
   assert.equal(p.blocked, 49);
+  assert.equal(p.needsManualStart, 1);
 });
 
-test('fifty independent tasks start fifty runs', async () => {
+test('fifty independent tasks start nothing — auto-run needs a prerequisite to have finished', async () => {
+  // Caught by running the real approval flow: the card said one task would start within the
+  // minute and it never did. AUTO_RUN_READY_SQL requires a prerequisite that is DONE, because
+  // auto-run means "start when what you were waiting for finishes", not "start because nothing
+  // is in the way" — `autoRunWhenReady` is documented as ignored with no prerequisites. The roots
+  // of every fresh DAG land here, so the old reading promised fifty runs and delivered none.
   const tasks = Array.from({ length: 50 }, (_, i) => ({ title: `t ${i}`, assigneeId: 'w1' }));
 
   const p = await batchService().previewCreateMany(OWNER, { tasks } as never);
 
-  assert.equal(p.startingNow, 50);
+  assert.equal(p.startingNow, 0);
   assert.equal(p.blocked, 0);
+  assert.equal(p.needsManualStart, 50);
 });
 
-test('a task whose assignee has no runner cannot run, and is not called blocked', async () => {
+test('a released task whose assignee has no runner cannot run, and is not called blocked', async () => {
   // Nothing finishing will release it — it waits for a person. Counting it as blocked would say
   // the batch is progressing when it is inert.
-  const p = await batchService({ runners: { w1: null } }).previewCreateMany(OWNER, {
-    tasks: [{ title: 'a', assigneeId: 'w1' }],
-  } as never);
+  const p = await batchService({ runners: { w1: null }, statuses: { old1: 'DONE' } }).previewCreateMany(
+    OWNER,
+    { tasks: [{ title: 'a', assigneeId: 'w1', dependsOnTaskIds: ['old1'] }] } as never,
+  );
 
   assert.equal(p.startingNow, 0);
   assert.equal(p.blocked, 0);
   assert.equal(p.notDispatchable, 1);
 });
 
-test('auto-run switched off keeps a task from starting', async () => {
-  const p = await batchService().previewCreateMany(OWNER, {
-    tasks: [{ title: 'a', assigneeId: 'w1', autoRunWhenReady: false }],
+test('auto-run switched off keeps a released task from starting', async () => {
+  const p = await batchService({ statuses: { old1: 'DONE' } }).previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1', dependsOnTaskIds: ['old1'], autoRunWhenReady: false }],
   } as never);
 
   assert.equal(p.startingNow, 0);

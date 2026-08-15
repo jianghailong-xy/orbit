@@ -23,6 +23,7 @@ interface DagPreview {
   }>;
   changes?: Array<{ taskId: string; title?: string; from: string; to: string }>;
   becomingRunnable?: number;
+  becomingManual?: number;
   becomingBlocked?: number;
   effectiveCount?: number;
   edgesBefore?: number;
@@ -36,6 +37,7 @@ interface BatchPreview {
   taskCount?: number;
   startingNow?: number;
   blocked?: number;
+  needsManualStart?: number;
   notDispatchable?: number;
   internalEdges?: number;
   externalEdges?: number;
@@ -236,6 +238,7 @@ export function ApprovalPanel({
 function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
   const starting = preview.startingNow ?? 0;
   const blocked = preview.blocked ?? 0;
+  const manual = preview.needsManualStart ?? 0;
   const inert = preview.notDispatchable ?? 0;
   const edges = (preview.internalEdges ?? 0) + (preview.externalEdges ?? 0);
   return (
@@ -245,6 +248,14 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
           {starting} start{starting === 1 ? 's' : ''} running within the minute
         </span>
         {blocked > 0 && <span className="dag-impact">{blocked} wait on a prerequisite</span>}
+        {manual > 0 && (
+          // Every root of a new DAG. Auto-run starts a task when a prerequisite finishes, so one
+          // with no prerequisites is never picked up however unblocked it looks — saying "will
+          // start" here is what this card got wrong before it was ever used.
+          <span className="dag-impact">
+            {manual} need{manual === 1 ? 's' : ''} a manual start — nothing will trigger {manual === 1 ? 'it' : 'them'}
+          </span>
+        )}
         {inert > 0 && (
           // Not the same as blocked: nothing finishing will release these. They sit until a
           // person assigns them, so a batch that is silently all of these did nothing at all.
@@ -289,6 +300,7 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
  */
 function DagChangeBody({ note, preview }: { note: string; preview: DagPreview }): JSX.Element {
   const runnable = preview.becomingRunnable ?? 0;
+  const manual = preview.becomingManual ?? 0;
   const blocked = preview.becomingBlocked ?? 0;
   const ops = preview.ops ?? [];
   return (
@@ -305,7 +317,14 @@ function DagChangeBody({ note, preview }: { note: string; preview: DagPreview })
             {blocked} task{blocked === 1 ? ' stops' : 's stop'} being runnable
           </span>
         )}
-        {runnable === 0 && blocked === 0 && (
+        {manual > 0 && (
+          // Freed from waiting and still not going anywhere: losing your last prerequisite means
+          // nothing is left to trigger you.
+          <span className="dag-impact">
+            {manual} stop{manual === 1 ? 's' : ''} waiting, but now need{manual === 1 ? 's' : ''} a manual start
+          </span>
+        )}
+        {runnable === 0 && blocked === 0 && manual === 0 && (
           <span className="dag-impact">No task changes state — this only rewrites edges</span>
         )}
       </div>

@@ -917,12 +917,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     let startingNow = 0;
     let blocked = 0;
+    let needsManualStart = 0;
     let notDispatchable = 0;
     let internalEdges = 0;
     let externalEdges = 0;
     for (const item of items) {
       internalEdges += item.dependsOnRefs?.length ?? 0;
       externalEdges += item.dependsOnTaskIds?.length ?? 0;
+      // A task with no prerequisites is never auto-run, however runnable it looks: the sweep's
+      // predicate requires a prerequisite that is DONE (AUTO_RUN_READY_SQL), because auto-run
+      // means "start when what you were waiting for finishes" — not "start because nothing is in
+      // the way". `autoRunWhenReady` says as much: ignored when there are no prerequisites.
+      //
+      // Getting this wrong is not a rounding error on the card. The roots of a fresh DAG have no
+      // prerequisites, so a flat batch of fifty would have promised fifty runs within the minute
+      // and started none of them.
+      const hasPrerequisites =
+        (item.dependsOnRefs?.length ?? 0) + (item.dependsOnTaskIds?.length ?? 0) > 0;
+      if (!hasPrerequisites) {
+        needsManualStart += 1;
+        continue;
+      }
       // A prerequisite created by this same batch is OPEN the moment it exists, so anything
       // naming one waits — no need to consult the graph for it.
       const waitsOnBatch = (item.dependsOnRefs?.length ?? 0) > 0;
@@ -942,6 +957,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       taskCount: items.length,
       startingNow,
       blocked,
+      // Written and idle: nothing is waiting on them and nothing will start them. Every root of a
+      // new DAG lands here, which is why it is named rather than folded into a runnable count.
+      needsManualStart,
       // Written but inert: no assignee, no runner behind the assignee, or auto-run switched off.
       // Worth separating from `blocked`, because these do not start when something finishes —
       // they wait for a person, and a batch that is silently all of these did nothing.
@@ -3080,7 +3098,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       noopCount: noop.length,
       cycle: cycle?.map((id) => ({ taskId: id, title: name(id) })) ?? null,
       changes: changes.map((c) => ({ ...c, title: name(c.taskId) })),
-      becomingRunnable: changes.filter((c) => c.to === 'READY' || c.to === 'NONE').length,
+      // Only READY. A task whose last prerequisite is *removed* becomes NONE, which looks like a
+      // release and is not one: the sweep requires a prerequisite that is DONE, so a task with no
+      // prerequisites left is never auto-started — it waits for a person. Counting NONE here
+      // promised runs that never happened.
+      becomingRunnable: changes.filter((c) => c.to === 'READY').length,
+      // Freed from waiting, but now nobody will start them either.
+      becomingManual: changes.filter((c) => c.to === 'NONE').length,
       becomingBlocked: changes.filter((c) => c.to === 'BLOCKED' || c.to === 'BLOCKED_FAILED').length,
       edgesBefore: current.length,
       edgesAfter: after.length,

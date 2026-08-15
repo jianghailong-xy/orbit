@@ -51,6 +51,16 @@ describe('batch create approval', () => {
     expect(html).toContain('create 50 tasks?');
   });
 
+  it('says a root needs a manual start instead of promising it will run', () => {
+    // The bug the real approval flow caught: the card claimed a task would start within the
+    // minute, and it never did. Auto-run triggers on a prerequisite finishing, so a task with
+    // none is never picked up — and every root of a fresh DAG is exactly that.
+    const html = render(batchApproval({ taskCount: 50, startingNow: 0, needsManualStart: 50 }));
+
+    expect(html).toContain('50 need a manual start');
+    expect(html).toContain('0 start running within the minute');
+  });
+
   it('separates tasks that cannot run from tasks that are merely waiting', () => {
     // Nothing finishing will release these — they sit until a person assigns them, and a batch
     // that is silently all of them did nothing at all.
@@ -142,6 +152,20 @@ describe('DAG change approval', () => {
     );
 
     expect(html).not.toContain('Edges written');
+  });
+
+  it('does not call a task freed of its last prerequisite runnable', () => {
+    // BLOCKED -> NONE reads like a release and is not one: nothing is left to trigger it.
+    const html = render(
+      dagApproval({
+        input: {
+          preview: { listTitle: 'X', ops: [], changes: [], becomingRunnable: 0, becomingManual: 3, becomingBlocked: 0 },
+        },
+      }),
+    );
+
+    expect(html).toContain('3 stop waiting, but now need a manual start');
+    expect(html).not.toContain('become runnable');
   });
 
   it('says so plainly when a restructure moves no task', () => {
