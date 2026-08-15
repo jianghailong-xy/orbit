@@ -797,6 +797,70 @@ func TestMCPTaskCreateBatchWritesNothingWhenDenied(t *testing.T) {
 
 // Headless there is nobody to ask, so the write must go ahead exactly as it did before rather
 // than blocking forever on an approval no UI will ever show.
+// A batch that starts nothing is a bookkeeping write. Gating those made the tool unusable: fifty
+// items per call means a 27,000-task campaign is 550 cards, none of which decide anything. It is
+// also how a human opts out without a new switch — build into a paused list, release it once.
+func TestMCPTaskCreateBatchDoesNotAskWhenNothingStarts(t *testing.T) {
+	var asked bool
+	var wrote bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
+			_, _ = w.Write([]byte(`{"taskCount":50,"startingNow":0,"needsManualStart":50}`))
+		case strings.Contains(r.URL.Path, "approval"):
+			asked = true
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+		default:
+			wrote = true
+			_, _ = w.Write([]byte(`[{"id":"t1"}]`))
+		}
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{map[string]interface{}{"title": "a"}},
+	})
+
+	if res["isError"] == true {
+		t.Fatalf("batch returned an error: %#v", res["content"])
+	}
+	if asked {
+		t.Fatal("a batch that starts nothing still raised an approval")
+	}
+	if !wrote {
+		t.Fatal("the batch was not written")
+	}
+}
+
+// The consequence is what earns a card: these begin within the minute.
+func TestMCPTaskCreateBatchStillAsksWhenRunsWouldStart(t *testing.T) {
+	var asked bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
+			_, _ = w.Write([]byte(`{"taskCount":50,"startingNow":40}`))
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			asked = true
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+		default:
+			_, _ = w.Write([]byte(`[{"id":"t1"}]`))
+		}
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{map[string]interface{}{"title": "a"}},
+	})
+
+	if !asked {
+		t.Fatal("a batch that starts 40 runs was written without asking")
+	}
+}
+
 func TestMCPTaskCreateBatchHeadlessDoesNotAsk(t *testing.T) {
 	var asked bool
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

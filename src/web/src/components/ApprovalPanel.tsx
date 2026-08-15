@@ -270,7 +270,7 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
           // Not the same as blocked: nothing finishing will release these. They sit until a
           // person assigns them, so a batch that is silently all of these did nothing at all.
           <span className="dag-impact dag-impact--block">
-            {inert} cannot run — unassigned, no runner, or auto-run off
+            {inert} cannot run — unassigned, no runner, auto-run off, or the list is paused
           </span>
         )}
       </div>

@@ -940,9 +940,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }),
       this.prisma.taskList.findMany({
         where: { id: { in: listIds }, ownerId },
-        select: { id: true, title: true },
+        select: { id: true, title: true, paused: true },
       }),
     ]);
+    // A paused list is out of the sweep entirely (AUTO_RUN_READY_SQL), so nothing landing in one
+    // starts however runnable it looks. Without this the card announced runs for a campaign that
+    // was explicitly stopped — and `paused` is precisely how someone builds a large campaign
+    // before releasing it, so it is the case that matters most.
+    const pausedLists = new Set(lists.filter((l) => l.paused).map((l) => l.id));
     const runnerOf = new Map(assignees.map((a) => [a.id, a.runnerId]));
     const nameOf = new Map(assignees.map((a) => [a.id, a.name]));
     const statusOf = new Map(prerequisites.map((t) => [t.id, t.status]));
@@ -981,7 +986,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       const dispatchable =
-        item.autoRunWhenReady !== false && !!item.assigneeId && !!runnerOf.get(item.assigneeId);
+        item.autoRunWhenReady !== false &&
+        !!item.assigneeId &&
+        !!runnerOf.get(item.assigneeId) &&
+        !(item.listId && pausedLists.has(item.listId));
       if (dispatchable) startingNow += 1;
       else notDispatchable += 1;
     }

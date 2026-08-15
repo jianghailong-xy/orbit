@@ -654,6 +654,23 @@ func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map
 	if err != nil {
 		return toolResult("batch preview failed: "+err.Error(), true)
 	}
+	// Ask about the consequence, not about the operation.
+	//
+	// What an approval protects is runs starting — real model calls, real money, real side
+	// effects — not rows being written. A batch that starts nothing is a bookkeeping write, and
+	// gating those made the tool unusable at any real scale: fifty items per call means a
+	// 27,000-task campaign is 550 cards, none of which decide anything.
+	//
+	// This also gives the escape hatch back to the human without a new switch. Building into a
+	// paused list, or with autoRunWhenReady off, starts nothing — so it is never asked — and one
+	// deliberate unpause releases the campaign afterwards. `paused` was already the control for
+	// "I am still assembling this"; it now does that job here too.
+	var startsNow struct {
+		StartingNow int `json:"startingNow"`
+	}
+	if err := json.Unmarshal(preview, &startsNow); err == nil && startsNow.StartingNow == 0 {
+		return s.createBatchNow(body)
+	}
 	input := map[string]interface{}{"tasks": bodies, "preview": json.RawMessage(preview)}
 	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
 		"toolName": batchApprovalToolName,

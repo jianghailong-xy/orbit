@@ -149,7 +149,7 @@ public extension Approvals {
             lines.append("\(p.needsManualStart) need\(p.needsManualStart == 1 ? "s" : "") a manual start — nothing will trigger \(p.needsManualStart == 1 ? "it" : "them")")
         }
         if p.notDispatchable > 0 {
-            lines.append("\(p.notDispatchable) cannot run — unassigned, no runner, or auto-run off")
+            lines.append("\(p.notDispatchable) cannot run — unassigned, no runner, auto-run off, or the list is paused")
         }
         return lines
     }

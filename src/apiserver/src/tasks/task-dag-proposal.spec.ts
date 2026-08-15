@@ -241,6 +241,7 @@ test('applying a batch that would create a cycle refuses before opening a transa
 function batchService(world: {
   runners?: Record<string, string | null>;
   statuses?: Record<string, string>;
+  pausedLists?: string[];
 } = {}) {
   const runners = world.runners ?? { w1: 'r1' };
   const statuses = world.statuses ?? {};
@@ -258,7 +259,15 @@ function batchService(world: {
           .map(([id, status]) => ({ id, status })),
       count: async () => Object.keys(statuses).length,
     },
-    taskList: { findMany: async () => [], findFirst: async () => ({ id: LIST, title: 'L' }) },
+    taskList: {
+      findMany: async ({ where }: any) =>
+        (where?.id?.in ?? []).map((id: string) => ({
+          id,
+          title: 'L',
+          paused: (world.pausedLists ?? []).includes(id),
+        })),
+      findFirst: async () => ({ id: LIST, title: 'L' }),
+    },
   };
   const service = new TasksService(prisma as never, {} as never, { publishForUser: () => undefined } as never);
   // Ownership assertions are covered by createMany's own tests; they are not what this measures.
@@ -349,4 +358,27 @@ test('the preview rejects what the write would reject, before anyone is asked', 
       } as never),
     /must name an earlier task/,
   );
+});
+
+test('nothing starts in a paused list, however runnable it looks', async () => {
+  // The sweep skips paused lists entirely, so announcing runs for one is a promise that cannot be
+  // kept — and `paused` is exactly how a large campaign is assembled before it is released, which
+  // makes it the case that matters most.
+  const p = await batchService({
+    statuses: { old1: 'DONE' },
+    pausedLists: [LIST],
+  }).previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1', listId: LIST, dependsOnTaskIds: ['old1'] }],
+  } as never);
+
+  assert.equal(p.startingNow, 0);
+  assert.equal(p.notDispatchable, 1);
+});
+
+test('the same batch in a live list does start', async () => {
+  const p = await batchService({ statuses: { old1: 'DONE' } }).previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1', listId: LIST, dependsOnTaskIds: ['old1'] }],
+  } as never);
+
+  assert.equal(p.startingNow, 1);
 });
