@@ -10,6 +10,8 @@ interface Bound {
   /** The session the list currently points at, if any. */
   session?: { id: string; deletedAt: Date | null } | null;
   foremanWorkspaceId?: string | null;
+  /** This list's tasks, as assignee -> count, for the borrow-a-workspace fallback. */
+  assignees?: Array<{ id: string; count: number; deleted?: boolean }>;
 }
 
 function makeService(bound: Bound = {}) {
@@ -29,6 +31,18 @@ function makeService(bound: Bound = {}) {
       update: async ({ data }: { data: Record<string, unknown> }) => {
         written.push(data);
         return { ...list, ...data };
+      },
+    },
+    task: {
+      // Honours the deleted-assignee filter the service passes. A stub that ignored it would make
+      // the guard's own test pass with the guard deleted — and borrowing a deleted workspace
+      // produces a console that can never be opened, which is the failure this exists to prevent.
+      groupBy: async ({ where }: any) => {
+        const wantAlive = where?.assignee?.deletedAt === null;
+        return (bound.assignees ?? [])
+          .filter((a) => !(wantAlive && a.deleted))
+          .sort((x, y) => y.count - x.count)
+          .map((a) => ({ assigneeId: a.id, _count: { _all: a.count } }));
       },
     },
   } as never;
@@ -94,6 +108,48 @@ test('an explicit workspace wins over the foreman default', async () => {
   await f.open('workspace-explicit');
 
   assert.equal(f.created[0][1].workspaceId, 'workspace-explicit');
+});
+
+test('with no foreman it borrows the workspace its tasks already run in', async () => {
+  // The button was unusable without this: a foreman is opt-in and rarely set, so seven of this
+  // deployment's eight lists had nothing to fall back on and every click returned 400.
+  const f = makeService({
+    foremanWorkspaceId: null,
+    assignees: [{ id: 'workspace-busy', count: 9 }, { id: 'workspace-few', count: 2 }],
+  });
+
+  await f.open();
+
+  assert.equal(f.created[0][1].workspaceId, 'workspace-busy');
+});
+
+test('an explicit workspace still wins over everything', async () => {
+  const f = makeService({ assignees: [{ id: 'workspace-busy', count: 9 }] });
+
+  await f.open('workspace-explicit');
+
+  assert.equal(f.created[0][1].workspaceId, 'workspace-explicit');
+});
+
+test('a foreman still wins over the borrowed one', async () => {
+  const f = makeService({ assignees: [{ id: 'workspace-busy', count: 9 }] });
+
+  await f.open();
+
+  assert.equal(f.created[0][1].workspaceId, 'workspace-foreman');
+});
+
+test('a deleted workspace is never borrowed', async () => {
+  // sessions.create filters on deletedAt, so borrowing one yields a console that cannot open —
+  // the same shape as the six verifications filed against a deleted workspace earlier.
+  const f = makeService({
+    foremanWorkspaceId: null,
+    assignees: [{ id: 'workspace-gone', count: 9, deleted: true }, { id: 'workspace-alive', count: 1 }],
+  });
+
+  await f.open();
+
+  assert.equal(f.created[0][1].workspaceId, 'workspace-alive');
 });
 
 test('with no workspace anywhere it asks rather than guesses', async () => {

@@ -439,10 +439,12 @@ export class TaskListsService {
     // The foreman's workspace is the sensible default: it is already the one this list's
     // coordination runs in. An explicit argument wins, and with neither there is nowhere to open
     // a conversation — which is a caller error rather than something to guess at.
-    const runIn = workspaceId ?? list.foremanWorkspaceId;
+    const runIn = workspaceId ?? list.foremanWorkspaceId ?? (await this.busiestAssignee(id));
     if (!runIn) {
       throw new BadRequestException(
-        'no workspace to open the console in — pass workspaceId or set the list a foreman',
+        'no workspace to open the console in — this list has no foreman and none of its tasks ' +
+          'has an assignee to borrow one from. Assign a task, set the list a foreman, or pass ' +
+          'workspaceId.',
       );
     }
     const session = await this.sessions.create(
@@ -461,6 +463,30 @@ export class TaskListsService {
     });
     this.realtime.publishForUser(ownerId, RunEventType.TASK_LIST_CHANGED, id);
     return { sessionId: session.id, created: true };
+  }
+
+  /**
+   * The workspace most of this list's tasks are assigned to, or null.
+   *
+   * The console is a conversation *about* the list, so it belongs where the list's work actually
+   * runs. Without this the button was unusable: a foreman is opt-in and rarely set, so seven of
+   * this deployment's eight lists had nothing to fall back on and every click returned 400. The
+   * error message it returned was accurate and useless — it described an edge case that was in
+   * fact the normal one.
+   *
+   * Soft-deleted workspaces are excluded rather than merely sorted last. `sessions.create` filters
+   * on `deletedAt: null`, so borrowing one produces a console that cannot be opened at all —
+   * exactly the failure that put six verification tasks against a deleted workspace earlier.
+   */
+  private async busiestAssignee(listId: string): Promise<string | null> {
+    const rows = await this.prisma.task.groupBy({
+      by: ['assigneeId'],
+      where: { listId, assigneeId: { not: null }, assignee: { deletedAt: null } },
+      _count: { _all: true },
+      orderBy: { _count: { assigneeId: 'desc' } },
+      take: 1,
+    });
+    return rows[0]?.assigneeId ?? null;
   }
 
   /**
