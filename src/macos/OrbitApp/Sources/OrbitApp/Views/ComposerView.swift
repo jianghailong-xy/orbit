@@ -22,9 +22,9 @@ private final class ComposerPasteState {
 
 /// The composer band: everything below the transcript that belongs to the message you're about to
 /// send — the error strip, staged attachments, the background tray, the git bar, and the composer
-/// itself. ONE place owns the band's 16pt gutter, its top divider + `.bar` surface, and the 8pt
-/// rhythm between its members (web parity: `.workspace-composer` — a bordered container whose
-/// children each carry `margin-bottom: 8px`). Before this existed every member padded itself and the
+/// itself. ONE place owns the band's 16pt gutter, its top rule, and the 8pt rhythm between its
+/// members (web parity: `.workspace-composer` — a `border-top`-only container whose children each
+/// carry `margin-bottom: 8px`). Before this existed every member padded itself and the
 /// stack drifted: the git bar had picked up a stray 4pt top padding nobody else had, so the gap
 /// above it was 12 where the tray's was 8, and the whole stack's top edge jumped 4pt whenever a
 /// background process appeared.
@@ -42,12 +42,17 @@ struct ComposerBand<Content: View>: View {
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 10)
-            .background(.bar)
+            // NO surface of its own — the band is defined by its top rule alone (web parity:
+            // `.workspace-composer` sets `border-top` and nothing else). A `.bar` fill here reads as
+            // a grey panel behind the tray and the git bar, which web has nowhere; the two cards and
+            // the composer box each already carry their own fill + border, so they stand on the
+            // content backdrop exactly as they do on the web. (`.bar` used to sit on `ComposerView`,
+            // covering only the field and its footer — hoisting it to the band is what spread it.)
+            //
             // Full-bleed hairline (so it can't be inset by the gutter above) marking where the
-            // transcript ends: on iOS `.bar` over a light transcript is nearly invisible on its own,
-            // which left the band without a top edge. Wrapped in a stack to give the rule a
-            // horizontal axis — a bare `Divider()` in an overlay draws as a VERTICAL line down the
-            // middle instead (same fix as the sticky question header's bottom rule).
+            // transcript ends. Wrapped in a stack to give the rule a horizontal axis — a bare
+            // `Divider()` in an overlay draws as a VERTICAL line down the middle instead (same fix
+            // as the sticky question header's bottom rule).
             .overlay(alignment: .top) { VStack(spacing: 0) { Divider() } }
     }
 }

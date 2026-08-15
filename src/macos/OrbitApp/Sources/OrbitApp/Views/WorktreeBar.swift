@@ -101,9 +101,9 @@ struct WorktreeBar: View {
         // bars share `min-height: 30`) so the stack above the composer reads as one system.
         .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
         // The same subtle tint the tray uses, NOT `.bar`: the two are peers in the stack and have to
-        // read as one surface, and `.bar` here is now the enclosing band's own material — the pill
-        // would dissolve into its background (web parity: `.wt-bar` and `.bg-tray` are both
-        // `--bg-subtle`).
+        // read as one surface (web parity: `.wt-bar` and `.bg-tray` are both `--bg-subtle`). This
+        // fill is also what lets the pill stand on the bare content backdrop now that `ComposerBand`
+        // carries no surface of its own.
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
         .padding(.bottom, .composerBandGap)
