@@ -90,14 +90,27 @@ extension Color {
         #endif
     }
 
-    /// The editor/text-field surface: macOS's `.textBackgroundColor`, iOS's system background.
-    /// Used for the composer's rounded field so it reads as a distinct surface (with its border
-    /// and shadow) on both platforms.
+    /// The editor/text-field surface: macOS's `.textBackgroundColor`, and on iOS a tone that is
+    /// deliberately NOT `.systemBackground`.
+    ///
+    /// macOS paints `orbitSurface` behind the panes, so a `.textBackgroundColor` field already
+    /// separates from its backdrop. iOS does not — `orbitPaneBackground()` is a no-op there — so the
+    /// backdrop behind the composer IS `.systemBackground`, and a field filled with it is the exact
+    /// colour of what it sits on. That was survivable only while a `.bar` band was painted behind the
+    /// composer; with the band gone (web parity — `.workspace-composer` has no background) the field
+    /// would be left to a hairline plus a drop shadow that is black-on-black in dark mode, i.e. the
+    /// most important control on the screen reading fainter than the status cards above it.
+    ///
+    /// So iOS gets its own two-step: light recedes a hair off pure white — it cannot rise *above* the
+    /// white backdrop, but it stays brighter than the 4%-grey tray/git cards, keeping the ramp
+    /// backdrop > field > cards; dark lifts to a raised grey, the same trick `floatingDiscSurface`
+    /// uses for the scroll puck, where a shadow can do nothing.
     static var editorSurface: Color {
         #if os(macOS)
         Color(nsColor: .textBackgroundColor)
         #else
-        Color(uiColor: .systemBackground)
+        Color(light: Color(red: 0.980, green: 0.980, blue: 0.980),
+              dark:  Color(red: 0.17,  green: 0.17,  blue: 0.18))
         #endif
     }
 
