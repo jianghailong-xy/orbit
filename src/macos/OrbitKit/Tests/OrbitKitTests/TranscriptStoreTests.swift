@@ -171,21 +171,24 @@ final class TranscriptStoreTests: XCTestCase {
         let store = FileTranscriptStore(directory: dir, maxFiles: 2)
         let r = TranscriptReducer()
 
-        // Two snapshots, back-dated so "old" is unambiguously the least recent.
-        for (i, id) in ["old", "mid"].enumerated() {
+        // Two snapshots, back-dated so "old" is unambiguously the least recent. The ids carry a
+        // hyphen so `PublicID.storageKey` leaves them alone — a bare word like "old" is valid
+        // base62, so it would land in a UUID-named file the back-dating below couldn't find.
+        for (i, id) in ["sess-old", "sess-mid"].enumerated() {
             store.save(sessionID: id, reducer: r)
             try FileManager.default.setAttributes(
                 [.modificationDate: Date(timeIntervalSince1970: Double(1000 + i))],
                 ofItemAtPath: dir.appendingPathComponent("\(id).json").path)
         }
-        XCTAssertEqual(Set(store.storedSessionIDs()), ["old", "mid"], "at the cap, nothing dropped yet")
+        XCTAssertEqual(Set(store.storedSessionIDs()), ["sess-old", "sess-mid"],
+                       "at the cap, nothing dropped yet")
 
         // A third session takes it past the cap — its own file is the newest, so "old" goes.
-        store.save(sessionID: "new", reducer: r)
+        store.save(sessionID: "sess-new", reducer: r)
 
         let remaining = Set(store.storedSessionIDs())
-        XCTAssertFalse(remaining.contains("old"), "oldest snapshot pruned beyond the cap")
-        XCTAssertEqual(remaining, ["mid", "new"])
+        XCTAssertFalse(remaining.contains("sess-old"), "oldest snapshot pruned beyond the cap")
+        XCTAssertEqual(remaining, ["sess-mid", "sess-new"])
     }
 
     /// Re-saving an existing session skips the prune scan: it cannot grow the directory, and the
@@ -197,17 +200,17 @@ final class TranscriptStoreTests: XCTestCase {
         let store = FileTranscriptStore(directory: dir, maxFiles: 1)
         var r = TranscriptReducer()
 
-        store.save(sessionID: "a", reducer: r)   // new file → prunes, but it's at the cap
+        store.save(sessionID: "sess-a", reducer: r)   // new file → prunes, but it's at the cap
         // Plant a snapshot directly on disk so the directory is now OVER the cap. Nothing but a prune
         // can remove it, which is what makes the assertion below meaningful: were prune still running
-        // on every save, the overwrite would evict this (leaving only the just-written "a").
+        // on every save, the overwrite would evict this (leaving only the just-written "sess-a").
         try Data("{}".utf8).write(to: dir.appendingPathComponent("planted.json"))
 
         for ev in turnOne() { r.apply(ev) }
-        store.save(sessionID: "a", reducer: r)   // an overwrite — the streaming checkpoint's shape
+        store.save(sessionID: "sess-a", reducer: r)   // an overwrite — the streaming checkpoint's shape
 
-        XCTAssertEqual(Set(store.storedSessionIDs()), ["a", "planted"], "an overwrite drops nothing")
-        XCTAssertEqual(store.load(sessionID: "a")?.state, r.state, "and still writes the new state")
+        XCTAssertEqual(Set(store.storedSessionIDs()), ["sess-a", "planted"], "an overwrite drops nothing")
+        XCTAssertEqual(store.load(sessionID: "sess-a")?.state, r.state, "and still writes the new state")
     }
 
     // MARK: - LRUOrder
