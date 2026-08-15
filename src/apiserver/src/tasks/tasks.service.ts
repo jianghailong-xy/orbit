@@ -2234,6 +2234,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`verification dispatch for task ${id} failed: ${e?.message ?? e}`),
       );
     }
+    // The other direction: something that reported itself finished has been put back. That is the
+    // verifier's rejection path (it has no verdict API — it just moves the task, deliberately),
+    // but a human does it the same way and `update` carries no actor, so the note states the
+    // observation and lets the reader infer the cause from the verification count rather than
+    // asserting one. Either way it is a campaign's most consequential silent change: this
+    // deployment reverted six tasks in one afternoon and nothing anywhere said so.
+    if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
+      const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
+      await this.recordListEvent(
+        before.listId,
+        'completion_reverted',
+        `任务「${before.title}」(${id}) 从 DONE 被退回 ${dto.status}` +
+          (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
+      );
+    }
     return updated;
   }
 
@@ -2425,10 +2440,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runnerId: string | null;
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
+        listId: string | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
-             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb"
+             a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
+             t.list_id AS "listId"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -2454,6 +2471,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runnerId: row.runnerId,
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
+      listId: row.listId,
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
@@ -2476,6 +2494,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let resumesAt: Date | undefined;
+    // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
+    // own console needs "is MY campaign moving", and one spent provider quota holds back every
+    // list assigned to that runner at once.
+    const perList = new Map<string, { quota: number; disk: number; resumesAt?: Date }>();
+    const holdFor = (listId: string | null) => {
+      if (!listId) return null;
+      let e = perList.get(listId);
+      if (!e) perList.set(listId, (e = { quota: 0, disk: 0 }));
+      return e;
+    };
     for (const t of ready) {
       const blockedUntil = t.assignee?.runnerId
         ? quotaBlocked.get(`${t.assignee.runnerId}:${t.assignee.provider}`)
@@ -2483,6 +2511,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (blockedUntil) {
         quotaHeld += 1;
         if (!resumesAt || blockedUntil < resumesAt) resumesAt = blockedUntil;
+        const e = holdFor(t.listId);
+        if (e) {
+          e.quota += 1;
+          if (!e.resumesAt || blockedUntil < e.resumesAt) e.resumesAt = blockedUntil;
+        }
         continue;
       }
       // Disk is checked before the failure backoff for the same reason quota is: it prevents a
@@ -2491,6 +2524,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // the runner's next heartbeat reports headroom again.
       if (t.diskShort) {
         diskHeld += 1;
+        const e = holdFor(t.listId);
+        if (e) e.disk += 1;
         continue;
       }
       if (heldOff.has(t.id)) continue;
@@ -2513,6 +2548,51 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (diskHeld > 0) {
       this.logger.log(
         `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
+      );
+    }
+    for (const [listId, e] of perList) {
+      if (e.quota > 0) {
+        await this.recordListEvent(
+          listId,
+          'quota_hold',
+          `${e.quota} 个就绪任务被配额挡住` +
+            (e.resumesAt ? `，最早 ${e.resumesAt.toISOString()} 恢复` : '，没有拿到恢复时间'),
+        );
+      }
+      if (e.disk > 0) {
+        await this.recordListEvent(
+          listId,
+          'disk_hold',
+          `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Note a condition about a list, or bump the one already noted.
+   *
+   * Upsert rather than insert: the sweep runs every 60s, so a four-hour quota outage is one
+   * condition seen ~240 times. What a reader wants is the board — what is true now, since when,
+   * how persistent — not 240 rows to page through.
+   *
+   * `deliveredAt` is deliberately left alone. Whether this needs re-reporting is decided by
+   * comparing it against `lastSeenAt` at read time; clearing it here would re-announce a standing
+   * outage on every single sweep.
+   *
+   * Best-effort by construction: this is a note for a human, and failing to write one must never
+   * take down the sweep that was doing the actual work.
+   */
+  private async recordListEvent(listId: string, kind: string, detail: string): Promise<void> {
+    try {
+      await this.prisma.taskListEvent.upsert({
+        where: { listId_kind: { listId, kind } },
+        create: { listId, kind, detail },
+        update: { detail, lastSeenAt: new Date(), occurrences: { increment: 1 } },
+      });
+    } catch (e) {
+      this.logger.warn(
+        `could not record ${kind} on list ${listId}: ${e instanceof Error ? e.message : e}`,
       );
     }
   }
@@ -2616,6 +2696,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
         await this.execute(list.ownerId, task.id);
         this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
+        await this.recordListEvent(
+          list.id,
+          'foreman_filed',
+          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${task.id} 去诊断`,
+        );
       } catch (e) {
         this.logger.warn(
           `foreman dispatch for list ${list.id} failed: ${e instanceof Error ? e.message : e}`,

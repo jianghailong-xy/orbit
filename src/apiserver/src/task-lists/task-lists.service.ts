@@ -340,7 +340,7 @@ export class TaskListsService {
       },
     });
     if (!list) throw new NotFoundException('task list not found');
-    const [byStatus, live, lastRunAt, latestRevision, failures] = await Promise.all([
+    const [byStatus, live, lastRunAt, latestRevision, failures, conditions] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { listId: id },
@@ -363,6 +363,11 @@ export class TaskListsService {
         where: { task: { listId: id }, status: RunStatus.FAILED },
         select: { error: true },
       }),
+      // Bounded by kinds, not by occurrences: one row per condition, bumped in place.
+      this.prisma.taskListEvent.findMany({
+        where: { listId: id },
+        orderBy: { lastSeenAt: 'desc' },
+      }),
     ]);
     // Why this list's runs died, bucketed by the lever that fixes each. Attribution rather than a
     // count: "47 failures" prompts a guess, and the guess is usually the instructions. On this
@@ -384,6 +389,17 @@ export class TaskListsService {
       lastRunStartedAt: lastRunAt._max.createdAt,
       policyVersion: latestRevision._max.version ?? null,
       failuresByCause,
+      // What the control plane noticed about this list. Also delivered into the console
+      // (ListEventsService), but exposed here too so an agent that wants the current picture can
+      // ask for it instead of waiting to be told — a foreman woken by a stall arrives with no
+      // delivery behind it and this is the only place it can read why nothing was running.
+      conditions: conditions.map((c) => ({
+        kind: c.kind,
+        detail: c.detail,
+        occurrences: c.occurrences,
+        firstSeenAt: c.firstSeenAt,
+        lastSeenAt: c.lastSeenAt,
+      })),
     };
   }
 

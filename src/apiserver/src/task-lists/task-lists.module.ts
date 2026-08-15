@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
+import { ListEventsService } from './list-events.service';
 import { TaskListsController } from './task-lists.controller';
 import { TaskListsService } from './task-lists.service';
 
@@ -9,7 +10,7 @@ import { TaskListsService } from './task-lists.service';
   // running twice a minute.
   imports: [SessionsModule],
   controllers: [TaskListsController],
-  providers: [TaskListsService],
-  exports: [TaskListsService],
+  providers: [TaskListsService, ListEventsService],
+  exports: [TaskListsService, ListEventsService],
 })
 export class TaskListsModule {}

@@ -1071,9 +1071,45 @@ model TaskList {
 
   tasks     Task[]
   revisions TaskListRevision[]
+  events    TaskListEvent[]
 
   @@index([ownerId])
   @@map("task_list")
+}
+
+/// A condition the control plane noticed about a list, kept so somebody can eventually read it.
+///
+/// These are all things the sweep already detects, acts on, and then forgets into a log line —
+/// "12 ready tasks held, provider quota exhausted" is written once per sweep to stdout and is
+/// invisible to the person whose campaign stopped moving. The auto-run comment says as much:
+/// "why is nothing running" needs an answer somewhere.
+///
+/// One row per (list, kind), not one per occurrence. A quota outage lasting four hours is one
+/// condition seen 240 times, not 240 events, and the board a reader wants is "what is true about
+/// this list now" — so a repeat bumps `lastSeenAt`/`occurrences` in place. That also bounds the
+/// table by lists × kinds instead of by sweep count.
+///
+/// Nothing here is on the dispatch path, and nothing waits on it. It is read at delivery into the
+/// list's console session and by tasklist_get; a row nobody ever reads costs one upsert.
+model TaskListEvent {
+  id     String   @id @default(uuid(7)) @db.Uuid
+  listId String   @map("list_id") @db.Uuid
+  list   TaskList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  /// quota_hold | disk_hold | foreman_filed | verification_rejected
+  kind        String
+  /// One line, already phrased for a reader — the counts and the reset time are the answer, and
+  /// re-deriving them at read time would mean re-running the sweep's query against a moved world.
+  detail      String
+  occurrences Int       @default(1)
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  /// When this condition was last reported into the console. A condition seen again since then is
+  /// due for re-reporting; comparing against `lastSeenAt` rather than clearing this flag is what
+  /// keeps a four-hour outage from re-announcing itself on every 60s sweep.
+  deliveredAt DateTime? @map("delivered_at")
+
+  @@unique([listId, kind])
+  @@map("task_list_event")
 }
 
 /// One recorded state of a list's dispatch policy — instructions, paused, maxConcurrent.

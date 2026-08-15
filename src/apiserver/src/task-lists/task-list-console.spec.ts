@@ -184,6 +184,7 @@ test('the summary attributes failures, and always reports every bucket', async (
       findMany: async () => sessions,
     },
     taskListRevision: { aggregate: async () => ({ _max: { version: null } }) },
+    taskListEvent: { findMany: async () => [] },
   } as never;
   const service = new TaskListsService(prisma, { publishForUser() {} } as never, {} as never);
 

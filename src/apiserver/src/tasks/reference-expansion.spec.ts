@@ -48,6 +48,20 @@ function makeService(opts: { ownedList?: boolean; ownedTask?: boolean } = {}) {
         { status: 'OPEN', _count: { _all: 248 } },
       ],
     },
+    taskListEvent: {
+      findMany: async ({ where }: any) =>
+        where.listId === LIST_ID
+          ? [
+              {
+                kind: 'quota_hold',
+                detail: '12 个就绪任务被配额挡住',
+                occurrences: 47,
+                firstSeenAt: new Date('2026-08-15T03:11:00.000Z'),
+                lastSeenAt: new Date('2026-08-15T04:07:00.000Z'),
+              },
+            ]
+          : [],
+    },
     session: {
       count: async ({ where }: any) => (where?.numTurns?.gt !== undefined ? 0 : 3),
       findMany: async () => [

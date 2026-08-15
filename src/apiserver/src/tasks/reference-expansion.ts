@@ -82,7 +82,7 @@ export class ReferenceExpansionService {
       },
     });
     if (!list) return null;
-    const [byStatus, live, failures] = await Promise.all([
+    const [byStatus, live, failures, conditions] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { listId: id },
@@ -94,6 +94,13 @@ export class ReferenceExpansionService {
       this.prisma.session.findMany({
         where: { task: { listId: id }, status: RunStatus.FAILED },
         select: { error: true },
+      }),
+      // "为什么卡住了" is the reason people reference a list at all, and the answer is here rather
+      // than in any of the counts above — a quota or disk hold leaves every number looking healthy.
+      this.prisma.taskListEvent.findMany({
+        where: { listId: id },
+        orderBy: { lastSeenAt: 'desc' },
+        take: 4,
       }),
     ]);
     const counts = byStatus.map((r) => `${r.status} ${r._count._all}`).join(' / ') || '(无任务)';
@@ -114,6 +121,13 @@ export class ReferenceExpansionService {
       `  失败归因 ${causeLine}`,
       `  策略   ${list.paused ? '已暂停' : '运行中'} · 并发上限 ${list.maxConcurrent ?? '无'} · ` +
         `作业指导 ${list.instructions ? '已设置' : '无'} · 完成时验收 ${list.verifyOnDone ? '开' : '关'}`,
+      ...(conditions.length > 0
+        ? [
+            `  控制面观察 ${conditions
+              .map((c) => `${c.kind}(${c.detail}，最近 ${c.lastSeenAt.toISOString()})`)
+              .join('；')}`,
+          ]
+        : []),
       `  明细请用 tasklist_get / task_list / task_get 自取——这里只给形状，不给内容。`,
       `</referenced-list>`,
     ].join('\n');

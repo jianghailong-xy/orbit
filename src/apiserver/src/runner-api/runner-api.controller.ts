@@ -105,6 +105,7 @@ import { hasSessionActivity } from './session-activity';
 import { stripNul } from './strip-nul';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
+import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { isNoiseSystemEvent, notNoiseSql } from '../common/system-noise';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
@@ -255,6 +256,7 @@ export class RunnerApiController {
     private readonly push: PushService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly references: ReferenceExpansionService,
+    private readonly listEvents: ListEventsService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -1744,6 +1746,10 @@ export class RunnerApiController {
             select: { ownerId: true },
           });
           if (owner) content = (await this.references.expand(owner.ownerId, content)) ?? content;
+          // A list's console also carries back what the control plane noticed while nobody was
+          // talking to it. Piggybacked here rather than pushed as its own turn — see
+          // ListEventsService for why a second waking path is the thing being avoided.
+          content = (await this.listEvents.appendFor(tx, sessionId, content)) ?? content;
         }
       } else if (t.kind !== 'shell') {
         // Control turns are fire-and-forget: ack on delivery so a stale one cannot
