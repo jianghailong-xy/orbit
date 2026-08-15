@@ -371,7 +371,7 @@ test('a runner that reports no disk figure is not gated on disk', async () => {
   assert.deepEqual(executed, ['task-unmeasured']);
 });
 
-test('a paused list is filtered out of the candidate scan in SQL', async () => {
+test('a held task is filtered out of the candidate scan, without reading its list', async () => {
   let sql = '';
   const prisma = {
     $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
@@ -382,7 +382,14 @@ test('a paused list is filtered out of the candidate scan in SQL', async () => {
   await sweep(new TasksService(prisma, {} as never, {} as never));
   // In the scan, not only in execute(): a paused 500-task list would otherwise throw once per
   // task per minute for as long as the pause lasted.
-  assert.match(sql, /NOT EXISTS \(SELECT 1 FROM task_list tl WHERE tl\.id = t\.list_id AND tl\.paused = true\)/);
+  assert.match(sql, /t\.dispatch_hold = false/);
+  // The point of the column. A stop spelled as a join to task_list is a stop that stops existing
+  // when the list is deleted, and an unexpressible veto reads as permission — that is how 55,513
+  // tasks kept running for a fortnight after their lists were deleted. Nothing in the permission
+  // path may consult a row that can be deleted out from under it. Asserted on the executable SQL
+  // rather than the raw string, which still names the old spelling in a comment explaining it.
+  const executable = sql.replace(/--[^\n]*/g, '');
+  assert.doesNotMatch(executable, /task_list/);
 });
 
 test('the sweep selects candidates on all five READY conditions, anchored on a DONE prerequisite', async () => {

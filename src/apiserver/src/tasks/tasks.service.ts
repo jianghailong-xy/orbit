@@ -152,11 +152,16 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
-  -- A paused list is out of the sweep entirely: pausing is the stop for a campaign dispatching
-  -- wrongly, so it has to work here, not only on the manual button. Filtered in SQL rather than
-  -- by letting execute() throw per task, which would log one rejection per task per minute for
-  -- as long as the pause lasts. A task with no list has nothing to pause and is unaffected.
-  AND NOT EXISTS (SELECT 1 FROM task_list tl WHERE tl.id = t.list_id AND tl.paused = true)
+  -- A held task is out of the sweep entirely: pausing a list is the stop for a campaign
+  -- dispatching wrongly, so it has to work here, not only on the manual button. Filtered in SQL
+  -- rather than by letting execute() throw per task, which would log one rejection per task per
+  -- minute for as long as the pause lasts.
+  --
+  -- A column on the task, not NOT EXISTS (... task_list.paused). That spelling made the stop
+  -- conditional on a row that could be deleted, and a veto that cannot be expressed reads as
+  -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
+  -- fortnight. Every clause here that permits must be positive and read off the task itself.
+  AND t.dispatch_hold = false
   AND EXISTS (
     SELECT 1 FROM task_dependency d
     JOIN task p ON p.id = d.depends_on_task_id
@@ -765,7 +770,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
     if (dependsOnTaskIds.length) await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
-    const data = this.taskCreateData(ownerId, dto, creator, sessionId, idempotencyKey);
+    const data = this.taskCreateData(
+      ownerId,
+      dto,
+      creator,
+      sessionId,
+      idempotencyKey,
+      await this.pausedListIds(ownerId, [dto.listId]),
+    );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
     // before its prerequisites and closing a cycle. Any FK/write failure rolls the task back too.
@@ -802,6 +814,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return task;
   }
 
+  /**
+   * Which of these lists are paused. A task filed into a paused list has to be born held —
+   * otherwise "pause the list" means "pause the tasks that happened to exist when I clicked",
+   * and a campaign that is still being written keeps dispatching around its own stop.
+   */
+  private async pausedListIds(
+    ownerId: string,
+    listIds: Array<string | null | undefined>,
+  ): Promise<Set<string>> {
+    const ids = [...new Set(listIds.filter((v): v is string => !!v))];
+    if (ids.length === 0) return new Set();
+    const paused = await this.prisma.taskList.findMany({
+      where: { id: { in: ids }, ownerId, paused: true },
+      select: { id: true },
+    });
+    return new Set(paused.map((l) => l.id));
+  }
+
   /** The Task row one create DTO turns into. Shared by create and createMany so the two
    *  write paths can never drift on a newly added field. */
   private taskCreateData(
@@ -809,9 +839,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     dto: CreateTaskDto,
     creator: Creator | undefined,
     sessionId: string | undefined,
-    idempotencyKey?: string,
+    idempotencyKey: string | undefined,
+    heldListIds: ReadonlySet<string>,
   ): Prisma.TaskUncheckedCreateInput {
     return {
+      dispatchHold: !!dto.listId && heldListIds.has(dto.listId),
       title: dto.title,
       description: dto.description,
       ownerId,
@@ -1004,6 +1036,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const hasDependencies = items.some(
       (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
     );
+    const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
     const created = await this.prisma.$transaction(async (tx) => {
       // Same owner lock as create: the tasks and their edges must become visible together, or a
       // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
@@ -1022,7 +1055,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const task =
           existing ??
           (await tx.task.create({
-            data: this.taskCreateData(ownerId, item, creator, sessionId, idempotencyKey),
+            data: this.taskCreateData(
+              ownerId,
+              item,
+              creator,
+              sessionId,
+              idempotencyKey,
+              heldListIds,
+            ),
           }));
         if (item.ref !== undefined) idByRef.set(item.ref, task.id);
         const dependsOnTaskIds = [
@@ -2305,6 +2345,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // listId is a relation FK: connect to (re)assign, disconnect to detach.
     if (dto.listId !== undefined) {
       data.list = dto.listId ? { connect: { id: dto.listId } } : { disconnect: true };
+      // The hold belongs to the list the task is in, so it moves with it. Detaching releases:
+      // a hold whose holder the task no longer belongs to can never be lifted, and a task that
+      // can neither run nor be resumed is a wedge rather than a stop.
+      data.dispatchHold = dto.listId
+        ? (await this.pausedListIds(ownerId, [dto.listId])).has(dto.listId)
+        : false;
     }
     const updated =
       dependsOnTaskIds === undefined
@@ -3392,7 +3438,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         listId: true,
         isForeman: true,
         verifiesTaskId: true,
-        list: { select: { paused: true, maxConcurrent: true, instructions: true } },
+        dispatchHold: true,
+        list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
@@ -3405,9 +3452,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           : 'Prerequisites are not all complete yet, cannot run',
       );
     }
-    // The sweep already filters paused lists out in SQL; this is the manual button's half of the
-    // same rule, so "paused" cannot be quietly bypassed by clicking Run on a task inside one.
-    if (task.list?.paused) {
+    // The sweep already filters held tasks out in SQL; this is the manual button's half of the
+    // same rule, so a pause cannot be quietly bypassed by clicking Run on a task inside one.
+    // Reads the task's own hold, not its list's flag: the two must not be able to disagree, and
+    // only one of them survives the list being deleted.
+    if (task.dispatchHold) {
       throw new BadRequestException('This task list is paused — resume it before running');
     }
     if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');

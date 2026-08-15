@@ -11,8 +11,15 @@ const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
  * and the auto-run sweep take, so what the list says has to be honoured here — these tests
  * assert the two things it can say: don't dispatch at all, and don't dispatch more than N at a
  * time.
+ *
+ * "Don't dispatch at all" is read off the task's own `dispatchHold`, not off `list.paused`:
+ * pausing a list projects the hold onto its tasks precisely so that permission never depends on
+ * a list row that can be deleted.
  */
-function runFixture(list: { paused?: boolean; maxConcurrent?: number | null } | null) {
+function runFixture(
+  list: { maxConcurrent?: number | null } | null,
+  task: { dispatchHold?: boolean } = {},
+) {
   const createCalls: any[][] = [];
   const prisma = {
     task: {
@@ -24,7 +31,8 @@ function runFixture(list: { paused?: boolean; maxConcurrent?: number | null } | 
         model: null,
         status: 'OPEN',
         listId: list ? LIST_ID : null,
-        list: list ? { paused: false, maxConcurrent: null, ...list } : null,
+        dispatchHold: task.dispatchHold ?? false,
+        list: list ? { maxConcurrent: null, ...list } : null,
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
     },
@@ -44,8 +52,8 @@ function runFixture(list: { paused?: boolean; maxConcurrent?: number | null } | 
 /** The `{ source, batch }` options object sessions.create() was called with. */
 const optsOf = (calls: any[][]) => calls[0][2];
 
-test('a task in a paused list is refused, so the stop cannot be clicked around', async () => {
-  const f = runFixture({ paused: true });
+test('a held task is refused, so the stop cannot be clicked around', async () => {
+  const f = runFixture({}, { dispatchHold: true });
 
   await assert.rejects(
     () => f.service.execute('owner-1', TASK_ID),

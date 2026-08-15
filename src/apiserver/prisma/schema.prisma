@@ -1196,6 +1196,19 @@ model Task {
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
+  /// This task is held: no sweep dispatch, no manual run. The projection of `TaskList.paused`,
+  /// written onto every task in a list when the list is paused or resumed.
+  ///
+  /// It is a column here rather than a join to `task_list.paused` because a join makes the
+  /// authority to spend money conditional on a row that can be deleted, and an unexpressible veto
+  /// reads as permission. Deleting a paused list used to resume its 55k tasks — the stop existed
+  /// only as `NOT EXISTS (... paused = true)`, so removing the list removed the brake. Authority
+  /// to run has to be carried by the task and revocable only by writing to the task.
+  ///
+  /// The cost is real and accepted: pausing is now one UPDATE over the list's tasks instead of a
+  /// single flag write. It is a separate column from `autoRunWhenReady` so resuming restores each
+  /// task's own setting instead of overwriting it with a guess.
+  dispatchHold     Boolean     @default(false) @map("dispatch_hold")
   // This task is a coordination run over its list, not one of the list's units of work. Two
   // consequences: it does not receive the list's standing instructions (those describe how the
   // *work* is done, and the foreman is not doing it), and an unfinished one suppresses further
