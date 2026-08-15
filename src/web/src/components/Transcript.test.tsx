@@ -401,6 +401,67 @@ describe('engine stderr', () => {
   });
 });
 
+describe('Orbit write tool cards', () => {
+  // Once an approval is decided, this row is all that survives of it. A folded
+  // `task_create_batch ✓` records that a decision happened and nothing about what was decided.
+  const toolEvent = (name: string, input: unknown): RunEvent => ({
+    seq: 1,
+    type: 'tool_use',
+    payload: { id: 't1', name, input },
+  });
+
+  it('says what a batch created and what shape it had', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__task_create_batch', {
+              tasks: [
+                { title: '准备分片清单', ref: 'r' },
+                { title: '分片 A', ref: 'a', dependsOnRefs: ['r'] },
+                { title: '分片 B', ref: 'b', dependsOnRefs: ['r'] },
+              ],
+            }),
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('Create tasks');
+    expect(html).toContain('2 in parallel after 1');
+    expect(html).not.toContain('mcp__orbit__task_create_batch');
+  });
+
+  it('names a restructure by its reason rather than its JSON', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__tasklist_propose_dag', {
+              listId: 'l1',
+              note: '把 WARC 转换拆开并行跑',
+              ops: [{ op: 'remove', taskId: 'a', dependsOnTaskId: 'b' }],
+            }),
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('Restructure dependencies');
+    expect(html).toContain('把 WARC 转换拆开并行跑');
+  });
+
+  it('still falls back to the generic card for any other MCP tool', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript events={[toolEvent('mcp__orbit__task_get', { taskId: 'x' })]} />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('orbit · task_get');
+  });
+});
+
 describe('injected context in a user bubble', () => {
   // The runner echoes what it was *given*, so anything delivery appended lands inside the
   // person's own bubble looking like they typed it. Found on the deployed stack, not in a test.

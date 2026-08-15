@@ -1,4 +1,5 @@
 import {
+  ApartmentOutlined,
   ApiOutlined,
   CheckCircleFilled,
   CheckOutlined,
@@ -45,6 +46,8 @@ import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api'
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
 import { describeInjected, splitDeliveredMessage } from '../lib/deliveredMessage';
+import { BatchGraph } from './BatchGraph';
+import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
@@ -2077,6 +2080,47 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         tone: 'agent',
         summary: qs.map((q) => q?.header).filter(Boolean).join('  ·  ') || undefined,
         body: qs.length ? <Questions questions={qs} answer={answer} /> : undefined,
+      };
+    }
+    // Orbit's own two writes, rendered as what they did rather than as the JSON they were sent.
+    // A batch is the record of an approval, and once the card is decided this row is all that is
+    // left of it — a folded `task_create_batch ✓` says a decision happened and nothing about what
+    // was decided.
+    case 'mcp__orbit__task_create_batch': {
+      const tasks: BatchTaskInput[] = Array.isArray(i.tasks) ? i.tasks : [];
+      const graph = buildBatchGraph(tasks);
+      const shape = describeShape(graph);
+      return {
+        label: 'Create tasks',
+        icon: <ApartmentOutlined />,
+        tone: 'agent',
+        meta: `${tasks.length}`,
+        summary: shape || undefined,
+        body: tasks.length ? (
+          <div className="tool-batch">
+            {shouldDraw(graph) ? <BatchGraph tasks={tasks} /> : null}
+            <ul className="dag-approval-ops">
+              {tasks.map((t, n) => (
+                <li key={n} className="dag-op">
+                  <span className="dag-op-verb">+</span>
+                  <span className="dag-op-text">{t.title}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : undefined,
+      };
+    }
+    case 'mcp__orbit__tasklist_propose_dag': {
+      const ops: any[] = Array.isArray(i.ops) ? i.ops : [];
+      const added = ops.filter((o) => o?.op === 'add').length;
+      return {
+        label: 'Restructure dependencies',
+        icon: <ApartmentOutlined />,
+        tone: 'agent',
+        meta: `${ops.length}`,
+        summary: typeof i.note === 'string' && i.note ? i.note : `+${added} / −${ops.length - added} edges`,
+        body: hasKeys(i) ? <KeyVals obj={i} /> : undefined,
       };
     }
     default:
