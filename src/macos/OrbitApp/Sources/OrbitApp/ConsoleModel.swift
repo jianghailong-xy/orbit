@@ -168,7 +168,7 @@ final class ConsoleModel {
     }
 
     // `/` command & skill autocomplete (the `+` menu opens it scoped). `slashItems` is the
-    // runner-reported set already narrowed to host-level + this session's agent (see loadSlashItems).
+    // session runner's reported set, narrowed to host-level + this session's agent (see applySlashItems).
     private(set) var slashItems: [SlashCommandInfo] = []
     var slashScope: String?   // nil = both kinds; "command"/"skill" when opened from the + menu
 
@@ -325,8 +325,9 @@ final class ConsoleModel {
     }
 
     func run() async {
-        Task { await loadSlashItems() }   // one-shot; concurrent with the stream connect
-        Task { await loadContext() }      // footer context: agent name / plan usage / live config
+        // Footer context: agent name / plan usage / live config — and, from the same runner read,
+        // the `/` catalog. One-shot; concurrent with the stream connect.
+        Task { await loadContext() }
         // Durable approvals aren't in the replayed stream (the `approval_request` nudge rides
         // seq 0, live-only) — fetch them once on open so a prompt already pending (e.g. an
         // AskUserQuestion awaiting an answer) surfaces. Decoupled from the stream; cancels with run().
@@ -688,6 +689,7 @@ final class ConsoleModel {
                 runnerEngines = nil
             }
         }
+        applySlashItems(from: sessionRunner)
         // Configured providers own a separate model space/default. Best-effort: a transient failure
         // keeps the last good list, and built-in runtimes still resolve from the runner/static data.
         if let providers = try? await api.providers() {
@@ -915,11 +917,13 @@ final class ConsoleModel {
         ComposerSlash.matches(items: composerSlashItems, token: slashToken, scope: slashScope)
     }
 
-    /// Fold every runner's reported commands + skills, scoped to host-level + this session's
-    /// agent (web parity). Best-effort: a failure just leaves the menu empty.
-    func loadSlashItems() async {
-        guard let runners = try? await api.runners() else { return }
-        let all = runners.flatMap { ($0.commands ?? []) + ($0.skills ?? []) }
+    /// Take the commands + skills of the runner this session runs on, scoped to host-level +
+    /// this session's agent (web parity — its menu reads the session's runner alone). Slash
+    /// assets are per-machine: another runner's can't run here, and a name several machines
+    /// report (any skill under a shared `~/.claude`) would otherwise list once per machine.
+    /// Fed from the runner read the caller already made; a failure leaves just the local items.
+    private func applySlashItems(from runner: Runner?) {
+        let all = (runner?.commands ?? []) + (runner?.skills ?? [])
         slashItems = ComposerHostCommand.slashItems + ComposerSlash.scoped(items: all, agentID: agentID)
     }
 
@@ -1275,8 +1279,10 @@ final class ConsoleModel {
         // slash discovery. The draft already has AgentsModel's cached seed, so failure keeps it.
         var runtimeDefaults: [String: String]?
         var runnerSnapshotLoaded = false
+        var agentRunner: Runner?
         if let rid = draftAgent?.runnerId, let rows = try? await api.runners() {
             if let r = rows.first(where: { $0.id == rid }) {
+                agentRunner = r
                 runnerPlanUsage = r.planUsage
                 modelCatalog = r.modelCatalog
                 runtimeDefaults = r.runtimeDefaultModels
@@ -1306,7 +1312,7 @@ final class ConsoleModel {
                 permissionMode, for: modelID, provider: provider,
                 configured: configuredProviders)
         }
-        await loadSlashItems()
+        applySlashItems(from: agentRunner)
         // OpenCode variants are model-defined, so this is the first point where a stored
         // value can be validated against the runner catalog.
         effort = AgentDefaults.normalizedEffort(
