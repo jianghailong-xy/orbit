@@ -410,6 +410,16 @@ final class AppModel {
     func bootstrap() {
         notifications.configure()
         notifications.onIntent = { [weak self] intent in self?.handle(intent) }
+        #if os(iOS)
+        // An approval that arrives while you're in the app shows as Orbit's own card rather than a
+        // system banner (see `NotificationManager.willPresent`). A `.warning`, so it stays until
+        // it's dealt with — that's the whole point of it, and it's what a banner's persistence in
+        // Notification Center was doing before. Tapping it opens the session it's blocking on.
+        notifications.onForegroundApproval = { [weak self] sessionID, line in
+            self?.showToast(line, sessionID: sessionID, tone: .warning,
+                            icon: "bell.badge.fill", awaitsApproval: true)
+        }
+        #endif
         #if os(macOS)
         // Frozen-runner upkeep: a Sparkle app update ships a newer bundled runner than the installed
         // ~/.orbit/bin copy (its network self-update is off), so re-sync it once at launch.
@@ -807,6 +817,12 @@ final class AppModel {
         if needsYou != lastNeedsYou {
             lastNeedsYou = needsYou
             NotificationManager.removeDeliveredApprovals(where: { !needsYou.contains($0) })
+            // The foreground card standing in for one of those banners has to come down with them.
+            // It's persistent by design, so an approval answered on web or macOS would otherwise
+            // leave a card asking for something that's already been decided.
+            if let toast, toast.awaitsApproval, let sid = toast.sessionID, !needsYou.contains(sid) {
+                dismissToast()
+            }
         }
         #endif
     }
@@ -1093,6 +1109,11 @@ final class AppModel {
         var icon: String?
         var sessionID: String?
         var canUndo = false
+        /// Set on the card that stands in for a foreground approval banner (see
+        /// `NotificationManager.willPresent`). It's a `.warning`, so nothing takes it down on a
+        /// timer — and the approval it names can be answered anywhere, including on another
+        /// device, so the snapshot that notices has to clear it.
+        var awaitsApproval = false
     }
     var toast: Toast?
     private var toastDismiss: Task<Void, Never>?
@@ -1117,11 +1138,11 @@ final class AppModel {
     /// mutation or the line just disappears. Everything else lets it resolve here.
     func showToast(_ message: String, sessionID: String? = nil, sessionTitle: String? = nil,
                    detail: String? = nil, tone: ToastTone = .success, icon: String? = nil,
-                   canUndo: Bool = false) {
+                   canUndo: Bool = false, awaitsApproval: Bool = false) {
         let title = sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         toast = Toast(message: message, sessionTitle: title,
                       detail: detail, tone: tone, icon: icon,
-                      sessionID: sessionID, canUndo: canUndo)
+                      sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval)
         toastDismiss?.cancel()
         guard !tone.isPersistent else { return }
         let isCard = title != nil || detail != nil || canUndo
