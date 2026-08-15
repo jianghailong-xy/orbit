@@ -1225,8 +1225,12 @@ export interface EventSearchHit {
 export interface EventSearchResponse {
   q: string;
   /** Every match in the session, even when `hits` was capped — so the UI can say "showing 100
-   *  of 240" instead of implying the list is everything. */
+   *  of 240" instead of implying the list is everything. Exact unless `totalCapped`. */
   total: number;
+  /** Set when counting stopped at its ceiling rather than reaching the end: `total` is then a
+   *  floor, to be shown as "1000+". Counting the rest cannot stop early and costs a full scan of
+   *  the session — 9s on the largest one here — for a label that says the same thing either way. */
+  totalCapped?: boolean;
   /** Newest first: the matches nearest what the user is reading come first, and the tail of a
    *  long list is the part that gets cut. */
   hits: EventSearchHit[];

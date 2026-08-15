@@ -184,6 +184,62 @@ function sleep(ms: number): Promise<void> {
 const stripMarks = (col: Prisma.Sql): Prisma.Sql =>
   Prisma.sql`replace(replace(${col}, '*', ''), '\`', '')`;
 
+/** Where in-session find stops counting matches. See `eventTotal`. */
+const EVENT_TOTAL_CAP = 1000;
+
+/**
+ * The corpus in-session find searches: one row per renderable event of one session, with every
+ * string a transcript card can show flattened into a single `text` column, so the match and the
+ * snippet can never disagree about where the hit is.
+ *
+ * A `WITH` body, shared by the page query and the count — written once because the two have to
+ * search exactly the same text, and a count over a corpus the page didn't use is just a wrong
+ * number.
+ *
+ * The two JSON casts (a tool's input, and a tool_result whose content is an array of blocks
+ * rather than a plain string) search the JSON *encoding*, so a query containing a quote or a
+ * newline won't match inside them — acceptable for what people actually search for (a path, a
+ * name, a phrase).
+ *
+ * Asterisks and backticks are dropped (stripMarks, which the ⌘K palette shares and stripEmphasis
+ * strips the query with) because what is stored is markdown source and what the user is searching
+ * for is what they read: "the merge button" has to find "the **merge** button", and 9.5k
+ * assistant events here carry bold. Underscore is deliberately kept — it is a character in half
+ * the identifiers anyone would search for, not decoration.
+ */
+const eventBodySql = (id: string): Prisma.Sql => Prisma.sql`
+  body AS (
+    SELECT
+      seq, type, created_at, payload,
+      ${stripMarks(Prisma.sql`
+        concat_ws(' ',
+          payload->>'text',
+          payload->>'name',
+          (payload->'input')::text,
+          CASE WHEN jsonb_typeof(payload->'content') = 'string'
+               THEN payload->>'content'
+               ELSE (payload->'content')::text END,
+          payload->>'message'
+        )
+      `)} AS text
+    FROM run_event
+    WHERE session_id = ${id}::uuid
+      AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
+  )`;
+
+/** "This event matches": every term ANDed, and a term's alternatives ORed (see SearchTerm). */
+const eventMatchSql = (norm: NormalizedSearchQuery): Prisma.Sql =>
+  Prisma.join(
+    norm.patterns.map(
+      (term) =>
+        Prisma.sql`(${Prisma.join(
+          term.map((p) => Prisma.sql`text ILIKE ${p}`),
+          ' OR ',
+        )})`,
+    ),
+    ' AND ',
+  );
+
 /** What SessionsService.resolveProviderSwitch answers — see its doc comment. */
 interface ResolvedProviderSwitch {
   /** The identity the session should dispatch under: the requested one, or the current one when
@@ -1957,15 +2013,22 @@ export class SessionsService {
     const norm = normalizeSearchQuery(stripEmphasis(q ?? ''));
     if (!norm) return { q: '', total: 0, hits: [] };
     const take = Math.min(Math.max(Math.trunc(limit ?? 100), 1), 200);
+    let matched = norm;
     let rows = await this.eventRows(id, norm, take);
     if (rows.length === 0) {
       const wide = broaden(norm);
-      if (wide) rows = await this.eventRows(id, wide, take);
+      if (wide) {
+        matched = wide;
+        rows = await this.eventRows(id, wide, take);
+      }
     }
+    // A short page is its own total — the LIMIT didn't cut anything, so there is nothing to count.
+    // Only a full page needs asking, and then only up to a ceiling (see `eventTotal`).
+    const counted = rows.length < take ? { total: rows.length } : await this.eventTotal(id, matched);
 
     return {
       q: norm.raw,
-      total: rows[0]?.total ?? 0,
+      ...counted,
       hits: rows.map((r) => ({
         seq: r.seq,
         type: r.type,
@@ -1993,60 +2056,16 @@ export class SessionsService {
     id: string,
     norm: NormalizedSearchQuery,
     take: number,
-  ): Promise<
-    { seq: number; type: string; toolName: string | null; ts: Date; total: number; snippet: string | null }[]
-  > {
-    const words = Prisma.join(
-      norm.patterns.map(
-        (term) =>
-          Prisma.sql`(${Prisma.join(
-            term.map((p) => Prisma.sql`text ILIKE ${p}`),
-            ' OR ',
-          )})`,
-      ),
-      ' AND ',
-    );
+  ): Promise<{ seq: number; type: string; toolName: string | null; ts: Date; snippet: string | null }[]> {
     return this.prisma.$queryRaw<
-      { seq: number; type: string; toolName: string | null; ts: Date; total: number; snippet: string | null }[]
+      { seq: number; type: string; toolName: string | null; ts: Date; snippet: string | null }[]
     >(Prisma.sql`
-      WITH body AS (
-        SELECT
-          seq, type, created_at, payload,
-          -- Every string a transcript card can show, in one column so the match and the snippet
-          -- can never disagree about where the hit is. The two JSON casts (a tool's input, and a
-          -- tool_result whose content is an array of blocks rather than a plain string) search
-          -- the JSON *encoding*, so a query containing a quote or a newline won't match inside
-          -- them — acceptable for what people actually search for (a path, a name, a phrase).
-          --
-          -- Asterisks and backticks are dropped (stripMarks, which the ⌘K palette shares and
-          -- stripEmphasis strips the query with) because what is stored is markdown source and
-          -- what the user is searching for is what they read: "the merge button" has to find
-          -- "the **merge** button", and 9.5k assistant events here carry bold. Underscore is
-          -- deliberately kept — it is a character in half the identifiers anyone would search
-          -- for, not decoration.
-          ${stripMarks(Prisma.sql`
-            concat_ws(' ',
-              payload->>'text',
-              payload->>'name',
-              (payload->'input')::text,
-              CASE WHEN jsonb_typeof(payload->'content') = 'string'
-                   THEN payload->>'content'
-                   ELSE (payload->'content')::text END,
-              payload->>'message'
-            )
-          `)} AS text
-        FROM run_event
-        WHERE session_id = ${id}::uuid
-          AND type IN ('user', 'assistant', 'thinking', 'tool_use', 'tool_result', 'error')
-      )
+      WITH ${eventBodySql(id)}
       SELECT
         seq,
         type,
         created_at AS "ts",
         payload->>'name' AS "toolName",
-        -- Counted over every match, not just the page: the UI says "100 of 240" rather than
-        -- implying the capped list is all there is. Window functions run before LIMIT.
-        (count(*) OVER ())::int AS "total",
         -- Same ±60 window as the ⌘K palette, and for the same reason: a match can sit deep
         -- inside a multi-KB body, so the cut has to happen in SQL. strpos is literal while
         -- ILIKE is not, which is why the pattern escapes % and _ (see search-query.ts).
@@ -2066,10 +2085,39 @@ export class SessionsService {
           length(${norm.raw}) + 120
         ) AS "snippet"
       FROM body
-      WHERE ${words}
+      -- No window count here on purpose. A count(*) OVER () has to see every match before it can
+      -- emit the first row, which forbids the backward index scan from stopping at LIMIT: on the
+      -- 111k-event session that was 9038ms against 162ms for the same query without it. The total
+      -- is asked for separately, and only when the page came back full.
+      WHERE ${eventMatchSql(norm)}
       ORDER BY seq DESC
       LIMIT ${take}::int
     `);
+  }
+
+  /**
+   * How many events match, counted only as far as it is worth counting.
+   *
+   * The exact figure costs a full scan of the session — nothing about "how many" can stop early —
+   * and its only consumer is a label reading "100 of 240". Past a point that label doesn't get
+   * more useful, so the count stops at EVENT_TOTAL_CAP and says it stopped; the client renders
+   * "1000+". Below the cap the answer is exact, which is every ordinary session.
+   */
+  private async eventTotal(
+    id: string,
+    norm: NormalizedSearchQuery,
+  ): Promise<{ total: number; totalCapped?: true }> {
+    const [row] = await this.prisma.$queryRaw<{ n: number }[]>(Prisma.sql`
+      WITH ${eventBodySql(id)}
+      SELECT count(*)::int AS n
+      FROM (
+        -- The LIMIT is what makes this cheap on the sessions that need it: a query matching most
+        -- of a huge session stops after the ceiling instead of counting all of it.
+        SELECT 1 FROM body WHERE ${eventMatchSql(norm)} LIMIT ${EVENT_TOTAL_CAP + 1}
+      ) capped
+    `);
+    const n = row?.n ?? 0;
+    return n > EVENT_TOTAL_CAP ? { total: EVENT_TOTAL_CAP, totalCapped: true } : { total: n };
   }
 
   /**

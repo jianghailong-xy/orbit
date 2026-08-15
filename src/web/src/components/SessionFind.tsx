@@ -420,13 +420,15 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
   if (!open) return null;
 
   const capped = total > hits.length;
+  // A "+" when the server stopped counting at its ceiling: the figure is a floor, not the answer.
+  const totalLabel = `${total}${search.data?.totalCapped ? '+' : ''}`;
   const status = search.isFetching
     ? 'Searching…'
     : !trimmed
       ? ''
       : total === 0
         ? 'No matches'
-        : `${cursor >= 0 ? `${cursor + 1}/` : ''}${hits.length}${capped ? ` of ${total}` : ''}`;
+        : `${cursor >= 0 ? `${cursor + 1}/` : ''}${hits.length}${capped ? ` of ${totalLabel}` : ''}`;
 
   return (
     <div className="find-bar" role="search">
@@ -463,7 +465,7 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
         />
         <span
           className={`find-count${trimmed && !search.isFetching && total === 0 ? ' find-none' : ''}`}
-          title={capped ? `${total} matches — the newest ${hits.length} are listed` : undefined}
+          title={capped ? `${totalLabel} matches — the newest ${hits.length} are listed` : undefined}
         >
           {jumping ? <LoadingOutlined spin /> : status}
         </span>

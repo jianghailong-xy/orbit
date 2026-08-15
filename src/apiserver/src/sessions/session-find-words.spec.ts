@@ -34,8 +34,21 @@ const capture = async (
   return sql;
 };
 
-const findIn = (query: string, results?: unknown[][]) =>
-  capture((s) => s.searchEvents(OWNER_ID, SESSION_ID, query), results);
+const findIn = (query: string, results?: unknown[][], limit?: number) =>
+  capture((s) => s.searchEvents(OWNER_ID, SESSION_ID, query, limit), results);
+
+/** The response rather than the statements, for the cases about what the count reports. */
+const findResult = async (query: string, results: unknown[][], limit: number) => {
+  let out: Awaited<ReturnType<SessionsService['searchEvents']>> | undefined;
+  await capture(async (s) => {
+    out = await s.searchEvents(OWNER_ID, SESSION_ID, query, limit);
+  }, results);
+  return out!;
+};
+
+/** `n` rows shaped like the page query's projection. */
+const page = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ seq: i, type: 'user', toolName: null, ts: new Date(), snippet: 'x' }));
 
 const palette = (query: string, results?: unknown[][]) =>
   capture((s) => s.search(OWNER_ID, query, 20), results);
@@ -95,6 +108,47 @@ test('find strips markdown marks from the query before splitting it', async () =
 test('a query of nothing but marks or whitespace runs no search at all', async () => {
   assert.equal((await findIn('***')).length, 0);
   assert.equal((await findIn('   ')).length, 0);
+});
+
+// ── how many matched ──────────────────────────────────────────────────────────────────────────
+
+test('a short page is its own total, and costs no second statement', async () => {
+  // The ordinary search: fewer hits than the limit, so the LIMIT cut nothing and there is
+  // nothing left to count.
+  const sql = await findIn('merge', [page(3)], 10);
+  assert.equal(sql.length, 1);
+  const r = await findResult('merge', [page(3)], 10);
+  assert.equal(r.total, 3);
+  assert.equal(r.totalCapped, undefined);
+});
+
+test('a full page is counted separately, with the count able to stop early', async () => {
+  const sql = await findIn('merge', [page(10)], 10);
+  assert.equal(sql.length, 2, 'page, then count');
+  // The LIMIT inside the count is the whole point: a query matching most of a huge session stops
+  // at the ceiling instead of scanning all of it. Without it the count cannot stop early at all
+  // (9038ms against 162ms on the 111k-event session).
+  assert.match(sql[1].sql, /SELECT 1 FROM body WHERE .* LIMIT \?/s);
+  assert.match(sql[1].sql, /count\(\*\)::int AS n/);
+  assert.ok(sql[1].values.includes(1001), 'ceiling + 1, so overflow is visible');
+});
+
+test('a count that hit the ceiling reports a floor, not a number', async () => {
+  const exact = await findResult('merge', [page(10), [{ n: 240 }]], 10);
+  assert.equal(exact.total, 240);
+  assert.equal(exact.totalCapped, undefined);
+
+  const over = await findResult('merge', [page(10), [{ n: 1001 }]], 10);
+  assert.equal(over.total, 1000, 'the ceiling itself, so the client shows "1000+"');
+  assert.equal(over.totalCapped, true);
+});
+
+test('the count asks the same question the page did, broadened or not', async () => {
+  // A count over a corpus or a predicate the page didn't use is just a wrong number.
+  const [, wide, count] = await findIn('confirm directory', [[], page(10)], 10);
+  assert.ok(wide.values.includes('%confirm%'));
+  assert.ok(count.values.includes('%confirm%'), 'counts the words, not the phrase');
+  assert.ok(!count.values.includes('%confirm directory%'));
 });
 
 // ── the ⌘K palette ────────────────────────────────────────────────────────────────────────────
