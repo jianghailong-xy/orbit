@@ -24,9 +24,9 @@ import {
   Tooltip,
 } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
-import { useLocation, useMatch, useSearchParams } from 'react-router-dom';
-import { api } from '../api';
-import { routeId } from '../lib/idCodec';
+import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
+import { api, openTaskListConsole } from '../api';
+import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
@@ -198,6 +198,28 @@ export function TaskListView() {
   // the anchor: a range is defined by two rows' positions, which just moved under it.
   useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
   const pageTitle = isListView ? (listQ.data?.title ?? '') : isUnlisted ? 'No list' : 'Active';
+
+  // ── The list's console ────────────────────────────────────────────────────────────────────
+  //
+  // One durable conversation per list, resolved or created server-side: going back to a list
+  // goes back to the same conversation, with the reasoning behind every earlier policy change
+  // still in it. Only offered on an actual list — "Active" and "No list" are views over tasks,
+  // not campaigns with a policy to steer.
+  const navigate = useNavigate();
+  const [openingConsole, setOpeningConsole] = useState(false);
+  const openConsole = async () => {
+    if (!listId || openingConsole) return;
+    setOpeningConsole(true);
+    try {
+      const { sessionId } = await openTaskListConsole(listId);
+      navigate(`/sessions/${encodeId(sessionId)}`);
+    } catch (e) {
+      // The common cause is a list with no foreman and no workspace to fall back on, which the
+      // server explains; surfacing its message beats a generic failure the user cannot act on.
+      message.error(e instanceof Error ? e.message : 'Could not open the console');
+      setOpeningConsole(false);
+    }
+  };
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
   // A deletion changes every task collection: the paged all/unlisted views, the embedded
@@ -668,7 +690,21 @@ export function TaskListView() {
         <div className="app-view app-view--doc app-view--tasks">
           {/* Title · progress · filters stay put; only the rows below them scroll. */}
           <div className="tasks-header">
-            <h1 className="page-title">{pageTitle}</h1>
+            {/* Title and console share one line: `.page-title` is a block-level h1, so the
+                button needs the row or it drops beneath the heading. */}
+            <div className="tasks-title-row">
+              <h1 className="page-title">{pageTitle}</h1>
+              {isListView && (
+                <Button
+                  size="small"
+                  onClick={openConsole}
+                  loading={openingConsole}
+                  title="Open the conversation this list is steered from"
+                >
+                  调度会话 ›
+                </Button>
+              )}
+            </div>
 
             {counts.total > 0 && (
               <div className="task-progress">

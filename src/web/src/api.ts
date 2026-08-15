@@ -731,6 +731,19 @@ export interface SessionDetail {
 export const getSession = (idOrPublicId: string) =>
   api<SessionDetail>(`/sessions/${idOrPublicId}`);
 
+/**
+ * Open (or return) the conversation a task list is steered from.
+ *
+ * `created` distinguishes the two: the caller can drop the user straight into an existing
+ * conversation, or say "opened a new one" when there wasn't one to return to. Calling it twice
+ * yields the same session rather than a second one.
+ */
+export const openTaskListConsole = (idOrPublicId: string, workspaceId?: string) =>
+  api<{ sessionId: string; created: boolean }>(`/task-lists/${idOrPublicId}/console`, {
+    method: 'POST',
+    body: workspaceId ? { workspaceId } : {},
+  });
+
 /** One changed file's full unified-diff text (git diff vs base). `patch` is absent for a
  *  binary file (shown via the stat instead) or one dropped for size; `truncated` marks the
  *  latter. Mirrors @orbit/shared FilePatch. Fetched lazily, only when a file's diff opens. */

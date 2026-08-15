@@ -1082,6 +1082,13 @@ body {
   min-height: 0;
   overflow-y: auto;
 }
+/* The list heading and its console entry on one line. `.page-title` is a block-level h1, so
+   without this row the button lands under the title instead of beside it. */
+.tasks-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .page-title {
   font-size: 20px;
   font-weight: 600;
