@@ -81,6 +81,14 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'targetRunnerId',
   'taskId',
   'dependsOnTaskId',
+  // The dependency graph's computed fields. They name tasks exactly as `taskId` does, but they are
+  // not columns, so `public-id-coverage.spec.ts` — which walks the schema — never asked about
+  // them. Left unencoded they came back as raw uuids beside nodes whose `id` had been encoded, so
+  // the focus matched no node and every edge pointed at nothing: the view fell back to "the
+  // dependency graph could not be rendered" for every task that has a dependency.
+  'focusTaskId',
+  'sourceTaskId',
+  'targetTaskId',
   'verifiesTaskId',
   'batchId',
   'listId',

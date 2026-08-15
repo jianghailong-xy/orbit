@@ -159,3 +159,35 @@ test('only the runner protocol prefix is excluded', async () => {
   const out = await through({ id: UUID });
   assert.equal(out.id, B62, '/api/runners (the user-facing list) flips like everything else');
 });
+
+/**
+ * Every field naming a task in one response must be spelled the same way.
+ *
+ * The dependency graph is built from computed fields — `focusTaskId`, and each edge's
+ * `sourceTaskId`/`targetTaskId` — which are not columns, so the schema-walking coverage spec never
+ * asked about them. Encoded `id` beside unencoded ids meant the focus matched no node and every
+ * edge pointed at nothing, and the view fell back to "the dependency graph could not be rendered"
+ * for every task that has a dependency.
+ *
+ * Asserted as an invariant over the whole payload rather than field by field: the next computed id
+ * added to this response should fail here, which is the failure the column walk cannot produce.
+ */
+test('every id in a dependency graph is spelled the same as the node ids', async () => {
+  const A = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
+  const B = '019fcbf3-0fa8-7f83-9302-46b25389cb16';
+
+  const out = await through({
+    focusTaskId: A,
+    nodes: [{ id: A, title: 'focus' }, { id: B, title: 'prerequisite' }],
+    edges: [{ sourceTaskId: B, targetTaskId: A }],
+  });
+
+  const nodeIds = new Set(out.nodes.map((n) => n.id));
+  assert.ok(nodeIds.has(out.focusTaskId), 'focus must resolve to a node');
+  assert.ok(nodeIds.has(out.edges[0].sourceTaskId), 'an edge must start at a node');
+  assert.ok(nodeIds.has(out.edges[0].targetTaskId), 'an edge must end at a node');
+
+  // And nothing in the payload is still a raw uuid.
+  const raw = JSON.stringify(out).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g);
+  assert.equal(raw, null, `raw uuids left in the response: ${raw}`);
+});
