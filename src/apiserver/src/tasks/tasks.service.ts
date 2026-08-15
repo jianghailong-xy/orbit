@@ -28,6 +28,7 @@ import {
   CreateTaskCommentDto,
   CreateTaskDto,
   CreateTasksBatchDto,
+  DAG_PREVIEW_TITLES,
   MAX_DAG_OPS,
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
@@ -829,17 +830,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Create several tasks in one call, all-or-nothing. An item may carry a `ref` and later items
-   * may list it in `dependsOnRefs`, so a whole dependency chain lands in a single round-trip
-   * instead of one create per node (previously the only way to build one, since each edge needs
-   * the id the previous call returned). Returns the created tasks in input order, echoing `ref`.
+   * Every check `createMany` makes before it writes anything, and nothing else.
+   *
+   * Shared with `previewCreateMany` on purpose. The preview exists to put a batch in front of a
+   * human, and a batch that would have been rejected anyway is not a decision worth interrupting
+   * someone for — it is a mistake to hand straight back. Two copies of these rules would drift,
+   * and the direction they would drift is a card that promises something the write then refuses.
    */
-  async createMany(
-    ownerId: string,
-    dto: CreateTasksBatchDto,
-    creator?: Creator,
-    creatorSessionId?: string,
-  ) {
+  private async assertBatchValid(ownerId: string, dto: CreateTasksBatchDto) {
     const items = dto.tasks ?? [];
     if (!items.length) throw new BadRequestException('tasks is required');
     if (items.length > TASK_BATCH_CREATE_MAX)
@@ -877,6 +875,109 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertUsableProvider(ownerId, provider);
     const existingPrerequisites = distinct(items.flatMap((item) => item.dependsOnTaskIds ?? []));
     if (existingPrerequisites.length) await this.assertOwnedTasks(ownerId, existingPrerequisites);
+    return items;
+  }
+
+  /**
+   * What a batch would create, without creating any of it.
+   *
+   * Building a DAG is the most consequential thing an agent does here and the least visible: the
+   * ops are fifty titles, and what actually happens is some number of runs starting within the
+   * minute. This deployment has the cautionary case — one session created 43 lists and ~21,500
+   * tasks before anybody looked at it — so the number the card leads with is how many of these
+   * begin immediately, not how many are written.
+   *
+   * "Immediately" is the auto-run sweep's own gate, applied here rather than approximated: the
+   * task must be unblocked, opted into auto-run, and assigned to a workspace bound to a runner.
+   * A task waiting on another item in the same batch is blocked by construction — its prerequisite
+   * is brand new and therefore OPEN — so a chain of fifty starts exactly one.
+   */
+  async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
+    const items = await this.assertBatchValid(ownerId, dto);
+    const assigneeIds = [...new Set(items.map((i) => i.assigneeId).filter((v): v is string => !!v))];
+    const externalIds = [...new Set(items.flatMap((i) => i.dependsOnTaskIds ?? []))];
+    const listIds = [...new Set(items.map((i) => i.listId).filter((v): v is string => !!v))];
+    const [assignees, prerequisites, lists] = await Promise.all([
+      this.prisma.workspace.findMany({
+        where: { id: { in: assigneeIds }, ownerId },
+        select: { id: true, name: true, runnerId: true },
+      }),
+      this.prisma.task.findMany({
+        where: { id: { in: externalIds }, ownerId },
+        select: { id: true, status: true },
+      }),
+      this.prisma.taskList.findMany({
+        where: { id: { in: listIds }, ownerId },
+        select: { id: true, title: true },
+      }),
+    ]);
+    const runnerOf = new Map(assignees.map((a) => [a.id, a.runnerId]));
+    const nameOf = new Map(assignees.map((a) => [a.id, a.name]));
+    const statusOf = new Map(prerequisites.map((t) => [t.id, t.status]));
+
+    let startingNow = 0;
+    let blocked = 0;
+    let notDispatchable = 0;
+    let internalEdges = 0;
+    let externalEdges = 0;
+    for (const item of items) {
+      internalEdges += item.dependsOnRefs?.length ?? 0;
+      externalEdges += item.dependsOnTaskIds?.length ?? 0;
+      // A prerequisite created by this same batch is OPEN the moment it exists, so anything
+      // naming one waits — no need to consult the graph for it.
+      const waitsOnBatch = (item.dependsOnRefs?.length ?? 0) > 0;
+      const waitsOnExisting = (item.dependsOnTaskIds ?? []).some(
+        (id) => statusOf.get(id) !== TaskStatus.DONE,
+      );
+      if (waitsOnBatch || waitsOnExisting) {
+        blocked += 1;
+        continue;
+      }
+      const dispatchable =
+        item.autoRunWhenReady !== false && !!item.assigneeId && !!runnerOf.get(item.assigneeId);
+      if (dispatchable) startingNow += 1;
+      else notDispatchable += 1;
+    }
+    return {
+      taskCount: items.length,
+      startingNow,
+      blocked,
+      // Written but inert: no assignee, no runner behind the assignee, or auto-run switched off.
+      // Worth separating from `blocked`, because these do not start when something finishes —
+      // they wait for a person, and a batch that is silently all of these did nothing.
+      notDispatchable,
+      internalEdges,
+      externalEdges,
+      lists: lists.map((l) => ({ id: l.id, title: l.title })),
+      assignees: [...new Set(items.map((i) => i.assigneeId))]
+        .filter((id): id is string => !!id)
+        .map((id) => ({ id, name: nameOf.get(id) ?? id, hasRunner: !!runnerOf.get(id) })),
+      tasks: items.slice(0, DAG_PREVIEW_TITLES).map((item) => ({
+        title: item.title,
+        listId: item.listId ?? null,
+        dependsOnRefs: item.dependsOnRefs ?? [],
+        dependsOnTaskIds: item.dependsOnTaskIds ?? [],
+        ref: item.ref ?? null,
+      })),
+      // The card shows a window, not the whole batch: fifty rows is not something a person reads
+      // before clicking, and the counts above are the decision.
+      titlesTruncated: Math.max(0, items.length - DAG_PREVIEW_TITLES),
+    };
+  }
+
+  /**
+   * Create several tasks in one call, all-or-nothing. An item may carry a `ref` and later items
+   * may list it in `dependsOnRefs`, so a whole dependency chain lands in a single round-trip
+   * instead of one create per node (previously the only way to build one, since each edge needs
+   * the id the previous call returned). Returns the created tasks in input order, echoing `ref`.
+   */
+  async createMany(
+    ownerId: string,
+    dto: CreateTasksBatchDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+  ) {
+    const items = await this.assertBatchValid(ownerId, dto);
     const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
     // create collapses a re-run of a batch, item by item, without merging distinct items.

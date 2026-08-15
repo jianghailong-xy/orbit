@@ -37,6 +37,53 @@ const dagApproval = (over: Record<string, unknown> = {}): ApprovalInfo =>
 
 const render = (a: ApprovalInfo) => renderToStaticMarkup(<ApprovalPanel approval={a} onDecide={() => {}} />);
 
+const batchApproval = (preview: Record<string, unknown>): ApprovalInfo =>
+  ({ id: 'b1', toolName: 'orbit_task_batch', input: { preview } }) as ApprovalInfo;
+
+describe('batch create approval', () => {
+  it('leads with how many actually start, not how many are written', () => {
+    // Fifty tasks that wait on each other cost two runs; fifty independent ones cost fifty. The
+    // titles look identical either way, which is the whole reason the counts come first.
+    const html = render(batchApproval({ taskCount: 50, startingNow: 2, blocked: 48 }));
+
+    expect(html).toContain('2 start running within the minute');
+    expect(html).toContain('48 wait on a prerequisite');
+    expect(html).toContain('create 50 tasks?');
+  });
+
+  it('separates tasks that cannot run from tasks that are merely waiting', () => {
+    // Nothing finishing will release these — they sit until a person assigns them, and a batch
+    // that is silently all of them did nothing at all.
+    const html = render(batchApproval({ taskCount: 3, startingNow: 0, blocked: 0, notDispatchable: 3 }));
+
+    expect(html).toContain('cannot run');
+    expect(html).not.toContain('wait on a prerequisite');
+  });
+
+  it('shows a window of titles and counts the rest', () => {
+    const html = render(
+      batchApproval({
+        taskCount: 40,
+        startingNow: 1,
+        tasks: [{ title: '[W 001/250] → WARC', dependsOnRefs: ['s0'] }],
+        titlesTruncated: 39,
+      }),
+    );
+
+    expect(html).toContain('[W 001/250] → WARC');
+    expect(html).toContain('waits on 1');
+    expect(html).toContain('+39 more');
+  });
+
+  it('offers no "always allow" — a standing yes to creating tasks is a blank cheque', () => {
+    const html = render(batchApproval({ taskCount: 2, startingNow: 2 }));
+
+    expect(html).not.toContain('Always allow');
+    expect(html).toContain('Create them');
+    expect(html).toContain('Create nothing');
+  });
+});
+
 describe('DAG change approval', () => {
   it('leads with the consequence, which is the part the ops do not show', () => {
     // "remove 1 edge" is unremarkable until you know it releases 40 tasks, and the sweep starts

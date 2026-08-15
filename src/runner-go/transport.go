@@ -813,6 +813,14 @@ func (t *Transport) updateTaskList(id, agentID, sessionID string, body map[strin
 	return out, err
 }
 
+// batchPreview asks what a batch create would do. Writes nothing; it fills the approval card.
+func (t *Transport) batchPreview(agentID, sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/tasks/batch-preview", body, &out, taskOpTimeout,
+		taskCreateHeaders(agentID, sessionID))
+	return out, err
+}
+
 // dagPreview asks what a batch of dependency edits would do. Writes nothing; the answer is what
 // fills the approval card.
 func (t *Transport) dagPreview(id string, body map[string]interface{}) (json.RawMessage, error) {

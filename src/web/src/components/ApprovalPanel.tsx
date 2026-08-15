@@ -29,6 +29,27 @@ interface DagPreview {
   edgesAfter?: number;
 }
 
+/** Orbit's other own ask: a batch of new tasks, which is how a DAG gets built in the first place. */
+const isBatch = (a: ApprovalInfo): boolean => a.toolName === 'orbit_task_batch';
+
+interface BatchPreview {
+  taskCount?: number;
+  startingNow?: number;
+  blocked?: number;
+  notDispatchable?: number;
+  internalEdges?: number;
+  externalEdges?: number;
+  lists?: Array<{ id: string; title: string }>;
+  assignees?: Array<{ id: string; name: string; hasRunner: boolean }>;
+  tasks?: Array<{ title: string; dependsOnRefs?: string[]; dependsOnTaskIds?: string[]; ref?: string | null }>;
+  titlesTruncated?: number;
+}
+
+function batchPreview(input: unknown): BatchPreview {
+  const obj = (input ?? {}) as { preview?: BatchPreview };
+  return obj.preview ?? {};
+}
+
 function dagInput(input: unknown): { preview: DagPreview; note: string } {
   const obj = (input ?? {}) as { preview?: DagPreview; note?: unknown };
   return {
@@ -53,7 +74,7 @@ function rememberRulesFor(a: ApprovalInfo): PermissionRule[] {
   // A DAG change joins questions and plans in having no repeatable form. "Always allow
   // restructuring this campaign's dependencies" is not a rule anyone means to write, and the
   // whole point of the card is that each batch releases a different set of tasks.
-  if (a.toolName === 'AskUserQuestion' || isPlan(a) || isDagChange(a)) return [];
+  if (a.toolName === 'AskUserQuestion' || isPlan(a) || isDagChange(a) || isBatch(a)) return [];
   if (a.toolName === 'Bash') {
     const cmd =
       a.input && typeof a.input === 'object'
@@ -153,6 +174,7 @@ export function ApprovalPanel({
   }
   const plan = isPlan(approval) ? planText(approval.input) : '';
   const dag = isDagChange(approval) ? dagInput(approval.input) : null;
+  const batch = isBatch(approval) ? batchPreview(approval.input) : null;
   return (
     <div className="approval-card">
       <div className="approval-head">
@@ -160,20 +182,24 @@ export function ApprovalPanel({
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
           : dag
             ? `🔗 Confirm: restructure dependencies in ${dag.preview.listTitle ?? 'this list'}?`
-            : `🔓 Approve tool call: ${approval.toolName}`}
+            : batch
+              ? `🧩 Confirm: create ${batch.taskCount ?? 0} task${batch.taskCount === 1 ? '' : 's'}?`
+              : `🔓 Approve tool call: ${approval.toolName}`}
       </div>
       <div className={`approval-body${plan ? ' is-plan' : ''}`}>
         {plan ? (
           <Markdown remarkPlugins={[remarkGfm]}>{plan}</Markdown>
         ) : dag ? (
           <DagChangeBody note={dag.note} preview={dag.preview} />
+        ) : batch ? (
+          <BatchCreateBody preview={batch} />
         ) : (
           <pre className="approval-input">{JSON.stringify(approval.input ?? {}, null, 2)}</pre>
         )}
       </div>
       <div className="approval-actions">
         <button className="approval-btn approve" onClick={() => onDecide(approval.id, 'allow')}>
-          {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : 'Approve'}
+          {isPlan(approval) ? 'Approve & run' : dag ? 'Apply changes' : batch ? 'Create them' : 'Approve'}
           {active && <span className="approval-btn-kbd">{ENTER_HINT}</span>}
         </button>
         {rules.length > 0 && (
@@ -187,9 +213,69 @@ export function ApprovalPanel({
           </button>
         )}
         <button className="approval-btn deny" onClick={() => onDecide(approval.id, 'deny')}>
-          {isPlan(approval) ? 'Keep planning' : dag ? 'Leave the graph alone' : 'Reject'}
+          {isPlan(approval)
+            ? 'Keep planning'
+            : dag
+              ? 'Leave the graph alone'
+              : batch
+                ? 'Create nothing'
+                : 'Reject'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * What a batch would create, led by how much of it starts running.
+ *
+ * The titles are the least useful part and the most eye-catching, so they come last and only a
+ * window of them. The decision is the counts: fifty tasks of which forty-eight wait on each other
+ * costs two runs, and fifty independent ones costs fifty.
+ */
+function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
+  const starting = preview.startingNow ?? 0;
+  const blocked = preview.blocked ?? 0;
+  const inert = preview.notDispatchable ?? 0;
+  const edges = (preview.internalEdges ?? 0) + (preview.externalEdges ?? 0);
+  return (
+    <div className="dag-approval">
+      <div className="dag-approval-impact">
+        <span className={`dag-impact${starting > 0 ? ' dag-impact--run' : ''}`}>
+          {starting} start{starting === 1 ? 's' : ''} running within the minute
+        </span>
+        {blocked > 0 && <span className="dag-impact">{blocked} wait on a prerequisite</span>}
+        {inert > 0 && (
+          // Not the same as blocked: nothing finishing will release these. They sit until a
+          // person assigns them, so a batch that is silently all of these did nothing at all.
+          <span className="dag-impact dag-impact--block">
+            {inert} cannot run — unassigned, no runner, or auto-run off
+          </span>
+        )}
+      </div>
+      {(preview.lists?.length ?? 0) > 0 && (
+        <p className="dag-approval-foot">
+          into {preview.lists!.map((l) => l.title).join(', ')}
+          {edges > 0 && ` · ${edges} dependency edge${edges === 1 ? '' : 's'}`}
+        </p>
+      )}
+      <p className="dag-approval-caption">Tasks</p>
+      <ul className="dag-approval-ops">
+        {(preview.tasks ?? []).map((t, i) => (
+          <li key={i} className="dag-op">
+            <span className="dag-op-verb">+</span>
+            <span className="dag-op-text">{t.title}</span>
+            {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
+              <span className="dag-op-noop">
+                waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {(preview.titlesTruncated ?? 0) > 0 && (
+        <p className="dag-approval-foot">+{preview.titlesTruncated} more</p>
+      )}
     </div>
   );
 }

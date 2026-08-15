@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -233,13 +234,27 @@ func TestMCPTaskCreateBatchPostsEveryItemInOneCall(t *testing.T) {
 		t.Fatalf("task_create leaked the batch-only ref field: %#v", single["ref"])
 	}
 
+	// A batch now goes preview -> approval -> create, so the fake server has to play all three.
+	// The create call is the one this test is about; `hits` records the order so the write can be
+	// shown to happen after the human said yes, not before.
 	var gotMethod, gotPath, gotAgent string
 	var gotBody map[string]interface{}
+	var hits []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotMethod, gotPath = r.Method, r.URL.Path
-		gotAgent = r.Header.Get("X-Orbit-Agent-Id")
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		_, _ = w.Write([]byte(`[{"id":"t1","ref":"s0"},{"id":"t2"}]`))
+		hits = append(hits, r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
+			_, _ = w.Write([]byte(`{"taskCount":2,"startingNow":1}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`))
+		default:
+			gotMethod, gotPath = r.Method, r.URL.Path
+			gotAgent = r.Header.Get("X-Orbit-Agent-Id")
+			_ = json.NewDecoder(r.Body).Decode(&gotBody)
+			_, _ = w.Write([]byte(`[{"id":"t1","ref":"s0"},{"id":"t2"}]`))
+		}
 	}))
 	defer srv.Close()
 
@@ -706,5 +721,101 @@ func TestMCPTaskListDelete(t *testing.T) {
 	// Without an id this must fail here, not send DELETE to the collection route.
 	if res := mcp.callTool("tasklist_delete", map[string]interface{}{}); res["isError"] != true {
 		t.Fatalf("tasklist_delete without listId did not error: %#v", res)
+	}
+}
+
+// Building a DAG is the most consequential thing an agent does here and the least visible: fifty
+// titles say nothing, and what happens is some number of runs starting within the minute. This
+// deployment created 43 lists and ~21,500 tasks from one session before anyone looked, which is
+// why the batch is gated rather than the tool being trusted to be used sparingly.
+func TestMCPTaskCreateBatchAsksBeforeWriting(t *testing.T) {
+	var hits []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits = append(hits, r.URL.Path)
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
+			_, _ = w.Write([]byte(`{"taskCount":2,"startingNow":2}`))
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"ALLOWED"}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"ALLOWED"}`))
+		default:
+			_, _ = w.Write([]byte(`[{"id":"t1"},{"id":"t2"}]`))
+		}
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{map[string]interface{}{"title": "a"}, map[string]interface{}{"title": "b"}},
+	})
+	if res["isError"] == true {
+		t.Fatalf("batch returned an error: %#v", res["content"])
+	}
+	// Preview, then ask, then write — in that order. A write that reached the server before the
+	// approval was registered would make the card a formality.
+	if len(hits) < 3 ||
+		!strings.HasSuffix(hits[0], "/tasks/batch-preview") ||
+		!strings.HasSuffix(hits[1], "/approvals") ||
+		!strings.HasSuffix(hits[len(hits)-1], "/tasks/batch-create") {
+		t.Fatalf("call order = %v", hits)
+	}
+}
+
+func TestMCPTaskCreateBatchWritesNothingWhenDenied(t *testing.T) {
+	var wrote bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/tasks/batch-preview"):
+			_, _ = w.Write([]byte(`{"taskCount":1,"startingNow":1}`))
+		case strings.Contains(r.URL.Path, "/approvals/"):
+			_, _ = w.Write([]byte(`{"status":"DENIED","message":"太多了"}`))
+		case strings.HasSuffix(r.URL.Path, "/approvals"):
+			_, _ = w.Write([]byte(`{"id":"ap1","status":"PENDING"}`))
+		default:
+			wrote = true
+			_, _ = w.Write([]byte(`[{"id":"t1"}]`))
+		}
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "sess-1", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{map[string]interface{}{"title": "a"}},
+	})
+
+	if wrote {
+		t.Fatal("a denied batch still wrote its tasks")
+	}
+	// The refusal reaches the model as an ordinary result, carrying the human's reason, so it can
+	// respond to it instead of retrying blind.
+	body := fmt.Sprintf("%v", res["content"])
+	if !strings.Contains(body, "太多了") {
+		t.Fatalf("deny message not passed back: %v", body)
+	}
+}
+
+// Headless there is nobody to ask, so the write must go ahead exactly as it did before rather
+// than blocking forever on an approval no UI will ever show.
+func TestMCPTaskCreateBatchHeadlessDoesNotAsk(t *testing.T) {
+	var asked bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "approval") || strings.Contains(r.URL.Path, "preview") {
+			asked = true
+		}
+		_, _ = w.Write([]byte(`[{"id":"t1"}]`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{agentID: "agent-1", sessionID: "", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("task_create_batch", map[string]interface{}{
+		"tasks": []interface{}{map[string]interface{}{"title": "a"}},
+	})
+
+	if res["isError"] == true {
+		t.Fatalf("headless batch failed: %#v", res["content"])
+	}
+	if asked {
+		t.Fatal("headless batch tried to raise an approval")
 	}
 }

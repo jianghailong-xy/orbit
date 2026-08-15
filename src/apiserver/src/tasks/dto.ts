@@ -56,6 +56,9 @@ export const TASK_BATCH_CREATE_MAX = 50;
  */
 export const MAX_DAG_OPS = 50;
 
+/** How many task titles a batch-create approval card shows before it starts counting instead. */
+export const DAG_PREVIEW_TITLES = 12;
+
 export class CreateTaskBatchItemDto extends CreateTaskDto {
   // Caller-supplied label for THIS item, used only to wire dependencies up inside the batch
   // (see dependsOnRefs) since the real ids don't exist yet. Never stored.

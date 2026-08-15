@@ -209,6 +209,16 @@ export class RunnerTasksController {
   }
 
   /**
+   * What a batch create would do. Pure read — it writes nothing, and it is what fills the approval
+   * card. Building a DAG is the most consequential thing an agent does here, and the ops alone
+   * do not show it: fifty titles say nothing about how many runs start within the minute.
+   */
+  @Post('tasks/batch-preview')
+  previewBatch(@CurrentRunner() runner: Runner, @Body() dto: CreateTasksBatchDto) {
+    return this.tasks.previewCreateMany(runner.ownerId, dto);
+  }
+
+  /**
    * What a proposed batch of dependency edits would do. Pure read — it writes nothing, and it is
    * what fills the approval card the human decides on.
    */

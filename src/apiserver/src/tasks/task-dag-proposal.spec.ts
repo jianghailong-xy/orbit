@@ -219,3 +219,112 @@ test('applying a batch that would create a cycle refuses before opening a transa
   await assert.rejects(() => service.applyDag(OWNER, LIST, [add(A, B)]), /would create a cycle/);
   assert.deepEqual(written, []);
 });
+
+/**
+ * The batch-create preview. Stubs honour their filters for the same reason as above: a `findMany`
+ * that ignores `where` makes "this assignee has no runner" indistinguishable from "no assignee".
+ */
+function batchService(world: {
+  runners?: Record<string, string | null>;
+  statuses?: Record<string, string>;
+} = {}) {
+  const runners = world.runners ?? { w1: 'r1' };
+  const statuses = world.statuses ?? {};
+  const prisma = {
+    workspace: {
+      findMany: async ({ where }: any) =>
+        Object.entries(runners)
+          .filter(([id]) => !where?.id?.in || where.id.in.includes(id))
+          .map(([id, runnerId]) => ({ id, name: id, runnerId })),
+    },
+    task: {
+      findMany: async ({ where }: any) =>
+        Object.entries(statuses)
+          .filter(([id]) => !where?.id?.in || where.id.in.includes(id))
+          .map(([id, status]) => ({ id, status })),
+      count: async () => Object.keys(statuses).length,
+    },
+    taskList: { findMany: async () => [], findFirst: async () => ({ id: LIST, title: 'L' }) },
+  };
+  const service = new TasksService(prisma as never, {} as never, { publishForUser: () => undefined } as never);
+  // Ownership assertions are covered by createMany's own tests; they are not what this measures.
+  for (const m of ['assertOwnedWorkspace', 'assertOwnedList', 'assertUsableProvider', 'assertOwnedTasks']) {
+    (service as unknown as Record<string, unknown>)[m] = async () => undefined;
+  }
+  return service;
+}
+
+test('a chain of fifty starts exactly one run, and the preview says so', async () => {
+  // The number the card leads with. Fifty titles look the same whether they cost 1 run or 50.
+  const tasks = Array.from({ length: 50 }, (_, i) => ({
+    title: `step ${i}`,
+    ref: `s${i}`,
+    assigneeId: 'w1',
+    ...(i > 0 ? { dependsOnRefs: [`s${i - 1}`] } : {}),
+  }));
+
+  const p = await batchService().previewCreateMany(OWNER, { tasks } as never);
+
+  assert.equal(p.taskCount, 50);
+  assert.equal(p.startingNow, 1);
+  assert.equal(p.blocked, 49);
+});
+
+test('fifty independent tasks start fifty runs', async () => {
+  const tasks = Array.from({ length: 50 }, (_, i) => ({ title: `t ${i}`, assigneeId: 'w1' }));
+
+  const p = await batchService().previewCreateMany(OWNER, { tasks } as never);
+
+  assert.equal(p.startingNow, 50);
+  assert.equal(p.blocked, 0);
+});
+
+test('a task whose assignee has no runner cannot run, and is not called blocked', async () => {
+  // Nothing finishing will release it — it waits for a person. Counting it as blocked would say
+  // the batch is progressing when it is inert.
+  const p = await batchService({ runners: { w1: null } }).previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1' }],
+  } as never);
+
+  assert.equal(p.startingNow, 0);
+  assert.equal(p.blocked, 0);
+  assert.equal(p.notDispatchable, 1);
+});
+
+test('auto-run switched off keeps a task from starting', async () => {
+  const p = await batchService().previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1', autoRunWhenReady: false }],
+  } as never);
+
+  assert.equal(p.startingNow, 0);
+  assert.equal(p.notDispatchable, 1);
+});
+
+test('an existing prerequisite that is already DONE does not block', async () => {
+  const p = await batchService({ statuses: { old1: 'DONE' } }).previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1', dependsOnTaskIds: ['old1'] }],
+  } as never);
+
+  assert.equal(p.startingNow, 1);
+});
+
+test('an existing prerequisite still open does block', async () => {
+  const p = await batchService({ statuses: { old1: 'IN_PROGRESS' } }).previewCreateMany(OWNER, {
+    tasks: [{ title: 'a', assigneeId: 'w1', dependsOnTaskIds: ['old1'] }],
+  } as never);
+
+  assert.equal(p.startingNow, 0);
+  assert.equal(p.blocked, 1);
+});
+
+test('the preview rejects what the write would reject, before anyone is asked', async () => {
+  // A batch that could never land is a mistake to hand back, not a decision to interrupt someone
+  // with. Same validation as createMany, shared rather than copied.
+  await assert.rejects(
+    () =>
+      batchService().previewCreateMany(OWNER, {
+        tasks: [{ title: 'a', dependsOnRefs: ['nope'] }],
+      } as never),
+    /must name an earlier task/,
+  );
+});

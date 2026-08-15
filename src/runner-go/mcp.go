@@ -317,11 +317,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			}
 			bodies = append(bodies, body)
 		}
-		raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, map[string]interface{}{"tasks": bodies})
-		if err != nil {
-			return toolResult("create tasks failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
+		return s.createBatchWithApproval(bodies)
 
 	case "task_update":
 		id, ok := s.resolveTaskID(args)
@@ -630,6 +626,66 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	default:
 		return toolResult("unknown tool: "+name, true)
 	}
+}
+
+// batchApprovalToolName is the batch-create card's key, alongside dagApprovalToolName. Building
+// a DAG and restructuring one are the same decision seen from two ends, so they are gated the
+// same way and rendered by two cards that read alike.
+const batchApprovalToolName = "orbit_task_batch"
+
+// createBatchWithApproval puts a batch of new tasks in front of a human before writing any of it.
+//
+// This is the tool that builds a DAG, and it is the most consequential thing an agent does here
+// while looking like the least: fifty titles say nothing, and what actually happens is some number
+// of runs starting within the minute. This deployment has the cautionary case — one session
+// created 43 lists and ~21,500 tasks before anybody looked.
+//
+// A single task_create stays ungated on purpose. It writes one task and can start one run, and
+// gating the most ordinary operation an agent performs would make it unusable; the batch is where
+// the reach is, and it is the only place `dependsOnRefs` — a DAG in one call — can be expressed.
+func (s *mcpServer) createBatchWithApproval(bodies []map[string]interface{}) map[string]interface{} {
+	body := map[string]interface{}{"tasks": bodies}
+	if s.sessionID == "" {
+		// Headless (a CLI-shaped call with no session): there is nobody to ask and no card to
+		// show, so the write goes ahead exactly as it did before.
+		return s.createBatchNow(body)
+	}
+	preview, err := s.t.batchPreview(s.agentID, s.sessionID, body)
+	if err != nil {
+		return toolResult("batch preview failed: "+err.Error(), true)
+	}
+	input := map[string]interface{}{"tasks": bodies, "preview": json.RawMessage(preview)}
+	id, err := s.t.createApproval(context.Background(), s.sessionID, map[string]interface{}{
+		"toolName": batchApprovalToolName,
+		"input":    input,
+	})
+	if err != nil {
+		return toolResult("could not register approval: "+err.Error(), true)
+	}
+	for {
+		dec, err := s.t.pollApproval(context.Background(), s.sessionID, id)
+		if err != nil {
+			return toolResult("approval poll failed: "+err.Error(), true)
+		}
+		switch dec.Status {
+		case "ALLOWED":
+			return s.createBatchNow(body)
+		case "DENIED":
+			msg := dec.Message
+			if msg == "" {
+				msg = "denied by the user"
+			}
+			return toolResult("the human rejected this batch: "+msg, false)
+		}
+	}
+}
+
+func (s *mcpServer) createBatchNow(body map[string]interface{}) map[string]interface{} {
+	raw, err := s.t.createTasksBatch(s.agentID, s.sessionID, body)
+	if err != nil {
+		return toolResult("create tasks failed: "+err.Error(), true)
+	}
+	return toolResult(prettyJSON(raw), false)
 }
 
 // dagApprovalToolName is what the approval is filed under, and what the web keys its typed card
@@ -963,7 +1019,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":        "array",
