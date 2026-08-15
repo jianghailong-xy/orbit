@@ -20,6 +20,44 @@ private final class ComposerPasteState {
 }
 #endif
 
+/// The composer band: everything below the transcript that belongs to the message you're about to
+/// send — the error strip, staged attachments, the background tray, the git bar, and the composer
+/// itself. ONE place owns the band's 16pt gutter, its top divider + `.bar` surface, and the 8pt
+/// rhythm between its members (web parity: `.workspace-composer` — a bordered container whose
+/// children each carry `margin-bottom: 8px`). Before this existed every member padded itself and the
+/// stack drifted: the git bar had picked up a stray 4pt top padding nobody else had, so the gap
+/// above it was 12 where the tray's was 8, and the whole stack's top edge jumped 4pt whenever a
+/// background process appeared.
+///
+/// Members carry their own `.padding(.bottom, .composerBandGap)` INSIDE their `if`, rather than the
+/// band using `VStack(spacing:)`: a hidden member is not always an `EmptyView` — `WorktreeBar` keeps
+/// a concrete container even when it renders nothing, as a stable `.sheet` host — and a zero-height
+/// subview would still collect stack spacing on both sides. The composer itself is always visible
+/// and is the last member, so it adds no bottom gap; the band's own bottom padding closes the stack.
+struct ComposerBand<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(spacing: 0) { content }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            .background(.bar)
+            // Full-bleed hairline (so it can't be inset by the gutter above) marking where the
+            // transcript ends: on iOS `.bar` over a light transcript is nearly invisible on its own,
+            // which left the band without a top edge. Wrapped in a stack to give the rule a
+            // horizontal axis — a bare `Divider()` in an overlay draws as a VERTICAL line down the
+            // middle instead (same fix as the sticky question header's bottom rule).
+            .overlay(alignment: .top) { VStack(spacing: 0) { Divider() } }
+    }
+}
+
+extension CGFloat {
+    /// The one vertical gap between `ComposerBand` members. Read it, don't retype it — the drift it
+    /// replaces was four hand-written literals that stopped agreeing.
+    static let composerBandGap: CGFloat = 8
+}
+
 struct ComposerView: View {
     @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
@@ -380,8 +418,9 @@ struct ComposerView: View {
             // for comfortable targets; macOS keeps the dense web-parity caption.
             .font(.orbitListSubtitle)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(.bar)
+        // No gutter, surface or vertical padding of its own: the enclosing `ComposerBand` owns all
+        // three for every member of the stack, so this can't drift away from the bars above it.
+        //
         // A focused field editor consumes ⌘V before any SwiftUI .onPasteCommand fires, so intercept
         // the keystroke here: when the composer is focused and the clipboard holds an image, attach
         // it (web parity) and swallow the paste; anything else falls through to normal text paste.
@@ -689,9 +728,9 @@ struct ComposerAttachmentsView: View {
                 ForEach(console.pendingAttachments) { attachmentChip($0) }
                 Spacer(minLength: 0)
             }
-            // The same 16pt gutter + 8pt gap the tray and worktree cards below it use, so the
-            // three read as one inset stack above the composer.
-            .padding(.horizontal, 16).padding(.bottom, 8)
+            // Gutter comes from the enclosing `ComposerBand`; this only owns its gap to the next
+            // member, and only while it is actually on screen.
+            .padding(.bottom, .composerBandGap)
         }
     }
 
