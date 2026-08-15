@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
+import { BatchGraph } from './BatchGraph';
+import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { bashCommandRules } from '@orbit/shared';
 
 // claude routes plan-mode "exit?" through the same permission tool as any other gated
@@ -241,6 +243,14 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
   const manual = preview.needsManualStart ?? 0;
   const inert = preview.notDispatchable ?? 0;
   const edges = (preview.internalEdges ?? 0) + (preview.externalEdges ?? 0);
+  const tasks = preview.tasks ?? [];
+  // Described from the window the card draws, not the whole batch — so the sentence says what the
+  // picture shows, and the "+N more" below says what it does not.
+  const graph = buildBatchGraph(tasks);
+  const shape = describeShape(graph);
+  // Drawn only while it stays legible; past that the sentence carries the shape and the list
+  // carries the names, which is strictly more readable than a picture scaled into illegibility.
+  const hasShape = shouldDraw(graph);
   return (
     <div className="dag-approval">
       <div className="dag-approval-impact">
@@ -270,20 +280,29 @@ function BatchCreateBody({ preview }: { preview: BatchPreview }): JSX.Element {
           {edges > 0 && ` · ${edges} dependency edge${edges === 1 ? '' : 's'}`}
         </p>
       )}
-      <p className="dag-approval-caption">Tasks</p>
-      <ul className="dag-approval-ops">
-        {(preview.tasks ?? []).map((t, i) => (
-          <li key={i} className="dag-op">
-            <span className="dag-op-verb">+</span>
-            <span className="dag-op-text">{t.title}</span>
-            {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
-              <span className="dag-op-noop">
-                waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
+      <p className="dag-approval-caption">
+        Tasks{shape ? ` — ${shape}` : ''}
+      </p>
+      {hasShape ? (
+        // Drawn only when the batch has edges. A chain of ten and ten unrelated tasks produce the
+        // same list of titles and behave completely differently, and that is exactly what a
+        // picture shows and a list cannot.
+        <BatchGraph tasks={tasks} />
+      ) : (
+        <ul className="dag-approval-ops">
+          {tasks.map((t, i) => (
+            <li key={i} className="dag-op">
+              <span className="dag-op-verb">+</span>
+              <span className="dag-op-text">{t.title}</span>
+              {((t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)) > 0 && (
+                <span className="dag-op-noop">
+                  waits on {(t.dependsOnRefs?.length ?? 0) + (t.dependsOnTaskIds?.length ?? 0)}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       {(preview.titlesTruncated ?? 0) > 0 && (
         <p className="dag-approval-foot">+{preview.titlesTruncated} more</p>
       )}

@@ -38,6 +38,18 @@ public struct DagApprovalPreview: Equatable, Sendable {
     public let edgesAfter: Int
 }
 
+/// One task in the window the card was given, with the wiring needed to show the batch's shape.
+public struct BatchPreviewTask: Equatable, Sendable {
+    public let title: String
+    /// Label other items in this batch use to depend on it; nil when nothing does.
+    public let ref: String?
+    /// Refs of earlier items in this same batch.
+    public let dependsOnRefs: [String]?
+    /// Ids of tasks that already exist — not drawn, so a task carrying one is a root in this
+    /// picture without being one overall, and the row says so.
+    public let dependsOnTaskIds: [String]?
+}
+
 public struct BatchApprovalPreview: Equatable, Sendable {
     public let taskCount: Int
     /// Has a prerequisite, and it is finished. Auto-run triggers on that, not on being unblocked.
@@ -48,7 +60,7 @@ public struct BatchApprovalPreview: Equatable, Sendable {
     public let notDispatchable: Int
     public let edges: Int
     public let lists: [String]
-    public let titles: [String]
+    public let tasks: [BatchPreviewTask]
     public let titlesTruncated: Int
 }
 
@@ -89,9 +101,18 @@ public extension Approvals {
         if case .array(let raw)? = p["lists"] {
             lists = raw.compactMap { $0["title"]?.stringValue }
         }
-        var titles: [String] = []
+        var tasks: [BatchPreviewTask] = []
         if case .array(let raw)? = p["tasks"] {
-            titles = raw.compactMap { $0["title"]?.stringValue }
+            tasks = raw.compactMap { t in
+                guard let title = t["title"]?.stringValue else { return nil }
+                func strings(_ key: String) -> [String]? {
+                    guard case .array(let a)? = t[key] else { return nil }
+                    return a.compactMap { $0.stringValue }
+                }
+                return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
+                                        dependsOnRefs: strings("dependsOnRefs"),
+                                        dependsOnTaskIds: strings("dependsOnTaskIds"))
+            }
         }
         return BatchApprovalPreview(
             taskCount: p["taskCount"]?.intValue ?? 0,
@@ -101,7 +122,7 @@ public extension Approvals {
             notDispatchable: p["notDispatchable"]?.intValue ?? 0,
             edges: (p["internalEdges"]?.intValue ?? 0) + (p["externalEdges"]?.intValue ?? 0),
             lists: lists,
-            titles: titles,
+            tasks: tasks,
             titlesTruncated: p["titlesTruncated"]?.intValue ?? 0)
     }
 

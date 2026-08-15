@@ -197,10 +197,15 @@ struct ToolApprovalCard: View {
                                tone: .orange, badge: "new tasks")
                 OrbitAskBody(impact: Approvals.batchImpactLines(batch),
                              note: "",
-                             detail: batch.lists.isEmpty ? "" : "into \(batch.lists.joined(separator: ", "))"
-                                 + (batch.edges > 0 ? " · \(batch.edges) dependency edge\(batch.edges == 1 ? "" : "s")" : ""),
-                             rows: batch.titles,
-                             more: batch.titlesTruncated)
+                             detail: (batch.lists.isEmpty ? "" : "into \(batch.lists.joined(separator: ", "))")
+                                 + (batch.edges > 0 ? " · \(batch.edges) dependency edge\(batch.edges == 1 ? "" : "s")" : "")
+                                 + shapeSuffix(batch),
+                             // Indented, so a chain reads as a chain and a fan-out as siblings —
+                             // the part a flat list of titles cannot show. Web draws a real graph;
+                             // a phone column has no room for one.
+                             rows: Approvals.batchTreeRows(batch.tasks).map(\.text),
+                             more: batch.titlesTruncated,
+                             mono: true)
             } else if let dag {
                 ApprovalHeader(symbol: "point.3.connected.trianglepath.dotted",
                                title: "Restructure dependencies in \(dag.listTitle)?",
@@ -209,7 +214,8 @@ struct ToolApprovalCard: View {
                              note: dag.note,
                              detail: "\(dag.edgesBefore) → \(dag.edgesAfter) edges",
                              rows: dag.ops.map { $0.noop ? "\($0.sentence) (already so)" : $0.sentence },
-                             more: 0)
+                             more: 0,
+                             mono: false)
             } else {
                 ApprovalHeader(symbol: "hand.raised.fill", title: "Approve tool call",
                                tone: .orange, badge: approval.toolName ?? "Tool")
@@ -260,12 +266,21 @@ struct ToolApprovalCard: View {
 /// The body shared by Orbit's two own asks: the consequence first and largest, then the reason,
 /// then the rows it is made of. The counts are the decision — the titles look identical whether a
 /// batch costs one run or none — so the rows come last and are capped.
+/// The shape, appended to the detail line: it describes the whole window even when the tree below
+/// is flattened by the depth cap.
+private func shapeSuffix(_ batch: BatchApprovalPreview) -> String {
+    let shape = Approvals.describeBatchShape(batch.tasks)
+    return shape.isEmpty ? "" : " · \(shape)"
+}
+
 private struct OrbitAskBody: View {
     let impact: [String]
     let note: String
     let detail: String
     let rows: [String]
     let more: Int
+    /// Tree rows are drawn with box glyphs, which only line up in a monospaced face.
+    var mono: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -282,8 +297,8 @@ private struct OrbitAskBody: View {
                 Text(detail).font(.orbitLabel).foregroundStyle(.secondary)
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                Text("• \(row)")
-                    .font(.orbitLabel).foregroundStyle(.secondary)
+                Text(mono ? row : "• \(row)")
+                    .font(mono ? .orbitMono : .orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             if more > 0 {

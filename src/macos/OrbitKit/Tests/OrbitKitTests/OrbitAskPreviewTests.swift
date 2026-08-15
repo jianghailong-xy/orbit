@@ -39,7 +39,7 @@ final class OrbitAskPreviewTests: XCTestCase {
         XCTAssertEqual(p.startingNow, 2)
         XCTAssertEqual(p.edges, 49)
         XCTAssertEqual(p.lists, ["FineWeb"])
-        XCTAssertEqual(p.titles, ["step 0", "step 1"])
+        XCTAssertEqual(p.tasks.map(\.title), ["step 0", "step 1"])
         XCTAssertEqual(p.titlesTruncated, 48)
 
         let lines = Approvals.batchImpactLines(p)
@@ -113,5 +113,91 @@ final class OrbitAskPreviewTests: XCTestCase {
         // rather than rendering an empty typed one.
         XCTAssertNil(Approvals.batchPreview(from: json("{\"tasks\":[]}")))
         XCTAssertNil(Approvals.dagPreview(from: json("{\"ops\":[]}")))
+    }
+}
+
+/// The batch's shape, rendered for a column too narrow to draw a graph in. Web draws real nodes
+/// and edges; the structure has to survive the translation, including the places a tree cannot
+/// express a DAG and has to say so instead of quietly simplifying.
+final class BatchTreeTests: XCTestCase {
+
+    private func task(_ title: String, ref: String? = nil, on refs: [String]? = nil,
+                      outside: [String]? = nil) -> BatchPreviewTask {
+        BatchPreviewTask(title: title, ref: ref, dependsOnRefs: refs, dependsOnTaskIds: outside)
+    }
+
+    func testAChainIndentsOneLevelPerStep() {
+        let rows = Approvals.batchTreeRows((0..<4).map {
+            task("step \($0)", ref: "s\($0)", on: $0 == 0 ? nil : ["s\($0 - 1)"])
+        })
+
+        XCTAssertEqual(rows.map(\.depth), [0, 1, 2, 3])
+        XCTAssertEqual(rows[0].text, "step 0")
+        XCTAssertEqual(rows[1].text, "└─ step 1")
+        XCTAssertEqual(Approvals.describeBatchShape((0..<4).map {
+            task("step \($0)", ref: "s\($0)", on: $0 == 0 ? nil : ["s\($0 - 1)"])
+        }), "a chain of 4")
+    }
+
+    func testAFanOutReadsAsSiblings() {
+        let tasks = [task("root", ref: "r"),
+                     task("left", ref: "l", on: ["r"]),
+                     task("right", ref: "x", on: ["r"])]
+
+        let rows = Approvals.batchTreeRows(tasks)
+
+        XCTAssertEqual(rows.map(\.text), ["root", "├─ left", "└─ right"])
+        XCTAssertEqual(Approvals.describeBatchShape(tasks), "2 in parallel after 1")
+    }
+
+    func testAJoinSaysItIsASimplification() {
+        // A tree cannot draw a task that waits on two things. Dropping the second edge silently
+        // would show an order the dispatcher will not follow; counting it is the honest move.
+        let tasks = [task("a", ref: "a"),
+                     task("b", ref: "b", on: ["a"]),
+                     task("join", ref: "j", on: ["a", "b"])]
+
+        let rows = Approvals.batchTreeRows(tasks)
+
+        XCTAssertTrue(rows.last!.text.contains("waits on 1 more"), rows.last!.text)
+    }
+
+    func testATaskWaitingOutsideTheBatchSaysSo() {
+        // It draws as a root because its prerequisite is not in the window; without the note the
+        // picture would say it can start, which is the opposite of true.
+        let rows = Approvals.batchTreeRows([task("a", ref: "a", outside: ["existing-1"])])
+
+        XCTAssertTrue(rows[0].text.contains("waits on a task outside"), rows[0].text)
+    }
+
+    func testIndentationStopsBeforeItRunsOffTheColumn() {
+        // A phone column is ~300pt and each level costs ~14pt; a 12-deep chain would push its last
+        // titles off the edge, which crops the shape rather than showing it.
+        let deep = (0..<8).map { task("step \($0)", ref: "s\($0)", on: $0 == 0 ? nil : ["s\($0 - 1)"]) }
+
+        let rows = Approvals.batchTreeRows(deep)
+
+        XCTAssertEqual(rows.map(\.depth).max(), maxTreeDepth)
+        XCTAssertTrue(rows.last!.text.contains("level 7"), rows.last!.text)
+    }
+
+    func testUnrelatedTasksHaveNoTreeAndSaySo() {
+        let tasks = [task("a"), task("b"), task("c")]
+
+        XCTAssertEqual(Approvals.batchTreeRows(tasks).map(\.depth), [0, 0, 0])
+        XCTAssertEqual(Approvals.describeBatchShape(tasks), "3 independent tasks")
+    }
+
+    func testARefPointingPastTheWindowLeavesTheTaskARoot() {
+        // The card draws at most a dozen of a fifty-task batch, so refs naming items outside the
+        // window are ordinary; they must not produce a row under a parent that is not there.
+        let rows = Approvals.batchTreeRows([task("a", ref: "a", on: ["not-shown"])])
+
+        XCTAssertEqual(rows.map(\.depth), [0])
+    }
+
+    func testAnEmptyBatchProducesNothing() {
+        XCTAssertTrue(Approvals.batchTreeRows([]).isEmpty)
+        XCTAssertEqual(Approvals.describeBatchShape([]), "")
     }
 }

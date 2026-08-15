@@ -6152,6 +6152,32 @@ body {
   color: var(--warning-fg, #ad6800);
   font-weight: 600;
 }
+/* The batch's shape. Nodes read as the same objects the counts above describe, and edges are the
+   quietest thing on the card — the structure should be legible from the arrangement, not from the
+   lines being loud. */
+.batch-graph {
+  margin: 2px 0 8px;
+}
+.batch-graph-edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--text-3) 55%, transparent);
+  stroke-width: 1.2;
+}
+.batch-graph-node rect {
+  fill: color-mix(in srgb, var(--brand) 12%, var(--bg-raised));
+  stroke: color-mix(in srgb, var(--brand) 34%, transparent);
+  stroke-width: 1;
+}
+.batch-graph-node text {
+  fill: var(--text-1);
+  font-size: 11px;
+}
+/* Waiting on something that is not drawn: dashed, so it never reads as a task ready to start. */
+.batch-graph-node.is-outside rect {
+  stroke-dasharray: 3 2;
+  fill: var(--bg-raised);
+}
+
 .dag-approval-caption {
   margin: 0 0 3px;
   color: var(--text-3);

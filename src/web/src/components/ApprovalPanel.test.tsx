@@ -85,6 +85,36 @@ describe('batch create approval', () => {
     expect(html).toContain('+39 more');
   });
 
+  it('draws the shape when the batch has one, and names it', () => {
+    const html = render(
+      batchApproval({
+        taskCount: 3,
+        startingNow: 0,
+        needsManualStart: 1,
+        blocked: 2,
+        tasks: [
+          { title: 'root', ref: 'r' },
+          { title: 'left', ref: 'l', dependsOnRefs: ['r'] },
+          { title: 'right', ref: 'x', dependsOnRefs: ['r'] },
+        ],
+      }),
+    );
+
+    expect(html).toContain('<svg');
+    expect(html).toContain('2 in parallel after 1');
+  });
+
+  it('keeps the list when there is no shape to draw', () => {
+    // Unrelated tasks have no structure; a row of disconnected boxes is a worse list than a list.
+    const html = render(
+      batchApproval({ taskCount: 2, startingNow: 0, tasks: [{ title: 'a' }, { title: 'b' }] }),
+    );
+
+    expect(html).not.toContain('<svg');
+    expect(html).toContain('2 independent tasks');
+    expect(html).toContain('a</span>');
+  });
+
   it('offers no "always allow" — a standing yes to creating tasks is a blank cheque', () => {
     const html = render(batchApproval({ taskCount: 2, startingNow: 2 }));
 
