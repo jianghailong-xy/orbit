@@ -51,9 +51,11 @@ struct ComposerBand<Content: View>: View {
             //
             // Full-bleed hairline (so it can't be inset by the gutter above) marking where the
             // transcript ends. Wrapped in a stack to give the rule a horizontal axis — a bare
-            // `Divider()` in an overlay draws as a VERTICAL line down the middle instead (same fix
-            // as the sticky question header's bottom rule).
-            .overlay(alignment: .top) { VStack(spacing: 0) { Divider() } }
+            // `Divider()` in a background draws as a VERTICAL line down the middle instead (same fix
+            // as the sticky question header's bottom rule). BEHIND the content, not over it: nothing
+            // in the band reaches its top edge (the 12pt padding keeps it clear), but the composer's
+            // floating `/` menu crosses it, and as an overlay the hairline drew a seam across that card.
+            .background(alignment: .top) { VStack(spacing: 0) { Divider() } }
     }
 }
 
@@ -71,6 +73,8 @@ struct ComposerView: View {
     var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
+    /// Measured height of the `/` menu's rows — the floating card is sized from this (see slashMenu).
+    @State private var slashHeight: CGFloat = 0
     #if os(macOS)
     @FocusState private var inputFocused: Bool
     @State private var pasteMonitor: Any?
@@ -206,8 +210,6 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
-            if showSlash { slashMenu }
-
             // One rounded box wrapping the + menu, the growing field, and send — mirrors the web
             // composer's single bordered `.composer-box` instead of three separate controls. Shell
             // mode is reached by a `!` prefix (the + menu's Shell item inserts it), not a toggle.
@@ -287,6 +289,17 @@ struct ComposerView: View {
                     .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)
             }
             .animation(.easeOut(duration: 0.15), value: boxFocused)
+            // The `/` menu FLOATS above the box instead of sitting in the band's stack (web parity:
+            // `.composer-slash-menu` is absolutely positioned at `bottom: 100% + 6px`). In flow it
+            // pushed the git bar and the transcript upward the moment a `/` was typed and dropped
+            // them back on every keystroke that emptied the match list; as an overlay it covers the
+            // content above and nothing under it moves. The guide puts the card's BOTTOM edge 6pt
+            // above the box's top edge.
+            .overlay(alignment: .top) {
+                if showSlash {
+                    slashMenu.alignmentGuide(.top) { $0[.bottom] + 6 }
+                }
+            }
 
             // Footer controls, laid out like the web composer: permission mode on the left,
             // then the provider · model · effort · plan-usage cluster on the right. Each
@@ -620,36 +633,56 @@ struct ComposerView: View {
     private static let slashRowMinHeight: CGFloat = 0
     #endif
 
+    /// Web parity (`max-height: 260px; overflow-y: auto`). Matches run to 50, and a card that tall
+    /// would leave the screen through the top with its first rows unreachable now that it floats.
+    private static let slashMenuMaxHeight: CGFloat = 260
+
     private var slashMenu: some View {
         let matches = console.slashMatches
         let highlightID = matches.indices.contains(slashIndex) ? matches[slashIndex].id : matches.first?.id
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(matches) { item in
-                Button {
-                    console.pickSlash(item.name)
-                    slashDismissed = nil
-                    requestFocus()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("/\(item.name)").font(.callout.monospaced())
-                        Text(item.type == "skill" ? "skill" : item.type == "local" ? "local" : "cmd")
-                            .font(.orbitMeta).foregroundStyle(.secondary)
-                        if let d = item.description, !d.isEmpty {
-                            Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(matches) { item in
+                    Button {
+                        console.pickSlash(item.name)
+                        slashDismissed = nil
+                        requestFocus()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("/\(item.name)").font(.callout.monospaced())
+                            Text(item.type == "skill" ? "skill" : item.type == "local" ? "local" : "cmd")
+                                .font(.orbitMeta).foregroundStyle(.secondary)
+                            if let d = item.description, !d.isEmpty {
+                                Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.horizontal, 8).padding(.vertical, Self.slashRowVPad)
+                        .frame(maxWidth: .infinity, minHeight: Self.slashRowMinHeight, alignment: .leading)
+                        .background(item.id == highlightID ? Color.accentColor.opacity(0.18) : .clear)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 8).padding(.vertical, Self.slashRowVPad)
-                    .frame(maxWidth: .infinity, minHeight: Self.slashRowMinHeight, alignment: .leading)
-                    .background(item.id == highlightID ? Color.accentColor.opacity(0.18) : .clear)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
+            }
+            // A ScrollView takes every point it is offered, and an overlay is offered the composer
+            // box's own height — so the card is sized from its measured rows instead of the
+            // proposal. (`onGeometryChange` is iOS 18+; this is the version-agnostic reader, same
+            // as MarkdownView's pane measurement.)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onChange(of: geo.size.height, initial: true) { _, h in slashHeight = h }
+                }
             }
         }
+        .frame(height: min(slashHeight, Self.slashMenuMaxHeight))
+        .scrollBounceBehavior(.basedOnSize)
         .padding(4)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.gray.opacity(0.25)))
+        // It stands on the transcript now, not in the band's stack: lift it off with the same soft
+        // drop shadow web gives the floating menu.
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
