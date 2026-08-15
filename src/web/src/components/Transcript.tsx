@@ -44,6 +44,7 @@ import type { LoginEngine } from '@orbit/shared';
 import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api';
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
+import { describeInjected, splitDeliveredMessage } from '../lib/deliveredMessage';
 import { RunnerSignIn } from './RunnerSignIn';
 
 // How a transcript fetches an attachment's bytes (as an object URL). Defaults to the
@@ -1056,10 +1057,16 @@ function UserBubble({ node }: { node: TextNode }) {
   const exp = useContext(ExportCtx);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const longText = node.text.length > USER_BUBBLE_TRUNCATE;
-  const shownText = longText && !expanded && !exp ? node.text.slice(0, USER_BUBBLE_TRUNCATE) : node.text;
+  // What the runner echoed back is what it was *given*, which includes anything delivery appended
+  // — a reference expansion, a list's condition board. Those belong to Orbit, not to the person
+  // whose bubble this is, so they come out of the body and are named on one line instead. Copying
+  // and the length cap follow the typed text for the same reason: neither should be measured
+  // against a block nobody wrote.
+  const { text: typed, injected } = splitDeliveredMessage(node.text);
+  const longText = typed.length > USER_BUBBLE_TRUNCATE;
+  const shownText = longText && !expanded && !exp ? typed.slice(0, USER_BUBBLE_TRUNCATE) : typed;
   const copy = () => {
-    void copyText(node.text).then((ok) => {
+    void copyText(typed).then((ok) => {
       if (!ok) return;
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
@@ -1096,12 +1103,20 @@ function UserBubble({ node }: { node: TextNode }) {
           </div>
         )}
         {shownText && <MD breaks>{shownText}</MD>}
+        {injected.length > 0 && (
+          // Named, not hidden: without this the agent answers about a quota outage nobody
+          // appears to have raised. The full text rides in the tooltip, so what the model read
+          // is still reachable without putting it in the middle of someone's sentence.
+          <div className="chat-injected" title={injected.map((b) => b.text).join('\n\n')}>
+            ⊕ Orbit attached: {describeInjected(injected)}
+          </div>
+        )}
       </div>
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
           {expanded
             ? 'Show less'
-            : `Show ${(node.text.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
+            : `Show ${(typed.length - USER_BUBBLE_TRUNCATE).toLocaleString()} more characters`}
         </button>
       )}
       {node.text && (

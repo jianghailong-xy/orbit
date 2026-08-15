@@ -401,6 +401,53 @@ describe('engine stderr', () => {
   });
 });
 
+describe('injected context in a user bubble', () => {
+  // The runner echoes what it was *given*, so anything delivery appended lands inside the
+  // person's own bubble looking like they typed it. Found on the deployed stack, not in a test.
+  const CONDITIONS = `<list-conditions list="l1" title="FineWeb">
+  配额挡住派发｜12 个就绪任务被配额挡住｜累计 47 次
+</list-conditions>`;
+  const userEvent = (text: string): RunEvent => ({ seq: 1, type: 'user', payload: { text } });
+
+  it('keeps the appended block out of the bubble body', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[userEvent(`这个列表现在什么情况？\n\n${CONDITIONS}`)]} />,
+    );
+
+    // Attribute values stripped first: the block is deliberately still in the tooltip, and
+    // asserting over the raw html would pass for the wrong reason either way.
+    const visible = html.replace(/title="[^"]*"/g, '');
+
+    expect(visible).toContain('这个列表现在什么情况？');
+    expect(visible).not.toContain('list-conditions list=');
+    expect(visible).not.toContain('累计 47 次');
+  });
+
+  it('keeps the block reachable in the tooltip, so what the model read is not lost', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[userEvent(`这个列表现在什么情况？\n\n${CONDITIONS}`)]} />,
+    );
+
+    expect(/title="[^"]*累计 47 次[^"]*"/.test(html)).toBe(true);
+  });
+
+  it('says that something was attached, so the reply is not unexplained', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[userEvent(`这个列表现在什么情况？\n\n${CONDITIONS}`)]} />,
+    );
+
+    expect(html).toContain('Orbit attached');
+    expect(html).toContain('list conditions');
+  });
+
+  it('leaves a message nobody appended to completely alone', () => {
+    const html = renderToStaticMarkup(<Transcript events={[userEvent('把 WARC 拆开并行跑')]} />);
+
+    expect(html).toContain('把 WARC 拆开并行跑');
+    expect(html).not.toContain('Orbit attached');
+  });
+});
+
 describe('transcript Markdown links', () => {
   it('opens ordinary links in a new tab without exposing the opener', () => {
     const html = renderToStaticMarkup(<MD>[Orbit](https://example.com/docs)</MD>);

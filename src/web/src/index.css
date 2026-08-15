@@ -4666,6 +4666,18 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* What delivery appended to a person's message, named on one line instead of dumped into their
+   bubble. Muted and small: it is provenance, not content — the eye should skip it unless the
+   reply mentions something the message did not. */
+.chat-injected {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--border-subtle);
+  color: var(--text-3);
+  font-size: 11.5px;
+  cursor: help;
+}
+
 /* A `#`-reference in a message, styled to read as the same object the composer chipped — the
    user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it
    sits mid-sentence and must not disturb the line box. */
