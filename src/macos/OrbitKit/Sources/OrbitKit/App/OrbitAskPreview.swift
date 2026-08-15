@@ -94,6 +94,26 @@ public extension Approvals {
             edgesAfter: p["edgesAfter"]?.intValue ?? 0)
     }
 
+    /// The `tasks` array of a batch, from wherever it appears.
+    ///
+    /// One parser for two readers on purpose: the approval card reads it from the server's
+    /// `preview`, and the transcript reads it straight off the tool call's own input, which
+    /// carries the same shape. A record rendered by a second copy of these rules would eventually
+    /// disagree with the card it is the history of.
+    static func batchTasks(from container: JSONValue) -> [BatchPreviewTask] {
+        guard case .array(let raw)? = container["tasks"] else { return [] }
+        return raw.compactMap { t in
+            guard let title = t["title"]?.stringValue else { return nil }
+            func strings(_ key: String) -> [String]? {
+                guard case .array(let a)? = t[key] else { return nil }
+                return a.compactMap { $0.stringValue }
+            }
+            return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
+                                    dependsOnRefs: strings("dependsOnRefs"),
+                                    dependsOnTaskIds: strings("dependsOnTaskIds"))
+        }
+    }
+
     /// The batch preview carried on an `orbit_task_batch` approval, or nil when absent.
     static func batchPreview(from input: JSONValue) -> BatchApprovalPreview? {
         guard let p = input["preview"] else { return nil }
@@ -101,19 +121,7 @@ public extension Approvals {
         if case .array(let raw)? = p["lists"] {
             lists = raw.compactMap { $0["title"]?.stringValue }
         }
-        var tasks: [BatchPreviewTask] = []
-        if case .array(let raw)? = p["tasks"] {
-            tasks = raw.compactMap { t in
-                guard let title = t["title"]?.stringValue else { return nil }
-                func strings(_ key: String) -> [String]? {
-                    guard case .array(let a)? = t[key] else { return nil }
-                    return a.compactMap { $0.stringValue }
-                }
-                return BatchPreviewTask(title: title, ref: t["ref"]?.stringValue,
-                                        dependsOnRefs: strings("dependsOnRefs"),
-                                        dependsOnTaskIds: strings("dependsOnTaskIds"))
-            }
-        }
+        let tasks = batchTasks(from: p)
         return BatchApprovalPreview(
             taskCount: p["taskCount"]?.intValue ?? 0,
             startingNow: p["startingNow"]?.intValue ?? 0,

@@ -201,3 +201,66 @@ final class BatchTreeTests: XCTestCase {
         XCTAssertEqual(Approvals.describeBatchShape([]), "")
     }
 }
+
+/// The transcript's record of Orbit's own writes. Reported from the app: once a batch approval is
+/// decided, all that survived was a folded `orbit · task_create_batch` — the card was gone and the
+/// durable record said only that a decision had happened.
+final class OrbitWriteToolDisplayTests: XCTestCase {
+
+    private func json(_ s: String) -> JSONValue {
+        try! JSONDecoder().decode(JSONValue.self, from: Data(s.utf8))
+    }
+    private func describe(_ name: String, _ input: JSONValue) -> ToolDisplay {
+        ToolDisplay.describe(name: name, input: input, status: .ok, id: "t1")
+    }
+
+    func testABatchSaysWhatItCreatedAndWhatShapeItHad() {
+        let d = describe("mcp__orbit__task_create_batch", json("""
+            {"tasks":[{"title":"准备分片清单","ref":"r"},
+                      {"title":"分片 A","ref":"a","dependsOnRefs":["r"]},
+                      {"title":"分片 B","ref":"b","dependsOnRefs":["r"]}]}
+            """))
+
+        XCTAssertEqual(d.label, "Create tasks")
+        XCTAssertEqual(d.summary, "2 in parallel after 1")
+        XCTAssertEqual(d.meta, "3")
+        // The tree, so the shape survives into the record and not just into the card.
+        guard case .code(let tree) = d.body else { return XCTFail("expected a tree body: \(d.body)") }
+        XCTAssertTrue(tree.contains("├─ 分片 A"), tree)
+        XCTAssertTrue(tree.contains("└─ 分片 B"), tree)
+    }
+
+    func testARestructureIsNamedByItsReason() {
+        let d = describe("mcp__orbit__tasklist_propose_dag", json("""
+            {"listId":"l1","note":"把 WARC 转换拆开并行跑",
+             "ops":[{"op":"remove","taskId":"a","dependsOnTaskId":"b"}]}
+            """))
+
+        XCTAssertEqual(d.label, "Restructure dependencies")
+        XCTAssertEqual(d.summary, "把 WARC 转换拆开并行跑")
+        XCTAssertEqual(d.meta, "1")
+    }
+
+    func testARestructureWithoutANoteFallsBackToItsEdgeCounts() {
+        let d = describe("mcp__orbit__tasklist_propose_dag", json("""
+            {"ops":[{"op":"add","taskId":"a","dependsOnTaskId":"b"},
+                    {"op":"remove","taskId":"c","dependsOnTaskId":"d"}]}
+            """))
+
+        XCTAssertEqual(d.summary, "+1 / −1 edges")
+    }
+
+    func testEveryOtherMCPToolKeepsTheGenericCard() {
+        let d = describe("mcp__orbit__task_get", json("{\"taskId\":\"x\"}"))
+
+        XCTAssertEqual(d.label, "orbit · task_get")
+    }
+
+    func testAnEmptyBatchDoesNotClaimAShape() {
+        let d = describe("mcp__orbit__task_create_batch", json("{\"tasks\":[]}"))
+
+        XCTAssertNil(d.summary)
+        XCTAssertNil(d.meta)
+        XCTAssertEqual(d.body, .none)
+    }
+}

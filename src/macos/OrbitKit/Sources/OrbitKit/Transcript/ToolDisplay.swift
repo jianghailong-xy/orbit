@@ -167,6 +167,40 @@ public struct ToolDisplay: Equatable, Sendable {
                                summary: summary, summaryMono: false, path: nil, meta: nil,
                                body: body, autoOpen: true)
 
+        // Orbit's own two writes, described by what they did rather than by the JSON they were
+        // sent. Once an approval is decided this row is all that survives of it, and a folded
+        // `orbit · task_create_batch` records that a decision happened and nothing about what was
+        // decided. The tool call's own input carries the titles and the refs, so the shape is
+        // recomputed from what was actually sent — including for batches approved before any of
+        // this existed.
+        case "mcp__orbit__task_create_batch":
+            let tasks = Approvals.batchTasks(from: input)
+            let tree = Approvals.batchTreeRows(tasks).map(\.text).joined(separator: "\n")
+            let shape = Approvals.describeBatchShape(tasks)
+            return ToolDisplay(label: "Create tasks", symbol: "square.stack.3d.up", tone: .agent,
+                               summary: shape.isEmpty ? nil : shape, summaryMono: false,
+                               path: nil, meta: tasks.isEmpty ? nil : "\(tasks.count)",
+                               body: tree.isEmpty ? .none : .code(tree), autoOpen: false)
+
+        case "mcp__orbit__tasklist_propose_dag":
+            var ops = 0
+            var added = 0
+            if case .array(let raw)? = input["ops"] {
+                ops = raw.count
+                added = raw.filter { $0["op"]?.stringValue == "add" }.count
+            }
+            // The note is the proposer's reason, which is the part worth reading afterwards. The
+            // body stays empty deliberately: these ops carry task ids and no titles — those live
+            // only in the server-computed preview — so the sentences the card shows cannot be
+            // rebuilt here, and ids alone read worse than nothing.
+            let note = input["note"]?.stringValue
+            return ToolDisplay(label: "Restructure dependencies", symbol: "point.3.connected.trianglepath.dotted",
+                               tone: .agent,
+                               summary: (note?.isEmpty == false) ? note : "+\(added) / −\(ops - added) edges",
+                               summaryMono: false,
+                               path: nil, meta: ops == 0 ? nil : "\(ops)",
+                               body: .none, autoOpen: false)
+
         default:
             if name.hasPrefix("mcp__") {
                 let label = String(name.dropFirst(5)).replacingOccurrences(of: "__", with: " · ")
