@@ -116,3 +116,8 @@ public struct ReorderAgentsRequest: Encodable, Sendable {
     public let ids: [String]
     public init(ids: [String]) { self.ids = ids }
 }
+
+/// POST /agents/orchestration — how many agents the bulk grant (or revoke) actually wrote.
+public struct BulkOrchestrationResult: Decodable, Sendable {
+    public let updated: Int
+}

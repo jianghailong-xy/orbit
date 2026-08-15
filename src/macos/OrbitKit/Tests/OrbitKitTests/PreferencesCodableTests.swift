@@ -34,12 +34,34 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertNil(u.createdAt)
     }
 
+    /// The account-level seed for a new agent's orchestration switch. Absent on an account that
+    /// never set it (→ nil), which reads as off — a capability is only ever handed out explicitly.
+    func testPreferencesDecodesOrchestrationDefault() throws {
+        let json = #"{"id":"u1","email":"a@b.com","preferences":{"defaultEnableOrchestration":true}}"#
+        let u = try JSONDecoder().decode(User.self, from: Data(json.utf8))
+        XCTAssertEqual(u.preferences?.defaultEnableOrchestration, true)
+
+        let bare = #"{"id":"u1","email":"a@b.com","preferences":{"theme":"light"}}"#
+        let old = try JSONDecoder().decode(User.self, from: Data(bare.utf8))
+        XCTAssertNil(old.preferences?.defaultEnableOrchestration)
+    }
+
     func testUpdatePreferencesIsPartial() throws {
         let obj = try jsonObject(UpdatePreferencesRequest(theme: "dark"))
         XCTAssertEqual(obj["theme"] as? String, "dark")
         XCTAssertFalse(obj.keys.contains("defaultModel"))          // omitted key → server keeps it
         XCTAssertFalse(obj.keys.contains("defaultPermissionMode"))
         XCTAssertFalse(obj.keys.contains("defaultEffort"))
+        XCTAssertFalse(obj.keys.contains("defaultEnableOrchestration"))
+    }
+
+    /// Turning the seed off has to send `false`, not drop the key: an omitted key means "keep what
+    /// you have", which would leave new agents being born with the grant.
+    func testUpdatePreferencesOrchestrationOnly() throws {
+        let obj = try jsonObject(UpdatePreferencesRequest(defaultEnableOrchestration: false))
+        XCTAssertEqual(obj["defaultEnableOrchestration"] as? Bool, false)
+        XCTAssertFalse(obj.keys.contains("theme"))
+        XCTAssertFalse(obj.keys.contains("defaultPermissionMode"))
     }
 
     /// Sending only defaultEffort must emit just that key (so the shallow-merge keeps theme/model)

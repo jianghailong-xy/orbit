@@ -21,7 +21,12 @@ struct SettingsView: View {
 
     @State private var theme = "system"
     @State private var permMode: PermissionMode = .default
+    @State private var grantOrchestrationToNew = false
     @State private var loaded = false
+
+    @State private var confirmGrantAll = false
+    @State private var applyingOrchestration = false
+    @State private var orchestrationMessage: String?
 
     @State private var curPw = ""
     @State private var newPw = ""
@@ -97,12 +102,34 @@ struct SettingsView: View {
                 #if os(macOS)
                 // iOS auto-saves on change (see `.onChange` below); macOS keeps an explicit commit.
                 Button("Save preferences") {
-                    Task {
-                        await model.savePreferences(UpdatePreferencesRequest(
-                            theme: theme, defaultPermissionMode: permMode.rawValue))
-                    }
+                    Task { await model.savePreferences(preferencesPatch) }
                 }
                 #endif
+            }
+
+            // Orchestration is granted per agent — the server reads that agent's own switch on
+            // every claim and every spawn, so it stays revocable one agent at a time. What lives
+            // here is the paperwork: a default for the agents made next, and a way to set the ones
+            // that exist all at once instead of opening every agent's editor in turn.
+            Section("Session orchestration") {
+                Toggle("Grant it to new agents", isOn: $grantOrchestrationToNew)
+                Text("An agent you create from now on starts able to spawn and manage other "
+                     + "sessions via the orbit MCP session tools. Existing agents are untouched.")
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+
+                Text(orchestrationStatus)
+                    .font(.orbitLabel).foregroundStyle(.secondary)
+                Button("Turn on for all") { confirmGrantAll = true }
+                    .disabled(agentCount == 0 || applyingOrchestration)
+                // No confirmation on the way out: this is the account's kill switch, and one you
+                // have to argue with is one you can't reach in a hurry.
+                Button("Turn off for all", role: .destructive) {
+                    Task { await applyOrchestrationToAll(false) }
+                }
+                .disabled(orchestratingCount == 0 || applyingOrchestration)
+                if let m = orchestrationMessage {
+                    Text(m).font(.orbitLabel).foregroundStyle(.secondary)
+                }
             }
 
             Section("Change password") {
@@ -137,6 +164,23 @@ struct SettingsView: View {
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
         .navigationTitle("Settings")
+        .confirmationDialog("Let all \(agentCount) agents orchestrate?",
+                            isPresented: $confirmGrantAll, titleVisibility: .visible) {
+            Button("Turn on for all") { Task { await applyOrchestrationToAll(true) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every agent's sessions will be able to spawn and drive other sessions. "
+                 + "Grant this only if you trust what each of them runs.")
+        }
+        .task {
+            // The count has to be true. Settings can be reached without the agent list ever having
+            // loaded, and "0 of 0" would read as an answer rather than as "not asked yet".
+            if let agents = model.agents, agents.items.isEmpty { await agents.load() }
+        }
+        // Persisted the moment it flips, on macOS too: the Save button lives in another section,
+        // and a capability switch that looks set but was never written is the one kind of lie
+        // this screen cannot afford.
+        .onChange(of: grantOrchestrationToNew) { saveOrchestrationDefault() }
         #if os(iOS)
         .onChange(of: theme) { autosavePreferences() }
         .onChange(of: permMode) { autosavePreferences() }
@@ -150,7 +194,55 @@ struct SettingsView: View {
             // would name a mode the account isn't actually running.
             permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
                 ?? AgentDefaults.defaultPermissionMode
+            grantOrchestrationToNew = p?.defaultEnableOrchestration ?? false
         }
+    }
+
+    /// Every preference this form owns, as one partial patch — the server shallow-merges, so the
+    /// keys not named here keep their value.
+    private var preferencesPatch: UpdatePreferencesRequest {
+        UpdatePreferencesRequest(theme: theme, defaultPermissionMode: permMode.rawValue,
+                                 defaultEnableOrchestration: grantOrchestrationToNew)
+    }
+
+    /// Write just this one key — the server shallow-merges, so a half-edited theme picker sitting
+    /// above (macOS, where the pickers still wait for Save) is not committed as a side effect.
+    /// Guarded against the `onAppear` seed, so opening Settings never writes.
+    private func saveOrchestrationDefault() {
+        guard (model.user?.preferences?.defaultEnableOrchestration ?? false)
+                != grantOrchestrationToNew else { return }
+        Task {
+            await model.savePreferences(
+                UpdatePreferencesRequest(defaultEnableOrchestration: grantOrchestrationToNew))
+        }
+    }
+
+    private var agentCount: Int { model.agents?.items.count ?? 0 }
+    private var orchestratingCount: Int {
+        model.agents?.items.filter { $0.enableOrchestration == true }.count ?? 0
+    }
+
+    private var orchestrationStatus: String {
+        guard let agents = model.agents, !agents.items.isEmpty else {
+            return model.agents?.loading == true ? "Loading your agents…" : "No agents yet."
+        }
+        return "\(orchestratingCount) of \(agents.items.count) can orchestrate now. "
+            + "Each keeps its own switch afterwards."
+    }
+
+    /// Writes every agent's own switch in one call, then reports what it actually wrote. Not a
+    /// master switch: each agent keeps its grant afterwards, so one can be revoked on its own.
+    @MainActor
+    private func applyOrchestrationToAll(_ enabled: Bool) async {
+        guard let agents = model.agents else { return }
+        applyingOrchestration = true
+        defer { applyingOrchestration = false }
+        guard let updated = await agents.setOrchestrationForAll(enabled) else {
+            orchestrationMessage = "Couldn't apply that to your agents."
+            return
+        }
+        orchestrationMessage = "\(enabled ? "Enabled" : "Disabled") on \(updated) "
+            + "agent\(updated == 1 ? "" : "s")."
     }
 
     #if os(iOS)
@@ -164,10 +256,7 @@ struct SettingsView: View {
             || (p?.defaultPermissionMode ?? AgentDefaults.defaultPermissionMode.rawValue)
                 != permMode.rawValue
         else { return }
-        Task {
-            await model.savePreferences(UpdatePreferencesRequest(
-                theme: theme, defaultPermissionMode: permMode.rawValue))
-        }
+        Task { await model.savePreferences(preferencesPatch) }
     }
     #endif
 }

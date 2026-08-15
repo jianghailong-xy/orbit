@@ -277,6 +277,14 @@ public final class APIClient: @unchecked Sendable {
     public func updateAgent(_ id: String, _ req: UpdateAgentRequest) async throws -> Agent { try await patch("agents/\(id)", body: req) }
     public func deleteAgent(_ id: String) async throws { try await deleteRaw("agents/\(id)") }
     public func reorderAgents(_ ids: [String]) async throws { try await postRaw("agents/reorder", body: ReorderAgentsRequest(ids: ids)) }
+    /// Grant or revoke session orchestration on every agent this account owns, and answer with how
+    /// many rows that wrote. Still a per-agent grant — the server writes each agent's own switch —
+    /// so one can be turned back off on its own afterwards; this only spares a visit per agent.
+    public func setOrchestrationForAllAgents(enabled: Bool) async throws -> Int {
+        let result: BulkOrchestrationResult = try await post("agents/orchestration",
+                                                             body: ["enabled": enabled])
+        return result.updated
+    }
 
     // MARK: tasks
     public func tasks() async throws -> [TaskItem] { try await get("tasks") }

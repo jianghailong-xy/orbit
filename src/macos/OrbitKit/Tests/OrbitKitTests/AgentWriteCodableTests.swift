@@ -31,6 +31,17 @@ final class AgentWriteCodableTests: XCTestCase {
         XCTAssertNil(a.enabled)
     }
 
+    /// The orchestration grant rides the list payload so Settings can count what actually holds
+    /// it. Absent on a server too old to send it — which reads as not granted, never as unknown.
+    func testAgentDecodesOrchestrationGrant() throws {
+        let json = #"{"id":"a1","name":"dev","enableOrchestration":true}"#
+        let granted = try JSONDecoder().decode(Agent.self, from: Data(json.utf8))
+        XCTAssertEqual(granted.enableOrchestration, true)
+
+        let old = try JSONDecoder().decode(Agent.self, from: Data(#"{"id":"a1","name":"dev"}"#.utf8))
+        XCTAssertNil(old.enableOrchestration)
+    }
+
     func testUpdateOmitsNilKeys() throws {
         let obj = try jsonObject(UpdateAgentRequest(name: "new", enabled: false))
         XCTAssertEqual(obj["name"] as? String, "new")

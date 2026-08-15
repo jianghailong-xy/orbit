@@ -13,6 +13,11 @@ public struct UserPreferences: Codable, Equatable, Sendable {
     /// default; otherwise an `Effort` raw value. Synced so a value chosen on web seeds new
     /// sessions here, and vice-versa (replaces web's per-browser localStorage).
     public let defaultEffort: String?
+    /// Whether an agent created from here on starts allowed to orchestrate other sessions. A seed
+    /// for that agent's own switch, never the permission itself — the server enforces
+    /// `Agent.enableOrchestration`, so this can't grant anything to an agent that already exists.
+    /// Absent = off.
+    public let defaultEnableOrchestration: Bool?
 }
 
 /// PATCH /users/me/preferences — only the present keys are merged; nil omits (synthesized
@@ -22,11 +27,13 @@ public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var defaultModel: String?
     public var defaultPermissionMode: String?
     public var defaultEffort: String?
+    public var defaultEnableOrchestration: Bool?
     public init(theme: String? = nil, defaultModel: String? = nil, defaultPermissionMode: String? = nil,
-                defaultEffort: String? = nil) {
+                defaultEffort: String? = nil, defaultEnableOrchestration: Bool? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
         self.defaultPermissionMode = defaultPermissionMode
         self.defaultEffort = defaultEffort
+        self.defaultEnableOrchestration = defaultEnableOrchestration
     }
 }

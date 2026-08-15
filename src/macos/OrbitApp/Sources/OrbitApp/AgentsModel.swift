@@ -115,6 +115,17 @@ final class AgentsModel {
         catch { errorText = friendly(error) }
     }
 
+    /// Grant or revoke session orchestration across every agent at once, then reload so the count
+    /// in Settings reflects what was actually written. Returns how many agents changed hands, nil
+    /// on failure (the message lands in `errorText`).
+    func setOrchestrationForAll(_ enabled: Bool) async -> Int? {
+        do {
+            let updated = try await api.setOrchestrationForAllAgents(enabled: enabled)
+            await load()
+            return updated
+        } catch { errorText = friendly(error); return nil }
+    }
+
     /// Start a new session for an agent from the draft composer. The runner is derived server-side
     /// from the agent (no `assignedRunnerId` needed). Returns the new session on success, nil on
     /// failure (the message lands in `errorText`).

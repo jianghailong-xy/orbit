@@ -77,6 +77,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let env: [String: String]?
     public let enabled: Bool?
     public let autoInitGit: Bool?
+    /// Whether this agent's sessions may spawn and drive other sessions via the orbit MCP session
+    /// tools. Granted per agent and enforced server-side on every claim and every spawn; the app
+    /// only reports it. Absent on an older server's payload, which reads as not granted.
+    public let enableOrchestration: Bool?
 }
 
 extension Agent {
