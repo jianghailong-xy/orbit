@@ -1,15 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { classifyFailure, FailureCause } from '@orbit/shared';
+import { classifyFailure, FailureCause, toUuid } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
- * `orbit-list:<uuid>` / `orbit-task:<uuid>` inside a markdown link, the same custom scheme the
+ * `orbit-list:<id>` / `orbit-task:<id>` inside a markdown link, the same custom scheme the
  * transcript already renders attachments with (`orbit-attachment:<id>`). Matching the URI rather
  * than the link text is what lets the composer show a chip reading "FineWeb CC-MAIN-2025-26"
  * while the wire carries an id.
+ *
+ * Either id spelling, like the attachment scheme: what clients hold is the base62 public id, and
+ * pinning this to the 36-char uuid made every reference the composer produced expand to nothing —
+ * silently, since an unmatched reference is indistinguishable from a message with none.
  */
-const REFERENCE_RE = /\(\s*<?orbit-(list|task):([0-9a-fA-F-]{36})>?\s*\)/g;
+const REFERENCE_RE = /\(\s*<?orbit-(list|task):([0-9a-zA-Z-]+)>?\s*\)/g;
 
 /** How many distinct references one message may expand. */
 const MAX_REFERENCES = 8;
@@ -169,7 +173,15 @@ export function parseReferences(content: string): Reference[] {
   const out: Reference[] = [];
   for (const m of content.matchAll(REFERENCE_RE)) {
     const kind = m[1] as 'list' | 'task';
-    const id = m[2].toLowerCase();
+    // Normalised so the two spellings of one id dedupe against each other, and so a value that
+    // is neither is dropped rather than reaching a `::uuid` cast: prose is allowed to contain
+    // anything, and a malformed reference must cost the expansion, not the delivery.
+    let id: string;
+    try {
+      id = toUuid(m[2]);
+    } catch {
+      continue;
+    }
     const key = `${kind}:${id}`;
     if (seen.has(key)) continue;
     seen.add(key);

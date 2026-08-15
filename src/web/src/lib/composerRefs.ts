@@ -108,7 +108,12 @@ export function materializeReferences(text: string, refs: ReferenceMap): string 
   return text.replace(matcher, (whole, token: string) => {
     const ref = refs[token];
     if (!ref) return whole;
-    return `[${token}](orbit-${ref.kind}:${ref.id})`;
+    // Brackets in the title are escaped, not passed through: this deployment's task titles start
+    // with `[W 009/250]`, and an unescaped one closes the link text early — the server still
+    // expands it (it matches on the URI), but the user's own bubble renders the markdown, so the
+    // broken link puts a raw uuid in front of the person who never typed one.
+    const label = token.replace(/[[\]]/g, '\\$&');
+    return `[${label}](orbit-${ref.kind}:${ref.id})`;
   });
 }
 

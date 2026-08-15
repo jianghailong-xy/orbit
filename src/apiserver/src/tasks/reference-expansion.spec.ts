@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { uuidToBase62 } from '@orbit/shared';
 import { parseReferences, ReferenceExpansionService } from './reference-expansion';
 
 const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
@@ -130,6 +131,28 @@ test('only the two known schemes are references', () => {
   // `orbit-attachment:` is the transcript's own image scheme and must not be swept up here.
   assert.deepEqual(parseReferences('![x](orbit-attachment:abc-123)'), []);
   assert.deepEqual(parseReferences('[x](https://example.com/orbit-list:nope)'), []);
+});
+
+test('a base62 public id resolves to the same reference as the uuid', () => {
+  // The spelling clients actually send. Pinning the pattern to the 36-char uuid made every
+  // reference the composer produced expand to nothing, and an unexpanded reference looks exactly
+  // like a message that never had one — so this is the case that has to stay covered.
+  const short = uuidToBase62(LIST_ID);
+
+  assert.notEqual(short, LIST_ID);
+  assert.deepEqual(parseReferences(`[x](orbit-list:${short})`), [{ kind: 'list', id: LIST_ID }]);
+});
+
+test('the two spellings of one id dedupe against each other', () => {
+  const mixed = `[a](orbit-list:${LIST_ID}) 和 [b](orbit-list:${uuidToBase62(LIST_ID)})`;
+
+  assert.deepEqual(parseReferences(mixed), [{ kind: 'list', id: LIST_ID }]);
+});
+
+test('an unparseable id costs the expansion, not the delivery', () => {
+  // Prose may contain anything; the value must never reach a `::uuid` cast.
+  assert.deepEqual(parseReferences('[x](orbit-list:not!an!id)'), []);
+  assert.deepEqual(parseReferences('[x](orbit-task:zzzzzzzzzzzzzzzzzzzzzzzzzz)'), []);
 });
 
 test('an id is matched case-insensitively and normalised', () => {

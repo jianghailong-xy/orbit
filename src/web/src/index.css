@@ -3881,6 +3881,79 @@ body {
 .composer-box .composer-shell-btn.ant-btn:hover {
   background: var(--error-bg);
 }
+/* ── Composer chips ───────────────────────────────────────────────────────────────────────
+   A textarea cannot hold styled elements, so `#`-references and `@`-mentions are drawn by
+   ComposerMirror sitting behind a transparent input. The two layers only stay aligned while
+   they share every metric that affects where a glyph lands, so the shared declarations live in
+   one place and BOTH selectors below claim them. Changing one without the other drifts the
+   caret away from the text the user sees — invisibly, because the real text is transparent. */
+.composer-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.composer-field .composer-mirror,
+.composer-field textarea.ant-input {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.5715;
+  letter-spacing: normal;
+  padding: 4px 11px 4px 2px;
+  border: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+.composer-mirror {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--text-1);
+}
+/* The input keeps the caret and the selection; the mirror behind it supplies the glyphs. */
+.composer-field textarea.ant-input {
+  position: relative;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--text-1);
+}
+.composer-field textarea.ant-input::selection {
+  background: rgba(22, 119, 255, 0.25);
+  -webkit-text-fill-color: var(--text-1);
+}
+/* Zero net layout width: the padding shaping the pill is cancelled by an equal negative margin,
+   so the background bleeds outward while the glyphs stay exactly where the textarea puts them.
+   Any residual width here compounds — every chip pushes the rest of the line further off. */
+.composer-chip {
+  border-radius: 6px;
+  padding: 1px 5px;
+  margin: 0 -5px;
+  white-space: nowrap;
+}
+.composer-chip--list,
+.composer-chip--task {
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 38%, transparent);
+  color: var(--brand);
+}
+.composer-chip--mention {
+  background: color-mix(in srgb, var(--text-1) 6%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-1) 16%, transparent);
+  color: var(--text-2);
+}
+/* The shell draft is red mono; its metrics differ, so the mirror steps aside entirely rather
+   than painting chips at the wrong places. */
+.composer-box-shell .composer-mirror {
+  display: none;
+}
+.composer-box-shell .composer-field textarea.ant-input {
+  -webkit-text-fill-color: var(--error);
+}
+
 /* Trim the textarea's default ~11px left padding so the text hugs the + icon.
    `resize: none` because the composer has its own top drag handle (native corner grip
    would fight autoSize). */
@@ -4592,6 +4665,21 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* A `#`-reference in a message, styled to read as the same object the composer chipped — the
+   user typed a pill and should recognise it in their own bubble. Inline, not a block chip: it
+   sits mid-sentence and must not disturb the line box. */
+.md-reference {
+  padding: 1px 5px;
+  margin: 0 -1px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 30%, transparent);
+  color: var(--brand);
+  text-decoration: none;
+}
+.md-reference:hover {
+  background: color-mix(in srgb, var(--brand) 18%, transparent);
 }
 /* A non-image attachment the user sent: a downloadable chip (paperclip + filename) that
    fetches the blob on click. */

@@ -26,6 +26,8 @@ import {
   WarningFilled,
 } from '@ant-design/icons';
 import { Image } from 'antd';
+import { Link } from 'react-router-dom';
+import { encodeId } from '../lib/idCodec';
 import { createContext, isValidElement, memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -1362,6 +1364,9 @@ function CodeBlock({ children }: any) {
 }
 
 const ORBIT_ATTACHMENT_PREFIX = 'orbit-attachment:';
+/** `#`-references the composer materialises. Both spellings of the id are accepted, since what a
+ *  client holds is the base62 public id and older messages may carry the raw uuid. */
+const ORBIT_REFERENCE_RE = /^orbit-(list|task):([0-9a-zA-Z-]+)$/;
 
 function attachmentIdFromSrc(src: unknown): string | null {
   if (typeof src !== 'string') return null;
@@ -1378,7 +1383,9 @@ function attachmentIdFromSrc(src: unknown): string | null {
 // those through untouched and defer every other URL to the default (XSS-safe)
 // transform so javascript:/data: links stay neutralized.
 function transcriptUrlTransform(url: string): string {
-  return url.trim().startsWith(ORBIT_ATTACHMENT_PREFIX) ? url : defaultUrlTransform(url);
+  const trimmed = url.trim();
+  if (trimmed.startsWith(ORBIT_ATTACHMENT_PREFIX) || ORBIT_REFERENCE_RE.test(trimmed)) return trimmed;
+  return defaultUrlTransform(url);
 }
 
 function isLocalImageSrc(src: string): boolean {
@@ -1484,11 +1491,40 @@ function nodeText(node: ReactNode): string {
   return '';
 }
 
+/**
+ * The route a `#`-reference points at, or null when the href is not one — including when the id
+ * is unparseable, which prose is entitled to contain. A bad reference falls through to a plain
+ * inert link rather than throwing inside the renderer and blanking the whole message.
+ */
+function referenceRoute(href: unknown): { path: string; label: string } | null {
+  if (typeof href !== 'string') return null;
+  const m = ORBIT_REFERENCE_RE.exec(href.trim());
+  if (!m) return null;
+  try {
+    const id = encodeId(m[2]);
+    return m[1] === 'list'
+      ? { path: `/lists/${id}`, label: 'Task list' }
+      : { path: `/tasks/${id}`, label: 'Task' };
+  } catch {
+    return null;
+  }
+}
+
 function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
   const id = attachmentIdFromSrc(href);
   if (id) {
     const name = typeof title === 'string' && title.trim() ? title.trim() : nodeText(children).trim() || undefined;
     return <AttachmentFile id={id} name={name} />;
+  }
+  // A `#`-reference: route to the thing rather than leaving an <a> the transform blanked to
+  // href="" — which in an SPA reloads the page on click.
+  const to = referenceRoute(href);
+  if (to) {
+    return (
+      <Link className="md-reference" to={to.path} title={to.label}>
+        {children}
+      </Link>
+    );
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
     return (

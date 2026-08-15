@@ -32,6 +32,12 @@ import {
   UndoOutlined,
 } from '@ant-design/icons';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  applyReferencePick,
+  materializeReferences,
+  referenceToken,
+  type ReferenceMap,
+} from '../lib/composerRefs';
 import { App as AntApp, Button, Dropdown, Image, Input, type MenuProps, Popover, Select, Spin, Tooltip } from 'antd';
 import {
   type DragEvent as ReactDragEvent,
@@ -149,6 +155,7 @@ import {
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
+import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
@@ -887,6 +894,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // these tooltips where hover is unavailable; every gated control already labels itself.
   const hoverTipOpen = useMediaQuery('(hover: hover)') ? undefined : false;
   const [text, setText] = useState('');
+  // `#`-references the user has picked in this draft: token → what it points at. Kept beside the
+  // draft rather than in the URL or the server, because it only has to survive as long as the
+  // text it annotates — a token the user edits stops matching and simply travels as prose.
+  const [composerRefs, setComposerRefs] = useState<ReferenceMap>({});
+  // The textarea's scroll offset, mirrored so the chip layer stays in step once the draft passes
+  // its auto-grow cap.
+  const [composerScroll, setComposerScroll] = useState(0);
   // Composer history cursor: -1 = editing the live draft; otherwise an index into the
   // session's stored history. `histDraft` stashes what was typed before recall started,
   // so stepping back past the newest entry restores it (shell-style).
@@ -2651,6 +2665,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }
       navigate(`/sessions/${encodeId(id)}`);
       setText('');
+      setComposerRefs({});
       // Hand the sent image previews to the transcript, keyed by turnId, so they show in
       // the user bubble immediately (the runner echoes the text + attachment refs). Only
       // inline images have a local object URL; files render from the durable ref echo. The
@@ -3329,6 +3344,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       void decide(replyTo.id, 'deny', undefined, c || '(see attached image)');
       setReplyTo(null);
       setText('');
+      setComposerRefs({});
       if (imgs.length > 0) {
         setHistIdx(-1);
         send.mutate({ content: '', images: imgs });
@@ -3351,7 +3367,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       else setText('');
       return;
     }
-    send.mutate({ content: c, images: readyImages });
+    send.mutate({ content: materializeReferences(c, composerRefs), images: readyImages });
   };
   // Open the new-session draft for this workspace. A /sessions/<id> URL carries no
   // workspace, so resolve it from the open session (scopeWorkspaceId), then the first workspace.
@@ -3588,6 +3604,63 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setMentionDismissed(null);
     setTimeout(() => taRef.current?.focus(), 0);
   };
+  // ── `#` task / task-list references ────────────────────────────────────────────────────
+  // Type `#` to reference a list or task; picking one inserts `#<title>` as readable text and
+  // records which id that title meant. The full `[title](orbit-list:<id>)` link is materialised
+  // on send (see materializeReferences) and expanded by the server at delivery — the box never
+  // holds a uuid, because the chip layer that hides one cannot keep the caret aligned with it.
+  const [refIndex, setRefIndex] = useState(0);
+  const [refDismissed, setRefDismissed] = useState<string | null>(null);
+  const refToken = referenceToken(text);
+  const refListsQ = useQuery({
+    queryKey: ['task-lists'],
+    queryFn: () => api<Array<{ id: string; title: string }>>('/task-lists'),
+    // Only once the user reaches for the menu: most drafts never contain a reference, and the
+    // list index is not otherwise needed on this screen.
+    enabled: refToken !== null,
+    staleTime: 30_000,
+  });
+  const refTasksQ = useQuery({
+    queryKey: ['tasks', 'ref-picker', refToken],
+    queryFn: () =>
+      api<{ items: Array<{ id: string; title: string }> }>(
+        `/tasks/page?limit=8&counts=none&q=${encodeURIComponent(refToken ?? '')}`,
+      ).then((p) => p.items),
+    // A blank `#` lists lists only: every task in the deployment is not a useful first screen,
+    // and the search is what makes the task half navigable at 56k rows.
+    enabled: !!refToken,
+    staleTime: 10_000,
+  });
+  const refMatches = useMemo(() => {
+    if (refToken === null) return [];
+    const q = refToken.toLowerCase();
+    const lists = (refListsQ.data ?? [])
+      .filter((l) => l.title.toLowerCase().includes(q))
+      .slice(0, 5)
+      .map((l) => ({ kind: 'list' as const, id: l.id, title: l.title }));
+    const tasks = (refTasksQ.data ?? [])
+      .slice(0, 5)
+      .map((t) => ({ kind: 'task' as const, id: t.id, title: t.title }));
+    return [...lists, ...tasks];
+  }, [refToken, refListsQ.data, refTasksQ.data]);
+  useEffect(() => {
+    setRefIndex(0);
+  }, [refToken]);
+  const showRef =
+    refToken !== null &&
+    refToken !== refDismissed &&
+    !selectedTrashed &&
+    !selectedMissing &&
+    refMatches.length > 0;
+  const refIdx = refMatches.length ? Math.min(refIndex, refMatches.length - 1) : 0;
+  const pickRef = (m: { kind: 'list' | 'task'; id: string; title: string }): void => {
+    const next = applyReferencePick(text, m.title, { kind: m.kind, id: m.id }, composerRefs);
+    setText(next.text);
+    setComposerRefs(next.refs);
+    setRefDismissed(null);
+    setTimeout(() => taRef.current?.focus(), 0);
+  };
+
   // Open the autocomplete from the `+` menu scoped to one asset kind: drop a `/` (prefixed
   // with a space when mid-message) so slashToken matches and the menu pops.
   const insertSlash = (scope: 'command' | 'skill'): void => {
@@ -4874,6 +4947,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ))}
             </div>
           )}
+          {showRef && (
+            <div className="composer-slash-menu" role="listbox">
+              {refMatches.map((m, i) => (
+                <div
+                  key={`${m.kind}:${m.id}`}
+                  role="option"
+                  aria-selected={i === refIdx}
+                  className={`composer-slash-item${i === refIdx ? ' is-active' : ''}`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pickRef(m);
+                  }}
+                  onMouseEnter={() => setRefIndex(i)}
+                >
+                  <span className="composer-slash-name">#{m.title}</span>
+                  <span className="composer-slash-type">{m.kind === 'list' ? 'list' : 'task'}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {showMention && (
             <div className="composer-slash-menu" role="listbox">
               {mentionMatches.map((a, i) => (
@@ -4988,8 +5081,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {shellMode ? '❯' : null}
             </Button>
           </Dropdown>
+          <div className="composer-field">
+          {/* Behind the input, drawing its chips. Same characters, same metrics — see the
+              `.composer-field` block in index.css for why that is not negotiable. */}
+          <ComposerMirror text={text} refs={composerRefs} scrollTop={composerScroll} />
           <Input.TextArea
             ref={taRef}
+            onScroll={(e) => setComposerScroll(e.currentTarget.scrollTop)}
             className={shellMode ? 'composer-shell' : undefined}
             variant="borderless"
             // Auto-grow up to 12 rows, then scroll — unless the user has dragged the handle to
@@ -5025,6 +5123,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // One keydown handler: drive the menu while open, else Up/Down recall
             // history (when it doesn't fight cursor movement), Enter=send / Shift+Enter=newline.
             onKeyDown={(e) => {
+              if (showRef && !e.nativeEvent.isComposing) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setRefIndex((i) => (i + 1) % refMatches.length);
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setRefIndex((i) => (i - 1 + refMatches.length) % refMatches.length);
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                  e.preventDefault();
+                  pickRef(refMatches[refIdx]);
+                  return;
+                }
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setRefDismissed(refToken);
+                  return;
+                }
+              }
               if (showMention && !e.nativeEvent.isComposing) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
@@ -5125,6 +5245,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               }
             }}
           />
+          </div>
           {showStop ? (
             <Tooltip title="Stop the current turn">
               <Button

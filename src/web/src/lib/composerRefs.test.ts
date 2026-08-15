@@ -112,6 +112,16 @@ describe('materializeReferences', () => {
     );
   });
 
+  it('escapes brackets in the title, which real task titles start with', () => {
+    // `[W 009/250] …` is the shape every task in this list uses. Unescaped, the first `]` closes
+    // the link text and the bubble renders the uuid the chip existed to hide.
+    const bracketed: ReferenceMap = { '[W 009/250] 000_00008.parquet': { kind: 'task', id: TASK_ID } };
+
+    expect(materializeReferences('看 #[W 009/250] 000_00008.parquet', bracketed)).toBe(
+      `看 [\\[W 009/250\\] 000_00008.parquet](orbit-task:${TASK_ID})`,
+    );
+  });
+
   it('leaves a bare # alone', () => {
     expect(materializeReferences('#1 完成了', refs)).toBe('#1 完成了');
   });

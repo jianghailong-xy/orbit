@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import {
   AutoRetryCtx,
@@ -10,6 +11,10 @@ import {
   type RunEvent,
   Transcript,
 } from './Transcript';
+import { encodeId } from '../lib/idCodec';
+
+const LIST_UUID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+const LIST_B62 = encodeId(LIST_UUID);
 
 const AUTH_FAILED =
   'Failed to authenticate: Codex is installed on this runner but not signed in — sign in from here, or run `codex login` on that machine.';
@@ -403,6 +408,44 @@ describe('transcript Markdown links', () => {
     expect(html).toContain('href="https://example.com/docs"');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it('routes a #-reference instead of leaving the blanked href react-markdown produces', () => {
+    // react-markdown's urlTransform strips any scheme off its allow-list, which left href="" —
+    // and an empty href in an SPA reloads the page on click.
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <MD>{`[FineWeb CC-MAIN-2025-26](orbit-list:${LIST_UUID})`}</MD>
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain(`href="/lists/${LIST_B62}"`);
+    expect(html).toContain('FineWeb CC-MAIN-2025-26');
+    expect(html).not.toContain('href=""');
+  });
+
+  it('shows the title, not the id, for a task title carrying its own brackets', () => {
+    // The composer escapes them; this is the other half of that contract, and the shape every
+    // task title in this deployment has.
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <MD>{`[\\[W 009/250\\] 000_00008.parquet](orbit-task:${LIST_UUID})`}</MD>
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('[W 009/250] 000_00008.parquet');
+    expect(html).not.toContain(LIST_UUID);
+  });
+
+  it('leaves an unparseable reference inert rather than throwing inside the renderer', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <MD>{'[x](orbit-task:not-an-id)'}</MD>
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('>x<');
+    expect(html).not.toContain('/tasks/');
   });
 });
 
