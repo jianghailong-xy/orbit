@@ -667,3 +667,61 @@ func TestParseDagEdge(t *testing.T) {
 		}
 	}
 }
+
+// `orbit task list` answers with one bounded page, so on an account of tens of thousands of
+// tasks its answer is silently "the newest N" — there is no --limit large enough to enumerate
+// one, and no cursor to continue with. --all is the way to walk the whole list.
+func TestTaskCLIListAllWalksEveryPage(t *testing.T) {
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.RequestURI())
+		switch r.URL.Query().Get("cursor") {
+		case "":
+			_, _ = w.Write([]byte(`{"items":[{"id":"t1"},{"id":"t2"}],"nextCursor":"c2"}`))
+		case "c2":
+			_, _ = w.Write([]byte(`{"items":[{"id":"t3"}],"nextCursor":null}`))
+		default:
+			t.Errorf("unexpected cursor %q", r.URL.Query().Get("cursor"))
+		}
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"list", "--list-id", "list-1", "--all", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+
+	// Every page, concatenated into one array — not the first page, and not three separate bodies.
+	var got []map[string]interface{}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("output is not one JSON array: %v (%s)", err, out.String())
+	}
+	if len(got) != 3 || got[0]["id"] != "t1" || got[2]["id"] != "t3" {
+		t.Fatalf("rows = %v", got)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("requests = %v", paths)
+	}
+	// The filter has to ride every page, or page 2 quietly widens the answer to the whole account.
+	for _, p := range paths {
+		if !strings.Contains(p, "/api/runner/tasks/page?") || !strings.Contains(p, "listId=list-1") {
+			t.Fatalf("request %q lost the paged route or the filter", p)
+		}
+	}
+	if !strings.Contains(paths[1], "cursor=c2") {
+		t.Fatalf("second request did not carry the cursor: %q", paths[1])
+	}
+}
+
+// --limit caps an answer; --all is the answer being uncapped. Accepting both would leave which
+// one the caller meant up to us.
+func TestTaskCLIListRejectsAllWithLimit(t *testing.T) {
+	configureCLITestRunner(t, "http://127.0.0.1:1")
+
+	var out bytes.Buffer
+	err := cmdTaskCLI([]string{"list", "--all", "--limit", "50"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("err = %v", err)
+	}
+}

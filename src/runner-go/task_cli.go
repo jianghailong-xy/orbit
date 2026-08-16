@@ -20,7 +20,7 @@ const (
 const taskHelp = `orbit task — manage Orbit tasks
 
 Usage:
-  orbit task list [--status STATUS] [--list-id ID] [--limit N] [--json]
+  orbit task list [--status STATUS] [--list-id ID] [--limit N | --all] [--json]
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
   orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
@@ -50,10 +50,15 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--limit N] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--limit N | --all] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
+
+--all returns every matching task instead of the newest page, walking the list one page at a
+time — what you need to enumerate a list of thousands (to diff it against something else, say),
+which no --limit can do. It can be a lot of output: scope it with --status/--list-id, and send it
+to a file or a pipe rather than into a conversation.
 `,
 	"get": `orbit task get — get a task, its comments, and linked sessions
 
@@ -525,11 +530,35 @@ func uniqueStrings(in []string) []string {
 	return out
 }
 
+// collectAllTasks walks every page of the filtered list and returns them as one JSON array.
+// The per-request size is the server's maximum: the caller asked for everything, so the only
+// thing left to tune is how many round trips it takes.
+func collectAllTasks(t *Transport, status, listID string) (json.RawMessage, error) {
+	all := []json.RawMessage{}
+	cursor := ""
+	for {
+		page, next, err := t.listTaskPage(status, listID, maxTaskListLimit, cursor)
+		if err != nil {
+			return nil, err
+		}
+		var items []json.RawMessage
+		if err := json.Unmarshal(page, &items); err != nil {
+			return nil, fmt.Errorf("server returned invalid JSON: %w", err)
+		}
+		all = append(all, items...)
+		if next == "" {
+			return json.Marshal(all)
+		}
+		cursor = next
+	}
+}
+
 func cliTaskList(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task list")
 	status := fs.String("status", "", "task status")
 	listID := fs.String("list-id", "", "task list id")
 	limit := fs.Int("limit", defaultTaskListLimit, "maximum tasks to return")
+	all := fs.Bool("all", false, "fetch every matching task, paging until the list is exhausted")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -543,12 +572,24 @@ func cliTaskList(args []string, out io.Writer) error {
 	if flagWasSet(fs, "status") && *status == "" {
 		return fmt.Errorf("--status cannot be empty")
 	}
-	if *limit < 1 || *limit > maxTaskListLimit {
+	// A cap on an answer that is by definition uncapped would only be ambiguous about which of
+	// the two the caller meant.
+	if *all && flagWasSet(fs, "limit") {
+		return fmt.Errorf("--all and --limit are mutually exclusive: --all returns every matching task")
+	}
+	if !*all && (*limit < 1 || *limit > maxTaskListLimit) {
 		return fmt.Errorf("--limit must be between 1 and %d", maxTaskListLimit)
 	}
 	t, err := cliTransport()
 	if err != nil {
 		return err
+	}
+	if *all {
+		raw, err := collectAllTasks(t, *status, *listID)
+		if err != nil {
+			return fmt.Errorf("list tasks: %w", err)
+		}
+		return writeCLIRawJSON(out, raw, *jsonOut)
 	}
 	raw, err := t.listTasks(*status, *listID, *limit)
 	if err != nil {
@@ -557,7 +598,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	// A full page is the one case where the answer is silently partial, and stdout has to stay
 	// parseable — so say so on stderr instead.
 	if countJSONArray(raw) >= *limit {
-		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id or raise --limit\n", *limit)
+		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id, raise --limit, or pass --all for every match\n", *limit)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -1266,7 +1307,7 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = []cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--limit N] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--limit <n> (default 100, max 200)", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--limit N | --all] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--limit <n> (default 100, max 200)", "--all (every match, paged; excludes --limit)", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately.", Mutates: true},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},

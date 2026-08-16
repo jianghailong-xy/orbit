@@ -97,6 +97,35 @@ export class RunnerTasksController {
     return page.items;
   }
 
+  /**
+   * One cursor page of tasks, newest first, together with the cursor for the next one.
+   *
+   * `GET tasks` above answers with a single bounded page and no way to ask for the rest, so its
+   * answer on a large account is silently "the newest N" — enumerating one (to diff it against
+   * something else, say) is impossible through it at any limit. This returns the page envelope
+   * rather than a bare array precisely so the caller can tell whether it has reached the end.
+   *
+   * Declared above `tasks/:id` so Nest never reads the literal "page" as a task id.
+   */
+  @Get('tasks/page')
+  listTaskPage(
+    @CurrentRunner() runner: Runner,
+    @Query('cursor') cursor?: string,
+    @Query('status') status?: string,
+    @Query('listId', PublicIdPipe) listId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tasks.listPage(runner.ownerId, {
+      cursor,
+      status,
+      listId,
+      limit,
+      // The tallies describe the scope, not the page, so re-deriving them once per page is
+      // pure waste — and a caller walking every page never reads them.
+      counts: 'none',
+    });
+  }
+
   @Get('tasks/:id')
   getTask(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.tasks.get(runner.ownerId, id);

@@ -664,6 +664,41 @@ func (t *Transport) listTasks(status, listID string, limit int) (json.RawMessage
 	return out, err
 }
 
+// listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
+// means this was the last page. listTasks above can only ever answer with the newest `limit`
+// rows, so this is what makes walking an entire account possible.
+func (t *Transport) listTaskPage(status, listID string, limit int, cursor string) (json.RawMessage, string, error) {
+	q := url.Values{}
+	if status != "" {
+		q.Set("status", status)
+	}
+	if listID != "" {
+		q.Set("listId", listID)
+	}
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if cursor != "" {
+		q.Set("cursor", cursor)
+	}
+	path := "/runner/tasks/page"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out struct {
+		Items      json.RawMessage `json:"items"`
+		NextCursor *string         `json:"nextCursor"`
+	}
+	if err := t.do(nil, "GET", path, nil, &out, taskOpTimeout); err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if out.NextCursor != nil {
+		next = *out.NextCursor
+	}
+	return out.Items, next, nil
+}
+
 func validatePathSegmentID(id string) error {
 	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\?#%\r\n") {
 		return fmt.Errorf("id must be a single safe path segment")

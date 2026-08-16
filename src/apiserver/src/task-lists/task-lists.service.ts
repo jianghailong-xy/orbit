@@ -87,6 +87,24 @@ export class TaskListsService {
     });
   }
 
+  /**
+   * The list's own row, with none of its tasks — what `GET /task-lists/:id?tasks=none` answers.
+   *
+   * `get()` below embeds every task the list has, which is fine for a list of twenty and ruinous
+   * for one of twenty-seven thousand: measured on this deployment at 19MB and ~1.2s of database
+   * time, most of it spent producing rows the caller then throws away because all it wanted was
+   * the title. Callers that need the contents page them through `GET /tasks/page?listId=…`.
+   *
+   * Why this is opt-in rather than the default: `tasks` is a non-optional field on the shipped
+   * macOS client's `TaskListDetail`, so omitting it unasked would not make that client fast — it
+   * would make it fail to decode. Same trap `counts=none` had to step around on the task page.
+   */
+  async getHeader(ownerId: string, id: string) {
+    const list = await this.prisma.taskList.findFirst({ where: { id, ownerId } });
+    if (!list) throw new NotFoundException('task list not found');
+    return list;
+  }
+
   async get(ownerId: string, id: string) {
     const list = await this.prisma.taskList.findFirst({
       where: { id, ownerId },

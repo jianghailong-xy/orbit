@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -7,6 +8,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
@@ -35,9 +37,23 @@ export class TaskListsController {
     return this.taskLists.list(user.userId);
   }
 
+  /**
+   * One list. `?tasks=none` drops the embedded tasks — see `getHeader`, and use
+   * `GET /tasks/page?listId=…` to read the contents a page at a time.
+   */
   @Get(':id')
-  get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.taskLists.get(user.userId, id);
+  get(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('tasks') tasks?: string,
+  ) {
+    const mode = tasks?.trim().toLowerCase();
+    if (mode !== undefined && mode !== 'none') {
+      throw new BadRequestException("tasks must be 'none' when set");
+    }
+    return mode === 'none'
+      ? this.taskLists.getHeader(user.userId, id)
+      : this.taskLists.get(user.userId, id);
   }
 
   @Patch(':id')

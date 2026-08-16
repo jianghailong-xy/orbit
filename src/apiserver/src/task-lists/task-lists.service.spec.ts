@@ -148,3 +148,46 @@ test('a runner that will not answer does not fail the delete', async () => {
   assert.deepEqual(await service.remove(OWNER_ID, LIST_ID), { ok: true });
   assert.equal(deleted, true);
 });
+
+// GET /task-lists/:id embeds every task the list has. On the FineWeb list — 27,548 tasks — that
+// is 19MB and well over a second of database time to answer a request whose caller (a page title,
+// a header) wanted one string; clients that fetched it locked up on the response. `tasks=none`
+// is the way to ask for the list without its contents.
+test('the header read fetches the list alone, with no task join at all', async () => {
+  let findArgs: any;
+  const service = new TaskListsService(
+    {
+      taskList: {
+        findFirst: async (args: any) => {
+          findArgs = args;
+          return { id: LIST_ID, title: 'FineWeb Parquet' };
+        },
+      },
+      // Reaching any of these would mean the header read is still walking the list's contents.
+      session: {
+        groupBy: async () => assert.fail('header read must not query sessions'),
+      },
+      taskDependency: {
+        findMany: async () => assert.fail('header read must not query dependencies'),
+      },
+    } as never,
+    {} as never,
+    {} as never,
+  );
+
+  const list = await service.getHeader(OWNER_ID, LIST_ID);
+
+  assert.equal(list.title, 'FineWeb Parquet');
+  assert.equal('tasks' in list, false);
+  assert.deepEqual(findArgs, { where: { id: LIST_ID, ownerId: OWNER_ID } });
+});
+
+test('a header read for someone else’s list is a 404, not an empty list', async () => {
+  const service = new TaskListsService(
+    { taskList: { findFirst: async () => null } } as never,
+    {} as never,
+    {} as never,
+  );
+
+  await assert.rejects(() => service.getHeader(OWNER_ID, LIST_ID), /task list not found/);
+});

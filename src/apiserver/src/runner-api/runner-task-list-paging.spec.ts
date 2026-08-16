@@ -50,6 +50,32 @@ test('a limit alone is enough to take the page query', async () => {
   assert.equal(calls.page.length, 1);
 });
 
+// `GET tasks` hands back a bare array, so a caller holding a full page cannot tell a complete
+// answer from a truncated one — and has nothing to continue from either way. Enumerating an
+// account (to diff its tasks against something else) needs the cursor, and the cursor needs the
+// envelope: 27k tasks are not reachable through any --limit.
+test('the paged route carries the cursor through and answers with the envelope', async () => {
+  const { controller, calls } = harness();
+
+  const page = await controller.listTaskPage(runner, 'cursor-2', 'OPEN', 'list-1', '200');
+
+  assert.deepEqual(page, { items: [{ id: 'page' }], nextCursor: null });
+  assert.equal(calls.list, 0);
+  assert.deepEqual(calls.page, [
+    { cursor: 'cursor-2', status: 'OPEN', listId: 'list-1', limit: '200', counts: 'none' },
+  ]);
+});
+
+test('the first page of a walk asks with no cursor', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTaskPage(runner);
+
+  assert.deepEqual(calls.page, [
+    { cursor: undefined, status: undefined, listId: undefined, limit: undefined, counts: 'none' },
+  ]);
+});
+
 // Runners older than these filters filter client-side, so they must keep receiving the whole list
 // rather than a page they would silently treat as complete.
 test('a caller that asks for nothing still gets the full list', async () => {
