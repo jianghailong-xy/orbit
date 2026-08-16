@@ -1114,6 +1114,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// without ever producing one never got past its own startup, so its exit is a
 	// refusal, not a crash (see startupRefusal).
 	var sawOutput atomic.Bool
+	// Set by the stderr reader when claude refuses the --session-id we asked it to open
+	// because that id already names a conversation (see sessionIDInUse).
+	var sessionIDTaken atomic.Bool
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
 	args := []string{
@@ -1238,7 +1241,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		s := bufio.NewScanner(stderr)
 		s.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		for s.Scan() {
-			emit(evSystem, map[string]interface{}{"stderr": stripANSI(s.Text()) + "\n"})
+			line := stripANSI(s.Text())
+			if sessionIDInUse(line) {
+				sessionIDTaken.Store(true)
+			}
+			emit(evSystem, map[string]interface{}{"stderr": line + "\n"})
 		}
 	}()
 
@@ -1648,6 +1655,16 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	if shutdownCtx.Err() != nil {
 		return stCancelled, true, false // graceful drain -> caller detaches without finalizing
 	}
+	// One startup refusal is not deterministic in its arguments: claude rejects
+	// `--session-id X` when X already names a conversation, which happens when the server
+	// asks for a first spawn on an id an earlier spawn already opened (a turn that never
+	// settled leaves numTurns at 0 — see queue.buildSession). Failing here would wedge the
+	// session for good, since every later message repeats the same refusal. The conversation
+	// is exactly what we want, so respawn onto it with --resume.
+	if firstSpawn && sessionIDTaken.Load() {
+		logln(fmt.Sprintf("interactive run %s — session id already opened; resuming it instead", job.SessionID))
+		return stFailed, false, false
+	}
 	// A clean exit with nothing on stdout is a startup refusal (bad flags, a resume
 	// target that can't be rebuilt, running --dangerously-skip-permissions as root):
 	// the same spawn with the same arguments refuses the same way, so respawning just
@@ -1656,6 +1673,14 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		return stFailed, true, false
 	}
 	return stFailed, false, false // unexpected exit -> respawn with --resume
+}
+
+// sessionIDInUse reports whether a stderr line is claude refusing to open the
+// --session-id it was given because that id already has a conversation on this machine
+// ("Error: Session ID <uuid> is already in use."). Only meaningful for a first spawn:
+// a resume never passes --session-id.
+func sessionIDInUse(line string) bool {
+	return strings.Contains(line, "Session ID") && strings.Contains(line, "is already in use")
 }
 
 // startupRefusal reports whether a process exit was a startup refusal rather than a

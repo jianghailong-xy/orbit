@@ -338,6 +338,15 @@ export class QueueService {
       session.runtimeSessionId = id;
       session.numTurns = 0;
       resume = false;
+    } else if (provider === AgentProvider.CLAUDE && !resume && session.runtimeSessionId) {
+      // numTurns alone understates what Claude has already opened: it only advances when a
+      // turn settles through turn-complete, and a turn still in flight when the session ends
+      // is drained to ANSWERED without it (finalizeRun). A session ended mid-turn therefore
+      // keeps numTurns at 0 over a conversation that exists — and a first spawn on an id
+      // Claude has already used is refused outright ("Session ID ... is already in use"),
+      // failing that run and every message sent after it. The runtime stamps the id it opened
+      // on its own events, which is the evidence --resume is the right flag here.
+      resume = await this.claudeConversationOpened(session.id, session.runtimeSessionId);
     }
     const runtimeSessionId = session.runtimeSessionId ?? undefined;
     const sessionUuid = runtimeSessionId ?? session.id;
@@ -407,5 +416,30 @@ export class QueueService {
         env: exec.env,
       },
     };
+  }
+
+  /**
+   * Has a Claude process ever run on this runtime session id? Every event Claude streams
+   * carries the id of the conversation it opened, so one such event means the local session
+   * file exists (and if this runner is not the machine that has it, the runner rebuilds it
+   * from Orbit's events before resuming — see transcript_rebuild.go).
+   *
+   * Ordered by seq so the lookup walks the session's events from the start: the runtime's
+   * `init` is the second event of a run, so the match is found immediately.
+   */
+  private async claudeConversationOpened(
+    sessionId: string,
+    runtimeSessionId: string,
+  ): Promise<boolean> {
+    const opened = await this.prisma.runEvent.findFirst({
+      where: {
+        sessionId,
+        type: 'system',
+        payload: { path: ['sessionId'], equals: runtimeSessionId },
+      },
+      orderBy: { seq: 'asc' },
+      select: { id: true },
+    });
+    return opened !== null;
   }
 }
