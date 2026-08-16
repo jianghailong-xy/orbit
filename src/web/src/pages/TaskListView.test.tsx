@@ -84,6 +84,30 @@ describe('opening one task list', () => {
     expect(html).toContain('Load more (2 of 19702)');
   });
 
+  it('renders each title whole, however much boilerplate the rows share', () => {
+    // The view used to strip the longest shared prefix off every row and show it once as a chip,
+    // which turned "[FineWeb][CC-MAIN-2025-26] 004_00040.parquet" into a bare "004_00040.parquet".
+    // A row must say what the task is actually called.
+    const html = renderList(
+      {
+        items: [
+          task('1', '[FineWeb][CC-MAIN-2025-26] 004_00040.parquet'),
+          task('2', '[FineWeb][CC-MAIN-2025-26] 004_00041.parquet'),
+          task('3', '[FineWeb][CC-MAIN-2025-26] 004_00042.parquet'),
+        ],
+        nextCursor: null,
+        total: 3,
+        counts: { ...counts, total: 3 },
+      },
+      [{ id: LIST_ID, title: 'FineWeb Parquet' }],
+    );
+
+    // Anchored on the surrounding tags: the full title has always been in the row's `title=`
+    // tooltip, so only asserting on the visible text node can tell the two behaviours apart.
+    expect(html).toContain('>[FineWeb][CC-MAIN-2025-26] 004_00040.parquet<');
+    expect(html).toContain('>[FineWeb][CC-MAIN-2025-26] 004_00042.parquet<');
+  });
+
   it('titles the page from the lists index rather than the list detail', () => {
     const html = renderList(
       { items: [], nextCursor: null, total: 0, counts: { ...counts, total: 0 } },

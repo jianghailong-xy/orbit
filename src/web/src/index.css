@@ -1105,9 +1105,8 @@ body {
 .tasks-search {
   width: 200px;
 }
-/* Muted chips surfacing context dropped from the rows: the shared title prefix and, when
-   every task shares one assignee, that assignee. */
-.task-prefix-chip,
+/* Muted chip surfacing context dropped from the rows: when every task shares one assignee,
+   that assignee. */
 .task-assignee-chip {
   display: inline-flex;
   align-items: center;

@@ -362,24 +362,6 @@ export function TaskListView() {
   // from page 2 on); until it lands — or if it fails — there is nothing to report.
   const counts = taskPageCounts ?? EMPTY_TASK_COUNTS;
 
-  // Tasks in a list usually share a boilerplate title prefix ("实现 EGIU Unit …"). Compute
-  // the longest common prefix across the loaded rows, trim it back to the last word boundary
-  // (so a shared number like "Unit 12" vs "120" isn't sliced), and strip it per row —
-  // surfacing it once instead of repeating it on every line. Needs ≥3 rows to be meaningful.
-  const commonPrefix = useMemo(() => {
-    const titles = taskData.map((t: any) => t.title ?? '').filter(Boolean);
-    if (titles.length < 3) return '';
-    let p: string = titles[0];
-    for (const t of titles) {
-      let i = 0;
-      while (i < p.length && i < t.length && p[i] === t[i]) i++;
-      p = p.slice(0, i);
-      if (!p) break;
-    }
-    p = p.slice(0, p.lastIndexOf(' ') + 1); // keep through the last space (incl. it)
-    return p.includes(' ') && p.trim().length >= 5 ? p : '';
-  }, [taskData]);
-
   // When every visible task shares one assignee, the column is pure repetition: drop it and
   // surface the assignee once. `name` is null when all are unassigned (nothing to surface).
   const uniformAssignee = useMemo(() => {
@@ -547,10 +529,6 @@ export function TaskListView() {
     // The workspace assigned to run the task (GET /tasks and the list view both include it).
     const assigneeName = r.assignee?.name ?? null;
     const selected = selectedTaskId === r.id;
-    // Strip the shared prefix for display; the full title stays in the hover tooltip.
-    const stripped =
-      commonPrefix && r.title?.startsWith(commonPrefix) ? r.title.slice(commonPrefix.length) : r.title;
-    const displayTitle = stripped?.trim() ? stripped : (r.title ?? '');
     // Row-level run/retry: offered only for an actionable, runnable task that isn't busy,
     // blocked, or already done. FAILED reframes the same action as "Retry".
     const canRunRow = canStartTask(r);
@@ -589,7 +567,7 @@ export function TaskListView() {
         </div>
         <div className="task-title-cell">
           <span className="task-title" title={r.title}>
-            {displayTitle}
+            {r.title ?? ''}
           </span>
           {r.blocked ? (
             <Tooltip
@@ -784,7 +762,6 @@ export function TaskListView() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
-                  {commonPrefix && <span className="task-prefix-chip">{commonPrefix.trim()}</span>}
                   {uniformAssignee?.name && (
                     <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>
                       <Avatar
