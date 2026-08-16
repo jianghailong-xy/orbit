@@ -187,11 +187,17 @@ export function TaskDetailPanel({
   // the DAG in both directions so opening a root prerequisite or a middle task still shows the
   // complete pipeline. Keeping the key under ['task', taskId] lets existing realtime
   // invalidation refresh both the detail and graph together.
+  //
+  // maxNodes is asked for explicitly at the server's ceiling rather than left to its default of
+  // 100. A fan-in task — "LevelDB 校验（300 shard）" gates on all 300 of its shards — is exactly
+  // the shape a graph is worth drawing for, and at the default it draws 100 of 301 and silently
+  // calls the rest truncated. The edge budget scales with it (4 per node, capped at 2000), so a
+  // wide single-depth fan-in fits whole.
   const dependencyGraphQ = useQuery({
     queryKey: ['task', taskId, 'dependency-graph'],
     queryFn: () =>
       api<TaskDependencyGraphResponse>(
-        `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true`,
+        `/tasks/${taskId}/dependency-graph?direction=both&pairUnary=true&maxNodes=500`,
       ),
     enabled:
       !!q.data &&
