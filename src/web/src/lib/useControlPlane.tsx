@@ -46,14 +46,13 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // list's optimistic edits can't touch them — so they need their own invalidation here.
       void qc.invalidateQueries({ queryKey: ['session-counts'] });
     };
-    // The task list/board queries: main list & sidebar count (['tasks']), the single-list view
-    // (['task-list', id]), the sidebar lists (['task-lists']), and an open detail (['task', id]).
-    // Refetched only on a `task.*` event (or on reconnect), so an unrelated session event doesn't
-    // needlessly refetch them. This is what makes MCP-created/updated tasks appear without a
-    // manual page refresh; before, tasks had no push path and rode a 5–15s poll only.
+    // The task list/board queries: every paged view — all tasks, one list, the unlisted bucket —
+    // plus the sidebar count (['tasks']), the sidebar lists (['task-lists']), and an open detail
+    // (['task', id]). Refetched only on a `task.*` event (or on reconnect), so an unrelated
+    // session event doesn't needlessly refetch them. This is what makes MCP-created/updated tasks
+    // appear without a manual page refresh; before, tasks had no push path and rode a 5–15s poll only.
     const refetchTasks = (): void => {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
-      void qc.invalidateQueries({ queryKey: ['task-list'] });
       void qc.invalidateQueries({ queryKey: ['task-lists'] });
       void qc.invalidateQueries({ queryKey: ['task'] });
     };

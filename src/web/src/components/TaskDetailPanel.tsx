@@ -394,7 +394,6 @@ export function TaskDetailPanel({
     return Promise.all([
       qc.invalidateQueries({ queryKey: ['task', taskId] }),
       qc.invalidateQueries({ queryKey: ['tasks'] }),
-      qc.invalidateQueries({ queryKey: ['task-list'] }),
     ]);
   };
 

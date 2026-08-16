@@ -36,7 +36,7 @@ import {
   DEFAULT_TASK_FILTER,
   matchesTaskFilter,
 } from '../lib/taskFilters';
-import { taskPagePath, type TaskPage } from '../lib/taskPages';
+import { taskPagePath, type TaskCounts, type TaskPage } from '../lib/taskPages';
 import {
   anchorAt,
   dropAnchor,
@@ -69,6 +69,19 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
   if (target.isContentEditable || target.tagName === 'TEXTAREA') return true;
   return target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type);
+};
+
+// What the header shows before the first page (which carries the scope-wide tallies) arrives.
+const EMPTY_TASK_COUNTS: TaskCounts = {
+  total: 0,
+  open: 0,
+  inProgress: 0,
+  done: 0,
+  failed: 0,
+  cancelled: 0,
+  running: 0,
+  queued: 0,
+  runnable: 0,
 };
 
 // Collapse a batch's per-task skip reasons into one countable summary
@@ -131,28 +144,31 @@ export function TaskListView() {
     else setSort(DEFAULT_TASK_SORT_FIELD, DEFAULT_TASK_SORT_DIRECTION);
   };
 
-  // /lists/<base62> renders a single user list instead of all tasks: fetch that list
-  // and render its tasks (GET /task-lists/:id includes them). routeId normalizes the param to
-  // the public id the rest of the app holds; the server takes either spelling in the path.
+  // /lists/<base62> renders a single user list instead of all tasks. routeId normalizes the
+  // param to the public id the rest of the app holds; the server takes either spelling.
   // "/lists/none" is the virtual "未分组" view — tasks with no list. It isn't a real
-  // list id, so skip decoding and keep listId null; the all-tasks data is filtered below.
+  // list id, so skip decoding and scope the query with the server's own `none` sentinel.
   const listMatch = useMatch('/lists/:key');
   const isUnlisted = listMatch?.params.key === 'none';
   const listId = listMatch && !isUnlisted ? routeId(listMatch.params.key) : null;
   const isListView = !!listId;
+  const scopeListId = isUnlisted ? 'none' : (listId ?? undefined);
 
-  // The all-tasks and unlisted views use cursor pagination. Status/title/list filters are
-  // executed server-side, so even an owner with tens of thousands of tasks downloads at
-  // most 200 rows per request. Poll only the pages the user has actually loaded.
+  // Every view — all tasks, one user list, the unlisted bucket — pages through the same cursor
+  // endpoint, which executes the status/title/list filters server-side, so even an owner with
+  // tens of thousands of tasks downloads at most 200 rows per request. A single list used to be
+  // fetched whole instead (GET /task-lists/:id embeds its tasks), which meant opening a 19k-task
+  // list blocked the first paint on ~13MB of rows and then rendered every one of them. Poll only
+  // the pages the user has actually loaded.
   const tasks = useInfiniteQuery({
-    queryKey: ['tasks', 'page', { filter, query, listId: isUnlisted ? 'none' : undefined }],
+    queryKey: ['tasks', 'page', { filter, query, listId: scopeListId ?? null }],
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
         taskPagePath({
           cursor: pageParam,
           limit: 200,
           status: filter,
-          listId: isUnlisted ? 'none' : undefined,
+          listId: scopeListId,
           q: query,
           // Only page 1 carries the tab badges; the counts are scope-wide, so asking for them
           // again on every subsequent page (and on every poll, which refetches all loaded
@@ -162,7 +178,6 @@ export function TaskListView() {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: !isListView,
     refetchInterval: (q) =>
       (q.state.data?.pages ?? []).some((page) =>
         page.items.some((t: any) => t.running || t.queued),
@@ -177,13 +192,18 @@ export function TaskListView() {
   const taskPageCounts = tasks.data?.pages[0]?.counts;
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
 
-  const listQ = useQuery({
-    queryKey: ['task-list', listId],
-    queryFn: () => api<{ id: string; title: string; tasks: any[] }>(`/task-lists/${listId}`),
-    enabled: !!listId,
-    refetchInterval: (q) =>
-      (q.state.data?.tasks ?? []).some((t: any) => t.running || t.queued) ? 5_000 : 15_000,
+  // The open list's own row, for the page title. Read off the lists index the sidebar already
+  // holds — same key, so opening a list costs no request of its own — rather than the list
+  // detail, whose whole payload is the tasks this view now pages through.
+  const taskLists = useQuery({
+    queryKey: ['task-lists'],
+    queryFn: () => api<{ id: string; title: string }[]>('/task-lists'),
   });
+  const listRow = (taskLists.data ?? []).find((l) => l.id === listId);
+  // An index with no such row means the list is gone — but only once it has been refetched for
+  // *this* page view. The sidebar's copy can be up to 15s stale, and calling a list that was
+  // created a second ago (over MCP, say, and deep-linked straight into) missing would be wrong.
+  const listMissing = isListView && taskLists.isFetchedAfterMount && !listRow;
   // A /tasks/:id deep link (e.g. a session header's "回到任务") opens that task's detail
   // panel; routeId normalizes it to the public id TaskDetailPanel fetches by.
   const taskMatch = useMatch('/tasks/:id');
@@ -197,7 +217,7 @@ export function TaskListView() {
   // Re-sorting or re-searching keeps the selection — the rows are still there — but voids
   // the anchor: a range is defined by two rows' positions, which just moved under it.
   useEffect(() => setSelection(dropAnchor), [sortField, sortDir, query]);
-  const pageTitle = isListView ? (listQ.data?.title ?? '') : isUnlisted ? 'No list' : 'Active';
+  const pageTitle = isListView ? (listRow?.title ?? '') : isUnlisted ? 'No list' : 'Active';
 
   // ── The list's console ────────────────────────────────────────────────────────────────────
   //
@@ -222,14 +242,13 @@ export function TaskListView() {
   };
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['tasks'] });
-  // A deletion changes every task collection: the paged all/unlisted views, the embedded
-  // tasks in a named-list detail query, and the sidebar's per-list counts.
+  // A deletion changes every task collection: the paged views (all, unlisted, one list) and
+  // the sidebar's per-list counts.
   const invalidateAfterDelete = () =>
     Promise.all([
       qc.invalidateQueries({ queryKey: ['tasks'] }),
       // Deleting a prerequisite removes dependency edges from other task details.
       qc.invalidateQueries({ queryKey: ['task'] }),
-      qc.invalidateQueries({ queryKey: ['task-list'] }),
       qc.invalidateQueries({ queryKey: ['task-lists'] }),
     ]);
 
@@ -322,22 +341,13 @@ export function TaskListView() {
     onError: (e: Error) => message.error(e.message),
   });
 
-  const taskRows = useMemo(
-    () =>
-      taskData
-        .filter((t: any) => (isUnlisted ? !t.listId : true))
-        .filter((t: any) => matchesTaskFilter(t, filter)),
-    [taskData, filter, isUnlisted],
+  // The rows currently shown, ordered by the selected sort field/direction. The server has
+  // already narrowed the scope and the status filter; re-applying the filter here keeps a row
+  // whose status changed under a poll from lingering in a tab it no longer belongs to.
+  const visibleRows = useMemo(
+    () => taskData.filter((t: any) => matchesTaskFilter(t, filter)),
+    [taskData, filter],
   );
-
-  const listRows = useMemo(
-    () => (listQ.data?.tasks ?? []).filter((t: any) => matchesTaskFilter(t, filter)),
-    [listQ.data, filter],
-  );
-
-  // The rows currently shown (a single list's tasks, or all tasks otherwise),
-  // ordered by the selected sort field/direction.
-  const visibleRows = isListView ? listRows : taskRows;
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
@@ -347,49 +357,17 @@ export function TaskListView() {
     return [...filtered].sort((a: any, b: any) => dir * compareTasksBy(a, b, sortField));
   }, [visibleRows, query, sortField, sortDir]);
 
-  // The current view's full task set (before the status filter) — drives the progress
-  // overview and the per-filter counts, which must reflect the whole list, not the
-  // currently filtered subset.
-  const baseRows = useMemo(
-    () =>
-      isListView
-        ? (listQ.data?.tasks ?? [])
-        : taskData.filter((t: any) => (isUnlisted ? !t.listId : true)),
-    [isListView, listQ.data, taskData, isUnlisted],
-  );
-  const counts = useMemo(() => {
-    if (!isListView && taskPageCounts) return taskPageCounts;
-    const c = {
-      total: baseRows.length,
-      done: 0,
-      inProgress: 0,
-      open: 0,
-      failed: 0,
-      cancelled: 0,
-      running: 0,
-      queued: 0,
-      runnable: 0,
-    };
-    for (const t of baseRows) {
-      if (t.status === 'DONE') c.done++;
-      else if (t.status === 'FAILED') c.failed++;
-      else if (t.status === 'CANCELLED') c.cancelled++;
-      else if (t.status === 'IN_PROGRESS') c.inProgress++;
-      else if (t.status === 'OPEN') c.open++;
-      // Live session overlays — orthogonal to lifecycle status, so counted separately.
-      if (t.running) c.running++;
-      else if (t.queued) c.queued++;
-      if (canStartTask(t)) c.runnable++;
-    }
-    return c;
-  }, [baseRows, isListView, taskPageCounts]);
+  // The progress bar and the tab badges describe the whole scope, not the pages loaded so far,
+  // so they can only come from the server. Page 1 always carries them (`counts=none` is sent
+  // from page 2 on); until it lands — or if it fails — there is nothing to report.
+  const counts = taskPageCounts ?? EMPTY_TASK_COUNTS;
 
   // Tasks in a list usually share a boilerplate title prefix ("实现 EGIU Unit …"). Compute
-  // the longest common prefix across the whole view, trim it back to the last word boundary
+  // the longest common prefix across the loaded rows, trim it back to the last word boundary
   // (so a shared number like "Unit 12" vs "120" isn't sliced), and strip it per row —
   // surfacing it once instead of repeating it on every line. Needs ≥3 rows to be meaningful.
   const commonPrefix = useMemo(() => {
-    const titles = baseRows.map((t: any) => t.title ?? '').filter(Boolean);
+    const titles = taskData.map((t: any) => t.title ?? '').filter(Boolean);
     if (titles.length < 3) return '';
     let p: string = titles[0];
     for (const t of titles) {
@@ -400,14 +378,14 @@ export function TaskListView() {
     }
     p = p.slice(0, p.lastIndexOf(' ') + 1); // keep through the last space (incl. it)
     return p.includes(' ') && p.trim().length >= 5 ? p : '';
-  }, [baseRows]);
+  }, [taskData]);
 
   // When every visible task shares one assignee, the column is pure repetition: drop it and
   // surface the assignee once. `name` is null when all are unassigned (nothing to surface).
   const uniformAssignee = useMemo(() => {
-    const names = new Set(baseRows.map((t: any) => t.assignee?.name ?? null));
+    const names = new Set(taskData.map((t: any) => t.assignee?.name ?? null));
     return names.size === 1 ? { name: [...names][0] as string | null } : null;
-  }, [baseRows]);
+  }, [taskData]);
 
   // The detail panel is a flex sibling that squeezes the list; with it open, drop the
   // assignee column too so the title keeps its width. Either condition hides the column.
@@ -824,15 +802,15 @@ export function TaskListView() {
           </div>
 
           <div className="tasks-body">
-            {(isListView ? listQ.isLoading : tasks.isLoading) ? (
+            {tasks.isLoading ? (
               <div style={{ padding: 48, textAlign: 'center' }}>
                 <Spin />
               </div>
-            ) : isListView && listQ.isError ? (
+            ) : listMissing ? (
               <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
                 This list could not be loaded.
               </div>
-            ) : !isListView && tasks.isError ? (
+            ) : tasks.isError ? (
               <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
                 Tasks could not be loaded.
               </div>
@@ -869,7 +847,7 @@ export function TaskListView() {
                 ) : (
                   rows.map((r: any) => renderRow(r))
                 )}
-                {!isListView && tasks.hasNextPage && (
+                {tasks.hasNextPage && (
                   <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center' }}>
                     <Button
                       loading={tasks.isFetchingNextPage}
