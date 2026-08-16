@@ -17,6 +17,9 @@ var cliParityExemptTools = map[string]string{
 var cliParityParamAlias = map[string]string{
 	"dependsOnTaskId":  "--depends-on",
 	"dependsOnTaskIds": "--depends-on",
+	// Singular at a terminal, like --depends-on above: one flag carries one label and repeats,
+	// which is also what makes a label containing a comma expressible.
+	"labels": "--label",
 	// One array of {op, taskId, dependsOnTaskId} over MCP; at a terminal the same batch is typed
 	// as repeated --add A:B / --remove C:D, because nobody hand-writes JSON into a flag.
 	"ops": "--add",

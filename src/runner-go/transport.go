@@ -651,7 +651,7 @@ func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, 
 // listTasks filters and caps server-side. Fetching every task to filter here means downloading
 // the owner's whole task history — descriptions included — on each call, which is slow enough to
 // time out mid-body on a large account and lands in an agent's context as tens of megabytes.
-func (t *Transport) listTasks(status, listID string, limit int) (json.RawMessage, error) {
+func (t *Transport) listTasks(status, listID string, labels []string, limit int) (json.RawMessage, error) {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
@@ -659,10 +659,32 @@ func (t *Transport) listTasks(status, listID string, limit int) (json.RawMessage
 	if listID != "" {
 		q.Set("listId", listID)
 	}
+	// Repeated rather than comma-joined: a label may legitimately contain a comma, and the
+	// server accepts both forms.
+	for _, label := range labels {
+		q.Add("labels", label)
+	}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))
 	}
 	path := "/runner/tasks"
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// labelSummary returns every label in scope with its own status breakdown, in one call. The
+// point of asking the server rather than listing tasks and tallying here is that the tally is
+// over every task carrying the label, not over the page the caller could afford to download.
+func (t *Transport) labelSummary(listID string) (json.RawMessage, error) {
+	q := url.Values{}
+	if listID != "" {
+		q.Set("listId", listID)
+	}
+	path := "/runner/tasks/labels"
 	if len(q) > 0 {
 		path += "?" + q.Encode()
 	}
@@ -696,13 +718,16 @@ func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
-func (t *Transport) listTaskPage(status, listID string, limit int, cursor string) (json.RawMessage, string, error) {
+func (t *Transport) listTaskPage(status, listID string, labels []string, limit int, cursor string) (json.RawMessage, string, error) {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
 	}
 	if listID != "" {
 		q.Set("listId", listID)
+	}
+	for _, label := range labels {
+		q.Add("labels", label)
 	}
 	if limit > 0 {
 		q.Set("limit", strconv.Itoa(limit))

@@ -86,15 +86,36 @@ export class RunnerTasksController {
     @Query('status') status?: string,
     @Query('listId', PublicIdPipe) listId?: string,
     @Query('limit') limit?: string,
+    // Appended rather than grouped with the other filters: these parameters are bound by name at
+    // runtime, but the controller's own tests call the method positionally, so inserting one in
+    // the middle silently reassigns every argument after it.
+    @Query('labels') labels?: string | string[],
   ) {
-    if (!status && !listId && !limit) return this.tasks.list(runner.ownerId);
+    // `labels` joins the other filters in this test, not just in the call below: the unfiltered
+    // branch answers from tasks.list, which has no label filter, so leaving it out would make a
+    // label-only request return every task while looking like it had filtered.
+    if (!status && !listId && !limit && !labels) return this.tasks.list(runner.ownerId);
     const page = await this.tasks.listPage(runner.ownerId, {
       status,
       listId,
+      labels,
       limit,
       counts: 'none',
     });
     return page.items;
+  }
+
+  /**
+   * Every label in scope with its status breakdown — the question labels exist to answer, and
+   * the one a per-label loop answers 110 times. Above `tasks/:id` so "labels" is never read as
+   * a task id.
+   */
+  @Get('tasks/labels')
+  labelSummary(
+    @CurrentRunner() runner: Runner,
+    @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+  ) {
+    return this.tasks.labelSummary(runner.ownerId, { listId });
   }
 
   /**
@@ -114,11 +135,13 @@ export class RunnerTasksController {
     @Query('status') status?: string,
     @Query('listId', PublicIdPipe) listId?: string,
     @Query('limit') limit?: string,
+    @Query('labels') labels?: string | string[],
   ) {
     return this.tasks.listPage(runner.ownerId, {
       cursor,
       status,
       listId,
+      labels,
       limit,
       // The tallies describe the scope, not the page, so re-deriving them once per page is
       // pure waste — and a caller walking every page never reads them.

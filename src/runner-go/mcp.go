@@ -191,6 +191,10 @@ const orchestrationOffMsg = "session orchestration is not enabled for this agent
 // TASK_BATCH_CREATE_MAX so the tool rejects an oversized batch before the round-trip.
 const maxTaskBatchCreate = 50
 
+// How many labels one task may carry. Mirrors the server's TASK_LABEL_MAX_COUNT so the schema
+// states the bound the write would be rejected against anyway.
+const maxTaskLabels = 16
+
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
@@ -203,15 +207,22 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if limit == 0 {
 			limit = defaultTaskListLimit
 		}
-		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), limit)
+		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getStringSlice(args, "labels"), limit)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
 		}
 		body := prettyJSON(raw)
 		if countJSONArray(raw) >= limit {
-			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId or raise limit.\n%s", limit, body)
+			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/labels or raise limit.\n%s", limit, body)
 		}
 		return toolResult(body, false)
+
+	case "task_labels":
+		raw, err := s.t.labelSummary(getString(args, "listId"))
+		if err != nil {
+			return toolResult("label summary failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
 
 	case "task_get":
 		id, ok := s.resolveTaskID(args)
@@ -279,7 +290,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady")
+		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -310,7 +321,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "ref", "dependsOnRefs")
+			copyIfPresent(body, item, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -325,7 +336,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(noTaskMsg, true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -962,6 +973,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to use the provider's own default. An id the provider doesn't have will fail at run time, not here.",
 	}
+	labelsProp := map[string]interface{}{
+		"type":        "array",
+		"items":       str,
+		"maxItems":    maxTaskLabels,
+		"description": "Grouping labels for this task, orthogonal to listId: the list decides how the task runs, a label only says which tasks belong together, so a task has one list and any number of labels. Use them for the axis the list cannot express — the batch, dataset, shard or upstream commit a task belongs to — and label facts, not judgements: `CC-MAIN-2017-34` groups reliably because it is copied from the work, `important` does not because the next call spells it differently. Matched exactly, case included. task_list filters on them and task_labels reports each label's progress, so a label nobody will query is just a longer title.",
+	}
 	obj := func(props map[string]interface{}, required ...string) map[string]interface{} {
 		schema := map[string]interface{}{"type": "object", "properties": props}
 		if len(required) > 0 {
@@ -989,6 +1006,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"type":        "boolean",
 				"description": "Once all prerequisites are DONE, auto-run this task without a manual start (default true). Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. Ignored when there are no prerequisites.",
 			},
+			"labels": labelsProp,
 		}
 	}
 	taskBatchItemProps := func() map[string]interface{} {
@@ -1007,11 +1025,23 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status or listId.",
+			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId or labels.",
 			"inputSchema": obj(map[string]interface{}{
 				"status": status,
 				"listId": str,
-				"limit":  map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d, server cap %d).", defaultTaskListLimit, maxTaskListLimit)},
+				"labels": map[string]interface{}{
+					"type":        "array",
+					"items":       str,
+					"description": "Only tasks carrying ALL of these labels. Matched exactly, case included. Use task_labels first when the exact spelling of a label is not already known.",
+				},
+				"limit": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": maxTaskListLimit, "description": fmt.Sprintf("Maximum tasks to return (default %d, server cap %d).", defaultTaskListLimit, maxTaskListLimit)},
+			}),
+		},
+		{
+			"name":        "task_labels",
+			"description": "Every label in use with its own status breakdown (total/open/inProgress/done/failed/cancelled), newest work included. This is the tool for \"how far along is each batch\" — it answers for all labels in one call, where task_list would have to be run once per label. Optionally scope to one listId. Also the way to discover how labels are actually spelled before filtering on one.",
+			"inputSchema": obj(map[string]interface{}{
+				"listId": str,
 			}),
 		},
 		{
@@ -1089,6 +1119,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
 					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+				},
+				"labels": map[string]interface{}{
+					"type":        "array",
+					"items":       str,
+					"maxItems":    maxTaskLabels,
+					"description": "Complete replacement for this task's labels. Omit to leave them unchanged; pass [] to clear them all.",
 				},
 			}),
 		},
@@ -1503,6 +1539,28 @@ func getString(args map[string]interface{}, key string) string {
 		}
 	}
 	return ""
+}
+
+// getStringSlice reads an array-of-strings argument, tolerating the single string a model
+// sometimes sends when the schema says array. Non-string entries are skipped rather than
+// failing the call: one malformed element should not lose a filter the caller did express.
+func getStringSlice(args map[string]interface{}, key string) []string {
+	switch v := args[key].(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		return []string{v}
+	case []interface{}:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // copyIfPresent passes through keys the caller supplied (including explicit null,

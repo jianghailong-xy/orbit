@@ -53,6 +53,9 @@ export class TasksController {
     // base62, so without the exemption it decodes to a uuid no list has.
     @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
     @Query('assigneeId', PublicIdPipe) assigneeId?: string,
+    // Free text, never an id: no PublicIdPipe, and a label that happens to look like a public id
+    // must survive as the string it is.
+    @Query('labels') labels?: string | string[],
     @Query('q') q?: string,
     @Query('counts') counts?: string,
   ) {
@@ -62,9 +65,20 @@ export class TasksController {
       status,
       listId,
       assigneeId,
+      labels,
       q,
       counts,
     });
+  }
+
+  // Above :id for the same reason as "page" — "labels" is not a task uuid.
+  @Get('labels')
+  labelSummary(
+    @CurrentUser() user: AuthUser,
+    @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+    @Query('assigneeId', PublicIdPipe) assigneeId?: string,
+  ) {
+    return this.tasks.labelSummary(user.userId, { listId, assigneeId });
   }
 
   @Get(':id/dependency-graph')

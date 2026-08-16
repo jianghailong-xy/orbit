@@ -1184,6 +1184,25 @@ model Task {
   // Optional parent list grouping; deleting the list detaches but keeps the task.
   listId           String?     @map("list_id") @db.Uuid
   list             TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
+  /// Free-text labels, written by whoever files the task (in practice the agent creating it).
+  /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
+  /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and
+  /// only says which tasks belong together. That split is why one is a single FK and these are a
+  /// set — "which stage" admits exactly one answer because two stages would give one task two
+  /// conflicting run policies, while "which batch" is just a fact about the work and can be
+  /// stated as many times as it is true.
+  ///
+  /// The need predates the column. Agents were already labelling, by writing the label into the
+  /// title where nothing could query it: at this migration 109,873 of 110,421 titles carried a
+  /// `[CC-MAIN-yyyy-ww]` snapshot marker, 110 distinct values, and every one of them spanned all
+  /// four pipeline lists. Migration 0106 lifts those into this column.
+  ///
+  /// An array rather than a tag table because none of what a tag table buys is wanted here:
+  /// there is no rename, no colour, no library to curate. Its cost is real though — the writer
+  /// is one INSERT instead of a find-or-create per label plus a join row, and there is no
+  /// second table to keep consistent. Matching is exact, including case: these record facts
+  /// (a snapshot id, a shard) rather than judgements, and facts arrive already spelled.
+  labels           String[]    @default([])
   dueDate          DateTime?   @map("due_date")
   // Per-task override for the runs this task dispatches: a built-in engine slug
   // ("claude"/"codex"/"kimi"/"opencode") or one of the owner's configured ModelProvider slugs,

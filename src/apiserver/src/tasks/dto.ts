@@ -21,6 +21,13 @@ import { IsPublicId } from '../common/public-id';
 
 const TASK_STATUSES = Object.values(TaskStatus);
 
+/**
+ * Bounds on one task's labels. Not a taxonomy — a stop on a caller that has confused the label
+ * set with the description. Both are mirrored in the runner's MCP tool schema.
+ */
+export const TASK_LABEL_MAX_COUNT = 16;
+export const TASK_LABEL_MAX_LENGTH = 64;
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -42,6 +49,14 @@ export class CreateTaskDto {
   @IsOptional() @IsArray() @IsPublicId({ each: true }) dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
+  // Free-text grouping labels, orthogonal to listId (see Task.labels). Stored trimmed and
+  // deduplicated, case as given, since filtering matches exactly.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(TASK_LABEL_MAX_COUNT)
+  @IsString({ each: true })
+  @MaxLength(TASK_LABEL_MAX_LENGTH, { each: true })
+  labels?: string[];
 }
 
 /** How many tasks one batch-create call may write. Mirrored in the runner's MCP tool schema. */
@@ -120,6 +135,14 @@ export class UpdateTaskDto {
   dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
+  // Full replacement for this task's labels, like dependsOnTaskIds above: omit to leave them
+  // alone, pass [] to clear them.
+  @ValidateIf((_dto, value) => value !== undefined)
+  @IsArray()
+  @ArrayMaxSize(TASK_LABEL_MAX_COUNT)
+  @IsString({ each: true })
+  @MaxLength(TASK_LABEL_MAX_LENGTH, { each: true })
+  labels?: string[];
 }
 
 export class AddDependencyDto {

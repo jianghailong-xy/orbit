@@ -37,7 +37,7 @@ test('a filtered list is answered by the page query, not by loading every task',
   assert.deepEqual(filtered, [{ id: 'page' }]);
   assert.equal(calls.list, 0);
   assert.deepEqual(calls.page, [
-    { status: 'OPEN', listId: 'list-1', limit: '50', counts: 'none' },
+    { status: 'OPEN', listId: 'list-1', labels: undefined, limit: '50', counts: 'none' },
   ]);
 });
 
@@ -48,6 +48,26 @@ test('a limit alone is enough to take the page query', async () => {
 
   assert.equal(calls.list, 0);
   assert.equal(calls.page.length, 1);
+});
+
+// The unfiltered branch answers from tasks.list, which has no label filter at all. A label-only
+// request routed there would come back as every task the owner has, and read as "no tasks match
+// that label" only to somebody who noticed the count.
+test('a label alone is enough to take the page query', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTasks(runner, undefined, undefined, undefined, 'CC-MAIN-2017-34');
+
+  assert.equal(calls.list, 0);
+  assert.deepEqual(calls.page, [
+    {
+      status: undefined,
+      listId: undefined,
+      labels: 'CC-MAIN-2017-34',
+      limit: undefined,
+      counts: 'none',
+    },
+  ]);
 });
 
 // `GET tasks` hands back a bare array, so a caller holding a full page cannot tell a complete
@@ -62,7 +82,7 @@ test('the paged route carries the cursor through and answers with the envelope',
   assert.deepEqual(page, { items: [{ id: 'page' }], nextCursor: null });
   assert.equal(calls.list, 0);
   assert.deepEqual(calls.page, [
-    { cursor: 'cursor-2', status: 'OPEN', listId: 'list-1', limit: '200', counts: 'none' },
+    { cursor: 'cursor-2', status: 'OPEN', listId: 'list-1', labels: undefined, limit: '200', counts: 'none' },
   ]);
 });
 
@@ -72,7 +92,7 @@ test('the first page of a walk asks with no cursor', async () => {
   await controller.listTaskPage(runner);
 
   assert.deepEqual(calls.page, [
-    { cursor: undefined, status: undefined, listId: undefined, limit: undefined, counts: 'none' },
+    { cursor: undefined, status: undefined, listId: undefined, labels: undefined, limit: undefined, counts: 'none' },
   ]);
 });
 
