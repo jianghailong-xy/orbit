@@ -699,11 +699,8 @@ func TestTaskCLIListAllWalksEveryPage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Every page, concatenated into one array — not the first page, and not three separate bodies.
-	var got []map[string]interface{}
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("output is not one JSON array: %v (%s)", err, out.String())
-	}
+	// Every page, one task per line — not the first page, and not one accumulated array.
+	got := decodeNDJSON(t, out.String())
 	if len(got) != 3 || got[0]["id"] != "t1" || got[2]["id"] != "t3" {
 		t.Fatalf("rows = %v", got)
 	}
@@ -729,6 +726,129 @@ func TestTaskCLIListRejectsAllWithLimit(t *testing.T) {
 	var out bytes.Buffer
 	err := cmdTaskCLI([]string{"list", "--all", "--limit", "50"}, strings.NewReader(""), &out)
 	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// One task per line, so a caller can consume the walk as it arrives and a killed walk keeps
+// what it already printed.
+func decodeNDJSON(t *testing.T, body string) []map[string]interface{} {
+	t.Helper()
+	rows := []map[string]interface{}{}
+	for _, line := range strings.Split(strings.TrimSpace(body), "\n") {
+		if line == "" {
+			continue
+		}
+		var row map[string]interface{}
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			t.Fatalf("line %q is not one JSON object: %v", line, err)
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// A walk of 27k tasks is ~138 sequential requests over minutes, so it will eventually span a
+// control-plane restart. The page is retried rather than the walk — otherwise request 137
+// failing throws away the 136 pages already fetched.
+func TestTaskCLIListAllRetriesAPageThroughA502(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("cursor") == "c2" {
+			attempts++
+			if attempts < 3 {
+				w.WriteHeader(http.StatusBadGateway)
+				return
+			}
+			_, _ = w.Write([]byte(`{"items":[{"id":"t3"}],"nextCursor":null}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"items":[{"id":"t1"}],"nextCursor":"c2"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"list", "--all"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := decodeNDJSON(t, out.String()); len(got) != 2 || got[1]["id"] != "t3" {
+		t.Fatalf("rows = %v", got)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts = %d, want the page retried twice then served", attempts)
+	}
+}
+
+// A 4xx says the same thing however many times it is asked. Retrying it would just make the
+// command take 30s to report what it knew immediately.
+func TestTaskCLIListAllDoesNotRetryClientErrors(t *testing.T) {
+	var attempts int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"list", "--all"}, strings.NewReader(""), &out); err == nil {
+		t.Fatal("a 400 should fail the walk")
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want no retry on 4xx", attempts)
+	}
+}
+
+// The point of streaming: a walk that dies mid-way keeps every page it already emitted, and
+// names the cursor to continue from instead of making the caller start over.
+func TestTaskCLIListAllKeepsEmittedPagesAndReportsResumeCursor(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("cursor") == "c2" {
+			w.WriteHeader(http.StatusBadRequest) // fails immediately, no retry wait
+			return
+		}
+		_, _ = w.Write([]byte(`{"items":[{"id":"t1"},{"id":"t2"}],"nextCursor":"c2"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdTaskCLI([]string{"list", "--all"}, strings.NewReader(""), &out)
+	if err == nil {
+		t.Fatal("the walk should report the failure")
+	}
+	// Page 1 is already on stdout and stays valid despite the non-zero exit.
+	if got := decodeNDJSON(t, out.String()); len(got) != 2 {
+		t.Fatalf("emitted rows lost on failure: %v", got)
+	}
+}
+
+// Resuming picks the walk up at the named page instead of re-downloading the ones already held.
+func TestTaskCLIListAllResumesFromCursor(t *testing.T) {
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = append(seen, r.URL.Query().Get("cursor"))
+		_, _ = w.Write([]byte(`{"items":[{"id":"t3"}],"nextCursor":null}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"list", "--all", "--cursor", "c2"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 1 || seen[0] != "c2" {
+		t.Fatalf("cursors requested = %v, want the walk to start at c2", seen)
+	}
+}
+
+func TestTaskCLIListRejectsCursorWithoutAll(t *testing.T) {
+	configureCLITestRunner(t, "http://127.0.0.1:1")
+
+	var out bytes.Buffer
+	err := cmdTaskCLI([]string{"list", "--cursor", "c2"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "only meaningful with --all") {
 		t.Fatalf("err = %v", err)
 	}
 }

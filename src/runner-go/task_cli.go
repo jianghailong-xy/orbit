@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 )
 
 // Task list paging, mirroring the apiserver's own page defaults. The endpoint used to return an
@@ -20,7 +21,7 @@ const (
 const taskHelp = `orbit task — manage Orbit tasks
 
 Usage:
-  orbit task list [--status STATUS] [--list-id ID] [--limit N | --all] [--json]
+  orbit task list [--status STATUS] [--list-id ID] [--limit N | --all [--cursor C]] [--json]
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
   orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
@@ -50,7 +51,7 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--limit N | --all] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--limit N | --all [--cursor C]] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
@@ -59,6 +60,12 @@ task in full). --limit defaults to 100 and may not exceed 200.
 time — what you need to enumerate a list of thousands (to diff it against something else, say),
 which no --limit can do. It can be a lot of output: scope it with --status/--list-id, and send it
 to a file or a pipe rather than into a conversation.
+
+With --all the output is line-delimited JSON — one compact task per line, written as each page
+arrives (--json is implied). A walk of tens of thousands is hundreds of requests over minutes, so
+it is built to be interrupted: pages that already printed stay printed, a failing page is retried
+for ~30s first, and if it still fails the cursor to resume from is printed to stderr. Continue
+with --cursor CURSOR and the same filters. Use ` + "`jq -s`" + ` if you want one array back.
 `,
 	"get": `orbit task get — get a task, its comments, and linked sessions
 
@@ -530,24 +537,63 @@ func uniqueStrings(in []string) []string {
 	return out
 }
 
-// collectAllTasks walks every page of the filtered list and returns them as one JSON array.
-// The per-request size is the server's maximum: the caller asked for everything, so the only
-// thing left to tune is how many round trips it takes.
-func collectAllTasks(t *Transport, status, listID string) (json.RawMessage, error) {
-	all := []json.RawMessage{}
-	cursor := ""
+// A walk of tens of thousands of tasks is hundreds of sequential requests over minutes, so it
+// will sooner or later span a control-plane restart — a container recreate is ~10-30s of 502s.
+// Retrying the page absorbs that; the budget below waits 2+4+8+16s across four retries. It is
+// deliberately bounded rather than the transport's own retry-forever: a terminal command that
+// hangs is worse than one that stops and says where to resume from.
+const (
+	taskListPageAttempts     = 5
+	taskListRetryInitialWait = 2 * time.Second
+)
+
+func listTaskPageWithRetry(t *Transport, status, listID, cursor string) (json.RawMessage, string, error) {
+	wait := taskListRetryInitialWait
+	var err error
+	for attempt := 1; ; attempt++ {
+		var page json.RawMessage
+		var next string
+		page, next, err = t.listTaskPage(status, listID, maxTaskListLimit, cursor)
+		if err == nil {
+			return page, next, nil
+		}
+		// A 4xx will say the same thing however many times it is asked; only failures that can
+		// clear on their own (timeout, 429, 5xx, a dropped connection) are worth another go.
+		if attempt == taskListPageAttempts || !isRetryableTransportError(err) {
+			return nil, "", err
+		}
+		time.Sleep(wait)
+		wait *= 2
+	}
+}
+
+// streamAllTasks walks every page of the filtered list, writing each task as its own line of
+// JSON as it arrives. Line-delimited and streamed rather than one accumulated array, because
+// both properties are what make a long walk survivable: a run killed at page 137 keeps the 136
+// pages it already printed, and 27k rows never have to sit in memory waiting to be marshalled.
+// `jq -s` puts them back into an array for anyone who wants one.
+//
+// Returns the cursor the walk died on, so the caller can tell the user where to resume.
+func streamAllTasks(t *Transport, status, listID, cursor string, out io.Writer) (written int, failedAt string, err error) {
+	encoder := json.NewEncoder(out)
 	for {
-		page, next, err := t.listTaskPage(status, listID, maxTaskListLimit, cursor)
-		if err != nil {
-			return nil, err
+		page, next, pageErr := listTaskPageWithRetry(t, status, listID, cursor)
+		if pageErr != nil {
+			return written, cursor, pageErr
 		}
 		var items []json.RawMessage
 		if err := json.Unmarshal(page, &items); err != nil {
-			return nil, fmt.Errorf("server returned invalid JSON: %w", err)
+			return written, cursor, fmt.Errorf("server returned invalid JSON: %w", err)
 		}
-		all = append(all, items...)
+		for _, item := range items {
+			// Encode compacts and appends the newline, which is exactly one NDJSON record.
+			if err := encoder.Encode(item); err != nil {
+				return written, cursor, err
+			}
+			written++
+		}
 		if next == "" {
-			return json.Marshal(all)
+			return written, "", nil
 		}
 		cursor = next
 	}
@@ -559,6 +605,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	listID := fs.String("list-id", "", "task list id")
 	limit := fs.Int("limit", defaultTaskListLimit, "maximum tasks to return")
 	all := fs.Bool("all", false, "fetch every matching task, paging until the list is exhausted")
+	cursor := fs.String("cursor", "", "resume an interrupted --all walk from this cursor")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -580,16 +627,27 @@ func cliTaskList(args []string, out io.Writer) error {
 	if !*all && (*limit < 1 || *limit > maxTaskListLimit) {
 		return fmt.Errorf("--limit must be between 1 and %d", maxTaskListLimit)
 	}
+	// A cursor names a position in a walk; without one there is nothing to resume.
+	if *cursor != "" && !*all {
+		return fmt.Errorf("--cursor is only meaningful with --all")
+	}
 	t, err := cliTransport()
 	if err != nil {
 		return err
 	}
 	if *all {
-		raw, err := collectAllTasks(t, *status, *listID)
+		written, failedAt, err := streamAllTasks(t, *status, *listID, *cursor, out)
 		if err != nil {
+			// Whatever was already printed is on stdout and stays valid; stderr carries the one
+			// thing needed to continue rather than start over.
+			if failedAt != "" {
+				fmt.Fprintf(os.Stderr,
+					"orbit task list: stopped after %d task(s); resume with --cursor %s\n",
+					written, failedAt)
+			}
 			return fmt.Errorf("list tasks: %w", err)
 		}
-		return writeCLIRawJSON(out, raw, *jsonOut)
+		return nil
 	}
 	raw, err := t.listTasks(*status, *listID, *limit)
 	if err != nil {
@@ -1307,7 +1365,7 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = []cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--limit N | --all] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--limit <n> (default 100, max 200)", "--all (every match, paged; excludes --limit)", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately.", Mutates: true},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
