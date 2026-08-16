@@ -8,6 +8,7 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerProvidersController } from './runner-providers.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
@@ -22,6 +23,7 @@ import {
 } from './runner-orchestration-authorizer';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { PushModule } from '../push/push.module';
+import { ProvidersModule } from '../providers/providers.module';
 
 @Module({
   // TasksService and TaskListsService are imported from their own modules rather than
@@ -32,7 +34,7 @@ import { PushModule } from '../push/push.module';
   // a duplicate would be two objects disagreeing about which session a list is steered from.
   // PushModule provides PushService so the approval-create handler can notify the session
   // owner's iOS devices.
-  imports: [SessionsModule, PushModule, TasksModule, TaskListsModule],
+  imports: [SessionsModule, PushModule, TasksModule, TaskListsModule, ProvidersModule],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
   controllers: [
@@ -41,6 +43,7 @@ import { PushModule } from '../push/push.module';
     RunnerServiceTokensController,
     RunnerSessionsController,
     RunnerAgentsController,
+    RunnerProvidersController,
   ],
   providers: [
     RunnerAuthGuard,

@@ -10,6 +10,22 @@ import { ProviderPlanUsageService } from './plan-usage.service';
 import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
+/**
+ * One entry of ProvidersService.listUsable. The last three are absent on a built-in engine
+ * rather than empty: what a built-in offers is whatever the CLI installed on the runner reports
+ * (see the runner's claude_models.go / codex_models.go), which this side does not know — and
+ * saying `models: []` would read as "this provider has no models", which is a different claim.
+ */
+export interface UsableProvider {
+  slug: string;
+  /** The engine that ends up running it — a configured provider borrows one (`moonshot` → `kimi`). */
+  runtime: string;
+  builtin: boolean;
+  label?: string;
+  models?: unknown;
+  defaultModel?: string | null;
+}
+
 @Injectable()
 export class ProvidersService {
   constructor(
@@ -55,6 +71,50 @@ export class ProvidersService {
       ...withPreset(picker),
       planUsage: this.planUsage.snapshot({ id, ownerId, runtime: picker.runtime, baseUrl, apiKeyEnc }),
     }));
+  }
+
+  /**
+   * The provider slugs this caller may actually dispatch with — what `provider` accepts on a
+   * session, a task, or the `--provider` flag of either. Mirrors the check both write paths run
+   * (TasksService.assertUsableProvider, SessionsService.create), so a slug listed here is a slug
+   * those two accept and one that is absent is one they refuse with `provider not available`.
+   *
+   * It exists because a configured provider's slug is derived and never shown (provider-slug.ts):
+   * a browser picks providers by clicking a row, but an agent has to type the string, and until
+   * this list there was no way to learn it other than guessing and being refused. Keyless and
+   * endpointless, like listPublic.
+   */
+  async listUsable(ownerId: string): Promise<UsableProvider[]> {
+    const rows = await this.prisma.modelProvider.findMany({
+      where: {
+        // The built-in entry below already names `opencode`; the compatibility guard row that
+        // holds that slug is not a second provider to choose between.
+        slug: { not: AgentProvider.OPENCODE },
+        enabled: true,
+        OR: [{ ownerId: null }, { ownerId }],
+      },
+      orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      select: {
+        slug: true,
+        label: true,
+        runtime: true,
+        models: true,
+        defaultModel: true,
+        presetSlug: true,
+        followsPreset: true,
+      },
+    });
+    return [
+      // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
+      ...Object.values(AgentProvider).map((slug) => ({ slug, runtime: slug, builtin: true })),
+      // Same preset resolution the pickers get, so the models named here are the ones the
+      // provider currently offers rather than the copy stored when it was connected. Which
+      // preset backs the row is the picker's business, not the caller's: dropped here.
+      ...rows.map((row) => {
+        const { presetSlug, followsPreset, ...view } = withPreset(row);
+        return { ...view, builtin: false };
+      }),
+    ];
   }
 
   /** Admin management list: the SHARED (ownerId null) providers only — never another

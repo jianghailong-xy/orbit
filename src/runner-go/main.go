@@ -63,6 +63,7 @@ Usage:
   orbit task-list <command>         Manage Orbit task lists
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
+  orbit provider <command>          List the providers a session or task may run on
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
@@ -173,6 +174,7 @@ running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGIN
 	"task-list": taskListHelp,
 	"session":   sessionHelp,
 	"agent":     agentHelp,
+	"provider":  providerHelp,
 	"token":     tokenHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
 
@@ -268,6 +270,11 @@ func main() {
 	case "agent":
 		if err := cmdAgentCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit agent:", err)
+			os.Exit(1)
+		}
+	case "provider":
+		if err := cmdProviderCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit provider:", err)
 			os.Exit(1)
 		}
 	case "token":

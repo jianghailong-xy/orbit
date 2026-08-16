@@ -434,6 +434,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "provider_list":
+		raw, err := s.t.listProviders()
+		if err != nil {
+			return toolResult("list providers failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "session_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -1162,6 +1169,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"undone. To stop a list from dispatching without discarding any of that, set `paused` " +
 				"with tasklist_update instead.",
 			"inputSchema": obj(map[string]interface{}{"listId": str}, "listId"),
+		},
+		{
+			"name": "provider_list",
+			"description": "List the provider slugs `provider` accepts here — the built-in engines (builtin true) " +
+				"plus the ones configured on this account, each with the runtime it borrows and the models it " +
+				"offers. Read this before pinning a `provider` on a task or session: a configured provider's " +
+				"slug is derived from its label, not chosen, so it cannot be guessed from the vendor's name, " +
+				"and a slug that is not on this list is refused with \"provider not available\".",
+			"inputSchema": obj(map[string]interface{}{}),
 		},
 	}
 	if includeOrchestration {

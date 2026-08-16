@@ -1388,6 +1388,8 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 		descriptors[name] = d
 	}
 	specs := append([]cliCapabilitySpec{}, baseCLICapabilities...)
+	// Ungated like the task commands, whose `provider` field it answers for.
+	specs = append(specs, providerCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:

@@ -40,7 +40,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 17 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 18 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -50,9 +50,13 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// about it. tasklist_delete closed the last gap: an agent could make lists but never
 	// clean up the ones it made. tasklist_propose_dag is the batch form of the trio: a restructure
 	// applied one edge at a time leaves the graph, for a moment, in a state the sweep will act on.
+	// provider_list is ungated for the same reason it exists: `--provider` is a field of the task
+	// commands, which need no orchestration, so an agent that can pin a provider must be able to
+	// find out which slugs there are rather than guess at a string nobody ever showed it.
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
+		"provider_list",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {

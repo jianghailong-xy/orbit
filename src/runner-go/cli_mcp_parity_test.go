@@ -28,7 +28,7 @@ var cliParityParamAlias = map[string]string{
 // grew `provider` and `permissionMode` and the hand-written argument list kept quiet about them.
 func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	specs := map[string]cliCapabilitySpec{}
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, sessionCLICapabilities, agentCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, sessionCLICapabilities, agentCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}

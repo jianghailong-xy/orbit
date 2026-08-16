@@ -664,6 +664,15 @@ func (t *Transport) listTasks(status, listID string, limit int) (json.RawMessage
 	return out, err
 }
 
+// listProviders returns the provider slugs this owner may pass as `provider` — the built-in
+// engines plus their configured ones. Plain runner auth, like the task routes whose `provider`
+// field it answers for, so it works outside an orchestration-enabled session too.
+func (t *Transport) listProviders() (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/providers", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
