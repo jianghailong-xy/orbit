@@ -2633,10 +2633,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         taskId,
         // A run in flight counts as evidence. `numTurns` is incremented when a turn *ends*, and a
         // task is almost always marked DONE by the agent from inside the turn doing the work — so
-        // at this instant the run that just did it still reads zero. Without this the check fired
-        // on every task that finishes in its first turn: all 22 verifications this deployment has
-        // filed were for lists with verifyOnDone off, 10 of them having already spent a run. The
-        // opt-in existed precisely to avoid doubling a list's runs, and it was never once honoured.
+        // at this instant the run that just did it still reads zero, and a task that genuinely
+        // executed is indistinguishable from one that never did.
+        //
+        // Without this, every task completing in its first turn earns a verification regardless of
+        // the opt-in. Reproduced directly: a run with five turns behind it, in a list with
+        // verifyOnDone off, still had one filed. It had not yet bitten in production only because
+        // every DONE task here so far was genuinely unevidenced — all twenty verifications on
+        // record correctly caught completions with no run behind them, which is the case this
+        // branch deliberately checks without asking.
         OR: [{ numTurns: { gt: 0 } }, { status: RunStatus.RUNNING }],
       },
     });
