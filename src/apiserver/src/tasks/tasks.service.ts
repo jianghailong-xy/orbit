@@ -280,6 +280,37 @@ export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
 // what done means", which is the case a third identical round does not settle.
 export const MAX_VERIFICATIONS_PER_TASK = 2;
 
+/** What the sweep is allowed to materialise, per runner and per capped list. */
+export interface MaterialisationBudget {
+  runner: Map<string, number>;
+  list: Map<string, number>;
+}
+
+/**
+ * Take one unit of budget for a task, or refuse.
+ *
+ * Both caps must allow it and both are then spent, so a task in a capped list also consumes its
+ * runner's allowance — it is one session either way. An id absent from a map has no cap and is
+ * unbounded, which is what a runner with no `max_concurrent` and a list with no cap both mean.
+ *
+ * Extracted rather than inlined because this is the whole of the decision: everything else in the
+ * dispatch loop is a filter, and this is the only part that has to stay consistent with what the
+ * claim will actually accept.
+ */
+export function takeBudget(
+  budget: MaterialisationBudget,
+  runnerId: string,
+  listId: string | null,
+): boolean {
+  const runnerLeft = budget.runner.get(runnerId);
+  const listLeft = listId ? budget.list.get(listId) : undefined;
+  if (runnerLeft !== undefined && runnerLeft <= 0) return false;
+  if (listLeft !== undefined && listLeft <= 0) return false;
+  if (runnerLeft !== undefined) budget.runner.set(runnerId, runnerLeft - 1);
+  if (listLeft !== undefined && listId) budget.list.set(listId, listLeft - 1);
+  return true;
+}
+
 
 export const FOREMAN_RETRY_BACKOFF_MS = [30 * 60_000, 2 * 60 * 60_000, 8 * 60 * 60_000];
 export const MAX_CONSECUTIVE_FOREMEN = FOREMAN_RETRY_BACKOFF_MS.length + 1;
@@ -2799,8 +2830,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ready.map((t) => t.id),
       blindTaskIds,
     );
+    // How many more sessions it is worth materialising, per runner and per capped list.
+    //
+    // Deliberately a different question from the claim's `runnerActiveTurns`, and counted
+    // differently: the claim asks "may this run now" and so counts only RUNNING, because an idle
+    // resumable session holds no slot. This asks "is there any point creating another", and a
+    // PENDING session is already queued for the next free slot — so it counts too. Materialising
+    // past that produces rows that cannot be claimed and simply wait.
+    //
+    // Without this the sweep dispatched every ready task in one pass, and the cap only bit at
+    // claim time: a released campaign turned into one PENDING session per task — ~10 KB each,
+    // indistinguishable from real work in every session-scoped view — waiting on a cap that
+    // permits one at a time.
+    const budget = await this.materialisationBudget();
     let quotaHeld = 0;
     let diskHeld = 0;
+    let atCapacity = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
@@ -2837,6 +2882,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       if (heldOff.has(t.id)) continue;
+      // Nothing left to claim it: leave the task OPEN and pick it up on a later sweep. The task
+      // table is already the durable queue — it carries the assignee, the provider and the
+      // description — so a second copy of it in `session` buys nothing until a slot exists.
+      if (!takeBudget(budget, t.assignee.runnerId!, t.listId)) {
+        atCapacity += 1;
+        continue;
+      }
       try {
         await this.execute(t.ownerId, t.id);
         this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
@@ -2858,6 +2910,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `auto-run: ${diskHeld} ready task(s) held — free disk below the runner's floor`,
       );
     }
+    if (atCapacity > 0) {
+      // Not a fault: the work is queued in the table it already lives in, and the next sweep
+      // dispatches whatever finished in between.
+      this.logger.log(
+        `auto-run: ${atCapacity} ready task(s) left for a later sweep — no free slot to claim them`,
+      );
+    }
     for (const [listId, e] of perList) {
       if (e.quota > 0) {
         await this.recordListEvent(
@@ -2875,6 +2934,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+  }
+
+  /**
+   * How many more sessions each runner and each capped list can usefully hold.
+   *
+   * Counts RUNNING and PENDING together — see the caller for why that differs from the claim's
+   * own slot count. A runner or list absent from the returned map has no cap and is unbounded.
+   *
+   * One grouped query each rather than a count per task: a released campaign is tens of thousands
+   * of rows, and the point of this is to stop doing work proportional to that.
+   */
+  private async materialisationBudget(): Promise<MaterialisationBudget> {
+    const [runners, lists] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ id: string; free: number }>>`
+        SELECT r.id, r."max_concurrent" - count(s.id)::int AS free
+        FROM "runner" r
+        LEFT JOIN "session" s
+          ON s."assigned_runner_id" = r.id AND s.status IN ('RUNNING', 'PENDING')
+        GROUP BY r.id, r."max_concurrent"`,
+      this.prisma.$queryRaw<Array<{ id: string; free: number }>>`
+        SELECT tl.id, tl."max_concurrent" - count(s.id)::int AS free
+        FROM "task_list" tl
+        LEFT JOIN "session" s
+          ON s."batch_id" = tl.id AND s.status IN ('RUNNING', 'PENDING')
+        WHERE tl."max_concurrent" IS NOT NULL
+        GROUP BY tl.id, tl."max_concurrent"`,
+    ]);
+    return {
+      runner: new Map(runners.map((r) => [r.id, Number(r.free)])),
+      list: new Map(lists.map((l) => [l.id, Number(l.free)])),
+    };
   }
 
   /**
