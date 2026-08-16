@@ -191,3 +191,31 @@ test('a header read for someone else’s list is a 404, not an empty list', asyn
 
   await assert.rejects(() => service.getHeader(OWNER_ID, LIST_ID), /task list not found/);
 });
+
+test('the list index projects no instructions, whatever else it carries', async () => {
+  let selected: Record<string, unknown> = {};
+  const service = new TaskListsService(
+    {
+      taskList: {
+        findMany: async (args: any) => {
+          selected = args.select;
+          return [{ id: LIST_ID, title: 'FineWeb Parquet', _count: { tasks: 27468 } }];
+        },
+      },
+      // Both grouped counts: running tasks, then DONE tasks.
+      task: { groupBy: async () => [] },
+    } as never,
+    {} as never,
+    {} as never,
+  );
+
+  const [list] = await service.list(OWNER_ID);
+
+  // A projection, not an include — otherwise every column rides along again the moment one is added.
+  assert.equal(selected.instructions, undefined);
+  assert.equal(selected.title, true);
+  assert.deepEqual(selected._count, { select: { tasks: true } });
+  assert.equal(list.runningTasks, 0);
+  // No task is DONE, so a list holding 27,468 of them is not finished.
+  assert.equal(list.completed, false);
+});

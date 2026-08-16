@@ -52,7 +52,27 @@ export class TaskListsService {
     const lists = await this.prisma.taskList.findMany({
       where: { ownerId },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { tasks: true } } },
+      // Explicit projection, and `instructions` is deliberately not in it. A list's standing
+      // instructions run to kilobytes of prose — on this deployment four lists carry 13KB of the
+      // 18.7KB this endpoint returned — and nothing reads them from the index: the sidebar draws a
+      // title and a dot, the prompt composer reads them off the task's own list join, and an agent
+      // that wants them asks `GET task-lists/:id` (see `summary`). Paying to serialize them a few
+      // times a second so every caller can discard them is the same trade `TASK_LIST_SELECT` had to
+      // undo for task descriptions.
+      select: {
+        id: true,
+        title: true,
+        ownerId: true,
+        createdAt: true,
+        updatedAt: true,
+        paused: true,
+        maxConcurrent: true,
+        foremanWorkspaceId: true,
+        foremanStallMinutes: true,
+        verifyOnDone: true,
+        ownerSessionId: true,
+        _count: { select: { tasks: true } },
+      },
     });
     // `runningTasks` = how many of the list's tasks are actually executing right now:
     // a task with a busy (PENDING/RUNNING) session. Same liveness notion the task

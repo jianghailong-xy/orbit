@@ -6,6 +6,15 @@ import { getToken } from '../api';
 // single snapshot refetch — mirrors the iOS/macOS 200ms window, a touch longer here since the web
 // list payload is larger, so batching a few more events per refetch is worth the small latency.
 const REFRESH_DEBOUNCE_MS = 500;
+// `['task-lists']` gets a slower floor of its own. The debounce above is a *trailing* window, so a
+// steady stream of task events never lets it close: a run writing tasks in bulk (a DAG being laid
+// down, a sweep dispatching a large list) holds it open and pins every query in the group at 2 Hz.
+// That is affordable for the task rows on screen and not for the list index, which is a per-list
+// aggregate over every task the owner has — six figures of rows on a large account, counted afresh
+// per request. What it feeds is a badge and a coloured dot, and TasksSidePanel's own refetchInterval
+// already declares 5s of staleness acceptable there, so refetching it faster than that is strictly
+// more work than the poll this stream replaced.
+const LISTS_MIN_INTERVAL_MS = 5_000;
 // The server pings ~every 20s (EventsController keepalive); 45s of total silence means the socket
 // went half-dead without firing onerror. EventSource has no read timeout, so we watch for it.
 const WATCHDOG_SILENCE_MS = 45_000;
@@ -35,6 +44,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let es: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let listsTimer: ReturnType<typeof setTimeout> | undefined;
+    let listsRefetchedAt = 0;
     let stopped = false;
     let dropped = false;
     let fails = 0;
@@ -46,6 +57,20 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       // list's optimistic edits can't touch them — so they need their own invalidation here.
       void qc.invalidateQueries({ queryKey: ['session-counts'] });
     };
+    // The sidebar's list index, rate-limited to one refetch per LISTS_MIN_INTERVAL_MS. Leading —
+    // an idle tab still reflects a single task change immediately — then at most one trailing
+    // refetch per window while events keep arriving, so a bulk write costs one request per window
+    // instead of one per debounce tick. See LISTS_MIN_INTERVAL_MS for why this query, alone in the
+    // task group, is worth holding back.
+    const refetchTaskLists = (): void => {
+      if (listsTimer) return; // a refetch is already queued for this window
+      const wait = Math.max(0, LISTS_MIN_INTERVAL_MS - (Date.now() - listsRefetchedAt));
+      listsTimer = setTimeout(() => {
+        listsTimer = undefined;
+        listsRefetchedAt = Date.now();
+        void qc.invalidateQueries({ queryKey: ['task-lists'] });
+      }, wait);
+    };
     // The task list/board queries: every paged view — all tasks, one list, the unlisted bucket —
     // plus the sidebar count (['tasks']), the sidebar lists (['task-lists']), and an open detail
     // (['task', id]). Refetched only on a `task.*` event (or on reconnect), so an unrelated
@@ -53,7 +78,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // appear without a manual page refresh; before, tasks had no push path and rode a 5–15s poll only.
     const refetchTasks = (): void => {
       void qc.invalidateQueries({ queryKey: ['tasks'] });
-      void qc.invalidateQueries({ queryKey: ['task-lists'] });
+      refetchTaskLists();
       void qc.invalidateQueries({ queryKey: ['task'] });
     };
     // The workspace list (sidebar, pickers, workspace page). Like the task queries it only refetches on an
@@ -170,6 +195,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       clearInterval(watchdog);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
+      if (listsTimer) clearTimeout(listsTimer);
       es?.close();
     };
   }, [qc]);
