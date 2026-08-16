@@ -293,13 +293,22 @@ struct ComposerView: View {
             // `.composer-slash-menu` is absolutely positioned at `bottom: 100% + 6px`). In flow it
             // pushed the git bar and the transcript upward the moment a `/` was typed and dropped
             // them back on every keystroke that emptied the match list; as an overlay it covers the
-            // content above and nothing under it moves. The guide puts the card's BOTTOM edge 6pt
-            // above the box's top edge.
+            // content above and nothing under it moves.
+            //
+            // The lift is an explicit `.offset` of the card's own measured height, NOT an
+            // `.alignmentGuide(.top) { $0[.bottom] + 6 }`: that guide left the card top-aligned with
+            // the box on iOS, so it sat ON the field and the footer row instead of above them. An
+            // offset is measured from the same number the card is sized with, so the two can't
+            // disagree.
             .overlay(alignment: .top) {
                 if showSlash {
-                    slashMenu.alignmentGuide(.top) { $0[.bottom] + 6 }
+                    slashMenu.offset(y: -(slashCardHeight + 6))
                 }
             }
+            // The footer below is a LATER sibling of this box, so it paints over anything the box
+            // overlays — the floating card included, which is how the model/effort row came to show
+            // through it. Raise the box (and with it the card) above the rest of the stack.
+            .zIndex(1)
 
             // Footer controls, laid out like the web composer: permission mode on the left,
             // then the provider · model · effort · plan-usage cluster on the right. Each
@@ -636,6 +645,14 @@ struct ComposerView: View {
     /// Web parity (`max-height: 260px; overflow-y: auto`). Matches run to 50, and a card that tall
     /// would leave the screen through the top with its first rows unreachable now that it floats.
     private static let slashMenuMaxHeight: CGFloat = 260
+    private static let slashMenuPadding: CGFloat = 4
+
+    /// On-screen height of the whole floating card — the scroller the rows are sized into plus its
+    /// own padding. The lift above the composer box is measured from this, so a card that grows a
+    /// row still lands with its bottom edge on the same line.
+    private var slashCardHeight: CGFloat {
+        min(slashHeight, Self.slashMenuMaxHeight) + Self.slashMenuPadding * 2
+    }
 
     private var slashMenu: some View {
         let matches = console.slashMatches
@@ -677,7 +694,7 @@ struct ComposerView: View {
         }
         .frame(height: min(slashHeight, Self.slashMenuMaxHeight))
         .scrollBounceBehavior(.basedOnSize)
-        .padding(4)
+        .padding(Self.slashMenuPadding)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.gray.opacity(0.25)))
         // It stands on the transcript now, not in the band's stack: lift it off with the same soft
