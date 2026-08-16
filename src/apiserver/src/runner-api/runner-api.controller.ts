@@ -18,6 +18,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
+import { MachineProtocol } from '../common/machine-protocol';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -247,6 +248,7 @@ function producedNothingBeforeFailing(
   return status === RunStatus.FAILED && numTurns === 0 && !dto.changedFiles?.length;
 }
 
+@MachineProtocol()
 @Controller('runner')
 export class RunnerApiController {
   constructor(

@@ -1,7 +1,9 @@
 import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { PUBLIC_ID_FIELDS, uuidToBase62 } from '@orbit/shared';
+import { MACHINE_PROTOCOL } from './machine-protocol';
 
 /**
  * Serve every public id in both spellings: alongside `sessionId` (the UUID the columns key by),
@@ -20,6 +22,8 @@ import { PUBLIC_ID_FIELDS, uuidToBase62 } from '@orbit/shared';
  * WHY AN ALLOWLIST, and why it is the same list the input side decodes: the wire is full of
  * uuid-shaped values that are not addresses. Lease and fence tokens (`leaseOwner`, `operationId`,
  * `generation`) are `@db.Uuid` columns the runner echoes back byte-for-byte into raw SQL casts —
+ * they are in `NEVER_PUBLIC_ID_FIELDS`, so no fence is reachable from here whatever the boundary
+ * below decides —
  * translate one on the way out without decoding it on the way back in and the fence stops
  * matching, silently, forever. `PUBLIC_ID_FIELDS` is the single classification both directions
  * read, and `public-id-coverage.spec.ts` fails the build when a new column joins neither set.
@@ -93,33 +97,26 @@ function addTwins(value: unknown, replaceSource: boolean, depth = 0): unknown {
 }
 
 /**
- * The one boundary that is NOT the public id's: the runner protocol.
+ * The one boundary that is NOT the public id's: the machine protocol.
  *
  * Everywhere else, `id` is the public id, unconditionally — no header, no negotiation, one
- * spelling. `/api/runner/*` is different in kind, not in version: the ids on it are not addresses
- * anybody links to (a runner has no URL bar), they are **keys**. A runner writes them straight
- * into filesystem paths and git ref names (`refs/orbit-base/<id>`), and alongside them travel the
- * lease/fence tokens that are compared byte-for-byte.
+ * spelling. `@MachineProtocol()` marks the exception and says why; see that decorator for the
+ * reasoning, and for why the test is per-controller and not per-path.
  *
- * Which makes flipping them not a formatting change but a re-keying of state that already exists
- * on disk on machines this server does not control. `runner.version` shows the field is not
- * uniform — there was a runner on 0.1.98 when this was written, eighteen releases behind the one
- * that taught runners to normalize the spelling. For that one, a flip would orphan a live
- * session's base ref, and the failure is the quiet kind: no error, every later diff just computed
- * against the wrong commit.
- *
- * So the machine protocol keeps UUIDs and the user-facing API is entirely public ids. That is a
- * protocol boundary rather than a compatibility shim, and it has no expiry date to forget.
+ * It used to be per-path (`/api/runner/*`), which swept in the agent-facing half of the runner
+ * API by accident: `orbit mcp` and the `orbit` CLI hand those response bodies straight to a model
+ * or onto stdout, so every task and session a model saw was named by a raw UUID — the one place
+ * the migration was supposed to have removed them from. The prefix was never the boundary; the
+ * keying was.
  */
-function isRunnerProtocol(request: { originalUrl?: unknown; url?: unknown } | undefined): boolean {
-  const path = request?.originalUrl ?? request?.url;
-  return typeof path === 'string' && path.startsWith('/api/runner/');
-}
-
 @Injectable()
 export class PublicIdInterceptor implements NestInterceptor {
+  private readonly reflector = new Reflector();
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const replaceSource = !isRunnerProtocol(context.switchToHttp().getRequest());
+    // getClass() only, not getHandler(): keying is a property of the whole protocol, and a
+    // per-route opt-out is exactly the kind of thing that gets forgotten on the next route added.
+    const replaceSource = !this.reflector.get<boolean>(MACHINE_PROTOCOL, context.getClass());
     return next.handle().pipe(map((body) => addTwins(body, replaceSource)));
   }
 }

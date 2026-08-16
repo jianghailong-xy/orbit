@@ -450,9 +450,9 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 		// execute a local MCP process outside Orbit's policy. Inline, agent-owned
 		// config above remains enabled and supplies Orbit's authorized MCP servers.
 		"OPENCODE_DISABLE_PROJECT_CONFIG": openCodeProjectConfigFlag(job.Agent.PermissionMode),
-		"ORBIT_SESSION_ID":                job.SessionID,
-		"ORBIT_AGENT_ID":                  job.AgentID,
-		"ORBIT_TASK_ID":                   job.TaskID,
+		"ORBIT_SESSION_ID":                publicID(job.SessionID),
+		"ORBIT_AGENT_ID":                  publicID(job.AgentID),
+		"ORBIT_TASK_ID":                   publicID(job.TaskID),
 		"ORBIT_ALLOW_ORCHESTRATION":       orchestrationEnv(job.AllowOrchestration),
 		envOrchestrationToken:             job.OrchestrationToken,
 		envMCPPermissionPrompt:            "0",
@@ -858,9 +858,9 @@ func openCodeConfigContent(job *ClaimedSession, scratchDir, agentName string, es
 			"enabled": true,
 			"timeout": 30000,
 			"environment": map[string]string{
-				"ORBIT_SESSION_ID":          job.SessionID,
-				"ORBIT_AGENT_ID":            job.AgentID,
-				"ORBIT_TASK_ID":             job.TaskID,
+				"ORBIT_SESSION_ID":          publicID(job.SessionID),
+				"ORBIT_AGENT_ID":            publicID(job.AgentID),
+				"ORBIT_TASK_ID":             publicID(job.TaskID),
 				"ORBIT_ALLOW_ORCHESTRATION": orchestrationEnv(job.AllowOrchestration),
 				envOrchestrationToken:       job.OrchestrationToken,
 				envMCPPermissionPrompt:      "0",

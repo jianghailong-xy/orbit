@@ -1,6 +1,6 @@
 # 设计文档:把 base62 public id 变成 API 的 id(方案 A)
 
-状态:草案 · 2026-08-14 · **Phase 0–3 已落地**(分类清单 · 双向覆盖测试 · 客户端版本上报 · 服务端双发 · 客户端拼写无关 · **`id` 无条件为 public id,runner 协议除外**)· Phase 0–2 已部署,**Phase 3 的无条件翻转未部署** · phase 4(删 UUID 孪生字段)须等 `client_version` 有数据
+状态:草案 · 2026-08-14(2026-08-16 追加 phase 3.5) · **Phase 0–3.5 已落地**(分类清单 · 双向覆盖测试 · 客户端版本上报 · 服务端双发 · 客户端拼写无关 · **`id` 无条件为 public id,仅机器协议除外**)· Phase 0–2 已部署,**Phase 3 的无条件翻转未部署** · phase 4(删 UUID 孪生字段)须等 `client_version` 有数据
 作者:Claude(应 jianghailong 要求)
 影响面:`src/apiserver`(响应侧拦截器 + 字段清单)、`src/web`、`src/ios`、`src/macos`、`src/runner-go`
 关联:`src/apiserver/src/common/public-id.ts`(入方向规则)、`src/apiserver/src/common/workspace-alias.interceptor.ts`(同型迁移的先例)
@@ -110,6 +110,23 @@ schema 里有 90 个 `@db.Uuid` 列、37 个不同字段名。**但"是 UUID 列
 写这段时线上 `runner.version` 显示还有一台停在 **0.1.98**,比教会 runner 归一化拼写的那个版本落后十八个发布。对它而言,翻转会让在飞会话的 base ref 变成孤儿,而且是最安静的那种故障:不报错,只是之后每次 diff 都基于错的 commit。
 
 这条边界没有过期日期要惦记,也不依赖任何人升级。
+
+**Phase 3.5 —— 把这条边界从「路径前缀」收窄成「机器协议」**·**已落地**(2026-08-16)
+
+上面那段把 `/api/runner/*` 整体当成了边界,但那个前缀底下其实住着两拨东西,只是共用路径和凭据:
+
+| | Controller | 有没有拿 id 当键 | 谁在读响应 |
+|---|---|---|---|
+| 机器协议 | `RunnerApiController`(claim / reclaim / leases / events / finalize / worktree op) | **有**:scratch 目录、`refs/orbit-base/<id>`、逐字节比较的围栏 | runner 进程 |
+| Agent 面 | `RunnerTasks` / `RunnerSessions` / `RunnerAgents` / `RunnerServiceTokens` | **没有** | 模型(`orbit mcp`)和人(`orbit` CLI) |
+
+Agent 面在 runner 里是**纯透传**:`orbit mcp` 一律 `toolResult(prettyJSON(raw))`,CLI 一律 `writeCLIRawJSON`,响应体原封不动变成工具结果或 stdout。所以按前缀排除的实际效果是:**模型看到的每一个任务和会话都还是裸 UUID**——恰恰是这次迁移要消灭的那种东西。前缀从来不是边界,**做键**才是。
+
+做法:`@MachineProtocol()` 标记类,拦截器读 `context.getClass()` 的元数据。**不能继续按路径分**,因为两拨在 URL 空间里交叉——`GET runner/sessions/claim` 是机器协议,`GET runner/sessions/:id` 是 agent 面,前缀测试分不开它们。`machine-protocol-split.spec.ts` 把这份名单钉成闭集:两个方向的错都不报错,标错了是 UUID 悄悄回到模型面前,漏标了是给活着的 runner 重新做键。
+
+同时补上第三个入方向位置:**header**。`X-Orbit-Session-Id` / `X-Orbit-Workspace-Id` / `X-Orbit-Agent-Id` 此前完全没解码——`RunnerOrchestrationAuthorizer.assert` 拿它和令牌的 `sub` 逐字节比,`resolveAgentCreator` 直接拿它进 `where: { id }`。runner 注的一直是 UUID 所以没炸,但这意味着 header 这层是 UUID 锁死的。现在由一个三名字的中间件归一(`public-id-headers.ts`),放在 guard 之前。这是唯一一处**全局按名字**的归一,理由和别处相反:header 是个我们自己拥有的封闭三元组,不是那条塞满 `clientTurnId` / `toolUseId` 的线。
+
+runner 侧则把 `ORBIT_SESSION_ID` / `ORBIT_AGENT_ID` / `ORBIT_TASK_ID` 改成注 base62(新增 `publicID()`,`decodeSessionID` 的逆,幂等)。**老 runner 不受影响**:它继续注 UUID,而服务端两种拼写都收——写这段时线上那台 0.1.98 仍在心跳。磁盘键那条路一行没动,仍然全程 `decodeSessionID`。
 
 **web 的改造。** 做法不是逐个改比较,而是**把 web 的内部规范拼写整体换成 public id**——这样路由参数和 API id 两侧自然同拼写,那 103 处比较**一处未动**:
 

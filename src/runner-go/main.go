@@ -721,6 +721,32 @@ func decodeSessionID(id string) string {
 	return fmt.Sprintf("%s-%s-%s-%s-%s", hex[0:8], hex[8:12], hex[12:16], hex[16:20], hex[20:32])
 }
 
+// publicID is decodeSessionID's inverse: the base62 spelling an id has everywhere a person or a
+// model can see it. Idempotent — an id already in the short form comes back unchanged — so it is
+// safe to apply at a boundary without first knowing which spelling arrived.
+//
+// Anything that is not a UUID is returned as-is, for the same reason decodeSessionID does it: this
+// is a rendering step, not a validator, and an empty AgentID/TaskID (both legitimately absent) has
+// to survive it untouched.
+func publicID(id string) string {
+	if !uuidRE.MatchString(id) {
+		return id
+	}
+	n := new(big.Int)
+	n.SetString(strings.ReplaceAll(strings.ToLower(id), "-", ""), 16)
+	if n.Sign() == 0 {
+		return "0"
+	}
+	base := big.NewInt(62)
+	rem := new(big.Int)
+	var out []byte
+	for n.Sign() > 0 {
+		n.DivMod(n, base, rem)
+		out = append([]byte{base62Alphabet[rem.Int64()]}, out...)
+	}
+	return string(out)
+}
+
 func readSessionMeta(path string) *sessionMeta {
 	b, err := os.ReadFile(path)
 	if err != nil {

@@ -1211,10 +1211,15 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
 	// from config.json so it never lands in the claude process environment.
 	// Appended last so a custom env var can't shadow the session context.
+	//
+	// Spelled base62, like every id the agent can see: these three are what `orbit mcp` and the
+	// `orbit` CLI default to and echo back in help text, so a UUID here is a UUID in front of the
+	// model. The control plane takes either spelling, so an older runner sending the raw form
+	// keeps working — the flip is cosmetic on the wire and load-bearing only in what it shows.
 	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+job.SessionID,
-		"ORBIT_AGENT_ID="+job.AgentID, // empty => orbit mcp falls back to USER attribution
-		"ORBIT_TASK_ID="+job.TaskID,   // empty => no "current task"
+		"ORBIT_SESSION_ID="+publicID(job.SessionID),
+		"ORBIT_AGENT_ID="+publicID(job.AgentID), // empty => orbit mcp falls back to USER attribution
+		"ORBIT_TASK_ID="+publicID(job.TaskID),   // empty => no "current task"
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
 	)

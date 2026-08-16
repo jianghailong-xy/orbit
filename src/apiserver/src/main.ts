@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 
@@ -28,6 +29,10 @@ async function bootstrap() {
   // limit rejects them with 413. Match the gateway/web nginx client_max_body_size (10m).
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
+
+  // The session-context headers carry public ids like every other id position. Before the guards,
+  // so no guard can see the un-normalized spelling.
+  app.use(publicIdHeaders);
 
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

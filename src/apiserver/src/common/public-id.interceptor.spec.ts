@@ -1,19 +1,26 @@
+import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { lastValueFrom, of } from 'rxjs';
 import { NEVER_PUBLIC_ID_FIELDS, toUuid, uuidToBase62 } from '@orbit/shared';
+import { MACHINE_PROTOCOL, MachineProtocol } from './machine-protocol';
 import { PublicIdInterceptor } from './public-id.interceptor';
 
 const UUID = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
 const OTHER = '019fcbf3-0fa8-7f83-9302-46b25389cb16';
 const B62 = uuidToBase62(UUID);
 
-/** Run a response body through the interceptor the way Nest does. `runner: true` puts the request
- *  on the runner protocol, the one surface that keeps UUIDs. */
-function through<T>(body: T, opts: { runner?: boolean } = {}): Promise<T> {
+/** A controller class carrying the marker, exactly as `RunnerApiController` does. */
+@MachineProtocol()
+class MachineController {}
+class AgentFacingController {}
+
+/** Run a response body through the interceptor the way Nest does. `machine: true` dispatches from
+ *  the machine protocol, the one surface that keeps UUIDs. */
+function through<T>(body: T, opts: { machine?: boolean } = {}): Promise<T> {
   const interceptor = new PublicIdInterceptor();
-  const request = { originalUrl: opts.runner ? '/api/runner/sessions/x/meta' : '/api/sessions/x' };
-  const context = { switchToHttp: () => ({ getRequest: () => request }) };
+  const cls = opts.machine ? MachineController : AgentFacingController;
+  const context = { getClass: () => cls };
   return lastValueFrom(
     interceptor.intercept(context as never, { handle: () => of(body) } as never),
   ) as Promise<T>;
@@ -89,7 +96,7 @@ test('terminates on a self-referencing body', async () => {
   assert.equal(out.publicId, B62);
 });
 
-// ── The runner protocol is the one surface that keeps UUIDs ───────────────────────────────────
+// ── The machine protocol is the one surface that keeps UUIDs ──────────────────────────────────
 
 test('the flip is consistent across a payload', async () => {
   const out = await through({ id: UUID, sessionId: OTHER, title: 'x' });
@@ -140,8 +147,8 @@ test('a non-UUID id is left alone even when the client asked', async () => {
 // state that already exists on disk on a machine this server does not control; a runner too old
 // to normalize would orphan a live session's base ref and compute every later diff against the
 // wrong commit, silently. `runner.version` showed one on 0.1.98 when this was written.
-test('the runner protocol keeps UUIDs, ids and all', async () => {
-  const out = await through({ id: UUID, sessionId: OTHER, leaseOwner: UUID }, { runner: true });
+test('the machine protocol keeps UUIDs, ids and all', async () => {
+  const out = await through({ id: UUID, sessionId: OTHER, leaseOwner: UUID }, { machine: true });
   assert.equal(out.id, UUID, 'a runner keys its scratch dir and base ref by this');
   assert.equal(out.sessionId, OTHER);
   assert.equal(out.leaseOwner, UUID);
@@ -149,15 +156,25 @@ test('the runner protocol keeps UUIDs, ids and all', async () => {
 
 // It still gets the twin, so a runner that wants the short form has it without a second request —
 // what it must never get is a DIFFERENT value under the name it already keys by.
-test('the runner protocol still receives the twin alongside', async () => {
-  const out = await through({ id: UUID }, { runner: true });
+test('the machine protocol still receives the twin alongside', async () => {
+  const out = await through({ id: UUID }, { machine: true });
   assert.equal((out as Record<string, unknown>).publicId, B62);
 });
 
-// Path-matched, so a route that merely mentions runners is not mistaken for the runner protocol.
-test('only the runner protocol prefix is excluded', async () => {
+// The boundary is the marker, not the URL. These two share the `/api/runner` prefix and the runner
+// credential, and differ only in who reads the answer: the agent-facing half is handed verbatim to
+// a model by `orbit mcp` and to a terminal by the `orbit` CLI, so a UUID there is a UUID in front
+// of a person. Only the marked controller opts out.
+test('an unmarked controller flips even under the runner prefix', async () => {
   const out = await through({ id: UUID });
-  assert.equal(out.id, B62, '/api/runners (the user-facing list) flips like everything else');
+  assert.equal(out.id, B62, 'runner/tasks, runner/task-lists, runner/agents, runner/sessions/:id');
+});
+
+// A per-route opt-out would be forgotten on the next route added to the machine protocol, so the
+// marker is read off the class and applies to every handler on it.
+test('the marker covers a controller whole, not route by route', async () => {
+  assert.equal(Reflect.getMetadata(MACHINE_PROTOCOL, MachineController), true);
+  assert.equal(Reflect.getMetadata(MACHINE_PROTOCOL, AgentFacingController), undefined);
 });
 
 /**

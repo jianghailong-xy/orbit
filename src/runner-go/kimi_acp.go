@@ -550,9 +550,9 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 	cmd.Dir = execDir
 	cmd.Env = envWithAgent(job.Agent.Env)
 	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+job.SessionID,
-		"ORBIT_AGENT_ID="+job.AgentID,
-		"ORBIT_TASK_ID="+job.TaskID,
+		"ORBIT_SESSION_ID="+publicID(job.SessionID),
+		"ORBIT_AGENT_ID="+publicID(job.AgentID),
+		"ORBIT_TASK_ID="+publicID(job.TaskID),
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envMCPPermissionPrompt+"=0",
 	)
