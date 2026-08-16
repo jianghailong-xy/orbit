@@ -2629,7 +2629,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // but its turns are. The task that motivated all of this had 18 sessions and numTurns 0 on
     // every one of them, and a comment claiming acceptance had passed.
     const executed = await this.prisma.session.count({
-      where: { taskId, numTurns: { gt: 0 } },
+      where: {
+        taskId,
+        // A run in flight counts as evidence. `numTurns` is incremented when a turn *ends*, and a
+        // task is almost always marked DONE by the agent from inside the turn doing the work — so
+        // at this instant the run that just did it still reads zero. Without this the check fired
+        // on every task that finishes in its first turn: all 22 verifications this deployment has
+        // filed were for lists with verifyOnDone off, 10 of them having already spent a run. The
+        // opt-in existed precisely to avoid doubling a list's runs, and it was never once honoured.
+        OR: [{ numTurns: { gt: 0 } }, { status: RunStatus.RUNNING }],
+      },
     });
     const unevidenced = executed === 0;
     // The opt-in governs checking work that demonstrably happened — that is the expensive case,

@@ -82,11 +82,15 @@ function makeService(subject: Subject = {}) {
     session: {
       count: async ({ where }: { where: Record<string, any> }) => {
         const all = subject.sessions ?? [{ status: 'RUNNING', numTurns: 7 }];
-        return all.filter((s) => {
-          if (where.numTurns?.gt !== undefined && !(s.numTurns > where.numTurns.gt)) return false;
-          if (where.status !== undefined && s.status !== where.status) return false;
+        // `OR` is honoured too, or the evidence question below reads as "no filter at all" and
+        // every test passes whatever the dispatcher asks.
+        const matches = (s: { status: string; numTurns: number }, w: Record<string, any>): boolean => {
+          if (Array.isArray(w.OR)) return w.OR.some((clause: Record<string, any>) => matches(s, clause));
+          if (w.numTurns?.gt !== undefined && !(s.numTurns > w.numTurns.gt)) return false;
+          if (w.status !== undefined && s.status !== w.status) return false;
           return true;
-        }).length;
+        };
+        return all.filter((s) => matches(s, where)).length;
       },
     },
   } as never;
@@ -326,4 +330,38 @@ test('a check still in flight counts, so a second is not filed alongside it', as
   await f.fileFor();
 
   assert.deepEqual(f.created, []);
+});
+
+
+/**
+ * A task is almost always marked DONE by the agent from inside the turn doing the work, and
+ * `numTurns` only increments when that turn *ends* — so the run providing the evidence still reads
+ * zero at the moment the check runs.
+ *
+ * Missing that, the unevidenced branch fired on every task that finishes in its first turn and
+ * dispatched a verification regardless of the opt-in: all 22 verifications this deployment had
+ * filed were for lists with verifyOnDone off, 10 of them having already spent a run. The flag
+ * exists precisely to stop a list's runs doubling, and it had never once been honoured.
+ */
+test('a run still in flight is evidence, so a self-completing task is not re-verified', async () => {
+  const f = makeService({ verifyOnDone: false, sessions: [{ status: 'RUNNING', numTurns: 0 }] });
+
+  await f.fileFor();
+
+  assert.deepEqual(f.created, []);
+});
+
+test('a completion with no run behind it is still checked, opt-in or not', async () => {
+  // The case the branch exists for: sessions that exist and never executed anything.
+  const f = makeService({
+    verifyOnDone: false,
+    sessions: [
+      { status: 'FAILED', numTurns: 0 },
+      { status: 'CANCELLED', numTurns: 0 },
+    ],
+  });
+
+  await f.fileFor();
+
+  assert.equal(f.created.length, 1);
 });
