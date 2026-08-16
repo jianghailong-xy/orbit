@@ -441,6 +441,20 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "notify":
+		message := getString(args, "message")
+		if message == "" {
+			return toolResult("message is required", true)
+		}
+		raw, err := s.t.notify(s.sessionID, message)
+		if err != nil {
+			return toolResult("notify failed: "+err.Error(), true)
+		}
+		// Not an error result when nothing was delivered: the call did what it could, and
+		// "delivered": false with a reason is the answer, not a failure of the tool. The agent
+		// needs to read it either way — it is what decides whether a human has actually been told.
+		return toolResult(prettyJSON(raw), false)
+
 	case "session_create":
 		if !s.orchestrationEnabled() {
 			return toolResult(orchestrationOffMsg, true)
@@ -1178,6 +1192,26 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"slug is derived from its label, not chosen, so it cannot be guessed from the vendor's name, " +
 				"and a slug that is not on this list is refused with \"provider not available\".",
 			"inputSchema": obj(map[string]interface{}{}),
+		},
+		{
+			"name": "notify",
+			"description": "Alert the human this session belongs to, on their phone and Mac, with a line you write. " +
+				"For the two moments a transcript cannot cover: you need something only they can give (a decision, a " +
+				"credential, an answer) and are otherwise stuck, or the thing they said they were waiting for is done. " +
+				"Say what happened and what you need in one sentence — it is read on a lock screen, and anything past " +
+				"~200 characters is cut. They can reply straight from the notification, which arrives in this session. " +
+				"NOT for progress updates, step-by-step narration, or anything they will see when they next look: this " +
+				"interrupts a person, and one that did not need to be sent teaches them to ignore the next one. " +
+				"At most one per session per minute. Read the result rather than assuming it landed — `delivered` is " +
+				"false with a `reason` when they have no device registered, have turned these off, or were just " +
+				"alerted; nothing is lost when it does (your message is still in the transcript), but nobody was told, " +
+				"so keep going rather than wait for a reply that isn't coming.",
+			"inputSchema": obj(map[string]interface{}{
+				"message": map[string]interface{}{
+					"type":        "string",
+					"description": "The line to show. The session's title is already the alert's heading, so don't restate it — say only what happened or what you need.",
+				},
+			}, "message"),
 		},
 	}
 	if includeOrchestration {

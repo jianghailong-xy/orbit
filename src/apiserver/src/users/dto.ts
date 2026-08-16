@@ -57,6 +57,17 @@ export class UpdatePreferencesDto {
   notifySessionFinished?: boolean;
 
   /**
+   * Whether an agent may push a line of its own to this account's devices (the `notify` tool /
+   * `orbit notify`). Its own switch rather than a share of the one above: that alert is Orbit
+   * reporting an outcome, this one is a model deciding you should be interrupted, and a person
+   * who wants the first does not necessarily want the second. Default on (absent = on), so the
+   * switch is only ever written to turn it off.
+   */
+  @IsOptional()
+  @IsBoolean()
+  notifyAgentMessage?: boolean;
+
+  /**
    * Whether a workspace created from here on starts with session orchestration granted. A seed
    * for the new row only — never an authority the orchestration authorizer consults, which keeps
    * the enforced bit on the workspace and revocable one workspace at a time. Absent = off, so a

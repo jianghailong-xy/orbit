@@ -5,18 +5,37 @@ import * as jwt from 'jsonwebtoken';
 import { RunStatus } from '@prisma/client';
 import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { settleAlert } from './settle-alert';
 
 const APNS_HOST_PROD = 'api.push.apple.com';
 const APNS_HOST_SANDBOX = 'api.sandbox.push.apple.com';
 const SYNC_DEBOUNCE_MS = 300; // coalesce a burst of resolutions into one silent badge sync
+/**
+ * Shortest gap between two agent-sent notifications about the same session. Every other push here
+ * is edge-triggered by something that happens at most a few times per run; this one fires whenever
+ * a model decides to, and a model in a loop decides to a lot. One a minute is far above the rate a
+ * milestone actually occurs at and far below the rate that turns a phone into an alarm.
+ */
+const AGENT_NOTIFY_MIN_INTERVAL_MS = 60_000;
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
 const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',
 };
+
+/** What became of an agent's own `notify` call — the answer handed straight back to the agent. */
+export interface AgentNotifyResult {
+  delivered: boolean;
+  /** Devices APNs accepted it for. Present only when delivered. */
+  devices?: number;
+  /** The message was longer than a notification carries and was cut. */
+  truncated?: boolean;
+  /** Why nothing was sent. Present only when not delivered, and written to be read by an agent. */
+  reason?: string;
+}
 
 /**
  * Sends "needs your reply" pushes to a user's registered iOS devices via APNs, using token-based
@@ -38,6 +57,10 @@ export class PushService {
   // idempotent so a rare cross-replica double-send is harmless. See docs/cross-platform-badge-sync.md.
   private readonly badgeState = new Map<string, BadgeState>();
   private readonly syncTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // When each session (or, headless, each owner) last rang its owner's devices via `notify`.
+  // Per-replica like badgeState, and swept on use so a long-lived process doesn't accumulate an
+  // entry per session ever run: an entry older than the interval can no longer refuse anything.
+  private readonly lastAgentNotify = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -231,6 +254,105 @@ export class PushService {
     }
   }
 
+  /**
+   * Deliver a line an agent wrote itself, to the devices of the account it is running for.
+   *
+   * The other three pushes announce things Orbit noticed. This one announces something only the
+   * agent knows — it hit a decision it can't make, it finished the part you were waiting on, it
+   * found the thing you asked it to look for — which until now had nowhere to go but a transcript
+   * nobody is reading. That is also why it is not fire-and-forget like the others: the agent gets
+   * the outcome back, so it can say "I've pinged you" only when somebody was actually pinged, and
+   * knows to keep working rather than wait when nobody was.
+   *
+   * Three things can refuse it, and each is reported rather than swallowed:
+   * the account turned agent notifications off, no device is registered, or this session already
+   * rang within `AGENT_NOTIFY_MIN_INTERVAL_MS`. The rate limit exists because the interrupt budget
+   * is per-person while the number of agents running is not — the same reason `settleAlert` is as
+   * narrow as it is — and a dropped message is not lost, only unannounced: it stays in the
+   * session's transcript, where the user reads it when they arrive.
+   *
+   * No badge: that count means "sessions needing your reply", and an agent talking is not one.
+   */
+  async notifyAgentMessage(input: {
+    ownerId: string;
+    /** The session the agent is running in; absent for a headless `orbit notify`. */
+    sessionId?: string;
+    /** Alert title when there is no session to take it from (the runner's name). */
+    fallbackTitle: string;
+    message: string;
+  }): Promise<AgentNotifyResult> {
+    const alert = agentAlert(input.message);
+    if (!alert) return { delivered: false, reason: 'message is empty' };
+    if (!this.enabled) return { delivered: false, reason: 'push is not configured on this server' };
+    try {
+      let title = input.fallbackTitle;
+      if (input.sessionId) {
+        // Scoped to the owner the runner token authenticated: a session id from another account
+        // reads as absent rather than as a session whose title we would then leak.
+        const session = await this.prisma.session.findFirst({
+          where: { id: input.sessionId, ownerId: input.ownerId },
+          select: { title: true },
+        });
+        if (!session) return { delivered: false, reason: 'session not found' };
+        title = session.title || input.fallbackTitle;
+      }
+      const user = await this.prisma.user.findUnique({
+        where: { id: input.ownerId },
+        select: { preferences: true },
+      });
+      const prefs = (user?.preferences ?? {}) as { notifyAgentMessage?: boolean };
+      if (prefs.notifyAgentMessage === false) {
+        return { delivered: false, reason: 'this account has turned agent notifications off' };
+      }
+
+      const key = input.sessionId ?? `owner:${input.ownerId}`;
+      const now = Date.now();
+      for (const [k, at] of this.lastAgentNotify) {
+        if (now - at >= AGENT_NOTIFY_MIN_INTERVAL_MS) this.lastAgentNotify.delete(k);
+      }
+      const last = this.lastAgentNotify.get(key);
+      if (last !== undefined) {
+        const wait = Math.ceil((AGENT_NOTIFY_MIN_INTERVAL_MS - (now - last)) / 1000);
+        return { delivered: false, reason: `rate limited — try again in ${wait}s` };
+      }
+
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: input.ownerId } });
+      if (tokens.length === 0) {
+        return { delivered: false, reason: 'no devices are registered for this account' };
+      }
+      const auth = this.authToken();
+      if (!auth) return { delivered: false, reason: 'push is not configured on this server' };
+
+      const body = JSON.stringify({
+        aps: {
+          alert: { title, body: alert.body },
+          sound: 'default',
+          // The category the clients register with a Reply action, so an agent's question can be
+          // answered from the banner without opening the app — which is the whole point of asking.
+          // Only with a session: without one there is nothing to reply into.
+          ...(input.sessionId
+            ? { category: 'ORBIT_SESSION', 'thread-id': input.sessionId }
+            : { 'thread-id': `owner-${input.ownerId}` }),
+        },
+        // OrbitKit Notifications.keySession — routes the tap to this session. Omitted headless,
+        // where the clients correctly ignore a payload that names no session.
+        ...(input.sessionId ? { sessionID: input.sessionId } : {}),
+        kind: 'agent-message',
+      });
+
+      // Recorded before the round-trip: an APNs call that is slow or fails still consumed this
+      // session's turn to interrupt, and retrying it in a tight loop is exactly what the limit is for.
+      this.lastAgentNotify.set(key, now);
+      const devices = await this.deliver(tokens, body, 'alert', '10', auth);
+      if (devices === 0) return { delivered: false, reason: 'no device accepted the notification' };
+      return { delivered: true, devices, ...(alert.truncated ? { truncated: true } : {}) };
+    } catch (err) {
+      const message = (err as Error).message;
+      this.log.warn(`agent notify failed: ${message}`);
+      return { delivered: false, reason: `push failed: ${message}` };
+    }
+  }
+
   /** Session IDs that currently "need your reply" for this owner — the badge is this set's size.
    *  Mirrors the client's SessionGrouping.needsYou exactly: an Open, non-ending RUNNING session
    *  with at least one PENDING approval. Counting sessions (not approval rows) keeps the badge equal
@@ -294,7 +416,9 @@ export class PushService {
   }
 
   /** Fan a prepared payload out to a set of device tokens, pruning any APNs reports as dead.
-   *  `collapseId`, when given, makes a repeat of the same alert replace the delivered one. */
+   *  `collapseId`, when given, makes a repeat of the same alert replace the delivered one.
+   *  Returns how many devices APNs accepted it for — ignored by the fire-and-forget callers,
+   *  and what `notifyAgentMessage` reports back to the agent that asked for the push. */
   private async deliver(
     tokens: { token: string; environment: string }[],
     body: string,
@@ -302,8 +426,8 @@ export class PushService {
     priority: '10' | '5',
     auth: string,
     collapseId?: string,
-  ): Promise<void> {
-    await Promise.all(
+  ): Promise<number> {
+    const results = await Promise.all(
       tokens.map(async (t) => {
         const host = t.environment === 'sandbox' ? APNS_HOST_SANDBOX : APNS_HOST_PROD;
         const res = await this.send(host, t.token, body, auth, pushType, priority, collapseId);
@@ -313,8 +437,10 @@ export class PushService {
         } else if (res.status >= 400) {
           this.log.warn(`APNs ${res.status} ${res.reason ?? ''} for ${t.token.slice(0, 8)}…`);
         }
+        return res.status >= 200 && res.status < 300;
       }),
     );
+    return results.filter(Boolean).length;
   }
 
   /** Cached provider JWT (ES256, kid=keyId, iss=teamId). Refreshed well before APNs's 1h limit. */

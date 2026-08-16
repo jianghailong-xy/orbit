@@ -40,7 +40,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 18 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 19 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -53,10 +53,13 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// provider_list is ungated for the same reason it exists: `--provider` is a field of the task
 	// commands, which need no orchestration, so an agent that can pin a provider must be able to
 	// find out which slugs there are rather than guess at a string nobody ever showed it.
+	// notify is ungated on the same principle: reaching your own owner is not an orchestration
+	// power, and the agent most likely to be stuck without a human is the plain single-session one
+	// that has no session_* tools at all.
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
-		"provider_list",
+		"provider_list", "notify",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {

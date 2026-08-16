@@ -1390,6 +1390,10 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	specs := append([]cliCapabilitySpec{}, baseCLICapabilities...)
 	// Ungated like the task commands, whose `provider` field it answers for.
 	specs = append(specs, providerCLICapabilities...)
+	// Also ungated, and for the same kind of reason: asking your own owner for a human is not an
+	// orchestration power, and the agents most likely to need one are the plain single-session
+	// ones this document is usually read by.
+	specs = append(specs, notifyCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:

@@ -587,6 +587,13 @@ func agentHeader(agentID string) map[string]string {
 	return map[string]string{"X-Orbit-Agent-Id": agentID}
 }
 
+func sessionHeader(sessionID string) map[string]string {
+	if sessionID == "" {
+		return nil
+	}
+	return map[string]string{"X-Orbit-Session-Id": sessionID}
+}
+
 // taskCreateHeaders attributes a created task to the acting agent and records the
 // session it was created from, so the task detail page can link back to that run.
 func taskCreateHeaders(agentID, sessionID string) map[string]string {
@@ -670,6 +677,19 @@ func (t *Transport) listTasks(status, listID string, limit int) (json.RawMessage
 func (t *Transport) listProviders() (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/providers", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// notify pushes one line the agent wrote to its owner's devices. Plain runner auth like the task
+// routes: the recipient is the runner's owner either way, so there is nobody else it could reach.
+// sessionID (when running inside a session) gives the alert that session's title and makes a tap
+// on it open the session; headless it is empty and the runner's name titles the alert instead.
+// The response says whether anything was actually delivered — the caller reports it verbatim
+// rather than assuming a 200 means somebody's phone rang.
+func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/notify", map[string]string{"message": message},
+		&out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 

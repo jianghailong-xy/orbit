@@ -37,6 +37,7 @@ export class UsersController {
     if (dto.defaultEffort !== undefined) merged.defaultEffort = dto.defaultEffort;
     if (dto.notifySessionFinished !== undefined)
       merged.notifySessionFinished = dto.notifySessionFinished;
+    if (dto.notifyAgentMessage !== undefined) merged.notifyAgentMessage = dto.notifyAgentMessage;
     if (dto.defaultEnableOrchestration !== undefined)
       merged.defaultEnableOrchestration = dto.defaultEnableOrchestration;
     return this.prisma.user.update({

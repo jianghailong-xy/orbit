@@ -206,3 +206,145 @@ test('approval push initially requires a canonical Open, non-ending RUNNING sess
     cancelRequestedAt: null,
   });
 });
+
+// ── notifyAgentMessage ─────────────────────────────────────────────────────
+
+/** A PushService whose delivery is captured, wired to one session with one registered device. */
+function agentNotifyHarness(opts: {
+  session?: Record<string, unknown> | null;
+  preferences?: Record<string, unknown>;
+  tokens?: { token: string; environment: string }[];
+  devices?: number;
+} = {}) {
+  const sent: string[] = [];
+  const prisma = {
+    session: { findFirst: async () => (opts.session === undefined ? { title: 'Fix the login bug' } : opts.session) },
+    user: { findUnique: async () => ({ preferences: opts.preferences ?? {} }) },
+    deviceToken: {
+      findMany: async () => opts.tokens ?? [{ token: 'device', environment: 'sandbox' }],
+    },
+  };
+  const service = new PushService(prisma as any, enabledConfig());
+  (service as any).authToken = () => 'auth-token';
+  (service as any).deliver = async (_t: unknown, body: string) => {
+    sent.push(body);
+    return opts.devices ?? 1;
+  };
+  return { service, sent };
+}
+
+const agentInput = { ownerId: 'owner-1', sessionId: 's-1', fallbackTitle: 'runner-a', message: 'x' };
+
+test("an agent's message is titled with its session and replyable from the banner", async () => {
+  const { service, sent } = agentNotifyHarness();
+
+  const result = await service.notifyAgentMessage({
+    ...agentInput,
+    message: 'Need the staging DB password to continue',
+  });
+
+  assert.deepEqual(result, { delivered: true, devices: 1 });
+  const payload = JSON.parse(sent[0]);
+  assert.equal(payload.aps.alert.title, 'Fix the login bug');
+  assert.equal(payload.aps.alert.body, 'Need the staging DB password to continue');
+  // The category the clients register a Reply action on: an agent's question is answerable
+  // without opening the app, which is most of the reason to ask this way at all.
+  assert.equal(payload.aps.category, 'ORBIT_SESSION');
+  assert.equal(payload.sessionID, 's-1');
+  assert.equal(payload.kind, 'agent-message');
+  // "Needs your reply" is what the badge counts, and an agent talking is not that.
+  assert.equal(payload.aps.badge, undefined);
+});
+
+test('a headless notify is titled with the runner and routes nowhere', async () => {
+  const { service, sent } = agentNotifyHarness();
+
+  const result = await service.notifyAgentMessage({
+    ownerId: 'owner-1',
+    fallbackTitle: 'runner-a',
+    message: 'Nightly backup finished',
+  });
+
+  assert.equal(result.delivered, true);
+  const payload = JSON.parse(sent[0]);
+  assert.equal(payload.aps.alert.title, 'runner-a');
+  // No session to reply into, so no category and no route — the clients ignore a payload
+  // that names no session, which is exactly right for an alert about the machine.
+  assert.equal(payload.aps.category, undefined);
+  assert.equal(payload.sessionID, undefined);
+});
+
+test('one session cannot ring the same phone twice in a minute', async () => {
+  const { service, sent } = agentNotifyHarness();
+
+  assert.equal((await service.notifyAgentMessage(agentInput)).delivered, true);
+  const second = await service.notifyAgentMessage(agentInput);
+
+  assert.equal(second.delivered, false);
+  assert.match(second.reason ?? '', /rate limited/);
+  assert.equal(sent.length, 1);
+});
+
+test('a different session is not blocked by another session having just alerted', async () => {
+  const { service, sent } = agentNotifyHarness();
+
+  await service.notifyAgentMessage(agentInput);
+  const other = await service.notifyAgentMessage({ ...agentInput, sessionId: 's-2' });
+
+  // The limit protects the person from one runaway run, not from having several runs.
+  assert.equal(other.delivered, true);
+  assert.equal(sent.length, 2);
+});
+
+test('the owner can turn agent notifications off on their own', async () => {
+  const off = agentNotifyHarness({ preferences: { notifyAgentMessage: false } });
+  const refused = await off.service.notifyAgentMessage(agentInput);
+  assert.equal(refused.delivered, false);
+  assert.equal(off.sent.length, 0);
+
+  // Its own switch: someone who wants Orbit's settle alert does not necessarily want a model
+  // deciding to interrupt them, so turning that one off must not turn this one off.
+  const on = agentNotifyHarness({ preferences: { notifySessionFinished: false } });
+  assert.equal((await on.service.notifyAgentMessage(agentInput)).delivered, true);
+});
+
+test('a session belonging to another account is not found', async () => {
+  const { service, sent } = agentNotifyHarness({ session: null });
+
+  const result = await service.notifyAgentMessage(agentInput);
+
+  assert.deepEqual(result, { delivered: false, reason: 'session not found' });
+  assert.equal(sent.length, 0);
+});
+
+test('nothing to deliver to is reported, not swallowed', async () => {
+  const { service } = agentNotifyHarness({ tokens: [] });
+  const result = await service.notifyAgentMessage(agentInput);
+  // The agent has to be able to tell "they were told" from "nobody was told" — otherwise it
+  // waits for a reply that was never going to come.
+  assert.equal(result.delivered, false);
+  assert.match(result.reason ?? '', /no devices/);
+});
+
+test('a message APNs accepted for nobody is not reported as delivered', async () => {
+  const { service } = agentNotifyHarness({ devices: 0 });
+  const result = await service.notifyAgentMessage(agentInput);
+  assert.equal(result.delivered, false);
+});
+
+test('an over-long message is delivered cut, and says so', async () => {
+  const { service, sent } = agentNotifyHarness();
+
+  const result = await service.notifyAgentMessage({ ...agentInput, message: 'y'.repeat(400) });
+
+  assert.equal(result.delivered, true);
+  assert.equal(result.truncated, true);
+  assert.equal(JSON.parse(sent[0]).aps.alert.body.length, 200);
+});
+
+test('an empty message is refused before anything is looked up', async () => {
+  const { service, sent } = agentNotifyHarness();
+  const result = await service.notifyAgentMessage({ ...agentInput, message: '  \n ' });
+  assert.equal(result.delivered, false);
+  assert.equal(sent.length, 0);
+});

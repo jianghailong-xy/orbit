@@ -99,6 +99,16 @@ export function SettingsPage() {
             loading={save.isPending}
           />
         </Field>
+        <Field
+          label="When an agent asks for you"
+          hint="Let a running agent alert your devices itself — to ask something only you can answer, or to report what you were waiting for. At most one per session per minute."
+        >
+          <Switch
+            checked={prefs.notifyAgentMessage ?? true}
+            onChange={(v) => save.mutate({ notifyAgentMessage: v })}
+            loading={save.isPending}
+          />
+        </Field>
       </Card>
 
       <Card title="Session defaults" style={{ marginBottom: 16 }}>

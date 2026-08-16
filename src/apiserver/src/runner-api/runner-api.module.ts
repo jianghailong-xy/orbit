@@ -9,6 +9,7 @@ import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
 import { RunnerProvidersController } from './runner-providers.controller';
+import { RunnerNotifyController } from './runner-notify.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import {
@@ -33,7 +34,7 @@ import { ProvidersModule } from '../providers/providers.module';
   // why it was listed as a provider — it now injects SessionsService for the list console, so
   // a duplicate would be two objects disagreeing about which session a list is steered from.
   // PushModule provides PushService so the approval-create handler can notify the session
-  // owner's iOS devices.
+  // owner's iOS devices, and RunnerNotifyController can send the agent's own.
   imports: [SessionsModule, PushModule, TasksModule, TaskListsModule, ProvidersModule],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
@@ -44,6 +45,7 @@ import { ProvidersModule } from '../providers/providers.module';
     RunnerSessionsController,
     RunnerAgentsController,
     RunnerProvidersController,
+    RunnerNotifyController,
   ],
   providers: [
     RunnerAuthGuard,
