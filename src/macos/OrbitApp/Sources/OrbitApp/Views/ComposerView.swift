@@ -28,6 +28,9 @@ struct ComposerView: View {
     var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
+    /// Natural height of the `/` menu's rows — see `slashMenu`. Starts at the cap so the panel is
+    /// never laid out at zero on the frame before the first measurement lands.
+    @State private var slashContentHeight: CGFloat = ComposerView.slashMenuMaxHeight
     #if os(macOS)
     @FocusState private var inputFocused: Bool
     @State private var pasteMonitor: Any?
@@ -163,8 +166,6 @@ struct ComposerView: View {
                 .background(.blue.opacity(0.1), in: Capsule())
             }
 
-            if showSlash { slashMenu }
-
             // One rounded box wrapping the + menu, the growing field, and send — mirrors the web
             // composer's single bordered `.composer-box` instead of three separate controls. Shell
             // mode is reached by a `!` prefix (the + menu's Shell item inserts it), not a toggle.
@@ -244,6 +245,12 @@ struct ComposerView: View {
                     .strokeBorder(Color.primary.opacity(boxFocused ? 0.22 : 0.10), lineWidth: 1)
             }
             .animation(.easeOut(duration: 0.15), value: boxFocused)
+            // The `/` menu floats above the box rather than sitting in this stack — see slashMenu.
+            .overlay(alignment: .top) {
+                if showSlash {
+                    slashMenu.alignmentGuide(.top) { $0[.bottom] + 6 }
+                }
+            }
 
             // Footer controls, laid out like the web composer: permission mode on the left,
             // then the provider · model · effort · plan-usage cluster on the right. Each
@@ -576,36 +583,61 @@ struct ComposerView: View {
     private static let slashRowMinHeight: CGFloat = 0
     #endif
 
+    /// Web parity (`.composer-slash-menu`'s `max-height`). A bare `/` matches up to 50 assets, so
+    /// the panel scrolls past this rather than growing to any height the list happens to need.
+    private static let slashMenuMaxHeight: CGFloat = 260
+
+    /// The `/` menu, floated over the transcript just above the composer box (web positions it
+    /// `absolute; bottom: calc(100% + 6px)`). It deliberately takes no space in the composer's own
+    /// stack: in flow it grew the composer as the user typed, shoving the field — and the footer
+    /// below it — down behind a keyboard that had already sized itself for the shorter composer.
+    ///
+    /// `slashContentHeight` is the rows' natural height, measured because an overlay is proposed the
+    /// box's height (~one line) and a ScrollView would take exactly that. Sized to the content and
+    /// capped, so a two-item menu is a two-item panel and a 50-item one scrolls.
     private var slashMenu: some View {
         let matches = console.slashMatches
         let highlightID = matches.indices.contains(slashIndex) ? matches[slashIndex].id : matches.first?.id
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(matches) { item in
-                Button {
-                    console.pickSlash(item.name)
-                    slashDismissed = nil
-                    requestFocus()
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("/\(item.name)").font(.callout.monospaced())
-                        Text(item.type == "skill" ? "skill" : item.type == "local" ? "local" : "cmd")
-                            .font(.orbitMeta).foregroundStyle(.secondary)
-                        if let d = item.description, !d.isEmpty {
-                            Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(matches) { item in
+                    Button {
+                        console.pickSlash(item.name)
+                        slashDismissed = nil
+                        requestFocus()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("/\(item.name)").font(.callout.monospaced())
+                            Text(item.type == "skill" ? "skill" : item.type == "local" ? "local" : "cmd")
+                                .font(.orbitMeta).foregroundStyle(.secondary)
+                            if let d = item.description, !d.isEmpty {
+                                Text(d).font(.orbitLabel).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.horizontal, 8).padding(.vertical, Self.slashRowVPad)
+                        .frame(maxWidth: .infinity, minHeight: Self.slashRowMinHeight, alignment: .leading)
+                        .background(item.id == highlightID ? Color.accentColor.opacity(0.18) : .clear)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 8).padding(.vertical, Self.slashRowVPad)
-                    .frame(maxWidth: .infinity, minHeight: Self.slashRowMinHeight, alignment: .leading)
-                    .background(item.id == highlightID ? Color.accentColor.opacity(0.18) : .clear)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .background(GeometryReader { geo in
+                Color.clear.preference(key: SlashMenuHeightKey.self, value: geo.size.height)
+            })
         }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(height: min(slashContentHeight, Self.slashMenuMaxHeight))
+        // Only real measurements: a closed menu reports the key's 0 default, and adopting that
+        // would open the next one collapsed.
+        .onPreferenceChange(SlashMenuHeightKey.self) { if $0 > 0 { slashContentHeight = $0 } }
         .padding(4)
         .background(.background, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(.gray.opacity(0.25)))
+        // Floating over the transcript, so it carries its own lift instead of reading as a band
+        // that happens to be drawn there.
+        .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -672,6 +704,13 @@ struct ComposerView: View {
         console.attach(filename: "pasted.png", mimeType: "image/png", data: png)
     }
     #endif
+}
+
+/// The `/` menu's natural content height, reported up from the rows so the floating panel can size
+/// itself to them (capped) — see `ComposerView.slashMenu`.
+private struct SlashMenuHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// The staged attachments a message is about to carry: 48² thumbnails for images, name + size
