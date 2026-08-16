@@ -53,3 +53,21 @@ func TestProviderCLIHelpAndUnknownCommand(t *testing.T) {
 		t.Fatal("unknown provider command was accepted")
 	}
 }
+
+// Defining per-action help is not enough: main answers `orbit <cmd> --help` itself with the
+// family overview unless the family is named as owning its leaf help, and a family that forgets
+// to say so compiles, tests green through its own handler, and ships help nobody can print. Both
+// `provider` (0.1.122) and `agent` did exactly that.
+func TestEveryFamilyWithPerActionHelpOwnsItsLeafHelp(t *testing.T) {
+	for family, actions := range map[string]map[string]string{
+		"provider": providerActionHelp,
+		"agent":    agentActionHelp,
+	} {
+		if len(actions) == 0 {
+			t.Fatalf("%s has no per-action help to route", family)
+		}
+		if !ownsLeafHelp(family) {
+			t.Errorf("%s defines per-action help but main answers its --help with the family overview", family)
+		}
+	}
+}

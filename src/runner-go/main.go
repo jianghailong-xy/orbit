@@ -197,6 +197,22 @@ the session context (ORBIT_SESSION_ID / ORBIT_AGENT_ID / ORBIT_TASK_ID) from the
 `,
 }
 
+// Command families that print their own per-action help, so `orbit <family> <action> --help` has
+// to reach the family rather than being answered here with the family overview. A family missing
+// from this set still compiles and still has leaf help — the text is simply unreachable, which is
+// how `orbit provider list --help` shipped in 0.1.122 answering with the overview instead.
+var leafHelpFamilies = map[string]bool{
+	"task":      true,
+	"task-list": true,
+	"session":   true,
+	"provider":  true,
+	// `agent` has had per-action help since it shipped and has never been able to print it —
+	// same omission, found while checking that provider's was reachable.
+	"agent": true,
+}
+
+func ownsLeafHelp(cmd string) bool { return leafHelpFamilies[cmd] }
+
 // helpFor returns the help text for a subcommand, or the global usage as a fallback.
 func helpFor(cmd string) string {
 	if h, ok := cmdHelp[cmd]; ok {
@@ -234,7 +250,7 @@ func main() {
 	// instead of running it.
 	// Nested resource commands own their leaf help (for example
 	// `orbit task create --help`). Other commands keep the flat help behavior.
-	if cmd != "task" && cmd != "task-list" && cmd != "session" && wantsHelp(args[1:]) {
+	if !ownsLeafHelp(cmd) && wantsHelp(args[1:]) {
 		fmt.Print(helpFor(cmd))
 		return
 	}
