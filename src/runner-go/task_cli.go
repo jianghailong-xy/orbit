@@ -106,6 +106,7 @@ Options:
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
   --depends-on ID[,ID...]     Repeatable prerequisite task ids
+  --label L[,L...]            Repeatable grouping label, orthogonal to --list-id
   --auto-run-when-ready[=BOOL]
   --json
 `,
@@ -146,6 +147,8 @@ Options:
   --model MODEL | --clear-model
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable
   --clear-dependencies        Remove all prerequisites
+  --label L[,L...]            Replace all labels; repeatable
+  --clear-labels              Remove all labels
   --auto-run-when-ready[=BOOL]
   --json
 
@@ -207,6 +210,7 @@ Options:
   --foreman-stall-minutes N       minutes of no activity before a foreman is filed
   --clear-foreman                 stop filing a foreman for this list
   --note TEXT                     why — recorded on the revision this change creates
+  --json                          emit compact JSON
 
 Every policy change is recorded as a restorable revision. Only the flags you pass are
 sent, so a partial edit never blanks the rest of the policy.
