@@ -8,6 +8,7 @@ import {
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
+import { labelSummaryPath, type LabelSummary } from './taskPages';
 
 export type { ConfiguredProvider };
 
@@ -274,4 +275,18 @@ export const sessionDiffQuery = (id: string | null | undefined) =>
     queryKey: ['session', id ?? null, 'diff'] as const,
     queryFn: () => getSessionDiff(id!),
     enabled: id != null,
+  });
+
+/**
+ * Per-label task progress for the Batches view, scoped to a list when one is open.
+ *
+ * One request answers for every label — the alternative is a task query per label, which is the
+ * loop this endpoint exists to remove. Polled on the same cadence as an idle task list; the
+ * numbers move when runs settle, not continuously.
+ */
+export const labelSummaryQuery = (listId?: string) =>
+  queryOptions({
+    queryKey: ['task-labels', listId ?? null] as const,
+    queryFn: () => api<LabelSummary>(labelSummaryPath(listId)),
+    staleTime: 10_000,
   });

@@ -36,6 +36,8 @@ import {
   DEFAULT_TASK_FILTER,
   matchesTaskFilter,
 } from '../lib/taskFilters';
+import { labelSummaryQuery } from '../lib/queries';
+import type { LabelSummaryRow } from '../lib/taskPages';
 import { taskPagePath, type TaskCounts, type TaskPage } from '../lib/taskPages';
 import {
   anchorAt,
@@ -95,6 +97,115 @@ const tallyReasons = (skipped: { reason: string }[]): string => {
 // The task-list view: the task table (all tasks, or a single user list) plus its detail
 // panel and batch-action modals. The task-list routes ("/tasks", "/lists/:key")
 // render it, so all of its state is scoped to this component.
+
+/**
+ * Per-label progress: one row per batch, newest work included, all of it from a single
+ * aggregate request.
+ *
+ * A table rather than a chart because 110 labels is far past the ~7 classes any colour scheme can
+ * keep apart — past that the honest form is rows you can read and sort. Each row's meter is the
+ * same one the page header already draws, so a batch and the whole scope are read the same way.
+ */
+function BatchesTable({
+  rows,
+  truncated,
+  labelTotal,
+  loading,
+  onPick,
+}: {
+  rows: LabelSummaryRow[];
+  truncated: boolean;
+  labelTotal: number;
+  loading: boolean;
+  onPick: (label: string) => void;
+}) {
+  // Label order, not size order: these read as a progress table, and one whose rows reorder as
+  // the work moves is one nobody can follow across two refreshes. For `CC-MAIN-yyyy-ww` it is
+  // also chronological for free.
+  const [sort, setSort] = useState<'label' | 'done' | 'remaining'>('label');
+  const sorted = useMemo(() => {
+    const copy = [...rows];
+    if (sort === 'done') copy.sort((a, b) => b.done / b.total - a.done / a.total || a.label.localeCompare(b.label));
+    else if (sort === 'remaining') copy.sort((a, b) => (b.total - b.done) - (a.total - a.done) || a.label.localeCompare(b.label));
+    else copy.sort((a, b) => a.label.localeCompare(b.label));
+    return copy;
+  }, [rows, sort]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <Spin />
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
+        No labels here yet. Agents add them when they file a task.
+      </div>
+    );
+  }
+
+  const head = (key: typeof sort, text: string, className: string) => (
+    <div
+      className={`col-head ${className}${sort === key ? ' sorted' : ''}`}
+      onClick={() => setSort(key)}
+      role="button"
+    >
+      {text}
+      {sort === key && <span className="batch-sort-caret">↓</span>}
+    </div>
+  );
+
+  return (
+    <div className="orbit-batchlist">
+      <div className="col-head-row">
+        {head('label', 'Label', 'batch-name')}
+        <div className="col-head batch-meter">Progress</div>
+        {head('done', 'Done', 'batch-num')}
+        <div className="col-head batch-num">Total</div>
+        {head('remaining', 'Left', 'batch-num')}
+      </div>
+      {sorted.map((row) => {
+        const donePct = (row.done / row.total) * 100;
+        const runPct = (row.inProgress / row.total) * 100;
+        return (
+          <div
+            key={row.label}
+            className="batch-row clickable"
+            onClick={() => onPick(row.label)}
+            title={`Show the ${row.total.toLocaleString()} tasks labelled ${row.label}`}
+          >
+            <div className="batch-name">{row.label}</div>
+            <div className="batch-meter">
+              <div className="task-progress-track">
+                {/* A zero-width segment renders nothing at all — no sliver, and no gap either. */}
+                {donePct > 0 && (
+                  <span className="task-progress-seg done" style={{ width: `${donePct}%` }} />
+                )}
+                {runPct > 0 && (
+                  <span
+                    className="task-progress-seg ongoing"
+                    style={{ width: `${runPct}%`, marginLeft: donePct > 0 ? 2 : 0 }}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="batch-num strong">{row.done.toLocaleString()}</div>
+            <div className="batch-num">{row.total.toLocaleString()}</div>
+            <div className="batch-num muted">{(row.total - row.done).toLocaleString()}</div>
+          </div>
+        );
+      })}
+      {truncated && (
+        <div className="batch-truncated">
+          Showing the {rows.length.toLocaleString()} largest of {labelTotal.toLocaleString()} labels.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function TaskListView() {
   const loc = useLocation();
   const message = useToast();
@@ -124,6 +235,19 @@ export function TaskListView() {
     );
   const filter = searchParams.get('filter') ?? DEFAULT_TASK_FILTER;
   const setFilter = (v: string) => setParam('filter', v, DEFAULT_TASK_FILTER);
+  // Which of the page's two views is showing. Tasks is the rows; Batches is the same scope
+  // grouped by label. In the URL like every other bit of view state, so a batch table is
+  // shareable and survives a refresh.
+  const view = searchParams.get('view') === 'batches' ? 'batches' : 'tasks';
+  const setView = (v: string) => setParam('view', v, 'tasks');
+  // Labels are a scope, not a text match: they narrow the rows, the header bar and the tab
+  // badges alike, because the server applies them before it counts. Comma-joined in the URL for
+  // readability; sent as repeated params so a label containing a comma still round-trips.
+  const labels = useMemo(() => {
+    const raw = searchParams.get('labels') ?? '';
+    return raw.split(',').map((l) => l.trim()).filter(Boolean);
+  }, [searchParams]);
+  const setLabels = (next: string[]) => setParam('labels', next.join(','), '');
   // Free-text filter over the visible rows' titles; lives in the URL (?q=…) like the rest
   // of the view state so it survives a refresh and is shareable.
   const query = searchParams.get('q') ?? '';
@@ -161,7 +285,15 @@ export function TaskListView() {
   // list blocked the first paint on ~13MB of rows and then rendered every one of them. Poll only
   // the pages the user has actually loaded.
   const tasks = useInfiniteQuery({
-    queryKey: ['tasks', 'page', { filter, query, listId: scopeListId ?? null }],
+    // `labels` only enters the key when there are any: react-query hashes the key with
+    // JSON.stringify, which drops undefined-valued properties, so the unfiltered view keeps the
+    // exact key it had before labels existed. Anything holding that key — a seeded cache, a
+    // targeted invalidation — keeps matching it.
+    queryKey: [
+      'tasks',
+      'page',
+      { filter, query, listId: scopeListId ?? null, labels: labels.length ? labels : undefined },
+    ],
     queryFn: ({ pageParam }) =>
       api<TaskPage>(
         taskPagePath({
@@ -169,6 +301,7 @@ export function TaskListView() {
           limit: 200,
           status: filter,
           listId: scopeListId,
+          labels,
           q: query,
           // Only page 1 carries the tab badges; the counts are scope-wide, so asking for them
           // again on every subsequent page (and on every poll, which refetches all loaded
@@ -191,6 +324,11 @@ export function TaskListView() {
   );
   const taskPageCounts = tasks.data?.pages[0]?.counts;
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
+  // Feeds both the Batches table and the picker's options, so opening the picker costs no
+  // request of its own and its entries can show what they would narrow to.
+  const labelSummary = useQuery(labelSummaryQuery(scopeListId));
+  const labelRows = labelSummary.data?.items ?? [];
+  const hasLabels = labelRows.length > 0 || labels.length > 0;
 
   // The open list's own row, for the page title. Read off the lists index the sidebar already
   // holds — same key, so opening a list costs no request of its own — rather than the list
@@ -664,6 +802,19 @@ export function TaskListView() {
               )}
             </div>
 
+            {hasLabels && (
+              <Segmented
+                className="tasks-viewswitch"
+                size="small"
+                value={view}
+                onChange={(v) => setView(v as string)}
+                options={[
+                  { label: 'Tasks', value: 'tasks' },
+                  { label: 'Batches', value: 'batches' },
+                ]}
+              />
+            )}
+
             {counts.total > 0 && (
               <div className="task-progress">
                 <div className="task-progress-track">
@@ -698,7 +849,10 @@ export function TaskListView() {
               </div>
             )}
 
-            <div className="tasks-toolbar">
+            {/* The filter row belongs to the rows it filters. In Batches nothing below it is a
+                task — a status tab there highlights a filter that changes nothing, and a label
+                picker duplicates the table itself. */}
+            <div className="tasks-toolbar" hidden={view === 'batches'}>
               {selectedRows.length > 0 ? (
                 // Selection mode: the batch-action bar takes over the whole toolbar row so it
                 // never has to share width with the filters (which made it wrap to a 2nd line).
@@ -764,6 +918,38 @@ export function TaskListView() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                   />
+                  {hasLabels && (
+                    <Select
+                      className="tasks-labelfilter"
+                      size="small"
+                      mode="multiple"
+                      allowClear
+                      // A picker, not a wall of chips: this deployment has 110 labels, and every
+                      // one of them as a toggle would be wallpaper rather than a control.
+                      showSearch
+                      optionFilterProp="label"
+                      maxTagCount={2}
+                      placeholder="Labels"
+                      value={labels}
+                      onChange={(v) => setLabels(v as string[])}
+                      options={labelRows.map((row) => ({
+                        value: row.label,
+                        label: row.label,
+                        // The count is why one label is worth picking over another; showing it
+                        // here saves a round trip through the table to find that out.
+                        title: `${row.done}/${row.total} done`,
+                      }))}
+                      optionRender={(option) => {
+                        const row = labelRows.find((r) => r.label === option.value);
+                        return (
+                          <span className="tasks-labelopt">
+                            <span className="tasks-labelopt-name">{option.label}</span>
+                            {row && <span className="tasks-labelopt-count">{row.total}</span>}
+                          </span>
+                        );
+                      }}
+                    />
+                  )}
                   {uniformAssignee?.name && (
                     <span className="task-assignee-chip" style={{ marginLeft: 'auto' }}>
                       <Avatar
@@ -793,6 +979,17 @@ export function TaskListView() {
               <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
                 Tasks could not be loaded.
               </div>
+            ) : view === 'batches' ? (
+              <BatchesTable
+                rows={labelRows}
+                truncated={labelSummary.data?.truncated ?? false}
+                labelTotal={labelSummary.data?.labelTotal ?? 0}
+                loading={labelSummary.isLoading}
+                onPick={(label) => {
+                  setLabels([label]);
+                  setView('tasks');
+                }}
+              />
             ) : (
               <div className={`orbit-tasklist${showAssigneeCol ? '' : ' no-assignee'}`}>
                 <div className="col-head-row">
