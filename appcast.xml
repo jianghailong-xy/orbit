@@ -3,6 +3,17 @@
     <channel>
         <title>Orbit</title>
         <item>
+            <title>0.1.2-beta.37</title>
+            <pubDate>Sun, 16 Aug 2026 09:42:50 +0000</pubDate>
+            <link>https://github.com/jianghailong-xy/orbit</link>
+            <sparkle:channel>beta</sparkle:channel>
+            <sparkle:version>1678</sparkle:version>
+            <sparkle:shortVersionString>0.1.2-beta.37</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.2-beta.37/Orbit-v0.1.2-beta.37-arm64.zip" length="8420949" type="application/octet-stream" sparkle:edSignature="0FDM9YdZueNUVgGQyrVRL/WrjDkF6d0ul47Lw9+R0xQ50VAN8Uv/5PfZF9UK34dlOxDoch3iA3nSKAj+Rf7LAw=="/>
+        </item>
+        <item>
             <title>0.1.2-beta.36</title>
             <pubDate>Sat, 15 Aug 2026 13:44:14 +0000</pubDate>
             <link>https://github.com/jianghailong-xy/orbit</link>
@@ -100,17 +111,6 @@
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.2-beta.28/Orbit-v0.1.2-beta.28-arm64.zip" length="8325339" type="application/octet-stream" sparkle:edSignature="7dXGxBi3uGWEFqGTYFNM2hQCs0hK5MLQXAaupu1NkgNxeAM+irUifS471F0uATuRS+79EN3IRP/qoJI/V0OQDA=="/>
-        </item>
-        <item>
-            <title>0.1.2-beta.27</title>
-            <pubDate>Fri, 14 Aug 2026 16:51:32 +0000</pubDate>
-            <link>https://github.com/jianghailong-xy/orbit</link>
-            <sparkle:channel>beta</sparkle:channel>
-            <sparkle:version>1606</sparkle:version>
-            <sparkle:shortVersionString>0.1.2-beta.27</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/jianghailong-xy/orbit/releases/download/v0.1.2-beta.27/Orbit-v0.1.2-beta.27-arm64.zip" length="8324812" type="application/octet-stream" sparkle:edSignature="MCzttOiMAltcon3c+A2nU2/5kCI+XGjOj4BEBIzP8ZY6BPIRcfu/FybHFU7DKtTV/gJ4y6a2a0IyhHPDmTDUBA=="/>
         </item>
         <item>
             <title>0.1.0</title>
