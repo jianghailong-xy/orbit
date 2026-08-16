@@ -4199,26 +4199,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       <div className="session-main">
                         <div className="session-title-row">
                           <div className="session-title">{s.title}</div>
-                          {(s.tags ?? []).length > 0 && (
-                            <Tooltip
-                              title={(s.tags as SessionTagRef[]).map((t) => t.name).join(', ')}
-                              placement="top"
-                              open={hoverTipOpen}
-                            >
-                              <span className="session-tag-dots">
-                                {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => (
-                                  <span
-                                    key={t.id}
-                                    className="session-tag-dot"
-                                    style={{ background: t.color }}
-                                  />
-                                ))}
-                                {s.tags.length > 3 && (
-                                  <span className="session-tag-more">+{s.tags.length - 3}</span>
-                                )}
-                              </span>
-                            </Tooltip>
-                          )}
                           {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
                             <Tooltip
                               title={
@@ -4232,10 +4212,41 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           )}
                           <span className="session-time">{fmtTime(s.lastTurnAt ?? s.createdAt)}</span>
                         </div>
-                        <div
-                          className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
-                        >
-                          {line.text}
+                        {/* Tags lead the second line and the reply preview follows them. They sat
+                            beside the title as bare colour dots until the naming pass started
+                            writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
+                            meaning lived only in a tooltip. Here they read at a glance and the
+                            title keeps its full width — the preview yields instead, being the
+                            echo of a reply rather than the handle you file the session under. */}
+                        <div className="session-sub">
+                          {(s.tags ?? []).length > 0 && (
+                            <Tooltip
+                              title={(s.tags as SessionTagRef[]).map((t) => t.name).join(', ')}
+                              placement="top"
+                              open={hoverTipOpen}
+                            >
+                              <span className="session-tag-chips">
+                                {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => (
+                                  <span
+                                    key={t.id}
+                                    className="session-tag-chip"
+                                    style={{ '--chip': t.color } as React.CSSProperties}
+                                  >
+                                    <span className="session-tag-chip-dot" />
+                                    {t.name}
+                                  </span>
+                                ))}
+                                {s.tags.length > 3 && (
+                                  <span className="session-tag-more">+{s.tags.length - 3}</span>
+                                )}
+                              </span>
+                            </Tooltip>
+                          )}
+                          <div
+                            className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
+                          >
+                            {line.text}
+                          </div>
                         </div>
                       </div>
                     </div>

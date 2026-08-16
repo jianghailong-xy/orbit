@@ -38,41 +38,96 @@ export function titleFromPrompt(prompt: string): string {
 }
 
 const DEEPSEEK_SYSTEM_PROMPT =
-  'You name a software-engineering session. Reply with ONLY a JSON object ' +
-  '{"title": string}. "title": a concise summary, at most 6 words ' +
+  'You name and label a software-engineering session. Reply with ONLY a JSON object ' +
+  '{"title": string, "tags": string[]}. "title": a concise summary, at most 6 words ' +
   '(or ~16 characters for languages without spaces), no trailing punctuation, written ' +
   "in the SAME language as the user's request — a Chinese request gets a Chinese title, " +
-  'an English request an English one. No other text.';
+  'an English request an English one. "tags": 1-3 short semantic labels the user can later ' +
+  'filter sessions by — the area, component, or kind of work — each at most 2 words and in ' +
+  "the title's language. A tag must group this session with OTHER sessions, so never restate " +
+  'the title and never name a one-off detail. No other text.';
+
+/**
+ * The reuse list, appended to the SYSTEM prompt rather than the user message. It belongs with the
+ * instructions, not with the request — and keeping it out of the user turn matters: a library of
+ * Chinese tags shown next to an English request made the model answer the English request in
+ * Chinese, title included. Hence the explicit language disclaimer; it was not enough to state the
+ * language rule once above.
+ */
+function reusePrompt(knownTags: string[]): string {
+  return (
+    `\n\nThe user's existing tags: ${knownTags.join(', ')}. ` +
+    'REUSE any that fit this session instead of coining a near-duplicate. ' +
+    "These are a vocabulary, not an example: their language says nothing about this request's " +
+    "language. Still write the title, and any NEW tag, in the language of the user's request."
+  );
+}
+
+/** Tags are a filter, not a description: past a handful they stop narrowing anything. */
+const MAX_SESSION_TAGS = 3;
+const MAX_TAG_CHARS = 24;
+
+/**
+ * Clean the model's `tags` into names safe to store: strings only, whitespace and a leading
+ * '#' trimmed, length-capped, deduped case-insensitively (so "Login"/"login" can't become two
+ * rows under the (owner, name) unique), and capped in count. Anything unexpected — a bare
+ * string, nested objects, 40 tags — degrades to what survives, never throws.
+ */
+export function sanitizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') continue;
+    const name = raw.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_CHARS).trim();
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    tags.push(name);
+    if (tags.length === MAX_SESSION_TAGS) break;
+  }
+  return tags;
+}
+
+/** What one naming pass yields. `tags` is always an array — empty when the model gave none. */
+export interface SessionNaming {
+  title?: string;
+  tags: string[];
+}
 
 /**
  * A single DeepSeek naming attempt (an OpenAI-compatible chat call). Returns the parsed
- * `{ title? }`, or null on ANY failure — no key configured, non-200, the per-attempt
+ * `{ title?, tags }`, or null on ANY failure — no key configured, non-200, the per-attempt
  * timeout firing, or a body that isn't the expected JSON. NEVER throws. The explicit race is a
  * hard outer bound even when a fetch implementation ignores abort; abort still actively tears
  * down a normal network request.
  */
 async function requestNaming(
-  input: { prompt: string; title?: string },
+  input: { prompt: string; title?: string; knownTags?: string[] },
   timeoutMs: number,
-): Promise<{ title?: string } | null> {
+): Promise<SessionNaming | null> {
   const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
   if (!apiKey) return null;
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  const request = (async (): Promise<{ title?: string } | null> => {
+  const request = (async (): Promise<SessionNaming | null> => {
     const base = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
     const model = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
     const task = [input.title, input.prompt].filter(Boolean).join('\n').slice(0, 600);
+    // The owner's own vocabulary. Without it every session coins a fresh near-synonym and the tag
+    // filter degrades into a list of one-session labels.
+    const system = input.knownTags?.length
+      ? DEEPSEEK_SYSTEM_PROMPT + reusePrompt(input.knownTags)
+      : DEEPSEEK_SYSTEM_PROMPT;
     const resp = await fetch(`${base}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         model,
         temperature: 0.2,
-        max_tokens: 120,
+        max_tokens: 200,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: DEEPSEEK_SYSTEM_PROMPT },
+          { role: 'system', content: system },
           { role: 'user', content: task },
         ],
       }),
@@ -87,10 +142,10 @@ async function requestNaming(
     const data = (await resp.json()) as { choices?: { message?: { content?: string } }[] };
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') return null;
-    const parsed = JSON.parse(content) as { title?: unknown };
+    const parsed = JSON.parse(content) as { title?: unknown; tags?: unknown };
     const title =
       typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim().slice(0, 80) : undefined;
-    return { title };
+    return { title, tags: sanitizeTags(parsed.tags) };
   })().catch(() => null);
   const timedOut = new Promise<null>((resolve) => {
     timeout = setTimeout(() => {
@@ -108,24 +163,26 @@ async function requestNaming(
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Off the hot path: ask DeepSeek for a cleaner display title. Session creation always uses its
- * synchronous fallback first; this helper can afford a generous timeout and retries. Returns a
- * clean title, or undefined when there's no key or every attempt failed. NEVER throws.
+ * Off the hot path: ask DeepSeek for a cleaner display title and a few filing tags. Session
+ * creation always uses its synchronous fallback first; this helper can afford a generous timeout
+ * and retries. Returns an empty result when there's no key or every attempt failed. NEVER throws.
+ * A titled answer ends the loop even with no tags — the title is the part a retry is worth paying
+ * for, and a re-ask would just as likely return no tags again.
  */
-export async function beautifyTitle(
-  input: { prompt: string; title?: string },
+export async function beautifySession(
+  input: { prompt: string; title?: string; knownTags?: string[] },
   opts: { timeoutMs?: number; retries?: number; backoffMs?: number } = {},
-): Promise<string | undefined> {
-  if (!process.env.DEEPSEEK_API_KEY?.trim()) return undefined;
+): Promise<SessionNaming> {
+  if (!process.env.DEEPSEEK_API_KEY?.trim()) return { tags: [] };
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const retries = opts.retries ?? 3;
   const backoffMs = opts.backoffMs ?? 1_000;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await requestNaming(input, timeoutMs);
-    if (res?.title) return res.title;
+    if (res?.title) return res;
     if (attempt < retries) await sleep(backoffMs * (attempt + 1));
   }
-  return undefined;
+  return { tags: [] };
 }
 
 // Naming is cosmetic. Keep slow or unavailable DeepSeek calls from turning a burst of session
@@ -134,12 +191,25 @@ export async function beautifyTitle(
 export const TITLE_BEAUTIFY_CONCURRENCY = 3;
 const beautifyQueue = new AsyncWorkQueue(TITLE_BEAUTIFY_CONCURRENCY);
 
-export function enqueueBeautifyTitle(
-  input: { prompt: string; title?: string },
+/**
+ * How many of the owner's existing tag names are offered to the model as reuse candidates —
+ * and, deliberately the same number, the ceiling on the auto-grown library (see applyAutoTags).
+ * They are one constant because a tag the model is never shown is a tag it will coin again under
+ * a new name: letting the library outgrow the prompt would manufacture the duplicates the reuse
+ * list exists to prevent.
+ */
+export const MAX_KNOWN_TAGS_PROMPTED = 60;
+
+export function enqueueBeautifySession(
+  input: { prompt: string; title?: string; knownTags?: string[] },
   opts: { timeoutMs?: number; retries?: number; backoffMs?: number } = {},
-): Promise<string | undefined> {
-  if (!process.env.DEEPSEEK_API_KEY?.trim()) return Promise.resolve(undefined);
+): Promise<SessionNaming> {
+  if (!process.env.DEEPSEEK_API_KEY?.trim()) return Promise.resolve({ tags: [] });
   // Do not retain an arbitrarily large compose prompt while earlier requests occupy the queue.
-  const boundedInput = { prompt: input.prompt.slice(0, 600), title: input.title?.slice(0, 80) };
-  return beautifyQueue.run(() => beautifyTitle(boundedInput, opts));
+  const boundedInput = {
+    prompt: input.prompt.slice(0, 600),
+    title: input.title?.slice(0, 80),
+    knownTags: input.knownTags?.slice(0, MAX_KNOWN_TAGS_PROMPTED),
+  };
+  return beautifyQueue.run(() => beautifySession(boundedInput, opts));
 }

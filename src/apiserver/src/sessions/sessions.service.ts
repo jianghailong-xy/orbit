@@ -50,8 +50,14 @@ import {
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
-import { enqueueBeautifyTitle, makeBranchName, titleFromPrompt } from './naming';
+import {
+  enqueueBeautifySession,
+  MAX_KNOWN_TAGS_PROMPTED,
+  makeBranchName,
+  titleFromPrompt,
+} from './naming';
 import {
   broaden,
   normalizeSearchQuery,
@@ -524,29 +530,122 @@ export class SessionsService {
     }
     // Only unnamed sessions need cosmetic naming. Task runs and user-supplied titles never call
     // DeepSeek. The branch is deliberately left as-is when the display title is later improved.
-    if (!hasExplicitTitle) void this.beautifyTitleLater(session.id, dto.prompt, title);
+    if (!hasExplicitTitle) void this.beautifySessionLater(ownerId, session.id, dto.prompt, title);
     return withSessionState(session);
   }
 
   /**
-   * Background naming for a session that started with a prompt-derived title. The shared bounded
-   * queue prevents a create burst from fan-out calling DeepSeek. Swap the title only while it is
-   * still the exact fallback we wrote, so a user rename (or any concurrent change) is never
-   * clobbered. Re-publishes the session so live clients pick up the new title. Fire-and-forget:
-   * never awaited, swallows all errors.
+   * Background naming for a session that started with a prompt-derived title: a cleaner display
+   * title, plus a couple of semantic tags to file it under. The shared bounded queue prevents a
+   * create burst from fan-out calling DeepSeek. Swap the title only while it is still the exact
+   * fallback we wrote, so a user rename (or any concurrent change) is never clobbered. Re-publishes
+   * the session so live clients pick up both. Fire-and-forget: never awaited, swallows all errors.
    */
-  private async beautifyTitleLater(sessionId: string, prompt: string, fallbackTitle: string): Promise<void> {
+  private async beautifySessionLater(
+    ownerId: string,
+    sessionId: string,
+    prompt: string,
+    fallbackTitle: string,
+  ): Promise<void> {
     try {
-      const title = await enqueueBeautifyTitle({ prompt });
-      if (!title || title === fallbackTitle) return;
-      const res = await this.prisma.session.updateMany({
-        where: { id: sessionId, title: fallbackTitle },
-        data: { title },
+      // The owner's own vocabulary, offered to the model as reuse candidates. System tags are
+      // colors ("Red"), not semantics, so they are never candidates and are never auto-applied.
+      const known = await this.prisma.sessionTag.findMany({
+        where: { ownerId, isSystem: false },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, name: true },
+        take: MAX_KNOWN_TAGS_PROMPTED,
       });
-      if (res.count > 0) this.realtime.publishSessionUpdated(sessionId);
+      const { title, tags } = await enqueueBeautifySession({
+        prompt,
+        knownTags: known.map((t) => t.name),
+      });
+      let changed = false;
+      if (title && title !== fallbackTitle) {
+        const res = await this.prisma.session.updateMany({
+          where: { id: sessionId, title: fallbackTitle },
+          data: { title },
+        });
+        changed = res.count > 0;
+      }
+      if (tags.length > 0 && (await this.applyAutoTags(ownerId, sessionId, tags, known))) {
+        changed = true;
+      }
+      if (changed) this.realtime.publishSessionUpdated(sessionId);
     } catch {
       // best-effort; the raw fallback title simply stays
     }
+  }
+
+  /**
+   * File a freshly created session under the model's labels, minting the ones this owner doesn't
+   * have yet. Returns whether anything was linked.
+   *
+   * `known` is the candidate list from before the call, so a name the model echoed back maps to
+   * the row it came from — matched case-insensitively, because "Login" and "login" are one tag to
+   * a person but two rows under the (owner, name) unique, and a filter split across both finds
+   * neither half.
+   */
+  private async applyAutoTags(
+    ownerId: string,
+    sessionId: string,
+    names: string[],
+    known: { id: string; name: string }[],
+  ): Promise<boolean> {
+    // Never argue with a person. Tagging by hand while DeepSeek was still in flight is a decision;
+    // this is a guess. Same compare-and-set spirit as the title swap above.
+    if ((await this.prisma.sessionTagLink.count({ where: { sessionId } })) > 0) return false;
+    const byName = new Map(known.map((t) => [t.name.toLowerCase(), t.id]));
+    const tagIds = names.map((name) => byName.get(name.toLowerCase())).filter((id): id is string => !!id);
+    const fresh = names.filter((name) => !byName.has(name.toLowerCase()));
+    // `known` was itself capped at MAX_KNOWN_TAGS_PROMPTED, so a short list *is* the proof that
+    // the library is still under the ceiling — no second count. At the ceiling the session still
+    // gets tagged, just only with labels that already exist: an unbounded auto-grown library is a
+    // wall of one-session tags, which is no filter at all.
+    const room = MAX_KNOWN_TAGS_PROMPTED - known.length;
+    if (fresh.length > 0 && room > 0) {
+      tagIds.push(...(await this.createAutoTags(ownerId, fresh.slice(0, room))));
+    }
+    if (tagIds.length === 0) return false;
+    await this.prisma.sessionTagLink.createMany({
+      data: tagIds.map((tagId) => ({ sessionId, tagId })),
+      skipDuplicates: true,
+    });
+    return true;
+  }
+
+  /**
+   * Create tags for this owner and return their ids. Positions continue after the system block
+   * (which may not be seeded yet — it is written lazily on first list) and pick a palette color by
+   * position. Two sessions naming the same new tag at once is a race the (owner, name) unique
+   * settles: `skipDuplicates` lets the loser adopt the winner's row instead of failing the pass,
+   * which is why the ids are read back by name rather than taken from the create.
+   */
+  private async createAutoTags(ownerId: string, names: string[]): Promise<string[]> {
+    const agg = await this.prisma.sessionTag.aggregate({
+      where: { ownerId },
+      _max: { position: true },
+    });
+    const start = (agg._max.position ?? SESSION_TAG_PALETTE.length - 1) + 1;
+    await this.prisma.sessionTag.createMany({
+      data: names.map((name, i) => ({
+        name,
+        ownerId,
+        isSystem: false,
+        color: SESSION_TAG_PALETTE[(start + i) % SESSION_TAG_PALETTE.length],
+        position: start + i,
+      })),
+      skipDuplicates: true,
+    });
+    const rows = await this.prisma.sessionTag.findMany({
+      where: { ownerId, name: { in: names } },
+      select: { id: true },
+    });
+    // The tag library is user-scoped and nothing polls it: without this push the new tag exists
+    // but is missing from every open filter and picker until a reload. Clients refetch the whole
+    // library on any tag event, so one publish covers the batch.
+    if (rows.length > 0) this.realtime.publishForUser(ownerId, RunEventType.TAG_CHANGED, rows[0].id);
+    return rows.map((r) => r.id);
   }
 
   // ── L3 orchestration: an in-session workspace spawning/managing OTHER sessions ──

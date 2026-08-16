@@ -23,6 +23,12 @@ const SYSTEM_TAGS: { name: string; color: string }[] = [
   { name: 'Gray', color: '#8E8E93' },
 ];
 
+/** The swatches a tag may wear, in picker order. A custom tag created without a person choosing
+ *  a color (auto-tagging on session create) cycles this by position, so a grown-up library reads
+ *  as distinguishable dots rather than a column of one color. Length doubles as the count of
+ *  system tags, which is where custom `position` values start. */
+export const SESSION_TAG_PALETTE: string[] = SYSTEM_TAGS.map((t) => t.color);
+
 // The trimmed shape returned to clients — never leaks ownerId/timestamps.
 const TAG_SELECT = {
   id: true,

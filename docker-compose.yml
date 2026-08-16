@@ -42,7 +42,8 @@ services:
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Optional: DeepSeek (OpenAI-compatible) for asynchronously improving prompt-derived
-      # session titles. Session creation and worktree branch generation never wait on it.
+      # session titles and filing the session under a few semantic tags. Session creation and
+      # worktree branch generation never wait on it.
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
       DEEPSEEK_BASE_URL: "${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"
       DEEPSEEK_MODEL: "${DEEPSEEK_MODEL:-deepseek-chat}"

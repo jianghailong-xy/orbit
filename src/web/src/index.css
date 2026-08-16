@@ -2423,23 +2423,50 @@ body {
   height: 8px;
   border-radius: 50%;
 }
-/* Per-row tag dots (up to 3, then "+N"), matching the native row's. Colour alone identifies the
-   tag; the title tooltip names them. */
-.session-tag-dots {
+/* Second line of a row: the tags, then the reply preview. The tags are a fixed-width lead and
+   the preview takes what's left (and ellipsizes), so a long tag list never pushes the preview
+   into wrapping the 64px row taller. */
+.session-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 4px;
+}
+/* Per-row tags (up to 3, then "+N"). Named, not just coloured: the naming pass writes semantic
+   tags, and a colour swatch can't say "登录". Colour still separates them at a glance, so the
+   name sits on a tint of the tag's own colour — a stronger tint in dark mode, where a 13% wash
+   over a near-black row is invisible. */
+.session-tag-chips {
   flex: none;
   display: flex;
   align-items: center;
-  /* The title row is baseline-aligned; bare dots have no baseline of their own, so centre them
-     against the title instead of letting them hang off the row's. */
-  align-self: center;
-  gap: 3px;
+  gap: 5px;
 }
-.session-tag-dot {
-  width: 8px;
-  height: 8px;
+.session-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 9px;
+  font-size: 11.5px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--chip);
+  background: color-mix(in srgb, var(--chip) 13%, transparent);
+}
+html[data-theme='dark'] .session-tag-chip {
+  background: color-mix(in srgb, var(--chip) 22%, transparent);
+}
+.session-tag-chip-dot {
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
+  background: var(--chip);
 }
 .session-tag-more {
+  flex: none;
   font-size: 11px;
   color: var(--text-4);
 }
@@ -3503,13 +3530,15 @@ body {
   line-height: 1;
   color: var(--error);
 }
-/* Last assistant reply, flattened to one line. Sits below the title row — darker
-   than the time so it reads as content, not metadata. */
+/* Last assistant reply, flattened to one line. Shares the second line with the row's tags
+   (.session-sub owns the spacing above) — darker than the time so it reads as content,
+   not metadata. */
 .session-preview {
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--text-2);
   line-height: 1.35;
-  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
