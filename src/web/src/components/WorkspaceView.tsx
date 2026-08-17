@@ -4298,9 +4298,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             >
                               <span className="session-tag-chips">
                                 {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => {
-                                  // The dot keeps the tag's own colour; the name takes a legible
-                                  // shade of it (see lib/tagColor). Both themes go on the element so
-                                  // the stylesheet still picks between them.
+                                  // The name takes a legible shade of the tag's colour (see
+                                  // lib/tagColor). Both themes go on the element so the stylesheet
+                                  // still picks between them.
                                   const label = tagChipLabels(t.color);
                                   return (
                                     <span
@@ -4314,7 +4314,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                         } as React.CSSProperties
                                       }
                                     >
-                                      <span className="session-tag-chip-dot" />
                                       {t.name}
                                     </span>
                                   );

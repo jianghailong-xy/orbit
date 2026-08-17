@@ -2562,7 +2562,7 @@ body {
    name sits on a tint of the tag's own colour — a stronger tint in dark mode, where a 13% wash
    over a near-black row is invisible. The name itself takes a legible shade of that colour rather
    than the raw hex (`--chip-label`, computed in lib/tagColor): #FFCC00 as text on its own wash
-   measures ~1.4:1, so a yellow tag's name was a smudge. The dot still carries the raw colour. */
+   measures ~1.4:1, so a yellow tag's name was a smudge. */
 .session-tag-chips {
   flex: none;
   display: flex;
@@ -2572,7 +2572,6 @@ body {
 .session-tag-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   height: 18px;
   padding: 0 7px;
   border-radius: 9px;
@@ -2585,12 +2584,6 @@ body {
 html[data-theme='dark'] .session-tag-chip {
   color: var(--chip-label-dark, var(--chip));
   background: color-mix(in srgb, var(--chip) 22%, transparent);
-}
-.session-tag-chip-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--chip);
 }
 .session-tag-more {
   flex: none;

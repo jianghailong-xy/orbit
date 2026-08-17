@@ -53,11 +53,11 @@ struct SessionTagDots: View {
     }
 }
 
-/// The *named* tags on a compact session row — a dot plus the tag's own name on a wash of its
-/// colour, the native port of web's `.session-tag-chip`. Same overflow rule as the dots (3, then
-/// "+N") and the same nothing-when-untagged. The dots above say only "there are two of them": the
-/// naming pass writes semantic tags ("登录", "性能") and a swatch cannot show a word, so on iPhone —
-/// where there is no hover tooltip to fall back to — the meaning was unreadable.
+/// The *named* tags on a compact session row — the tag's own name on a wash of its colour, the
+/// native port of web's `.session-tag-chip`. Same overflow rule as the dots (3, then "+N") and the
+/// same nothing-when-untagged. The dots above say only "there are two of them": the naming pass
+/// writes semantic tags ("登录", "性能") and a swatch cannot show a word, so on iPhone — where there
+/// is no hover tooltip to fall back to — the meaning was unreadable.
 struct SessionTagChips: View {
     let tags: [SessionTag]
     @Environment(\.colorScheme) private var scheme
@@ -90,23 +90,20 @@ struct SessionTagChips: View {
     }
 
     private func chip(_ t: SessionTag) -> some View {
-        HStack(spacing: 4) {
-            Circle().fill(Color(tagHex: t.color)).frame(width: 5, height: 5)
-            Text(t.name)
-                .font(.orbitMeta)
-                .foregroundStyle(Color(tagLabelHex: t.color, dark: scheme == .dark))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                // A long tag can't push the row's text off screen; the full name stays in the
-                // picker and in VoiceOver.
-                .frame(maxWidth: maxNameWidth, alignment: .leading)
-        }
-        .padding(.horizontal, 7)
-        .frame(height: height)
-        // The wash the label colour was measured against — a stronger one in dark, where 13% over a
-        // near-black row is invisible (web's `.session-tag-chip` splits the same way).
-        .background(Color(tagHex: t.color)
-            .opacity(TagChipColor.backgroundOpacity(dark: scheme == .dark)), in: Capsule())
+        Text(t.name)
+            .font(.orbitMeta)
+            .foregroundStyle(Color(tagLabelHex: t.color, dark: scheme == .dark))
+            .lineLimit(1)
+            .truncationMode(.tail)
+            // A long tag can't push the row's text off screen; the full name stays in the
+            // picker and in VoiceOver.
+            .frame(maxWidth: maxNameWidth, alignment: .leading)
+            .padding(.horizontal, 7)
+            .frame(height: height)
+            // The wash the label colour was measured against — a stronger one in dark, where 13%
+            // over a near-black row is invisible (web's `.session-tag-chip` splits the same way).
+            .background(Color(tagHex: t.color)
+                .opacity(TagChipColor.backgroundOpacity(dark: scheme == .dark)), in: Capsule())
     }
 }
 

@@ -4,11 +4,11 @@ import Foundation
 /// web's `lib/tagColor` so both ends treat a tag the same way.
 ///
 /// A palette hex is a swatch, not a label: `#FFCC00` as text on the chip's own pale wash measures
-/// about 1.4:1, so the tag's *name* read as a smudge while the dot beside it carried the hue
-/// perfectly well. Each colour is therefore pushed toward the row's background — black in light,
-/// white in dark — but only as far as it must to clear AA against the wash it sits on. A colour that
-/// was already legible barely moves; only the pale ones darken visibly. One fixed blend can't do
-/// this: the amount yellow needs turns red into near-black, throwing away what the colour is for.
+/// about 1.4:1, so the tag's *name* read as a smudge on the very wash meant to identify it. Each
+/// colour is therefore pushed toward the row's background — black in light, white in dark — but
+/// only as far as it must to clear AA against the wash it sits on. A colour that was already
+/// legible barely moves; only the pale ones darken visibly. One fixed blend can't do this: the
+/// amount yellow needs turns red into near-black, throwing away what the colour is for.
 public enum TagChipColor {
     /// sRGB in 0…1, ready for `Color(red:green:blue:)`.
     public struct Components: Equatable, Sendable {

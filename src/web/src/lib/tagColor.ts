@@ -2,12 +2,12 @@
  * The label colour for a session-tag chip.
  *
  * The palette hex is a swatch, not a label: `#FFCC00` as text on the chip's own pale wash measures
- * about 1.4:1, so the tag's *name* read as a smudge while the dot beside it carried the hue
- * perfectly well. Each colour is therefore pushed toward the row's background — black in light,
- * white in dark — but only as far as it must to clear AA against the wash it sits on. A colour that
- * was already legible (gray, blue) barely moves; only the pale ones (yellow) darken visibly. One
- * fixed blend can't do this: the amount yellow needs turns red into near-black, which would throw
- * away the very thing the colour is for.
+ * about 1.4:1, so the tag's *name* read as a smudge on the very wash meant to identify it. Each
+ * colour is therefore pushed toward the row's background — black in light, white in dark — but only
+ * as far as it must to clear AA against the wash it sits on. A colour that was already legible
+ * (gray, blue) barely moves; only the pale ones (yellow) darken visibly. One fixed blend can't do
+ * this: the amount yellow needs turns red into near-black, which would throw away the very thing
+ * the colour is for.
  *
  * Both themes are computed here and handed to CSS as two custom properties, so the stylesheet keeps
  * owning the light/dark split (`.session-tag-chip`) and a theme switch needs no re-render.
