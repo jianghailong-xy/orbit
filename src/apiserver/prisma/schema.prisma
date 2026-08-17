@@ -1372,6 +1372,17 @@ model Task {
   /// indexes, which is what keeps a project or parent delete from scanning the task table.
   @@index([projectId])
   @@index([parentTaskId])
+  /// The two reads `GET /projects/:id/tasks/page` makes: one project's top-level tasks, and one
+  /// task's direct children, both in cursor order. They need SEPARATE indexes because the top
+  /// level is `parent_task_id IS NULL` — an index scan key PostgreSQL can seek on but cannot
+  /// carry an ordering past, so a shared index leaves that page sorting its whole level.
+  ///
+  /// Both are created PARTIAL (see migration 0108), which this schema cannot spell — as with
+  /// `Session.retryAt`, whose index has been `WHERE retry_at IS NOT NULL` since 0081. The
+  /// predicates are what make the root index able to order at all, and what keep both indexes off
+  /// the six figures of tasks that are in no project.
+  @@index([ownerId, projectId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_project_root_created_id_idx")
+  @@index([ownerId, projectId, parentTaskId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_project_child_created_id_idx")
   @@index([status])
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this

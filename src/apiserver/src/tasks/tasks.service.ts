@@ -351,8 +351,8 @@ export function diskBelowFloor(
 // by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
 // that ceiling even when an owner has tens of thousands of tasks.
 const TASK_ID_QUERY_CHUNK = 5_000;
-const DEFAULT_TASK_PAGE_SIZE = 100;
-const MAX_TASK_PAGE_SIZE = 200;
+export const DEFAULT_TASK_PAGE_SIZE = 100;
+export const MAX_TASK_PAGE_SIZE = 200;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH = 8;
 const MAX_DEPENDENCY_GRAPH_MAX_DEPTH = 32;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_NODES = 100;
@@ -479,13 +479,16 @@ interface TaskPageCursor {
   id: string;
 }
 
-function encodeTaskPageCursor(task: { createdAt: Date; id: string }): string {
+/** Exported so a second paged task read cannot invent a second cursor format: a cursor is part of
+ *  the wire contract, and two encodings of "where the last page stopped" would be one client
+ *  upgrade away from being handed to the wrong decoder. */
+export function encodeTaskPageCursor(task: { createdAt: Date; id: string }): string {
   return Buffer.from(
     JSON.stringify({ createdAt: task.createdAt.toISOString(), id: task.id } satisfies TaskPageCursor),
   ).toString('base64url');
 }
 
-function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
+export function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as TaskPageCursor;
     const createdAt = new Date(parsed.createdAt);

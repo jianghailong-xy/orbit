@@ -40,6 +40,26 @@ export class ProjectsController {
     return this.projects.get(user.userId, id);
   }
 
+  /**
+   * One level of this project's task tree: its top-level tasks, or — with `?parentId=` — the
+   * direct children of one of them. Cursor-paged, newest first.
+   *
+   * `parentId` is an address like any other, so it goes through PublicIdPipe: clients hold the
+   * base62 short form (that is what `parentTaskId` is encoded as on the way out), and a value
+   * that decodes to nothing must be a 400 here rather than a 500 from a `::uuid` cast.
+   */
+  @Get(':id/tasks/page')
+  taskPage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('parentId', PublicIdPipe) parentId?: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+  ) {
+    return this.projects.taskPage(user.userId, id, { parentId, cursor, limit, status });
+  }
+
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */
   @Patch(':id')
   update(

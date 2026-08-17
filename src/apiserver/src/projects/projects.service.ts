@@ -4,9 +4,48 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProjectStatus } from '@prisma/client';
+import { Prisma, ProjectStatus, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  DEFAULT_TASK_PAGE_SIZE,
+  MAX_TASK_PAGE_SIZE,
+  decodeTaskPageCursor,
+  encodeTaskPageCursor,
+} from '../tasks/tasks.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
+
+export interface ProjectTaskPageQuery {
+  /** Absent = the project's top level. Present = that task's direct children, and only those. */
+  parentId?: string;
+  cursor?: string;
+  limit?: string | number;
+  status?: string;
+}
+
+/**
+ * What ONE row of the project's task tree needs, and nothing else.
+ *
+ * The tree's first screen shows a title, where the work stands, when it is due and who would run
+ * it — so `description` is out for the reason it is out of `TASK_LIST_SELECT` (~500 bytes a task,
+ * parsed and thrown away by every client that renders a row), and `comments`, `sessions` and
+ * `children` are out because each is an unbounded collection that turns one page into a fan-out.
+ *
+ * The child tally a row needs in order to know whether it has anything to expand is added by
+ * `taskPage` rather than listed here, because it is scoped to the request's owner and project.
+ * It is a `_count` — one joined aggregate — and NOT `children: true` with a `.length`, which is
+ * the difference between an integer per row and every subtask of every row on the page.
+ */
+const PROJECT_TASK_TREE_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  parentTaskId: true,
+  acceptanceCriteria: true,
+  createdAt: true,
+  updatedAt: true,
+  dueDate: true,
+  assignee: { select: { id: true, name: true } },
+} satisfies Prisma.TaskSelect;
 
 /**
  * Projects: what a body of work is trying to achieve, and how anyone would know it got there.
@@ -102,6 +141,123 @@ export class ProjectsService {
       ...project,
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
     };
+  }
+
+  /**
+   * One level of the project's task tree, newest first.
+   *
+   * The tree is read a level at a time rather than as a tree. `parentId` absent means the
+   * project's top level (`parentTaskId IS NULL`) and NEVER a subtask; `parentId` present means
+   * that task's direct children and never a grandchild. So the cost of opening a project is one
+   * page of its roots, and the cost of expanding a node is one page of that node's children —
+   * neither is the size of the project, which is the property the whole endpoint exists for.
+   *
+   * Every query here is bounded by all three of `ownerId`, `projectId` and `parentTaskId`
+   * together. The project alone would be the shape that has to be avoided: "load the project's
+   * tasks and assemble the tree in memory" is exactly the read that stops working at the size a
+   * project reaches when it is worth having.
+   *
+   * `(createdAt DESC, id DESC)` because `createdAt` alone is not a total order — tasks filed in
+   * one batch share a millisecond, and a page boundary landing inside such a group would repeat
+   * some of them and skip others. `id` breaks the tie, and the cursor carries both.
+   */
+  async taskPage(ownerId: string, projectId: string, query: ProjectTaskPageQuery = {}) {
+    await this.assertOwned(ownerId, projectId);
+
+    const limit = query.limit === undefined ? DEFAULT_TASK_PAGE_SIZE : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_TASK_PAGE_SIZE) {
+      throw new BadRequestException(`limit must be an integer from 1 to ${MAX_TASK_PAGE_SIZE}`);
+    }
+
+    const status = ProjectsService.parseTaskStatus(query.status);
+    const parentTaskId = query.parentId
+      ? await this.assertParentInProject(ownerId, projectId, query.parentId)
+      : null;
+
+    const scope: Prisma.TaskWhereInput = {
+      ownerId,
+      projectId,
+      parentTaskId,
+      ...(status ? { status } : {}),
+    };
+    const cursor = query.cursor ? decodeTaskPageCursor(query.cursor) : undefined;
+    const where: Prisma.TaskWhereInput = cursor
+      ? {
+          AND: [
+            scope,
+            {
+              OR: [
+                { createdAt: { lt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { lt: cursor.id } },
+              ],
+            },
+          ],
+        }
+      : scope;
+
+    // One row over the page: the only thing `nextCursor` must not do is promise a page that turns
+    // out to be empty, and counting the remainder to find that out would cost the scan the paging
+    // is here to avoid.
+    const rows = await this.prisma.task.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: {
+        ...PROJECT_TASK_TREE_SELECT,
+        // Scoped to the same owner and project as the page it would open, so the number a row
+        // shows is the number expanding it returns. Today those clauses match every child a task
+        // can have — a subtask is created into its parent's project and cannot be moved out of it
+        // while it is still linked — which is exactly why they are stated rather than assumed: an
+        // invariant enforced elsewhere is not a reason for this count to be a guess.
+        _count: { select: { children: { where: { ownerId, projectId } } } },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const items = page.map(({ _count, ...task }) => ({ ...task, childCount: _count.children }));
+    return {
+      items,
+      nextCursor: hasMore && page.length ? encodeTaskPageCursor(page[page.length - 1]) : null,
+    };
+  }
+
+  /**
+   * The parent a subtask page may be asked for: a task this owner has, in THIS project.
+   *
+   * Both halves are checked in the one query that resolves it, so a parent in someone else's
+   * account and a parent in the caller's own next project are the same 404 — an id that is not
+   * part of this tree is not part of it, and saying which kind of not-part-of-it it was would
+   * answer a question about another project's contents.
+   */
+  private async assertParentInProject(
+    ownerId: string,
+    projectId: string,
+    parentId: string,
+  ): Promise<string> {
+    const parent = await this.prisma.task.findFirst({
+      where: { id: parentId, ownerId, projectId },
+      select: { id: true },
+    });
+    if (!parent) throw new NotFoundException('parent task not found');
+    return parent.id;
+  }
+
+  /**
+   * A task status, or a 400 naming the ones that exist.
+   *
+   * Only the real `TaskStatus` values: `GET /tasks/page` also answers to RUNNABLE, RUNNING and
+   * ONGOING, and those are questions about runs and tabs rather than about a tree. An unknown
+   * value is refused rather than ignored, for the reason the project filter refuses one — a
+   * silently dropped filter reports the unfiltered tree as if it were the answer.
+   */
+  private static parseTaskStatus(status?: string): TaskStatus | undefined {
+    if (status === undefined || status.trim() === '') return undefined;
+    const value = status.trim().toUpperCase();
+    if (!Object.values<string>(TaskStatus).includes(value)) {
+      throw new BadRequestException(`status must be one of ${Object.values(TaskStatus).join(', ')}`);
+    }
+    return value as TaskStatus;
   }
 
   /** Each field is written only when the caller sent it, so closing a project cannot blank the goal
