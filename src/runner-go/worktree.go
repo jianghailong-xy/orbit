@@ -326,7 +326,19 @@ func (ops worktreeGitOps) branchMergedInto(wt *Worktree) bool {
 	// commit accounted for ('-', none '+') ⇒ the work is in the target under a different identity —
 	// still merged. Any '+' (or a git error / empty output) stays conservatively false, keeping the
 	// actionable Merge button.
-	out, err := ops.run(wt.RepoDir, "cherry", target, branch)
+	//
+	// The fork point goes in as `cherry`'s third argument (the limit) so the question asked is
+	// "did THIS SESSION's commits land", over the same range the merge itself replays (see
+	// replayAnchor). Without it the range is `<target>..<branch>`, which for a branch forked
+	// outside the target also contains the fork branch's own commits — commits this session never
+	// wrote and the merge deliberately leaves behind, each of them a '+' that reads as unmerged
+	// work forever. A base that isn't on the branch's history only widens the range, so the
+	// verdict stays conservative.
+	cherry := []string{"cherry", target, branch}
+	if baseSha := wt.baseSha(); baseSha != "" {
+		cherry = append(cherry, baseSha)
+	}
+	out, err := ops.run(wt.RepoDir, cherry...)
 	if err != nil {
 		return false
 	}
@@ -575,6 +587,10 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 		return execDir
 	}
 
+	// Fork from the workDir's HEAD — deliberately NOT the session's merge target. mergeToMain
+	// writes defaultMergeTarget back on every explicit "Merge to…" pick, so basing the checkout
+	// on it would let one one-off merge silently re-base every later session of that agent.
+	// Sessions follow the shared checkout; move it with `git checkout` to move them.
 	base, err := git(baseDir, "rev-parse", "HEAD")
 	if err != nil || base == "" {
 		// An empty repo (no commits) has no HEAD to fork from — run shared instead.
@@ -1035,7 +1051,45 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return *out
 	}
 
-	return rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot)
+	return rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot,
+		replayAnchor(repoRoot, req.SessionID, sourceSha, req.BaseSha))
+}
+
+// replayAnchor picks the commit the merge replays FROM: the session's fork point, so only the
+// session's own commits land on the target. Without one, `git rebase <target>` replays everything
+// in `<target>..<branch>` — for a branch forked from main and merged into a different target (a
+// develop/release branch), that silently carries main's commits into it too.
+//
+// The fork point comes from the local base ref while the session's checkout is alive, else from
+// the control plane's record (MergeCommand.BaseSha, reported at /complete). Returns "" — replay
+// everything, exactly as before — unless the anchor can be *proven* usable here: a commit this
+// repo has, on the source branch's own history, with work after it. An anchor wrong in the other
+// direction (too new, sitting on top of session commits) would silently drop work from the merge,
+// so anything unproven takes the conservative path instead.
+func replayAnchor(repoRoot, sessionID, sourceSha, serverBase string) string {
+	candidates := make([]string, 0, 2)
+	if local, err := git(repoRoot, "rev-parse", "--verify", "--quiet", baseRefName(sessionID)); err == nil && local != "" {
+		candidates = append(candidates, local)
+	}
+	if serverBase = strings.TrimSpace(serverBase); serverBase != "" {
+		candidates = append(candidates, serverBase)
+	}
+	for _, candidate := range candidates {
+		sha, err := git(repoRoot, "rev-parse", "--verify", "--quiet", candidate+"^{commit}")
+		if err != nil || sha == "" {
+			continue // not a commit this repo has (a foreign sha, a pruned object)
+		}
+		if _, err := git(repoRoot, "merge-base", "--is-ancestor", sha, sourceSha); err != nil {
+			continue // not on this branch's history — it can't be where it forked
+		}
+		// Nothing after the fork means the anchor is the tip: replaying from it would merge an
+		// empty range. Let the unanchored path handle it (and report "already merged" as before).
+		if n, err := git(repoRoot, "rev-list", "--count", sha+".."+sourceSha); err != nil || n == "0" {
+			continue
+		}
+		return sha
+	}
+	return ""
 }
 
 // rebaseFastForward replays source's commits onto target and advances target to the result by
@@ -1047,11 +1101,17 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 // rebase conflict it aborts and reports "conflict". Inline identity so the rewritten commits
 // never fail on a runner with no git user.*.
 //
+// `onto` (see replayAnchor) bounds what gets replayed: given the session's fork point, only its
+// own commits move, rather than everything the branch carries ahead of the target. Empty replays
+// `<target>..<source>`, the original behavior. The two are equivalent whenever the fork point is
+// already in the target — the usual fork-from-main, merge-to-main case — and differ only where the
+// branch sits on commits the target doesn't have.
+//
 // When origin tracks target, it pushes the rebased result to origin/<target> BEFORE advancing the
 // local branch, so the local target only ever moves to what origin already accepted — local merges
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
-func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool) mergeOutcome {
+func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string) mergeOutcome {
 	tmpBranch := "orbit/_rebase-" + sessionID
 	tmp := filepath.Join(worktreesDir(), "_rebase-"+sessionID)
 	// Clear any leftover from a crashed prior attempt before staging fresh.
@@ -1080,11 +1140,23 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 	// retried: re-sync the local target to the new tip and replay onto it. The loop ends on a clean
 	// push, a local-only target (nothing to push), a rebase conflict, or a divergence we can't fix.
 	for attempt := 0; ; attempt++ {
+		// Retry after origin moved: put the temp branch back on the source tip so this attempt
+		// replays exactly what the first one did. Without the reset the second `rebase` would
+		// start from the already-replayed result, whose relationship to `onto` no longer holds.
+		if attempt > 0 {
+			if _, err := git(tmp, "reset", "--hard", sourceSha); err != nil {
+				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not restage %s for retry: %s", source, gitStderr(err)), 1000)}
+			}
+		}
+		rebase := []string{"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner", "rebase"}
+		if onto != "" {
+			rebase = append(rebase, "--onto", target, onto)
+		} else {
+			rebase = append(rebase, target)
+		}
 		// A conflict stops the rebase; abort so the worktree is left clean before we tear it down
 		// (git writes "CONFLICT ..." to stdout, returned as `out`).
-		if out, err := git(tmp,
-			"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-			"rebase", target); err != nil {
+		if out, err := git(tmp, rebase...); err != nil {
 			msg := strings.TrimSpace(out + "\n" + gitStderr(err))
 			_, _ = git(tmp, "rebase", "--abort")
 			return mergeOutcome{Status: "conflict", Message: clip(msg, 1000)}

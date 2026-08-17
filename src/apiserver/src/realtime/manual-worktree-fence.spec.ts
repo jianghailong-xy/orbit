@@ -26,6 +26,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
           {
             id: SESSION_ID,
             branch: 'orbit/session',
+            baseSha: 'f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0',
             mergeTarget: 'main',
             mergeOperationId: OPERATION_ID,
             mergeOperationOwner: null,
@@ -51,6 +52,9 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
       branch: 'orbit/session',
       workDir: '/repo',
       targetBranch: 'main',
+      // The fork point travels with the command: the runner's own base ref is gone once the
+      // checkout is torn down, and it anchors the replay to this session's commits.
+      baseSha: 'f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0',
     },
   ]);
   assert.deepEqual(reads, [
@@ -78,6 +82,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
       select: {
         id: true,
         branch: true,
+        baseSha: true,
         mergeTarget: true,
         mergeOperationId: true,
         mergeOperationOwner: true,

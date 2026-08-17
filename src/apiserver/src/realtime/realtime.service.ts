@@ -746,6 +746,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       select: {
         id: true,
         branch: true,
+        baseSha: true,
         mergeTarget: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
@@ -781,6 +782,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             branch: s.branch!,
             workDir: s.workspace!.workDir!,
             ...(s.mergeTarget ? { targetBranch: s.mergeTarget } : {}),
+            // The fork point, so the merge replays only this session's commits. The runner's own
+            // copy of it dies with the checkout (removeWorktree drops the base ref), and a merge
+            // is usually requested after that, so send ours.
+            ...(s.baseSha ? { baseSha: s.baseSha } : {}),
           };
         }),
     );

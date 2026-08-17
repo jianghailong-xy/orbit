@@ -1121,3 +1121,132 @@ func TestMergeToMainOverlappingDirtyRootFailsBeforePushing(t *testing.T) {
 		t.Errorf("the bystander's edit must be untouched, got %q", string(got))
 	}
 }
+
+// The fork base is the workDir's HEAD, and a merge target must NOT move it. defaultMergeTarget is
+// written back implicitly by every explicit "Merge to…" pick (SessionsService.mergeToMain), so
+// forking from it would turn one one-off merge into a permanent re-basing of that agent's later
+// sessions. Sessions follow the shared checkout instead.
+func TestSetupWorktreeForksFromWorkdirHead(t *testing.T) {
+	for _, tc := range []struct{ name, target string }{
+		{"no merge target", ""},
+		{"merge target behind HEAD", "develop"},
+		{"merge target not local", "release/2.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			repo := initRepo(t)
+			mustGit(t, repo, "branch", "develop") // a local target, one commit behind main
+			commitFile(t, repo, "main-only.txt", "main\n", "main advances past develop")
+			head := mustGit(t, repo, "rev-parse", "HEAD")
+
+			job := &ClaimedSession{SessionID: "s-base", Branch: "orbit/feat", MergeTarget: tc.target}
+			execDir := setupWorktree(job, repo)
+
+			if job.IsolationStatus != isoWorktree || job.WT == nil {
+				t.Fatalf("expected worktree isolation, got %q (wt=%v)", job.IsolationStatus, job.WT)
+			}
+			if job.WT.BaseSha != head {
+				t.Errorf("BaseSha = %s, want workDir HEAD %s", job.WT.BaseSha, head)
+			}
+			if ref := mustGit(t, repo, "rev-parse", baseRefName("s-base")); ref != head {
+				t.Errorf("persisted base ref = %s, want workDir HEAD %s", ref, head)
+			}
+			// The checkout starts from what the shared repo currently has, target or no target.
+			if _, err := os.Stat(filepath.Join(execDir, "main-only.txt")); err != nil {
+				t.Errorf("checkout must carry the workDir's current work: %v", err)
+			}
+		})
+	}
+}
+
+// A session forked from main and merged into a DIFFERENT target must carry only its own commits
+// there. Before the fork point anchored the replay, `git rebase develop` replayed everything in
+// develop..orbit/feat — main's unrelated commits included — and reported a clean "merged".
+func TestMergeToMainReplaysOnlySessionCommits(t *testing.T) {
+	// Two ways the runner learns the fork point: its own ref while the checkout is alive, and the
+	// control plane's record once the checkout (and the ref with it) is gone.
+	for _, tc := range []struct {
+		name                 string
+		localRef, fromServer bool
+	}{
+		{"local base ref", true, false},
+		{"base sha from the control plane", false, true},
+		{"both agree", true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			repo := initRepo(t)
+			mustGit(t, repo, "branch", "develop") // the merge target, left behind by main
+			commitFile(t, repo, "main-only.txt", "main\n", "someone else's main commit")
+			fork := mustGit(t, repo, "rev-parse", "HEAD") // where setupWorktree forked the session
+			mustGit(t, repo, "checkout", "-b", "orbit/feat")
+			commitFile(t, repo, "feat.txt", "feature\n", "session work")
+			mustGit(t, repo, "checkout", "main")
+			if tc.localRef {
+				mustGit(t, repo, "update-ref", baseRefName("s-anchor"), fork)
+			}
+			req := MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "s-anchor", TargetBranch: "develop"}
+			if tc.fromServer {
+				req.BaseSha = fork
+			}
+
+			out := mergeToMain(req)
+			if out.Status != "merged" {
+				t.Fatalf("expected merged, got %q (%s)", out.Status, out.Message)
+			}
+			if _, err := git(repo, "cat-file", "-e", "develop:feat.txt"); err != nil {
+				t.Errorf("develop must carry the session's work: %v", err)
+			}
+			if _, err := git(repo, "cat-file", "-e", "develop:main-only.txt"); err == nil {
+				t.Error("develop must NOT carry main's unrelated commit")
+			}
+			// The status bar must agree the work landed, or the Merge button never clears.
+			wt := &Worktree{Branch: "orbit/feat", BaseSha: fork, RepoDir: repo, Session: "s-anchor"}
+			rememberMergeTarget(wt.Session, "develop")
+			defer forgetMergeTarget(wt.Session)
+			if !branchMergedInto(wt) {
+				t.Error("branchMergedInto must see the session's work in develop")
+			}
+		})
+	}
+}
+
+// An anchor that can't be proven to be this branch's fork point is ignored rather than trusted:
+// replaying from the wrong commit would silently drop session commits from the merge. The merge
+// then behaves exactly as it did before the anchor existed.
+func TestMergeToMainIgnoresUntrustworthyAnchor(t *testing.T) {
+	for _, tc := range []struct{ name, baseSha string }{
+		{"unknown commit", "0000000000000000000000000000000000000000"},
+		{"not this branch's history", "refs/heads/sidetrack"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			repo := initRepo(t)
+			mustGit(t, repo, "branch", "develop")
+			commitFile(t, repo, "main-only.txt", "main\n", "someone else's main commit")
+			mustGit(t, repo, "checkout", "-b", "sidetrack")
+			commitFile(t, repo, "side.txt", "side\n", "unrelated branch")
+			mustGit(t, repo, "checkout", "main")
+			mustGit(t, repo, "checkout", "-b", "orbit/feat")
+			commitFile(t, repo, "feat.txt", "feature\n", "session work")
+			mustGit(t, repo, "checkout", "main")
+
+			baseSha := tc.baseSha
+			if strings.HasPrefix(baseSha, "refs/") {
+				baseSha = mustGit(t, repo, "rev-parse", baseSha)
+			}
+			out := mergeToMain(MergeCommand{
+				WorkDir: repo, Branch: "orbit/feat", SessionID: "s-bad", TargetBranch: "develop", BaseSha: baseSha,
+			})
+			if out.Status != "merged" {
+				t.Fatalf("expected merged, got %q (%s)", out.Status, out.Message)
+			}
+			if _, err := git(repo, "cat-file", "-e", "develop:feat.txt"); err != nil {
+				t.Errorf("the session's work must land whatever the anchor says: %v", err)
+			}
+			if _, err := git(repo, "cat-file", "-e", "develop:side.txt"); err == nil {
+				t.Error("an unrelated branch's commit must never be replayed")
+			}
+		})
+	}
+}

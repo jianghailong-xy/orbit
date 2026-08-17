@@ -344,6 +344,11 @@ type MergeCommand struct {
 	// TargetBranch is the branch to merge INTO. Empty → auto-detect main, else master (the
 	// original behavior); set when the user picked a target from the status bar's dropdown.
 	TargetBranch string `json:"targetBranch,omitempty"`
+	// BaseSha is the commit the session's branch forked from, as the control plane recorded it
+	// at /complete. The merge replays from here so it carries only the session's own commits
+	// (see replayAnchor); the local base ref is gone by then for a torn-down checkout. Empty on
+	// an older control plane → replay everything ahead of the target, as before.
+	BaseSha string `json:"baseSha,omitempty"`
 }
 
 // MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a

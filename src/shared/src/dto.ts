@@ -663,6 +663,13 @@ export interface MergeCommand {
    *  (the original behavior). Set when the user picked a non-default target from the
    *  status bar's branch dropdown. */
   targetBranch?: string;
+  /** The commit the session's branch forked from (`session.baseSha`), so the runner replays
+   *  only the session's own commits onto the target instead of everything the branch carries
+   *  ahead of it. The runner keeps this in a local ref while the checkout is alive, but drops
+   *  it when the checkout is torn down — which is exactly when most merges are requested, so
+   *  the record has to come from here. Absent → the runner replays `<target>..<branch>` as
+   *  before. */
+  baseSha?: string;
 }
 
 /** Control plane → runner: commit a live session's uncommitted worktree changes onto its
