@@ -301,7 +301,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
+		copyIfPresent(body, args, "description", "listId", "projectId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -332,7 +332,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
+			copyIfPresent(body, item, "description", "listId", "projectId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -984,6 +984,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to use the provider's own default. An id the provider doesn't have will fail at run time, not here.",
 	}
+	// Files a new task under a project, on task_create and every task_create_batch item alike.
+	// Not nullable, unlike listId: on a create there is nothing to clear, and null would be an id
+	// the server rejects rather than a shorthand for "no project".
+	projectIDProp := map[string]interface{}{
+		"type": "string",
+		"description": "File this task under a project you own — what to pass when the work is part of a " +
+			"goal you were given (project_get names it). Orthogonal to listId: the project says what the " +
+			"work is FOR, the list decides how it is dispatched, so a task may have one of each, either, " +
+			"or neither. Omit it when the work belongs to no project; a project that does not exist, or " +
+			"belongs to somebody else, is rejected rather than filed nowhere.",
+	}
 	labelsProp := map[string]interface{}{
 		"type":        "array",
 		"items":       str,
@@ -1005,6 +1016,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"description": promptDesc,
 			"listId":      map[string]interface{}{"type": []string{"string", "null"}},
 			"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
+			"projectId":   projectIDProp,
 			"dueDate":     str,
 			"provider":    providerProp,
 			"model":       modelProp,
@@ -1118,12 +1130,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
+			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
 			"inputSchema": obj(taskCreateProps(), "title"),
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` included, so a plan for one project files every task it produces under that project in the same call. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":        "array",
