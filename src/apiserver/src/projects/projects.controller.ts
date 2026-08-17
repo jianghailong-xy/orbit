@@ -14,7 +14,7 @@ import { ProjectStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { CreateProjectDto, OpenProjectCoordinatorDto, UpdateProjectDto } from './dto';
 import { ProjectsService } from './projects.service';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -58,6 +58,23 @@ export class ProjectsController {
     @Query('status') status?: string,
   ) {
     return this.projects.taskPage(user.userId, id, { parentId, cursor, limit, status });
+  }
+
+  /**
+   * Open (or return) the session this project is coordinated from.
+   *
+   * POST because it may create one, and idempotent in the way that matters: calling it twice
+   * returns the same conversation with `created: false` rather than opening a second one. A body
+   * is optional — `workspaceId` decides where a FIRST coordinator opens, and on a project that
+   * already has one a different value is a 409 rather than a move.
+   */
+  @Post(':id/coordinator')
+  openCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: OpenProjectCoordinatorDto,
+  ) {
+    return this.projects.coordinator(user.userId, id, dto?.workspaceId);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

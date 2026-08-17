@@ -55,7 +55,7 @@ function serviceWith(opts: {
         return opts.tasks ?? [];
       },
     },
-  } as never);
+  } as never, {} as never);
   return { service, calls };
 }
 
@@ -285,7 +285,7 @@ test('paging a level whose rows share a createdAt loses nothing and repeats noth
         return matches.slice(0, args.take);
       },
     },
-  } as never);
+  } as never, {} as never);
 
   const seen: string[] = [];
   let cursor: string | null | undefined;

@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProjectStatus, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionsService } from '../sessions/sessions.service';
 import {
   DEFAULT_TASK_PAGE_SIZE,
   MAX_TASK_PAGE_SIZE,
@@ -50,15 +52,34 @@ const PROJECT_TASK_TREE_SELECT = {
 /**
  * Projects: what a body of work is trying to achieve, and how anyone would know it got there.
  *
- * Read-and-write only. Nothing here dispatches, cancels, holds or releases anything, and that is
- * a property to preserve rather than an omission to fill in: a project carries no authority over
- * how its tasks run, so no write on this service can change what the sweep, the claim gate or a
- * runner does. `TaskListsService.remove` has to disarm its tasks before deleting a list precisely
- * because a list *does* carry that authority; the equivalent here would be code with nothing to do.
+ * Nothing here dispatches, cancels, holds or releases a TASK, and that is a property to preserve
+ * rather than an omission to fill in: a project carries no authority over how its tasks run, so no
+ * write on this service can change what the sweep, the claim gate or a runner does.
+ * `TaskListsService.remove` has to disarm its tasks before deleting a list precisely because a
+ * list *does* carry that authority; the equivalent here would be code with nothing to do.
+ *
+ * `coordinator` opens a session, which is the one thing on this service that starts anything — and
+ * it starts a conversation ABOUT the project, not any of its work. Nothing on the dispatch path
+ * reads the binding it writes, so the property above survives it intact.
  */
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ProjectsService.name);
+
+  /**
+   * One wording for "this project's coordinator is not where you asked", whether that was noticed
+   * before a session was created or after losing the race to bind one. Two phrasings would read as
+   * two different rules to anyone who hit both.
+   */
+  private static readonly ELSEWHERE =
+    'this project already has a coordinator, and it runs in a different workspace — open it where ' +
+    'it is, or delete it first. Moving a coordinator is not something this endpoint does as a side ' +
+    'effect of asking for one.';
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sessions: SessionsService,
+  ) {}
 
   /**
    * Ownership check for the write paths, and the 404 every unknown or cross-tenant id gets.
@@ -258,6 +279,246 @@ export class ProjectsService {
       throw new BadRequestException(`status must be one of ${Object.values(TaskStatus).join(', ')}`);
     }
     return value as TaskStatus;
+  }
+
+  /**
+   * The session this project is coordinated from, opening one if it has none it can still use.
+   *
+   * Resolve-or-create, for the reason `TaskListsService.console` is: the point of the binding is
+   * that coming back to a project comes back to the same conversation, with the reasoning behind
+   * everything decided in it still there. Calling this twice therefore returns one session and
+   * says `created: false` the second time — it is not a "new coordinator" endpoint that happens to
+   * be reachable twice.
+   *
+   * A bound session is reused even when it has FAILED: that is a terminal state Orbit revives with
+   * a new turn, and the history is the thing worth keeping. Only a session the user put in Trash,
+   * or one deleted out from under the pointer, earns a replacement — those are the two cases where
+   * the conversation is genuinely gone rather than merely finished.
+   *
+   * What this deliberately will NOT do is move an existing coordinator. A request naming a
+   * different workspace than the binding was made in is a 409, not a re-point: the conversation is
+   * where the work was discussed, and relocating it is a decision someone has to make on purpose.
+   * Replacing a coordinator is its own endpoint, and this is not it.
+   */
+  async coordinator(
+    ownerId: string,
+    id: string,
+    workspaceId?: string,
+  ): Promise<{ sessionId: string; created: boolean; workspaceId: string | null }> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: {
+        id: true,
+        title: true,
+        coordinatorSessionId: true,
+        coordinatorWorkspaceId: true,
+        coordinatorSession: { select: { id: true, deletedAt: true } },
+      },
+    });
+    if (!project) throw new NotFoundException('project not found');
+
+    // Trashed, not merely ended: reviving a session out of Trash behind the user's back would undo
+    // a deletion they performed deliberately.
+    if (project.coordinatorSession && !project.coordinatorSession.deletedAt) {
+      // Only when BOTH are known. A workspace deleted since the binding leaves `null` here (the FK
+      // is SET NULL), and "different from something we no longer know" is not a conflict anyone
+      // could act on — so that case returns the coordinator it has, which re-points nothing.
+      if (
+        workspaceId &&
+        project.coordinatorWorkspaceId &&
+        workspaceId !== project.coordinatorWorkspaceId
+      ) {
+        throw new ConflictException(ProjectsService.ELSEWHERE);
+      }
+      return {
+        sessionId: project.coordinatorSession.id,
+        created: false,
+        workspaceId: project.coordinatorWorkspaceId,
+      };
+    }
+
+    // Where a replacement opens, in the order the answers are trustworthy: what the caller said,
+    // then where this project's coordinator ran last, then where its work runs.
+    //
+    // The middle one is why `coordinatorWorkspaceId` is a column rather than a derived value. A
+    // project whose coordinator was trashed and reopened lands back in the same workspace, which is
+    // the whole point of having recorded it — skipping straight to the busiest assignee would move
+    // the coordinator on the most ordinary path there is, and move it silently, which is the exact
+    // migration the 409 above exists to refuse.
+    const runIn =
+      workspaceId ?? (await this.lastCoordinatorWorkspace(ownerId, project)) ?? (await this.busiestAssignee(id));
+    if (!runIn) {
+      throw new BadRequestException(
+        'no workspace to open the coordinator in — none of this project’s tasks has an assignee ' +
+          'to borrow one from. Assign a task, or pass workspaceId.',
+      );
+    }
+
+    // Ownership, soft-deletion, "is it disabled" and "is it bound to a runner" are all checked by
+    // sessions.create, which is the only thing that may build a session row. Re-deriving any of
+    // that here would be a second opinion on a question that already has an owner.
+    const session = await this.sessions.create(
+      ownerId,
+      {
+        workspaceId: runIn,
+        title: `协调：${project.title}`.slice(0, 80),
+        prompt: ProjectsService.buildCoordinatorOpening(project.title, project.id),
+      },
+      { source: 'user' },
+    );
+
+    // Written only after the session exists, so a failed create leaves the project exactly as it
+    // was rather than pointing at a session that was never made — and written as a compare-and-swap
+    // against the pointer this call read, not as an unconditional update. Two people opening the
+    // coordinator at once both see it unbound and both write; the swap is what makes exactly one
+    // of those writes land, in the database rather than in this process.
+    //
+    // The condition is the value we READ rather than "still null", because the reuse path above
+    // also replaces a trashed session — swapping on what we saw covers both without a second branch.
+    //
+    // A row lock held across the create would avoid the wasted session altogether. Not here, for
+    // the reason the console gives: sessions.create is heavy, Prisma's interactive transactions
+    // time out at five seconds, and holding a lock across one trades a rare harmless race for a
+    // rarer and far more confusing failure.
+    // `ownerId` is in the swap as well as the id. The project was resolved by owner above, so this
+    // cannot currently narrow anything — it is here because this is a WRITE, and a write that
+    // carries its own tenant scope stays correct if the read above is ever moved, cached or
+    // refactored into something that does not.
+    const claimed = await this.prisma.project.updateMany({
+      where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
+      data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
+    });
+    if (claimed.count === 0) {
+      // We lost. Discard the session this call made BEFORE deciding anything else, so that every
+      // path out of here — adopted, conflicted, or retryable — has already dealt with it. If the
+      // discard itself fails, this throws rather than returning: reporting success while a live
+      // agent sits in a workspace nobody points at is the one outcome that must never be reachable.
+      await this.discardLoser(ownerId, session.id);
+
+      const winner = await this.prisma.project.findFirst({
+        where: { id, ownerId },
+        select: {
+          coordinatorWorkspaceId: true,
+          coordinatorSession: { select: { id: true, deletedAt: true } },
+        },
+      });
+      // Adopted only if it is a conversation the caller can actually open. A pointer that is empty
+      // again, or that leads into Trash, is not something to hand back as this project's
+      // coordinator — the caller would get an id it cannot use and a `created: false` saying that
+      // was the intended answer. Both are transient, so both say "try again".
+      if (!winner?.coordinatorSession || winner.coordinatorSession.deletedAt) {
+        throw new ConflictException(
+          'this project’s coordinator changed while one was being opened for it — try again',
+        );
+      }
+      // The cross-workspace contract holds however the binding got there. Losing a race is not a
+      // reason to hand back a coordinator somewhere the caller did not ask for and would have been
+      // refused a moment earlier — the answer to "not where you asked" must not depend on timing.
+      if (
+        workspaceId &&
+        winner.coordinatorWorkspaceId &&
+        workspaceId !== winner.coordinatorWorkspaceId
+      ) {
+        throw new ConflictException(ProjectsService.ELSEWHERE);
+      }
+      return {
+        sessionId: winner.coordinatorSession.id,
+        created: false,
+        workspaceId: winner.coordinatorWorkspaceId,
+      };
+    }
+    return { sessionId: session.id, created: true, workspaceId: runIn };
+  }
+
+  /**
+   * Get rid of a coordinator this call created and then lost the race to bind.
+   *
+   * `remove` rather than `end`, which is the difference between a finished session and one that is
+   * gone: the loser is a conversation nobody will ever open — no project points at it and nothing
+   * links to it — so leaving it in Open is litter that looks exactly like a real coordinator. The
+   * soft delete also recycles the runtime on its way out (it ends the session first, exactly as
+   * `end` would), so this is strictly more cleanup, not different cleanup. Nothing is destroyed:
+   * the row, the transcript and the billing stay, and it is restorable from Trash.
+   *
+   * A failure here is re-thrown, never swallowed. The whole reason the loser is discarded is that
+   * an unreferenced live session must not exist; a caught-and-ignored failure would report success
+   * in precisely the case where that guarantee was not met. The id is logged first, because at that
+   * point it is the only place the orphan is named — the caller's retry will resolve the winner and
+   * never mention this session again.
+   */
+  private async discardLoser(ownerId: string, sessionId: string): Promise<void> {
+    try {
+      await this.sessions.remove(ownerId, sessionId);
+    } catch (e) {
+      this.logger.error(
+        `lost the coordinator race and could not discard session ${sessionId} — it may still be ` +
+          'live and is bound to no project',
+        e instanceof Error ? e.stack : String(e),
+      );
+      throw e;
+    }
+  }
+
+  /**
+   * Where this project's previous coordinator ran, if that workspace can still run one.
+   *
+   * Checked for liveness rather than trusted. Workspaces are SOFT-deleted, so the FK's SET NULL
+   * never fires for one and the column goes on naming a workspace `sessions.create` will refuse —
+   * which would turn every replacement on that project into a 403, with the borrow-a-workspace
+   * fallback sitting right there unused. Only the DERIVED value is filtered this way: an explicit
+   * `workspaceId` is the caller's own claim and is left to fail loudly if it is wrong.
+   */
+  private async lastCoordinatorWorkspace(
+    ownerId: string,
+    project: { coordinatorWorkspaceId: string | null },
+  ): Promise<string | null> {
+    if (!project.coordinatorWorkspaceId) return null;
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: project.coordinatorWorkspaceId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    return workspace?.id ?? null;
+  }
+
+  /**
+   * The workspace most of this project's tasks are assigned to, or null.
+   *
+   * A coordinator is a conversation about the project, so it belongs where the project's work
+   * actually runs. Soft-deleted workspaces are excluded rather than merely sorted last:
+   * `sessions.create` filters on `deletedAt: null`, so borrowing one produces a coordinator that
+   * cannot be opened at all — a 403 in place of the 400 that would at least have said what to do.
+   */
+  private async busiestAssignee(projectId: string): Promise<string | null> {
+    const rows = await this.prisma.task.groupBy({
+      by: ['assigneeId'],
+      where: { projectId, assigneeId: { not: null }, assignee: { deletedAt: null } },
+      _count: { _all: true },
+      orderBy: { _count: { assigneeId: 'desc' } },
+      take: 1,
+    });
+    return rows[0]?.assigneeId ?? null;
+  }
+
+  /**
+   * The opening message of a project's coordinator.
+   *
+   * Self-contained, because the agent reading it has no idea which project it is in or that a
+   * coordinator is a thing — so it names the project and carries its id, which is the only thing
+   * in the message that ties the conversation back to a row.
+   *
+   * It claims no tools. This slice binds a session to a project and stops there: nothing yet
+   * exposes "start this task", "file a subtask" or a project read to a runner, and a prompt that
+   * told the agent otherwise would produce an opening turn spent hunting for tools that are not
+   * there — and, worse, a confident report assembled from whatever it found instead.
+   */
+  private static buildCoordinatorOpening(title: string, projectId: string): string {
+    return (
+      `你是项目「${title}」（id: ${projectId}）的协调会话。\n\n` +
+      `这里用来跟进这个项目的进展、协调它下面的任务，不是用来替它干活的。项目本身记着目标、验收标准和作业指导，` +
+      `任务记着各自的状态、层级和归属——请先把这两样读一遍，弄清楚现在停在哪里，再简短汇报现状。\n\n` +
+      `现阶段你只负责读和说：不要假设自己手上有能直接开跑任务、改任务状态或指挥 runner 的工具。` +
+      `需要动的地方，说清楚该动什么、为什么，由我来决定。`
+    );
   }
 
   /** Each field is written only when the caller sent it, so closing a project cannot blank the goal

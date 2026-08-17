@@ -470,6 +470,7 @@ model Workspace {
   sessions      Session[]
   assignedTasks Task[] // tasks assigned to run in this workspace
   foremanFor    TaskList[] @relation("TaskListForeman") // lists whose coordination runs here
+  coordinatorForProjects Project[] @relation("ProjectCoordinatorWorkspace") // projects coordinated here
   // Service tokens pinned to this workspace (see ServiceToken).
   serviceTokens ServiceToken[]
   // What this workspace always allows without asking again (see WorkspacePermissionRule).
@@ -773,6 +774,8 @@ model Session {
   createdTasks          Task[]                 @relation("TaskCreatorSession")
   taskListRevisions     TaskListRevision[]     @relation("TaskListRevisionAuthorSession")
   consoleForLists       TaskList[]             @relation("TaskListConsole")
+  // At most one, enforced by the unique index behind Project.coordinatorSessionId.
+  coordinatorForProject Project?               @relation("ProjectCoordinator")
   attachments           Attachment[]
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
@@ -1068,12 +1071,41 @@ model Project {
 
   status ProjectStatus @default(OPEN)
 
+  /// The session this project is coordinated from — one durable conversation per project, resolved
+  /// or created by `POST /projects/:id/coordinator`.
+  ///
+  /// A pointer, never a dependency, exactly as `TaskList.ownerSessionId` is: nothing on the
+  /// dispatch path reads it, so a coordinator that dies, fails or is deleted cannot stall a single
+  /// one of this project's tasks. `@unique` states the other half of the binding — a session
+  /// coordinates at most one project — and gives the reverse lookup its index. NULLs are exempt
+  /// from a Postgres unique index, so any number of projects may have no coordinator.
+  ///
+  /// SetNull on delete, which is what makes "deleted, so replaceable" true at the database rather
+  /// than only in the service: losing the conversation empties the pointer, and the next request
+  /// opens a new one. Cascade would delete the PROJECT — every task's `project_id` is RESTRICT, so
+  /// it would not even succeed; it would make deleting a session fail against work it never touched.
+  coordinatorSessionId   String?    @unique @map("coordinator_session_id") @db.Uuid
+  coordinatorSession     Session?   @relation("ProjectCoordinator", fields: [coordinatorSessionId], references: [id], onDelete: SetNull)
+  /// Where that conversation was opened, recorded at bind time rather than read back off the
+  /// session (`Session.workspaceId` is nullable and belongs to the session's own lifecycle). It is
+  /// what a second request naming a DIFFERENT workspace is compared against — that is a 409, not a
+  /// silent migration, because moving a coordinator is a decision with a conversation attached to
+  /// it. SetNull for the reason above: a deleted workspace loses the record of where, not the
+  /// coordinator.
+  coordinatorWorkspaceId String?    @map("coordinator_workspace_id") @db.Uuid
+  coordinatorWorkspace   Workspace? @relation("ProjectCoordinatorWorkspace", fields: [coordinatorWorkspaceId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tasks Task[]
 
   @@index([ownerId])
+  // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
+  // and the referencing one never, so without this every workspace delete has to scan project to
+  // find the rows its SET NULL applies to. (`coordinatorSessionId` needs no entry here — its
+  // `@unique` already is one.)
+  @@index([coordinatorWorkspaceId])
   @@map("project")
 }
 

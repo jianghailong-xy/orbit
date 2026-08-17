@@ -1,5 +1,6 @@
 import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ProjectStatus } from '@orbit/shared';
+import { IsPublicId } from '../common/public-id';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
 
@@ -49,4 +50,16 @@ export class UpdateProjectDto {
    *  a filing state — moving a project out of somebody's way is a separate concern that must not
    *  be spelled by overwriting what happened to the work. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
+}
+
+export class OpenProjectCoordinatorDto {
+  /**
+   * Where to run the conversation. Optional: it falls back to the workspace most of this project's
+   * tasks already run in.
+   *
+   * On a project that already HAS a coordinator this is not a request to move it — a value that
+   * differs from where the binding was made is a 409, so passing one is a way of stating which
+   * workspace you believed you were opening, not of changing it.
+   */
+  @IsOptional() @IsPublicId() workspaceId?: string;
 }

@@ -9,8 +9,10 @@ const { PrismaClientKnownRequestError } = Prisma;
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000a1';
 
+// No sessions stub: nothing exercised here opens one. `coordinator` is the only path that does,
+// and it has its own file (project-coordinator.spec.ts).
 function serviceWith(prisma: unknown): ProjectsService {
-  return new ProjectsService(prisma as never);
+  return new ProjectsService(prisma as never, {} as never);
 }
 
 test('create files the project against the caller and stores blank prose as null', async () => {
