@@ -740,14 +740,23 @@ struct AgentSessionRow: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Text(session.title ?? "Untitled session").lineLimit(1)
-                SessionTagDots(tags: session.tags ?? [])
                 Spacer(minLength: 8)
                 liveIndicator
                 if let rel = relTime {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             }
-            Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+            // Named tags lead the second line and the preview follows them — the same trade web
+            // makes (see `session-sub`). They sat beside the title as bare dots, but the title line
+            // is already carrying the live cue and the timestamp, so chips there truncate the title;
+            // the preview is the echo of a reply rather than the handle you file a session under, so
+            // it's the one that yields (the chips are fixed-size, web's `flex: none`).
+            HStack(spacing: 7) {
+                if let tags = session.tags, !tags.isEmpty {
+                    SessionTagChips(tags: tags)
+                }
+                Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+            }
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its
