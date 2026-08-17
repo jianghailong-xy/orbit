@@ -7,34 +7,19 @@ import OrbitKit
 // session row's "Tags…" action (see SessionRowActions) and filtered/grouped in AgentPanes.
 
 extension Color {
-    /// `#RRGGBB` → components in 0…1, or nil when malformed, so callers can fall back rather than
-    /// crash a row on bad data.
-    private static func tagComponents(_ hex: String) -> (r: Double, g: Double, b: Double)? {
-        let s = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        return (Double((v >> 16) & 0xFF) / 255,
-                Double((v >> 8) & 0xFF) / 255,
-                Double(v & 0xFF) / 255)
-    }
-
     /// A Color from a `#RRGGBB` hex (the session-tag palette). Falls back to gray on a malformed
     /// value so a row never crashes on bad data.
     init(tagHex hex: String) {
-        guard let c = Self.tagComponents(hex) else { self = .gray; return }
-        self.init(red: c.r, green: c.g, blue: c.b)
+        guard let c = TagChipColor.components(hex: hex) else { self = .gray; return }
+        self.init(red: c.red, green: c.green, blue: c.blue)
     }
 
-    /// The same tag colour used as chip *text*: blended toward black in light mode / white in dark.
-    /// The raw palette colour is a swatch, not a label — `#FFCC00` on white measures about 1.4:1,
-    /// so the name would read as a smudge. The dot keeps the raw colour, which is what actually
-    /// carries the hue. (Web tints with `color-mix`; SwiftUI has no equivalent, hence the blend.)
+    /// The same tag colour used as chip *text* — a legible shade of it rather than the raw hex; see
+    /// `TagChipColor`, which web's `lib/tagColor` mirrors. Falls back to the row's secondary text
+    /// colour on a malformed hex: unusual, but never unreadable.
     init(tagLabelHex hex: String, dark: Bool) {
-        guard let c = Self.tagComponents(hex) else { self = .secondary; return }
-        let target: Double = dark ? 1 : 0
-        let amount: Double = dark ? 0.30 : 0.28
-        self.init(red: c.r + (target - c.r) * amount,
-                  green: c.g + (target - c.g) * amount,
-                  blue: c.b + (target - c.b) * amount)
+        guard let c = TagChipColor.label(hex: hex, dark: dark) else { self = .secondary; return }
+        self.init(red: c.red, green: c.green, blue: c.blue)
     }
 }
 
@@ -118,9 +103,10 @@ struct SessionTagChips: View {
         }
         .padding(.horizontal, 7)
         .frame(height: height)
-        // A 14% wash disappears into a near-black row, so dark mode takes a stronger one — the
-        // same split web makes between its light and dark `.session-tag-chip`.
-        .background(Color(tagHex: t.color).opacity(scheme == .dark ? 0.22 : 0.14), in: Capsule())
+        // The wash the label colour was measured against — a stronger one in dark, where 13% over a
+        // near-black row is invisible (web's `.session-tag-chip` splits the same way).
+        .background(Color(tagHex: t.color)
+            .opacity(TagChipColor.backgroundOpacity(dark: scheme == .dark)), in: Capsule())
     }
 }
 
