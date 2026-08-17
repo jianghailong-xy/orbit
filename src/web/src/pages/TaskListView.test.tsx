@@ -34,13 +34,20 @@ const task = (id: string, title: string) => ({
  * fetched the list whole (GET /task-lists/:id, which embeds every task) would find nothing here
  * and render its empty state — which is what makes these assertions worth making.
  */
-function renderList(page: unknown, lists: { id: string; title: string }[]) {
+function renderList(
+  page: unknown,
+  lists: { id: string; title: string }[],
+  scopeCounts?: unknown,
+) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(['task-lists'], lists);
   qc.setQueryData(['tasks', 'page', { filter: 'ALL', query: '', listId: LIST_ID }], {
     pages: [page],
     pageParams: [null],
   });
+  // The tallies are their own query, keyed by scope rather than by tab — seeded separately here
+  // for the same reason they exist separately in the app.
+  if (scopeCounts) qc.setQueryData(['tasks', 'counts', LIST_ID, []], scopeCounts);
   return renderToStaticMarkup(
     <QueryClientProvider client={qc}>
       <AntApp>
@@ -125,12 +132,31 @@ describe('opening one task list', () => {
         items: [task('1', 'Download shard 000'), task('2', 'Download shard 001')],
         nextCursor: 'cursor-2',
         total: counts.total,
-        counts,
+      },
+      [{ id: LIST_ID, title: 'FineWeb Parquet' }],
+      counts,
+    );
+
+    // Anchored on the elements that make the claim. A bare toContain('19702') passed even after
+    // the progress bar stopped rendering entirely, because the "Load more (2 of 19702)" button
+    // happens to carry the same number.
+    expect(html).toMatch(/task-progress-text[^]*?19702/);
+    expect(html).toMatch(/seg-count">19702</);
+  });
+
+  // Without its own query the tallies rode on the paged one, which is keyed by filter — so
+  // switching tab emptied them and the progress bar vanished until the next page arrived.
+  it('renders no tallies at all when only the page is known', () => {
+    const html = renderList(
+      {
+        items: [task('1', 'Download shard 000')],
+        nextCursor: null,
+        total: counts.total,
       },
       [{ id: LIST_ID, title: 'FineWeb Parquet' }],
     );
 
-    expect(html).toContain('19702');
+    expect(html).not.toContain('task-progress-text');
   });
 
   it('does not call a list missing on the strength of a stale index', () => {

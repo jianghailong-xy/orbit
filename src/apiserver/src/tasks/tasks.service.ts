@@ -377,6 +377,19 @@ export interface ListTasksPageQuery {
   counts?: string;
 }
 
+/** The scope-wide tallies: identical for every tab, because none of them reads a filter. */
+export interface TaskCounts {
+  total: number;
+  open: number;
+  inProgress: number;
+  done: number;
+  failed: number;
+  cancelled: number;
+  running: number;
+  queued: number;
+  runnable: number;
+}
+
 export interface LabelSummaryQuery {
   listId?: string;
   assigneeId?: string;
@@ -1271,8 +1284,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
 
     const countsMode = query.counts?.trim().toLowerCase();
-    if (countsMode !== undefined && countsMode !== 'none') {
-      throw new BadRequestException("counts must be 'none' when set");
+    if (countsMode !== undefined && countsMode !== 'none' && countsMode !== 'total') {
+      throw new BadRequestException("counts must be 'none' or 'total' when set");
     }
 
     const status = query.status?.trim().toUpperCase();
@@ -1329,15 +1342,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
       : filteredWhere;
 
-    // `counts=none` drops the whole aggregate block. The counts describe the scope, not the
-    // page, so every page after the first recomputes numbers the client already has — and the
-    // client only ever reads them off page 1. Opt-in (rather than "skip when a cursor is set")
-    // because `counts` is a required field for already-shipped native clients.
-    const wantCounts = countsMode !== 'none';
+    // Three levels, because the response carries two different kinds of number.
+    //
+    // `counts` is scope-wide: no status filter, no search. It is the same for every tab, so a
+    // client that keeps it never needs it again until the scope changes — `counts=total` says
+    // so, and skips four aggregates over the whole task table.
+    //
+    // `total` is the filtered count, which does move with the tab and the search box, so it
+    // stays available at `total` and above. `counts=none` drops both and is what paging uses.
+    //
+    // Opt-in rather than "skip when a cursor is set", because `counts` is a required field for
+    // already-shipped native clients.
+    const wantCounts = countsMode === undefined;
+    const wantTotal = countsMode !== 'none';
     // On the Ready tab the filtered total IS the runnable count; count it once and share it.
     // A title search narrows the filtered total but deliberately not the tab badge, so that
     // case still needs its own count.
-    const [rows, ownFilteredTotal, statusGroups, running, queued, runnable] = await Promise.all([
+    const [rows, ownFilteredTotal, counts] = await Promise.all([
       runnableOnly
         ? this.runnableTaskPage(scopedWhere, { search, cursor, take: limit + 1 })
         : this.prisma.task.findMany({
@@ -1346,29 +1367,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             take: limit + 1,
             select: TASK_LIST_SELECT,
           }),
-      !wantCounts || (runnableOnly && !search)
+      // On the Ready tab the filtered total IS the runnable count, which the counts block
+      // already has; a title search narrows the filtered total but deliberately not the tab
+      // badge, so that case still needs its own count.
+      !wantTotal || (runnableOnly && !search)
         ? undefined
         : runnableOnly
           ? this.runnableTaskCount(scopedWhere, search)
           : this.prisma.task.count({ where: filteredWhere }),
-      wantCounts
-        ? this.prisma.task.groupBy({ by: ['status'], where: scopedWhere, _count: { _all: true } })
-        : undefined,
-      wantCounts
-        ? this.prisma.task.count({
-            where: { ...scopedWhere, sessions: { some: { status: RunStatus.RUNNING } } },
-          })
-        : undefined,
-      wantCounts
-        ? this.prisma.task.count({
-            where: {
-              ...scopedWhere,
-              sessions: { some: { status: RunStatus.PENDING } },
-              NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
-            },
-          })
-        : undefined,
-      wantCounts ? this.runnableTaskCount(scopedWhere) : undefined,
+      wantCounts ? this.scopeCounts(scopedWhere) : undefined,
     ]);
 
     const hasMore = rows.length > limit;
@@ -1383,23 +1390,72 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     const nextCursor =
       hasMore && items.length ? encodeTaskPageCursor(items[items.length - 1]) : null;
-    if (!wantCounts) return { items, nextCursor };
+    if (!wantTotal) return { items, nextCursor };
+    // On Ready without a search the runnable count is the filtered total — but only the full
+    // block carries it, so `counts=total` there falls back to what the page itself showed.
+    const total = ownFilteredTotal ?? counts?.runnable ?? items.length;
+    if (!wantCounts) return { items, nextCursor, total };
+    return { items, nextCursor, total, counts };
+  }
 
-    const groups = statusGroups ?? [];
-    const byStatus = new Map(groups.map((group) => [group.status, group._count._all]));
-    const counts = {
-      total: groups.reduce((sum, group) => sum + group._count._all, 0),
+  /**
+   * The scope-wide tallies behind the progress bar and the tab badges.
+   *
+   * Every one of these reads `scope` alone — no status filter, no search term — which is exactly
+   * why they belong to the scope and not to whichever tab is open. Extracted so the paged list
+   * and the standalone counts endpoint compute them from one definition rather than two that can
+   * drift apart.
+   */
+  private async scopeCounts(scope: Prisma.TaskWhereInput): Promise<TaskCounts> {
+    const [statusGroups, running, queued, runnable] = await Promise.all([
+      this.prisma.task.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
+      this.prisma.task.count({
+        where: { ...scope, sessions: { some: { status: RunStatus.RUNNING } } },
+      }),
+      this.prisma.task.count({
+        where: {
+          ...scope,
+          sessions: { some: { status: RunStatus.PENDING } },
+          NOT: { sessions: { some: { status: RunStatus.RUNNING } } },
+        },
+      }),
+      this.runnableTaskCount(scope),
+    ]);
+    const byStatus = new Map(statusGroups.map((group) => [group.status, group._count._all]));
+    return {
+      total: statusGroups.reduce((sum, group) => sum + group._count._all, 0),
       open: byStatus.get(TaskStatus.OPEN) ?? 0,
       inProgress: byStatus.get(TaskStatus.IN_PROGRESS) ?? 0,
       done: byStatus.get(TaskStatus.DONE) ?? 0,
       failed: byStatus.get(TaskStatus.FAILED) ?? 0,
       cancelled: byStatus.get(TaskStatus.CANCELLED) ?? 0,
-      running: running ?? 0,
-      queued: queued ?? 0,
-      runnable: runnable ?? 0,
+      running,
+      queued,
+      runnable,
     };
+  }
 
-    return { items, nextCursor, total: ownFilteredTotal ?? counts.runnable, counts };
+  /**
+   * The tallies on their own, so a client can hold them across tab changes.
+   *
+   * They cost four aggregates over the owner's whole task table, and they are identical for
+   * every tab — asking for them again with each tab's first page was recomputing a constant.
+   * Given their own request they are fetched once per scope and read from cache thereafter.
+   */
+  async taskCounts(ownerId: string, query: LabelSummaryQuery & { labels?: string | string[] } = {}) {
+    const scope: Prisma.TaskWhereInput = { ownerId };
+    if (query.listId === 'none') scope.listId = null;
+    else if (query.listId) {
+      if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
+      scope.listId = query.listId;
+    }
+    if (query.assigneeId) {
+      if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
+      scope.assigneeId = query.assigneeId;
+    }
+    const labelFilter = parseLabelsQuery(query.labels);
+    if (labelFilter.length) scope.labels = { hasEvery: labelFilter };
+    return this.scopeCounts(scope);
   }
 
   /**

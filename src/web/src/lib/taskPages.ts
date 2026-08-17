@@ -28,11 +28,14 @@ export interface TaskPageParams {
   labels?: string[];
   q?: string;
   /**
-   * `'none'` asks the server to skip the aggregate block. The counts are scope-wide, so every
-   * page past the first would recompute numbers the client already read off page 1 — and on a
-   * large account that block is the most expensive part of the request.
+   * How much of the aggregate block to compute.
+   *
+   * `'total'` keeps the filtered total — which does move with the tab and the search box — and
+   * skips the scope-wide counts, which do not: they are identical for every tab, so asking for
+   * them again with each tab's first page recomputes a constant over the whole task table.
+   * `'none'` drops both, which is all paging needs. Omitted asks for everything.
    */
-  counts?: 'none';
+  counts?: 'none' | 'total';
 }
 
 export function taskPagePath(params: TaskPageParams = {}): string {
@@ -85,4 +88,12 @@ export interface ActiveTasks<T = any> {
 
 export function activeTasksPath(listId?: string): string {
   return `/tasks/active${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`;
+}
+
+export function taskCountsPath(listId?: string, labels: string[] = []): string {
+  const search = new URLSearchParams();
+  if (listId) search.set('listId', listId);
+  for (const label of labels) search.append('labels', label);
+  const suffix = search.toString();
+  return `/tasks/counts${suffix ? `?${suffix}` : ''}`;
 }

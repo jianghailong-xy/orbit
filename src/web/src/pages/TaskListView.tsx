@@ -38,7 +38,7 @@ import {
   rememberTaskFilter,
   matchesTaskFilter,
 } from '../lib/taskFilters';
-import { activeTasksQuery, labelSummaryQuery } from '../lib/queries';
+import { activeTasksQuery, labelSummaryQuery, taskCountsQuery } from '../lib/queries';
 import type { LabelSummaryRow } from '../lib/taskPages';
 import { taskPagePath, type TaskCounts, type TaskPage } from '../lib/taskPages';
 import {
@@ -333,10 +333,11 @@ export function TaskListView() {
           listId: scopeListId,
           labels,
           q: query,
-          // Only page 1 carries the tab badges; the counts are scope-wide, so asking for them
-          // again on every subsequent page (and on every poll, which refetches all loaded
-          // pages) re-runs the request's most expensive queries for numbers already in hand.
-          counts: pageParam ? 'none' : undefined,
+          // Never the scope-wide block: that is its own request now, keyed by scope, so a tab
+          // change is a cache hit rather than four aggregates over the whole task table. Page 1
+          // still asks for `total`, which is the filtered count and does move with the tab and
+          // the search box; later pages need neither.
+          counts: pageParam ? 'none' : 'total',
         }),
       ),
     initialPageParam: null as string | null,
@@ -358,21 +359,11 @@ export function TaskListView() {
     () => (tasks.data?.pages ?? []).flatMap((page) => page.items),
     [tasks.data],
   );
-  // The tallies describe the scope — owner, list, labels — and the server computes them from a
-  // where-clause that contains no status filter and no search term. Switching tab therefore
-  // cannot change them. They arrive on the task query anyway, which is keyed by filter, so the
-  // act of switching emptied `data` and took the progress bar and every badge down with it until
-  // the new page landed. Carrying the last tallies for the same scope is not a cache trick: it
-  // restores the lifetime the numbers already have.
-  const countsScope = JSON.stringify([scopeListId ?? null, labels]);
-  const carriedCounts = useRef<{ scope: string; counts: TaskCounts } | null>(null);
-  const freshCounts = tasks.data?.pages[0]?.counts;
-  // Written during render on purpose: an effect would publish them a frame late, which is the
-  // flicker this exists to remove. The write is idempotent, so a double render is harmless.
-  if (freshCounts) carriedCounts.current = { scope: countsScope, counts: freshCounts };
-  const taskPageCounts =
-    freshCounts ??
-    (carriedCounts.current?.scope === countsScope ? carriedCounts.current.counts : undefined);
+  // The tallies have their own request, keyed by the scope they describe rather than by the tab.
+  // They survive a tab change because nothing about them changed — no carrying, no cache trick,
+  // just a query whose key says what it depends on.
+  const taskCounts = useQuery(taskCountsQuery(scopeListId, labels));
+  const taskPageCounts = taskCounts.data;
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no
   // request of its own and its entries can show what they would narrow to.

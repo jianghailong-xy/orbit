@@ -8,7 +8,14 @@ import {
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
-import { activeTasksPath, labelSummaryPath, type ActiveTasks, type LabelSummary } from './taskPages';
+import {
+  activeTasksPath,
+  labelSummaryPath,
+  taskCountsPath,
+  type ActiveTasks,
+  type LabelSummary,
+  type TaskCounts,
+} from './taskPages';
 
 export type { ConfiguredProvider };
 
@@ -302,4 +309,18 @@ export const activeTasksQuery = (listId?: string) =>
     queryKey: ['tasks', 'active', listId ?? null] as const,
     queryFn: () => api<ActiveTasks>(activeTasksPath(listId)),
     refetchInterval: 5_000,
+  });
+
+/**
+ * The progress bar and the tab badges, keyed by the scope they describe.
+ *
+ * Not by the tab: the server computes these from a where-clause with no status filter and no
+ * search term, so every tab sees the same numbers. Keyed this way, switching tab is a cache hit
+ * and the four aggregates behind them run once per scope instead of once per tab.
+ */
+export const taskCountsQuery = (listId?: string, labels: string[] = []) =>
+  queryOptions({
+    queryKey: ['tasks', 'counts', listId ?? null, labels] as const,
+    queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels)),
+    staleTime: 10_000,
   });

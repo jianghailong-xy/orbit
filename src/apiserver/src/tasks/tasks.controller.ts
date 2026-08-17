@@ -71,6 +71,18 @@ export class TasksController {
     });
   }
 
+  // The tab badges and the progress bar, on their own. They are identical for every tab, so a
+  // client holds them across tab changes instead of asking for them with each tab's first page.
+  @Get('counts')
+  taskCounts(
+    @CurrentUser() user: AuthUser,
+    @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+    @Query('assigneeId', PublicIdPipe) assigneeId?: string,
+    @Query('labels') labels?: string | string[],
+  ) {
+    return this.tasks.taskCounts(user.userId, { listId, assigneeId, labels });
+  }
+
   // Above :id, like "page" and "labels" — none of these literals is a task uuid.
   @Get('active')
   activeTasks(
