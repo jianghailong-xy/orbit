@@ -23,7 +23,7 @@ import {
   Spin,
   Tooltip,
 } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, openTaskListConsole } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
@@ -74,6 +74,14 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
   if (target.isContentEditable || target.tagName === 'TEXTAREA') return true;
   return target instanceof HTMLInputElement && !NON_TEXT_INPUT_TYPES.has(target.type);
 };
+
+/**
+ * How many pages scrolling will pull in before it hands back to the reader.
+ *
+ * Ten pages is 2,000 rows, which measured at ~49k DOM nodes and ~510MB of heap — heavy but
+ * usable. The next few pages are where it stops being usable, and a 27k-row list has 137 of them.
+ */
+const MAX_AUTOLOADED_PAGES = 10;
 
 // What the header shows before the first page (which carries the scope-wide tallies) arrives.
 const EMPTY_TASK_COUNTS: TaskCounts = {
@@ -527,6 +535,46 @@ export function TaskListView() {
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a: any, b: any) => dir * compareTasksBy(a, b, sortField));
   }, [visibleRows, query, sortField, sortDir, activeRows]);
+
+  // Pull the next page when the end of the list comes into view, so a long list is read by
+  // scrolling rather than by finding a button 200 rows down and clicking it 137 times.
+  //
+  // Rooted on .tasks-body because that is the element that scrolls — the viewport never moves,
+  // so a document-rooted observer would never fire. The margin starts the fetch before the
+  // sentinel is actually on screen, which is what makes continuous scrolling feel continuous
+  // instead of stopping at every page boundary.
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  // Scrolling stops fetching by itself after this many pages. Rows are real DOM, and this list
+  // is 27k long: measured in a headless Chrome at 200 rows per page, 1,000 rows cost 24.7k DOM
+  // nodes and 332MB of heap, and 2,200 rows cost 53.5k nodes and 949MB. Left unbounded, reading
+  // to the end of a large list is not slow — it is a dead tab. Past the cap the button remains,
+  // so continuing is possible but deliberate, and the honest answer to "I cannot find it in
+  // 2,000 rows" is a filter rather than another 25,000 rows.
+  const autoPagesLoaded = tasks.data?.pages.length ?? 0;
+  const autoLoadExhausted = autoPagesLoaded >= MAX_AUTOLOADED_PAGES;
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !tasks.hasNextPage || tasks.isFetchingNextPage || autoLoadExhausted) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void tasks.fetchNextPage();
+      },
+      { root: sentinel.closest('.tasks-body'), rootMargin: '600px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+    // Re-armed after each page: the effect tears the observer down while a fetch is in flight
+    // and sets it up again once the new rows have landed, so one page is requested at a time
+    // even though the sentinel stays in view throughout.
+  }, [
+    tasks.hasNextPage,
+    tasks.isFetchingNextPage,
+    tasks.fetchNextPage,
+    autoLoadExhausted,
+    filter,
+    query,
+    view,
+  ]);
 
   // The progress bar and the tab badges describe the whole scope, not the pages loaded so far,
   // so they can only come from the server. Page 1 always carries them (`counts=none` is sent
@@ -1080,13 +1128,23 @@ export function TaskListView() {
                   rows.map((r: any) => renderRow(r))
                 )}
                 {tasks.hasNextPage && (
-                  <div style={{ gridColumn: '1 / -1', padding: '16px', textAlign: 'center' }}>
+                  // Also the scroll sentinel. The button stays because auto-loading is invisible
+                  // when it works and unrecoverable when it doesn't: it shows how far in you are,
+                  // and still loads the next page on click if the observer never fires.
+                  <div className="tasks-loadmore" ref={loadMoreRef}>
                     <Button
                       loading={tasks.isFetchingNextPage}
                       onClick={() => tasks.fetchNextPage()}
                     >
-                      Load more ({taskData.length} of {tasks.data?.pages[0]?.total ?? taskData.length})
+                      {tasks.isFetchingNextPage ? 'Loading' : 'Load more'} ({taskData.length} of{' '}
+                      {tasks.data?.pages[0]?.total ?? taskData.length})
                     </Button>
+                    {autoLoadExhausted && (
+                      <div className="tasks-loadmore-hint">
+                        Scrolling stops loading here to keep the page responsive — keep going with
+                        the button, or narrow the list with search, a label or a status tab.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
