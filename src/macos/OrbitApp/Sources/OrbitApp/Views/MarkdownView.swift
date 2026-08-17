@@ -320,64 +320,33 @@ private struct MarkdownImageView: View {
     // Every call site (assistant bubble, thinking block, tool card, approval plan) renders inside the
     // transcript's `AttachmentImageStore` environment — the same store `ChatAttachmentImage` reads.
     @Environment(AttachmentImageStore.self) private var store
-    // Live pane width (measured in `body`); `capWidth` clamps the image to it so a wide image can't
-    // push the transcript row past the screen edge — web's `100%` term (see `cap`).
-    @State private var paneWidth: CGFloat = 0
     #if os(iOS)
     // A tap opens the shared full-screen zoomable viewer, like a sent-image thumbnail.
     @State private var fullScreen = false
     #endif
 
-    // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`. `cap` is the fixed upper
-    // bound (the `760px` / `70vh` term); the render width also honours the pane via `capWidth` (the
-    // `100%` term). Without that clamp a landscape image scaled up to the 520pt cap overflowed a
-    // ~360pt phone pane and bled off both edges — the reported "image stretches the whole page" bug.
+    // web `.md-image { max-width: min(100%, 760px); max-height: 70vh }`, rendered at an exact fitted
+    // size (below) against a fixed cap — the same approach as the sibling `ChatAttachmentImage` /
+    // `ToolResultImageView` thumbnails. The iOS width cap stays comfortably under the narrowest phone
+    // content pane (~328pt on a mini), so a wide image can never push the transcript row past the
+    // screen edge; a tap opens the full-screen viewer for anything finer. (A pane-measuring version
+    // rendered edge-to-edge, but a `fullScreenCover` transition could hand its `GeometryReader` a
+    // stale / inset-free width that stuck, and the image overflowed again — a fixed cap is immune.)
     #if os(iOS)
-    private static let cap = CGSize(width: 520, height: 460)
+    private static let cap = CGSize(width: 300, height: 460)
     #else
     private static let cap = CGSize(width: 480, height: 360)
     #endif
 
-    /// The fixed width cap, but never wider than the pane (0 before the first geometry read → fall
-    /// back to the fixed cap; the read lands on the same layout pass).
-    private var capWidth: CGFloat {
-        paneWidth > 0 ? min(Self.cap.width, paneWidth) : Self.cap.width
-    }
-
-    /// Scale the source down to touch the (pane-clamped) cap (never up — web's `max-*` only shrinks),
-    /// keeping aspect, so the rounded border hugs the image with no letterbox margin (see
-    /// `ChatAttachmentImage`).
-    private func fitted(_ src: CGSize) -> CGSize {
-        guard src.width > 0, src.height > 0 else { return CGSize(width: capWidth, height: Self.cap.height) }
-        let k = min(capWidth / src.width, Self.cap.height / src.height, 1)
+    /// Scale the source down to touch the cap (never up — web's `max-*` only shrinks), keeping aspect,
+    /// so the rounded border hugs the image with no letterbox margin (see `ChatAttachmentImage`).
+    private static func fitted(_ src: CGSize) -> CGSize {
+        guard src.width > 0, src.height > 0 else { return cap }
+        let k = min(cap.width / src.width, cap.height / src.height, 1)
         return CGSize(width: src.width * k, height: src.height * k)
     }
 
     var body: some View {
-        // The pane is measured by a zero-height probe laid BESIDE the image, never by a
-        // `.background` behind it: a background is proposed the size of the view it backs, and
-        // `.frame(maxWidth: .infinity)` reports an oversized child's own width instead of clamping it
-        // (see MarkdownTableView). So a background reader measured the *image*, `capWidth` collapsed
-        // to `min(cap, cap)`, and the clamp silently died — a wide image again stretched the row (and
-        // its sibling paragraphs) past the screen edge, exactly the bug the clamp was added for. It
-        // only surfaced when the bytes were already decoded on the first layout pass (a revisited
-        // session, a recycled row); with a still-loading attachment the reader happened to measure the
-        // placeholder and read the true pane. `Color.clear` only ever takes the width the row
-        // proposes, so the probe reads the pane however wide the image wants to be.
-        // `onGeometryChange` is iOS 18+, so this uses the version-agnostic reader + `onChange`.
-        ZStack(alignment: .topLeading) {
-            GeometryReader { geo in
-                Color.clear.onChange(of: geo.size.width, initial: true) { _, w in paneWidth = w }
-            }
-            .frame(height: 0)
-            // The exact-framed image stays hugged to the leading edge — the empty trailing space
-            // (the outer `maxWidth: .infinity`) is inert.
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder private var content: some View {
         if let id = attachmentID {
             attachmentImage(id)
         } else if let url = remoteURL {
@@ -385,7 +354,7 @@ private struct MarkdownImageView: View {
                 switch phase {
                 case .success(let image):
                     image.resizable().scaledToFit()
-                        .frame(maxWidth: capWidth, maxHeight: Self.cap.height, alignment: .leading)
+                        .frame(maxWidth: Self.cap.width, maxHeight: Self.cap.height, alignment: .leading)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .overlay { RoundedRectangle(cornerRadius: 8).strokeBorder(.primary.opacity(0.08)) }
                 case .failure:
@@ -402,7 +371,7 @@ private struct MarkdownImageView: View {
     @ViewBuilder private func attachmentImage(_ id: String) -> some View {
         Group {
             if let img = store.image(for: id) {
-                let size = fitted(img.size)
+                let size = Self.fitted(img.size)
                 withPreview(
                     Image(platformImage: img)
                         .resizable().scaledToFit()
