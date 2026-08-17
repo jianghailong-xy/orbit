@@ -1275,10 +1275,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"title":     str,
 					"model":     str,
 					"provider":  map[string]interface{}{"type": "string", "description": "Run this session on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit to start where the target agent's project last started — an agent has no provider of its own."},
+					// The enum is what a model actually chooses from, so it lists only the modes this
+					// machine can run — a root runner drops "bypassPermissions", which claude refuses
+					// under root by exiting during startup. Offering it there is how a sub-session got
+					// created that could never produce a turn.
 					"permissionMode": map[string]interface{}{
 						"type":        "string",
-						"enum":        []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"},
-						"description": "How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask, \"dontAsk\"/\"bypassPermissions\" never ask. Omit to use the owner's account default. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching.",
+						"enum":        offeredPermissionModes(),
+						"description": strings.TrimSpace("How much the sub-session may do without a human: \"plan\" investigates and proposes without touching anything, \"default\" asks before each unapproved action, \"acceptEdits\" pre-approves file edits only, \"auto\" lets the model decide when to ask, \"dontAsk\"/\"bypassPermissions\" never ask. Omit to use the owner's account default. A mode that asks parks the sub-session on an approval card until a human answers, so pick one only if someone is watching. " + rootWithheldPermissionModeNote()),
 					},
 					"wait": map[string]interface{}{"type": "boolean", "description": "Block until the new session finishes its first turn (result ready), then return its full state. Default false — returns immediately; poll session_get."},
 				}, "prompt"),

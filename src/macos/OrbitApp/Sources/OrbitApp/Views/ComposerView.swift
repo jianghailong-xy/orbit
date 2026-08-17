@@ -127,6 +127,15 @@ struct ComposerView: View {
     /// row here also made the menu disagree with web, which offers it.
     private var permissionModeMenuItems: [PermissionMode] { AgentDefaults.permissionModes }
 
+    /// A mode this RUNNER cannot run is the one exception to the rule above, because that rule's
+    /// premise — the mode starts applying once the session moves somewhere that honors it — does not
+    /// hold here: a session cannot move machines. Bypass on a root runner is not awaiting its moment,
+    /// it is a session claude refuses to start. Shown but not selectable (web parity: the option
+    /// carries `disabled` rather than being filtered out), so the reason stays visible.
+    private func modeRunnable(_ mode: PermissionMode) -> Bool {
+        AgentDefaults.isRunnable(mode, runsAsRoot: console.runnerRunsAsRoot)
+    }
+
     /// Keep a stored project-defined OpenCode variant visible until a catalog explicitly says it
     /// is incompatible. This mirrors the model picker's preservation of non-catalog values.
     private var effortMenuItems: [Effort] {
@@ -335,6 +344,7 @@ struct ComposerView: View {
                         } label: {
                             menuItemLabel(AgentDefaults.label(mode), selected: mode == console.permissionMode)
                         }
+                        .disabled(!modeRunnable(mode))
                     }
                 } label: {
                     menuLabel(AgentDefaults.label(console.permissionMode))

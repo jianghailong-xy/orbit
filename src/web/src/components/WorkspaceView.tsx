@@ -165,6 +165,7 @@ import {
   derivePermissionSemantics,
   lastUserMessageText,
   MAX_PROMPT_CHARS,
+  permissionModeAvailableOnRunner,
   TRASH_RETENTION_DAYS,
 } from '@orbit/shared';
 import { planUsageRows } from '../lib/planUsage';
@@ -3931,9 +3932,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const permissionSemanticsFor = useCallback(
     (label: string) =>
       shownProviderIsBuiltin
-        ? derivePermissionSemantics(shownProvider, MODE_TO_PERMISSION[label], shownModel)
+        ? derivePermissionSemantics(
+            shownProvider,
+            MODE_TO_PERMISSION[label],
+            shownModel,
+            runner.runsAsRoot,
+          )
         : undefined,
-    [shownProvider, shownProviderIsBuiltin, shownModel],
+    [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot],
   );
   const shownModeSemantics = permissionSemanticsFor(shownMode);
   // Model, Mode & Effort can be changed any time on a live session (the runner must be
@@ -5403,14 +5409,29 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 }}
                 options={MODE_OPTIONS.map((m) => {
-                  // Every mode is offered on every engine, and none is ever disabled. A mode this
-                  // engine cannot honor is still the user's stored intent, and it starts being
-                  // enforced the moment the session moves to an engine that can — it just must not
-                  // read as a guarantee it isn't, so the option carries the caveat. The wording
-                  // comes from the shared table rather than being rebuilt here: a picker that
-                  // re-derives it is a picker that can contradict what dispatch will do.
-                  const shortNote = permissionSemanticsFor(m)?.shortNote;
-                  return { value: m, label: shortNote ? `${m} — ${shortNote}` : m };
+                  // A mode this ENGINE cannot honor is still offered, and never disabled: it is the
+                  // user's stored intent, and it starts being enforced the moment the session moves
+                  // to an engine that can — it just must not read as a guarantee it isn't, so the
+                  // option carries the caveat. The wording comes from the shared table rather than
+                  // being rebuilt here: a picker that re-derives it is a picker that can contradict
+                  // what dispatch will do.
+                  //
+                  // A mode this RUNNER cannot run is the one exception, and disabled rather than
+                  // annotated, because the premise above does not hold for it: a session cannot move
+                  // to another machine, so Bypass on a root runner is not a mode awaiting its moment
+                  // — claude exits during startup and the session never produces anything. Disabled
+                  // and not hidden, so the reason is visible instead of the option silently missing.
+                  const semantics = permissionSemanticsFor(m);
+                  const runnable = permissionModeAvailableOnRunner(
+                    MODE_TO_PERMISSION[m],
+                    runner.runsAsRoot,
+                  );
+                  const shortNote = semantics?.shortNote;
+                  return {
+                    value: m,
+                    label: shortNote ? `${m} — ${shortNote}` : m,
+                    disabled: !runnable,
+                  };
                 })}
                 disabled={!configEditable}
                 popupMatchSelectWidth={false}

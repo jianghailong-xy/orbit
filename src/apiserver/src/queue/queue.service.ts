@@ -221,7 +221,9 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
-        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+        assignedRunner: {
+          select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true },
+        },
         // The account-level permission default, which replaced the per-workspace one.
         owner: { select: { preferences: true } },
       },
@@ -396,11 +398,14 @@ export class QueueService {
         // Configured providers still borrow one of these runtimes, so the same runtime-level
         // guard applies to API/MCP/old-client input as it does to built-in identities; their
         // vendor-defined model space is exempt from the Claude allow-list though.
+        // The root check rides along here for the same reason: a Bypass default reaching a root
+        // runner is a session that exits during startup, and this is the last place before it does.
         permissionMode: normalizeBuiltinPermissionMode(
           provider,
           exec.model,
           permissionMode,
           customRow?.enabled === true,
+          session.assignedRunner?.runsAsRoot,
         ),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // An OpenCode variant is model-defined, so it is only checkable once the assigned

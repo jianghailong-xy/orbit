@@ -109,6 +109,11 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// Each engine CLI's install/sign-in state as of that heartbeat's probe (`orbit doctor`).
     /// Absent from an older server, and from a runner that hasn't reported one.
     public let engines: [RunnerEngineHealth]?
+    /// Whether this runner's process is root, which costs the machine one permission mode: claude
+    /// refuses Bypass under root and exits before its first message. Nil from an older server or a
+    /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
+    /// that works (see `AgentDefaults.isRunnable`).
+    public let runsAsRoot: Bool?
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {

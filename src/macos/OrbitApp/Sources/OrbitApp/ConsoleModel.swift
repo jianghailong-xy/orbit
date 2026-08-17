@@ -156,6 +156,10 @@ final class ConsoleModel {
     /// choice is a claim about that machine, so the picker greys out what it says can't run there.
     /// Nil until the runner read lands (and from an older server), which claims nothing.
     private(set) var runnerEngines: [RunnerEngineHealth]?
+    /// Whether this session's runner is deployed as root, which withdraws one permission mode from
+    /// the composer's Mode menu (`AgentDefaults.isRunnable`). Same nil semantics as the engines
+    /// above: not reported claims nothing, so no mode is withdrawn on a guess.
+    private(set) var runnerRunsAsRoot: Bool?
     /// Control-plane–configured providers (custom slugs borrowing a built-in runtime) — this
     /// session's provider may be one, so the composer's model menu/pill and the context gauge
     /// merge them in. Loaded with the footer context; left empty by an older server without
@@ -683,10 +687,12 @@ final class ConsoleModel {
                 runnerPlanUsage = r.planUsage
                 modelCatalog = r.modelCatalog
                 runnerEngines = r.engines
+                runnerRunsAsRoot = r.runsAsRoot
             } else {
                 runnerPlanUsage = nil
                 modelCatalog = nil
                 runnerEngines = nil
+                runnerRunsAsRoot = nil
             }
         }
         applySlashItems(from: sessionRunner)
@@ -1288,10 +1294,12 @@ final class ConsoleModel {
                 runtimeDefaults = r.runtimeDefaultModels
                 runnerSnapshotLoaded = true
                 runnerEngines = r.engines
+                runnerRunsAsRoot = r.runsAsRoot
             } else {
                 runnerPlanUsage = nil
                 modelCatalog = nil
                 runnerEngines = nil
+                runnerRunsAsRoot = nil
             }
         }
         if let providers = try? await api.providers() {

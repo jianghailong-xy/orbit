@@ -484,6 +484,20 @@ public enum AgentDefaults {
 
     public static let permissionModes = PermissionMode.allCases
 
+    /// Modes a runner deployed as root cannot run at all. Mirrors `ROOT_REFUSED_PERMISSION_MODES`
+    /// in shared/permissionSemantics.ts: claude refuses Bypass under root ("--dangerously-skip-
+    /// permissions cannot be used with root/sudo privileges") and exits inside its own startup, so
+    /// the session dies on its first turn having produced nothing. Every other mode starts normally
+    /// as root, which is why this is one entry and not "the unsafe ones".
+    public static let rootRefusedPermissionModes: Set<PermissionMode> = [.bypass]
+
+    /// Whether a runner can actually run a mode. `runsAsRoot` is optional on purpose: nil is a
+    /// runner that has not reported, and reads as unrestricted rather than withdrawing a mode that
+    /// works today.
+    public static func isRunnable(_ mode: PermissionMode, runsAsRoot: Bool?) -> Bool {
+        runsAsRoot == true ? !rootRefusedPermissionModes.contains(mode) : true
+    }
+
     /// The posture a run gets when nobody said. Mirrors `DEFAULT_PERMISSION_MODE` in
     /// apiserver/src/common/permission-mode.ts: the server resolves this same floor at dispatch,
     /// so a pill showing anything else misreports what the runtime is about to do.

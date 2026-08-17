@@ -202,6 +202,12 @@ model Runner {
   // kept separate from modelCatalog because availability and selected-default are independent.
   // Shape: { "claude": "claude-opus-5", "codex": "gpt-5.6-sol", ... }.
   runtimeDefaultModels Json?     @map("runtime_default_models")
+  // Whether this runner's process is root, reported each heartbeat. Capability state, not a
+  // setting: Claude Code refuses Bypass under root and exits before its first message, so this is
+  // what lets the pickers and dispatch withdraw that one mode (ROOT_REFUSED_PERMISSION_MODES).
+  // NULL means a runner too old to report it, which stays unrestricted — "we don't know" must not
+  // remove a mode that works today.
+  runsAsRoot        Boolean?     @map("runs_as_root")
   // State of the shared checkouts this machine's agents work in, reported each heartbeat.
   // Array of @orbit/shared RunnerRepoHealth. Session worktrees are isolated; the checkout they
   // fork from and merge into is not, so a half-finished merge left there blocks every merge on

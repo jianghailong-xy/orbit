@@ -1,4 +1,10 @@
-import { AgentProvider, PermissionMode, autoAvailable } from '@orbit/shared';
+import {
+  AgentProvider,
+  PermissionMode,
+  ROOT_FALLBACK_PERMISSION_MODE,
+  autoAvailable,
+  permissionModeAvailableOnRunner,
+} from '@orbit/shared';
 import { runtimeCatalogReasoningLevels } from './runtime-model';
 
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
@@ -40,13 +46,23 @@ export function initializesRuntimeDynamically(provider?: string | null): boolean
  *
  * `customProvider` is true when the model came from an enabled configured ModelProvider row; its
  * model space is vendor-defined, so the static Claude allow-list cannot police it and the CLI
- * decides for itself (it accepts Auto for any model it doesn't recognize as unsupported). */
+ * decides for itself (it accepts Auto for any model it doesn't recognize as unsupported).
+ *
+ * `runsAsRoot` is the assigned runner's report about itself. It gates Bypass, which Claude Code
+ * refuses under root by exiting during startup — so unlike the Auto case this is not a mode that
+ * merely goes unenforced, it is a session that never runs at all. Substituting here rather than
+ * rejecting is what keeps an *account-level* Bypass default from failing every session on a root
+ * runner; a caller that named Bypass explicitly is told instead (assertPermissionModeRunnable). */
 export function normalizeBuiltinPermissionMode(
   provider: AgentProvider,
   model: string,
   permissionMode: PermissionMode,
   customProvider = false,
+  runsAsRoot?: boolean | null,
 ): PermissionMode {
+  if (!permissionModeAvailableOnRunner(permissionMode, runsAsRoot)) {
+    return ROOT_FALLBACK_PERMISSION_MODE;
+  }
   if (permissionMode !== PermissionMode.AUTO) return permissionMode;
   return autoAvailable(provider, model, customProvider) ? permissionMode : PermissionMode.DEFAULT;
 }

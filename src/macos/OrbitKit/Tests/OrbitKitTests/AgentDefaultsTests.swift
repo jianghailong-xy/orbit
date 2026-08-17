@@ -141,6 +141,22 @@ final class AgentDefaultsTests: XCTestCase {
             .plan)
     }
 
+    /// A runner deployed as root cannot run Bypass: claude prints "--dangerously-skip-permissions
+    /// cannot be used with root/sudo privileges" and exits inside its own startup, so the session
+    /// dies on its first turn having produced nothing. Mirrors `permissionModeAvailableOnRunner`
+    /// in shared/permissionSemantics.ts — the composer's Mode menu greys the row out from here.
+    func testRootRunnerWithdrawsOnlyBypass() {
+        XCTAssertFalse(AgentDefaults.isRunnable(.bypass, runsAsRoot: true))
+        XCTAssertTrue(AgentDefaults.isRunnable(.bypass, runsAsRoot: false))
+        // Verified against claude 2.1.233 as uid 0: every other mode reaches its system/init
+        // message, so withdrawing any of them would remove a mode that works.
+        for mode in [PermissionMode.default, .plan, .acceptEdits, .auto, .dontAsk] {
+            XCTAssertTrue(AgentDefaults.isRunnable(mode, runsAsRoot: true))
+        }
+        // Not reported (older server or older runner) claims nothing, so nothing is withdrawn.
+        XCTAssertTrue(AgentDefaults.isRunnable(.bypass, runsAsRoot: nil))
+    }
+
     func testAutoPermissionModeCapabilityAndClamp() {
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-opus-5"))
         XCTAssertTrue(AgentDefaults.supportsAuto("claude-fable-5"))

@@ -83,6 +83,10 @@ export interface Runner {
   modelCatalog?: RunnerModelCatalog | null;
   // Effective default model reported by each built-in runtime on this runner.
   runtimeDefaultModels?: RuntimeDefaultModels;
+  // Whether this runner's process is root, which costs it one permission mode: claude refuses
+  // Bypass under root and exits before its first message. undefined/null = a runner too old to
+  // report it, which stays unrestricted.
+  runsAsRoot?: boolean | null;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;

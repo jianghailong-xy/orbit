@@ -25,6 +25,8 @@ import {
   MAX_PROMPT_CHARS,
   PermissionMode,
   type PermissionRule,
+  ROOT_FALLBACK_PERMISSION_MODE,
+  ROOT_REFUSED_PERMISSION_MODES,
   RunEventType,
   SessionEndReason,
   SessionFilingState,
@@ -411,6 +413,39 @@ export class SessionsService {
       borrowedRuntime = configured?.runtime ?? null;
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
+    // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
+    // claude refuses by exiting inside its own startup — five seconds in, with the refusal on
+    // stderr and a bare FAILED in every UI. Which of the two outcomes below applies turns on who
+    // chose the mode, because they are owed different answers:
+    //
+    //   named by the caller  -> refuse. A composer that offered it is stale and an MCP/CLI caller
+    //                           invented it; either way the request cannot be honored as written,
+    //                           and silently running something else would report success for a
+    //                           guarantee that was never applied.
+    //   the account default  -> substitute. A stored preference is about a fleet, not this machine,
+    //                           and must not make every session on one runner unstartable.
+    //
+    // The lookup sits behind the mode test, so no caller that named a runnable mode pays for it.
+    let rootRefusedFallback: PermissionMode | undefined;
+    const requestedMode = dto.permissionMode ?? accountPermissionMode;
+    if (requestedMode && ROOT_REFUSED_PERMISSION_MODES.has(requestedMode)) {
+      const target = await this.prisma.runner.findUnique({
+        where: { id: assignedRunnerId },
+        select: { name: true, runsAsRoot: true },
+      });
+      if (target?.runsAsRoot && dto.permissionMode) {
+        throw new BadRequestException(
+          `runner "${target.name}" runs as root, and Claude Code refuses "${dto.permissionMode}" ` +
+            `under root — the session would exit before its first turn. Use ` +
+            `"${ROOT_FALLBACK_PERMISSION_MODE}", which also never asks.`,
+        );
+      }
+      // Substituted into the stored column rather than only at dispatch, so the Mode pill reads
+      // what the session will really do. Narrowing only (Bypass -> Don't Ask, allow -> deny), which
+      // is why this is safe to persist where the general rule is to derive: the account's own
+      // default is untouched, and a session cannot move to a runner that would have honored it.
+      if (target?.runsAsRoot) rootRefusedFallback = ROOT_FALLBACK_PERMISSION_MODE;
+    }
     // Linking to a task: it must belong to the same user (no cross-tenant linking).
     if (dto.taskId) {
       const task = await this.prisma.task.findFirst({
@@ -477,7 +512,7 @@ export class SessionsService {
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
         // distinguish their legacy null-model inheritance from new Runtime-default semantics.
         usesRuntimeDefaultModel: true,
-        permissionMode: dto.permissionMode ?? accountPermissionMode,
+        permissionMode: rootRefusedFallback ?? dto.permissionMode ?? accountPermissionMode,
         effort: normalizeEffortForProvider(runtime, dto.effort),
         workspaceId: dto.workspaceId,
         assignedRunnerId,
@@ -3910,7 +3945,9 @@ export class SessionsService {
         where: { id },
         include: {
           workspace: true,
-          assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true } },
+          assignedRunner: {
+            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true },
+          },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
         },
@@ -3938,6 +3975,7 @@ export class SessionsService {
         exec.model,
         requestedPermissionMode,
         next.customRow?.enabled === true,
+        session.assignedRunner?.runsAsRoot,
       );
       const normalizedEffort =
         dto.effort !== undefined

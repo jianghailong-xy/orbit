@@ -78,6 +78,48 @@ export function autoAvailable(runtime: string, model: string, customProvider = f
 }
 
 /**
+ * Permission modes a runner deployed as root cannot run at all.
+ *
+ * Claude Code refuses Bypass outright when its own process is root — it prints
+ * "--dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons"
+ * and exits during startup, before any stream-json message. The session dies on its first turn with
+ * no model ever in the loop, and because the refusal arrives on stderr rather than as a run result
+ * it lands as a bare FAILED. Every other mode (Default, Plan, Accept Edits, Auto, Don't Ask) starts
+ * normally as root, so this set is deliberately one entry and not "the unsafe ones".
+ *
+ * This is the one dimension `autoAvailable` above cannot express: it is a property of how the
+ * runner was *deployed*, not of the model or the runtime. The runner reports the bare fact
+ * (`runsAsRoot`) and the consequence lives here, in the table the pickers and dispatch already
+ * share, so neither can invent a different answer.
+ */
+export const ROOT_REFUSED_PERMISSION_MODES: ReadonlySet<string> = new Set([PermissionMode.BYPASS]);
+
+/**
+ * What a root runner runs instead of a mode it must refuse. Don't Ask is the honest neighbour of
+ * Bypass: both never consult a human, so an unattended session still runs unattended rather than
+ * parking on an approval card nobody is watching — but an action nobody pre-approved is denied
+ * instead of allowed. Strictly narrower than what was asked for, which is the only direction a
+ * substitution may ever go.
+ */
+export const ROOT_FALLBACK_PERMISSION_MODE = PermissionMode.DONT_ASK;
+
+/**
+ * Whether a runner can actually run a mode.
+ *
+ * `runsAsRoot` is nullable on purpose. A runner too old to report it, or one that has not
+ * heartbeated since this shipped, reads as unrestricted: an unknown must never remove a mode that
+ * works today. The cost of that choice is the pre-existing failure, unchanged, on exactly the
+ * runners that cannot yet say — and the cost of the opposite choice would be silently withdrawing
+ * Bypass from every non-root runner in the fleet.
+ */
+export function permissionModeAvailableOnRunner(
+  mode: string,
+  runsAsRoot?: boolean | null,
+): boolean {
+  return !runsAsRoot || !ROOT_REFUSED_PERMISSION_MODES.has(mode);
+}
+
+/**
  * Resolve a permission mode against the runtime that will honor it — the single answer to "what
  * will this session actually do with an action nobody pre-approved".
  *
@@ -89,14 +131,36 @@ export function autoAvailable(runtime: string, model: string, customProvider = f
  * `model` is optional and only changes the answer for Auto, the one mode Claude gates per model.
  * Pass it where a mode is being described against a specific model — a composer picker — and omit
  * it where the mode has already been normalized for dispatch.
+ *
+ * `runsAsRoot` is the assigned runner's report about itself, and likewise only changes the answer
+ * for Bypass. Omit it where no single runner is in view (an account-level default applies across a
+ * fleet, and one root machine in it must not describe the setting for all of them).
  */
 export function derivePermissionSemantics(
   provider: string,
   permissionMode?: string | null,
   model?: string,
+  runsAsRoot?: boolean | null,
 ): PermissionSemantics {
   const mode = (permissionMode ?? PermissionMode.DONT_ASK) as string;
   const approvalSupport = runtimeApprovalSupport(provider);
+
+  // Bypass on a runner deployed as root. Unlike every other unhonored mode here this one is not a
+  // difference of degree: the CLI refuses to start at all, so the session produces nothing. It runs
+  // as Don't Ask instead (normalizeBuiltinPermissionMode), which still never asks — disclosed here
+  // rather than hidden, on the same terms as Auto below.
+  if (!permissionModeAvailableOnRunner(mode, runsAsRoot)) {
+    return {
+      mode,
+      unapproved: 'deny',
+      approvalSupport,
+      honored: false,
+      note:
+        'This runner is deployed as root, and Claude Code refuses Bypass under root. The session ' +
+        "runs as Don't Ask instead: it never asks, but an action nobody pre-approved is denied.",
+      shortNote: 'unavailable on a root runner, runs as Don’t Ask',
+    };
+  }
 
   // Auto on a Claude model that does not have it. The session runs as Default instead
   // (normalizeBuiltinPermissionMode), which asks — so this is a safe degradation, and it is

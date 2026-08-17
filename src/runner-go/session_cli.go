@@ -31,8 +31,12 @@ the sessions this runner hosts; set ORBIT_SERVICE_TOKEN to a credential from
 Run 'orbit session <command> --help' for options.
 `
 
+// The create help is assembled rather than literal because the permission modes it documents
+// depend on the machine: a root runner does not offer "bypassPermissions" (see
+// offeredPermissionModes), and help that names a mode the runner will refuse is how an agent picks
+// it. Package-level init order resolves runsAsRoot first — it is a dependency of this expression.
 var sessionActionHelp = map[string]string{
-	"create": `orbit session create — spawn an agent session
+	"create": fmt.Sprintf(`orbit session create — spawn an agent session
 
 Usage:
   orbit session create (--prompt TEXT | --prompt-file -) [options]
@@ -46,16 +50,15 @@ Options:
   --model MODEL
   --provider SLUG          Built-in engine (claude, codex, kimi, opencode) or a configured
                            provider slug; defaults to where the agent's project last started
-  --permission-mode MODE   How much the session may do unattended: default, acceptEdits,
-                           plan, auto, dontAsk or bypassPermissions. Defaults to the
-                           owner's account setting; the ask-me modes park the session
-                           on an approval card until a human answers
+  --permission-mode MODE   How much the session may do unattended: %s.
+                           Defaults to the owner's account setting; the ask-me modes park
+                           the session on an approval card until a human answers
   --wait[=BOOL]            Wait until the first turn settles
   --json
 
 Outside a session this needs ORBIT_SERVICE_TOKEN to carry the session:create scope; the
 session starts the agent that token is pinned to, and --agent-id may only name that agent.
-`,
+%s`, permissionModeProse(), rootWithheldPermissionModeNoteBlock()),
 	"list": `orbit session list — list sessions
 
 Usage:
@@ -104,7 +107,7 @@ Usage:
 }
 
 var sessionCLICapabilities = []cliCapabilitySpec{
-	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--provider <claude|codex|kimi|opencode|configured slug>", "--permission-mode <default|acceptEdits|plan|auto|dontAsk|bypassPermissions>", "--wait[=true|false]", "--json"}, Mutates: true},
+	{Tool: "session_create", Argv: []string{"orbit", "session", "create"}, Usage: "orbit session create (--prompt TEXT | --prompt-file -) [options]", Arguments: []string{"--prompt <text> | --prompt-file - (required)", "--agent-id <id> | --agent-name <name>", "--title <text>", "--model <model>", "--provider <claude|codex|kimi|opencode|configured slug>", permissionModeFlagSpec(), "--wait[=true|false]", "--json"}, Mutates: true},
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},

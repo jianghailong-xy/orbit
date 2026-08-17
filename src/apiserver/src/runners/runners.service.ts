@@ -77,6 +77,9 @@ export class RunnersService {
         // Runtime defaults reported by the runner heartbeat. This is capability state, not a
         // user-editable Runner setting.
         runtimeDefaultModels: true,
+        // Same: reported, not configured. Withdraws Bypass from this machine's Mode pickers, which
+        // is the only reason clients need to know (see ROOT_REFUSED_PERMISSION_MODES).
+        runsAsRoot: true,
         // Per-engine health, and any install the user started for one of them — both drive the
         // Providers page's "On your runners" section.
         engines: true,

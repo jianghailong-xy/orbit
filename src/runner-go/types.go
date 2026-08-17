@@ -85,6 +85,12 @@ type HeartbeatRequest struct {
 	// RepoHealthReport). Nil until the first scan completes — an omitted field leaves the
 	// server's last snapshot alone rather than claiming every checkout is clean.
 	Repos []RepoHealthReport `json:"repos,omitempty"`
+	// RunsAsRoot reports whether this process is root, which costs the machine one permission
+	// mode: claude refuses Bypass under root ("--dangerously-skip-permissions cannot be used with
+	// root/sudo privileges") and exits before its first stream-json message, so a session asking
+	// for it here can only ever fail. A pointer so `false` is still sent — the control plane's
+	// NULL means "not reported", and a non-root runner has to be able to say so.
+	RunsAsRoot *bool `json:"runsAsRoot,omitempty"`
 }
 
 // AgentDirProbe is what the runner found at one agent's working directory: whether the path is

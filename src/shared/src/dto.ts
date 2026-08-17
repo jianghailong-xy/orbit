@@ -341,6 +341,11 @@ export interface RunnerHeartbeatRequest {
   /** State of the shared checkouts this machine's agents work in. Absent on older runners,
    *  which leaves the stored snapshot alone rather than claiming every checkout is clean. */
   repos?: RunnerRepoHealth[];
+  /** Whether this runner process is running as root. Reported because it removes a permission
+   *  mode: Claude Code refuses Bypass under root and exits before its first message (see
+   *  ROOT_REFUSED_PERMISSION_MODES). Absent on older runners, which are left unrestricted —
+   *  an unknown must not withdraw a mode that works. */
+  runsAsRoot?: boolean;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,

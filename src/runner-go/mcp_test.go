@@ -459,7 +459,10 @@ func TestMCPSessionCreateCarriesPermissionMode(t *testing.T) {
 		t.Fatalf("session_create permissionMode schema = %#v", props["permissionMode"])
 	}
 	offered, _ := schema["enum"].([]string)
-	for _, want := range []string{"default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"} {
+	// Compared against the helper rather than a literal list, because the answer is per-machine: a
+	// root runner withholds "bypassPermissions" (TestOfferedPermissionModes covers both branches
+	// deterministically). A literal here would fail whenever the suite itself runs as root.
+	for _, want := range offeredPermissionModes() {
 		found := false
 		for _, mode := range offered {
 			found = found || mode == want
@@ -467,6 +470,10 @@ func TestMCPSessionCreateCarriesPermissionMode(t *testing.T) {
 		if !found {
 			t.Fatalf("session_create permissionMode enum %#v is missing %q", offered, want)
 		}
+	}
+	if len(offered) != len(offeredPermissionModes()) {
+		t.Fatalf("session_create permissionMode enum %#v is not what this machine offers (%#v)",
+			offered, offeredPermissionModes())
 	}
 
 	var gotBody map[string]interface{}

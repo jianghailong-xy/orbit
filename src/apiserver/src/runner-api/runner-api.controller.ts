@@ -496,6 +496,10 @@ export class RunnerApiController {
           reportedEngines == null
             ? undefined
             : (reportedEngines as unknown as Prisma.InputJsonValue),
+        // Whether that process is root, which withdraws Bypass on this machine (see
+        // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
+        // the stored value — NULL there means "never told us" and stays unrestricted.
+        runsAsRoot: dto?.runsAsRoot ?? undefined,
         // Runtime-owned default snapshot. Omission means an older runner and preserves the
         // previous value; an explicit {} clears stale values so catalog/static fallback applies.
         runtimeDefaultModels:
@@ -998,7 +1002,9 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/reclaim')
   async reclaim(
-    @CurrentRunner() runner: { id: string; ownerId: string },
+    // runsAsRoot rides the authenticated row (RunnerAuthGuard loads it whole): the claim below has
+    // to withdraw Bypass for the machine that is about to spawn the process, not for some other.
+    @CurrentRunner() runner: { id: string; ownerId: string; runsAsRoot?: boolean | null },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ReclaimResponse> {
@@ -1131,6 +1137,7 @@ export class RunnerApiController {
           exec.model,
           permissionMode,
           customRow?.enabled === true,
+          runner.runsAsRoot,
         ),
         // Per-session effort wins; otherwise use the workspace's effort setting.
         // Same dispatch-time variant check as the queue claim: an OpenCode variant is only

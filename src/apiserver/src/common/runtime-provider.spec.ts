@@ -165,3 +165,79 @@ test('OpenCode is a dynamically-initialized runtime whose Auto mode is never dow
     PermissionMode.AUTO,
   );
 });
+
+// The observed failure: a session created with Bypass landed on a runner running as root, claude
+// refused with "--dangerously-skip-permissions cannot be used with root/sudo privileges for
+// security reasons" and exited during startup, and the session finished FAILED in 5s with zero
+// turns and an empty error column. Substituting here is what keeps an account-level Bypass default
+// from doing that to every session on that machine.
+test('a root runner runs Don’t Ask in place of Bypass', () => {
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-opus-5',
+      PermissionMode.BYPASS,
+      false,
+      true,
+    ),
+    PermissionMode.DONT_ASK,
+  );
+});
+
+test('Bypass survives everywhere the root refusal does not apply', () => {
+  // A non-root runner is the ordinary case and must be untouched.
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-opus-5',
+      PermissionMode.BYPASS,
+      false,
+      false,
+    ),
+    PermissionMode.BYPASS,
+  );
+  // A runner too old to report its uid: "we don't know" must not silently narrow the mode, or
+  // shipping this would change what every un-upgraded runner in the fleet does.
+  for (const unreported of [undefined, null]) {
+    assert.equal(
+      normalizeBuiltinPermissionMode(
+        AgentProvider.CLAUDE,
+        'claude-opus-5',
+        PermissionMode.BYPASS,
+        false,
+        unreported,
+      ),
+      PermissionMode.BYPASS,
+    );
+  }
+});
+
+test('root does not disturb the modes it has no claim on', () => {
+  // Only Bypass is refused under root — every other mode starts normally, verified against claude
+  // 2.1.233 as uid 0. Auto in particular keeps its own per-model rule rather than being shadowed.
+  for (const mode of [
+    PermissionMode.DEFAULT,
+    PermissionMode.PLAN,
+    PermissionMode.ACCEPT_EDITS,
+    PermissionMode.DONT_ASK,
+  ]) {
+    assert.equal(
+      normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'claude-opus-5', mode, false, true),
+      mode,
+    );
+  }
+  assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, 'claude-opus-5', PermissionMode.AUTO, false, true),
+    PermissionMode.AUTO,
+  );
+  assert.equal(
+    normalizeBuiltinPermissionMode(
+      AgentProvider.CLAUDE,
+      'claude-haiku-4-5-20251001',
+      PermissionMode.AUTO,
+      false,
+      true,
+    ),
+    PermissionMode.DEFAULT,
+  );
+});

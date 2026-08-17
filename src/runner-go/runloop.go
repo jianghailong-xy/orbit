@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+// runsAsRoot is whether this process is root, which the heartbeat reports because it withdraws one
+// permission mode (see HeartbeatRequest.RunsAsRoot). Evaluated once: a process does not change euid
+// under us, and every beat sending the same answer should not re-ask the OS for it.
+var runsAsRoot = os.Geteuid() == 0
+
 const (
 	heartbeatInterval                   = 30 * time.Second
 	selfUpdateCheckInterval             = 10 * time.Minute
@@ -730,6 +735,7 @@ func runLoop(cfg *RunnerConfig) bool {
 				Engines:              engineHealth.snapshotNow(),
 				AgentDirProbes:       agentDirs.snapshot(),
 				Repos:                repoHealth.snapshotNow(),
+				RunsAsRoot:           &runsAsRoot,
 			}, t.heartbeat)
 			if err != nil {
 				logln("heartbeat failed:", err)
