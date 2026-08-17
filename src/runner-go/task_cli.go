@@ -112,6 +112,9 @@ Options:
   --list-id ID
   --project-id ID             File the task under this project, orthogonal to --list-id
   --parent-task-id TASK_ID    Create it as a subtask of this existing task
+  --acceptance-criteria TEXT  What would settle that this task is done (max 4,000 characters)
+  --acceptance-criteria-file -
+                              Read the acceptance criteria from stdin; paths are rejected
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
@@ -134,6 +137,15 @@ be in the SAME project as the new task, and the project is never inherited from 
 under a project's task normally passes both --project-id and --parent-task-id naming that same
 project, while a parent filed under no project needs --project-id omitted here too. A parent
 that is missing, somebody else's, or in another project is rejected by the server.
+
+--acceptance-criteria records what would settle that this task is done: the observable,
+verifiable result — a command that passes, a file that exists, a number that moved — stated so
+somebody who did not do the work can check it. It answers a different question from
+--description, which says what work to PERFORM, and from a project's own acceptance criteria
+(` + "`orbit project get`" + `), which settles the whole goal rather than this one task. The server
+accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin, accepting only
+'-'; since --description-file reads the same stdin, the two file flags cannot be used together,
+but passing one field inline and the other on stdin is fine.
 `,
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
 
@@ -142,8 +154,12 @@ Usage:
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId,
-parentTaskId, dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady. Nothing is
-written unless every item is valid.
+parentTaskId, acceptanceCriteria, dueDate, provider, model, dependsOnTaskIds,
+autoRunWhenReady. Nothing is written unless every item is valid.
+
+"acceptanceCriteria" states per item what would settle that THAT task is done — the
+observable result somebody else can check — where "description" says what work to
+perform; the server accepts up to 4,000 characters each.
 
 To make one item depend on another item of the same batch — whose id does not exist
 yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
@@ -771,6 +787,8 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	listID := fs.String("list-id", "", "task list id")
 	projectID := fs.String("project-id", "", "file the task under this project, orthogonal to --list-id")
 	parentTaskID := fs.String("parent-task-id", "", "make the new task a subtask of this existing task")
+	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
+	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -792,7 +810,19 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if *unassigned && flagWasSet(fs, "assignee-id") {
 		return fmt.Errorf("--unassigned and --assignee-id cannot be used together")
 	}
+	// Two fields, one stdin. readCLIText sees a single field at a time, so nothing downstream can
+	// notice that the first read drains the stream and the second gets an empty string — a create
+	// that silently files blank criteria. Caught here, before either read and before any request:
+	// one of the pair has to be passed inline. A direct value for one and stdin for the other is
+	// unambiguous and stays legal.
+	if flagWasSet(fs, "description-file") && flagWasSet(fs, "acceptance-criteria-file") {
+		return fmt.Errorf("--description-file and --acceptance-criteria-file both read stdin and cannot be used together; pass one of them inline")
+	}
 	desc, descSet, err := readCLIText(in, *description, flagWasSet(fs, "description"), *descriptionFile, flagWasSet(fs, "description-file"), "description")
+	if err != nil {
+		return err
+	}
+	criteria, criteriaSet, err := readCLIText(in, *acceptanceCriteria, flagWasSet(fs, "acceptance-criteria"), *acceptanceCriteriaFile, flagWasSet(fs, "acceptance-criteria-file"), "acceptance-criteria")
 	if err != nil {
 		return err
 	}
@@ -833,6 +863,12 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--parent-task-id cannot be empty")
 		}
 		body["parentTaskId"] = *parentTaskID
+	}
+	// Free text, not an id, so the blank-is-a-typo rule above does not apply: the server's DTO has
+	// no MinLength, and `--acceptance-criteria ""` is a caller deliberately recording none. Sent
+	// exactly as given; only omitting the flag omits the field.
+	if criteriaSet {
+		body["acceptanceCriteria"] = criteria
 	}
 	if flagWasSet(fs, "due-date") {
 		if strings.TrimSpace(*dueDate) == "" {
@@ -1487,7 +1523,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent.", Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},

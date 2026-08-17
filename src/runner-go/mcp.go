@@ -195,6 +195,11 @@ const maxTaskBatchCreate = 50
 // states the bound the write would be rejected against anyway.
 const maxTaskLabels = 16
 
+// How long a task's acceptance criteria may be. Mirrors the server's
+// MAX_TASK_ACCEPTANCE_CRITERIA_CHARS, for the same reason as the bounds above: the schema states
+// the cap the write would be rejected against, rather than letting a model discover it by 400.
+const maxTaskAcceptanceCriteriaChars = 4000
+
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
@@ -301,7 +306,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -332,7 +337,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -1009,6 +1014,33 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"to depend on something created in this same call, use ref/dependsOnRefs, which is ordering, " +
 			"not membership.",
 	}
+	// The create path now has a field of its own for what proves the work is done, so its
+	// `description` must stop asking for one: promptDesc above tells the caller to put acceptance
+	// criteria inside the prompt, and next to acceptanceCriteria that is an instruction to write the
+	// same thing twice — two copies that drift, with nothing saying which one settles the task.
+	// task_update and session_create deliberately keep promptDesc: neither takes acceptanceCriteria,
+	// so for them the prompt really is the only place the criteria can live.
+	createDescriptionProp := map[string]interface{}{
+		"type": "string",
+		"description": "Write this as a self-contained, executable prompt for the task — background, " +
+			"files involved, and concrete steps — so an agent with no prior conversation context can " +
+			"pick it up and act on it directly. Say what to DO here; what would PROVE it done belongs " +
+			"in `acceptanceCriteria`, not repeated here.",
+	}
+	// States what would settle this one task, on task_create and every task_create_batch item alike.
+	// Capped here at the server's own limit so an over-long value is caught before the round trip.
+	acceptanceCriteriaProp := map[string]interface{}{
+		"type":      "string",
+		"maxLength": maxTaskAcceptanceCriteriaChars,
+		"description": fmt.Sprintf("What would settle that THIS task is done: the observable, "+
+			"independently verifiable result — a command that passes, a file that exists, a number "+
+			"that moved — stated so somebody who did not watch the work can check it. Distinct from "+
+			"`description`, which says what work to PERFORM, and from the project's own "+
+			"acceptanceCriteria (project_get), which settles the whole goal rather than this one "+
+			"step. Coexists with projectId and parentTaskId: a subtask filed under a project still "+
+			"states what would settle itself, not what would settle its parent or its project. Up "+
+			"to %d characters.", maxTaskAcceptanceCriteriaChars),
+	}
 	labelsProp := map[string]interface{}{
 		"type":        "array",
 		"items":       str,
@@ -1026,15 +1058,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
 		return map[string]interface{}{
-			"title":        str,
-			"description":  promptDesc,
-			"listId":       map[string]interface{}{"type": []string{"string", "null"}},
-			"assigneeId":   map[string]interface{}{"type": []string{"string", "null"}},
-			"projectId":    projectIDProp,
-			"parentTaskId": parentTaskIDProp,
-			"dueDate":      str,
-			"provider":     providerProp,
-			"model":        modelProp,
+			"title":              str,
+			"description":        createDescriptionProp,
+			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
+			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
+			"projectId":          projectIDProp,
+			"parentTaskId":       parentTaskIDProp,
+			"acceptanceCriteria": acceptanceCriteriaProp,
+			"dueDate":            str,
+			"provider":           providerProp,
+			"model":              modelProp,
 			"dependsOnTaskIds": map[string]interface{}{
 				"type":        "array",
 				"items":       str,
@@ -1145,12 +1178,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
+			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
 			"inputSchema": obj(taskCreateProps(), "title"),
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` included, so a plan for one project files every task it produces under that project in the same call. `parentTaskId` is for hanging items under a task that ALREADY exists (same project as the item); it is not a way to nest items of this batch under each other — refs express ordering, not membership. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. `parentTaskId` is for hanging items under a task that ALREADY exists (same project as the item); it is not a way to nest items of this batch under each other — refs express ordering, not membership. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":        "array",
