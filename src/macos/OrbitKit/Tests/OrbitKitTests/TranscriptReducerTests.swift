@@ -1110,6 +1110,77 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.maxSeq, 43)
     }
 
+    /// `resync` is an order to the consume loop, not content: it rides seq 0 and must leave the
+    /// transcript, the cursors and the dedup set exactly as they were, so a loop that ignores it
+    /// (a client too old to know it) is no worse off than before.
+    func testResyncIsNotTranscriptContent() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 7, type: .assistant, payload: .object(["text": .string("hi")])))
+        r.apply(RunEvent(seq: 0, type: .resync))
+
+        XCTAssertEqual(r.state.items.count, 1, "no row of its own")
+        XCTAssertEqual(r.state.maxSeq, 7, "it must not move the reconnect cursor")
+        XCTAssertFalse(RunEventType.resync.isDurable)
+    }
+
+    /// Acting on `resync`: the window is a position in the history and all of it goes — items,
+    /// both cursors, and the dedup set (so the tail page that follows re-folds the same seqs
+    /// instead of being deduped into nothing, which would leave the transcript blank for good).
+    func testResetForResyncClearsTheWindowSoATailPageCanRefold() {
+        var r = TranscriptReducer()
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 10, type: .user, payload: .object(["text": .string("go")])),
+            RunEvent(seq: 11, type: .assistant, payload: .object(["text": .string("done")])),
+        ], hasMore: true))   // history remains before this window
+        XCTAssertTrue(r.state.hasMoreOlder)
+
+        r.resetForResync()
+        XCTAssertTrue(r.state.items.isEmpty)
+        XCTAssertEqual(r.state.maxSeq, 0, "cursor-less, so the next connect gets a capped replay")
+        XCTAssertNil(r.state.oldestSeq)
+        XCTAssertFalse(r.state.hasMoreOlder)
+
+        // The re-seeded page carries the same seqs the cleared window held: they must fold again.
+        r.applyTailPage(EventPage(events: [
+            RunEvent(seq: 11, type: .assistant, payload: .object(["text": .string("done")])),
+            RunEvent(seq: 12, type: .assistant, payload: .object(["text": .string("and more")])),
+        ], hasMore: true))
+        XCTAssertEqual(r.state.items.count, 2)
+        XCTAssertEqual(r.state.maxSeq, 12)
+        XCTAssertEqual(r.state.oldestSeq, 11)
+    }
+
+    /// What a re-seed must NOT throw away: the live state the transcript stream doesn't own. A
+    /// tail page carries no approvals (they ride seq 0), no background tray, and no queued send,
+    /// so clearing those here would blank UI nothing restores — an approval card the user was
+    /// looking at, or the message they typed while the turn ran.
+    func testResetForResyncKeepsLiveStateATailPageCannotRestore() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object(["toolUseId": .string("bgt1"),
+                                                                   "name": .string("Bash"),
+                                                                   "input": .object(["command": .string("npm test"),
+                                                                                     "run_in_background": .bool(true)])])))
+        r.apply(RunEvent(seq: 2, type: .backgroundTask, payload: .object(["shellId": .string("bg1"),
+                                                                          "toolUseId": .string("bgt1"),
+                                                                          "status": .string("running")])))
+        r.apply(RunEvent(seq: 0, type: .approvalRequest, payload: .object(["id": .string("ap1"),
+                                                                           "toolName": .string("Bash"),
+                                                                           "input": .object(["command": .string("rm x")])])))
+        r.apply(RunEvent(seq: 3, type: .status, payload: .object(["status": .string("RUNNING")])))
+        r.apply(RunEvent(seq: 4, type: .turnEnd, payload: .object(["status": .string("RUNNING"),
+                                                                    "contextTokens": .int(1_234),
+                                                                    "contextWindow": .int(200_000)])))
+        r.addOptimisticUser(clientTurnId: "c9", text: "one more thing", queued: true)
+
+        r.resetForResync()
+        XCTAssertEqual(r.state.pendingApprovals.count, 1)
+        XCTAssertEqual(r.state.background.count, 1)
+        XCTAssertEqual(r.state.queued.count, 1)
+        XCTAssertEqual(r.state.status, .running)
+        XCTAssertEqual(r.state.contextTokens, 1_234)
+        XCTAssertEqual(r.state.contextWindow, 200_000)
+    }
+
     /// A reply that merely quotes a limit is an ordinary reply — rendering it as the provider
     /// refusing to answer would replace it with a card saying the opposite of what it says.
     func testAReplyAboutAQuotaStaysAReply() {

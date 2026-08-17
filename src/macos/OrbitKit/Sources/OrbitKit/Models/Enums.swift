@@ -206,6 +206,11 @@ public enum RunEventType: String, Codable, Sendable {
     case approvalResolved = "approval_resolved"
     case backgroundTask = "background_task"
     case backgroundOutput = "background_output"
+    /// The server refusing to replay this connection's gap: the cursor is further behind than
+    /// `SSE_GAP_CAP` (1000 renderable events), so instead of history it sends this one order —
+    /// throw the loaded window away and re-seed from a tail page. Rides seq 0 like the other
+    /// live-only control events. Handled in `ConsoleModel.run()`; web parity (`reseed`).
+    case resync
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -215,10 +220,10 @@ public enum RunEventType: String, Codable, Sendable {
 
     /// Durable events carry a real per-session `seq`: they are persisted, replayed on
     /// reconnect, and deduped by seq. The animation/live-only types below never are —
-    /// deltas are broadcast-only, and approvals/background-output ride seq 0.
+    /// deltas are broadcast-only, and approvals/background-output/resync ride seq 0.
     public var isDurable: Bool {
         switch self {
-        case .textDelta, .thinkingDelta, .approvalRequest, .approvalResolved, .backgroundOutput:
+        case .textDelta, .thinkingDelta, .approvalRequest, .approvalResolved, .backgroundOutput, .resync:
             return false
         default:
             return true

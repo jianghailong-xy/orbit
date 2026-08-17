@@ -81,6 +81,16 @@ final class SSEFrameParserTests: XCTestCase {
         XCTAssertEqual(r.state.maxSeq, 3)
     }
 
+    /// The exact frame the server sends when it won't replay a cursor's gap (sessions.controller
+    /// `SSE_GAP_CAP`): it must decode to `.resync`, not `.unknown`. Decoding it as unknown is
+    /// silent and total — the client keeps its stale window, reconnects from the same
+    /// unreplayable seq forever, and the transcript never advances again.
+    func testResyncFrameDecodesToItsOwnType() {
+        let events = eventsFromBytes(#"data: {"seq":0,"type":"resync","payload":{}}"# + "\n\n")
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events[0].type, .resync)
+    }
+
     func testSSEToReducerPath() {
         // The real path: wire bytes → frames → RunEvent → reducer.
         let wire = """

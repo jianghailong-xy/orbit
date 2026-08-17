@@ -135,8 +135,33 @@ public struct TranscriptReducer: Sendable, Codable {
         case .backgroundOutput: applyBackgroundOutput(ev)
         case .status, .result:  applyStatus(ev)
         case .system:           appendEngineStderr(ev)
+        // An order to the consume loop, not transcript content: it can't re-fetch anything from
+        // in here, so it acts on `resetForResync()` + a fresh tail page (see `ConsoleModel.run()`).
+        case .resync:           break
         case .unknown:          break          // lifecycle noise — no transcript item
         }
+    }
+
+    /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
+    /// half of the server's `resync` order (see `RunEventType.resync`).
+    ///
+    /// Everything that makes this window a *position* in the history goes: the folded items, the
+    /// dedup set, both cursors, and the open-bubble marks (a bubble left open here would swallow
+    /// the first deltas of the re-seeded window). What survives is the state the transcript stream
+    /// doesn't own and other paths re-seed on the same reconnect — pending approvals, the
+    /// background tray, the composer's queued sends, the run status and the context gauge —
+    /// because clearing those would blank live UI the re-seed cannot restore. Web's `reseed`
+    /// draws the same line: it resets `events`/`seen`/`oldestSeq`/`lastSeq` and nothing else.
+    public mutating func resetForResync() {
+        state.items = []
+        state.maxSeq = 0
+        state.oldestSeq = nil
+        state.hasMoreOlder = false
+        seen.removeAll()
+        openAssistant = nil
+        openThinking = nil
+        bgLaunch.removeAll()
+        stderrSeen.removeAll()
     }
 
     /// Fold the tail-first initial page (the newest N persisted events) and record whether older

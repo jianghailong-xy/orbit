@@ -12,6 +12,9 @@ public enum StreamOutcome: Sendable, Equatable {
     case kicked
     /// The consume loop's task was cancelled (model teardown / focus moved away).
     case cancelled
+    /// The server sent `resync`: this cursor is too far behind to replay, so the connection is
+    /// spent and the loop must re-seed its window from a tail page before connecting again.
+    case resync
 }
 
 /// What the loop should do after an attempt ends.
@@ -32,7 +35,10 @@ public enum ReconnectAction: Sendable, Equatable {
 ///  - a kick reconnects immediately (the kicker already knows the network is back);
 ///  - a clean close still waits a beat (300ms) so an end-of-session close doesn't hot-loop;
 ///  - failures retry forever — a mobile outage can last minutes, and giving up would freeze the
-///    session with no recovery — with backoff 1s, 2s, 4s, 8s, then capped at 15s.
+///    session with no recovery — with backoff 1s, 2s, 4s, 8s, then capped at 15s;
+///  - a `resync` reconnects immediately (the caller re-seeds first) but does NOT reset the ramp:
+///    re-seeding spends the same retry budget, so a stream that only ever answers with `resync`
+///    still backs off instead of hot-looping (web parity: its `reseed` leaves `fails` alone).
 public struct ReconnectPolicy: Sendable, Equatable {
     /// Consecutive failed attempts since the last healthy signal.
     public private(set) var attempt = 0
@@ -54,6 +60,11 @@ public struct ReconnectPolicy: Sendable, Equatable {
             return .reconnect(afterMs: 0)
         case .ended:
             attempt = 0
+            return .reconnect(afterMs: 300)
+        case .resync:
+            // Leave the ramp where it is — see the note above — and wait the same beat a clean
+            // close does, so a server that somehow answered a re-seeded cursor with another
+            // `resync` still can't spin this loop.
             return .reconnect(afterMs: 300)
         case .failed:
             attempt += 1

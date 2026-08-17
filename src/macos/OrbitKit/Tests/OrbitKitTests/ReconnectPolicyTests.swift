@@ -45,6 +45,17 @@ final class ReconnectPolicyTests: XCTestCase {
         XCTAssertEqual(p.attempt, 0)
     }
 
+    /// A `resync` reconnects (the caller re-seeds in between) without touching the ramp: re-seeding
+    /// spends the same retry budget, so a stream that only ever answers `resync` still backs off.
+    func testResyncReconnectsWithoutResettingTheRamp() {
+        var p = ReconnectPolicy()
+        _ = p.next(after: .failed)
+        _ = p.next(after: .failed)
+        XCTAssertEqual(p.next(after: .resync), .reconnect(afterMs: 300))
+        XCTAssertEqual(p.attempt, 2, "re-seeding is not a sign of health")
+        XCTAssertEqual(p.next(after: .failed), .reconnect(afterMs: 4_000))   // ramp carried on
+    }
+
     func testFailuresNeverStop() {
         var p = ReconnectPolicy()
         for _ in 0..<100 {

@@ -358,23 +358,8 @@ final class ConsoleModel {
         // from its max seq. Cold open only: a restored reducer already carries its transcript and
         // maxSeq, so it skips straight to the SSE resume below (which streams seq > maxSeq).
         let coldOpen = reducer.state.maxSeq == 0
-        if coldOpen, !sessionID.isEmpty {
-            // Retry the tail seed a few times before giving up. A transient failure here (common on
-            // mobile) used to fall straight through to the SSE loop below with `sinceSeq: 0`, replaying
-            // the WHOLE transcript byte-by-byte — the exact "very slow to sync a long session" path.
-            // The `where` clause stops the loop the instant a page seeds (applyTailPage advances
-            // maxSeq); if all attempts fail the server still caps a cursor-less replay (SSE_REPLAY_CAP),
-            // so it degrades gracefully rather than dumping the full history.
-            for attempt in 0..<3 where reducer.state.maxSeq == 0 {
-                if Task.isCancelled { return }
-                if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
-                    reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
-                    publishStateNow()
-                } else if attempt < 2 {
-                    try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
-                }
-            }
-        }
+        if coldOpen, !sessionID.isEmpty { await seedTailPage() }
+        if Task.isCancelled { return }
         // Seed the "Background processes" tray with the server's authoritative, complete list — every
         // Bash(run_in_background) the session launched, not just the few whose launch sits in the loaded
         // tail window, and the output of agent shells whose live tail was never persisted. Kicked so it
@@ -406,6 +391,14 @@ final class ConsoleModel {
                     do {
                         connected = true
                         for try await ev in stream.events(sessionID: sessionID, sinceSeq: reducer.state.maxSeq) {
+                            // The server won't replay a gap this long (see `RunEventType.resync`):
+                            // the connection carries this order and nothing else, so hand it to the
+                            // loop below before any bookkeeping. Without it the window froze at the
+                            // cursor for good — the stream stayed connected, every reconnect asked
+                            // from the same unreplayable seq, and the transcript sat hours behind a
+                            // session list that kept advancing (it comes from the list query, not
+                            // this stream).
+                            if ev.type == .resync { return .resync }
                             foldQueuedBackIntoComposer(before: ev)   // salvage queued text before an interrupt drops it
                             reducer.apply(ev)
                             scheduleStatePublish()
@@ -439,6 +432,12 @@ final class ConsoleModel {
             // refresh the status from REST before reconnecting.
             if outcome == .ended || outcome == .cancelled { publishStateNow() }
             if outcome == .ended { await refreshServerStatus() }
+            // Ordered by the server: this window is not a viable place to resume from. Throw it
+            // away and re-seed exactly as a cold open does, so the next connect resumes from the
+            // fresh page's max seq. A seed that fails leaves the reducer empty, which makes the
+            // reconnect cursor-less — and a cursor-less replay is server-capped, so the fallback
+            // is still a bounded catch-up rather than the full history.
+            if outcome == .resync { await reseedFromTailPage() }
             switch reconnectPolicy.next(after: outcome) {
             case .stop:
                 return
@@ -446,6 +445,40 @@ final class ConsoleModel {
                 if ms > 0 { await backoffSleep(ms: ms) }
             }
         }
+    }
+
+    /// Fold the newest page of persisted events into an empty window — the tail-first seed, used
+    /// both on a cold open and when a `resync` clears the window (see `reseedFromTailPage`).
+    ///
+    /// Retries a few times before giving up. A transient failure here (common on mobile) used to
+    /// fall straight through to the SSE loop with `sinceSeq: 0`, replaying the WHOLE transcript
+    /// byte-by-byte — the exact "very slow to sync a long session" path. The `where` clause stops
+    /// the loop the instant a page seeds (applyTailPage advances maxSeq); if all attempts fail the
+    /// server still caps a cursor-less replay (SSE_REPLAY_CAP), so it degrades gracefully rather
+    /// than dumping the full history.
+    private func seedTailPage() async {
+        for attempt in 0..<3 where reducer.state.maxSeq == 0 {
+            if Task.isCancelled { return }
+            if let page = try? await api.eventPage(sessionID: sessionID, tail: Self.tailPage) {
+                reducer.applyTailPage(page)   // also records the scroll-up window cursor (hasMoreOlder)
+                publishStateNow()
+            } else if attempt < 2 {
+                try? await Task.sleep(nanoseconds: UInt64(300 * (attempt + 1)) * 1_000_000)
+            }
+        }
+    }
+
+    /// Act on the server's `resync`: drop the loaded window and rebuild it from a tail page.
+    ///
+    /// The cleared state is deliberately NOT published on its own — a seed usually lands in a few
+    /// hundred milliseconds, and painting an empty transcript in between would flash the screen
+    /// blank on what the user experiences as a plain reconnect. The stale rows stay up until the
+    /// fresh page replaces them (or, if every attempt fails, until the capped cursor-less replay
+    /// on the next connect does).
+    private func reseedFromTailPage() async {
+        guard !sessionID.isEmpty else { return }
+        reducer.resetForResync()
+        await seedTailPage()
     }
 
     /// Force the live stream to reconnect immediately: abandons a stalled read or a backoff wait and
