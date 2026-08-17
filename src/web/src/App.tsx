@@ -18,7 +18,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
-import { ProjectsPage } from './pages/ProjectsPage';
+import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 
@@ -171,6 +171,14 @@ export function App() {
               element={
                 <DocView>
                   <ProjectsPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="projects/:id"
+              element={
+                <DocView>
+                  <ProjectDetailPage />
                 </DocView>
               }
             />

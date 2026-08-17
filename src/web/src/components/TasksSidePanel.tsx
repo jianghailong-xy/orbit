@@ -171,16 +171,19 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
   // The runner-centric routes (/runners, /runner, /workspaces, /sessions) keep "Runners"
   // highlighted; an open workspace highlights its own row below instead. Clicking a list item
-  // below overrides it locally.
+  // below overrides it locally. A project's detail page (/projects/<id>) stays under "Projects"
+  // — the bare /projects reaches the same key through the pathname fallback at the end.
   const routeKey = activeWorkspaceId
     ? '' // scoped to one workspace — its row highlights below, no top item
     : loc.pathname.startsWith('/workspaces/') ||
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/runner')
       ? 'runners'
-      : loc.pathname.startsWith('/lists/')
-        ? loc.pathname.slice('/lists/'.length)
-        : loc.pathname.slice(1);
+      : loc.pathname.startsWith('/projects/')
+        ? 'projects'
+        : loc.pathname.startsWith('/lists/')
+          ? loc.pathname.slice('/lists/'.length)
+          : loc.pathname.slice(1);
   const [sel, setSel] = useState(routeKey);
   useEffect(() => setSel(routeKey), [routeKey]);
 

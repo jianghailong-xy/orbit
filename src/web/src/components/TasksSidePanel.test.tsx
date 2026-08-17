@@ -33,4 +33,13 @@ describe('TasksSidePanel nav', () => {
     // produce sel === 'projects' and light up the entry asserted above.
     expect(source).toContain(': loc.pathname.slice(1);');
   });
+
+  it('keeps Projects selected on a project detail URL', () => {
+    // /projects/<id> would otherwise reach the slice(1) fallback above and produce
+    // sel === 'projects/<id>', which matches no TOP key — the entry would go dark on the very
+    // page you navigated to from it. This branch has to map the whole subtree back to 'projects'.
+    expect(source).toMatch(/startsWith\('\/projects\/'\)\s*\n?\s*\?\s*'projects'/);
+    // The runner branch is checked first and its /runner prefix must not swallow it.
+    expect(source).not.toMatch(/startsWith\('\/project'\)/);
+  });
 });
