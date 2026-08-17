@@ -12,8 +12,28 @@ const TASK_A = '550e8400-e29b-41d4-a716-446655440000';
 const TASK_B = '550e8400-e29b-41d4-a716-446655440001';
 const OTHER_TASK = '550e8400-e29b-41d4-a716-446655440002';
 
-function serviceWith(prisma: unknown, realtime: unknown = { publishForUser: () => undefined }): TasksService {
-  return new TasksService(prisma as never, {} as never, realtime as never);
+/**
+ * A delete now runs inside a transaction and scans for the task's live runs first, so every
+ * stub needs those two even when the test is about something else. Defaults say "no runs":
+ * a test that cares supplies its own `session.findMany`.
+ */
+let lastTxOptions: any;
+
+function serviceWith(
+  prisma: any,
+  realtime: unknown = { publishForUser: () => undefined },
+  sessions: unknown = { cancel: async () => true },
+): TasksService {
+  const tx = {
+    $queryRaw: async () => [],
+    session: { findMany: async () => [] },
+    ...prisma,
+  };
+  const $transaction = async (fn: (t: unknown) => unknown, options: unknown) => {
+    lastTxOptions = options;
+    return fn(tx);
+  };
+  return new TasksService({ ...tx, $transaction } as never, sessions as never, realtime as never);
 }
 
 test('batch delete is exposed as POST tasks/batch-delete and forwards the authenticated owner', async () => {
@@ -106,8 +126,9 @@ test('single delete rejects malformed and non-owned ids before deleting', async 
         lookupWhere = where;
         return null;
       },
-      delete: async () => {
+      deleteMany: async () => {
         deletes += 1;
+        return { count: 0 };
       },
     },
   });
@@ -120,23 +141,25 @@ test('single delete rejects malformed and non-owned ids before deleting', async 
   assert.equal(deletes, 0);
 });
 
+const ownedTask = () => ({
+  id: TASK_A,
+  ownerId: OWNER_ID,
+  status: 'CANCELLED',
+  creatorSessionId: null,
+  comments: [],
+  dependsOn: [],
+});
+
 test('single delete hard-deletes an owned task', async () => {
-  let deletedId: string | undefined;
+  let deleteWhere: any;
   const published: unknown[][] = [];
   const service = serviceWith(
     {
       task: {
-        findFirst: async () => ({
-          id: TASK_A,
-          ownerId: OWNER_ID,
-          status: 'CANCELLED',
-          creatorSessionId: null,
-          comments: [],
-          dependsOn: [],
-        }),
-        delete: async ({ where }: any) => {
-          deletedId = where.id;
-          return { id: where.id };
+        findFirst: async () => ownedTask(),
+        deleteMany: async ({ where }: any) => {
+          deleteWhere = where;
+          return { count: 1 };
         },
       },
     },
@@ -144,6 +167,131 @@ test('single delete hard-deletes an owned task', async () => {
   );
 
   assert.deepEqual(await service.remove(OWNER_ID, TASK_A), { ok: true });
-  assert.equal(deletedId, TASK_A);
+  assert.deepEqual(deleteWhere, { ownerId: OWNER_ID, id: { in: [TASK_A] } });
   assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
+});
+
+// A run reaches its terminal state by finishing its task. Delete the task under a live run and
+// that route is gone: the run parks at AWAITING_INPUT and stays there, detached by the SET NULL
+// foreign key and indistinguishable from an ordinary chat, so nothing later can settle it. These
+// cover the one moment that still can.
+
+const RUN_A = '550e8400-e29b-41d4-a716-4466554400a0';
+const RUN_B = '550e8400-e29b-41d4-a716-4466554400a1';
+
+/** Records the order of the delete's steps, so "scan, then delete" can be asserted. */
+function deleteRecorder(runs: string[], deleted = 1) {
+  const calls: string[] = [];
+  const cancelled: Array<[string, string, string]> = [];
+  const prisma = {
+    task: {
+      findFirst: async () => ownedTask(),
+      deleteMany: async () => {
+        calls.push('delete');
+        return { count: deleted };
+      },
+    },
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      calls.push('lock');
+      calls.push(strings.join('?').replace(/\s+/g, ' ').trim());
+      return [];
+    },
+    session: {
+      findMany: async ({ where }: any) => {
+        calls.push('scan');
+        calls.push(JSON.stringify(where));
+        return runs.map((id) => ({ id }));
+      },
+    },
+  };
+  const sessions = {
+    cancel: async (ownerId: string, id: string, reason: string) => {
+      calls.push('cancel');
+      cancelled.push([ownerId, id, reason]);
+      return true;
+    },
+  };
+  return { service: serviceWith(prisma, undefined, sessions), calls, cancelled };
+}
+
+test('deleting a task ends the runs that were still working it', async () => {
+  const { service, cancelled } = deleteRecorder([RUN_A, RUN_B]);
+
+  await service.remove(OWNER_ID, TASK_A);
+
+  // task_cancelled, not cancelled: it is a graceful reason, so a runner that never honors the
+  // end is force-finalized to CANCELLED rather than recorded as a run failure. Nothing failed.
+  assert.deepEqual(cancelled, [
+    [OWNER_ID, RUN_A, 'task_cancelled'],
+    [OWNER_ID, RUN_B, 'task_cancelled'],
+  ]);
+});
+
+test('only runs that could still be working the task are ended', async () => {
+  const { service, calls } = deleteRecorder([]);
+
+  await service.remove(OWNER_ID, TASK_A);
+
+  // Finished runs stay untouched: detaching them instead of cascading them away is what keeps a
+  // deleted task's history readable. TASK_OCCUPYING is the set that has not finished — PENDING
+  // included, since a queued run would otherwise start working a task that no longer exists.
+  const scan = JSON.parse(calls[calls.indexOf('scan') + 1]);
+  assert.deepEqual(scan, {
+    ownerId: OWNER_ID,
+    taskId: { in: [TASK_A] },
+    status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+  });
+});
+
+test('the runs are read under a lock on the task, before it is deleted', async () => {
+  const { service, calls } = deleteRecorder([RUN_A]);
+
+  await service.remove(OWNER_ID, TASK_A);
+
+  // Order is the whole fix: after the delete the SET NULL foreign key has already erased the
+  // link, and there is nothing left to scan for.
+  assert.deepEqual(
+    calls.filter((c) => ['lock', 'scan', 'delete', 'cancel'].includes(c)),
+    ['lock', 'scan', 'delete', 'cancel'],
+  );
+  // FOR UPDATE on the task row conflicts with the FOR KEY SHARE a session insert takes on it,
+  // so a dispatch landing mid-delete either commits before the scan or fails its foreign key.
+  // Without it, a run could slip in between the scan and the delete and be stranded.
+  const sql = calls[calls.indexOf('lock') + 1];
+  assert.match(sql, /FROM "task"/);
+  assert.match(sql, /FOR UPDATE/);
+});
+
+test('a run that cannot be ended does not fail the delete', async () => {
+  const published: unknown[][] = [];
+  const service = serviceWith(
+    {
+      task: { findFirst: async () => ownedTask(), deleteMany: async () => ({ count: 1 }) },
+      session: { findMany: async () => [{ id: RUN_A }, { id: RUN_B }] },
+    },
+    { publishForUser: (...args: unknown[]) => published.push(args) },
+    {
+      cancel: async (_o: string, id: string) => {
+        if (id === RUN_A) throw new Error('runner gone');
+        return true;
+      },
+    },
+  );
+
+  // The task is deleted either way, and an end nobody honors is force-finalized by the reaper.
+  assert.deepEqual(await service.remove(OWNER_ID, TASK_A), { ok: true });
+  assert.deepEqual(published, [[OWNER_ID, 'task_changed', TASK_A]]);
+});
+
+test('batch delete ends the runs of every task it removes', async () => {
+  const { service, cancelled, calls } = deleteRecorder([RUN_A, RUN_B], 2);
+
+  assert.deepEqual(await service.batchDelete(OWNER_ID, [TASK_A, TASK_B]), { deleted: 2 });
+
+  assert.deepEqual(JSON.parse(calls[calls.indexOf('scan') + 1]).taskId, { in: [TASK_A, TASK_B] });
+  assert.deepEqual(cancelled.map((c) => c[1]), [RUN_A, RUN_B]);
+  // The delete was one implicit statement before, under no client deadline. Prisma's default
+  // aborts an interactive transaction at 5s, which a batch cascading through thousands of
+  // comments and edges would hit — deletes that used to work would start failing as P2028.
+  assert.ok(lastTxOptions.timeout >= 30_000, `transaction deadline: ${lastTxOptions?.timeout}`);
 });

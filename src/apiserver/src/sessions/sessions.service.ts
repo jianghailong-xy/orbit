@@ -3265,17 +3265,26 @@ export class SessionsService {
   }
 
   /**
-   * Stop a session and settle it to CANCELLED with endReason 'cancelled' — unlike
-   * {@link end}, which reaches the same status under 'ended' and so still reads as
-   * dormant/resumable. A PENDING session is finalized in place (while any prior warm
-   * runtime is cancelled); other open states receive an end control. No-op (returns
-   * false) if already terminal or already ending. Used by {@link TasksService.batchStop}.
+   * Stop a session and settle it to CANCELLED — unlike {@link end}, which reaches the same
+   * status under 'ended' and so still reads as dormant/resumable. A PENDING session is
+   * finalized in place (while any prior warm runtime is cancelled); other open states receive
+   * an end control. No-op (returns false) if already terminal or already ending.
+   *
+   * `reason` records who called it off. CANCELLED is a person stopping the run
+   * (TasksService.batchStop). TASK_CANCELLED is the work item itself going away
+   * (TasksService deleting the task) — a *graceful* reason, so a runner that never honors the
+   * end is force-finalized to CANCELLED by the reaper instead of being recorded as a run
+   * failure. Nothing failed: the task was withdrawn.
    */
-  async cancel(ownerId: string, id: string): Promise<boolean> {
+  async cancel(
+    ownerId: string,
+    id: string,
+    reason: SessionEndReason = SessionEndReason.CANCELLED,
+  ): Promise<boolean> {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) return false;
-    return this.endOpen(ownerId, id, SessionEndReason.CANCELLED);
+    return this.endOpen(ownerId, id, reason);
   }
 
   /**

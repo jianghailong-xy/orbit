@@ -156,8 +156,9 @@ task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 Usage:
   orbit task delete [task-id] [--json]
 
-This cannot be undone. Comments and dependency edges are deleted; linked sessions
-are retained and detached from the task.
+This cannot be undone. Comments and dependency edges are deleted; finished sessions
+are retained and detached from the task, but a run still in flight is stopped — with
+the task gone it has no way left to finish.
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
 `,

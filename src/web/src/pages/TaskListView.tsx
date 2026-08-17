@@ -615,7 +615,9 @@ export function TaskListView() {
           )}
           <Popconfirm
             title="Delete this task?"
-            description="This action cannot be undone."
+            // A run in flight is stopped, not detached: with the task gone it has no way left to
+            // finish, so leaving it would park it forever. Worth saying before the click.
+            description="A run still in flight is stopped. This action cannot be undone."
             okText="Delete"
             cancelText="Cancel"
             okButtonProps={{
@@ -727,7 +729,7 @@ export function TaskListView() {
                   </Button>
                   <Popconfirm
                     title={`Delete ${selectedRows.length} selected task${selectedRows.length === 1 ? '' : 's'}?`}
-                    description="This action cannot be undone."
+                    description="Runs still in flight are stopped. This action cannot be undone."
                     okText="Delete"
                     cancelText="Cancel"
                     okButtonProps={{ danger: true, loading: batchDelete.isPending }}

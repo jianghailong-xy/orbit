@@ -14,6 +14,7 @@ import {
   planUsageBlockedUntil,
   planUsageReported,
   RunEventType,
+  SessionEndReason,
   TaskStatus,
   USAGE_LIMIT_ERROR_MARKERS,
   type PlanUsage,
@@ -3511,11 +3512,73 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
-    await this.prisma.task.delete({ where: { id } });
+    await this.deleteAndStopRuns(ownerId, [id]);
     // Cascades may remove prerequisite edges from other open DAGs, so invalidate the owner's
     // task snapshots even though the deleted focus task itself can no longer be fetched.
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
     return { ok: true };
+  }
+
+  /**
+   * Delete the caller's tasks among `ids`, and stop whatever was still running them.
+   *
+   * A task run settles by finishing its task: the workspace marks it DONE and the session ends
+   * as `task_done`. Delete the task under a live run and that route is gone — the run finishes
+   * its turn, parks at AWAITING_INPUT, and stays there. It costs nothing (the claim counts only
+   * RUNNING, so an idle session holds no slot) but it never settles, and no later sweep can
+   * recognize it: Session.taskId is SET NULL by the delete, leaving a run indistinguishable
+   * from an ordinary chat. The reaper's rule for a task that goes terminal under a live run
+   * cannot cover this one, because by the time it looks there is no task to read a status from.
+   * This is the last moment the link exists, so it is the only place that can end them.
+   *
+   * Terminal sessions are deliberately left alone: detaching finished runs rather than
+   * cascading them away is what keeps a deleted task's history readable.
+   *
+   * The tasks are locked before their runs are read. Inserting a session that references a task
+   * takes FOR KEY SHARE on that task's row, which FOR UPDATE conflicts with, so a dispatch
+   * landing at the same moment either commits first and is seen by the scan, or waits and then
+   * fails its foreign key against the row just deleted. Unlocked it could slip in between the
+   * scan and the delete and be stranded by the very code meant to prevent that.
+   */
+  private async deleteAndStopRuns(ownerId: string, ids: string[]): Promise<number> {
+    const { deleted, runs } = await this.prisma.$transaction(
+      async (tx) => {
+        // Ordered, so two deletes over overlapping selections cannot take the same rows in
+        // opposite orders and deadlock.
+        await tx.$queryRaw`
+          SELECT id FROM "task"
+          WHERE id = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+          ORDER BY id
+          FOR UPDATE`;
+        const occupying = await tx.session.findMany({
+          where: { ownerId, taskId: { in: ids }, status: { in: TASK_OCCUPYING } },
+          select: { id: true },
+        });
+        const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
+        return { deleted: res.count, runs: occupying.map((s) => s.id) };
+      },
+      // The delete used to be one implicit statement under no client deadline. Inside an
+      // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
+      // cascade through thousands of comments and edges would hit — turning deletes that used
+      // to work into P2028. The locks are held for as long as the delete takes either way.
+      { timeout: 60_000, maxWait: 10_000 },
+    );
+    for (const sessionId of runs) {
+      // Each end is its own transaction, and one that fails must not take the delete with it:
+      // the task is already gone either way, and an end nobody honors is force-finalized by
+      // the reaper.
+      await this.sessions
+        .cancel(ownerId, sessionId, SessionEndReason.TASK_CANCELLED)
+        .catch((e) =>
+          this.logger.warn(
+            `task delete: could not end run ${sessionId}: ${e instanceof Error ? e.message : e}`,
+          ),
+        );
+    }
+    if (runs.length > 0) {
+      this.logger.log(`task delete: ended ${runs.length} in-flight run(s) across ${deleted} task(s)`);
+    }
+    return deleted;
   }
 
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
@@ -3938,19 +4001,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * Hard-delete many tasks with the same semantics as {@link remove}. The owner filter
    * is part of the DELETE statement, so unknown and cross-tenant ids are indistinguishable
-   * and silently ignored. Task comments and dependency edges cascade-delete; task sessions
-   * are retained and detached by the Session.taskId SET NULL foreign key, including live runs.
+   * and silently ignored. Task comments and dependency edges cascade-delete; finished task
+   * sessions are retained and detached by the Session.taskId SET NULL foreign key, and runs
+   * still in flight are ended — see {@link deleteAndStopRuns}.
    */
   async batchDelete(ownerId: string, taskIds: string[]) {
     const uniqueIds = [...new Set(taskIds)];
     if (uniqueIds.length === 0) return { deleted: 0 };
-    const result = await this.prisma.task.deleteMany({
-      where: { ownerId, id: { in: uniqueIds } },
-    });
-    if (result.count > 0) {
+    const deleted = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    if (deleted > 0) {
       this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, uniqueIds[0]);
     }
-    return { deleted: result.count };
+    return { deleted };
   }
 
   /** Set (or clear, when assigneeId is null) the responsible workspace on many tasks at once. */

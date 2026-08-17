@@ -48,7 +48,7 @@ struct TasksListView: View {
                 }
                 Button("Cancel", role: .cancel) { taskToDelete = nil }
             } message: {
-                Text("This can't be undone. Existing run sessions are kept.")
+                Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
             }
             #if os(iOS)
             .toolbar {
@@ -712,7 +712,7 @@ private struct TaskDetailContent: View {
             .disabled(tasks.isMutating(taskID))
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This can't be undone. Existing run sessions are kept.")
+            Text("This can't be undone. Finished run sessions are kept; a run still in flight is stopped.")
         }
     }
 

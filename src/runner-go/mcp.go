@@ -1130,7 +1130,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_delete",
-			"description": "Permanently delete a task. This cannot be undone. Comments and dependency edges are deleted; linked sessions are retained and detached from the task. taskId defaults to the current task.",
+			"description": "Permanently delete a task. This cannot be undone. Comments and dependency edges are deleted; finished sessions are retained and detached from the task, but a run still in flight is stopped — with the task gone it has no way left to finish. taskId defaults to the current task.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
