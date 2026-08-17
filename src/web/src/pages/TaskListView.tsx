@@ -551,11 +551,20 @@ export function TaskListView() {
         <span className="seg-count">{n}</span>
       </span>
     );
+    // Ordered as work moves through the system: everything, then what is waiting, then what
+    // could start, then what is running, then how it ended. Each tab after the first is a
+    // narrowing of the one before it (Ready is the unblocked part of Open, Running the part of
+    // that which is in flight), so the row reads left to right as a pipeline rather than as an
+    // arbitrary list.
+    //
+    // All leads because it is both the default and the superset. It used to sit second, behind
+    // Ready — a leftover from when Ready was the default — which left the selected tab looking
+    // like something the reader had picked rather than where the page opens.
     const opts = [
-      { value: 'RUNNABLE', label: seg('Ready', counts.runnable) },
       { value: 'ALL', label: seg('All', counts.total) },
-      { value: 'RUNNING', label: seg('Running', counts.running) },
       { value: 'ONGOING', label: seg('Open', counts.open + counts.inProgress) },
+      { value: 'RUNNABLE', label: seg('Ready', counts.runnable) },
+      { value: 'RUNNING', label: seg('Running', counts.running) },
       { value: 'FAILED', label: seg('Failed', counts.failed, counts.failed > 0) },
       { value: 'DONE', label: seg('Done', counts.done) },
     ];
