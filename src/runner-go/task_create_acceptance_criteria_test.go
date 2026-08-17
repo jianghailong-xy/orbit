@@ -229,14 +229,14 @@ func TestTaskCLICreateAllowsADirectDescriptionWithCriteriaOnStdin(t *testing.T) 
 // instruction to write the same thing twice. Two copies drift, and nothing then says which one
 // settles the task — so the description copy has to hand the job over rather than compete for it.
 //
-// The same sentence is shared with task_update and session_create, neither of which takes the new
-// field: for them the prompt IS the only place criteria can live, so this pins that the create copy
-// was split off and the others were left exactly as they were.
+// The same sentence is shared with session_create, which takes no acceptanceCriteria: for it the
+// prompt IS the only place criteria can live, so this pins that the create copy was split off and
+// the shared one was left exactly as it was.
 func TestMCPTaskCreateDescriptionDefersProofOfDoneToAcceptanceCriteria(t *testing.T) {
 	tools := toolDescriptors(true, true)
 
-	// The wording task_update still uses, pinned literally: a "fix" that edited the shared string in
-	// place would satisfy every check below except this one.
+	// The wording session_create still uses, pinned literally: a "fix" that edited the shared string
+	// in place would satisfy every check below except this one.
 	const sharedPromptDesc = "Write this as a self-contained, executable prompt for the task — background, files involved, concrete steps, and acceptance criteria — so an agent with no prior conversation context can pick it up and act on it directly."
 
 	batch := mcpToolProps(tools, "task_create_batch")
@@ -250,7 +250,7 @@ func TestMCPTaskCreateDescriptionDefersProofOfDoneToAcceptanceCriteria(t *testin
 		description, _ := props["description"].(map[string]interface{})
 		text, _ := description["description"].(string)
 		if text == sharedPromptDesc {
-			t.Fatalf("%s description still shares task_update's prompt copy, which asks for criteria inline", label)
+			t.Fatalf("%s description still shares session_create's prompt copy, which asks for criteria inline", label)
 		}
 		if strings.Contains(strings.ToLower(text), "and acceptance criteria") {
 			t.Fatalf("%s description still asks for acceptance criteria inline: %q", label, text)
@@ -281,20 +281,22 @@ func TestMCPTaskCreateDescriptionDefersProofOfDoneToAcceptanceCriteria(t *testin
 		}
 	}
 
-	// task_update takes no acceptanceCriteria, so for it the prompt genuinely is the only place the
-	// criteria can live: both halves of its copy must be exactly what they were.
-	updateProps := mcpToolProps(tools, "task_update")
-	updateDescription, _ := updateProps["description"].(map[string]interface{})
-	if text, _ := updateDescription["description"].(string); text != sharedPromptDesc {
-		t.Fatalf("task_update description property changed: %q", text)
+	// session_create takes no acceptanceCriteria, so for it the prompt genuinely is the only place the
+	// criteria can live: both halves of its copy must be exactly what they were. It is also the
+	// remaining holder of the shared string, which makes it the control that fails if the narrowing
+	// was done by editing promptDesc globally instead of splitting a copy off it.
+	sessionProps := mcpToolProps(tools, "session_create")
+	sessionPrompt, _ := sessionProps["prompt"].(map[string]interface{})
+	if text, _ := sessionPrompt["description"].(string); text != sharedPromptDesc {
+		t.Fatalf("session_create prompt property changed: %q", text)
 	}
 	for _, tool := range tools {
-		if tool["name"] != "task_update" {
+		if tool["name"] != "session_create" {
 			continue
 		}
 		text, _ := tool["description"].(string)
-		if !strings.Contains(text, "(background, files involved, steps, acceptance criteria)") {
-			t.Fatalf("task_update tool description changed: %q", text)
+		if !strings.Contains(text, "(background, files, steps, acceptance)") {
+			t.Fatalf("session_create tool description changed: %q", text)
 		}
 	}
 }

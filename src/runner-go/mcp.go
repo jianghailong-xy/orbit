@@ -352,7 +352,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(noTaskMsg, true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
+		// acceptanceCriteria rides the same present-only copy as every other field, which is what
+		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
+		// a string is forwarded as given, and an explicit null survives as null rather than being
+		// mistaken for "not supplied" — that last one is the whole clear path.
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "labels")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1014,13 +1018,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"to depend on something created in this same call, use ref/dependsOnRefs, which is ordering, " +
 			"not membership.",
 	}
-	// The create path now has a field of its own for what proves the work is done, so its
+	// Both task write doors have a field of their own for what proves the work is done, so their
 	// `description` must stop asking for one: promptDesc above tells the caller to put acceptance
 	// criteria inside the prompt, and next to acceptanceCriteria that is an instruction to write the
 	// same thing twice — two copies that drift, with nothing saying which one settles the task.
-	// task_update and session_create deliberately keep promptDesc: neither takes acceptanceCriteria,
-	// so for them the prompt really is the only place the criteria can live.
-	createDescriptionProp := map[string]interface{}{
+	// Shared by task_create, every task_create_batch item and task_update, because a prompt edited
+	// through the update door must not reintroduce the copy the create door just gave up.
+	// session_create deliberately keeps promptDesc: it takes no acceptanceCriteria, so for it the
+	// prompt really is the only place the criteria can live.
+	taskDescriptionProp := map[string]interface{}{
 		"type": "string",
 		"description": "Write this as a self-contained, executable prompt for the task — background, " +
 			"files involved, and concrete steps — so an agent with no prior conversation context can " +
@@ -1041,6 +1047,27 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"states what would settle itself, not what would settle its parent or its project. Up "+
 			"to %d characters.", maxTaskAcceptanceCriteriaChars),
 	}
+	// The same field on the edit door, where it also has to be removable. Criteria are usually
+	// written before the work is understood, so what settles a task is whatever it says at the end,
+	// not what it was created with — an agent that discovers the real test has to be able to record
+	// it, and one that finds the recorded test was wrong has to be able to take it back. Nullable,
+	// unlike the create prop above: on a create there is no existing value to clear.
+	updateAcceptanceCriteriaProp := map[string]interface{}{
+		"type":      []string{"string", "null"},
+		"maxLength": maxTaskAcceptanceCriteriaChars,
+		"description": fmt.Sprintf("What would settle that THIS task is done: the observable, "+
+			"independently verifiable result — a command that passes, a file that exists, a number "+
+			"that moved — stated so somebody who did not watch the work can check it. Whole-field "+
+			"replacement, not an append: OMIT it to leave the task's current criteria exactly as they "+
+			"are, pass a string to REPLACE them (the empty string records that the task has none "+
+			"worth stating), pass null to CLEAR them. Expect to use it after creation — what proves a "+
+			"task done is often only knowable once the work is understood. Distinct from "+
+			"`description`, which says what work to PERFORM, and from the project's own "+
+			"acceptanceCriteria (project_get), which settles the whole goal rather than this one "+
+			"step: editing a task's criteria never touches its project's, and copying the project's "+
+			"onto a task claims one step settles everything. Up to %d characters.",
+			maxTaskAcceptanceCriteriaChars),
+	}
 	labelsProp := map[string]interface{}{
 		"type":        "array",
 		"items":       str,
@@ -1059,7 +1086,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	taskCreateProps := func() map[string]interface{} {
 		return map[string]interface{}{
 			"title":              str,
-			"description":        createDescriptionProp,
+			"description":        taskDescriptionProp,
 			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 			"projectId":          projectIDProp,
@@ -1196,17 +1223,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). Pass null for assigneeId/listId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). Pass null for assigneeId/listId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
-				"taskId":      taskIDProp,
-				"title":       str,
-				"description": promptDesc,
-				"status":      status,
-				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
-				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
-				"dueDate":     map[string]interface{}{"type": []string{"string", "null"}},
-				"provider":    providerProp,
-				"model":       modelProp,
+				"taskId":             taskIDProp,
+				"title":              str,
+				"description":        taskDescriptionProp,
+				"status":             status,
+				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
+				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
+				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
+				"provider":           providerProp,
+				"model":              modelProp,
+				"acceptanceCriteria": updateAcceptanceCriteriaProp,
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",
 					"items":       str,

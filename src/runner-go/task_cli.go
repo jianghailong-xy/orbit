@@ -188,6 +188,11 @@ Options:
   --due-date ISO_DATE | --clear-due-date
   --provider SLUG | --clear-provider
   --model MODEL | --clear-model
+  --acceptance-criteria TEXT  Replace what would settle that this task is done (max 4,000
+                              characters)
+  --acceptance-criteria-file -
+                              Read the replacement criteria from stdin; paths are rejected
+  --clear-acceptance-criteria Leave the task with no acceptance criteria
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable
   --clear-dependencies        Remove all prerequisites
   --label L[,L...]            Replace all labels; repeatable
@@ -196,6 +201,22 @@ Options:
   --json
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+
+--acceptance-criteria records what would settle that this task is done: the observable,
+verifiable result — a command that passes, a file that exists, a number that moved — stated so
+somebody who did not do the work can check it. It answers a different question from
+--description, which says what work to PERFORM, and from a project's own acceptance criteria
+(` + "`orbit project get`" + `), which settle the whole goal rather than this one task; updating a task's
+criteria never touches its project's. Expect to use it after the task was created — what proves
+a task done is often only clear once the work is understood.
+
+It replaces the whole field rather than appending to it. Omitting the flag leaves the criteria
+the task already has untouched, passing text replaces them (` + "`--acceptance-criteria \"\"`" + ` records
+that there are none worth stating), and --clear-acceptance-criteria removes them, so it cannot
+be combined with either form. The server accepts up to 4,000 characters.
+--acceptance-criteria-file reads the replacement from stdin, accepting only '-'; since
+--description-file reads the same stdin, the two file flags cannot be used together, but passing
+one field inline and the other on stdin is fine.
 `,
 	"delete": `orbit task delete — permanently delete a task
 
@@ -1031,6 +1052,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearProvider := fs.Bool("clear-provider", false, "inherit the assignee's provider again")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
 	clearModel := fs.Bool("clear-model", false, "inherit the assignee's model again")
+	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
+	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
+	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
 	clearDependencies := fs.Bool("clear-dependencies", false, "clear all prerequisite task ids")
@@ -1079,7 +1103,28 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if flagWasSet(fs, "label") && len(labels) == 0 {
 		return fmt.Errorf("--label cannot be empty; use --clear-labels")
 	}
+	// Clearing and replacing are opposite instructions about the same field, so naming both is not a
+	// preference order to resolve — including when the replacement is on stdin, which is why this is
+	// caught before anything reads it.
+	if *clearAcceptanceCriteria && flagWasSet(fs, "acceptance-criteria") {
+		return fmt.Errorf("--clear-acceptance-criteria and --acceptance-criteria cannot be used together")
+	}
+	if *clearAcceptanceCriteria && flagWasSet(fs, "acceptance-criteria-file") {
+		return fmt.Errorf("--clear-acceptance-criteria and --acceptance-criteria-file cannot be used together")
+	}
+	// Two fields, one stdin — the same collision `orbit task create` has. readCLIText sees a single
+	// field at a time, so nothing downstream can notice that the first read drains the stream and the
+	// second gets an empty string: an update that silently blanks a task's criteria (or its
+	// description) and reports success. Caught here, before either read and before any request; a
+	// direct value for one and stdin for the other is unambiguous and stays legal.
+	if flagWasSet(fs, "description-file") && flagWasSet(fs, "acceptance-criteria-file") {
+		return fmt.Errorf("--description-file and --acceptance-criteria-file both read stdin and cannot be used together; pass one of them inline")
+	}
 	desc, descSet, err := readCLIText(in, *description, flagWasSet(fs, "description"), *descriptionFile, flagWasSet(fs, "description-file"), "description")
+	if err != nil {
+		return err
+	}
+	criteria, criteriaSet, err := readCLIText(in, *acceptanceCriteria, flagWasSet(fs, "acceptance-criteria"), *acceptanceCriteriaFile, flagWasSet(fs, "acceptance-criteria-file"), "acceptance-criteria")
 	if err != nil {
 		return err
 	}
@@ -1135,6 +1180,15 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--model cannot be empty; use --clear-model")
 		}
 		body["model"] = *model
+	}
+	// Whole-field replacement with an explicit way to remove it: null clears, a string replaces, and
+	// an absent flag sends nothing so the task keeps what it already states. Free text rather than an
+	// id, so the blank-is-a-typo rule the id flags above use does not apply — `--acceptance-criteria
+	// ""` is a caller deliberately recording none, and the server's DTO has no MinLength either.
+	if *clearAcceptanceCriteria {
+		body["acceptanceCriteria"] = nil
+	} else if criteriaSet {
+		body["acceptanceCriteria"] = criteria
 	}
 	if *clearDependencies {
 		body["dependsOnTaskIds"] = []string{}
@@ -1525,7 +1579,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
