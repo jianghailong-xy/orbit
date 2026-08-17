@@ -28,6 +28,9 @@ const TASK_STATUSES = Object.values(TaskStatus);
 export const TASK_LABEL_MAX_COUNT = 16;
 export const TASK_LABEL_MAX_LENGTH = 64;
 
+/** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
+export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -38,6 +41,17 @@ export class CreateTaskDto {
   @IsOptional() @IsPublicId() assigneeId?: string;
   // The list this task belongs to. Must be owned by the caller.
   @IsOptional() @IsPublicId() listId?: string;
+  // The project this task is work towards. Must be owned by the caller. Orthogonal to listId:
+  // a list decides how the task runs, a project states what it is for.
+  @IsOptional() @IsPublicId() projectId?: string;
+  // The task this one is a part of. Must be owned by the caller and belong to the same project —
+  // a subtask of work in another project is a statement no reader could act on.
+  @IsOptional() @IsPublicId() parentTaskId?: string;
+  // What would settle that this task is actually done.
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
+  acceptanceCriteria?: string;
   @IsOptional() @IsDateString() dueDate?: string;
   // Provider/model this task's runs use, overriding the assignee workspace's own. The provider must
   // be a built-in engine slug or one of the caller's enabled configured providers; omitted (or
@@ -122,6 +136,18 @@ export class UpdateTaskDto {
   @IsOptional() @IsPublicId() assigneeId?: string | null;
   // null detaches from its list; a string (re)assigns to that list.
   @IsOptional() @IsPublicId() listId?: string | null;
+  // null detaches from its project; a string (re)files it under that project. Rejected when it
+  // would leave this task in a different project from its parent or its subtasks — see
+  // TasksService.assertHierarchyConsistent.
+  @IsOptional() @IsPublicId() projectId?: string | null;
+  // null detaches from its parent; a string makes this task part of that one. Rejected for a
+  // self-parent, for a cycle, and across projects.
+  @IsOptional() @IsPublicId() parentTaskId?: string | null;
+  // null clears the criteria; a string replaces them.
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
+  acceptanceCriteria?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
   // null goes back to inheriting the assignee workspace's provider/model; a string pins this task's
   // runs to that provider / model id. Omit to leave the current pin alone.

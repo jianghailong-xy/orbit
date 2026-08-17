@@ -49,6 +49,25 @@ enum TaskStatus {
   @@map("task_status")
 }
 
+/// Where a project stands as a piece of work: still being pursued, achieved, or abandoned.
+///
+/// A business lifecycle, deliberately mirroring `TaskStatus`'s vocabulary rather than inventing a
+/// second one — a project and its tasks are the same kind of claim at different scales, and
+/// "DONE" has to mean the same thing at both or a coordinator cannot roll one up into the other.
+///
+/// Filing (archive / hide / pin) is NOT expressed here and must not be added here. That is a
+/// statement about a reader's list, not about the work: a cancelled project someone still wants
+/// on screen and a finished one they have put away are independent facts, and collapsing them
+/// into one column makes each unable to be recorded without overwriting the other. `Session`
+/// already keeps the two apart (`RunStatus` beside `completedAt`/`deletedAt`) and this follows it.
+enum ProjectStatus {
+  OPEN
+  DONE
+  CANCELLED
+
+  @@map("project_status")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -85,6 +104,7 @@ model User {
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
   taskLists        TaskList[] // task lists this user owns (tenant scope)
+  projects         Project[] // projects this user owns (tenant scope)
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
   deviceTokens     DeviceToken[] // registered iOS devices for APNs push
   modelProviders   ModelProvider[] // personal (BYOK) model providers
@@ -1010,6 +1030,53 @@ model Activity {
 
 // A user-created grouping of Tasks. Minimal: just a title + tenant scope.
 // Deleting a list detaches its tasks (Task.listId -> null), never deletes them.
+/// A body of work stated as an outcome: what is wanted, how anyone would know it was reached, and
+/// how it is to be pursued.
+///
+/// Deliberately not a second TaskList. A list is a dispatch policy — it decides how its tasks run
+/// (instructions spliced into the prompt, concurrency, pause, foreman) and every column on it
+/// exists because some part of the dispatch path reads it. A project decides nothing about
+/// dispatch: nothing in the sweep, the claim gate, the reconciler or the runner reads this table,
+/// and this phase adds no code that does. That separation is the point of introducing it as its
+/// own model rather than as more columns on the list — the two answer different questions ("how
+/// should this class of work be run" vs "what are we trying to achieve"), and a campaign can be
+/// re-organised along one axis without disturbing the other.
+///
+/// `goal` and `acceptanceCriteria` are separate columns rather than one prose blob because they
+/// are read by different readers for different purposes: the goal is the standing statement of
+/// intent, the criteria are what a check is run against. Merging them would make "is this done"
+/// a matter of interpreting a paragraph, which is the failure verification exists to avoid.
+model Project {
+  id      String @id @default(uuid(7)) @db.Uuid
+  title   String
+  // Tenant scope: list/authorization always filter by this column (like tasks and task lists).
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id])
+
+  /// What this project is trying to achieve, in words. Optional: a project is often filed before
+  /// anyone can state the outcome precisely, and refusing to record it until then loses the only
+  /// place the intent could live.
+  goal               String?
+  /// What would settle that the goal was reached. The same field exists on Task for the same
+  /// reason it exists here — a claim of completion is only checkable against a stated condition.
+  acceptanceCriteria String? @map("acceptance_criteria")
+  /// How this project's work is to be done, as opposed to which item is being done. The project
+  /// counterpart of `TaskList.instructions`, and — importantly for this phase — NOT wired into
+  /// any run prompt: nothing assembles it into a dispatch today. It is recorded so a coordinator
+  /// can be given it later, not so a task silently starts inheriting it now.
+  instructions       String?
+
+  status ProjectStatus @default(OPEN)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tasks Task[]
+
+  @@index([ownerId])
+  @@map("project")
+}
+
 model TaskList {
   id        String   @id @default(uuid(7)) @db.Uuid
   title     String
@@ -1190,6 +1257,38 @@ model Task {
   // Optional parent list grouping; deleting the list detaches but keeps the task.
   listId           String?     @map("list_id") @db.Uuid
   list             TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
+  /// The project this task is work towards. A third grouping axis, and — like `labels` and unlike
+  /// `listId` — one that carries no authority: no dispatch path reads it, so filing a task under a
+  /// project cannot change whether, when or how it runs. That is what makes this column safe to add
+  /// to 110k existing rows as NULL and leave there.
+  ///
+  /// Restrict on delete, NOT SetNull, and this is the one place it differs from `listId`. A list is
+  /// a dispatch policy its tasks can outlive; a project is what its tasks are *for*, so silently
+  /// nulling this column would not detach the tasks, it would destroy the only record of why they
+  /// exist — and it would do so invisibly, since nothing about a project-less task says it ever had
+  /// one. Deleting a non-empty project is therefore refused outright (see ProjectsService.remove),
+  /// and this constraint is the backstop that makes that refusal true even for a caller that races
+  /// past the check.
+  projectId        String?     @map("project_id") @db.Uuid
+  project          Project?    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  /// The task this one is a part of. Decomposition, not ordering: `TaskDependency` already says
+  /// "B waits for A", and that is a different claim from "B is part of A" — a subtask can be
+  /// unblocked and still belong to its parent, and a prerequisite can be finished work nobody
+  /// considers part of anything.
+  ///
+  /// A single optional parent (a forest) rather than an edge table, because the question it answers
+  /// admits exactly one answer: two parents would give one task two different wholes to be part of,
+  /// and the completion of neither would mean anything definite.
+  ///
+  /// SetNull on delete, NOT Cascade. Cascade would make `DELETE /tasks/:id` delete other tasks —
+  /// a change to what an existing, already-shipped endpoint does, and the destructive direction.
+  /// An orphaned child is recoverable by re-pointing it; a cascade-deleted subtree is not.
+  parentTaskId     String?     @map("parent_task_id") @db.Uuid
+  parent           Task?       @relation("TaskHierarchy", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  children         Task[]      @relation("TaskHierarchy")
+  /// What would settle that this task is actually done, as opposed to reported done. The task-level
+  /// counterpart of `Project.acceptanceCriteria`; nothing assembles it into a prompt in this phase.
+  acceptanceCriteria String?   @map("acceptance_criteria")
   /// Free-text labels, written by whoever files the task (in practice the agent creating it).
   /// The second grouping axis, orthogonal to `listId` and carrying no authority: a list decides
   /// how its tasks run (instructions, concurrency, pause, foreman), a label decides nothing and
@@ -1268,6 +1367,11 @@ model Task {
   @@index([ownerId, listId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_list_created_id_idx")
   @@index([assigneeId])
   @@index([listId])
+  /// "What is in this project" and "what are this task's subtasks" are the only two questions the
+  /// new columns are read by, and each is one indexed lookup. Both are also the FKs' own lookup
+  /// indexes, which is what keeps a project or parent delete from scanning the task table.
+  @@index([projectId])
+  @@index([parentTaskId])
   @@index([status])
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this

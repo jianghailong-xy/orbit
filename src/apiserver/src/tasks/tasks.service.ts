@@ -26,6 +26,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { withSessionState } from '../sessions/session-state';
 import {
+  CreateTaskBatchItemDto,
   CreateTaskCommentDto,
   CreateTaskDto,
   CreateTasksBatchDto,
@@ -66,6 +67,15 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // this set so it falls through to the resume path, where the trigger delivers its prompt
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
+
+/**
+ * How far `assertNoParentCycle` walks up a subtask chain before it refuses to judge.
+ *
+ * A bound, not a product rule: the walk is one query per level, and a decomposition fifty levels
+ * deep is a mistake rather than a plan. It also guarantees the loop ends even if the stored tree
+ * is somehow malformed.
+ */
+const MAX_TASK_PARENT_DEPTH = 50;
 
 /**
  * What a task LIST row needs: every scalar column except `description`, plus the assignee
@@ -634,6 +644,146 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!list) throw new ForbiddenException('task list not found');
   }
 
+  /** A task may only be filed under a project the same user owns (cf. assertOwnedList). */
+  private async assertOwnedProject(ownerId: string, projectId?: string | null): Promise<void> {
+    if (!projectId) return;
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { id: true },
+    });
+    if (!project) throw new ForbiddenException('project not found');
+  }
+
+  /**
+   * The parent this task may be made part of: owned by the same user, and in the same project the
+   * child will be in.
+   *
+   * The project rule is what keeps "part of" meaningful. A subtask belongs to the whole its parent
+   * belongs to; if the two could sit in different projects, then "everything in project A" and
+   * "everything under task P" would describe overlapping but disagreeing sets, and neither could
+   * be used to decide whether A is finished.
+   *
+   * Both sides are compared as `?? null`, so "no project" is one value rather than two — a task
+   * with no project may parent another task with no project, which is the shape every task in this
+   * deployment has today.
+   *
+   * `db` is the transaction the caller is writing in, so the parent read here and the write that
+   * follows see the same snapshot under the same lock. The preview path passes the plain client:
+   * it writes nothing, so there is nothing to serialize.
+   */
+  private async assertParentEligible(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    parentTaskId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    const parent = await db.task.findFirst({
+      where: { id: parentTaskId, ownerId },
+      select: { id: true, projectId: true },
+    });
+    if (!parent) throw new NotFoundException('parent task not found');
+    if ((parent.projectId ?? null) !== projectId) {
+      throw new BadRequestException(
+        'A subtask must be in the same project as its parent task — file both under the same ' +
+          'project (or neither) before linking them',
+      );
+    }
+  }
+
+  /**
+   * Walk up from `parentTaskId` and refuse the link if it comes back to `taskId`.
+   *
+   * One indexed lookup per level rather than loading the owner's edges wholesale, which is what
+   * the dependency cycle check does: dependencies are a graph that has to be examined as a whole,
+   * while parents form a forest where the only path that can close a loop is the one directly
+   * above the proposed parent. On an account with six figures of tasks the difference is a handful
+   * of primary-key reads against a full scan.
+   *
+   * The walk is bounded twice over — by `seen` and by the depth cap — so a cycle already stored by
+   * some other means cannot make this loop forever. A cycle it meets on the way up is not one this
+   * write is creating, so it stops rather than blaming the caller for it.
+   *
+   * Every step reads through `db`, the caller's transaction, which is holding the owner lock
+   * (`lockDependencyGraph`). That is what makes the answer still true when the write lands:
+   * unlocked, two simultaneous requests — one making A a child of B, the other B a child of A —
+   * each pass against a graph that does not yet contain the other, and commit a cycle between
+   * them. It is the same write skew the dependency edges take the same lock to prevent.
+   */
+  private async assertNoParentCycle(
+    db: Prisma.TransactionClient,
+    taskId: string,
+    parentTaskId: string,
+  ): Promise<void> {
+    const seen = new Set<string>();
+    let cursor: string | null = parentTaskId;
+    for (let depth = 0; depth < MAX_TASK_PARENT_DEPTH && cursor; depth += 1) {
+      if (cursor === taskId) {
+        throw new BadRequestException('That parent task is already one of this task’s subtasks');
+      }
+      if (seen.has(cursor)) return;
+      seen.add(cursor);
+      const above: { parentTaskId: string | null } | null = await db.task.findUnique({
+        where: { id: cursor },
+        select: { parentTaskId: true },
+      });
+      cursor = above?.parentTaskId ?? null;
+    }
+    if (cursor) {
+      throw new BadRequestException(
+        `Subtask chains are limited to ${MAX_TASK_PARENT_DEPTH} levels`,
+      );
+    }
+  }
+
+  /**
+   * Everything that must still hold about where this task sits, once `dto` is applied.
+   *
+   * Both columns are checked together because either one can break the same rule: re-filing a task
+   * under a different project can orphan it from its parent just as surely as pointing it at a
+   * parent in another project can.
+   *
+   * Moving a task that has subtasks is refused rather than cascaded. Cascading would mean a single
+   * PATCH silently rewriting an unbounded number of rows the caller never named, and there is no
+   * reader of this column yet to make that convenience worth the surprise; the error says how to
+   * do it explicitly instead.
+   *
+   * Runs inside the caller's transaction, under the owner lock, against `current` as re-read there
+   * — never against a copy loaded before the lock was taken. Both halves need it and for the same
+   * reason: moving a parent into another project and linking a child to that parent are the two
+   * writes that break the shared-project rule together, and each is invisible to the other until
+   * one of them commits. Serialized, whichever arrives second sees the first and is refused.
+   */
+  private async assertHierarchyConsistent(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+    current: { projectId: string | null; parentTaskId: string | null },
+    dto: UpdateTaskDto,
+  ): Promise<void> {
+    if (dto.projectId === undefined && dto.parentTaskId === undefined) return;
+    const projectId = dto.projectId === undefined ? current.projectId : (dto.projectId ?? null);
+    const parentTaskId =
+      dto.parentTaskId === undefined ? current.parentTaskId : (dto.parentTaskId ?? null);
+
+    if (parentTaskId) {
+      if (parentTaskId === taskId) {
+        throw new BadRequestException('A task cannot be its own parent');
+      }
+      await this.assertParentEligible(db, ownerId, parentTaskId, projectId);
+      await this.assertNoParentCycle(db, taskId, parentTaskId);
+    }
+
+    if (projectId !== current.projectId) {
+      const subtasks = await db.task.count({ where: { ownerId, parentTaskId: taskId } });
+      if (subtasks > 0) {
+        throw new BadRequestException(
+          `This task has ${subtasks} subtask(s) that would be left in a different project — ` +
+            'detach them (parentTaskId: null), move them, and link them again',
+        );
+      }
+    }
+  }
+
   /** Assert every id is a task this user owns (dependency endpoints both sides). */
   private async assertOwnedTasks(ownerId: string, ids: string[]): Promise<void> {
     const unique = [...new Set(ids)];
@@ -845,6 +995,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
+    await this.assertOwnedProject(ownerId, dto.projectId);
     await this.assertUsableProvider(ownerId, dto.provider);
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
@@ -875,21 +1026,38 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
     // before its prerequisites and closing a cycle. Any FK/write failure rolls the task back too.
+    //
+    // A parent link takes the same lock, and for the same shape of reason: the parent's project is
+    // read here and relied on by the row written next, so a concurrent move of that parent into
+    // another project has to be either wholly before or wholly after this. No cycle check is
+    // needed, though — a task that does not exist yet has no subtasks, so nothing can close a loop
+    // through it.
     let task: Task;
     try {
-      task = dependsOnTaskIds.length
-        ? await this.prisma.$transaction(async (tx) => {
-            await this.lockDependencyGraph(tx, ownerId);
-            const created = await tx.task.create({ data });
-            await tx.taskDependency.createMany({
-              data: dependsOnTaskIds.map((dependsOnTaskId) => ({
-                taskId: created.id,
-                dependsOnTaskId,
-              })),
-            });
-            return created;
-          })
-        : await this.prisma.task.create({ data });
+      task =
+        dependsOnTaskIds.length || dto.parentTaskId
+          ? await this.prisma.$transaction(async (tx) => {
+              await this.lockDependencyGraph(tx, ownerId);
+              if (dto.parentTaskId) {
+                await this.assertParentEligible(
+                  tx,
+                  ownerId,
+                  dto.parentTaskId,
+                  dto.projectId ?? null,
+                );
+              }
+              const created = await tx.task.create({ data });
+              if (dependsOnTaskIds.length) {
+                await tx.taskDependency.createMany({
+                  data: dependsOnTaskIds.map((dependsOnTaskId) => ({
+                    taskId: created.id,
+                    dependsOnTaskId,
+                  })),
+                });
+              }
+              return created;
+            })
+          : await this.prisma.task.create({ data });
     } catch (e) {
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
@@ -948,6 +1116,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       idempotencyKey,
       assigneeId: dto.assigneeId,
       listId: dto.listId,
+      projectId: dto.projectId,
+      parentTaskId: dto.parentTaskId,
+      acceptanceCriteria: dto.acceptanceCriteria,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       labels: dto.labels ? normalizeTaskLabels(dto.labels) : undefined,
       provider: dto.provider,
@@ -998,11 +1169,38 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertOwnedWorkspace(ownerId, assigneeId);
     for (const listId of distinct(items.map((item) => item.listId)))
       await this.assertOwnedList(ownerId, listId);
+    for (const projectId of distinct(items.map((item) => item.projectId)))
+      await this.assertOwnedProject(ownerId, projectId);
     for (const provider of distinct(items.map((item) => item.provider)))
       await this.assertUsableProvider(ownerId, provider);
     const existingPrerequisites = distinct(items.flatMap((item) => item.dependsOnTaskIds ?? []));
     if (existingPrerequisites.length) await this.assertOwnedTasks(ownerId, existingPrerequisites);
     return items;
+  }
+
+  /**
+   * Every item's parent, judged against the project that item will be in.
+   *
+   * Per item rather than per distinct value: eligibility is a fact about the pair (parent,
+   * project), so two items naming the same parent from different projects are two questions. A
+   * batch cannot name one of its own items as a parent — `ref` wires up dependencies only — so
+   * every parent here already exists and no cycle can be formed.
+   *
+   * Kept out of `assertBatchValid` because the two callers need it at different moments: the write
+   * runs it inside its transaction under the owner lock, where the answer stays true long enough
+   * to be written, while the preview runs it on the plain client because it writes nothing. Both
+   * still run it, so a card cannot promise a batch the write would refuse.
+   */
+  private async assertBatchHierarchy(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    items: CreateTaskBatchItemDto[],
+  ): Promise<void> {
+    for (const item of items) {
+      if (item.parentTaskId) {
+        await this.assertParentEligible(db, ownerId, item.parentTaskId, item.projectId ?? null);
+      }
+    }
   }
 
   /**
@@ -1021,6 +1219,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
     const items = await this.assertBatchValid(ownerId, dto);
+    // Unlocked: a preview writes nothing, so there is nothing for a lock to protect. It is asked
+    // at all so the card cannot promise a batch the write would then refuse.
+    await this.assertBatchHierarchy(this.prisma, ownerId, items);
     const assigneeIds = [...new Set(items.map((i) => i.assigneeId).filter((v): v is string => !!v))];
     const externalIds = [...new Set(items.flatMap((i) => i.dependsOnTaskIds ?? []))];
     const listIds = [...new Set(items.map((i) => i.listId).filter((v): v is string => !!v))];
@@ -1139,11 +1340,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const hasDependencies = items.some(
       (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
     );
+    const hasParents = items.some((item) => !!item.parentTaskId);
     const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
     const created = await this.prisma.$transaction(async (tx) => {
       // Same owner lock as create: the tasks and their edges must become visible together, or a
       // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
-      if (hasDependencies) await this.lockDependencyGraph(tx, ownerId);
+      // A batch naming parents takes it for the matching reason — each parent's project is read
+      // here and relied on by the rows written next.
+      if (hasDependencies || hasParents) await this.lockDependencyGraph(tx, ownerId);
+      // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
+      // parent in item 40 must not leave items 1-39 written.
+      if (hasParents) await this.assertBatchHierarchy(tx, ownerId, items);
       const idByRef = new Map<string, string>();
       const rows: Array<Task & { ref?: string }> = [];
       for (const item of items) {
@@ -2607,7 +2814,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const before = await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
+    if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
     if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
+    // Whether this write can move the task within the project/subtask structure. It decides both
+    // that the hierarchy rules are checked at all and that the write takes the owner lock: the
+    // check and the update it authorises have to be one serialized step, not two.
+    const touchesHierarchy = dto.projectId !== undefined || dto.parentTaskId !== undefined;
     const dependsOnTaskIds =
       dto.dependsOnTaskIds === undefined ? undefined : [...new Set(dto.dependsOnTaskIds)];
     if (dependsOnTaskIds?.includes(id)) {
@@ -2628,6 +2840,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // pin, null goes back to inheriting the assignee's provider/model.
       provider: dto.provider === undefined ? undefined : (dto.provider ?? null),
       model: dto.model === undefined ? undefined : (dto.model ?? null),
+      acceptanceCriteria:
+        dto.acceptanceCriteria === undefined ? undefined : (dto.acceptanceCriteria ?? null),
       autoRunWhenReady: dto.autoRunWhenReady,
     };
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
@@ -2644,12 +2858,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? (await this.pausedListIds(ownerId, [dto.listId])).has(dto.listId)
         : false;
     }
+    // projectId and parentTaskId are relation FKs too, and unlike the list they carry nothing with
+    // them: a project holds no dispatch policy, so re-filing a task cannot hold or release it.
+    if (dto.projectId !== undefined) {
+      data.project = dto.projectId ? { connect: { id: dto.projectId } } : { disconnect: true };
+    }
+    if (dto.parentTaskId !== undefined) {
+      data.parent = dto.parentTaskId ? { connect: { id: dto.parentTaskId } } : { disconnect: true };
+    }
+    // One owner lock covers both structures a task can be moved within — its dependency edges and
+    // its place in a project's subtask tree — because a single request can touch both and because
+    // serializing each against itself but not against the other would leave exactly the gap the
+    // lock exists to close. An update that touches neither still takes no lock at all: renaming a
+    // task must not queue behind another owner's DAG rewrite.
     const updated =
-      dependsOnTaskIds === undefined
+      dependsOnTaskIds === undefined && !touchesHierarchy
         ? await this.prisma.task.update({ where: { id }, data })
         : await this.prisma.$transaction(async (tx) => {
             await this.lockDependencyGraph(tx, ownerId);
-            if (dependsOnTaskIds.length) {
+            if (touchesHierarchy) {
+              // Re-read INSIDE the lock. `before` was loaded before it was held, so by now another
+              // request may have moved this task's project or given it subtasks — and judging
+              // against that stale copy is precisely how two writes that are each legal separately
+              // commit an illegal state together.
+              const current = await tx.task.findFirst({
+                where: { id, ownerId },
+                select: { projectId: true, parentTaskId: true },
+              });
+              if (!current) throw new NotFoundException('task not found');
+              await this.assertHierarchyConsistent(tx, ownerId, id, current, dto);
+            }
+            if (dependsOnTaskIds?.length) {
               const edges = await tx.taskDependency.findMany({
                 where: { task: { ownerId } },
                 select: { taskId: true, dependsOnTaskId: true },
@@ -2662,11 +2901,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
             // full dependency replacement atomic; [] intentionally stops after the delete.
             const task = await tx.task.update({ where: { id }, data });
-            await tx.taskDependency.deleteMany({ where: { taskId: id } });
-            if (dependsOnTaskIds.length) {
-              await tx.taskDependency.createMany({
-                data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: id, dependsOnTaskId })),
-              });
+            if (dependsOnTaskIds !== undefined) {
+              await tx.taskDependency.deleteMany({ where: { taskId: id } });
+              if (dependsOnTaskIds.length) {
+                await tx.taskDependency.createMany({
+                  data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: id, dependsOnTaskId })),
+                });
+              }
             }
             return task;
           });

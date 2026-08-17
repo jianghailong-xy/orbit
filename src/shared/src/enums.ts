@@ -358,6 +358,16 @@ export enum TaskStatus {
   FAILED = 'FAILED',
 }
 
+/** Where a project stands as a piece of work: still pursued, achieved, or abandoned. The same
+ *  vocabulary as {@link TaskStatus} on purpose — a project and its tasks are the same kind of
+ *  claim at different scales. Filing (archive/hide) is a separate concern and does not belong
+ *  in this enum. */
+export enum ProjectStatus {
+  OPEN = 'OPEN',
+  DONE = 'DONE',
+  CANCELLED = 'CANCELLED',
+}
+
 /** Who/what authored a Task (polymorphic creator). */
 export enum CreatorType {
   USER = 'USER',
