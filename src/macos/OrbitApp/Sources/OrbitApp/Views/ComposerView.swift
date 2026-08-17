@@ -56,6 +56,12 @@ struct ComposerBand<Content: View>: View {
             // in the band reaches its top edge (the 12pt padding keeps it clear), but the composer's
             // floating `/` menu crosses it, and as an overlay the hairline drew a seam across that card.
             .background(alignment: .top) { VStack(spacing: 0) { Divider() } }
+            // Clearance ABOVE the rule (web's `.workspace-composer { margin-top: 8px }`) — applied
+            // after the background so it pads the band outward and leaves the hairline on the
+            // content's edge. Without it the rule sat ~7pt under the last transcript row (its 6pt
+            // inset + the 1pt tail anchor) while web gives the same bubble 16 (8pt message margin +
+            // this 8), so the tail — a reply, or the working dots — read as crowding the line.
+            .padding(.top, 8)
     }
 }
 
