@@ -235,6 +235,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_get":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProject(id)
+		if err != nil {
+			return toolResult("get project failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -1048,6 +1059,23 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_get",
 			"description": "Get one task with its comments and linked sessions.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name": "project_get",
+			"description": "Read one project's durable context: its goal, what would settle that " +
+				"the goal was reached (acceptanceCriteria), how the work is to be done " +
+				"(instructions), its status, the session and workspace it is coordinated from, and " +
+				"how its tasks are distributed (_count and tasksByStatus). This is what a project " +
+				"coordinator works FROM — read it before deciding what to file or whether the work " +
+				"is finished, because none of it is repeated in a task's description. Returns the " +
+				"shape of the project, not its tasks: use task_list for those. Read-only; the " +
+				"fields here are the owner's statement of what the work is for.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
 		},
 		{
 			"name":        "task_dependency_graph",

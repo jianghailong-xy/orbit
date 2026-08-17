@@ -30,6 +30,7 @@ import { TasksController } from '../tasks/tasks.controller';
 import { AdminController } from '../users/admin.controller';
 import { RunnerAgentsController } from '../runner-api/runner-agents.controller';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { RunnerServiceTokensController } from '../runner-api/runner-service-tokens.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
@@ -69,6 +70,7 @@ const CONTROLLERS = [
   AdminController,
   RunnerAgentsController,
   RunnerApiController,
+  RunnerProjectsController,
   RunnerServiceTokensController,
   RunnerSessionsController,
   RunnerTasksController,

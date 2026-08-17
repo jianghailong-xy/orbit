@@ -105,6 +105,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		for _, action := range []string{"list", "create", "get", "update", "delete"} {
 			rules = append(rules, "Bash("+command+" task-list "+action+" *)")
 		}
+		// The only project verb there is, and a read: without it a coordinator hits a permission
+		// prompt for the command `capabilities --json` just told it to run.
+		rules = append(rules, "Bash("+command+" project get *)")
 		if allowOrchestration {
 			for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")

@@ -18,6 +18,7 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 	helpByFamily := map[string]map[string]string{
 		"task":      taskActionHelp,
 		"task-list": taskListActionHelp,
+		"project":   projectActionHelp,
 		"session":   sessionActionHelp,
 		"provider":  providerActionHelp,
 		"agent":     agentActionHelp,
@@ -25,8 +26,8 @@ func TestPerActionHelpDocumentsEveryAdvertisedFlag(t *testing.T) {
 	flagRe := regexp.MustCompile(`--[a-z][a-z0-9-]*`)
 
 	for _, list := range [][]cliCapabilitySpec{
-		baseCLICapabilities, providerCLICapabilities, notifyCLICapabilities,
-		sessionCLICapabilities, agentCLICapabilities,
+		baseCLICapabilities, providerCLICapabilities, projectCLICapabilities,
+		notifyCLICapabilities, sessionCLICapabilities, agentCLICapabilities,
 	} {
 		for _, spec := range list {
 			// Single-command families (`orbit notify`) have one help text, not a per-action map.

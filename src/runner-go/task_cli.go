@@ -1520,6 +1520,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	specs := append([]cliCapabilitySpec{}, baseCLICapabilities...)
 	// Ungated like the task commands, whose `provider` field it answers for.
 	specs = append(specs, providerCLICapabilities...)
+	// Also ungated: it only reads, and the agent that needs a project's goal and acceptance
+	// criteria is the plain coordinator session that has no session_* tools at all.
+	specs = append(specs, projectCLICapabilities...)
 	// Also ungated, and for the same kind of reason: asking your own owner for a human is not an
 	// orchestration power, and the agents most likely to need one are the plain single-session
 	// ones this document is usually read by.

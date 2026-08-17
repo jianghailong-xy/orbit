@@ -769,6 +769,21 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// getProject reads one project's durable context: its goal, acceptance criteria, instructions,
+// status, coordinator ids and task tallies. Read-only, and tallies rather than task rows — the
+// tasks themselves are what the task routes above are for.
+//
+// Ids arrive in whichever spelling the caller holds (base62 short form or raw UUID); the server
+// decodes both, and an id belonging to somebody else is its 404, not a check made here.
+func (t *Transport) getProject(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
