@@ -1178,13 +1178,6 @@ body {
   padding: 16px;
   text-align: center;
 }
-.tasks-loadmore-hint {
-  margin: 10px auto 0;
-  max-width: 460px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-3);
-}
 
 /* The pinned strip of work that is actually happening. It sits inside .orbit-tasklist so its
    rows inherit the same column grid as the list below — the header governs both. */

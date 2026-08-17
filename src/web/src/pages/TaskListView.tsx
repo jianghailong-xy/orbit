@@ -76,12 +76,23 @@ const isTypingTarget = (target: EventTarget | null): boolean => {
 };
 
 /**
- * How many pages scrolling will pull in before it hands back to the reader.
+ * Row geometry, in sync with `.task-row` in index.css.
  *
- * Ten pages is 2,000 rows, which measured at ~49k DOM nodes and ~510MB of heap — heavy but
- * usable. The next few pages are where it stops being usable, and a 27k-row list has 137 of them.
+ * Fixed height is what makes windowing arithmetic rather than measurement: the first visible row
+ * is `scrollTop / TASK_ROW_HEIGHT`, with no per-row observation and no layout thrash. If the row
+ * height changes in CSS it has to change here too — the alternative is measuring every row, which
+ * costs more than the whole optimisation saves.
  */
-const MAX_AUTOLOADED_PAGES = 10;
+const TASK_ROW_HEIGHT = 44;
+
+/**
+ * Rows rendered beyond each edge of the viewport.
+ *
+ * Covers the gap between a scroll event and the re-render that answers it, so fast scrolling
+ * shows rows rather than blank space. Eight rows is ~350px, which a trackpad flick clears easily
+ * — but it only has to survive one frame, not the whole gesture.
+ */
+const TASK_ROW_OVERSCAN = 8;
 
 // What the header shows before the first page (which carries the scope-wide tallies) arrives.
 const EMPTY_TASK_COUNTS: TaskCounts = {
@@ -330,12 +341,18 @@ export function TaskListView() {
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    refetchInterval: (q) =>
-      (q.state.data?.pages ?? []).some((page) =>
-        page.items.some((t: any) => t.running || t.queued),
-      )
+    // Polling refetches *every* page that has been loaded, so its cost grows with how far the
+    // reader has scrolled — and with the window in place they can now scroll to 137 pages, which
+    // would be 137 requests and ~31MB every interval. Past a handful of pages the list stops
+    // polling itself: by then it is being read as history, and the part that has to stay live is
+    // the pinned strip above it, which is bounded and refetches on its own every 5s.
+    refetchInterval: (q) => {
+      const pages = q.state.data?.pages ?? [];
+      if (pages.length > 5) return false;
+      return pages.some((page) => page.items.some((t: any) => t.running || t.queued))
         ? 5_000
-        : 15_000,
+        : 15_000;
+    },
   });
   const taskData = useMemo(
     () => (tasks.data?.pages ?? []).flatMap((page) => page.items),
@@ -544,17 +561,9 @@ export function TaskListView() {
   // sentinel is actually on screen, which is what makes continuous scrolling feel continuous
   // instead of stopping at every page boundary.
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  // Scrolling stops fetching by itself after this many pages. Rows are real DOM, and this list
-  // is 27k long: measured in a headless Chrome at 200 rows per page, 1,000 rows cost 24.7k DOM
-  // nodes and 332MB of heap, and 2,200 rows cost 53.5k nodes and 949MB. Left unbounded, reading
-  // to the end of a large list is not slow — it is a dead tab. Past the cap the button remains,
-  // so continuing is possible but deliberate, and the honest answer to "I cannot find it in
-  // 2,000 rows" is a filter rather than another 25,000 rows.
-  const autoPagesLoaded = tasks.data?.pages.length ?? 0;
-  const autoLoadExhausted = autoPagesLoaded >= MAX_AUTOLOADED_PAGES;
   useEffect(() => {
     const sentinel = loadMoreRef.current;
-    if (!sentinel || !tasks.hasNextPage || tasks.isFetchingNextPage || autoLoadExhausted) return;
+    if (!sentinel || !tasks.hasNextPage || tasks.isFetchingNextPage) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) void tasks.fetchNextPage();
@@ -566,15 +575,7 @@ export function TaskListView() {
     // Re-armed after each page: the effect tears the observer down while a fetch is in flight
     // and sets it up again once the new rows have landed, so one page is requested at a time
     // even though the sentinel stays in view throughout.
-  }, [
-    tasks.hasNextPage,
-    tasks.isFetchingNextPage,
-    tasks.fetchNextPage,
-    autoLoadExhausted,
-    filter,
-    query,
-    view,
-  ]);
+  }, [tasks.hasNextPage, tasks.isFetchingNextPage, tasks.fetchNextPage, filter, query, view]);
 
   // The progress bar and the tab badges describe the whole scope, not the pages loaded so far,
   // so they can only come from the server. Page 1 always carries them (`counts=none` is sent
@@ -728,10 +729,76 @@ export function TaskListView() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [selectedRows.length]);
 
-  // Keep the highlighted row in view when arrowing through a long list.
+  // Only the rows on screen are in the DOM. Everything below is arithmetic on a fixed row
+  // height: the list holds its full length open with a spacer above and below the window, so the
+  // scrollbar still describes the whole list while the node count stays flat. Measured before
+  // this: 2,000 rows were 48.7k nodes and ~510MB of heap, and the list runs to 27,468.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const rowsStartRef = useRef<HTMLDivElement | null>(null);
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 0, rowsTop: 0 });
   useEffect(() => {
-    document.querySelector('.task-row.selected')?.scrollIntoView({ block: 'nearest' });
-  }, [selectedTaskId]);
+    const body = bodyRef.current;
+    if (!body) return;
+    const measure = () => {
+      const start = rowsStartRef.current;
+      // Where the rows begin inside the scroll container. Not a constant: the pinned strip and
+      // the sticky header sit above them and both change height. Taken from the live geometry so
+      // no layout number has to be duplicated in JS.
+      const rowsTop = start
+        ? start.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop
+        : 0;
+      setViewport({ scrollTop: body.scrollTop, height: body.clientHeight, rowsTop });
+    };
+    measure();
+    body.addEventListener('scroll', measure, { passive: true });
+    // Catches window resizes and the pinned strip growing or shrinking under the rows.
+    const resize = new ResizeObserver(measure);
+    resize.observe(body);
+    return () => {
+      body.removeEventListener('scroll', measure);
+      resize.disconnect();
+    };
+  }, [view, filter]);
+
+  const windowed = useMemo(() => {
+    const total = rows.length;
+    if (total === 0) return { start: 0, end: 0, padTop: 0, padBottom: 0, rows: [] as any[] };
+    // Before the first measurement the height is 0; render a screenful rather than nothing so
+    // the first paint is never empty.
+    const height = viewport.height || 900;
+    const scrolledIn = Math.max(0, viewport.scrollTop - viewport.rowsTop);
+    const start = Math.max(0, Math.floor(scrolledIn / TASK_ROW_HEIGHT) - TASK_ROW_OVERSCAN);
+    const visible = Math.ceil(height / TASK_ROW_HEIGHT) + TASK_ROW_OVERSCAN * 2;
+    const end = Math.min(total, start + visible);
+    return {
+      start,
+      end,
+      padTop: start * TASK_ROW_HEIGHT,
+      padBottom: (total - end) * TASK_ROW_HEIGHT,
+      rows: rows.slice(start, end),
+    };
+  }, [rows, viewport]);
+
+  // Keep the highlighted row in view when arrowing through a long list. The row may not be in
+  // the DOM at all now, so this scrolls by index instead of asking the element to scroll itself.
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    const body = bodyRef.current;
+    if (!body) return;
+    const index = rows.findIndex((r: any) => r.id === selectedTaskId);
+    if (index < 0) return;
+    const top = viewport.rowsTop + index * TASK_ROW_HEIGHT;
+    const bottom = top + TASK_ROW_HEIGHT;
+    // `block: 'nearest'` semantics: only move if the row is outside the viewport, and only far
+    // enough to bring it in — arrowing down a list should not recentre it on every keystroke.
+    if (top < body.scrollTop) body.scrollTop = top;
+    else if (bottom > body.scrollTop + body.clientHeight) {
+      body.scrollTop = bottom - body.clientHeight;
+    }
+    // Deliberately not re-running on scroll: this reacts to the selection moving, and viewport
+    // is read for its geometry only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTaskId, rows]);
 
   // A clickable column header that drives the sort. Active header shows a caret for the
   // direction; clicking cycles asc → desc → cleared (handled by cycleSort).
@@ -1056,7 +1123,7 @@ export function TaskListView() {
             </div>
           </div>
 
-          <div className="tasks-body">
+          <div className="tasks-body" ref={bodyRef}>
             {tasks.isLoading ? (
               <div style={{ padding: 48, textAlign: 'center' }}>
                 <Spin />
@@ -1110,6 +1177,8 @@ export function TaskListView() {
                   </div>
                 )}
 
+                {/* Marks where the rows start, so the window knows how much sits above them. */}
+                <div ref={rowsStartRef} />
                 {rows.length === 0 ? (
                   <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
                     {query.trim()
@@ -1125,7 +1194,13 @@ export function TaskListView() {
                           : 'No tasks yet.'}
                   </div>
                 ) : (
-                  rows.map((r: any) => renderRow(r))
+                  <>
+                    {/* The rows that are not rendered are still occupying their height, so the
+                        scrollbar measures the list rather than the window onto it. */}
+                    <div style={{ height: windowed.padTop }} aria-hidden />
+                    {windowed.rows.map((r: any) => renderRow(r))}
+                    <div style={{ height: windowed.padBottom }} aria-hidden />
+                  </>
                 )}
                 {tasks.hasNextPage && (
                   // Also the scroll sentinel. The button stays because auto-loading is invisible
@@ -1139,12 +1214,6 @@ export function TaskListView() {
                       {tasks.isFetchingNextPage ? 'Loading' : 'Load more'} ({taskData.length} of{' '}
                       {tasks.data?.pages[0]?.total ?? taskData.length})
                     </Button>
-                    {autoLoadExhausted && (
-                      <div className="tasks-loadmore-hint">
-                        Scrolling stops loading here to keep the page responsive — keep going with
-                        the button, or narrow the list with search, a label or a status tab.
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
