@@ -32,4 +32,30 @@ final class AgentListLogicTests: XCTestCase {
         XCTAssertEqual(AgentListLogic.ordered(agents).map(\.id), ["1", "4", "3", "2"])
         XCTAssertEqual(AgentListLogic.ordered([]).map(\.id), [])
     }
+
+    func testRunnerOrderMatchesPersistedOrderWithHostLast() {
+        let agents = [
+            agent(#"{"id":"1","name":"a","runnerId":"workstation"}"#),
+            agent(#"{"id":"2","name":"b"}"#),                              // host-level
+            agent(#"{"id":"3","name":"c","runnerId":"wikova"}"#),
+            agent(#"{"id":"4","name":"d","runnerId":"macbook"}"#),
+        ]
+        // The web sidebar orders runner groups by the persisted runner order, not by whichever
+        // runner an agent happened to mention first.
+        let groups = AgentListLogic.grouped(agents, runnerOrder: ["wikova", "macbook", "workstation"])
+        XCTAssertEqual(groups.map(\.runnerId), ["wikova", "macbook", "workstation", nil])
+        XCTAssertEqual(AgentListLogic.ordered(agents, runnerOrder: ["wikova", "macbook", "workstation"]).map(\.id),
+                       ["3", "4", "1", "2"])
+    }
+
+    func testUnknownRunnersStayStableAfterKnownOnes() {
+        let agents = [
+            agent(#"{"id":"1","name":"a","runnerId":"stale-a"}"#),
+            agent(#"{"id":"2","name":"b","runnerId":"second"}"#),
+            agent(#"{"id":"3","name":"c","runnerId":"stale-b"}"#),
+            agent(#"{"id":"4","name":"d","runnerId":"first"}"#),
+        ]
+        let groups = AgentListLogic.grouped(agents, runnerOrder: ["first", "second"])
+        XCTAssertEqual(groups.map(\.runnerId), ["first", "second", "stale-a", "stale-b"])
+    }
 }

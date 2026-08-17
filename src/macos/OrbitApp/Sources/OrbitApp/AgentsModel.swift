@@ -10,6 +10,10 @@ import OrbitKit
 final class AgentsModel {
     private(set) var items: [Agent] = []
     private(set) var runnerNames: [String: String] = [:]
+    /// Runner ids in the order `GET /runners` returns them (the user's persisted runner order), so
+    /// the drawer's runner groups match the web sidebar. Empty until that fetch lands, which leaves
+    /// the groups in first-seen order.
+    private(set) var runnerOrder: [String] = []
     /// runnerId → is-online, for the drawer's collapsible runner rows (a leading connection dot).
     /// Populated from the same best-effort `runners()` fetch that feeds `runnerNames`.
     private(set) var runnerOnline: [String: Bool] = [:]
@@ -40,7 +44,7 @@ final class AgentsModel {
         api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
-    var groups: [AgentGroup] { AgentListLogic.grouped(items) }
+    var groups: [AgentGroup] { AgentListLogic.grouped(items, runnerOrder: runnerOrder) }
 
     /// Display name for a group header (runner display-name, else id, else "Shared" for host).
     func runnerLabel(_ runnerId: String?) -> String {
@@ -85,6 +89,7 @@ final class AgentsModel {
             items = try await api.agents()
             // Best-effort: map runner ids → names (group headers) and → online (connection dots).
             if let runners = try? await api.runners() {
+                runnerOrder = runners.map(\.id)
                 runnerNames = Dictionary(runners.map { ($0.id, $0.displayName ?? $0.name) },
                                          uniquingKeysWith: { a, _ in a })
                 runnerOnline = Dictionary(runners.map { ($0.id, $0.online ?? ($0.status == .online)) },

@@ -853,7 +853,7 @@ final class AppModel {
 
     /// Agents in sidebar display order — the order ⌘1…⌘9 index into (and the sidebar renders).
     /// Empty until the agent list loads.
-    var orderedAgents: [Agent] { AgentListLogic.ordered(agents?.items ?? []) }
+    var orderedAgents: [Agent] { AgentListLogic.ordered(agents?.items ?? [], runnerOrder: agents?.runnerOrder ?? []) }
 
     /// agentID → 0-based position for the first nine agents, so the sidebar can show a faint "⌘N"
     /// hint on each shortcut-addressable row. Agents past the ninth get none.

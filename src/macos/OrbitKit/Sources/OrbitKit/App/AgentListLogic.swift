@@ -10,9 +10,15 @@ public struct AgentGroup: Equatable, Sendable, Identifiable {
 }
 
 public enum AgentListLogic {
-    /// Group agents by their runner, preserving first-seen runner order; host-level agents
-    /// (no runnerId) sink to the bottom — like the web's "Shared" group.
-    public static func grouped(_ agents: [Agent]) -> [AgentGroup] {
+    /// Group agents by their runner; host-level agents (no runnerId) sink to the bottom — like the
+    /// web's "Shared" group.
+    ///
+    /// `runnerOrder` is the runner ids in their persisted display order (`GET /runners`, which the
+    /// server sorts by the user's runner `position`). Groups follow it so the drawer lists machines
+    /// in the same order as the web sidebar; runners missing from it (a stale agent pointing at a
+    /// runner the list no longer carries) keep their first-seen position behind the known ones.
+    /// Mirrors the web `orderWorkspaceGroupsByRunners`.
+    public static func grouped(_ agents: [Agent], runnerOrder: [String] = []) -> [AgentGroup] {
         var order: [String] = []
         var map: [String: [Agent]] = [:]
         var host: [Agent] = []
@@ -24,14 +30,27 @@ public enum AgentListLogic {
                 host.append(a)
             }
         }
-        var groups = order.map { AgentGroup(runnerId: $0, agents: map[$0] ?? []) }
+        var rank: [String: Int] = [:]
+        for (i, rid) in runnerOrder.enumerated() where rank[rid] == nil { rank[rid] = i }
+        let sortedRunnerIds = order.enumerated()
+            .sorted { l, r in
+                switch (rank[l.element], rank[r.element]) {
+                case let (a?, b?): return a < b
+                case (_?, nil): return true
+                case (nil, _?): return false
+                case (nil, nil): return l.offset < r.offset
+                }
+            }
+            .map(\.element)
+        var groups = sortedRunnerIds.map { AgentGroup(runnerId: $0, agents: map[$0] ?? []) }
         if !host.isEmpty { groups.append(AgentGroup(runnerId: nil, agents: host)) }
         return groups
     }
 
-    /// Agents flattened in sidebar display order — runner groups (first-seen) then host "Shared".
-    /// This is the order ⌘1…⌘9 index into, so it stays in lockstep with what `grouped` renders.
-    public static func ordered(_ agents: [Agent]) -> [Agent] {
-        grouped(agents).flatMap(\.agents)
+    /// Agents flattened in sidebar display order — runner groups (in `runnerOrder`) then host
+    /// "Shared". This is the order ⌘1…⌘9 index into, so it stays in lockstep with what `grouped`
+    /// renders.
+    public static func ordered(_ agents: [Agent], runnerOrder: [String] = []) -> [Agent] {
+        grouped(agents, runnerOrder: runnerOrder).flatMap(\.agents)
     }
 }
