@@ -83,6 +83,13 @@ const MAX_TASK_PARENT_DEPTH = 50;
  * description in a list row — the detail panel fetches `GET /tasks/:id` for that — and it
  * averages ~500 bytes per task, so including it here inflated a 200-row page by ~46% and a
  * 701-task list view by ~440KB for bytes that were parsed and thrown away.
+ *
+ * `projectId`, `parentTaskId` and `acceptanceCriteria` are in for the same reason the rest of the
+ * scalars are, and the same reason `description` stays out. They are what a row is filed under,
+ * what it is part of, and what would settle it — a coordinator listing its project's tasks reads
+ * all three off the page it already has, where without them the only way to learn that a row is a
+ * subtask is one `GET /tasks/:id` per row, description included. They are three small columns, not
+ * a relation: no join, no fan-out, and `children`/`comments` stay out for exactly that reason.
  */
 export const TASK_LIST_SELECT = {
   id: true,
@@ -96,6 +103,9 @@ export const TASK_LIST_SELECT = {
   createdAt: true,
   updatedAt: true,
   listId: true,
+  projectId: true,
+  parentTaskId: true,
+  acceptanceCriteria: true,
   labels: true,
   creatorSessionId: true,
   autoRunWhenReady: true,
@@ -194,8 +204,8 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   )`;
 
 /**
- * SQL mirror of the `{ ownerId, listId?, assigneeId? }` scope the Prisma queries are built
- * from. Derived from that same object rather than re-read from the query string, so the two
+ * SQL mirror of the `{ ownerId, listId?, projectId?, assigneeId? }` scope the Prisma queries are
+ * built from. Derived from that same object rather than re-read from the query string, so the two
  * spellings of the scope cannot drift.
  */
 function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
@@ -203,6 +213,9 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
   if (scope.listId === null) clauses.push(Prisma.sql`t.list_id IS NULL`);
   else if (typeof scope.listId === 'string') {
     clauses.push(Prisma.sql`t.list_id = ${scope.listId}::uuid`);
+  }
+  if (typeof scope.projectId === 'string') {
+    clauses.push(Prisma.sql`t.project_id = ${scope.projectId}::uuid`);
   }
   if (typeof scope.assigneeId === 'string') {
     clauses.push(Prisma.sql`t.assignee_id = ${scope.assigneeId}::uuid`);
@@ -379,6 +392,14 @@ export interface ListTasksPageQuery {
   limit?: string | number;
   status?: string;
   listId?: string;
+  /**
+   * Tasks filed under exactly this project. A scope like `listId`, not a lookup: it is applied
+   * alongside the owner filter and never checked against the project table, so an id that does not
+   * exist — or exists under another owner — narrows to nothing and answers as an empty list. That
+   * is deliberate. Answering 404 here would make this endpoint report whether a project id exists
+   * to a caller who is not allowed to read it, which is a question about somebody else's account.
+   */
+  projectId?: string;
   assigneeId?: string;
   /** Tasks carrying ALL of these labels. Comma-separated, or repeated. */
   labels?: string | string[];
@@ -1565,6 +1586,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     else if (query.listId) {
       if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
       scopedWhere.listId = query.listId;
+    }
+    // Scope, not filter, for the same reason a label is: the tallies have to describe the project
+    // being asked about, or a coordinator reads its own progress off the whole account's numbers.
+    if (query.projectId) {
+      if (!UUID_RE.test(query.projectId)) throw new BadRequestException('invalid project id');
+      scopedWhere.projectId = query.projectId;
     }
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');

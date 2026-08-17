@@ -207,13 +207,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if limit == 0 {
 			limit = defaultTaskListLimit
 		}
-		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getStringSlice(args, "labels"), limit)
+		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
 		}
 		body := prettyJSON(raw)
 		if countJSONArray(raw) >= limit {
-			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/labels or raise limit.\n%s", limit, body)
+			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/projectId/labels or raise limit.\n%s", limit, body)
 		}
 		return toolResult(body, false)
 
@@ -1036,10 +1036,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId or labels.",
+			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId or labels. Rows carry projectId, parentTaskId and acceptanceCriteria, so which project a task belongs to, what it is part of, and what would settle it are readable without fetching each task.",
 			"inputSchema": obj(map[string]interface{}{
 				"status": status,
 				"listId": str,
+				"projectId": map[string]interface{}{
+					"type": "string",
+					"description": "Only tasks filed under this project — the read a project coordinator " +
+						"wants, since every other filter here answers across all projects. Use project_get " +
+						"for what the project is FOR (goal, acceptanceCriteria, instructions); this returns " +
+						"the work filed under it. A project that does not exist, or belongs to somebody " +
+						"else, lists as empty, exactly like any other filter matching nothing.",
+				},
 				"labels": map[string]interface{}{
 					"type":        "array",
 					"items":       str,

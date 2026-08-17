@@ -21,7 +21,7 @@ const (
 const taskHelp = `orbit task — manage Orbit tasks
 
 Usage:
-  orbit task list [--status STATUS] [--list-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
   orbit task labels [--list-id ID] [--json]
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
@@ -52,18 +52,26 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
 
+--project-id narrows to the tasks filed under one project — the read a project coordinator
+wants, since every other filter here answers across all of them. The id is the one in the web UI
+URL (/projects/<id>); a raw UUID works too. A project that does not exist, or belongs to somebody
+else, lists as empty like any other filter that matches nothing. Read ` + "`orbit project get`" + ` for what
+the project is for; this is the work filed under it.
+
 --label filters to tasks carrying ALL of the labels given (repeat the flag or comma-separate).
 Labels are matched exactly, case included; ` + "`orbit task labels`" + ` lists the ones in use.
 
+Filters combine: --project-id with --status OPEN answers "what is still open in this project".
+
 --all returns every matching task instead of the newest page, walking the list one page at a
 time — what you need to enumerate a list of thousands (to diff it against something else, say),
-which no --limit can do. It can be a lot of output: scope it with --status/--list-id, and send it
-to a file or a pipe rather than into a conversation.
+which no --limit can do. It can be a lot of output: scope it with --status/--list-id/--project-id,
+and send it to a file or a pipe rather than into a conversation.
 
 With --all the output is line-delimited JSON — one compact task per line, written as each page
 arrives (--json is implied). A walk of tens of thousands is hundreds of requests over minutes, so
@@ -571,13 +579,13 @@ const (
 	taskListRetryInitialWait = 2 * time.Second
 )
 
-func listTaskPageWithRetry(t *Transport, status, listID string, labels []string, cursor string) (json.RawMessage, string, error) {
+func listTaskPageWithRetry(t *Transport, status, listID, projectID string, labels []string, cursor string) (json.RawMessage, string, error) {
 	wait := taskListRetryInitialWait
 	var err error
 	for attempt := 1; ; attempt++ {
 		var page json.RawMessage
 		var next string
-		page, next, err = t.listTaskPage(status, listID, labels, maxTaskListLimit, cursor)
+		page, next, err = t.listTaskPage(status, listID, projectID, labels, maxTaskListLimit, cursor)
 		if err == nil {
 			return page, next, nil
 		}
@@ -598,10 +606,10 @@ func listTaskPageWithRetry(t *Transport, status, listID string, labels []string,
 // `jq -s` puts them back into an array for anyone who wants one.
 //
 // Returns the cursor the walk died on, so the caller can tell the user where to resume.
-func streamAllTasks(t *Transport, status, listID string, labels []string, cursor string, out io.Writer) (written int, failedAt string, err error) {
+func streamAllTasks(t *Transport, status, listID, projectID string, labels []string, cursor string, out io.Writer) (written int, failedAt string, err error) {
 	encoder := json.NewEncoder(out)
 	for {
-		page, next, pageErr := listTaskPageWithRetry(t, status, listID, labels, cursor)
+		page, next, pageErr := listTaskPageWithRetry(t, status, listID, projectID, labels, cursor)
 		if pageErr != nil {
 			return written, cursor, pageErr
 		}
@@ -627,6 +635,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task list")
 	status := fs.String("status", "", "task status")
 	listID := fs.String("list-id", "", "task list id")
+	projectID := fs.String("project-id", "", "only tasks filed under this project")
 	var labels csvFlag
 	fs.Var(&labels, "label", "only tasks carrying ALL of these labels (comma-separated, repeatable)")
 	limit := fs.Int("limit", defaultTaskListLimit, "maximum tasks to return")
@@ -662,7 +671,7 @@ func cliTaskList(args []string, out io.Writer) error {
 		return err
 	}
 	if *all {
-		written, failedAt, err := streamAllTasks(t, *status, *listID, labels, *cursor, out)
+		written, failedAt, err := streamAllTasks(t, *status, *listID, *projectID, labels, *cursor, out)
 		if err != nil {
 			// Whatever was already printed is on stdout and stays valid; stderr carries the one
 			// thing needed to continue rather than start over.
@@ -675,14 +684,14 @@ func cliTaskList(args []string, out io.Writer) error {
 		}
 		return nil
 	}
-	raw, err := t.listTasks(*status, *listID, labels, *limit)
+	raw, err := t.listTasks(*status, *listID, *projectID, labels, *limit)
 	if err != nil {
 		return fmt.Errorf("list tasks: %w", err)
 	}
 	// A full page is the one case where the answer is silently partial, and stdout has to stay
 	// parseable — so say so on stderr instead.
 	if countJSONArray(raw) >= *limit {
-		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id/--label, raise --limit, or pass --all for every match\n", *limit)
+		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id/--project-id/--label, raise --limit, or pass --all for every match\n", *limit)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -1436,7 +1445,7 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = []cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately.", Mutates: true},
