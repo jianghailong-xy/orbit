@@ -908,3 +908,47 @@ describe('tool run folding', () => {
     expect(html).toContain('Bash × 3');
   });
 });
+
+// A screenshot too big to ship inline reaches the transcript as an image block with no `data`
+// (see the apiserver's MAX_IMAGE_PAYLOAD). What must survive that clip is the *card opening*:
+// the untrimmed payload is fetched only for an open card, so a card that folds because it can't
+// see an image is a card that never asks for the image — the picture would be gone, not deferred.
+describe('clipped screenshot results', () => {
+  const imageResult = (source: Record<string, unknown>): RunEvent[] => [
+    { seq: 1, type: 'tool_use', payload: { id: 'ti', name: 'Read', input: { file_path: '/tmp/shot.png' } } },
+    {
+      seq: 2,
+      type: 'tool_result',
+      truncated: true,
+      payload: { toolUseId: 'ti', content: [{ type: 'image', source }] },
+    },
+  ];
+  const render = (events: RunEvent[]) => renderToStaticMarkup(<Transcript events={events} />);
+
+  it('opens the card for an image whose bytes the server dropped', () => {
+    const html = render(imageResult({ type: 'base64', media_type: 'image/png' }));
+
+    expect(html).toContain('is-open');
+  });
+
+  it('still opens — and renders — a small image that arrived whole', () => {
+    const data = 'iVBORw0KGgo=';
+    const html = render(imageResult({ type: 'base64', media_type: 'image/png', data }));
+
+    expect(html).toContain('is-open');
+    expect(html).toContain(`data:image/png;base64,${data}`);
+  });
+
+  it('leaves a text-only result folded', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Read', input: { file_path: '/a.ts' } } },
+          { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: 'plain output' } },
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain('is-open');
+  });
+});

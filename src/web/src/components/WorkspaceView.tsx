@@ -498,6 +498,11 @@ const TRANSCRIPT_CACHE_MAX = 20;
 // any viewport in one shot, so no auto-load fires until the user actually scrolls up.
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
+// Consecutive reconnects that fail to move the resume cursor before the transcript stops trying to
+// resume and re-seeds from a tail page instead. Three is past any single dropped connection while
+// still costing ~12s of the backoff below — short enough that a wedged tab recovers on its own,
+// long enough that an ordinary redeploy blip never throws away a loaded window. See reseed().
+const RESEED_AFTER_STALLED_RECONNECTS = 3;
 // Distance from the top (px) at which scrolling up pulls in the next older page.
 const LOAD_OLDER_AT = 400;
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
@@ -2075,6 +2080,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     let fails = 0;
     // Resume just past what's loaded so only the gap is streamed, not the whole history.
     let lastSeq = cached.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
+    // The cursor the current connection opened at, and how many connections in a row have died
+    // without moving it. A reconnect that resumes from the same seq re-requests the same replay,
+    // so a cursor the client can't get past is a loop, not a retry — see reseed().
+    let seqAtConnect = -1;
+    let stalled = 0;
     const writeCache = (): void => {
       const snapshot = {
         events: accRef.current,
@@ -2109,7 +2119,50 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       writeCache();
       setEvents(accRef.current);
     };
+    /**
+     * Throw the loaded window away and start over from a tail page, exactly as a cold open does.
+     *
+     * Two callers, one situation: the cursor this tab holds is not a viable place to resume from.
+     * The server says so with `resync` when the gap is too long to replay; the stall counter below
+     * infers it when reconnecting from the same seq keeps failing to advance it. Both used to be
+     * unrecoverable in place — the tab reconnected from that cursor forever, re-downloading the
+     * same replay while the session it was watching ran on without it.
+     *
+     * Resetting `seen` and the pagination boundary along with the events is what makes this a real
+     * re-seed rather than a patch over a hole: the tail page re-establishes both.
+     */
+    const reseed = async (): Promise<void> => {
+      accRef.current = [];
+      seen.current = new Set();
+      oldestSeqRef.current = null;
+      hasMoreOlderRef.current = false;
+      lastSeq = 0;
+      stalled = 0;
+      try {
+        const page = await getSessionEventPage(selectedId, {
+          tail: TAIL_PAGE,
+          signal: seedAbort.signal,
+        });
+        if (closed) return;
+        accRef.current = page.events;
+        for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+        oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
+        hasMoreOlderRef.current = page.hasMore;
+        lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
+        setEvents(accRef.current);
+        writeCache();
+      } catch {
+        // Leave lastSeq at 0 and let the reconnect below carry it: a cursor-less connect is
+        // server-capped, so the fallback for a failed re-seed is still a bounded replay.
+      }
+      if (closed) return;
+      // `fails` is deliberately NOT reset: re-seeding is a different way to spend the same retry
+      // budget, not a fresh start. Zeroing it would turn the give-up below into an unreachable
+      // branch — a permanently broken stream would reconnect, stall, re-seed, forever.
+      connect();
+    };
     const connect = (): void => {
+      seqAtConnect = lastSeq;
       es = new EventSource(sessionEventsUrl(selectedId, lastSeq));
       es.onmessage = (e) => {
         fails = 0; // a message means the stream is healthy
@@ -2118,6 +2171,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // stream isn't reaped by Cloudflare. Discard it by type before the reducer below, which
         // would otherwise dedup-miss (seq undefined) and append it as a junk transcript row.
         if (ev.type === 'ping') return;
+        // The server refused to replay our gap — it's longer than it will stream (SSE_GAP_CAP).
+        // Handled here, before the seq bookkeeping and the dedup below, because it rides seq 0
+        // like the approval nudges. Re-seed from a tail page instead; this connection is spent.
+        if (ev.type === 'resync') {
+          es?.close();
+          void reseed();
+          return;
+        }
         if (typeof ev.seq === 'number' && ev.seq !== Number.MAX_SAFE_INTEGER) {
           lastSeq = Math.max(lastSeq, ev.seq);
         }
@@ -2214,6 +2275,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       es.onerror = () => {
         es?.close();
         if (closed || paused) return;
+        // A connection that died without moving the cursor forward left us exactly where we
+        // started, so reconnecting asks the server for the same replay again. Once is a dropped
+        // connection; three in a row is a replay this tab cannot get through — the shape a single
+        // outsized event makes — and the only way out is to stop asking for it. See reseed().
+        stalled = lastSeq > seqAtConnect ? 0 : stalled + 1;
+        if (stalled >= RESEED_AFTER_STALLED_RECONNECTS) {
+          void reseed();
+          return;
+        }
         // Auto-reconnect, resuming after lastSeq — survives long idle / redeploy
         // drops (the seq dedup set makes any replay overlap harmless).
         if (++fails > 12) return;

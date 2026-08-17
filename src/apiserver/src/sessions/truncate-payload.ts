@@ -16,6 +16,22 @@ import { RunEventType } from '@orbit/shared';
  *  the 12-16 a folded card shows, so the preview is never short of content to display. */
 export const DEFAULT_MAX_PAYLOAD = 2048;
 
+/**
+ * Largest base64 image kept inline. Images can't be clipped to a preview — half a base64 string
+ * renders as a broken image — so they are all-or-nothing, and for a long time the answer was
+ * always "all". That is what wedged a transcript: one turn read two screenshots (275KB + 300KB),
+ * and every SSE reconnect from a cursor below them had to re-deliver ~580KB before the client
+ * could commit a single seq past them. Any interruption in that window put the tab in a loop —
+ * same cursor, same 580KB, forever — while the session it was watching ran on without it.
+ *
+ * So: above this size the block keeps its shape and loses its `data`, which both clients read as
+ * "an image is here, its bytes are not" (web `resultImages`, native `resultImages`) — the card
+ * refetches the whole thing from `/events/:seq/full`, off the stream. Under it nothing changes:
+ * an icon or a small diagram still arrives inline, costing no extra request. 64KB is well above
+ * what a UI screenshot of a region costs and well below the full-window captures that caused this.
+ */
+export const MAX_IMAGE_PAYLOAD = 64 * 1024;
+
 /** Below this a cap costs more in refetches than it saves in bytes. */
 const MIN_MAX_PAYLOAD = 256;
 
@@ -46,10 +62,25 @@ function clipDeep(v: unknown, cap: number, cut: { hit: boolean }): unknown {
 }
 
 /**
+ * Drop an oversized image block's bytes, keeping everything that says an image belongs here — the
+ * block type and its `media_type`. `data` is omitted rather than emptied on purpose: both clients
+ * test it for a non-empty string, and native's decoder turns `""` into a zero-byte image rather
+ * than no image at all. Under MAX_IMAGE_PAYLOAD the block is returned untouched.
+ */
+function clipImage(block: Record<string, unknown>, cut: { hit: boolean }): unknown {
+  const source = block.source;
+  if (!source || typeof source !== 'object') return block;
+  const s = source as Record<string, unknown>;
+  if (typeof s.data !== 'string' || s.data.length <= MAX_IMAGE_PAYLOAD) return block;
+  cut.hit = true;
+  const { data: _dropped, ...rest } = s;
+  return { ...block, source: rest };
+}
+
+/**
  * Clip a tool_result's `content`. Claude delivers it as a plain string or as an array of blocks;
- * only the text of a text block is clipped. Image blocks pass through whole — their base64 IS
- * what the user sees (a screenshot the workspace produced), and half a base64 string renders as a
- * broken image rather than a preview.
+ * only the text of a text block is clipped to `cap`. An image block can't be clipped to a preview
+ * at all, so it is instead kept whole or emptied of its bytes wholesale — see MAX_IMAGE_PAYLOAD.
  */
 function clipContent(content: unknown, cap: number, cut: { hit: boolean }): unknown {
   if (typeof content === 'string') return clip(content, cap, cut);
@@ -57,6 +88,7 @@ function clipContent(content: unknown, cap: number, cut: { hit: boolean }): unkn
     return content.map((b) => {
       if (!b || typeof b !== 'object') return b;
       const block = b as Record<string, unknown>;
+      if (block.type === 'image') return clipImage(block, cut);
       if (typeof block.text !== 'string') return b;
       return { ...block, text: clip(block.text, cap, cut) };
     });

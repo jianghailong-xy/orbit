@@ -18,7 +18,7 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { Prisma } from '@prisma/client';
 import { concat, concatMap, from, interval, map, merge, Observable, switchMap, throwError } from 'rxjs';
-import { ApprovalDecisionRequest } from '@orbit/shared';
+import { ApprovalDecisionRequest, RunEventType } from '@orbit/shared';
 import { notNoiseSql } from '../common/system-noise';
 import { AllowQueryToken } from '../auth/allow-query-token.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -53,8 +53,22 @@ const KEEPALIVE_MS = 20_000;
  *  surface (or never). Clients open cold via `GET /events/page?tail=N` and then resume the SSE with
  *  `sinceSeq=<max>`, so this bound only affects the fallback/cursor-less path; older history is
  *  paged in over `/events/page`. Matches the client tail-page size (web `TAIL_PAGE`, iOS `tailPage`).
- *  A cursor'd connect is never capped — it must send the full gap or the transcript would hole. */
+ *  A cursor'd connect replays its whole gap instead, up to SSE_GAP_CAP. */
 const SSE_REPLAY_CAP = 200;
+
+/**
+ * Cap the gap a cursor'd connect will replay. Sending the full gap is what keeps a resumed
+ * transcript from holing, so this is deliberately far above SSE_REPLAY_CAP — a client an hour
+ * behind should still be caught up in place, not reset. It exists because "the full gap" was
+ * previously unbounded in both directions that matter: how many events, and how many bytes each
+ * one carries. A cursor sitting just below two screenshots had to swallow ~580KB per attempt, and
+ * a cursor that can never commit re-requests the same gap forever.
+ *
+ * MAX_IMAGE_PAYLOAD bounds the bytes; this bounds the count. Past it the replay is abandoned for a
+ * `resync`, which costs the client one tail page — strictly less than replaying a thousand events
+ * it would have to hold in memory anyway.
+ */
+const SSE_GAP_CAP = 1000;
 
 @UseGuards(JwtAuthGuard)
 @Controller('sessions')
@@ -443,9 +457,9 @@ export class SessionsController {
     ).pipe(
       switchMap((session) => {
         if (!session) return throwError(() => new ForbiddenException('session not found'));
-        // With a cursor: replay the full gap after it (seq asc) — never capped, or the transcript
-        // would hole. Without one: replay only the newest SSE_REPLAY_CAP, fetched seq desc so the
-        // LIMIT keeps the newest rows, then reversed back to seq asc below — see SSE_REPLAY_CAP.
+        // With a cursor: replay the gap after it (seq asc), up to SSE_GAP_CAP. Without one: replay
+        // only the newest SSE_REPLAY_CAP, fetched seq desc so the LIMIT keeps the newest rows, then
+        // reversed back to seq asc below — see SSE_REPLAY_CAP.
         // `notNoiseSql` skips the `system` progress pings no client renders (they stay in the
         // table; this is the wire). It matches what the live broadcast already drops, so a
         // replayed transcript and a live one carry the same events — and it makes SSE_REPLAY_CAP
@@ -453,7 +467,11 @@ export class SessionsController {
         const capped = !seqFilter;
         const gap = seqFilter ? Prisma.sql`AND seq > ${seqFilter.gt}` : Prisma.empty;
         const order = capped ? Prisma.sql`DESC` : Prisma.sql`ASC`;
-        const limit = capped ? Prisma.sql`LIMIT ${SSE_REPLAY_CAP}` : Prisma.empty;
+        // One row past the cap, so "is the gap too big" is answered by the same query that would
+        // have served it — no count round-trip on the path every reconnect takes.
+        const limit = capped
+          ? Prisma.sql`LIMIT ${SSE_REPLAY_CAP}`
+          : Prisma.sql`LIMIT ${SSE_GAP_CAP + 1}`;
         const history$ = from(
           this.prisma.$queryRaw<
             { seq: number; type: string; payload: unknown; turnId: string | null; createdAt: Date }[]
@@ -466,7 +484,29 @@ export class SessionsController {
             ORDER BY seq ${order}
             ${limit}
           `,
-        ).pipe(concatMap((rows) => from(capped ? [...rows].reverse() : rows)));
+        ).pipe(
+          concatMap((rows) => {
+            if (capped) return from([...rows].reverse());
+            // Too far behind to catch up in place. Replaying a truncated gap would leave a hole the
+            // client cannot see (it would go on believing its window is contiguous, and "load
+            // earlier" would page from the wrong boundary), so send nothing but the order to
+            // re-seed: drop the cached window, refetch a tail page, resume from its max seq. Rides
+            // seq 0 like the other live-only control events, and lands before the dedup that would
+            // otherwise swallow the second one.
+            if (rows.length > SSE_GAP_CAP) {
+              return from([
+                {
+                  seq: 0,
+                  type: RunEventType.RESYNC as string,
+                  payload: {},
+                  turnId: null,
+                  createdAt: new Date(),
+                },
+              ]);
+            }
+            return from(rows);
+          }),
+        );
         // Only the live half can contain deltas — they are broadcast-only and never persisted, so
         // a replay never carries them and the history stream is left exactly as it was.
         const live$ = this.realtime.streamForRun(id).pipe(coalesceDeltas());

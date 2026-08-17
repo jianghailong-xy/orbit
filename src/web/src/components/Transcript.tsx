@@ -1709,14 +1709,15 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // proportionate to unfold: the input is what has the lines (a heredoc clamps at
   // sixteen), the reason is four — and the agent, not the reader, is the first responder
   // to a failed step. The red mark on the folded row says it happened; the click says why.
-  // Deliberately keyed on the *preview* result: images are never clipped, so this
-  // can't depend on the refetch below (which is itself gated on being open).
+  // Keyed on the *preview* result, which is why a clipped image keeps its (dataless) block: this
+  // decides whether the card opens, and opening the card is what fetches the picture back. Asking
+  // `resultImages` here instead would deadlock the two — the refetch below is gated on being open.
   const defaultOpen =
     !!exp ||
     node.name === 'ExitPlanMode' ||
     node.name === 'AskUserQuestion' ||
     isShell ||
-    resultImages(node.result?.content).length > 0;
+    hasResultImage(node.result?.content);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const open = manualOpen ?? defaultOpen;
   // Opening a clipped card pulls its untrimmed call/result back (see useFullPayload); until
@@ -2522,9 +2523,18 @@ export function resultText(content: any): string {
   return safeJson(content);
 }
 
+// Whether a tool_result carries an image at all — including one the server emptied of its bytes
+// because it was too big to ship inline (see the apiserver's MAX_IMAGE_PAYLOAD). The block outlives
+// that clip, keeping its type and media_type, exactly so this stays true: a screenshot still opens
+// its card on arrival, and the open card refetches the payload whole.
+export function hasResultImage(content: any): boolean {
+  return Array.isArray(content) && content.some((b) => b && b.type === 'image');
+}
+
 // Inline images carried by a tool_result's content blocks — e.g. Read on a .png, or an
 // MCP tool returning a screenshot. The base64 data is passed through verbatim from the
-// runner, so render it as a data URL. A plain-text result yields [].
+// runner, so render it as a data URL. A block whose data the server clipped yields nothing
+// here until the untrimmed payload lands. A plain-text result yields [].
 function resultImages(content: any): string[] {
   if (!Array.isArray(content)) return [];
   const urls: string[] = [];
