@@ -8,6 +8,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  ProjectOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -45,6 +46,7 @@ const TOP = [
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
   { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
+  { key: 'projects', icon: <ProjectOutlined />, label: 'Projects' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
