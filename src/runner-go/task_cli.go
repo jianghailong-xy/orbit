@@ -111,6 +111,7 @@ Options:
   --unassigned                Explicitly leave the task unassigned
   --list-id ID
   --project-id ID             File the task under this project, orthogonal to --list-id
+  --parent-task-id TASK_ID    Create it as a subtask of this existing task
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
@@ -126,6 +127,13 @@ one of each, either, or neither. The id is the one in the web UI URL (/projects/
 UUID works too. Unlike ` + "`orbit task list --project-id`" + `, which narrows a read and answers empty
 for an id nobody owns, this writes — an unknown project, or one belonging to somebody else, is
 rejected by the server rather than silently filed nowhere.
+
+--parent-task-id creates the task as a subtask of a task that ALREADY exists, which is how a
+piece of work is broken into steps that stay attached to it. The parent must be yours and must
+be in the SAME project as the new task, and the project is never inherited from it: a subtask
+under a project's task normally passes both --project-id and --parent-task-id naming that same
+project, while a parent filed under no project needs --project-id omitted here too. A parent
+that is missing, somebody else's, or in another project is rejected by the server.
 `,
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
 
@@ -134,8 +142,8 @@ Usage:
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId,
-dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady. Nothing is written unless
-every item is valid.
+parentTaskId, dueDate, provider, model, dependsOnTaskIds, autoRunWhenReady. Nothing is
+written unless every item is valid.
 
 To make one item depend on another item of the same batch — whose id does not exist
 yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
@@ -144,8 +152,10 @@ yet — give the earlier item a "ref" and list it in the later item's "dependsOn
    {"title":"Deploy","dependsOnRefs":["build"]}]
 
 A ref must name an EARLIER item; "dependsOnTaskIds" still takes ids of tasks that
-already exist. assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave an
-item unassigned). --tasks-file accepts only '-' (stdin).
+already exist. "parentTaskId" likewise names a task that already exists, in the same
+project as the item carrying it — refs wire ordering between items, they cannot nest
+one item of this batch under another. assigneeId defaults to ORBIT_AGENT_ID per item
+(pass null to leave an item unassigned). --tasks-file accepts only '-' (stdin).
 `,
 	"update": `orbit task update — update a task
 
@@ -760,6 +770,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	unassigned := fs.Bool("unassigned", false, "leave task unassigned")
 	listID := fs.String("list-id", "", "task list id")
 	projectID := fs.String("project-id", "", "file the task under this project, orthogonal to --list-id")
+	parentTaskID := fs.String("parent-task-id", "", "make the new task a subtask of this existing task")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -813,6 +824,15 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--project-id cannot be empty")
 		}
 		body["projectId"] = *projectID
+	}
+	// The server checks the parent against the projectId sent on THIS request and never infers one
+	// from the parent, so a subtask of a project's task has to name both. Same present-only rule as
+	// the flags above: absent leaves the body untouched, blank is caught before the round trip.
+	if flagWasSet(fs, "parent-task-id") {
+		if strings.TrimSpace(*parentTaskID) == "" {
+			return fmt.Errorf("--parent-task-id cannot be empty")
+		}
+		body["parentTaskId"] = *parentTaskID
 	}
 	if flagWasSet(fs, "due-date") {
 		if strings.TrimSpace(*dueDate) == "" {
@@ -1467,7 +1487,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched.", Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent.", Mutates: true},
 	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
