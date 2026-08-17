@@ -170,6 +170,7 @@ import {
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
+import { tagChipLabels } from '../lib/tagColor';
 import {
   isSessionLive,
   isSessionTerminal,
@@ -4296,16 +4297,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                               open={hoverTipOpen}
                             >
                               <span className="session-tag-chips">
-                                {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => (
-                                  <span
-                                    key={t.id}
-                                    className="session-tag-chip"
-                                    style={{ '--chip': t.color } as React.CSSProperties}
-                                  >
-                                    <span className="session-tag-chip-dot" />
-                                    {t.name}
-                                  </span>
-                                ))}
+                                {(s.tags as SessionTagRef[]).slice(0, 3).map((t) => {
+                                  // The dot keeps the tag's own colour; the name takes a legible
+                                  // shade of it (see lib/tagColor). Both themes go on the element so
+                                  // the stylesheet still picks between them.
+                                  const label = tagChipLabels(t.color);
+                                  return (
+                                    <span
+                                      key={t.id}
+                                      className="session-tag-chip"
+                                      style={
+                                        {
+                                          '--chip': t.color,
+                                          '--chip-label': label.light,
+                                          '--chip-label-dark': label.dark,
+                                        } as React.CSSProperties
+                                      }
+                                    >
+                                      <span className="session-tag-chip-dot" />
+                                      {t.name}
+                                    </span>
+                                  );
+                                })}
                                 {s.tags.length > 3 && (
                                   <span className="session-tag-more">+{s.tags.length - 3}</span>
                                 )}

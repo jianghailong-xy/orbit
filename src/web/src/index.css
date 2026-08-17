@@ -2560,7 +2560,9 @@ body {
 /* Per-row tags (up to 3, then "+N"). Named, not just coloured: the naming pass writes semantic
    tags, and a colour swatch can't say "登录". Colour still separates them at a glance, so the
    name sits on a tint of the tag's own colour — a stronger tint in dark mode, where a 13% wash
-   over a near-black row is invisible. */
+   over a near-black row is invisible. The name itself takes a legible shade of that colour rather
+   than the raw hex (`--chip-label`, computed in lib/tagColor): #FFCC00 as text on its own wash
+   measures ~1.4:1, so a yellow tag's name was a smudge. The dot still carries the raw colour. */
 .session-tag-chips {
   flex: none;
   display: flex;
@@ -2577,10 +2579,11 @@ body {
   font-size: 11.5px;
   line-height: 1;
   white-space: nowrap;
-  color: var(--chip);
+  color: var(--chip-label, var(--chip));
   background: color-mix(in srgb, var(--chip) 13%, transparent);
 }
 html[data-theme='dark'] .session-tag-chip {
+  color: var(--chip-label-dark, var(--chip));
   background: color-mix(in srgb, var(--chip) 22%, transparent);
 }
 .session-tag-chip-dot {
