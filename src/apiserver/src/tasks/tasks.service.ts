@@ -655,6 +655,51 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The error to raise when a write that named a project failed on a foreign key.
+   *
+   * `assertOwnedProject` answers "is this project yours" before the write; a project deleted in the
+   * moment between that answer and the write itself makes the database answer instead, in its own
+   * language. The outcome is correct either way — `ON DELETE RESTRICT` and the delete's row lock
+   * mean a task is never left holding a project that is gone — but "Foreign key constraint
+   * violated: task_project_id_fkey" surfaces as a 500, and a 500 says the server is broken when in
+   * fact the rule worked. The caller asked to file work into a project that no longer exists, and
+   * that is a 403 whether they lost the race by a millisecond or by a day.
+   *
+   * Two codes, because the same race is caught by two different guards depending on when the
+   * delete commits: PostgreSQL's constraint refuses the write with P2003, while a `connect:` that
+   * Prisma resolves first fails earlier with P2025 ("No 'Project' record(s) ... for a nested
+   * connect"). `create` writes the column directly and raises P2003; `update` connects the
+   * relation and raised whichever won the millisecond, which is exactly how this surfaced as an
+   * intermittent 500 in the concurrency test rather than a consistent one.
+   *
+   * Narrow on purpose, in three ways. It runs only when THIS request named a project, so a failure
+   * on a task that merely happens to have one is untouched. It re-reads the named projects rather
+   * than parsing the constraint out of the message, so a concurrent list, assignee or parent-task
+   * deletion — which raises the identical codes — is not silently relabelled: if the projects are
+   * all still there, the original error is returned unchanged for whatever it was really about.
+   * That re-read is what makes P2025 safe to include, since P2025 on an update can equally mean
+   * the task itself is gone. And it returns the error rather than throwing it, so every call site
+   * stays an explicit `throw`.
+   */
+  private async translateProjectFk(
+    e: unknown,
+    ownerId: string,
+    projectIds: Array<string | null | undefined>,
+  ): Promise<unknown> {
+    const raced =
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      (e.code === 'P2003' || e.code === 'P2025');
+    if (!raced) return e;
+    const named = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (named.length === 0) return e;
+    const live = await this.prisma.project.count({ where: { id: { in: named }, ownerId } });
+    if (live === named.length) return e;
+    // Deliberately the same status and wording as the pre-write check, so losing the race is
+    // indistinguishable to a caller from having asked a moment later.
+    return new ForbiddenException('project not found');
+  }
+
+  /**
    * The parent this task may be made part of: owned by the same user, and in the same project the
    * child will be in.
    *
@@ -1065,7 +1110,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
         if (existing) return existing;
       }
-      throw e;
+      // And the project's own pre-check has the same shape of gap — see translateProjectFk.
+      throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     }
     // Push the new task to the owner's control-plane stream (GET /api/events) so their task
     // list refreshes live instead of on the next poll — the fix for "MCP-created tasks only
@@ -1394,6 +1440,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
       return rows;
+    }).catch(async (e) => {
+      // A batch is all-or-nothing, so one item's project vanishing mid-write fails the whole call —
+      // and it should say so in the language of the request, not as a 500 (see translateProjectFk).
+      throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
     });
     // One control-plane nudge per task, exactly as create does (see its comment).
     if (sessionId) for (const task of created) this.realtime.publishTaskChanged(sessionId, task.id);
@@ -2871,10 +2921,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // serializing each against itself but not against the other would leave exactly the gap the
     // lock exists to close. An update that touches neither still takes no lock at all: renaming a
     // task must not queue behind another owner's DAG rewrite.
-    const updated =
+    const updated = await (
       dependsOnTaskIds === undefined && !touchesHierarchy
-        ? await this.prisma.task.update({ where: { id }, data })
-        : await this.prisma.$transaction(async (tx) => {
+        ? this.prisma.task.update({ where: { id }, data })
+        : this.prisma.$transaction(async (tx) => {
             await this.lockDependencyGraph(tx, ownerId);
             if (touchesHierarchy) {
               // Re-read INSIDE the lock. `before` was loaded before it was held, so by now another
@@ -2910,7 +2960,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               }
             }
             return task;
-          });
+          })
+    // Both branches share one translation: a project deleted between this request's check and its
+    // write is the caller's race to hear about, not a server fault (see translateProjectFk). Only
+    // an update that named a project can be relabelled, so every other FK failure is untouched.
+    ).catch(async (e) => {
+      throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
+    });
     // A dependency replacement may target a web-created task, which has no creator session to
     // carry the refresh. Publish it on the owner's stream so Workspace/MCP and CLI replacements
     // refresh an already-open DAG immediately. Scalar-only updates keep their existing
