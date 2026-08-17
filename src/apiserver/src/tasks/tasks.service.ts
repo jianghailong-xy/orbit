@@ -385,6 +385,13 @@ export interface LabelSummaryQuery {
 /** How many labels one summary reports. See labelSummary for why it is capped at all. */
 export const TASK_LABEL_SUMMARY_MAX = 500;
 
+/**
+ * How many rows the active strip shows before it starts counting instead. Sized for reading, not
+ * for completeness: past a screenful the strip has stopped being a glance and the Failed tab is
+ * the better answer.
+ */
+export const ACTIVE_TASK_STRIP_MAX = 50;
+
 export interface DependencyGraphQuery {
   direction?: string;
   maxDepth?: string | number;
@@ -1393,6 +1400,63 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
 
     return { items, nextCursor, total: ownFilteredTotal ?? counts.runnable, counts };
+  }
+
+  /**
+   * The tasks that are happening or need somebody: running, queued, in progress, failed.
+   *
+   * This exists because a paged list ordered by creation time can never show them. Work is
+   * executed oldest-first while the list is served newest-first, so the active tasks are
+   * systematically the *last* rows an owner would ever page to — measured on this deployment,
+   * the one running task sits at position 109,873 of 110,419, some 550 pages down. Client-side
+   * sorting cannot fix that: it can only reorder rows already downloaded, so a status sort
+   * promises "the important ones first" while the important ones are not in the set at all.
+   *
+   * Bounded rather than paged, and that bound is a property of the system rather than a guess:
+   * running and queued are capped by the runners' own concurrency, so this answers with single
+   * digits in normal operation. FAILED is the one that can arrive in bulk (one runner outage
+   * fails a batch), which is why the cap exists and why the response reports the true total —
+   * a pinned strip that silently truncates is the same lie in a smaller box.
+   */
+  async activeTasks(ownerId: string, query: LabelSummaryQuery = {}) {
+    const scope: Prisma.TaskWhereInput = { ownerId };
+    if (query.listId === 'none') scope.listId = null;
+    else if (query.listId) {
+      if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
+      scope.listId = query.listId;
+    }
+
+    // Live execution state comes off the session table, so "has a live run" cannot be a column
+    // predicate — it is the same `sessions: { some: ... }` the counts above use.
+    const where: Prisma.TaskWhereInput = {
+      ...scope,
+      OR: [
+        { sessions: { some: { status: { in: [RunStatus.RUNNING, RunStatus.PENDING] } } } },
+        { status: { in: [TaskStatus.IN_PROGRESS, TaskStatus.FAILED] } },
+      ],
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        // Newest first within the strip; the caller ranks by live state, which it must compute
+        // from the run rows anyway.
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: ACTIVE_TASK_STRIP_MAX,
+        select: TASK_LIST_SELECT,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
+
+    const [withRun, states] = await Promise.all([
+      this.withRunning(ownerId, rows, true),
+      this.dependencyStatesFor(rows.map((task) => task.id)),
+    ]);
+    const items = withRun.map((task) => {
+      const dependencyState = states.get(task.id) ?? 'NONE';
+      return { ...task, dependencyState, blocked: !canRun(dependencyState) };
+    });
+    return { items, total, truncated: total > items.length };
   }
 
   /**

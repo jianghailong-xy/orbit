@@ -8,7 +8,7 @@ import {
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
-import { labelSummaryPath, type LabelSummary } from './taskPages';
+import { activeTasksPath, labelSummaryPath, type ActiveTasks, type LabelSummary } from './taskPages';
 
 export type { ConfiguredProvider };
 
@@ -289,4 +289,17 @@ export const labelSummaryQuery = (listId?: string) =>
     queryKey: ['task-labels', listId ?? null] as const,
     queryFn: () => api<LabelSummary>(labelSummaryPath(listId)),
     staleTime: 10_000,
+  });
+
+/**
+ * The active strip for the task page, scoped to a list when one is open.
+ *
+ * Polled faster than the list it sits above: this is the part of the page that is supposed to be
+ * moving, and it is bounded, so the refresh costs a small query rather than a page of rows.
+ */
+export const activeTasksQuery = (listId?: string) =>
+  queryOptions({
+    queryKey: ['tasks', 'active', listId ?? null] as const,
+    queryFn: () => api<ActiveTasks>(activeTasksPath(listId)),
+    refetchInterval: 5_000,
   });

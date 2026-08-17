@@ -71,6 +71,15 @@ export class TasksController {
     });
   }
 
+  // Above :id, like "page" and "labels" — none of these literals is a task uuid.
+  @Get('active')
+  activeTasks(
+    @CurrentUser() user: AuthUser,
+    @Query('listId', PublicIdPipe.allowing('none')) listId?: string,
+  ) {
+    return this.tasks.activeTasks(user.userId, { listId });
+  }
+
   // Above :id for the same reason as "page" — "labels" is not a task uuid.
   @Get('labels')
   labelSummary(

@@ -70,3 +70,19 @@ export interface LabelSummary {
 export function labelSummaryPath(listId?: string): string {
   return `/tasks/labels${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`;
 }
+
+/**
+ * The tasks that are happening or need somebody, outside the paged list.
+ *
+ * `total` is the true count in scope; `items` is capped, so a strip full of failures says how
+ * many it is standing in for rather than reading as the whole story.
+ */
+export interface ActiveTasks<T = any> {
+  items: T[];
+  total: number;
+  truncated: boolean;
+}
+
+export function activeTasksPath(listId?: string): string {
+  return `/tasks/active${listId ? `?listId=${encodeURIComponent(listId)}` : ''}`;
+}

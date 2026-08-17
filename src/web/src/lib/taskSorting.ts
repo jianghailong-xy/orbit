@@ -1,8 +1,20 @@
 export type TaskSortField = 'status' | 'title' | 'assignee' | 'created';
 export type TaskSortDirection = 'asc' | 'desc';
 
-export const DEFAULT_TASK_SORT_FIELD: TaskSortField = 'status';
-export const DEFAULT_TASK_SORT_DIRECTION: TaskSortDirection = 'asc';
+/**
+ * Creation order, matching what the server already returns — so by default the rows are in the
+ * order they arrived and nothing is silently rearranged.
+ *
+ * It used to default to `status`, which put running and failed work on top. That reads as "the
+ * important ones first" and cannot be: this sort runs in the browser over the pages fetched so
+ * far, while tasks execute oldest-first and the list is served newest-first. The active tasks
+ * are therefore the *last* rows anyone would page to — 550 pages down on this deployment — so
+ * sorting the loaded rows by status reordered a set that never contained them. The pinned strip
+ * above the list is what actually surfaces them; status stays available as a manual sort, where
+ * it is honest about being a sort of what you are looking at.
+ */
+export const DEFAULT_TASK_SORT_FIELD: TaskSortField = 'created';
+export const DEFAULT_TASK_SORT_DIRECTION: TaskSortDirection = 'desc';
 
 const TASK_SORT_FIELDS = new Set<TaskSortField>(['status', 'title', 'assignee', 'created']);
 

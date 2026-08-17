@@ -1173,6 +1173,31 @@ body {
   color: var(--border);
 }
 
+/* The pinned strip of work that is actually happening. It sits inside .orbit-tasklist so its
+   rows inherit the same column grid as the list below — the header governs both. */
+.task-active-strip {
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border);
+}
+.task-active-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 16px 5px;
+}
+.task-active-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.task-active-hint {
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The Batches view: one row per label, each carrying the same meter as the header above. */
 .tasks-viewswitch {
   margin: 10px 0 0;

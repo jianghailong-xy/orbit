@@ -38,7 +38,7 @@ import {
   rememberTaskFilter,
   matchesTaskFilter,
 } from '../lib/taskFilters';
-import { labelSummaryQuery } from '../lib/queries';
+import { activeTasksQuery, labelSummaryQuery } from '../lib/queries';
 import type { LabelSummaryRow } from '../lib/taskPages';
 import { taskPagePath, type TaskCounts, type TaskPage } from '../lib/taskPages';
 import {
@@ -337,6 +337,23 @@ export function TaskListView() {
   const workspaces = useQuery({ queryKey: ['workspaces'], queryFn: () => api<any[]>('/workspaces') });
   // Feeds both the Batches table and the picker's options, so opening the picker costs no
   // request of its own and its entries can show what they would narrow to.
+  // The work that is happening, fetched outside the paged list because it can never be in it:
+  // tasks run oldest-first while the list is served newest-first, so the active ones sit at the
+  // far end of the pagination — 550 pages down on this deployment. Only on the unfiltered tab;
+  // Running and Failed already answer for themselves, and pinning a row above the tab that
+  // exists to show it is just showing it twice.
+  const activeTasks = useQuery({
+    ...activeTasksQuery(scopeListId),
+    enabled: view === 'tasks' && filter === 'ALL',
+  });
+  // Ranked by live state here, which is the one place that ranking is honest: the strip is the
+  // complete set in scope (capped at 50 and reporting when it capped), not a page of it, so
+  // "running first" is a statement about all of it rather than about what happened to load.
+  const activeRows = useMemo(() => {
+    if (filter !== 'ALL') return [];
+    const items = activeTasks.data?.items ?? [];
+    return [...items].sort((a: any, b: any) => compareTasksBy(a, b, 'status'));
+  }, [activeTasks.data, filter]);
   const labelSummary = useQuery(labelSummaryQuery(scopeListId));
   const labelRows = labelSummary.data?.items ?? [];
   const hasLabels = labelRows.length > 0 || labels.length > 0;
@@ -499,12 +516,17 @@ export function TaskListView() {
   );
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const filtered = q
+    const searched = q
       ? visibleRows.filter((r: any) => (r.title ?? '').toLowerCase().includes(q))
       : visibleRows;
+    // Anything pinned above is removed here. On this deployment the two sets never overlap —
+    // the active tasks sit 550 pages down — but that is a property of the data, not a guarantee,
+    // and the same row twice reads as two tasks.
+    const pinned = new Set(activeRows.map((r: any) => r.id));
+    const filtered = pinned.size ? searched.filter((r: any) => !pinned.has(r.id)) : searched;
     const dir = sortDir === 'asc' ? 1 : -1;
     return [...filtered].sort((a: any, b: any) => dir * compareTasksBy(a, b, sortField));
-  }, [visibleRows, query, sortField, sortDir]);
+  }, [visibleRows, query, sortField, sortDir, activeRows]);
 
   // The progress bar and the tab badges describe the whole scope, not the pages loaded so far,
   // so they can only come from the server. Page 1 always carries them (`counts=none` is sent
@@ -1016,6 +1038,20 @@ export function TaskListView() {
                   {sortHead('title', 'Task')}
                   {showAssigneeCol && sortHead('assignee', 'Assignee')}
                 </div>
+
+                {activeRows.length > 0 && (
+                  <div className="task-active-strip">
+                    <div className="task-active-head">
+                      <span className="task-active-title">Happening now</span>
+                      <span className="task-active-hint">
+                        {activeTasks.data?.truncated
+                          ? `${activeRows.length} of ${(activeTasks.data?.total ?? 0).toLocaleString()} — open the Failed or Running tab for the rest`
+                          : 'Running, queued, in progress or failed — pinned because the list below is ordered by creation time'}
+                      </span>
+                    </div>
+                    {activeRows.map(renderRow)}
+                  </div>
+                )}
 
                 {rows.length === 0 ? (
                   <div style={{ padding: '24px 16px', color: 'var(--text-3)', fontSize: 13 }}>
