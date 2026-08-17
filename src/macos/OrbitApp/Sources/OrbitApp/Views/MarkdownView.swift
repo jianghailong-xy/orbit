@@ -354,17 +354,27 @@ private struct MarkdownImageView: View {
     }
 
     var body: some View {
-        content
-            // Spread to the full pane and measure it: a `GeometryReader` background reads the pane
-            // width without disturbing the exact-framed image (which stays hugged to the leading edge
-            // — the empty trailing space is inert). `onGeometryChange` is iOS 18+, so this uses the
-            // version-agnostic reader + `onChange`.
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                GeometryReader { geo in
-                    Color.clear.onChange(of: geo.size.width, initial: true) { _, w in paneWidth = w }
-                }
+        // The pane is measured by a zero-height probe laid BESIDE the image, never by a
+        // `.background` behind it: a background is proposed the size of the view it backs, and
+        // `.frame(maxWidth: .infinity)` reports an oversized child's own width instead of clamping it
+        // (see MarkdownTableView). So a background reader measured the *image*, `capWidth` collapsed
+        // to `min(cap, cap)`, and the clamp silently died — a wide image again stretched the row (and
+        // its sibling paragraphs) past the screen edge, exactly the bug the clamp was added for. It
+        // only surfaced when the bytes were already decoded on the first layout pass (a revisited
+        // session, a recycled row); with a still-loading attachment the reader happened to measure the
+        // placeholder and read the true pane. `Color.clear` only ever takes the width the row
+        // proposes, so the probe reads the pane however wide the image wants to be.
+        // `onGeometryChange` is iOS 18+, so this uses the version-agnostic reader + `onChange`.
+        ZStack(alignment: .topLeading) {
+            GeometryReader { geo in
+                Color.clear.onChange(of: geo.size.width, initial: true) { _, w in paneWidth = w }
             }
+            .frame(height: 0)
+            // The exact-framed image stays hugged to the leading edge — the empty trailing space
+            // (the outer `maxWidth: .infinity`) is inert.
+            content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder private var content: some View {
