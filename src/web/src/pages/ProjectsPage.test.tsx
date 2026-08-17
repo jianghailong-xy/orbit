@@ -56,6 +56,26 @@ function newClient() {
   });
 }
 
+// The tasks section's own cache entry: keyed by the NORMALIZED project id (what the URL carries
+// is not always what the key holds) and by the level being read, so a later subtask page under the
+// same project cannot land here. Spelled out rather than imported — a key the component changed
+// unilaterally should break these tests, which it can't do if both sides read one constant.
+const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'tasks', 'root'];
+
+const task = (over: Record<string, unknown> = {}) => ({
+  id: 't1',
+  title: 'Design the landing page',
+  status: 'OPEN',
+  parentTaskId: null,
+  acceptanceCriteria: 'Passes design review',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-02T00:00:00Z',
+  dueDate: null,
+  assignee: null,
+  childCount: 0,
+  ...over,
+});
+
 const detail = (over: Record<string, unknown> = {}) => ({
   id: P1,
   title: 'Website Revamp',
@@ -71,16 +91,24 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects and GET /projects/<id> — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id> and the root task page — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if either call grows extra args or a query string, if a path changes, or if a third
+    // Fails if any call grows extra args or a query string, if a path changes, or if a fourth
     // api(...) call is added anywhere in the file. The arg pattern allows one level of nesting
     // so encodeURIComponent(...)'s own paren doesn't cut the match short.
     const apiCalls = [...source.matchAll(/\bapi(?:<[^>]*>)?\(((?:[^()]|\([^()]*\))*)\)/g)].map(
       (m) => m[1].trim(),
     );
-    expect(apiCalls).toEqual(["'/projects'", '`/projects/${encodeURIComponent(id!)}`']);
+    expect(apiCalls).toEqual([
+      "'/projects'",
+      '`/projects/${encodeURIComponent(id!)}`',
+      // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
+      // added `&parentId=…` here would silently turn this into a subtask page under the same
+      // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
+      // of the URL that goes on the wire.
+      '`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`',
+    ]);
     // ...that `id` is the normalized route id, not the raw param — the detail URL and the cache
     // key have to agree on one spelling...
     expect(source).toContain('const id = routeId(params.id)');
@@ -292,6 +320,19 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('href="/projects"'); // the way out stays reachable on the error path
   });
 
+  it('keeps rendering the project itself when its tasks fail to load', async () => {
+    // The tasks section is an addition to this page, not a gate on it: a failed task page must
+    // cost the reader the task list and nothing else.
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    await qc.prefetchQuery({ queryKey: tasksKey(P1), queryFn: () => Promise.reject(new Error('tasks down')) });
+    const html = renderDetail(qc, encodeId(P1));
+    expect(html).toContain('Website Revamp');
+    expect(html).toContain('5 tasks');
+    expect(html).toContain('Lighthouse ≥ 90 on every page');
+    expect(html).not.toContain('Project could not be loaded');
+  });
+
   it('is routed at /projects/:id inside the app shell, wrapped in DocView', () => {
     // The page only gets a gutter + its own scroll region if it's wrapped like the other doc
     // views; an unwrapped route renders into a full-bleed shell instead.
@@ -299,5 +340,165 @@ describe('ProjectDetailPage', () => {
     expect(app).toMatch(
       /path="projects\/:id"\s*\n\s*element=\{\s*\n\s*<DocView>\s*\n\s*<ProjectDetailPage \/>/,
     );
+  });
+});
+
+describe('ProjectDetailPage — top-level tasks', () => {
+  /** A detail page whose project loaded, so the tasks section is actually mounted. */
+  function withProject(seed?: (qc: QueryClient) => void) {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    seed?.(qc);
+    return { qc, html: () => renderDetail(qc, encodeId(P1)) };
+  }
+
+  it('renders every root task in full: title, status, criteria excerpt/fallback and subtask count', () => {
+    // Well past the 180-char row cap, so this proves the criteria get cut rather than merely shown.
+    const longCriteria = 'Every breakpoint matches the comp. '.repeat(10);
+    // Long enough that a title-truncating row would be caught: a half-read title names a
+    // different task, so this one must arrive whole.
+    const longTitle = 'Migrate the ledger export job off the legacy scheduler and onto the queue';
+    const { qc, html } = withProject((c) =>
+      c.setQueryData(tasksKey(P1), {
+        items: [
+          task({ id: 't1', status: 'IN_PROGRESS', acceptanceCriteria: longCriteria, childCount: 3 }),
+          task({ id: 't2', title: longTitle, status: 'DONE', acceptanceCriteria: null, childCount: 1 }),
+          task({ id: 't3', title: 'Retire the old CDN', status: 'CANCELLED', childCount: 0 }),
+        ],
+        nextCursor: null,
+      }),
+    );
+    const out = html();
+
+    expect(out).toContain('Tasks');
+    expect(out).toContain('Design the landing page');
+    expect(out).toContain('IN_PROGRESS'); // a status a PROJECT can never have — its own colour map
+    expect(out).toContain(longTitle); // whole, not excerpted
+    expect(out).toContain('DONE');
+    expect(out).toContain('Retire the old CDN');
+    expect(out).toContain('CANCELLED');
+
+    // Acceptance criteria: capped with one ellipsis, never delivered whole to a row...
+    expect(out).toContain(`${longCriteria.slice(0, 180)}…`);
+    expect(out).not.toContain(longCriteria);
+    // ...shown as-is when it already fits...
+    expect(out).toContain('Passes design review');
+    // ...and named rather than left blank when there is none.
+    expect(out).toContain('No acceptance criteria set');
+
+    // Subtask counts, with the singular spelled correctly — `1 subtasks` is the bug this catches.
+    expect(out).toContain('3 subtasks');
+    expect(out).toContain('1 subtask');
+    expect(out).not.toContain('1 subtasks');
+    expect(out).toContain('0 subtasks');
+
+    // The children themselves stay unfetched. Rendering a row with `3 subtasks` on it must not
+    // open a page for those three — expansion is the next unit, so these two are the only queries
+    // this page is allowed to have.
+    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+      ['project', encodeId(P1)],
+      tasksKey(P1),
+    ]);
+  });
+
+  it('reads the page from a key naming both the project and the root level', () => {
+    // Seeded under the exact key and rendered without a stub: the row can only appear if the
+    // component asked for THIS entry. A key missing the project id would collide across projects;
+    // one missing the level would collide with the subtask pages that come next.
+    const { html } = withProject((qc) =>
+      qc.setQueryData(tasksKey(P1), { items: [task({ title: 'Only via the right key' })], nextCursor: null }),
+    );
+    expect(html()).toContain('Only via the right key');
+
+    // ...and it is a different entry from the project document itself, which is keyed one level up.
+    const other = newClient();
+    other.setQueryData(['project', encodeId(P1)], detail());
+    other.setQueryData(tasksKey(P2), { items: [task({ title: 'Another project’s task' })], nextCursor: null });
+    expect(renderDetail(other, encodeId(P1))).not.toContain('Another project’s task');
+  });
+
+  it('says so when the project has no top-level tasks', () => {
+    const { html } = withProject((qc) => qc.setQueryData(tasksKey(P1), { items: [], nextCursor: null }));
+    const out = html();
+    expect(out).toContain('Tasks');
+    expect(out).toContain('No top-level tasks yet');
+    // Distinct from the per-status tally's own empty line, which is about a different count.
+    expect(out).toContain('OPEN 2');
+  });
+
+  it('spins under the Tasks heading while the page is still loading', () => {
+    // Project seeded, tasks not: the section is mounted and pending, which is a state of its own
+    // rather than a silently empty list.
+    const { html } = withProject();
+    const out = html();
+    expect(out).toContain('Tasks');
+    expect(out).toContain('ant-spin');
+    expect(out).not.toContain('No top-level tasks yet');
+  });
+
+  it('shows an error with a Retry action when the task page fails', async () => {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    await qc.prefetchQuery({ queryKey: tasksKey(P1), queryFn: () => Promise.reject(new Error('tasks down')) });
+    const out = renderDetail(qc, encodeId(P1));
+    expect(out).toContain('Tasks could not be loaded');
+    expect(out).toContain('tasks down');
+    expect(out).toContain('Retry');
+  });
+
+  it('says more top-level tasks exist when the server returns a cursor — without a pager', () => {
+    const { html } = withProject((qc) =>
+      qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: 'eyJjcmVhdGVkQXQiOiIifQ' }),
+    );
+    const out = html();
+    expect(out).toContain('More top-level tasks exist beyond this first page');
+    // This unit reads one page and sends no cursor, so it must not offer a control that would.
+    expect(out).not.toMatch(/Load more|Show more|Next page/i);
+  });
+
+  it('stays silent about further pages when the server returns none', () => {
+    const { html } = withProject((qc) =>
+      qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null }),
+    );
+    expect(html()).not.toContain('More top-level tasks exist');
+  });
+
+  it('does not create the tasks query until the project itself has loaded', async () => {
+    // Mounting a useQuery registers it in the cache even in a static render (no effects needed),
+    // so "is there an entry for this key" is a direct read of whether the request was armed at
+    // all — stronger than checking that no rows rendered, which an empty page would also satisfy.
+    const key = tasksKey(P1);
+
+    const pending = newClient(); // nothing seeded: the project is still loading
+    renderDetail(pending, encodeId(P1));
+    expect(pending.getQueryCache().find({ queryKey: key })).toBeUndefined();
+
+    const failed = newClient();
+    await failed.prefetchQuery({
+      queryKey: ['project', encodeId(P1)],
+      queryFn: () => Promise.reject(new Error('network down')),
+    });
+    renderDetail(failed, encodeId(P1));
+    expect(failed.getQueryCache().find({ queryKey: key })).toBeUndefined();
+
+    const missingId = newClient(); // no :id in the route at all — nothing to key a task page by
+    renderToStaticMarkup(
+      <QueryClientProvider client={missingId}>
+        <MemoryRouter initialEntries={['/projects']}>
+          <Routes>
+            <Route path="/projects" element={<ProjectDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    // The project's own query is still built — it is declared unconditionally and `enabled` is
+    // what keeps it off the wire — but no task page is, because there is no id to key one by.
+    expect(missingId.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([['project', null]]);
+
+    // Only a project that actually came back arms it.
+    const loaded = newClient();
+    loaded.setQueryData(['project', encodeId(P1)], detail());
+    renderDetail(loaded, encodeId(P1));
+    expect(loaded.getQueryCache().find({ queryKey: key })).toBeDefined();
   });
 });
