@@ -93,7 +93,11 @@ function makeService(bound: Bound = {}) {
       updateMany: async ({ where, data }: any) => {
         swaps.push(where);
         if (where.ownerId !== OWNER_ID) return { count: 0 }; // the write carries its own tenant scope
-        if (where.coordinatorSessionId !== state.coordinatorSessionId) {
+        // A `where` with no pointer predicate is an unconditional UPDATE, and is modelled as one.
+        // Otherwise a swap that stopped being a swap would show up as a stub mismatch — every
+        // condition failing against `undefined` — instead of as the two-winners bug it is.
+        const conditional = 'coordinatorSessionId' in where;
+        if (conditional && where.coordinatorSessionId !== state.coordinatorSessionId) {
           if (bound.winnerVanishes) {
             state.coordinatorSessionId = null;
             state.coordinatorWorkspaceId = null;
@@ -751,4 +755,193 @@ test('a long project title is cut to a title, not passed through whole', async (
   await new ProjectsService(prisma, sessions).coordinator(OWNER_ID, PROJECT_ID, WORKSPACE_TASKS);
 
   assert.ok(created[0].title.length <= 80, `title was ${created[0].title.length} chars`);
+});
+
+// ── Two real calls, actually interleaved ──────────────────────────────────────────────────────
+//
+// Everything above drives ONE call and injects the other side of the race by mutating the row
+// mid-flight. That is the right tool for the branches — it can put the pointer in states a second
+// caller could not produce on demand (trashed winner, vanished winner, a winner in another
+// workspace) — but it proves nothing about two callers both going read → create → swap, because
+// there is only ever one caller.
+//
+// This one runs both. Barriers pin the interleaving that matters (neither may read after the other
+// has bound; neither may swap before both sessions exist), so the ordering under test is the one
+// intended rather than whatever the event loop happened to do that run. Which of the two wins is
+// still up to the scheduler — so every assertion below is written against the winner the row
+// actually ended up naming, not against a call chosen in advance. That is what makes it
+// deterministic in what it claims while staying honest about what it cannot control.
+
+/** A rendezvous `parties` callers must all reach before any continues. It rejects rather than
+ *  hanging: a service that stopped creating a session would otherwise stall the whole run instead
+ *  of failing this one test with a legible reason. */
+function barrier(parties: number, label: string) {
+  let arrived = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  return async () => {
+    arrived += 1;
+    if (arrived >= parties) release();
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        gate,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`only ${arrived}/${parties} callers reached ${label}`)),
+            2_000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+function concurrentFixture() {
+  // The one mutable row both callers contend for.
+  const row: { coordinatorSessionId: string | null; coordinatorWorkspaceId: string | null } = {
+    coordinatorSessionId: null,
+    coordinatorWorkspaceId: null,
+  };
+  const readsSeen: (string | null)[] = [];
+  const swaps: any[] = [];
+  const creates: string[] = [];
+  const removed: string[] = [];
+  const ended: string[] = [];
+
+  const bothRead = barrier(2, 'the first read');
+  const bothCreated = barrier(2, 'sessions.create');
+  let minted = 0;
+
+  const prisma = {
+    project: {
+      findFirst: async () => {
+        // Snapshot at read time, like a real read: the value returned is the one that was there
+        // when the query ran, not whatever the row holds by the time the caller looks at it.
+        const seen = { ...row };
+        readsSeen.push(seen.coordinatorSessionId);
+        // Only the two opening reads rendezvous. The third is the loser looking up the winner,
+        // which must see the row as it is by then.
+        if (readsSeen.length <= 2) await bothRead();
+        return {
+          id: PROJECT_ID,
+          title: 'Ship the coordinator',
+          coordinatorSessionId: seen.coordinatorSessionId,
+          coordinatorWorkspaceId: seen.coordinatorWorkspaceId,
+          coordinatorSession: seen.coordinatorSessionId
+            ? { id: seen.coordinatorSessionId, deletedAt: null }
+            : null,
+        };
+      },
+      // A real compare-and-swap: there is NO await between the compare and the set, so the two
+      // callers cannot interleave inside it — exactly the guarantee `UPDATE ... WHERE` gives.
+      // Whichever microtask arrives second sees what the first wrote and is refused.
+      //
+      // A `where` carrying no pointer predicate is an unconditional UPDATE and is applied as one,
+      // so a swap that stops being a swap fails this test as two winners rather than as a stub
+      // that happened to compare against `undefined`.
+      updateMany: async ({ where, data }: any) => {
+        swaps.push(where);
+        if (where.ownerId !== OWNER_ID) return { count: 0 };
+        const conditional = 'coordinatorSessionId' in where;
+        if (conditional && row.coordinatorSessionId !== where.coordinatorSessionId) {
+          return { count: 0 };
+        }
+        row.coordinatorSessionId = data.coordinatorSessionId;
+        row.coordinatorWorkspaceId = data.coordinatorWorkspaceId;
+        return { count: 1 };
+      },
+    },
+    task: { groupBy: async () => [] },
+    workspace: { findFirst: async ({ where }: any) => ({ id: where.id }) },
+  } as never;
+
+  const sessions = {
+    create: async () => {
+      const id = `session-${'AB'[minted] ?? minted}`;
+      minted += 1;
+      creates.push(id);
+      // Both sessions exist before either binding is attempted, which is the case that produces a
+      // stranded session if the swap is not a swap.
+      await bothCreated();
+      return { id };
+    },
+    end: async (_owner: string, id: string) => {
+      ended.push(id);
+      return { ok: true };
+    },
+    remove: async (_owner: string, id: string) => {
+      removed.push(id);
+      return { ok: true };
+    },
+  } as never;
+
+  const service = new ProjectsService(prisma, sessions);
+  return {
+    row,
+    readsSeen,
+    swaps,
+    creates,
+    removed,
+    ended,
+    openTwice: () =>
+      Promise.all([
+        service.coordinator(OWNER_ID, PROJECT_ID, WORKSPACE_TASKS),
+        service.coordinator(OWNER_ID, PROJECT_ID, WORKSPACE_TASKS),
+      ]),
+  };
+}
+
+test('two concurrent calls both open a session, and the project keeps exactly one', async () => {
+  const f = concurrentFixture();
+
+  const [a, b] = await f.openTwice();
+
+  // Both really went read → create → swap: two reads that each found nothing, two distinct
+  // sessions, two swap attempts. Any of these at 1 would mean the test proved nothing.
+  assert.deepEqual(f.readsSeen.slice(0, 2), [null, null], 'both had to read it unbound');
+  assert.equal(f.creates.length, 2);
+  assert.notEqual(f.creates[0], f.creates[1], 'the two sessions must be distinguishable');
+  assert.equal(f.swaps.length, 2, 'both had to attempt the binding');
+  assert.deepEqual(
+    f.swaps.map((w) => w.coordinatorSessionId),
+    [null, null],
+    'both had to swap against the unbound pointer they read — an absent predicate is no swap',
+  );
+
+  // One binding survives, and it is one of the two that were actually created.
+  const winner = f.row.coordinatorSessionId;
+  assert.ok(winner && f.creates.includes(winner), `row bound ${winner}`);
+  assert.equal(f.row.coordinatorWorkspaceId, WORKSPACE_TASKS);
+
+  // And both callers are told about that one — which is the entire promise of the endpoint.
+  assert.equal(a.sessionId, winner);
+  assert.equal(b.sessionId, winner);
+  assert.deepEqual([a.created, b.created].sort(), [false, true], 'exactly one created it');
+});
+
+test('the concurrent loser is soft-removed and the winner is left alone', async () => {
+  const f = concurrentFixture();
+
+  await f.openTwice();
+
+  const winner = f.row.coordinatorSessionId;
+  const loser = f.creates.find((id) => id !== winner);
+  assert.deepEqual(f.removed, [loser], 'exactly the loser, exactly once');
+  assert.equal(f.removed.includes(winner as string), false, 'the winner must survive its own race');
+  assert.deepEqual(f.ended, [], 'discarded to Trash, not merely ended into Open');
+});
+
+test('two concurrent calls naming the same workspace do not conflict', async () => {
+  // The loser adopts the winner and passes the cross-workspace check on the way, because both
+  // asked for the same place. Promise.all resolving at all is the assertion: a 409 here would mean
+  // asking twice for a coordinator in one workspace could fail purely on timing.
+  const f = concurrentFixture();
+
+  const [a, b] = await f.openTwice();
+
+  assert.equal(a.workspaceId, WORKSPACE_TASKS);
+  assert.equal(b.workspaceId, WORKSPACE_TASKS);
 });
