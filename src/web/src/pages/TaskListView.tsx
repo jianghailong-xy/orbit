@@ -34,6 +34,8 @@ import {
   canDispatchTask,
   canStartTask,
   DEFAULT_TASK_FILTER,
+  initialTaskFilter,
+  rememberTaskFilter,
   matchesTaskFilter,
 } from '../lib/taskFilters';
 import { labelSummaryQuery } from '../lib/queries';
@@ -233,8 +235,17 @@ export function TaskListView() {
       },
       { replace: true },
     );
-  const filter = searchParams.get('filter') ?? DEFAULT_TASK_FILTER;
-  const setFilter = (v: string) => setParam('filter', v, DEFAULT_TASK_FILTER);
+  // The URL still owns the filter — it is what makes a view shareable — but with nothing in it
+  // the last tab the user picked is what they get, not a fixed default.
+  const filter = initialTaskFilter(searchParams.get('filter'));
+  const setFilter = (v: string) => {
+    rememberTaskFilter(v);
+    // Compared against the static default, never against what was just stored: the stored value
+    // is `v` by this point, so that comparison is always true and would strip `filter` from
+    // every URL — leaving a shared link to resolve against whatever tab the *recipient* last
+    // used. Any non-default tab stays spelled out in the URL and travels with it.
+    setParam('filter', v, DEFAULT_TASK_FILTER);
+  };
   // Which of the page's two views is showing. Tasks is the rows; Batches is the same scope
   // grouped by label. In the URL like every other bit of view state, so a batch table is
   // shareable and survives a refresh.

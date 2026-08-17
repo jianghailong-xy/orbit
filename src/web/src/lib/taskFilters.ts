@@ -1,4 +1,40 @@
-export const DEFAULT_TASK_FILTER = 'RUNNABLE';
+/**
+ * The tab a task page opens on when nothing else says otherwise.
+ *
+ * `ALL` rather than `RUNNABLE`: Ready counts only what could be dispatched *right now* — no
+ * unmet prerequisite, a workspace bound to a live runner, nothing already in flight. In a
+ * dependency-ordered campaign that is almost always zero, so the page opened on an empty table
+ * reading "No tasks are ready to run" while holding 27,468 tasks. A landing tab that hides the
+ * whole list to report a transient scheduling fact is answering a question nobody asked on
+ * arrival.
+ */
+export const DEFAULT_TASK_FILTER = 'ALL';
+
+/** Where the last tab the user picked is remembered, so the choice outlives one page view. */
+export const TASK_FILTER_STORAGE_KEY = 'orbit-task-filter';
+
+/**
+ * The tab to open on: an explicit `?filter=` wins (a shared link means what it says), then
+ * whatever the user last picked, then the default. Storage is read defensively — Safari's
+ * private mode throws on access rather than returning null, and a task list that will not
+ * render is a worse outcome than a forgotten preference.
+ */
+export function initialTaskFilter(fromUrl: string | null): string {
+  if (fromUrl) return fromUrl;
+  try {
+    return localStorage.getItem(TASK_FILTER_STORAGE_KEY) ?? DEFAULT_TASK_FILTER;
+  } catch {
+    return DEFAULT_TASK_FILTER;
+  }
+}
+
+export function rememberTaskFilter(filter: string): void {
+  try {
+    localStorage.setItem(TASK_FILTER_STORAGE_KEY, filter);
+  } catch {
+    /* preference is a convenience; losing it must never break the view */
+  }
+}
 
 export interface FilterableTask {
   status: string;

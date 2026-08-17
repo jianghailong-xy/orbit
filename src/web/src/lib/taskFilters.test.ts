@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { canDispatchTask, canStartTask, DEFAULT_TASK_FILTER, matchesTaskFilter } from './taskFilters';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  canDispatchTask,
+  canStartTask,
+  DEFAULT_TASK_FILTER,
+  initialTaskFilter,
+  matchesTaskFilter,
+  rememberTaskFilter,
+  TASK_FILTER_STORAGE_KEY,
+} from './taskFilters';
 
 const runnable = {
   status: 'OPEN',
@@ -10,9 +18,67 @@ const runnable = {
 };
 
 describe('task filters', () => {
-  it('defaults to tasks that can be started now', () => {
-    expect(DEFAULT_TASK_FILTER).toBe('RUNNABLE');
+  // Ready is near-permanently zero in a dependency-ordered campaign, so landing on it showed an
+  // empty table over a list of tens of thousands. The landing tab has to show the work.
+  it('defaults to showing every task, not only the dispatchable ones', () => {
+    expect(DEFAULT_TASK_FILTER).toBe('ALL');
     expect(matchesTaskFilter(runnable, DEFAULT_TASK_FILTER)).toBe(true);
+    expect(matchesTaskFilter({ ...runnable, status: 'DONE' }, DEFAULT_TASK_FILTER)).toBe(true);
+  });
+
+  describe('the remembered tab', () => {
+    // These tests run in the node environment the rest of the suite uses, which has no DOM and
+    // therefore no localStorage — so the store is supplied here rather than pulling in jsdom.
+    beforeEach(() => {
+      const store = new Map<string, string>();
+      (globalThis as { localStorage?: unknown }).localStorage = {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => void store.set(k, String(v)),
+        removeItem: (k: string) => void store.delete(k),
+        clear: () => store.clear(),
+      };
+    });
+    afterEach(() => {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+    });
+
+    it('falls back to the default until the user has picked something', () => {
+      expect(initialTaskFilter(null)).toBe(DEFAULT_TASK_FILTER);
+    });
+
+    it('reopens on the last tab the user picked', () => {
+      rememberTaskFilter('RUNNING');
+      expect(initialTaskFilter(null)).toBe('RUNNING');
+      expect(localStorage.getItem(TASK_FILTER_STORAGE_KEY)).toBe('RUNNING');
+    });
+
+    // A shared link has to mean what it says, whatever the recipient last looked at.
+    it('lets an explicit URL filter win over the remembered one', () => {
+      rememberTaskFilter('RUNNING');
+      expect(initialTaskFilter('FAILED')).toBe('FAILED');
+    });
+
+    // Safari's private mode throws on access rather than returning null, and a task list that
+    // will not render is a worse outcome than a forgotten preference.
+    it('survives storage throwing', () => {
+      (globalThis as { localStorage?: unknown }).localStorage = {
+        getItem: () => {
+          throw new Error('denied');
+        },
+        setItem: () => {
+          throw new Error('denied');
+        },
+      };
+      expect(initialTaskFilter(null)).toBe(DEFAULT_TASK_FILTER);
+      expect(() => rememberTaskFilter('RUNNING')).not.toThrow();
+    });
+
+    // The page itself renders server-side in these tests, where the global is simply absent.
+    it('survives storage being absent entirely', () => {
+      delete (globalThis as { localStorage?: unknown }).localStorage;
+      expect(initialTaskFilter(null)).toBe(DEFAULT_TASK_FILTER);
+      expect(() => rememberTaskFilter('RUNNING')).not.toThrow();
+    });
   });
 
   it.each([
