@@ -96,14 +96,23 @@ export const MAX_DAG_OPS = 50;
 export const DAG_PREVIEW_TITLES = 12;
 
 export class CreateTaskBatchItemDto extends CreateTaskDto {
-  // Caller-supplied label for THIS item, used only to wire dependencies up inside the batch
-  // (see dependsOnRefs) since the real ids don't exist yet. Never stored.
+  // Caller-supplied label for THIS item, used only to wire the batch together internally — its
+  // dependencies (dependsOnRefs) and its subtasks (parentRef) — since the real ids don't exist
+  // yet. Never stored.
   @IsOptional() @IsString() @MinLength(1) @MaxLength(64) ref?: string;
 
   // Prerequisites created by this same batch, addressed by their `ref`. Each must belong to an
   // EARLIER item, which keeps the batch acyclic by construction. Adds to dependsOnTaskIds,
   // which stays reserved for tasks that already exist.
   @IsOptional() @IsArray() @IsString({ each: true }) dependsOnRefs?: string[];
+
+  // The parent this item is a part of, created by this same batch and addressed by its `ref` —
+  // what lets a decomposition land in one call, since the parent's id does not exist yet. Must
+  // name an EARLIER item, which is both what makes the id available by the time this row is
+  // written and what keeps the tree acyclic by construction. Mutually exclusive with
+  // parentTaskId, which stays reserved for a parent that already exists: naming both is naming
+  // two parents.
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(64) parentRef?: string;
 }
 
 export class CreateTasksBatchDto {

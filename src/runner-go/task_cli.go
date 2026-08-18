@@ -168,10 +168,22 @@ yet — give the earlier item a "ref" and list it in the later item's "dependsOn
    {"title":"Deploy","dependsOnRefs":["build"]}]
 
 A ref must name an EARLIER item; "dependsOnTaskIds" still takes ids of tasks that
-already exist. "parentTaskId" likewise names a task that already exists, in the same
-project as the item carrying it — refs wire ordering between items, they cannot nest
-one item of this batch under another. assigneeId defaults to ORBIT_AGENT_ID per item
-(pass null to leave an item unassigned). --tasks-file accepts only '-' (stdin).
+already exist.
+
+To make one item a PART OF another item of the same batch, name the earlier item's
+ref in the later item's "parentRef" — how a plan lands as a tree in one call:
+
+  [{"title":"Ship the importer","ref":"epic"},
+   {"title":"Parse the feed","ref":"parse","parentRef":"epic"},
+   {"title":"Backfill","parentRef":"epic","dependsOnRefs":["parse"]}]
+
+The two ref fields answer different questions: "dependsOnRefs" is when an item may
+run, "parentRef" is what it is a part of. "parentTaskId" is the same link to a task
+that already exists, in the same project as the item carrying it; one item cannot
+carry both, and a parentRef item must carry the same "projectId" as the item it
+points at (the project is never inherited). assigneeId defaults to ORBIT_AGENT_ID
+per item (pass null to leave an item unassigned). --tasks-file accepts only '-'
+(stdin).
 `,
 	"update": `orbit task update — update a task
 
@@ -185,6 +197,8 @@ Options:
   --status OPEN|IN_PROGRESS|DONE|CANCELLED
   --assignee-id ID | --clear-assignee
   --list-id ID | --clear-list
+  --parent-task-id TASK_ID | --clear-parent
+                              Move this task under that task, or detach it
   --due-date ISO_DATE | --clear-due-date
   --provider SLUG | --clear-provider
   --model MODEL | --clear-model
@@ -217,6 +231,15 @@ be combined with either form. The server accepts up to 4,000 characters.
 --acceptance-criteria-file reads the replacement from stdin, accepting only '-'; since
 --description-file reads the same stdin, the two file flags cannot be used together, but passing
 one field inline and the other on stdin is fine.
+
+--parent-task-id moves this task under another task you own, and --clear-parent detaches it and
+leaves it standing on its own; omitting both leaves the parent it already has alone. A
+decomposition is usually understood after the tasks exist — a step turns out to belong under a
+different piece of work — so this is how it is corrected, rather than deleting the task and
+recreating it. The parent must be in the SAME project as this task (re-file one of them first if
+they differ), and a task can be neither its own parent nor a subtask of one of its own subtasks:
+both close a loop and are rejected. It says what this task is PART OF and nothing about when it
+runs — that is --depends-on.
 `,
 	"delete": `orbit task delete — permanently delete a task
 
@@ -1046,6 +1069,8 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearAssignee := fs.Bool("clear-assignee", false, "clear assignee")
 	listID := fs.String("list-id", "", "task list id")
 	clearList := fs.Bool("clear-list", false, "clear task list")
+	parentTaskID := fs.String("parent-task-id", "", "make this task a subtask of that task")
+	clearParent := fs.Bool("clear-parent", false, "detach this task from its parent task")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	clearDueDate := fs.Bool("clear-due-date", false, "clear due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
@@ -1081,6 +1106,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearList && flagWasSet(fs, "list-id") {
 		return fmt.Errorf("--clear-list and --list-id cannot be used together")
+	}
+	if *clearParent && flagWasSet(fs, "parent-task-id") {
+		return fmt.Errorf("--clear-parent and --parent-task-id cannot be used together")
 	}
 	if *clearDueDate && flagWasSet(fs, "due-date") {
 		return fmt.Errorf("--clear-due-date and --due-date cannot be used together")
@@ -1156,6 +1184,17 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--list-id cannot be empty; use --clear-list")
 		}
 		body["listId"] = *listID
+	}
+	// Membership, not ordering: this moves the task within the subtask tree and says nothing about
+	// when it runs (--depends-on below is that). Blank is a typo or an unset shell variable, the
+	// same rule the id flags above use — detaching is what --clear-parent says out loud.
+	if *clearParent {
+		body["parentTaskId"] = nil
+	} else if flagWasSet(fs, "parent-task-id") {
+		if strings.TrimSpace(*parentTaskID) == "" {
+			return fmt.Errorf("--parent-task-id cannot be empty; use --clear-parent")
+		}
+		body["parentTaskId"] = *parentTaskID
 	}
 	if *clearDueDate {
 		body["dueDate"] = nil
@@ -1578,8 +1617,8 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},

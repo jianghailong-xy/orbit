@@ -373,7 +373,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs", "parentRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -392,7 +392,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "labels")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "labels")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1051,8 +1051,23 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"projectId; a parent filed under no project needs projectId omitted here too. The project " +
 			"is NOT inherited from the parent — a mismatch (or a parent that does not exist, or belongs " +
 			"to somebody else) is rejected rather than filed loose. Names a task that already exists: " +
-			"to depend on something created in this same call, use ref/dependsOnRefs, which is ordering, " +
-			"not membership.",
+			"to hang an item under another item of this same task_create_batch call, whose id does not " +
+			"exist yet, use `parentRef` instead. Either spelling is membership, not ordering — when a " +
+			"task RUNS is dependsOnTaskIds/dependsOnRefs, a separate question.",
+	}
+	// The same link on the edit door, where it also has to be removable. A decomposition is
+	// usually understood after the tasks exist — a step turns out to belong under a different
+	// piece of work, or under none — so re-parenting has to be expressible without deleting and
+	// recreating the task, which would lose its comments, its sessions and its edges. Nullable,
+	// unlike the create prop above: on a create there is no existing link to clear.
+	updateParentTaskIDProp := map[string]interface{}{
+		"type": []string{"string", "null"},
+		"description": "Make this task a subtask of another task you own, or pass null to detach it " +
+			"and leave it standing on its own; omit it to leave the current parent alone. The parent " +
+			"must be in the SAME project as this task — re-file one of them first if they differ. " +
+			"Refused when it would make a task its own parent, or name one of its own subtasks as its " +
+			"parent (that closes a loop). Membership, not ordering: this says what the task is PART OF " +
+			"and changes nothing about when it runs — that is dependsOnTaskIds.",
 	}
 	// Both task write doors have a field of their own for what proves the work is done, so their
 	// `description` must stop asking for one: promptDesc above tells the caller to put acceptance
@@ -1153,6 +1168,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"type":        "array",
 			"items":       str,
 			"description": "Refs of EARLIER items in this same batch that must finish before this one runs. Use this for prerequisites created by this call (their ids don't exist yet) and dependsOnTaskIds for tasks that already exist.",
+		}
+		props["parentRef"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Ref of an EARLIER item in this same batch that this item is a PART OF — how a plan lands as a tree in one call, since the parent it names is being created by this very batch and has no id yet. Use parentTaskId instead for a parent that already exists; naming both is rejected, because it names two parents. The item it points at must carry the same projectId as this one (the project is never inherited). Membership, not ordering: dependsOnRefs decides when this item may run, parentRef only says what it is part of.",
 		}
 		return props
 	}
@@ -1324,7 +1343,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. `parentTaskId` is for hanging items under a task that ALREADY exists (same project as the item); it is not a way to nest items of this batch under each other — refs express ordering, not membership. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, `parentRef` is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":        "array",
@@ -1337,7 +1356,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). Pass null for assigneeId/listId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
@@ -1345,6 +1364,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"status":             status,
 				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
+				"parentTaskId":       updateParentTaskIDProp,
 				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
 				"provider":           providerProp,
 				"model":              modelProp,

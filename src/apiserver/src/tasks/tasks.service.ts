@@ -1346,6 +1346,35 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           );
       }
     });
+    // A parent named inside the batch, judged here rather than in assertBatchHierarchy: both
+    // sides of the pair are in this request, so the same rules the DB check asks of an existing
+    // parent are answerable without a query — and answerable before any row is written, which is
+    // what keeps a batch all-or-nothing.
+    //
+    // Backward-only again, for one more reason than dependsOnRefs has: items are created in
+    // order, so an earlier ref is also the only one whose id exists by the time this row is
+    // written. That ordering is what makes a cycle unconstructible here, so — unlike `update`,
+    // where a parent can be any task in the account — no ancestor walk is needed.
+    items.forEach((item, index) => {
+      if (item.parentRef === undefined) return;
+      if (item.parentTaskId)
+        throw new BadRequestException(
+          `tasks[${index}]: parentRef and parentTaskId name two different parents — pass one`,
+        );
+      const position = positionByRef.get(item.parentRef);
+      if (position === undefined || position >= index)
+        throw new BadRequestException(
+          `tasks[${index}]: parentRef "${item.parentRef}" must name an earlier task in this batch`,
+        );
+      // The shared-project rule, same as assertParentEligible states it for a parent that already
+      // exists: a subtask belongs to the whole its parent belongs to. Both sides `?? null`, so
+      // "no project" is one value rather than two.
+      if ((items[position].projectId ?? null) !== (item.projectId ?? null))
+        throw new BadRequestException(
+          `tasks[${index}]: a subtask must be in the same project as its parent task — file both ` +
+            'under the same project (or neither) before linking them',
+        );
+    });
 
     // Validate every referenced entity before writing anything, once per distinct value.
     const distinct = (values: Array<string | null | undefined>) => [
@@ -1559,6 +1588,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const hasDependencies = items.some(
       (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
     );
+    // Only parents that already exist. A parentRef points at a row this very transaction writes,
+    // which no other request can see — let alone move into another project — so there is nothing
+    // for the lock or the DB check below to protect; its rules were settled in assertBatchValid,
+    // where both sides of the pair were in the request.
     const hasParents = items.some((item) => !!item.parentTaskId);
     const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
     const created = await this.prisma.$transaction(async (tx) => {
@@ -1581,12 +1614,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const existing = idempotencyKey
           ? await tx.task.findUnique({ where: { idempotencyKey } })
           : null;
+        // A parentRef names an item of this same batch, so the id it stands for only exists now.
+        // Resolved into the field an already-existing parent would have used, so one write path
+        // serves both and nothing downstream has to know which spelling the caller used.
+        // Non-null: every parentRef was proven to belong to an earlier, already-created item.
+        const row =
+          item.parentRef === undefined
+            ? item
+            : { ...item, parentTaskId: idByRef.get(item.parentRef)! };
         const task =
           existing ??
           (await tx.task.create({
             data: this.taskCreateData(
               ownerId,
-              item,
+              row,
               creator,
               sessionId,
               idempotencyKey,
