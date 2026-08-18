@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** How the board reads, in the order a reader cares about. */
@@ -96,7 +97,11 @@ export class ListEventsService {
           `，最近 ${e.lastSeenAt.toISOString()}，累计 ${e.occurrences} 次`,
       );
     return [
-      `<list-conditions list="${listId}" title="${title}">`,
+      // Spelled base62, the same as the `id` the agent gets back from `tasklist_get`. Prose is the
+      // one boundary `PublicIdInterceptor` cannot reach — it rewrites response *fields*, and a
+      // message body is not one — so the encode happens here, where the id becomes text. The
+      // lookup and the delivered-stamp above stay on the uuid the column holds.
+      `<list-conditions list="${uuidToBase62(listId)}" title="${title}">`,
       ...lines,
       `  以上是控制面在你上次收到消息之后观察到的，不是用户说的。`,
       `  "累计"次数大、"最近"很新 = 条件仍然成立；"最近"已经旧了 = 它自己过去了。`,
