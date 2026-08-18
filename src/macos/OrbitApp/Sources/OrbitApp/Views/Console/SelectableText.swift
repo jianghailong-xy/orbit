@@ -90,9 +90,10 @@ struct SelectableText: UIViewRepresentable {
     private var wraps: Bool { !segments.allSatisfy { $0.role == .code } }
 
     // The transcript's attachment store, used to fetch the bytes behind a tapped
-    // `orbit-attachment:` link. Optional so a `SelectableText` outside the transcript's environment
-    // renders fine (its links just stay inert) instead of trapping.
+    // `orbit-attachment:` link, and the app model a failed fetch reports through. Both optional so a
+    // `SelectableText` outside those environments renders fine (its links just stay inert).
     @Environment(AttachmentImageStore.self) private var attachments: AttachmentImageStore?
+    @Environment(AppModel.self) private var app: AppModel?
 
     /// Remembers what a text view was last built from, so `updateUIView` can no-op when nothing
     /// changed. That matters twice over: the transcript re-evaluates its rows on every stream publish
@@ -130,6 +131,7 @@ struct SelectableText: UIViewRepresentable {
         // Before the no-op guard: the store arrives from the environment and the coordinator outlives
         // any single render, so it must be refreshed even when the text itself hasn't changed.
         context.coordinator.attachments = attachments
+        context.coordinator.app = app
         let key = renderKey
         guard context.coordinator.key != key else { return }   // nothing changed — keep any live selection
         context.coordinator.key = key
@@ -280,6 +282,7 @@ extension SelectableText {
     @MainActor final class Coordinator: NSObject, UITextViewDelegate {
         var key: Int?
         var attachments: AttachmentImageStore?
+        var app: AppModel?
         private var downloading: Set<String> = []
 
         func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
@@ -296,11 +299,27 @@ extension SelectableText {
             downloading.insert(id)
             Task { [weak self] in
                 defer { self?.downloading.remove(id) }
-                guard let data = await attachments.data(for: id), !data.isEmpty else { return }
-                let file = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(AttachmentLink.suggestedFileName(id: id, data: data))
-                guard (try? data.write(to: file, options: .atomic)) != nil else { return }
+                // Say so rather than leaving the tap looking dead — the very complaint this handler
+                // exists to answer (offline, or an attachment the server no longer holds).
+                guard let data = await attachments.data(for: id), !data.isEmpty,
+                      let file = Self.writeToTemp(data, id: id) else {
+                    self?.app?.showToast("Couldn't download that file", tone: .error)
+                    return
+                }
                 Self.share(file, from: view)
+            }
+        }
+
+        /// The bytes as a file the share sheet can hand to Files / Photos / another app, named so the
+        /// saved copy keeps a usable extension (the API serves attachments unnamed).
+        private static func writeToTemp(_ data: Data, id: String) -> URL? {
+            let file = FileManager.default.temporaryDirectory
+                .appendingPathComponent(AttachmentLink.suggestedFileName(id: id, data: data))
+            do {
+                try data.write(to: file, options: .atomic)
+                return file
+            } catch {
+                return nil
             }
         }
 
