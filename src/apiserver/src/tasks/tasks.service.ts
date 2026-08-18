@@ -3568,10 +3568,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
         await this.execute(list.ownerId, task.id);
         this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
+        // The id is encoded where it becomes prose. This detail is stored and replayed to agents
+        // — `describeList` prints it verbatim beside the list's own base62 id — and
+        // `PublicIdInterceptor` rewrites response *fields* only, so a raw uuid here is the one
+        // part of the note nobody can hand back to `task_get`. The dispatch above, the log line
+        // and the list this is filed under stay uuids: those are lookups, not text.
         await this.recordListEvent(
           list.id,
           'foreman_filed',
-          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${task.id} 去诊断`,
+          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${uuidToBase62(task.id)} 去诊断`,
         );
       } catch (e) {
         this.logger.warn(
