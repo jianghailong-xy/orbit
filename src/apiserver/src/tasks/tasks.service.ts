@@ -3030,10 +3030,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // deployment reverted six tasks in one afternoon and nothing anywhere said so.
     if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
       const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
+      // The id is encoded where it becomes prose. This detail is stored and replayed to agents,
+      // and `PublicIdInterceptor` rewrites response *fields* only, so an id spelled here as the
+      // raw uuid is one no reader can hand back to `task_get` / `task_update` — the id is the
+      // only part of the note that says *which* completion was reverted. The count above and the
+      // list this is filed under stay uuids: those are lookups, not text.
       await this.recordListEvent(
         before.listId,
         'completion_reverted',
-        `任务「${before.title}」(${id}) 从 DONE 被退回 ${dto.status}` +
+        `任务「${before.title}」(${uuidToBase62(id)}) 从 DONE 被退回 ${dto.status}` +
           (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
       );
     }
