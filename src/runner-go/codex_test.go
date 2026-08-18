@@ -779,6 +779,44 @@ func TestRewriteLocalMarkdownImagesUploadsAllowedFileLink(t *testing.T) {
 	}
 }
 
+func TestCodexGeneratedImagesDirFollowsCodexHome(t *testing.T) {
+	got := codexGeneratedImagesDir([]string{"HOME=/home/agent", "CODEX_HOME=/custom/codex"}, "/work")
+	if want := filepath.Join("/custom", "codex", "generated_images"); got != want {
+		t.Fatalf("generated images dir = %q, want %q", got, want)
+	}
+}
+
+func TestCodexGeneratedImagesDirFallsBackToHome(t *testing.T) {
+	got := codexGeneratedImagesDir([]string{"HOME=/home/agent"}, "/work")
+	if want := filepath.Join("/home/agent", ".codex", "generated_images"); got != want {
+		t.Fatalf("generated images dir = %q, want %q", got, want)
+	}
+}
+
+// The imagegen tool writes outside the worktree, so its directory has to be an upload root of its
+// own — otherwise the reply keeps a path only the runner can read.
+func TestRewriteLocalMarkdownImagesUploadsGeneratedImage(t *testing.T) {
+	home := t.TempDir()
+	genDir := filepath.Join(home, ".codex", "generated_images", "thread-1")
+	if err := os.MkdirAll(genDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(genDir, "exec-1.png")
+	if err := os.WriteFile(path, []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	roots := []string{t.TempDir(), codexGeneratedImagesDir([]string{"HOME=" + home}, "/work")}
+	got := rewriteLocalMarkdownImagesWithUploader(
+		context.Background(),
+		"[download PNG]("+path+")",
+		roots,
+		func(ctx context.Context, path, mimeType string) (string, error) { return "att-1", nil },
+	)
+	if got != `[download PNG](orbit-attachment:att-1 "exec-1.png")` {
+		t.Fatalf("rewritten = %q", got)
+	}
+}
+
 func TestRewriteLocalMarkdownImagesSkipsOutsideRoot(t *testing.T) {
 	dir := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "mockup.png")

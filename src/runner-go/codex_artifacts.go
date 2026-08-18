@@ -66,6 +66,19 @@ func rewriteLocalMarkdownImagesWithUploader(ctx context.Context, text string, ro
 	})
 }
 
+// codexGeneratedImagesDir is the directory Codex's image tools write into —
+// CODEX_HOME/generated_images, outside both the worktree and the session's uploads dir. A reply
+// linking one of those files would otherwise carry a path only the runner can read (every client
+// renders it as an unreachable file), so it counts as an upload root. Empty when the home can't be
+// resolved; cleanExistingRoots drops that, and any root that doesn't exist yet.
+func codexGeneratedImagesDir(env []string, cwd string) string {
+	home, err := effectiveCodexHome(env, cwd)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, "generated_images")
+}
+
 func skipMarkdownAttachmentSrc(src string) bool {
 	lower := strings.ToLower(strings.TrimSpace(src))
 	return lower == "" ||

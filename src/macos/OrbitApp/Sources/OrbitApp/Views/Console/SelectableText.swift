@@ -1,4 +1,5 @@
 import SwiftUI
+import OrbitKit
 #if os(iOS)
 import UIKit
 #endif
@@ -88,11 +89,16 @@ struct SelectableText: UIViewRepresentable {
     // ScrollView); prose always wraps to the proposed width.
     private var wraps: Bool { !segments.allSatisfy { $0.role == .code } }
 
+    // The transcript's attachment store, used to fetch the bytes behind a tapped
+    // `orbit-attachment:` link. Optional so a `SelectableText` outside the transcript's environment
+    // renders fine (its links just stay inert) instead of trapping.
+    @Environment(AttachmentImageStore.self) private var attachments: AttachmentImageStore?
+
     /// Remembers what a text view was last built from, so `updateUIView` can no-op when nothing
     /// changed. That matters twice over: the transcript re-evaluates its rows on every stream publish
     /// (~5×/sec during a turn), and reassigning `attributedText` each time would both re-parse the
     /// Markdown (a known battery hotspot) and *clear the user's active selection* mid-read.
-    final class Coordinator { var key: Int? }
+    /// The same coordinator answers link taps (see `Coordinator` below).
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     private var renderKey: Int {
@@ -115,11 +121,15 @@ struct SelectableText: UIViewRepresentable {
         tv.textContainer.lineBreakMode = wraps ? .byWordWrapping : .byClipping
         tv.adjustsFontForContentSizeCategory = false   // fonts are baked per build (see dynamicTypeSize)
         tv.dataDetectorTypes = []             // links come from the Markdown, not from detection
+        tv.delegate = context.coordinator     // an `orbit-attachment:` link downloads instead of opening
         tv.setContentCompressionResistancePriority(.required, for: .vertical)
         return tv
     }
 
     func updateUIView(_ tv: UITextView, context: Context) {
+        // Before the no-op guard: the store arrives from the environment and the coordinator outlives
+        // any single render, so it must be refreshed even when the text itself hasn't changed.
+        context.coordinator.attachments = attachments
         let key = renderKey
         guard context.coordinator.key != key else { return }   // nothing changed — keep any live selection
         context.coordinator.key = key
@@ -184,6 +194,7 @@ struct SelectableText: UIViewRepresentable {
         // so a pasted link is tappable: a selectable, non-editable UITextView opens `.link` runs on tap
         // and `linkTextAttributes` tints them.
         let source = seg.markdown ? inlineMarkdownAttributed(seg.text) : AttributedString(seg.text)
+        var previousLink: URL?
         for run in source.runs {
             // Soft breaks inside a paragraph become LINE SEPARATORs so they wrap without picking up
             // paragraph spacing — only the real block break (the styled `\n` below) gets the gap.
@@ -206,13 +217,41 @@ struct SelectableText: UIViewRepresentable {
             if intent?.contains(.strikethrough) == true {
                 attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             }
-            if let link = run.link { attrs[.link] = link }
+            if let link = run.link {
+                if AttachmentLink.isRunnerLocalPath(link) {
+                    // A path on the runner's disk the agent never uploaded: no client can fetch it, so
+                    // don't draw a link whose tap could only do nothing. Web chips these with a
+                    // paperclip (`md-image-unavailable`) — same here, laid inline so it stays part of
+                    // the selectable prose. The clip goes in once per link, not once per styled run.
+                    if link != previousLink { result.append(paperclip(font: font, para: para)) }
+                    attrs[.foregroundColor] = ProseInk.secondary.uiColor
+                } else {
+                    attrs[.link] = link
+                }
+            }
+            previousLink = run.link
             result.append(NSAttributedString(string: piece, attributes: attrs))
         }
 
         if trailingNewline {
             result.append(NSAttributedString(string: "\n", attributes: [.font: base, .paragraphStyle: para]))
         }
+    }
+
+    /// The paperclip that opens an unreachable file link, sized to the surrounding type and sitting
+    /// on the baseline (a symbol image otherwise lays out from its own origin and rides high).
+    private func paperclip(font: UIFont, para: NSParagraphStyle) -> NSAttributedString {
+        let attachment = NSTextAttachment()
+        if let glyph = UIImage(systemName: "paperclip", withConfiguration: UIImage.SymbolConfiguration(font: font))?
+            .withTintColor(ProseInk.secondary.uiColor, renderingMode: .alwaysOriginal) {
+            attachment.image = glyph
+            attachment.bounds = CGRect(x: 0, y: font.descender, width: glyph.size.width, height: glyph.size.height)
+        }
+        let clip = NSMutableAttributedString(attachment: attachment)
+        clip.append(NSAttributedString(string: "\u{2009}"))   // thin space between clip and label
+        clip.addAttributes([.font: font, .paragraphStyle: para],
+                           range: NSRange(location: 0, length: clip.length))
+        return clip
     }
 
     private func baseFont(for role: ProseRole) -> UIFont {
@@ -233,15 +272,68 @@ struct SelectableText: UIViewRepresentable {
     }
 }
 
-/// A read-only `UITextView` whose Copy normalises the soft-break sentinel (U+2028, used inside a
-/// merged prose run so wrapped lines don't pick up inter-block spacing) back to `\n`, so copied prose
-/// pastes with ordinary newlines rather than stray line-separator characters.
+extension SelectableText {
+    /// Holds the render key `updateUIView` compares against, and answers link taps: an
+    /// `orbit-attachment:<id>` link isn't a URL anything can open (the bytes are bearer-guarded), so
+    /// tapping one downloads the file and offers it through the share sheet — iOS's "download": Save
+    /// to Files, Save Image, AirDrop. Every other link keeps the system's default action.
+    @MainActor final class Coordinator: NSObject, UITextViewDelegate {
+        var key: Int?
+        var attachments: AttachmentImageStore?
+        private var downloading: Set<String> = []
+
+        func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
+                      defaultAction: UIAction) -> UIAction? {
+            guard case .link(let url) = textItem.content,
+                  let id = AttachmentLink.attachmentID(url) else { return defaultAction }
+            return UIAction(title: "Download") { [weak self, weak textView] _ in
+                self?.download(id, from: textView)
+            }
+        }
+
+        private func download(_ id: String, from view: UIView?) {
+            guard let attachments, !downloading.contains(id) else { return }
+            downloading.insert(id)
+            Task { [weak self] in
+                defer { self?.downloading.remove(id) }
+                guard let data = await attachments.data(for: id), !data.isEmpty else { return }
+                let file = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(AttachmentLink.suggestedFileName(id: id, data: data))
+                guard (try? data.write(to: file, options: .atomic)) != nil else { return }
+                Self.share(file, from: view)
+            }
+        }
+
+        /// Presented from the text view's own view controller so it works from any transcript row,
+        /// and from the topmost sheet above it (a transcript inside a presented sheet).
+        private static func share(_ file: URL, from view: UIView?) {
+            guard let view else { return }
+            var responder: UIResponder? = view
+            while let next = responder, !(next is UIViewController) { responder = next.next }
+            guard var host = responder as? UIViewController else { return }
+            while let presented = host.presentedViewController { host = presented }
+
+            let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+            sheet.popoverPresentationController?.sourceView = view          // iPad anchor
+            sheet.popoverPresentationController?.sourceRect =
+                CGRect(x: view.bounds.midX, y: view.bounds.midY, width: 0, height: 0)
+            host.present(sheet, animated: true)
+        }
+    }
+}
+
+/// A read-only `UITextView` that cleans up the layout sentinels on Copy, so copied prose pastes as
+/// the reader sees it: the soft break (U+2028, used inside a merged prose run so wrapped lines don't
+/// pick up inter-block spacing) becomes an ordinary `\n`, and the paperclip glyph on an unreachable
+/// file link (a text attachment, U+FFFC) drops out with its spacer.
 final class SelectableTextView: UITextView {
     override func copy(_ sender: Any?) {
         super.copy(sender)
-        if let s = UIPasteboard.general.string, s.contains("\u{2028}") {
-            UIPasteboard.general.string = s.replacingOccurrences(of: "\u{2028}", with: "\n")
-        }
+        guard let copied = UIPasteboard.general.string else { return }
+        let clean = copied
+            .replacingOccurrences(of: "\u{2028}", with: "\n")
+            .replacingOccurrences(of: "\u{FFFC}\u{2009}", with: "")
+        if clean != copied { UIPasteboard.general.string = clean }
     }
 }
 

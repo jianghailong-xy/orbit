@@ -310,6 +310,10 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		sendInterrupt(markCodexAppTurnStarted(&activeMu, &active, orbitTurnID, codexTurnID))
 	}
 
+	// Resolved from the env the app-server process was spawned with, so it tracks the same
+	// CODEX_HOME the tool writes under (see codexGeneratedImagesDir).
+	genImagesDir := codexGeneratedImagesDir(processEnv, execDir)
+
 	asyncWg.Add(1)
 	go func() {
 		defer asyncWg.Done()
@@ -326,7 +330,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 				handleCodexAppNotification(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
-					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir})
+					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir, genImagesDir})
 				}, onRateLimits)
 				activeMu.Lock()
 				tokens := 0

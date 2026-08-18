@@ -42,6 +42,13 @@ final class AttachmentImageStore {
         cache[id] = img
     }
 
+    /// Raw bytes for `id`, uncached — what the "download" affordance on an `orbit-attachment:` link
+    /// shares. It hands off the file itself (any type, image or not), so the decoded-image cache
+    /// above is the wrong shape for it and a one-off fetch is cheaper than holding another copy.
+    func data(for id: String) async -> Data? {
+        try? await api.downloadAttachment(id)
+    }
+
     /// Fetch + decode `id` if not already known. Idempotent and dedups concurrent callers.
     func load(_ id: String) async {
         guard cache[id] == nil, !notImage.contains(id), !loading.contains(id) else { return }

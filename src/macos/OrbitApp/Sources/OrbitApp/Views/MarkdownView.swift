@@ -456,6 +456,16 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
             attributed[range].backgroundColor = Color.secondary.opacity(0.08)
         }
     }
+    // A link naming a file on the runner's disk can't be opened from a client, so don't draw one —
+    // the label reads as prose instead of a tinted link whose click does nothing. (The iOS transcript
+    // renders those through SelectableText, which draws web's paperclip chip; a `Text` — a macOS
+    // paragraph, or a table cell on either platform — can't hold one.) Ranges first, as above.
+    let deadRanges = attributed.runs
+        .filter { $0.link.map(AttachmentLink.isRunnerLocalPath) == true }
+        .map(\.range)
+    for range in deadRanges {
+        attributed[range].link = nil
+    }
     return Text(LinkDetection.linkifying(attributed))
 }
 
