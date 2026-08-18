@@ -1086,12 +1086,23 @@ model Project {
   /// it would not even succeed; it would make deleting a session fail against work it never touched.
   coordinatorSessionId   String?    @unique @map("coordinator_session_id") @db.Uuid
   coordinatorSession     Session?   @relation("ProjectCoordinator", fields: [coordinatorSessionId], references: [id], onDelete: SetNull)
-  /// Where that conversation was opened, recorded at bind time rather than read back off the
-  /// session (`Session.workspaceId` is nullable and belongs to the session's own lifecycle). It is
-  /// what a second request naming a DIFFERENT workspace is compared against — that is a 409, not a
-  /// silent migration, because moving a coordinator is a decision with a conversation attached to
-  /// it. SetNull for the reason above: a deleted workspace loses the record of where, not the
-  /// coordinator.
+  /// Where this project's coordinator runs — recorded rather than read back off the session
+  /// (`Session.workspaceId` is nullable and belongs to the session's own lifecycle).
+  ///
+  /// Written in EITHER of two places, and it means the same thing in both. A project created from
+  /// inside an agent session is seeded here, server-side, with that session's own workspace, so it
+  /// has somewhere to be coordinated from before it holds a single task — the value is derived from
+  /// the authenticated session context, never accepted from a request body. Binding a coordinator
+  /// then writes the workspace that coordinator was actually opened in, which from that point is
+  /// what this column holds and what a replacement reopens in. So: the initial default while
+  /// nothing is bound, the bound workspace once something is, and the last one after a coordinator
+  /// is trashed. A project created outside a session (the user-facing POST /projects, or a headless
+  /// runner call) starts with this NULL and gets its value at bind time as before.
+  ///
+  /// It is what a second request naming a DIFFERENT workspace is compared against — that is a 409,
+  /// not a silent migration, because moving a coordinator is a decision with a conversation
+  /// attached to it. SetNull for the reason above: a deleted workspace loses the record of where,
+  /// not the coordinator.
   coordinatorWorkspaceId String?    @map("coordinator_workspace_id") @db.Uuid
   coordinatorWorkspace   Workspace? @relation("ProjectCoordinatorWorkspace", fields: [coordinatorWorkspaceId], references: [id], onDelete: SetNull)
 

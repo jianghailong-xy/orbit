@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
@@ -17,6 +18,10 @@ import (
 // revises the prose or settles the status when the work lands — the same fields, through the same
 // server DTOs, as the person typing them into the web UI. Everything else about a project (listing
 // them, deleting one, opening its coordinator) is still the human's door.
+//
+// `create` is the one that carries the session it ran in, because a project recorded from inside a
+// session takes that session's workspace as its coordinator default. Opening the coordinator is
+// still the human's door; where it would open is settled at creation so that door is never shut.
 //
 // Scope is the runner's owner throughout: the credential names a machine, so the only account
 // these commands can read or write is the one that machine belongs to.
@@ -62,6 +67,11 @@ Options:
 The project is created under this runner's owner and starts OPEN. It holds no tasks yet —
 file them with ` + "`orbit task create --project-id <id>`" + ` once it exists.
 
+Run inside a session, the project remembers THAT session's workspace as where its coordinator
+is to be opened, so it can be coordinated straight away rather than only once one of its tasks
+has an assignee. Run headless there is no session to inherit from and no such default: the
+coordinator is opened wherever the project's work turns out to run, or wherever you say.
+
 Only one --*-file flag per invocation: they all read the same stdin, and the second read
 would silently come back empty.
 `,
@@ -98,7 +108,7 @@ Only one --*-file flag per invocation: they all read the same stdin.
 
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
-	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that the goal was reached; max 4,000 characters)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use it when you are asked to set up or plan out a body of work: --goal says what it is trying to achieve, --acceptance-criteria what would settle that the goal was reached, and --instructions how the work is to be done. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that the goal was reached; max 4,000 characters)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use it when you are asked to set up or plan out a body of work: --goal says what it is trying to achieve, --acceptance-criteria what would settle that the goal was reached, and --instructions how the work is to be done. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project also remembers that session's workspace as where its coordinator is to be opened, so it is coordinatable before it has any tasks; headless there is no session and so no such default.", Mutates: true},
 	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--json"}, Description: "Update a project you own. Only the flags you pass are sent, so revising the goal never blanks the instructions. Each prose field is a whole-field replacement: text replaces it and --clear-<field> removes it, which is why naming both for one field is refused. --status DONE records that the goal was reached and CANCELLED that it will not be — say so when the work actually lands, and note that neither is a way to file the project out of sight. At least one flag is required. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 }
 
@@ -246,7 +256,13 @@ func cliProjectCreate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.createProject(body)
+	// The session this ran in, the same env var `orbit task create` attributes a task with and
+	// `orbit notify` routes an alert by. Here the server reads it to record that session's
+	// workspace as the new project's coordinator default, so the project can be coordinated
+	// straight away rather than only once one of its tasks has an assignee to borrow from.
+	// Headless (launchd/cron, no ORBIT_SESSION_ID) sends no header and gets no default, which is
+	// the honest answer: no session, no workspace to inherit.
+	raw, err := t.createProject(strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID")), body)
 	if err != nil {
 		return fmt.Errorf("create project: %w", err)
 	}

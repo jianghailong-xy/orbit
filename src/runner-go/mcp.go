@@ -258,7 +258,10 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
-		raw, err := s.t.createProject(body)
+		// The calling session goes with it, the same as it does on task_create — here so the
+		// server can record this session's workspace as the project's coordinator default, which
+		// is what lets a project created in this turn be coordinated before it has any tasks.
+		raw, err := s.t.createProject(s.sessionID, body)
 		if err != nil {
 			return toolResult("create project failed: "+err.Error(), true)
 		}
@@ -1217,7 +1220,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rather than waiting for somebody to type it in. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
-				"it is for.",
+				"it is for. Created from inside a session, the project also remembers THIS " +
+				"session's workspace as where its coordinator is to be opened, so it can be " +
+				"coordinated straight away — you do not have to file a task first to give it " +
+				"somewhere to run. There is no workspace to pass and none to choose; created " +
+				"outside a session there is no such default.",
 			"inputSchema": obj(map[string]interface{}{
 				"title": map[string]interface{}{
 					"type":        "string",

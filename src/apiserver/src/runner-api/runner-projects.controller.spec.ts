@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RequestMethod } from '@nestjs/common';
+import { ForbiddenException, RequestMethod } from '@nestjs/common';
 import { ProjectStatus } from '@orbit/shared';
 import { METHOD_METADATA, PATH_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { PublicIdPipe } from '../common/public-id';
@@ -9,6 +9,9 @@ import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
 import { RunnerProjectsController } from './runner-projects.controller';
 
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
+
+/** The session the runner injects into an in-session call, already decoded by `publicIdHeaders`. */
+const SESSION_ID = '00000000-0000-7000-8000-0000000000c1';
 
 test('getProject reads the project through ProjectsService, scoped to the runner owner', async () => {
   const seen: { ownerId?: string; projectId?: string } = {};
@@ -110,7 +113,7 @@ test('createProject writes into the runner owner, with the body untouched', asyn
     instructions: 'Work shard by shard',
   };
 
-  const result = await controller.createProject(RUNNER, dto);
+  const result = await controller.createProject(RUNNER, undefined, dto);
 
   assert.equal(seen.ownerId, 'owner-1');
   // The same object, not a copy: a runner door that rebuilt the payload could drop a field the
@@ -118,6 +121,138 @@ test('createProject writes into the runner owner, with the body untouched', asyn
   assert.equal(seen.dto, dto);
   assert.equal(result, created);
 });
+
+/** A controller whose two create paths are told apart by which one was called. */
+function createSpy() {
+  const calls: Array<{ path: 'headless' | 'in-session'; args: unknown[] }> = [];
+  const projects = {
+    create: async (...args: unknown[]) => {
+      calls.push({ path: 'headless', args });
+      return { id: 'project-1' };
+    },
+    createInSession: async (...args: unknown[]) => {
+      calls.push({ path: 'in-session', args });
+      return { id: 'project-1' };
+    },
+  } as never;
+  return { calls, controller: new RunnerProjectsController(projects) };
+}
+
+// The whole point of the header: a project an agent records while working somewhere should be
+// coordinated from where it was working, so its coordinator opens the moment it exists. The
+// runner id travels with the owner id because the header is the caller's own claim about itself —
+// see ProjectsService.sessionWorkspace.
+test('a project created from inside a session is created in that session’s context', async () => {
+  const f = createSpy();
+  const dto: CreateProjectDto = { title: 'Crawl', goal: 'Index the corpus' };
+
+  await f.controller.createProject(RUNNER, SESSION_ID, dto);
+
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].path, 'in-session');
+  assert.deepEqual(f.calls[0].args.slice(0, 3), ['owner-1', 'runner-1', SESSION_ID]);
+  // Still the same object, exactly as the headless path forwards it: the session decides where the
+  // coordinator will open and nothing about what the project IS.
+  assert.equal(f.calls[0].args[3], dto);
+});
+
+// A cron/launchd bridge belongs to no session and has no workspace to inherit. It must reach the
+// plain create — not a session lookup for `undefined`, and not one for the empty string a shell
+// exports when ORBIT_SESSION_ID is unset.
+for (const [label, header] of [
+  ['absent', undefined],
+  ['empty', ''],
+  ['whitespace', '   '],
+] as const) {
+  test(`a headless create with an ${label} session header keeps the old behaviour`, async () => {
+    const f = createSpy();
+
+    await f.controller.createProject(RUNNER, header, { title: 'Nightly sweep' });
+
+    assert.equal(f.calls.length, 1);
+    assert.equal(f.calls[0].path, 'headless');
+    assert.deepEqual(f.calls[0].args.slice(0, 1), ['owner-1']);
+  });
+}
+
+// The session is context, not content. A door that copied it into the body would be inventing a
+// caller-controlled workspace field — which is the thing CreateProjectDto deliberately does not
+// have, because a runner that could name any workspace could plant a coordinator in one.
+test('the session never becomes part of the project body', async () => {
+  const f = createSpy();
+  const dto = { title: 'Crawl' } as CreateProjectDto;
+
+  await f.controller.createProject(RUNNER, SESSION_ID, dto);
+
+  assert.deepEqual(Object.keys(dto), ['title']);
+  assert.equal('workspaceId' in dto, false);
+  assert.equal('coordinatorWorkspaceId' in dto, false);
+});
+
+// `workspaceId` is not on CreateProjectDto, so the global ValidationPipe strips it — but a
+// controller that read `dto.workspaceId` would still honour it on a direct call. This is the
+// assertion that the workspace comes from the session and from nowhere else.
+test('a workspaceId smuggled into the body is not what the project is created with', async () => {
+  const f = createSpy();
+
+  await f.controller.createProject(RUNNER, SESSION_ID, {
+    title: 'Crawl',
+    workspaceId: 'workspace-somebody-elses',
+  } as never);
+
+  assert.deepEqual(f.calls[0].args.slice(0, 3), ['owner-1', 'runner-1', SESSION_ID]);
+});
+
+// A session that is not this runner's, or has no workspace left, is refused by the service. The
+// door must let that through rather than falling back to a project with no default — an
+// unopenable project reported as success is exactly the outcome this path exists to prevent.
+test('a session the service refuses is not quietly downgraded to a headless create', async () => {
+  const calls: string[] = [];
+  const projects = {
+    create: async () => {
+      calls.push('headless');
+      return { id: 'project-1' };
+    },
+    createInSession: async () => {
+      calls.push('in-session');
+      throw new ForbiddenException('no workspace');
+    },
+  } as never;
+  const controller = new RunnerProjectsController(projects);
+
+  await assert.rejects(
+    () => controller.createProject(RUNNER, SESSION_ID, { title: 'Crawl' }),
+    (e: unknown) => e instanceof ForbiddenException,
+  );
+  assert.deepEqual(calls, ['in-session']);
+});
+
+// The exact header, spelled the way `publicIdHeaders` normalizes and the way every shipped runner
+// sends it. A typo here is silent: the parameter is `undefined` on every request and every
+// in-session create quietly becomes headless again.
+test('createProject reads the session from x-orbit-session-id', () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'createProject') as
+    | Record<string, { index: number; data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {}).filter((arg) => typeof arg.data === 'string' && arg.data.includes('-'));
+  assert.deepEqual(
+    headers.map((arg) => arg.data),
+    ['x-orbit-session-id'],
+  );
+});
+
+// Reading a project and revising one are not "where am I" questions: neither has a coordinator
+// default to seed, so neither may grow a dependence on the caller's session.
+for (const method of ['getProject', 'updateProject'] as const) {
+  test(`${method} takes no session context`, () => {
+    const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
+      | Record<string, { data?: unknown }>
+      | undefined;
+    for (const arg of Object.values(args ?? {})) {
+      assert.notEqual(arg.data, 'x-orbit-session-id');
+    }
+  });
+}
 
 test('updateProject writes into the runner owner, with the id and body untouched', async () => {
   const seen: { ownerId?: string; projectId?: string; dto?: UpdateProjectDto } = {};

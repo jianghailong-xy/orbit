@@ -450,3 +450,115 @@ func TestMCPProjectUpdateIDCannotEscapeTheProjectRoute(t *testing.T) {
 		}
 	}
 }
+
+// The calling session goes with the create, so the server can record this session's workspace as
+// the project's coordinator default. This is the MCP half of the same contract `orbit project
+// create` holds — both read the one session id the runner injected, and a project created by
+// either has to be coordinatable the same way.
+func TestMCPProjectCreateCarriesTheCallingSession(t *testing.T) {
+	var session, method, path string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+
+	// Base62, the spelling the runner injects and the only one a model ever sees. Forwarded
+	// verbatim: the server decodes it, and an id re-spelled here would match nothing.
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	res := mcp.callTool("project_create", map[string]interface{}{"title": "Crawl"})
+	if res["isError"] == true {
+		t.Fatalf("project_create returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost || path != "/api/runner/projects" {
+		t.Fatalf("project_create hit %s %s", method, path)
+	}
+	if session != "343dlzsYWKo5z8l2M8tsB" {
+		t.Fatalf("project_create session header = %q", session)
+	}
+	// Context, not content: no workspace field appears in the body, because where the coordinator
+	// opens is the server's conclusion about the session rather than this process's request.
+	if len(body) != 1 || body["title"] != "Crawl" {
+		t.Fatalf("project_create body = %#v", body)
+	}
+}
+
+// `orbit mcp` outside a session (the runner injects nothing) must send no header at all rather
+// than an empty one, which the server would look up as a session and refuse.
+func TestMCPProjectCreateWithNoSessionSendsNoHeader(t *testing.T) {
+	sawSessionHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_create", map[string]interface{}{"title": "Crawl"})
+	if res["isError"] == true {
+		t.Fatalf("project_create returned an error: %#v", res["content"])
+	}
+	if sawSessionHeader {
+		t.Fatal("project_create with no session sent a session header")
+	}
+}
+
+// Only the create. A coordinator default is settled once, when the project is recorded; a read or
+// an edit sent from wherever the agent happens to be now is not a request to move it.
+func TestMCPProjectReadAndUpdateCarryNoSession(t *testing.T) {
+	for _, tc := range []struct {
+		tool string
+		args map[string]interface{}
+	}{
+		{"project_get", map[string]interface{}{"projectId": "proj-1"}},
+		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "DONE"}},
+	} {
+		sawSessionHeader := true
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+			_, _ = w.Write([]byte(projectDetailJSON))
+		}))
+
+		mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-1"}
+		res := mcp.callTool(tc.tool, tc.args)
+		srv.Close()
+		if res["isError"] == true {
+			t.Fatalf("%s returned an error: %#v", tc.tool, res["content"])
+		}
+		if sawSessionHeader {
+			t.Fatalf("%s sent a session header", tc.tool)
+		}
+	}
+}
+
+// The description is what stops the model reinventing the workaround. "Holds no tasks" on its own
+// reads as "so it cannot be coordinated yet", and the model's next move is to file a task purely
+// to give the coordinator somewhere to run.
+func TestMCPProjectCreateDescriptionStatesTheCoordinatorDefault(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	var description string
+	for _, tool := range tools {
+		if tool["name"] == "project_create" {
+			description, _ = tool["description"].(string)
+		}
+	}
+	if description == "" {
+		t.Fatal("project_create has no description")
+	}
+	for _, want := range []string{"coordinator", "session", "workspace"} {
+		if !strings.Contains(strings.ToLower(description), want) {
+			t.Fatalf("project_create description does not mention %q: %q", want, description)
+		}
+	}
+	// And it must not promise an input that does not exist: the workspace comes from the session,
+	// so a model hunting for a workspace argument would be hunting for nothing.
+	props := mcpToolProps(tools, "project_create")
+	for _, name := range []string{"workspaceId", "coordinatorWorkspaceId", "sessionId"} {
+		if _, ok := props[name]; ok {
+			t.Fatalf("project_create exposes a %q input", name)
+		}
+	}
+}

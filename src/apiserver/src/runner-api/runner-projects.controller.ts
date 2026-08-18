@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
@@ -37,10 +37,30 @@ export class RunnerProjectsController {
    * Record a new project. The body is the same CreateProjectDto the user-facing POST /projects
    * takes, forwarded untouched, so the length bounds and the blank-is-null rule are decided in one
    * place rather than twice.
+   *
+   * X-Orbit-Session-Id is the one thing this door adds, and it is CONTEXT rather than a field:
+   * a project created from inside a session defaults its coordinator to that session's workspace,
+   * so the coordinator can be opened the moment the project exists rather than only once one of
+   * its tasks has an assignee to borrow a workspace from. It is deliberately not a body field —
+   * `workspaceId` on the DTO would be a caller-chosen workspace, and this is a fact about where
+   * the request came from that only the server can establish (`createInSession` resolves it under
+   * this runner and this owner, and refuses anything else).
+   *
+   * No orchestration credential is asked for. Writing a project is authority `project_create`
+   * already has; the header narrows where the project's own coordinator will open, and grants
+   * nothing. The empty-string check is not cosmetic: a headless caller must reach `create`, and
+   * `''` would otherwise be looked up as a session and refused.
    */
   @Post('projects')
-  createProject(@CurrentRunner() runner: Runner, @Body() dto: CreateProjectDto) {
-    return this.projects.create(runner.ownerId, dto);
+  createProject(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Body() dto: CreateProjectDto,
+  ) {
+    const inSession = sessionId?.trim();
+    return inSession
+      ? this.projects.createInSession(runner.ownerId, runner.id, inSession, dto)
+      : this.projects.create(runner.ownerId, dto);
   }
 
   @Get('projects/:id')

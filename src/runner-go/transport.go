@@ -798,9 +798,17 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 // The body goes as the caller built it. Length bounds, the blank-is-null rule and which fields
 // exist at all are the server's CreateProjectDto to decide; a second opinion held here would be
 // one that drifts.
-func (t *Transport) createProject(body map[string]interface{}) (json.RawMessage, error) {
+//
+// sessionID travels in the header rather than the body, exactly as it does for a created task —
+// and for a stronger reason: the server reads it to record the calling session's workspace as
+// this project's coordinator default, so a project created here can have its coordinator opened
+// before it has a single task. A workspace in the BODY would be this process's claim about where
+// a coordinator should run; the header is a claim about which session is calling, which the
+// server checks against the session it has. Empty (headless) sends no header at all, and the
+// project is created with no default — see sessionHeader.
+func (t *Transport) createProject(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/projects", body, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
 
@@ -809,6 +817,10 @@ func (t *Transport) createProject(body map[string]interface{}) (json.RawMessage,
 // Only the keys the caller put in `body` are sent, and a key holding nil is sent AS null — that is
 // how a field gets cleared, so nothing here may prune it. Deciding locally which fields are worth
 // forwarding is the one thing that would turn "clear the goal" into "leave the goal alone".
+//
+// No session header, unlike createProject: a project's coordinator default is settled when the
+// project is created, and an update sent from wherever the agent happens to be running now is not
+// a request to move it. Moving a coordinator is a decision someone makes on purpose.
 func (t *Transport) updateProject(id string, body map[string]interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

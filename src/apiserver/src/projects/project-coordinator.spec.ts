@@ -500,6 +500,28 @@ test('a first coordinator has nothing remembered and borrows as before', async (
   assert.equal(f.created[0][1].workspaceId, WORKSPACE_TASKS);
 });
 
+// A project an agent just recorded from inside a session: no coordinator yet, and NO TASKS to
+// borrow an assignee from. It is openable anyway, because `create` stored where the session that
+// recorded it was running.
+//
+// This is the whole reason that default exists. Without it, the first thing anyone could do with a
+// brand-new project was fail to open its coordinator — and the workaround was to file an assigned
+// task purely so a workspace could be borrowed, which makes a project's viability depend on work
+// nobody has decided on yet. `assignees: []` is deliberate: if this ever falls through to the task
+// fallback, there is nothing there and the call is a 400 rather than a quietly different workspace.
+test('a project created in a session opens its coordinator with no tasks at all', async () => {
+  const f = makeService({ coordinatorWorkspaceId: WORKSPACE_OTHER, assignees: [] });
+
+  const result = await f.open();
+
+  assert.deepEqual(result, {
+    sessionId: SESSION_NEW,
+    created: true,
+    workspaceId: WORKSPACE_OTHER,
+  });
+  assert.equal(f.created[0][1].workspaceId, WORKSPACE_OTHER);
+});
+
 test('with no explicit workspace it opens where the project’s work already runs', async () => {
   const f = makeService({
     assignees: [

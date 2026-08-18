@@ -1,12 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProjectStatus, TaskStatus } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -73,6 +74,15 @@ export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
 
   /**
+   * One wording for "the session you said you are in is not one I will take a workspace from",
+   * whichever of the several reasons applies. See `sessionWorkspace`.
+   */
+  private static readonly NO_SESSION_WORKSPACE =
+    'no workspace to record as this project’s coordinator default — the session this request ' +
+    'came from is not one this runner is running for this owner, or the workspace it ran in ' +
+    'cannot be run in';
+
+  /**
    * One wording for "this project's coordinator is not where you asked", whether that was noticed
    * before a session was created or after losing the race to bind one. Two phrasings would read as
    * two different rules to anyone who hit both.
@@ -114,7 +124,13 @@ export class ProjectsService {
     return value?.trim() ? value : null;
   }
 
-  async create(ownerId: string, dto: CreateProjectDto) {
+  /**
+   * `coordinatorWorkspaceId` is a SERVER-DERIVED argument, never a field of `CreateProjectDto`:
+   * the only caller that passes one is `createInSession`, which resolved it from the session the
+   * request came from. Putting it on the DTO would let any caller name any workspace on a project
+   * it is creating, and the coordinator would open there.
+   */
+  async create(ownerId: string, dto: CreateProjectDto, coordinatorWorkspaceId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
     return this.prisma.project.create({
       data: {
@@ -123,8 +139,93 @@ export class ProjectsService {
         goal: ProjectsService.blankToNull(dto.goal),
         acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
         instructions: ProjectsService.blankToNull(dto.instructions),
+        // Written in the same insert as the rest, so a project is never briefly openable-nowhere:
+        // there is no window in which it exists with the default not yet applied.
+        ...(coordinatorWorkspaceId ? { coordinatorWorkspaceId } : {}),
       },
     });
+  }
+
+  /**
+   * A project recorded by an agent from inside a session, which is where a project usually gets
+   * recorded now that `project_create` reaches a runner.
+   *
+   * It defaults the coordinator to THAT session's workspace, because a project with no default is
+   * a project whose coordinator cannot be opened until somebody assigns one of its tasks —
+   * `coordinator` falls back to the busiest assignee, and a project created a second ago has no
+   * tasks at all. The workaround that produced was "file a task so the coordinator has a workspace
+   * to borrow", which makes a project's viability depend on work nobody has decided on yet.
+   *
+   * The workspace is the one the agent is already running in rather than one it names: an agent
+   * asked to set up a body of work is working somewhere, and that somewhere is the honest default.
+   * Nothing about it is client-controlled — see `sessionWorkspace`.
+   *
+   * Headless `project_create` (a cron bridge, no session) keeps calling `create` and keeps getting
+   * a project with no default, which is the truthful answer: no session, no workspace to inherit.
+   */
+  async createInSession(
+    ownerId: string,
+    runnerId: string,
+    sessionId: string,
+    dto: CreateProjectDto,
+  ) {
+    return this.create(ownerId, dto, await this.sessionWorkspace(ownerId, runnerId, sessionId));
+  }
+
+  /**
+   * The workspace of the session a runner request says it is coming from — or a 403.
+   *
+   * Scoped by BOTH `ownerId` and `assignedRunnerId`, so the header can only ever name a session
+   * this very runner is running for this very owner. The credential authenticates a machine, and
+   * a machine that could name any session id would be able to plant a project pointing into
+   * somebody else's workspace and then open a coordinator in it.
+   *
+   * Every rejection is the SAME 403 with the same wording — unknown id, another owner's session,
+   * another runner's session, a deleted one, one whose workspace has since been deleted or
+   * disabled, one that never had a workspace. Distinguishing them would answer "does this session
+   * id exist" for ids the caller has no business knowing about, and the caller can act on none of
+   * the distinctions anyway. 403 rather than 404 for the same reason `resolveAgentCreator` refuses
+   * an unusable `X-Orbit-Workspace-Id` with one: the id is context the caller asserted about
+   * itself, not a resource it asked for.
+   *
+   * Refusing is the point. Creating the project anyway, minus the default, is exactly the
+   * unopenable project this whole path exists to stop producing.
+   */
+  private async sessionWorkspace(
+    ownerId: string,
+    runnerId: string,
+    sessionId: string,
+  ): Promise<string> {
+    let id: string;
+    try {
+      // `publicIdHeaders` already normalized base62 to a UUID; it deliberately leaves a value it
+      // could not decode alone for the handler to reject, which is this. Decoding again is
+      // idempotent on a UUID, so the middleware's work stands and garbage is a 403 rather than
+      // the P2023 a `@db.Uuid` column answers a base62-shaped string with.
+      id = toUuid(sessionId);
+    } catch {
+      throw new ForbiddenException(ProjectsService.NO_SESSION_WORKSPACE);
+    }
+    const session = await this.prisma.session.findFirst({
+      where: {
+        id,
+        ownerId,
+        assignedRunnerId: runnerId,
+        deletedAt: null,
+        // The two states `sessions.create` refuses, checked here rather than trusted. Workspaces
+        // are soft-deleted, so the FK never nulls for one, and `enabled` is an ordinary column a
+        // person flips at any time — either way the id goes on naming a workspace no coordinator
+        // can be opened in. Seeding a default from one produces exactly the unopenable project
+        // this path exists to stop producing, and it produces it silently: the create succeeds and
+        // the failure only surfaces later, at the coordinator, as a 403 about a workspace nobody
+        // chose. `enabled` is compared to `true` rather than read for falsiness because the column
+        // is non-nullable with a default, which is how sessions.create reads it.
+        workspace: { deletedAt: null, enabled: true },
+      },
+      select: { workspaceId: true },
+    });
+    if (!session?.workspaceId) throw new ForbiddenException(ProjectsService.NO_SESSION_WORKSPACE);
+    return session.workspaceId;
   }
 
   /**
@@ -343,14 +444,19 @@ export class ProjectsService {
       };
     }
 
-    // Where a replacement opens, in the order the answers are trustworthy: what the caller said,
-    // then where this project's coordinator ran last, then where its work runs.
+    // Where a coordinator opens, in the order the answers are trustworthy: what the caller said,
+    // then what this project already records as its coordinator workspace, then where its work
+    // runs.
     //
-    // The middle one is why `coordinatorWorkspaceId` is a column rather than a derived value. A
-    // project whose coordinator was trashed and reopened lands back in the same workspace, which is
-    // the whole point of having recorded it — skipping straight to the busiest assignee would move
-    // the coordinator on the most ordinary path there is, and move it silently, which is the exact
-    // migration the 409 above exists to refuse.
+    // The middle one is why `coordinatorWorkspaceId` is a column rather than a derived value, and
+    // it answers for two situations rather than one. A project whose coordinator was trashed and
+    // reopened lands back in the same workspace, which is the whole point of having recorded it —
+    // skipping straight to the busiest assignee would move the coordinator on the most ordinary
+    // path there is, and move it silently, which is the exact migration the 409 above exists to
+    // refuse. And a project created from inside a session was SEEDED with that session's workspace
+    // at creation, so a project that has never been coordinated and holds no tasks at all opens
+    // here rather than falling through to a fallback with nothing in it. Both are the same read:
+    // this column is where the coordinator belongs, however it came to say so.
     const runIn =
       workspaceId ?? (await this.lastCoordinatorWorkspace(ownerId, project)) ?? (await this.busiestAssignee(id));
     if (!runIn) {
@@ -466,7 +572,12 @@ export class ProjectsService {
   }
 
   /**
-   * Where this project's previous coordinator ran, if that workspace can still run one.
+   * The workspace this project records as its coordinator's, if that workspace can still run one.
+   *
+   * "last" in the name is the case that named it — where the previous coordinator ran — but the
+   * column also holds the default `createInSession` seeded from the creating session, which no
+   * coordinator has run in yet. Both are read identically, and deliberately: the question here is
+   * "where does this project say its coordinator belongs", not "has one been there before".
    *
    * Checked for liveness rather than trusted. Workspaces are SOFT-deleted, so the FK's SET NULL
    * never fires for one and the column goes on naming a workspace `sessions.create` will refuse —

@@ -652,3 +652,156 @@ func TestProjectUpdatePropagatesTheServerError(t *testing.T) {
 		t.Fatalf("project update printed a body for a failed write: %q", out.String())
 	}
 }
+
+// The session the CLI ran in reaches the server as context, which is what lets the new project
+// remember where its coordinator is to be opened. Verbatim: the runner injects ORBIT_SESSION_ID
+// already spelled base62 (that is the spelling everything a model can see uses), and the server
+// decodes it — a CLI that re-spelled it here would produce an id neither end recognises.
+func TestProjectCreateCarriesTheSessionItRanIn(t *testing.T) {
+	var session, method, path string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "343dlzsYWKo5z8l2M8tsB")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"create", "--title", "Crawl"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project create: %v", err)
+	}
+	if method != http.MethodPost || path != "/api/runner/projects" {
+		t.Fatalf("project create hit %s %s", method, path)
+	}
+	if session != "343dlzsYWKo5z8l2M8tsB" {
+		t.Fatalf("project create session header = %q", session)
+	}
+	// The session is context, never content: a workspace in the body would be this process's own
+	// claim about where a coordinator should run, and the server does not accept one.
+	if len(body) != 1 || body["title"] != "Crawl" {
+		t.Fatalf("project create body = %#v", body)
+	}
+}
+
+// A launchd/cron bridge belongs to no session and has no workspace to inherit. The header has to
+// be ABSENT rather than empty: an empty one is a session id the server would look up and refuse,
+// turning a legitimate headless create into a 403.
+func TestProjectCreateHeadlessSendsNoSessionHeader(t *testing.T) {
+	sawSessionHeader := true
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"create", "--title", "Nightly sweep"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project create: %v", err)
+	}
+	if sawSessionHeader {
+		t.Fatal("a headless project create sent a session header")
+	}
+}
+
+// A shell that exports ORBIT_SESSION_ID from something empty leaves whitespace, which is not a
+// session — and padding around a real id is not a different id.
+func TestProjectCreateTrimsTheSessionFromTheEnvironment(t *testing.T) {
+	for _, tc := range []struct{ env, want string }{
+		{"  sess-1  ", "sess-1"},
+		{"   ", ""},
+	} {
+		var session string
+		sawSessionHeader := true
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			session = r.Header.Get("X-Orbit-Session-Id")
+			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+			_, _ = w.Write([]byte(projectCreatedJSON))
+		}))
+
+		configureCLITestRunner(t, srv.URL)
+		t.Setenv("ORBIT_SESSION_ID", tc.env)
+
+		var out bytes.Buffer
+		if err := cmdProjectCLI([]string{"create", "--title", "Crawl"}, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("project create %q: %v", tc.env, err)
+		}
+		srv.Close()
+		if session != tc.want {
+			t.Fatalf("ORBIT_SESSION_ID=%q sent session header %q, want %q", tc.env, session, tc.want)
+		}
+		if tc.want == "" && sawSessionHeader {
+			t.Fatalf("ORBIT_SESSION_ID=%q sent an empty session header instead of none", tc.env)
+		}
+	}
+}
+
+// Reading a project and revising one are not "where am I" questions. A coordinator default is
+// settled when the project is created; sending the current session on an update would be a
+// standing offer to move a coordinator as a side effect of editing a goal.
+func TestProjectReadAndUpdateCarryNoSession(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		argv []string
+	}{
+		{"get", []string{"get", "proj-1", "--json"}},
+		{"update", []string{"update", "proj-1", "--status", "DONE", "--json"}},
+	} {
+		sawSessionHeader := true
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, sawSessionHeader = r.Header["X-Orbit-Session-Id"]
+			_, _ = w.Write([]byte(projectDetailJSON))
+		}))
+
+		configureCLITestRunner(t, srv.URL)
+		t.Setenv("ORBIT_SESSION_ID", "sess-1")
+
+		var out bytes.Buffer
+		if err := cmdProjectCLI(tc.argv, strings.NewReader(""), &out); err != nil {
+			t.Fatalf("project %s: %v", tc.name, err)
+		}
+		srv.Close()
+		if sawSessionHeader {
+			t.Fatalf("project %s sent a session header", tc.name)
+		}
+	}
+}
+
+// Whoever reads the help or the capability document is deciding whether a project they create can
+// be coordinated. The old text said it "holds no tasks yet" and stopped there, which read as "so
+// there is nothing to coordinate from" — the exact belief that produced the file-a-task-first
+// workaround.
+func TestProjectCreateHelpStatesTheCoordinatorDefault(t *testing.T) {
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"create", "--help"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project create --help: %v", err)
+	}
+	for _, want := range []string{"coordinator", "session", "headless"} {
+		if !strings.Contains(strings.ToLower(out.String()), want) {
+			t.Fatalf("project create help does not mention %q:\n%s", want, out.String())
+		}
+	}
+
+	var found bool
+	for _, cmd := range projectCLICapabilities {
+		if cmd.Tool != "project_create" {
+			continue
+		}
+		found = true
+		for _, want := range []string{"coordinator", "session", "headless"} {
+			if !strings.Contains(strings.ToLower(cmd.Description), want) {
+				t.Fatalf("project_create capability description does not mention %q: %q", want, cmd.Description)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("project_create is missing from the capability document")
+	}
+}
