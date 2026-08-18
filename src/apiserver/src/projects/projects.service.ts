@@ -518,18 +518,33 @@ export class ProjectsService {
    * carrying is an id meant to be used, and a coordinator told one spelling and shown another has
    * no way to tell it is looking at its own project.
    *
-   * It claims no tools. This slice binds a session to a project and stops there: nothing yet
-   * exposes "start this task", "file a subtask" or a project read to a runner, and a prompt that
-   * told the agent otherwise would produce an opening turn spent hunting for tools that are not
-   * there — and, worse, a confident report assembled from whatever it found instead.
+   * It names the tools a coordinator actually has, and only those. `project_get`, the task tools
+   * and `project_update` all reach a runner now, so the older wording — "assume you have nothing
+   * that can change anything" — had stopped being caution and become a false statement: the one
+   * session built to coordinate a project was the one told not to try. A prompt that undersells
+   * the tools produces a coordinator that asks a human to do what it was handed the authority to
+   * do; a prompt that oversells them produces an opening turn spent hunting for tools that are not
+   * there, and then a confident report assembled from whatever it found instead. Both are wrong in
+   * the same way, so this names the real set.
+   *
+   * Read before write, in that order, because neither the goal nor the acceptance criteria is
+   * repeated in a task's description — a coordinator that starts by editing has nothing to have
+   * based the edit on. And coordinating is not doing: the implementation belongs to each task's
+   * own session, which is what having a project full of tasks is for.
+   *
+   * Still no promise of listing or deleting projects, opening another coordinator, or driving a
+   * runner directly. None of those reaches a runner, and naming one would recreate the hunt.
    */
   private static buildCoordinatorOpening(title: string, projectId: string): string {
     return (
       `你是项目「${title}」（id: ${uuidToBase62(projectId)}）的协调会话。\n\n` +
-      `这里用来跟进这个项目的进展、协调它下面的任务，不是用来替它干活的。项目本身记着目标、验收标准和作业指导，` +
-      `任务记着各自的状态、层级和归属——请先把这两样读一遍，弄清楚现在停在哪里，再简短汇报现状。\n\n` +
-      `现阶段你只负责读和说：不要假设自己手上有能直接开跑任务、改任务状态或指挥 runner 的工具。` +
-      `需要动的地方，说清楚该动什么、为什么，由我来决定。`
+      `这里用来跟进这个项目的进展、协调它下面的任务，不是用来替它干活的——具体实现交给各个任务自己的会话去做。\n\n` +
+      `先读再说：用 project_get 读这个项目的目标、验收标准和作业指导，再用 task_list（projectId 传上面那个 id）` +
+      `看它下面的任务各自停在哪里。这两样都不在任务的描述里，不读就只能靠猜。读完先简短汇报现状。\n\n` +
+      `该动的时候你手上有工具，按我这次的要求来定：project_update 改这个项目的标题、目标、验收标准、作业指导，` +
+      `或在工作真的落地时把 status 记成 DONE / CANCELLED；task_create、task_update、task_start 管它下面的任务。` +
+      `我没让你改的，先说清楚该动什么、为什么，由我来决定。\n\n` +
+      `没给你的工具就别去找：列出或删除项目、另开一个协调会话、直接指挥 runner，都不在你手上。`
     );
   }
 

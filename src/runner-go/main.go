@@ -284,7 +284,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "project":
-		if err := cmdProjectCLI(args[1:], os.Stdout); err != nil {
+		if err := cmdProjectCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit project:", err)
 			os.Exit(1)
 		}

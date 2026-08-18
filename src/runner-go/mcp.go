@@ -251,6 +251,39 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_create":
+		title := getString(args, "title")
+		if title == "" {
+			return toolResult("title is required", true)
+		}
+		body := map[string]interface{}{"title": title}
+		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
+		raw, err := s.t.createProject(body)
+		if err != nil {
+			return toolResult("create project failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_update":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		body := map[string]interface{}{}
+		// The same present-only copy task_update uses, and it is what gives each prose field all
+		// three outcomes for free: absent stays absent (the project keeps what it states), a string
+		// is forwarded as given, and an explicit null survives as null rather than being mistaken
+		// for "not supplied" — that last one is the whole clear path.
+		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "instructions", "status")
+		if len(body) == 0 {
+			return toolResult("no fields to update", true)
+		}
+		raw, err := s.t.updateProject(id, body)
+		if err != nil {
+			return toolResult("update project failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -1163,12 +1196,86 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"how its tasks are distributed (_count and tasksByStatus). This is what a project " +
 				"coordinator works FROM — read it before deciding what to file or whether the work " +
 				"is finished, because none of it is repeated in a task's description. Returns the " +
-				"shape of the project, not its tasks: use task_list for those. Read-only; the " +
-				"fields here are the owner's statement of what the work is for.",
+				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
+				"of the account this runner belongs to; write these same fields with " +
+				"project_create and project_update.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_create",
+			"description": "Create a project in the account this runner belongs to — the durable " +
+				"context a whole body of work is carried out from, as opposed to a task, which is " +
+				"one piece of that work. Use it when you are asked to set up or plan out a body of " +
+				"work: state what it is trying to achieve (goal), what would settle that the goal " +
+				"was reached (acceptanceCriteria), and how the work is to be done (instructions). " +
+				"You have the authority to write these fields — record what you were asked for " +
+				"rather than waiting for somebody to type it in. The " +
+				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
+				"task_create_batch passing its projectId, which is what connects the work to what " +
+				"it is for.",
+			"inputSchema": obj(map[string]interface{}{
+				"title": map[string]interface{}{
+					"type":        "string",
+					"description": "What this body of work is called.",
+				},
+				"goal": map[string]interface{}{
+					"type":        "string",
+					"description": "What this project is trying to achieve, in at most 4,000 characters.",
+				},
+				"acceptanceCriteria": map[string]interface{}{
+					"type": "string",
+					"description": "What would settle that the goal was reached — the observable " +
+						"result a reader can verify for the whole project, as opposed to a task's " +
+						"own acceptanceCriteria, which settles one piece of it. Max 4,000 characters.",
+				},
+				"instructions": map[string]interface{}{
+					"type":        "string",
+					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters.",
+				},
+			}, "title"),
+		},
+		{
+			"name": "project_update",
+			"description": "Update a project in the account this runner belongs to: rename it, " +
+				"revise what it is trying to achieve (goal), what would settle that the goal was " +
+				"reached (acceptanceCriteria) or how the work is to be done (instructions), and " +
+				"record where the work stands (status). You have the authority to write these " +
+				"fields — say so when the work actually lands rather " +
+				"than leaving a finished project OPEN. Only the fields you pass are sent, so " +
+				"revising the goal never blanks the instructions: omit a field to leave it " +
+				"untouched, pass a string to replace it, pass null to clear it. status DONE means " +
+				"the goal was reached and CANCELLED that it will not be; neither is a way to file " +
+				"a project out of sight. Read project_get first when the current context is not " +
+				"already known — each prose field is a whole-field replacement, not an append.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to update, as shown in its web UI URL (/projects/<id>).",
+				},
+				"title": str,
+				"goal": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "Replace what this project is trying to achieve (max 4,000 characters), or null to leave it with no stated goal.",
+				},
+				"acceptanceCriteria": map[string]interface{}{
+					"type": []string{"string", "null"},
+					"description": "Replace what would settle that the goal was reached (max 4,000 " +
+						"characters), or null to leave it with none stated. This settles the whole " +
+						"project, not one task.",
+				},
+				"instructions": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions.",
+				},
+				"status": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
+					"description": "Where the work stands: OPEN, DONE (the goal was reached) or CANCELLED (it will not be).",
 				},
 			}, "projectId"),
 		},

@@ -720,19 +720,69 @@ test('the id it carries is the public one, not the uuid the column holds', async
   assert.equal(prompt.includes(PROJECT_ID), false, 'the raw uuid reached the agent');
 });
 
-test('the opening message claims no tools this slice has not shipped', async () => {
-  // Nothing yet exposes starting a task, filing a subtask or reading a project to a runner. A
-  // prompt that said otherwise would spend the first turn hunting for tools that are not there —
-  // and then report confidently from whatever it found instead.
+test('the opening message sends the coordinator to read before it decides anything', async () => {
+  // Neither the goal nor the acceptance criteria is repeated in a task's description, so a
+  // coordinator that starts by editing has nothing to have based the edit on. Both reads are
+  // named, and both come before the writes are mentioned — ordering is the instruction here, not
+  // decoration.
   const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
 
   await f.open();
 
   const prompt: string = f.created[0][1].prompt;
-  for (const tool of ['task_start', 'task_update', 'project_get', 'tasklist_update']) {
-    assert.equal(prompt.includes(tool), false, `prompt promises ${tool}`);
+  const read = prompt.indexOf('project_get');
+  const scope = prompt.indexOf('task_list');
+  const write = prompt.indexOf('project_update');
+  assert.ok(read >= 0, `prompt never names project_get: ${prompt}`);
+  assert.ok(scope >= 0, `prompt never names task_list: ${prompt}`);
+  assert.ok(write >= 0, `prompt never names project_update: ${prompt}`);
+  assert.ok(read < write && scope < write, `prompt puts writing before reading: ${prompt}`);
+  // The task scope is this project's, which is what the id it carries is for — a coordinator that
+  // read every task in the account would report on work that is not its own.
+  assert.match(prompt, /task_list（projectId/);
+});
+
+test('the opening message tells the coordinator it may act when asked to', async () => {
+  // `project_get`, the task tools and now `project_update` all reach a runner. The older wording
+  // told the one session built to coordinate a project to assume it could change nothing, so the
+  // agent handed the authority was the agent instructed not to use it.
+  const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
+
+  await f.open();
+
+  const prompt: string = f.created[0][1].prompt;
+  for (const tool of ['project_update', 'task_create', 'task_update', 'task_start']) {
+    assert.ok(prompt.includes(tool), `prompt never offers ${tool}: ${prompt}`);
   }
-  assert.match(prompt, /不要假设/);
+  // Settling the project is part of the authority, and the point of naming it: a finished project
+  // left OPEN is what happens when nobody believes they may say so.
+  assert.match(prompt, /DONE \/ CANCELLED/);
+  // And the old blanket denial is gone, not merely outnumbered.
+  assert.equal(prompt.includes('不要假设'), false, `prompt still denies the tools: ${prompt}`);
+});
+
+test('the opening message still promises no tool a runner cannot reach', async () => {
+  // Listing or deleting projects, opening another coordinator and driving a runner directly are
+  // none of them exposed. Naming one would spend the first turn hunting for it, and then report
+  // confidently from whatever it found instead.
+  const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
+
+  await f.open();
+
+  const prompt: string = f.created[0][1].prompt;
+  for (const absent of ['project_list', 'project_delete', 'project_coordinator', 'session_create']) {
+    assert.equal(prompt.includes(absent), false, `prompt promises ${absent}`);
+  }
+});
+
+test('coordinating is named as distinct from doing the work', async () => {
+  // A coordinator that implements the tasks itself is one session doing what a project full of
+  // them exists to spread out — and it does so holding none of their context.
+  const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
+
+  await f.open();
+
+  assert.match(f.created[0][1].prompt, /不是用来替它干活的/);
 });
 
 test('the title and the prompt are stable across calls', async () => {

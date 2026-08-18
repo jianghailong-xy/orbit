@@ -778,8 +778,8 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 }
 
 // getProject reads one project's durable context: its goal, acceptance criteria, instructions,
-// status, coordinator ids and task tallies. Read-only, and tallies rather than task rows — the
-// tasks themselves are what the task routes above are for.
+// status, coordinator ids and task tallies. Tallies rather than task rows — the tasks themselves
+// are what the task routes above are for.
 //
 // Ids arrive in whichever spelling the caller holds (base62 short form or raw UUID); the server
 // decodes both, and an id belonging to somebody else is its 404, not a check made here.
@@ -789,6 +789,32 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 	}
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// createProject records a new project under the runner's owner — the same tenant every task write
+// here lands in, since the credential names a machine rather than a person.
+//
+// The body goes as the caller built it. Length bounds, the blank-is-null rule and which fields
+// exist at all are the server's CreateProjectDto to decide; a second opinion held here would be
+// one that drifts.
+func (t *Transport) createProject(body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/projects", body, &out, taskOpTimeout)
+	return out, err
+}
+
+// updateProject changes a project's title, goal, acceptance criteria, instructions or status.
+//
+// Only the keys the caller put in `body` are sent, and a key holding nil is sent AS null — that is
+// how a field gets cleared, so nothing here may prune it. Deciding locally which fields are worth
+// forwarding is the one thing that would turn "clear the goal" into "leave the goal alone".
+func (t *Transport) updateProject(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "PATCH", "/runner/projects/"+url.PathEscape(id), body, &out, taskOpTimeout)
 	return out, err
 }
 

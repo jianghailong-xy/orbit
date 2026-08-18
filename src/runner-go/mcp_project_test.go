@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -119,18 +122,331 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	}
 }
 
-// The project surface is one read. A write tool here could let a coordinator restate the goal it
-// is judged against, so its absence is a property worth failing on.
-func TestMCPExposesNoProjectWriteTools(t *testing.T) {
+// The project surface is exactly these three. Listing projects, deleting one and opening its
+// coordinator stay the human's door, so a fourth appearing here is a decision somebody makes
+// rather than something a refactor adds.
+func TestMCPExposesExactlyTheThreeProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
 	} {
+		seen := map[string]bool{}
 		for _, tool := range tools {
 			name, _ := tool["name"].(string)
-			if strings.HasPrefix(name, "project_") && name != "project_get" {
-				t.Fatalf("unexpected project tool exposed: %q", name)
+			if strings.HasPrefix(name, "project_") {
+				seen[name] = true
 			}
+		}
+		for _, want := range []string{"project_get", "project_create", "project_update"} {
+			if !seen[want] {
+				t.Fatalf("%s missing from the tools", want)
+			}
+			delete(seen, want)
+		}
+		if len(seen) != 0 {
+			t.Fatalf("unexpected project tools exposed: %#v", seen)
+		}
+	}
+}
+
+// Ungated for the same reason project_get is: the session that most needs to record what a body of
+// work is for — a coordinator — has no session_* tools at all.
+func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
+	tools := toolDescriptors(false, false)
+
+	createProps := mcpToolProps(tools, "project_create")
+	for _, field := range []string{"title", "goal", "acceptanceCriteria", "instructions"} {
+		prop, _ := createProps[field].(map[string]interface{})
+		if prop["type"] != "string" {
+			t.Fatalf("project_create %s schema = %#v", field, createProps[field])
+		}
+	}
+	if len(createProps) != 4 {
+		t.Fatalf("project_create properties = %#v", createProps)
+	}
+	if got := mcpToolRequired(t, tools, "project_create"); len(got) != 1 || got[0] != "title" {
+		t.Fatalf("project_create required = %#v", got)
+	}
+
+	updateProps := mcpToolProps(tools, "project_update")
+	if len(updateProps) != 6 {
+		t.Fatalf("project_update properties = %#v", updateProps)
+	}
+	// The prose fields accept null, and that is not decoration: without it a model following the
+	// schema has no way to express "there is no stated goal any more" and would send "" instead.
+	for _, field := range []string{"goal", "acceptanceCriteria", "instructions"} {
+		prop, _ := updateProps[field].(map[string]interface{})
+		types, _ := prop["type"].([]string)
+		if len(types) != 2 || types[0] != "string" || types[1] != "null" {
+			t.Fatalf("project_update %s type = %#v", field, prop["type"])
+		}
+	}
+	// status is a closed set, and the three the server's DTO validates against.
+	statusProp, _ := updateProps["status"].(map[string]interface{})
+	statusEnum, _ := statusProp["enum"].([]string)
+	if strings.Join(statusEnum, ",") != "OPEN,DONE,CANCELLED" {
+		t.Fatalf("project_update status enum = %#v", statusProp["enum"])
+	}
+	if got := mcpToolRequired(t, tools, "project_update"); len(got) != 1 || got[0] != "projectId" {
+		t.Fatalf("project_update required = %#v", got)
+	}
+
+	// The descriptions are what a model decides from, so they have to state the scope it writes
+	// into and that writing is its call to make — the old wording said these fields were the
+	// owner's alone, which is exactly the belief that would stop it recording a goal it was asked
+	// for. Nothing may claim they are human-only.
+	for _, name := range []string{"project_get", "project_create", "project_update"} {
+		description := mcpToolDescription(tools, name)
+		if !strings.Contains(description, "account this runner belongs to") {
+			t.Fatalf("%s description does not state its owner scope: %q", name, description)
+		}
+		for _, forbidden := range []string{"Read-only", "human-only", "owner's statement"} {
+			if strings.Contains(description, forbidden) {
+				t.Fatalf("%s description still claims %q: %q", name, forbidden, description)
+			}
+		}
+	}
+	for _, name := range []string{"project_create", "project_update"} {
+		if !strings.Contains(mcpToolDescription(tools, name), "authority") {
+			t.Fatalf("%s does not tell the model it may write these fields", name)
+		}
+	}
+	if !strings.Contains(mcpToolDescription(tools, "project_update"), "null to clear") {
+		t.Fatalf("project_update does not document the null clear: %q", mcpToolDescription(tools, "project_update"))
+	}
+}
+
+func mcpToolRequired(t *testing.T, tools []map[string]interface{}, name string) []string {
+	t.Helper()
+	for _, tool := range tools {
+		if tool["name"] != name {
+			continue
+		}
+		schema, _ := tool["inputSchema"].(map[string]interface{})
+		required, _ := schema["required"].([]string)
+		return required
+	}
+	t.Fatalf("%s missing from the tools", name)
+	return nil
+}
+
+func mcpToolDescription(tools []map[string]interface{}, name string) string {
+	for _, tool := range tools {
+		if tool["name"] == name {
+			description, _ := tool["description"].(string)
+			return description
+		}
+	}
+	return ""
+}
+
+func TestMCPProjectCreatePostsTheRunnerProjectRoute(t *testing.T) {
+	var method, path string
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_create", map[string]interface{}{
+		"title":              "Crawl",
+		"goal":               "Index the corpus",
+		"acceptanceCriteria": "Every shard reported",
+		"instructions":       "Work shard by shard",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_create returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPost || path != "/api/runner/projects" {
+		t.Fatalf("project_create hit %s %s", method, path)
+	}
+	want := map[string]interface{}{
+		"title":              "Crawl",
+		"goal":               "Index the corpus",
+		"acceptanceCriteria": "Every shard reported",
+		"instructions":       "Work shard by shard",
+	}
+	if fmt.Sprintf("%v", body) != fmt.Sprintf("%v", want) {
+		t.Fatalf("project_create body = %#v", body)
+	}
+	// The created project reaches the model whole, id included — that id is what task_create then
+	// files work under.
+	content, _ := res["content"].([]map[string]interface{})
+	if text, _ := content[0]["text"].(string); !strings.Contains(text, "proj-2") {
+		t.Fatalf("project_create result = %q", text)
+	}
+}
+
+// Fields the model did not name must not be invented: the server stores blank prose as null, so a
+// phantom "" would be recorded as a goal that was stated and left empty.
+func TestMCPProjectCreateSendsOnlyWhatWasGiven(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectCreatedJSON))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_create", map[string]interface{}{"title": "Crawl"})
+	if res["isError"] == true {
+		t.Fatalf("project_create returned an error: %#v", res["content"])
+	}
+	if len(body) != 1 || body["title"] != "Crawl" {
+		t.Fatalf("project_create body = %#v", body)
+	}
+}
+
+func TestMCPProjectCreateRequiresATitle(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_create", map[string]interface{}{"goal": "Index the corpus"})
+	if res["isError"] != true {
+		t.Fatalf("project_create without a title isError = %#v", res["isError"])
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "title is required") {
+		t.Fatalf("project_create without a title result = %#v", res)
+	}
+	if hit {
+		t.Fatal("project_create called the server with no title")
+	}
+}
+
+// Omitted, replaced and cleared are three different instructions, and the difference only survives
+// if the handler copies keys rather than reading values: a `goal` read as a string turns an
+// explicit null into "", and a nil-skipping copy turns it into "leave the goal alone".
+func TestMCPProjectUpdateDistinguishesOmittedFromNull(t *testing.T) {
+	var raw string
+	var body map[string]interface{}
+	var method, path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		raw = string(b)
+		_ = json.Unmarshal(b, &body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1",
+		"goal":      nil,
+		"status":    "DONE",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_update returned an error: %#v", res["content"])
+	}
+	if method != http.MethodPatch || path != "/api/runner/projects/proj-1" {
+		t.Fatalf("project_update hit %s %s", method, path)
+	}
+	value, present := body["goal"]
+	if !present || value != nil {
+		t.Fatalf("project_update dropped the null goal clear: %s", raw)
+	}
+	if body["status"] != "DONE" {
+		t.Fatalf("project_update status = %#v", body["status"])
+	}
+	// acceptanceCriteria and instructions were never mentioned, so they must not appear at all —
+	// a key present with any value is an instruction to write that field.
+	for _, omitted := range []string{"acceptanceCriteria", "instructions", "title"} {
+		if _, present := body[omitted]; present {
+			t.Fatalf("project_update sent %s nobody asked for: %s", omitted, raw)
+		}
+	}
+	if len(body) != 2 {
+		t.Fatalf("project_update body = %s", raw)
+	}
+}
+
+func TestMCPProjectUpdateRequiresAnIDAndAField(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_update", map[string]interface{}{"status": "DONE"})
+	if res["isError"] != true {
+		t.Fatalf("project_update without an id isError = %#v", res["isError"])
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if !strings.Contains(content[0]["text"].(string), "projectId is required") {
+		t.Fatalf("project_update without an id result = %#v", res)
+	}
+
+	// An update naming no field would come back 200 having changed nothing, which reads to the
+	// model as a successful edit.
+	res = mcp.callTool("project_update", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] != true {
+		t.Fatalf("empty project_update isError = %#v", res["isError"])
+	}
+	content, _ = res["content"].([]map[string]interface{})
+	if !strings.Contains(content[0]["text"].(string), "no fields to update") {
+		t.Fatalf("empty project_update result = %#v", res)
+	}
+	if hit {
+		t.Fatal("an invalid project_update reached the server")
+	}
+}
+
+// A failed write is reported as a failure and attempted exactly once: a tool that retried on its
+// own could create a second project, or apply an edit twice, on the strength of one call.
+func TestMCPProjectWriteFailuresDoNotRetry(t *testing.T) {
+	for _, tc := range []struct {
+		tool   string
+		args   map[string]interface{}
+		status int
+		want   string
+	}{
+		{"project_create", map[string]interface{}{"title": "Crawl"}, http.StatusBadRequest, "create project failed"},
+		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "DONE"}, http.StatusNotFound, "update project failed"},
+	} {
+		calls := 0
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte(`{"statusCode":0,"message":"nope"}`))
+		}))
+
+		mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+		res := mcp.callTool(tc.tool, tc.args)
+		srv.Close()
+
+		if res["isError"] != true {
+			t.Fatalf("%s on a %d isError = %#v", tc.tool, tc.status, res["isError"])
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		text, _ := content[0]["text"].(string)
+		if !strings.Contains(text, tc.want) || !strings.Contains(text, fmt.Sprint(tc.status)) {
+			t.Fatalf("%s result = %q", tc.tool, text)
+		}
+		if calls != 1 {
+			t.Fatalf("%s made %d requests for one call", tc.tool, calls)
+		}
+	}
+}
+
+func TestMCPProjectUpdateIDCannotEscapeTheProjectRoute(t *testing.T) {
+	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
+	for _, id := range []string{"../sessions", "..%2Fsessions", "a/b"} {
+		res := mcp.callTool("project_update", map[string]interface{}{"projectId": id, "status": "DONE"})
+		if res["isError"] != true {
+			t.Fatalf("project_update(%q) isError = %#v", id, res["isError"])
+		}
+		content, _ := res["content"].([]map[string]interface{})
+		if len(content) == 0 || !strings.Contains(content[0]["text"].(string), "single safe path segment") {
+			t.Fatalf("project_update(%q) result = %#v", id, res)
 		}
 	}
 }

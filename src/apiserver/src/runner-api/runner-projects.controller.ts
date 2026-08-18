@@ -1,32 +1,70 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
+import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
 /**
- * A project's durable context, read by `orbit project get` and the `project_get` MCP tool with the
- * machine's runner token. Tenant scope is the runner's owner, exactly as the task routes have it.
+ * A project's durable context, read and written by `orbit project` and the `project_*` MCP tools
+ * with the machine's runner token. Tenant scope is the runner's owner, exactly as the task routes
+ * have it.
  *
- * It exists because `GET /projects/:id` is behind JwtAuthGuard and a runner holds no user JWT — its
+ * It exists because `/projects` is behind JwtAuthGuard and a runner holds no user JWT — its
  * credential is an opaque token hashed in the runner row — so a coordinator session had no way to
- * read the goal, acceptance criteria and instructions it is supposed to be working from. Same
- * service, same owner scoping, second door: no query, no ownership rule and no payload of its own,
- * so the two can never disagree about what a project is or who may see it.
+ * read the goal, acceptance criteria and instructions it is supposed to be working from, nor to
+ * record one it was asked to set up. Same service, same DTOs, same owner scoping, second door:
+ * these routes hold no query, ownership rule or DTO of their own — the bodies they take are the
+ * canonical ones, forwarded untouched — so the two can never disagree about what a project is,
+ * who may see it, or what a valid write looks like.
  *
- * Read-only on purpose, and only this one route. A project's fields are written by a human deciding
- * what the work is for; a coordinator that could rewrite its own acceptance criteria could settle
- * itself. Its tasks are not here either — `ProjectsService.get` returns tallies rather than rows,
- * and the runner already reaches the work through the task routes.
+ * An agent may state what a body of work is for and settle where it stands, which is why create
+ * and update are here: a coordinator handed "plan this out" had nowhere to put the goal it worked
+ * out, and a project whose work is finished could not be marked DONE by the thing that finished
+ * it. The fields are not owner-only prose any more.
+ *
+ * Listing, deletion and opening a coordinator are still not here. Nor are the project's tasks —
+ * `ProjectsService.get` returns tallies rather than rows, and the runner already reaches the work
+ * through the task routes.
  */
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
 export class RunnerProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
+  /**
+   * Record a new project. The body is the same CreateProjectDto the user-facing POST /projects
+   * takes, forwarded untouched, so the length bounds and the blank-is-null rule are decided in one
+   * place rather than twice.
+   */
+  @Post('projects')
+  createProject(@CurrentRunner() runner: Runner, @Body() dto: CreateProjectDto) {
+    return this.projects.create(runner.ownerId, dto);
+  }
+
   @Get('projects/:id')
   getProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(runner.ownerId, id);
+  }
+
+  /**
+   * Change a project's title, goal, acceptance criteria, instructions or status.
+   *
+   * Partial by construction: `ProjectsService.update` writes only the fields the body carries, so
+   * an agent settling a project's status cannot blank the prose that says what it was for. `null`
+   * on one of the prose fields clears it — the DTO's own rule, and the reason the runner door must
+   * not reshape the body on its way through.
+   *
+   * A project belonging to somebody else is the service's 404, decided by the same `assertOwned`
+   * the user door goes through; nothing here checks ownership separately.
+   */
+  @Patch('projects/:id')
+  updateProject(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: UpdateProjectDto,
+  ) {
+    return this.projects.update(runner.ownerId, id, dto);
   }
 }
