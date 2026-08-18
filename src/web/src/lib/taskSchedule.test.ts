@@ -1,11 +1,12 @@
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   RUN_AT_IMPOSSIBLE,
   canSaveTaskSchedule,
   runAtIso,
   runAtLocalValue,
   runAtProblem,
+  refreshManyTaskScheduleViews,
   refreshTaskScheduleViews,
   scheduledStart,
 } from './taskSchedule';
@@ -262,6 +263,189 @@ describe('refreshTaskScheduleViews — what a change to when a task runs refresh
       expect(invalidated(['project', 'proj62'])).toBe(false);
       expect(invalidated(['project', 'proj62', 'tasks', 'root'])).toBe(false);
     }
+  });
+});
+
+describe('refreshManyTaskScheduleViews — the same rule for a whole batch at once', () => {
+  /** A cache holding both projects a batch touches, one it does not, and the projects index. */
+  function seeded() {
+    const qc = new QueryClient();
+    for (const id of ['t1', 't2', 't3']) qc.setQueryData(['task', id], { id });
+    qc.setQueryData(['tasks', 'page', null], { items: [] });
+    qc.setQueryData(['tasks', 'counts', null, []], { open: 3 });
+    qc.setQueryData(['tasks', 'active', null], { items: [] });
+    qc.setQueryData(['project', 'projA'], { id: 'projA' });
+    qc.setQueryData(['project', 'projA', 'tasks', 'root'], { items: [] });
+    qc.setQueryData(['project', 'projA', 'tasks', 'children', 'parent62'], { items: [] });
+    qc.setQueryData(['project', 'projB'], { id: 'projB' });
+    qc.setQueryData(['project', 'projB', 'tasks', 'root'], { items: [] });
+    // A project no row in the batch belongs to, and the index that counts tasks per project.
+    qc.setQueryData(['project', 'projC'], { id: 'projC' });
+    qc.setQueryData(['project', 'projC', 'tasks', 'root'], { items: [] });
+    qc.setQueryData(['projects'], []);
+    return qc;
+  }
+
+  const invalidatedIn = (qc: QueryClient) => (key: unknown[]) =>
+    qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
+
+  /** Two rows in one project, one in another, and one filed under no project at all. */
+  const batch = [
+    { id: 't1', projectId: 'projA' },
+    { id: 't2', projectId: 'projA' },
+    { id: 't3', projectId: 'projB' },
+    { id: 't4', projectId: null },
+  ];
+
+  it('covers every task in the batch and every project any of them came from', () => {
+    const qc = seeded();
+    refreshManyTaskScheduleViews(qc, batch);
+    const invalidated = invalidatedIn(qc);
+    for (const id of ['t1', 't2', 't3']) expect(invalidated(['task', id])).toBe(true);
+    expect(invalidated(['tasks', 'page', null])).toBe(true);
+    expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
+    expect(invalidated(['tasks', 'active', null])).toBe(true);
+    // Both projects, each through the prefix that reaches the document, the root page and every
+    // opened subtask level below it.
+    expect(invalidated(['project', 'projA'])).toBe(true);
+    expect(invalidated(['project', 'projA', 'tasks', 'root'])).toBe(true);
+    expect(invalidated(['project', 'projA', 'tasks', 'children', 'parent62'])).toBe(true);
+    expect(invalidated(['project', 'projB'])).toBe(true);
+    expect(invalidated(['project', 'projB', 'tasks', 'root'])).toBe(true);
+  });
+
+  it('reaches no further than the batch itself', () => {
+    const qc = seeded();
+    refreshManyTaskScheduleViews(qc, batch);
+    const invalidated = invalidatedIn(qc);
+    // A project none of these rows belong to — open in another tab, and none of its business.
+    expect(invalidated(['project', 'projC'])).toBe(false);
+    expect(invalidated(['project', 'projC', 'tasks', 'root'])).toBe(false);
+    // The projects index carries a task COUNT per project, which running tasks does not move.
+    expect(invalidated(['projects'])).toBe(false);
+    // The unprojected row contributed no project key of its own — an `undefined` there would be
+    // a prefix of EVERY project in the cache, so exactly the five views of the two projects the
+    // batch really came from are stale, and projC's two are not.
+    const staleProjectViews = qc
+      .getQueryCache()
+      .findAll({ queryKey: ['project'] })
+      .filter((q) => q.state.isInvalidated);
+    expect(staleProjectViews.length).toBe(5);
+  });
+
+  it('invalidates each key once, not once per row', () => {
+    // Forty selected rows sharing two projects must not fire forty `['tasks']` invalidations:
+    // each one is a refetch of views already being refetched by the one before it.
+    const qc = seeded();
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    refreshManyTaskScheduleViews(qc, [...batch, { id: 't1', projectId: 'projA' }]);
+    const keys = spy.mock.calls.map(([arg]) => JSON.stringify(arg?.queryKey));
+    expect(keys.filter((k) => k === JSON.stringify(['tasks'])).length).toBe(1);
+    expect(keys.filter((k) => k === JSON.stringify(['project', 'projA'])).length).toBe(1);
+    expect(keys.filter((k) => k === JSON.stringify(['task', 't1'])).length).toBe(1);
+    // Four distinct tasks — the unprojected row's own detail included — one `['tasks']`, and two
+    // distinct projects, from five rows naming three keys between them more than once.
+    expect(keys.length).toBe(7);
+    spy.mockRestore();
+  });
+
+  it('scales as forty rows across two projects: 43 invalidations, not 120', () => {
+    // The exact shape the doc comment claims, pinned so neither can drift from the other. Every
+    // task keeps its OWN detail invalidation — each of those rows really did change — and it is
+    // only the two keys they SHARE that collapse.
+    const qc = seeded();
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    const forty = Array.from({ length: 40 }, (_, i) => ({
+      id: `t${i}`,
+      projectId: i % 2 ? 'projA' : 'projB',
+    }));
+    refreshManyTaskScheduleViews(qc, forty);
+
+    const keys = spy.mock.calls.map(([arg]) => arg?.queryKey as unknown[]);
+    expect(keys.length).toBe(43);
+    // All forty details, none of them dropped or merged.
+    const details = keys.filter((k) => k[0] === 'task');
+    expect(details.length).toBe(40);
+    expect(new Set(details.map((k) => k[1])).size).toBe(40);
+    // And the shared keys exactly once each.
+    expect(keys.filter((k) => k.length === 1 && k[0] === 'tasks').length).toBe(1);
+    expect(keys.filter((k) => k[0] === 'project').length).toBe(2);
+    spy.mockRestore();
+  });
+
+  it('refreshes nothing at all for an empty batch', async () => {
+    // The caller with no tasks to report is one whose write moved nothing; refetching every task
+    // view on its behalf would redraw exactly what is already on screen.
+    const qc = seeded();
+    const spy = vi.spyOn(qc, 'invalidateQueries');
+    await refreshManyTaskScheduleViews(qc, []);
+    expect(spy).not.toHaveBeenCalled();
+    expect(invalidatedIn(qc)(['tasks', 'page', null])).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('resolves only once the active views have refetched', async () => {
+    // Returned from each caller's `onSuccess`, which is what keeps the bulk Run pending until the
+    // list it just changed has actually caught up.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let release!: () => void;
+    const refetching = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    qc.setQueryData(['tasks', 'page', null], { items: [] });
+    const watcher = new QueryObserver(qc, {
+      queryKey: ['tasks', 'page', null],
+      queryFn: async () => {
+        await refetching;
+        return { items: [] };
+      },
+      refetchOnMount: false,
+    });
+    const unsubscribe = watcher.subscribe(() => {});
+
+    let settled = false;
+    const refreshed = refreshManyTaskScheduleViews(qc, batch).then(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    release();
+    await refreshed;
+    expect(settled).toBe(true);
+    unsubscribe();
+  });
+
+  it('is what the single-task refresh is built out of, unchanged', () => {
+    // The panel's Run now and the schedule editor call the singular form; it must keep meaning
+    // exactly what it meant when it held the rule itself.
+    const one = seeded();
+    const many = seeded();
+    refreshTaskScheduleViews(one, 't1', 'projA');
+    refreshManyTaskScheduleViews(many, [{ id: 't1', projectId: 'projA' }]);
+    const keys = (qc: QueryClient) =>
+      qc
+        .getQueryCache()
+        .getAll()
+        .filter((q) => q.state.isInvalidated)
+        .map((q) => JSON.stringify(q.queryKey))
+        .sort();
+    expect(keys(one)).toEqual(keys(many));
+    // And it really is the panel's set: this task, every task view, this project only.
+    expect(keys(one)).toEqual(
+      [
+        ['task', 't1'],
+        ['tasks', 'page', null],
+        ['tasks', 'counts', null, []],
+        ['tasks', 'active', null],
+        ['project', 'projA'],
+        ['project', 'projA', 'tasks', 'root'],
+        ['project', 'projA', 'tasks', 'children', 'parent62'],
+      ]
+        .map((k) => JSON.stringify(k))
+        .sort(),
+    );
   });
 });
 

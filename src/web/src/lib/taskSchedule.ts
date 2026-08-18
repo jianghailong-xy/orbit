@@ -157,23 +157,44 @@ export function canSaveTaskSchedule(draft: string, current: string): boolean {
 }
 
 /**
- * Refresh every view that a change to WHEN a task runs makes stale — a schedule saved, a schedule
- * cancelled, or a Run now that consumed one.
+ * A task as a refresh has to know it: the task itself, and the project whose cached pages a run
+ * or a reschedule makes stale. `projectId` is null or absent for the many tasks filed under no
+ * project at all, which is a refresh of nothing rather than a refresh of every project.
+ */
+export interface TaskRefreshTarget {
+  id: string;
+  projectId?: string | null;
+}
+
+/**
+ * Refresh every view that a change to WHEN a set of tasks runs makes stale — a schedule saved, a
+ * schedule cancelled, a Run now that consumed one, or a batch run that consumed several.
  *
- * `['task', taskId]` is the open panel, `['tasks']` the prefix every task list, count and active
- * strip in the app reads under. `['project', projectId]` is a PREFIX of the project page's own
- * keys, so that one entry covers the project document, its root task page and every opened
- * subtask level — which is what keeps a Project row from going on showing a start that is gone.
+ * `['task', id]` is the open panel, `['tasks']` the prefix every task list, count and active strip
+ * in the app reads under. `['project', projectId]` is a PREFIX of the project page's own keys, so
+ * that one entry covers the project document, its root task page and every opened subtask level —
+ * which is what keeps a Project row from going on showing a start that is gone.
  *
- * Deliberately no `['projects']`: the list rows carry a task COUNT, and rescheduling a task moves
- * no counts. And nothing at all for a task that belongs to no project, so a reader with a project
- * page open in another tab does not have it refetched because of a task it never contained.
+ * Deliberately no `['projects']`: the list rows carry a task COUNT, and neither running a task nor
+ * rescheduling one moves a count. And nothing at all for a task that belongs to no project, so a
+ * reader with a project page open in another tab does not have it refetched because of a task it
+ * never contained.
  *
- * One function rather than a list at each call site, because the panel's Run now spends a schedule
- * just as surely as cancelling one does, and the two must not drift into refreshing different
- * things. Exported for the same reason `invalidateAfterProjectTaskCreate` is: what a write
- * refreshes has to be assertable against a seeded cache, since the buttons that trigger it are
- * behind a mutation.
+ * Every task in the set gets its OWN `['task', id]`, since each one really did change. What is
+ * deduplicated is the rest: `['tasks']` is invalidated exactly once however many tasks were given,
+ * and each project once however many of its rows were in the set. So a batch of forty rows sharing
+ * two projects is 43 invalidations — forty details, one `['tasks']`, two projects — rather than the
+ * 120 that calling the single-task form per row would fire, where 77 of them would be redundant
+ * refetches of views already being refetched by the call before.
+ *
+ * An EMPTY set refreshes nothing, not even `['tasks']` — the caller with no tasks to report is one
+ * whose write moved nothing, and a refetch on its behalf would redraw rows that never changed.
+ *
+ * One function rather than a list at each call site, because the panel's Run now, the row's Run
+ * and the bulk Run all spend a schedule just as surely as cancelling one does, and they must not
+ * drift into refreshing different things. Exported for the same reason
+ * `invalidateAfterProjectTaskCreate` is: what a write refreshes has to be assertable against a
+ * seeded cache, since the buttons that trigger it are behind a mutation.
  *
  * Returns the refetches rather than firing and forgetting them, and every caller returns it from
  * its `onSuccess` — which is what keeps a mutation PENDING until the views have actually caught
@@ -181,16 +202,30 @@ export function canSaveTaskSchedule(draft: string, current: string): boolean {
  * answers and before a single query has refetched, so for that window it is enabled and showing
  * the schedule the write just replaced: an invitation to send the same request twice.
  */
+export function refreshManyTaskScheduleViews(
+  qc: QueryClient,
+  tasks: readonly TaskRefreshTarget[],
+): Promise<void> {
+  const taskIds = new Set(tasks.map((t) => t.id));
+  // Nothing at all for a task filed under no project, rather than an invalidation that matches
+  // nothing: an `undefined` in the key would make this a prefix of EVERY project's cache.
+  const projectIds = new Set(tasks.map((t) => t.projectId).filter((id): id is string => !!id));
+  if (taskIds.size === 0) return Promise.resolve();
+  return Promise.all([
+    ...[...taskIds].map((id) => qc.invalidateQueries({ queryKey: ['task', id] })),
+    qc.invalidateQueries({ queryKey: ['tasks'] }),
+    ...[...projectIds].map((id) => qc.invalidateQueries({ queryKey: ['project', id] })),
+  ]).then(() => undefined);
+}
+
+/**
+ * The same refresh for a single task — the shape the panel's schedule editor and its Run now have
+ * always called, kept so those call sites read as the one-task statements they are.
+ */
 export function refreshTaskScheduleViews(
   qc: QueryClient,
   taskId: string,
   projectId?: string | null,
 ): Promise<void> {
-  return Promise.all([
-    qc.invalidateQueries({ queryKey: ['task', taskId] }),
-    qc.invalidateQueries({ queryKey: ['tasks'] }),
-    // Nothing at all for a task filed under no project, rather than an invalidation that matches
-    // nothing: an `undefined` in the key would make this a prefix of EVERY project's cache.
-    ...(projectId ? [qc.invalidateQueries({ queryKey: ['project', projectId] })] : []),
-  ]).then(() => undefined);
+  return refreshManyTaskScheduleViews(qc, [{ id: taskId, projectId }]);
 }
