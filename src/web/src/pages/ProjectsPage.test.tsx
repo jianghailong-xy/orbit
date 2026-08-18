@@ -4,14 +4,16 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
-import { ProjectDetailPage, ProjectsPage } from './ProjectsPage';
+import { ProjectDetailPage, ProjectTaskLevel, ProjectsPage } from './ProjectsPage';
 
 // react-query never dispatches a fetch during a static (effect-free) render — confirmed by
 // instrumenting it directly, matching TaskListView.test.tsx's own note that these tests must
-// seed the cache instead of letting the real request run. So `api` is stubbed only as a
-// backstop against an accidental live call; the exact-endpoint check below reads the source
-// instead, since that's the only way to see which path the component's queryFn actually calls.
+// seed the cache instead of letting the real request run. So `api` is stubbed both as a backstop
+// against an accidental live call and as the place a URL shows up when a test calls a registered
+// queryFn by hand (see urlOf); the source-level endpoint check below is what fixes the shape of
+// every call, including the ones no test invokes.
 vi.mock('../api', () => ({ api: vi.fn(() => new Promise(() => {})) }));
 
 const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.meta.url)), 'utf8');
@@ -21,6 +23,9 @@ const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.m
 const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
+// A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
+// what goes on the wire has to be the short public id whichever spelling the row was handed.
+const T1 = '0195c0de-0000-7000-8000-0000000000a1';
 
 function renderPage(qc: QueryClient) {
   return renderToStaticMarkup(
@@ -91,14 +96,18 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id> and the root task page — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id> and the two task-page levels — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if a fourth
-    // api(...) call is added anywhere in the file. The arg pattern allows one level of nesting
-    // so encodeURIComponent(...)'s own paren doesn't cut the match short.
-    const apiCalls = [...source.matchAll(/\bapi(?:<[^>]*>)?\(((?:[^()]|\([^()]*\))*)\)/g)].map(
-      (m) => m[1].trim(),
+    // Fails if any call grows extra args or a query string, if a path changes, or if a fifth
+    // api(...) call is added anywhere in the file. The arg pattern allows two levels of nesting so
+    // that neither encodeURIComponent(...) nor the encodeId(...) inside it cuts the match short —
+    // a call it cannot parse drops out of this list entirely, which fails the assertion too.
+    const apiCalls = [
+      ...source.matchAll(/\bapi(?:<[^>]*>)?\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/g),
+    ].map(
+      // A call wrapped across lines keeps its trailing comma; the URL is what this asserts on.
+      (m) => m[1].trim().replace(/,$/, ''),
     );
     expect(apiCalls).toEqual([
       "'/projects'",
@@ -108,6 +117,12 @@ describe('ProjectsPage', () => {
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
       // of the URL that goes on the wire.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`',
+      // The level below a row: the same endpoint, plus exactly one `parentId`, carrying the id
+      // through encodeId so the server is named a parent the way it names one itself, and escaped
+      // like the path segment above. What each of these two fetches is asserted at runtime further
+      // down — base62 has nothing to escape, so the escaping itself is held here — and this list
+      // is what proves there is no THIRD task-page spelling and no fifth endpoint in the file.
+      '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
     ]);
     // ...that `id` is the normalized route id, not the raw param — the detail URL and the cache
     // key have to agree on one spelling...
@@ -500,5 +515,260 @@ describe('ProjectDetailPage — top-level tasks', () => {
     loaded.setQueryData(['project', encodeId(P1)], detail());
     renderDetail(loaded, encodeId(P1));
     expect(loaded.getQueryCache().find({ queryKey: key })).toBeDefined();
+  });
+});
+
+describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
+  // One row's children, keyed by project AND parent. Spelled out rather than imported, for the
+  // same reason tasksKey is: a key the component changes unilaterally has to break these tests.
+  const childKey = (projectUuid: string, parentTaskId: string) => [
+    'project',
+    encodeId(projectUuid),
+    'tasks',
+    'children',
+    parentTaskId,
+  ];
+
+  /** A detail page whose project and root task page both loaded, so the rows are on screen. */
+  function withRows(items: ReturnType<typeof task>[]) {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    qc.setQueryData(tasksKey(P1), { items, nextCursor: null });
+    return { qc, out: renderDetail(qc, encodeId(P1)) };
+  }
+
+  /** One opened level, mounted on its own: a static render cannot press the row's button, so this
+   *  is the only way to assert what an expansion actually puts on screen. */
+  function renderLevel(qc: QueryClient, projectId: string, parentTaskId: string) {
+    return renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <ProjectTaskLevel projectId={projectId} parentTaskId={parentTaskId} />
+      </QueryClientProvider>,
+    );
+  }
+
+  /** The URL a registered query would really fetch. The static render never dispatches it (see the
+   *  module comment), but the queryFn it registered is sitting in the cache — calling that by hand
+   *  reads the URL itself, where the source assertion above only reads the code that builds it. */
+  function urlOf(qc: QueryClient, queryKey: unknown[]): string {
+    const registered = qc.getQueryCache().find({ queryKey });
+    if (!registered) throw new Error(`nothing registered for ${JSON.stringify(queryKey)}`);
+    const apiMock = vi.mocked(api);
+    apiMock.mockClear();
+    void (registered.options.queryFn as (ctx: unknown) => unknown)({ queryKey });
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    return apiMock.mock.calls[0][0];
+  }
+
+  it('gives a row with children one closed disclosure, and asks for nothing until it opens', () => {
+    const { qc, out } = withRows([
+      task({ id: 't1', title: 'Has children', childCount: 3 }),
+      task({ id: 't2', title: 'Also has children', childCount: 1 }),
+    ]);
+
+    // One control per expandable row, each a real button with a name that says what it does —
+    // and `aria-expanded` on it, which is what makes it a disclosure to a reader who cannot see
+    // the indent it controls.
+    expect(out).toMatch(
+      /<button[^>]*aria-expanded="false"[^>]*>[^<]*<span>Show subtasks<\/span>/,
+    );
+    expect(out.match(/aria-expanded="[^"]*"/g)).toEqual([
+      'aria-expanded="false"',
+      'aria-expanded="false"',
+    ]);
+    expect(out).not.toContain('Hide subtasks'); // closed is the state it starts in
+
+    // Each control says which row it opens. The visible text is the same three words on every
+    // expandable row, so without this a reader tabbing through hears "Show subtasks" twice with
+    // nothing to choose between them — and it stays the literal prefix of the name, so the button
+    // is still reachable by what is written on it.
+    expect(out.match(/aria-label="[^"]*"/g)).toEqual([
+      'aria-label="Show subtasks for Has children"',
+      'aria-label="Show subtasks for Also has children"',
+    ]);
+    // The opened spelling is the same name in the other direction; only the source can show it,
+    // since a static render cannot flip the row.
+    expect(source).toMatch(
+      /aria-label=\{\s*expanded \? `Hide subtasks for \$\{task\.title\}` : `Show subtasks for \$\{task\.title\}`\s*\}/,
+    );
+
+    // ...and closed means NOT FETCHED, not merely not shown: the level component is the only
+    // thing that registers a child query, and a closed row does not render one at all. Two rows
+    // claiming four children between them still leave exactly the two queries this page had.
+    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+      ['project', encodeId(P1)],
+      tasksKey(P1),
+    ]);
+    expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();
+    expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't2') })).toBeUndefined();
+  });
+
+  it('gives a leaf row no expand control at all', () => {
+    // A control here would promise a level that does not exist, and pressing it would spend a
+    // request to learn what the row already says.
+    const { out } = withRows([task({ id: 't3', title: 'A leaf', childCount: 0 })]);
+    expect(out).toContain('A leaf');
+    expect(out).toContain('0 subtasks');
+    expect(out).not.toContain('Show subtasks');
+    expect(out).not.toContain('aria-expanded');
+    expect(out).not.toContain('aria-label');
+  });
+
+  it('mounts the opened level indented, and only inside the expanded branch', () => {
+    // The indent and the mount both live behind `expanded`, which a static render cannot flip —
+    // so this reads the one place both are decided. Rendering the level from anywhere else would
+    // make the child page eager, which the cache assertion above would then be blind to.
+    expect(source).toMatch(
+      /\{expanded \? \(\s*<div style=\{\{ marginLeft: 32, marginTop: 8 \}\}>\s*<ProjectTaskLevel projectId=\{projectId\} parentTaskId=\{task\.id\} \/>/,
+    );
+  });
+
+  it('requests exactly this parent’s direct children, at the task’s public id', () => {
+    // Handed the raw-UUID spelling, as a payload from before the public-id flip would give it.
+    const qc = newClient();
+    renderLevel(qc, 'p/1', T1);
+    const url = urlOf(qc, ['project', 'p/1', 'tasks', 'children', T1]);
+
+    // Exactly one parentId, carrying the short public id the server names a parent by — and a
+    // project id escaped into the path, chosen unescapable-looking on purpose because a real
+    // base62 id would hide a missing encodeURIComponent.
+    expect(url).toBe(`/projects/p%2F1/tasks/page?parentId=${encodeId(T1)}&limit=100`);
+    expect(url).not.toContain(T1); // the raw UUID must not reach the wire
+    expect(url.match(/parentId=/g)).toHaveLength(1);
+
+    // ...and an id that already arrived as a public id is sent unchanged, not encoded twice.
+    const already = newClient();
+    renderLevel(already, 'p/1', encodeId(T1));
+    expect(urlOf(already, ['project', 'p/1', 'tasks', 'children', encodeId(T1)])).toBe(
+      `/projects/p%2F1/tasks/page?parentId=${encodeId(T1)}&limit=100`,
+    );
+  });
+
+  it('still requests the root level with no parentId at all', () => {
+    // The two levels share an endpoint, so the root's own URL is asserted the same way: sending
+    // `parentId` here would quietly turn the top of the tree into one task's children.
+    const { qc } = withRows([task({ childCount: 2 })]);
+    const rootUrl = urlOf(qc, tasksKey(P1));
+    expect(rootUrl).toBe(`/projects/${encodeId(P1)}/tasks/page?limit=100`);
+    expect(rootUrl).not.toContain('parentId');
+  });
+
+  it('keys every level by project and parent, so no two levels can collide', () => {
+    const qc = newClient();
+    qc.setQueryData(childKey(P1, 't1'), {
+      items: [task({ id: 'c1', title: 'Only under t1 of P1' })],
+      nextCursor: null,
+    });
+
+    // Seeded under one parent, read back only there...
+    expect(renderLevel(qc, encodeId(P1), 't1')).toContain('Only under t1 of P1');
+    // ...not by a sibling level of the same project (a key missing the parent id)...
+    expect(renderLevel(qc, encodeId(P1), 't2')).not.toContain('Only under t1 of P1');
+    // ...and not by the same-looking level of another project (a key missing the project id).
+    expect(renderLevel(qc, encodeId(P2), 't1')).not.toContain('Only under t1 of P1');
+    // Nor does any of them land on the root entry, which is the level with no parent at all.
+    expect(qc.getQueryCache().find({ queryKey: tasksKey(P1) })).toBeUndefined();
+  });
+
+  it('renders the direct children in full, each expandable one level at a time', () => {
+    const longCriteria = 'Every breakpoint matches the comp. '.repeat(10);
+    const qc = newClient();
+    qc.setQueryData(childKey(P1, 't1'), {
+      items: [
+        task({ id: 'c1', title: 'First child', status: 'IN_PROGRESS', acceptanceCriteria: longCriteria, childCount: 2 }),
+        task({ id: 'c2', title: 'Second child', status: 'DONE', acceptanceCriteria: null, childCount: 1 }),
+        task({ id: 'c3', title: 'Third child', status: 'CANCELLED', childCount: 0 }),
+      ],
+      nextCursor: null,
+    });
+    const out = renderLevel(qc, encodeId(P1), 't1');
+
+    // The same row as the root list: whole title, status tag, criteria excerpt or fallback, count.
+    expect(out).toContain('First child');
+    expect(out).toContain('IN_PROGRESS');
+    expect(out).toContain(`${longCriteria.slice(0, 180)}…`);
+    expect(out).not.toContain(longCriteria);
+    expect(out).toContain('Second child');
+    expect(out).toContain('No acceptance criteria set');
+    expect(out).toContain('Third child');
+    expect(out).toContain('2 subtasks');
+    expect(out).toContain('1 subtask');
+    expect(out).not.toContain('1 subtasks');
+    expect(out).toContain('0 subtasks');
+
+    // Recursive, but still one level per press: the two children that have children of their own
+    // get their own closed disclosure, the leaf gets none...
+    expect(out.match(/aria-expanded="[^"]*"/g)).toEqual([
+      'aria-expanded="false"',
+      'aria-expanded="false"',
+    ]);
+    // ...and none of THEIR levels is fetched either, so opening one row never opens a subtree.
+    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([childKey(P1, 't1')]);
+  });
+
+  it('spins inside the row while the child page is still loading', () => {
+    // Nothing seeded for this level: react-query reports the pending state on first render, which
+    // is a state of its own rather than a row that silently opened onto nothing.
+    const out = renderLevel(newClient(), encodeId(P1), 't1');
+    expect(out).toContain('ant-spin');
+    expect(out).not.toContain('No subtasks');
+  });
+
+  it('shows a failed level’s own error and Retry, without taking anything else down', async () => {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    qc.setQueryData(tasksKey(P1), { items: [task({ id: 't1', childCount: 2 })], nextCursor: null });
+    await qc.prefetchQuery({
+      queryKey: childKey(P1, 't1'),
+      queryFn: () => Promise.reject(new Error('subtasks down')),
+    });
+
+    // The level says what went wrong, in place, and offers the one thing that can fix it.
+    const level = renderLevel(qc, encodeId(P1), 't1');
+    expect(level).toContain('Subtasks could not be loaded');
+    expect(level).toContain('subtasks down');
+    expect(level).toContain('Retry');
+
+    // And it is its own cache entry, so the page it hangs off is untouched: the project, the root
+    // list and the parent row all still render, and the root reports no error of its own.
+    const page = renderDetail(qc, encodeId(P1));
+    expect(page).toContain('Website Revamp');
+    expect(page).toContain('Design the landing page');
+    expect(page).toContain('Show subtasks');
+    expect(page).not.toContain('Tasks could not be loaded');
+    expect(page).not.toContain('Project could not be loaded');
+    expect(page).not.toContain('Subtasks could not be loaded');
+  });
+
+  it('names the stale count when a child page comes back empty', () => {
+    // Only a row claiming children can open a level, so nothing here is not "a leaf" — it is a
+    // count the row is still showing after the children went away.
+    const qc = newClient();
+    qc.setQueryData(childKey(P1, 't1'), { items: [], nextCursor: null });
+    const out = renderLevel(qc, encodeId(P1), 't1');
+    expect(out).toContain('No subtasks — the count on this row is out of date');
+    expect(out).not.toContain('ant-spin');
+  });
+
+  it('says more subtasks exist when the child page returns a cursor — without a pager', () => {
+    const qc = newClient();
+    qc.setQueryData(childKey(P1, 't1'), {
+      items: [task({ id: 'c1', title: 'First child' })],
+      nextCursor: 'eyJjcmVhdGVkQXQiOiIifQ',
+    });
+    const out = renderLevel(qc, encodeId(P1), 't1');
+    expect(out).toContain('More subtasks exist beyond this first page');
+    // This unit reads one page per level and sends no cursor, so it must not offer a control that
+    // would — the same promise the root list makes.
+    expect(out).not.toMatch(/Load more|Show more|Next page/i);
+  });
+
+  it('stays silent about further subtasks when the server returns no cursor', () => {
+    const qc = newClient();
+    qc.setQueryData(childKey(P1, 't1'), {
+      items: [task({ id: 'c1', title: 'First child' })],
+      nextCursor: null,
+    });
+    expect(renderLevel(qc, encodeId(P1), 't1')).not.toContain('More subtasks exist');
   });
 });

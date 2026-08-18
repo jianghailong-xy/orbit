@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Empty, List, Spin, Tag, Typography } from 'antd';
 import { Link, useParams } from 'react-router-dom';
@@ -121,8 +122,8 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
 }
 
 /** Read-only detail for one project: what it's for, how anyone would know it got there, and where
- *  its tasks stand — down to a row per top-level task. Still no row interaction and no writes: the
- *  task rows are read-only, and nothing below them is expanded. */
+ *  its tasks stand — down to a row per top-level task, and from there down to whichever levels
+ *  the reader opens. Still no writes: every row is read-only, however deep it sits. */
 export function ProjectDetailPage() {
   const params = useParams();
   // The route param can still arrive as a raw UUID (an old bookmark, a pasted link), so normalize
@@ -238,16 +239,18 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
 };
 
 /**
- * The project's top-level tasks, read-only: the first page of them and nothing below them.
+ * The project's top-level tasks, read-only: the first page of them, each of which can be opened
+ * onto its own direct children.
  *
  * Its own query rather than a field on the project, because the tree is paged and the project
  * document is not — folding one into the other would make every project read pay for a page of
  * tasks. Sending no `parentId` is what asks for the root level specifically, so the key names that
- * level too: the subtask pages that will hang off these rows later are the same endpoint with a
- * `parentId`, and they must not land on this entry.
+ * level too: the subtask pages hanging off these rows are the same endpoint with a `parentId`,
+ * and they must not land on this entry.
  *
- * `childCount` is rendered but never followed. Expanding a row is the next unit's job; this one
- * only promises that the number a row shows is the number expanding it would return.
+ * Only this level is fetched here. A row's own children are read by that row, and only once it is
+ * opened — so a project with a deep tree still costs exactly one request until the reader asks for
+ * more.
  */
 function ProjectTasks({ projectId }: { projectId: string }) {
   const tasks = useQuery({
@@ -281,23 +284,7 @@ function ProjectTasks({ projectId }: { projectId: string }) {
           <List
             dataSource={tasks.data.items}
             rowKey="id"
-            renderItem={(t) => (
-              <List.Item>
-                <List.Item.Meta
-                  // Title in full: a task's title is its identity, and a half-read one names a
-                  // different task. The long-form field underneath is what gets cut instead.
-                  title={
-                    <span>
-                      {t.title} <Tag color={TASK_STATUS_COLOR[t.status]}>{t.status}</Tag>
-                    </span>
-                  }
-                  description={excerpt(t.acceptanceCriteria, 'No acceptance criteria set')}
-                />
-                <div>
-                  {t.childCount} subtask{t.childCount === 1 ? '' : 's'}
-                </div>
-              </List.Item>
-            )}
+            renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
           />
           {/* Said outright rather than shown as a button: this unit reads one page and sends no
               cursor, so a silent stop here would read as "that is all of them". */}
@@ -311,5 +298,138 @@ function ProjectTasks({ projectId }: { projectId: string }) {
         <Empty description="No top-level tasks yet" />
       )}
     </div>
+  );
+}
+
+/**
+ * One read-only task row, plus — once the reader asks — the level directly beneath it.
+ *
+ * `expanded` lives here, per row, rather than in a set held by the page: keeping it local is what
+ * makes the child page lazy, because a closed row renders no level component at all, so no child
+ * query is even registered, let alone sent. Closing the row unmounts it again.
+ *
+ * The same component renders those children, so a subtask that has subtasks of its own gets the
+ * same control and opens the same way — one level per press, never a whole subtree at once.
+ */
+function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectTask }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <List.Item style={{ display: 'block' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <List.Item.Meta
+          // Title in full: a task's title is its identity, and a half-read one names a
+          // different task. The long-form field underneath is what gets cut instead.
+          title={
+            <span>
+              {task.title} <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
+            </span>
+          }
+          description={excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}
+        />
+        <div>
+          {task.childCount} subtask{task.childCount === 1 ? '' : 's'}
+        </div>
+        {/* Only where there is a level to open: on a leaf, a control would promise one that does
+            not exist. `aria-expanded` is what makes it a disclosure rather than a plain button —
+            it tells a reader who cannot see the indent which way this row currently sits. */}
+        {task.childCount > 0 ? (
+          <Button
+            size="small"
+            aria-expanded={expanded}
+            // The visible text alone is the same three words on every expandable row, so a reader
+            // moving between controls hears "Show subtasks" over and over with nothing to tell
+            // them apart. The label names the row; the visible text stays its literal prefix, so
+            // voice control still reaches it by what is on screen.
+            aria-label={
+              expanded ? `Hide subtasks for ${task.title}` : `Show subtasks for ${task.title}`
+            }
+            onClick={() => setExpanded((open) => !open)}
+          >
+            {expanded ? 'Hide subtasks' : 'Show subtasks'}
+          </Button>
+        ) : null}
+      </div>
+
+      {expanded ? (
+        <div style={{ marginLeft: 32, marginTop: 8 }}>
+          <ProjectTaskLevel projectId={projectId} parentTaskId={task.id} />
+        </div>
+      ) : null}
+    </List.Item>
+  );
+}
+
+/**
+ * One task's direct children — the same endpoint the root list reads, with a `parentId`.
+ *
+ * The id goes on the wire through `encodeId`, like every link in the app: what a payload calls
+ * `task.id` is a moving target across the public-id migration, and the server names a parent by
+ * its short public id. It is idempotent, so an id that already arrived in that spelling is sent
+ * unchanged. The cache key keeps the spelling it was handed instead — every row in one render
+ * comes from one payload, and normalizing there would throw on an id `encodeId` cannot read.
+ *
+ * Keyed by project AND parent task, so neither two levels of one project nor the same-looking
+ * level of two projects can share an entry. Every state it can be in is rendered in place, inside
+ * the row that opened it: a level that fails takes down its own contents and nothing else, leaving
+ * the parent row, its siblings and the root list exactly where they were.
+ *
+ * Exported for tests: a static render cannot press the row's button, so mounting this directly is
+ * the only way to assert what an opened level shows.
+ */
+export function ProjectTaskLevel({
+  projectId,
+  parentTaskId,
+}: {
+  projectId: string;
+  parentTaskId: string;
+}) {
+  const children = useQuery({
+    queryKey: ['project', projectId, 'tasks', 'children', parentTaskId],
+    queryFn: () =>
+      api<ProjectTaskPage>(
+        `/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`,
+      ),
+  });
+
+  return children.isLoading ? (
+    <div style={{ padding: 12, textAlign: 'center' }}>
+      <Spin size="small" />
+    </div>
+  ) : children.isError ? (
+    <Alert
+      type="error"
+      showIcon
+      message="Subtasks could not be loaded"
+      description={children.error instanceof Error ? children.error.message : undefined}
+      action={
+        <Button size="small" danger onClick={() => children.refetch()}>
+          Retry
+        </Button>
+      }
+    />
+  ) : children.data && children.data.items.length > 0 ? (
+    <>
+      <List
+        size="small"
+        dataSource={children.data.items}
+        rowKey="id"
+        renderItem={(child) => <ProjectTaskRow projectId={projectId} task={child} />}
+      />
+      {/* Same reason as the root list: one page, no cursor sent, so stopping silently would read
+          as "that is all of them". */}
+      {children.data.nextCursor ? (
+        <Typography.Text type="secondary">
+          More subtasks exist beyond this first page.
+        </Typography.Text>
+      ) : null}
+    </>
+  ) : (
+    // The only way to reach this level is a row that claimed at least one child, so an empty page
+    // is not "a leaf" — it is a count that has since moved on.
+    <Empty
+      image={Empty.PRESENTED_IMAGE_SIMPLE}
+      description="No subtasks — the count on this row is out of date"
+    />
   );
 }
