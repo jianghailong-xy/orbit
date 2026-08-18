@@ -7,12 +7,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
 import {
+  EMPTY_NEW_TASK_DRAFT,
+  NewProjectTaskForm,
   ProjectCoordinatorControl,
   ProjectDetailPage,
   ProjectTaskLevel,
   ProjectsPage,
   coordinatorSessionPath,
+  createProjectTask,
+  invalidateAfterProjectTaskCreate,
+  newProjectTaskBody,
   openProjectCoordinator,
+  type NewProjectTaskDraft,
 } from './ProjectsPage';
 
 // react-query never dispatches a fetch during a static (effect-free) render — confirmed by
@@ -106,10 +112,10 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the coordinator POST and the two task-page levels — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the coordinator POST, the two task-page levels and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if a sixth
+    // Fails if any call grows extra args or a query string, if a path changes, or if a seventh
     // api(...) call is added anywhere in the file. The arg pattern allows two levels of nesting so
     // that neither encodeURIComponent(...) nor the encodeId(...) inside it cuts the match short —
     // a call it cannot parse drops out of this list entirely, which fails the assertion too.
@@ -140,6 +146,12 @@ describe('ProjectsPage', () => {
       // down — base62 has nothing to escape, so the escaping itself is held here — and this list
       // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
+      // The second WRITE, and the only one that creates anything: a top-level task in this
+      // project. The path is the generic task collection rather than a nested project route —
+      // `projectId` is a field of the body, which is why it is built in one place instead of
+      // interpolated here. What that body carries, and what it deliberately leaves out, is
+      // asserted at runtime further down.
+      "'/tasks', { method: 'POST', body: newProjectTaskBody(projectId, draft) }",
     ]);
     // ...that `id` is the normalized route id, not the raw param — the detail URL and the cache
     // key have to agree on one spelling...
@@ -148,6 +160,12 @@ describe('ProjectsPage', () => {
     // `/projects/` on the wire the moment the param went missing.
     expect(source).not.toMatch(/routeId\(params\.id\)\s*\?\?/);
     expect(source).toContain('enabled: Boolean(id)');
+    // The New task form's three option sources are read through the shared query factories, not
+    // re-spelled here — which is what keeps the list above a complete account of this file's
+    // requests, and what keeps its keys identical to the ones the task panel's pickers use.
+    expect(source).toContain(
+      "import { providersQuery, runnersQuery, workspacesQuery } from '../lib/queries';",
+    );
   });
 
   it('renders each project’s title, status, task count and goal excerpt/fallback', () => {
@@ -972,5 +990,347 @@ describe('ProjectDetailPage — coordinator', () => {
     expect(out).toContain('Coordinator');
     expect(out).toContain('Start coordinator');
     expect(out).toContain('boom');
+  });
+});
+
+describe('ProjectDetailPage — creating a top-level task', () => {
+  // The three option sources the form reads, at the shared factories' own keys. Seeded rather than
+  // stubbed, exactly like every other query on this page.
+  const WORKSPACES = [
+    { id: 'w-codex', name: 'Builder', runnerId: 'r1', provider: 'codex' },
+    { id: 'w-plain', name: 'Drafter', runnerId: 'r1', provider: null },
+    { id: 'w-none', name: 'Runnerless', runnerId: null, provider: 'claude' },
+  ];
+  const PROVIDERS = [
+    {
+      slug: 'acme',
+      label: 'Acme',
+      runtime: 'claude',
+      models: [{ value: 'acme-1', label: 'Acme One' }],
+    },
+  ];
+  const RUNNERS = [
+    {
+      id: 'r1',
+      modelCatalog: {
+        codex: [{ value: 'gpt-5.6-sol', label: 'GPT-5.6 Sol' }],
+        claude: [{ value: 'claude-opus-5', label: 'Opus 5' }],
+      },
+    },
+  ];
+
+  /** The form on its own, in one state. An antd Modal renders through a portal, which a static
+   *  render produces NO markup for at all — so the body mounted directly is the only place the
+   *  dialog's fields can be read. */
+  function renderForm(
+    draft: NewProjectTaskDraft,
+    over: { error?: Error | null; pending?: boolean; seed?: (qc: QueryClient) => void } = {},
+  ) {
+    const qc = newClient();
+    qc.setQueryData(['workspaces'], WORKSPACES);
+    qc.setQueryData(['providers'], PROVIDERS);
+    qc.setQueryData(['runners'], RUNNERS);
+    over.seed?.(qc);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <NewProjectTaskForm
+          draft={draft}
+          onChange={() => {}}
+          error={over.error ?? null}
+          pending={over.pending ?? false}
+        />
+      </QueryClientProvider>,
+    );
+    // The renderer escapes the apostrophe in "Assignee's"; comparing against the text a reader
+    // sees keeps that entity out of the assertions below.
+    return html.replace(/&#x27;/g, "'");
+  }
+
+  /** The one call `createProjectTask` makes, read off the module mock — the same shape the
+   *  coordinator POST is asserted with. */
+  function postOf(projectId: string, draft: NewProjectTaskDraft) {
+    const apiMock = vi.mocked(api);
+    apiMock.mockClear();
+    void createProjectTask(projectId, draft);
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const [path, init] = apiMock.mock.calls[0];
+    return [path, (init ?? {}) as { method?: string; body?: Record<string, unknown> }] as const;
+  }
+
+  it('offers New task beside the heading, whatever the list underneath is doing', async () => {
+    const listed = newClient();
+    listed.setQueryData(['project', encodeId(P1)], detail());
+    listed.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
+    // A real button, named by what is written on it, next to the section it adds to.
+    expect(renderDetail(listed, encodeId(P1))).toMatch(
+      /<button[^>]*>[^<]*<span>New task<\/span>/,
+    );
+
+    // A project with no tasks is exactly where this is most needed...
+    const empty = newClient();
+    empty.setQueryData(['project', encodeId(P1)], detail({ _count: { tasks: 0 }, tasksByStatus: {} }));
+    empty.setQueryData(tasksKey(P1), { items: [], nextCursor: null });
+    const emptyOut = renderDetail(empty, encodeId(P1));
+    expect(emptyOut).toContain('No top-level tasks yet');
+    expect(emptyOut).toContain('New task');
+
+    // ...and a page of tasks that failed to load says nothing about whether another can be added.
+    const failed = newClient();
+    failed.setQueryData(['project', encodeId(P1)], detail());
+    await failed.prefetchQuery({
+      queryKey: tasksKey(P1),
+      queryFn: () => Promise.reject(new Error('tasks down')),
+    });
+    const failedOut = renderDetail(failed, encodeId(P1));
+    expect(failedOut).toContain('Tasks could not be loaded');
+    expect(failedOut).toContain('New task');
+
+    // Only the project itself gates it: with nothing to create a task under, there is no offer.
+    expect(renderDetail(newClient(), encodeId(P1))).not.toContain('New task');
+  });
+
+  it('posts one top-level task to /tasks, in this project, carrying every choice made', () => {
+    const [path, init] = postOf(encodeId(P1), {
+      title: 'Ship the pricing page',
+      description: 'Copy is signed off; wire it up',
+      assigneeId: 'w-codex',
+      provider: 'acme',
+      model: 'acme-1',
+    });
+
+    expect(path).toBe('/tasks');
+    expect(init.method).toBe('POST');
+    expect(init.body).toEqual({
+      projectId: encodeId(P1),
+      title: 'Ship the pricing page',
+      description: 'Copy is signed off; wire it up',
+      assigneeId: 'w-codex',
+      provider: 'acme',
+      model: 'acme-1',
+    });
+
+    // The project is fixed by the page, never picked in the form: whatever else the reader
+    // chooses, the task lands under the project whose page they are on.
+    expect(init.body!.projectId).toBe(encodeId(P1));
+    // ...and it is a ROOT task. A `parentTaskId` here would file it under some row instead, which
+    // is a different control on a different unit.
+    expect(init.body).not.toHaveProperty('parentTaskId');
+    // ...and the draft has no field for one, so no caller can reintroduce it through this path.
+    const draftFields = source.match(/export interface NewProjectTaskDraft \{([^}]*)\}/)?.[1] ?? '';
+    expect(draftFields).toContain('title: string;');
+    expect(draftFields).not.toContain('parentTaskId');
+  });
+
+  it('says "inherit" by leaving the field out, never by copying the assignee’s provider', () => {
+    // An assignee that HAS a provider, and no pin of its own. The wire body must carry the
+    // assignee and nothing about providers: absent is what the server reads as "inherit".
+    const body = newProjectTaskBody(encodeId(P1), {
+      title: 'Draft the migration plan',
+      assigneeId: 'w-codex',
+    });
+    expect(body).toEqual({ projectId: encodeId(P1), title: 'Draft the migration plan', assigneeId: 'w-codex' });
+    // Absent, not null and not '': `'provider' in body` is what tells those three apart, and only
+    // the first one inherits — a null would pin "no provider" and an '' would pin an empty slug.
+    expect('provider' in body).toBe(false);
+    expect('model' in body).toBe(false);
+
+    // Nothing at all chosen reduces to the two fields the page itself decides.
+    expect(Object.keys(newProjectTaskBody(encodeId(P1), { title: 'Bare' }))).toEqual([
+      'projectId',
+      'title',
+    ]);
+    // The reset state is that same nothing: reopening the dialog after a create cannot leave a
+    // previous task's pins behind on the next one.
+    expect(EMPTY_NEW_TASK_DRAFT).toEqual({ title: '' });
+
+    // The resolved provider exists in the form, but only to decide which models are OFFERED — it
+    // is never written back into the draft, which is the one way a copy could reach the body.
+    expect(source).toContain(
+      'const effectiveProvider = draft.provider ?? assignee?.provider ?? null;',
+    );
+    expect(source).not.toMatch(/provider:\s*effectiveProvider/);
+    expect(source).not.toMatch(/provider:\s*assignee[?.]/);
+  });
+
+  it('trims the title, drops an empty description, and refuses a title of only spaces', () => {
+    expect(
+      newProjectTaskBody(encodeId(P1), { title: '  Ship the pricing page  ', description: '  ' }),
+    ).toEqual({ projectId: encodeId(P1), title: 'Ship the pricing page' });
+
+    // A description that is really there survives, trimmed.
+    expect(
+      newProjectTaskBody(encodeId(P1), { title: 'x', description: '  wire it up  ' }).description,
+    ).toBe('wire it up');
+
+    // Whitespace-only never gets as far as the body: the dialog's own action is disabled, which a
+    // static render cannot reach (portal), so this reads the one place it is decided. `@MinLength(1)`
+    // on the server would happily accept '   ' — the trim is what makes this a real check.
+    expect(source).toContain('const titled = draft.title.trim().length > 0;');
+    expect(source).toContain('okButtonProps={{ disabled: !titled }}');
+  });
+
+  it('keeps OpenCode’s managed-model choice, which is an empty string rather than no choice', () => {
+    // '' is a real selection in OpenCode's model space ("Managed by OpenCode"), so it has to reach
+    // the wire — dropping it as falsy would silently fall back to inheriting the assignee's model.
+    const chosen = newProjectTaskBody(encodeId(P1), { title: 'x', provider: 'opencode', model: '' });
+    expect(chosen.model).toBe('');
+    expect('model' in chosen).toBe(true);
+    // Where nothing was picked at all, the field stays absent.
+    expect('model' in newProjectTaskBody(encodeId(P1), { title: 'x', provider: 'opencode' })).toBe(false);
+  });
+
+  it('shows Title, Description, Assignee, Provider and Model, holding what it was handed', () => {
+    const out = renderForm({
+      title: 'Ship the pricing page',
+      description: 'Copy is signed off',
+      assigneeId: 'w-codex',
+    });
+
+    expect(out).toContain('>Title<');
+    expect(out).toContain('>Description<');
+    expect(out).toContain('>Assignee<');
+    expect(out).toContain('>Provider<');
+    expect(out).toContain('>Model<');
+
+    // The values are rendered, not merely accepted: a field that dropped what was typed would
+    // still show its label.
+    expect(out).toContain('value="Ship the pricing page"');
+    expect(out).toContain('Copy is signed off');
+    // The assignee is shown by NAME, which can only come from the workspaces the form read.
+    expect(out).toContain('>Builder<');
+  });
+
+  it('lists models from the effective provider and the assignee runner’s own catalogue', () => {
+    // No pin: the model space is the ASSIGNEE's provider (codex), read out of that runner's
+    // catalogue under the codex key. The picker renders the option's LABEL, so a model id that
+    // resolves to its catalogue name is proof the list was built from that catalogue.
+    expect(renderForm({ title: 'x', assigneeId: 'w-codex', model: 'gpt-5.6-sol' })).toContain(
+      '>GPT-5.6 Sol<',
+    );
+
+    // A pin of its own wins over the assignee's: the same assignee with a configured provider
+    // pinned reads that provider's own model list instead, never the runtime's.
+    const pinned = renderForm({ title: 'x', assigneeId: 'w-codex', provider: 'acme', model: 'acme-1' });
+    expect(pinned).toContain('>Acme One<');
+    // ...and the provider box names it, which is only possible if configured providers are merged
+    // in alongside the built-ins.
+    expect(pinned).toContain('>Acme<');
+    expect(source).toContain('options={mergedProviderOptions(configuredProviders)}');
+
+    // A built-in pin resolves to its built-in label, from the same merged list.
+    expect(renderForm({ title: 'x', provider: 'codex' })).toContain('>Codex<');
+
+    // An id the catalogue does not name — one whose runner retired it while the dialog was open
+    // — still renders as itself rather than vanishing out of the box it is sitting in.
+    expect(renderForm({ title: 'x', assigneeId: 'w-codex', model: 'claude-opus-5' })).toContain(
+      '>claude-opus-5<',
+    );
+  });
+
+  it('names the provider a task would inherit instead of pre-selecting it', () => {
+    // An assignee with a provider: the box stays EMPTY and says what would be inherited. A
+    // pre-selected value here would be the copy that turns inheriting into pinning.
+    const inherited = renderForm({ title: 'x', assigneeId: 'w-codex' });
+    expect(inherited).toContain("Assignee's (codex)");
+    expect(inherited).toContain('ant-select-selection-placeholder');
+    expect(inherited).not.toContain('>Codex<');
+
+    // An assignee with no provider of its own inherits the server's own claude fallback...
+    expect(renderForm({ title: 'x', assigneeId: 'w-plain' })).toContain("Assignee's (claude)");
+    // ...and with no assignee there is nothing to name, so it says only whose it will be.
+    const unassigned = renderForm({ title: 'x' });
+    expect(unassigned).toContain("Assignee's");
+    expect(unassigned).not.toContain("Assignee's (");
+    // The model box says the same kind of thing for the same reason.
+    expect(unassigned).toContain('Provider default');
+  });
+
+  it('drops the chosen model whenever the provider OR the assignee changes', () => {
+    // A model id only means anything inside one provider's model space, and an unpinned task takes
+    // that space from its assignee — so both pickers have to carry the model out with them. The
+    // handlers are inline in JSX, which a static render reduces to markup with no way back to the
+    // function, so this reads the one place each transition is written.
+    expect(source).toContain(
+      'onChange={(val) => onChange({ ...draft, provider: val ?? undefined, model: undefined })}',
+    );
+    // Reassigning is the case that would otherwise submit an id from the PREVIOUS assignee's
+    // runner catalogue against the new one's runtime.
+    expect(source).toContain(
+      'onChange={(val) => onChange({ ...draft, assigneeId: val ?? undefined, model: undefined })}',
+    );
+    // The model's own handler must NOT clear back the other way: picking a model says nothing
+    // about who runs it or on what.
+    expect(source).toContain('onChange={(val) => onChange({ ...draft, model: val ?? undefined })}');
+    expect(source).not.toMatch(/model: val \?\? undefined, (provider|assigneeId): undefined/);
+  });
+
+  it('shows the server’s own message inline, leaving everything that was typed on screen', () => {
+    // The real shape of a rejection a reader can act on: it names the field. Summarised into
+    // "failed" it would be unactionable, so it arrives whole.
+    const message = 'provider must be one of the built-in engines or a provider you have enabled';
+    const out = renderForm(
+      { title: 'Ship the pricing page', description: 'Copy is signed off', assigneeId: 'w-codex' },
+      { error: new Error(message) },
+    );
+    expect(out).toContain('Task could not be created');
+    expect(out).toContain(message);
+    // Inline: the draft is still there to correct, which is what makes the dialog's own Create
+    // button the retry — so there is no second Retry control repeating it.
+    expect(out).toContain('value="Ship the pricing page"');
+    expect(out).toContain('Copy is signed off');
+    expect(out).toContain('>Builder<');
+    expect(out).not.toContain('Retry');
+  });
+
+  it('refreshes the level the task landed in, the project’s tallies and the task views', () => {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
+    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
+    // Another project's page, open in another tab: it must not be dragged along.
+    qc.setQueryData(['project', encodeId(P2)], detail({ id: P2 }));
+    qc.setQueryData(tasksKey(P2), { items: [], nextCursor: null });
+
+    invalidateAfterProjectTaskCreate(qc, encodeId(P1));
+
+    const invalidated = (key: unknown[]) =>
+      qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
+    // The row the new task appears in...
+    expect(invalidated(tasksKey(P1))).toBe(true);
+    // ...the document whose total and per-status tallies it moved...
+    expect(invalidated(['project', encodeId(P1)])).toBe(true);
+    // ...the list row carrying the same count...
+    expect(invalidated(['projects'])).toBe(true);
+    // ...and the task views elsewhere in the app, which have never heard of this page.
+    expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
+    // Scoped, though: another project's page is left exactly where it was.
+    expect(invalidated(['project', encodeId(P2)])).toBe(false);
+    expect(invalidated(tasksKey(P2))).toBe(false);
+  });
+
+  it('empties the form and closes the dialog once the task exists', () => {
+    // Both live in the mutation's onSuccess, behind a button no static render can press.
+    expect(source).toMatch(
+      /onSuccess: \(\) => \{\s*setDraft\(EMPTY_NEW_TASK_DRAFT\);\s*onClose\(\);\s*invalidateAfterProjectTaskCreate\(qc, projectId\);/,
+    );
+    // The project the task is created under is the page's own normalized id, handed down from the
+    // route — never re-derived, and never picked in the form.
+    expect(source).toContain('<ProjectTasks projectId={id} />');
+    expect(source).toContain('projectId={projectId}');
+  });
+
+  it('costs nothing until it is opened', () => {
+    // The dialog is mounted with the section, but its body — and therefore the three option
+    // queries it reads — only renders once it opens. Reading a project must not fetch the
+    // workspaces, providers and runners of a task nobody has asked to create.
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail());
+    qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
+    renderDetail(qc, encodeId(P1));
+    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
+      ['project', encodeId(P1)],
+      tasksKey(P1),
+    ]);
   });
 });

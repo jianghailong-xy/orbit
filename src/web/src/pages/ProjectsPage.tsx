@@ -1,9 +1,15 @@
-import { useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Alert, Button, Empty, List, Spin, Tag, Typography } from 'antd';
+import { useMemo, useState, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
+import { providersQuery, runnersQuery, workspacesQuery } from '../lib/queries';
+import {
+  mergedProviderOptions,
+  modelOptionsForProvider,
+  type ConfiguredProvider,
+} from '../lib/workspaceDefaults';
 
 interface Project {
   id: string;
@@ -373,6 +379,9 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
  * more.
  */
 function ProjectTasks({ projectId }: { projectId: string }) {
+  // The dialog is opened from here rather than owning its own trigger, so the section that lists
+  // the level a new task lands in is also the thing that offers to add one to it.
+  const [creating, setCreating] = useState(false);
   const tasks = useQuery({
     queryKey: ['project', projectId, 'tasks', 'root'],
     queryFn: () =>
@@ -381,7 +390,15 @@ function ProjectTasks({ projectId }: { projectId: string }) {
 
   return (
     <div style={{ marginBottom: 24 }}>
-      <Typography.Title level={4}>Tasks</Typography.Title>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography.Title level={4}>Tasks</Typography.Title>
+        {/* Beside the heading, not inside the list: it is still offered on a project whose page
+            of tasks is empty, still loading, or failed to load — none of which says anything
+            about whether another task can be added. */}
+        <Button type="primary" onClick={() => setCreating(true)}>
+          New task
+        </Button>
+      </div>
 
       {tasks.isLoading ? (
         <div style={{ padding: 24, textAlign: 'center' }}>
@@ -417,6 +434,12 @@ function ProjectTasks({ projectId }: { projectId: string }) {
       ) : (
         <Empty description="No top-level tasks yet" />
       )}
+
+      <NewProjectTaskModal
+        projectId={projectId}
+        open={creating}
+        onClose={() => setCreating(false)}
+      />
     </div>
   );
 }
@@ -551,5 +574,277 @@ export function ProjectTaskLevel({
       image={Empty.PRESENTED_IMAGE_SIMPLE}
       description="No subtasks — the count on this row is out of date"
     />
+  );
+}
+
+/**
+ * What the New task form holds while it is being filled in.
+ *
+ * Only the title is required. Every other field is `undefined` until it is actually chosen, and
+ * that distinction is load-bearing rather than incidental — see `newProjectTaskBody`.
+ */
+export interface NewProjectTaskDraft {
+  title: string;
+  description?: string;
+  assigneeId?: string;
+  provider?: string;
+  model?: string;
+}
+
+/** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
+export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
+
+/**
+ * The body `POST /tasks` is given, from a draft and the project it is being created under.
+ *
+ * What is absent from it is the point. A task with no provider pin inherits its assignee's, and
+ * the way to say that is to send no `provider` at all — not `null`, and above all not a copy of
+ * whichever provider the assignee happens to use today. Writing that value in would freeze it: the
+ * assignee moving to another provider would stop carrying this task along with it, which is the
+ * whole difference between inheriting and pinning.
+ *
+ * `''` is not "unselected" — it is OpenCode's own managed-model choice, a real selection — so what
+ * is tested for is null/undefined rather than falsiness. The title is trimmed here, at the one
+ * place the wire value is built, so no caller can send the untrimmed one.
+ */
+export function newProjectTaskBody(
+  projectId: string,
+  draft: NewProjectTaskDraft,
+): Record<string, string> {
+  const body: Record<string, string> = { projectId, title: draft.title.trim() };
+  const description = draft.description?.trim();
+  if (description) body.description = description;
+  if (draft.assigneeId != null) body.assigneeId = draft.assigneeId;
+  if (draft.provider != null) body.provider = draft.provider;
+  if (draft.model != null) body.model = draft.model;
+  return body;
+}
+
+/** Create one TOP-LEVEL task in this project. No `parentTaskId`: a subtask belongs to the row it
+ *  hangs under, and this dialog is opened from the section that lists the root level. */
+export function createProjectTask(projectId: string, draft: NewProjectTaskDraft): Promise<unknown> {
+  return api('/tasks', { method: 'POST', body: newProjectTaskBody(projectId, draft) });
+}
+
+/**
+ * What a newly created task changes, refreshed together.
+ *
+ * `['project', projectId]` is a PREFIX of the root-task page's key, so one invalidation covers both
+ * the project document — whose total and per-status tallies the new task moved — and the level the
+ * task was just added to. `['projects']` carries the same count on the list row, and `['tasks']`
+ * is the prefix every other task view in the app reads under (its lists, its counts, its active
+ * strip), none of which knows this project page exists.
+ *
+ * Exported because it is the half of the mutation a static render can never reach: the dialog's
+ * button lives behind a portal, so calling this directly is the only way to assert what a
+ * successful create actually refreshes.
+ */
+export function invalidateAfterProjectTaskCreate(qc: QueryClient, projectId: string): void {
+  void qc.invalidateQueries({ queryKey: ['project', projectId] });
+  void qc.invalidateQueries({ queryKey: ['projects'] });
+  void qc.invalidateQueries({ queryKey: ['tasks'] });
+}
+
+/** As much of a workspace row as this form reads: the name it is picked by, the runner whose
+ *  catalogue names its models, and the provider a task with no pin of its own inherits. */
+interface AssigneeRow {
+  id: string;
+  name: string;
+  runnerId?: string | null;
+  provider?: string | null;
+}
+
+/** One labelled control in the form below. */
+function FormRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+        {label}
+      </Typography.Text>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The New task form's fields, in one state.
+ *
+ * Presentational and exported for the same reason ProjectCoordinatorControl is — and here it is
+ * also the only way: an antd Modal renders through a portal, which a static render produces no
+ * markup at all for, so the body has to be mountable on its own to be assertable at all.
+ *
+ * It does read its own option sources rather than take them as props. They are the same three the
+ * task panel's pickers use, at the same keys: the owner's workspaces, the configured (BYOK)
+ * providers, and the model catalogue the assignee's runner reported — model ids are per-machine,
+ * which is why they come from that runner rather than from a table.
+ */
+export function NewProjectTaskForm({
+  draft,
+  onChange,
+  error,
+  pending,
+}: {
+  draft: NewProjectTaskDraft;
+  onChange: (draft: NewProjectTaskDraft) => void;
+  error: Error | null;
+  pending: boolean;
+}) {
+  const workspacesQ = useQuery(workspacesQuery());
+  const providersQ = useQuery(providersQuery());
+  const runnersQ = useQuery(runnersQuery());
+  const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
+  const assignees: AssigneeRow[] = workspacesQ.data ?? [];
+  const assignee = assignees.find((a) => a.id === draft.assigneeId);
+  const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assignee?.runnerId);
+  // The provider whose model space the Model picker lists: this task's own pin when it has one,
+  // otherwise the assignee's — so the models offered always match what the run will use. Read
+  // only to decide what is OFFERED; it is never written into the draft, which is what keeps an
+  // inherited provider inherited rather than pinned at the moment the form was open.
+  const effectiveProvider = draft.provider ?? assignee?.provider ?? null;
+  const modelOptions = useMemo(
+    () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
+    [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
+  );
+
+  return (
+    <>
+      <FormRow label="Title">
+        <Input
+          value={draft.title}
+          placeholder="What needs doing"
+          disabled={pending}
+          onChange={(e) => onChange({ ...draft, title: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Description">
+        <Input.TextArea
+          rows={3}
+          value={draft.description ?? ''}
+          placeholder="Optional detail"
+          disabled={pending}
+          onChange={(e) => onChange({ ...draft, description: e.target.value })}
+        />
+      </FormRow>
+      <FormRow label="Assignee">
+        <Select
+          style={{ width: '100%' }}
+          value={draft.assigneeId ?? undefined}
+          placeholder="Unassigned"
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          loading={workspacesQ.isLoading}
+          disabled={pending}
+          options={assignees.map((a) => ({ value: a.id, label: a.name }))}
+          // The model goes with the assignee for the same reason it goes with the provider: an
+          // unpinned task reads its model space off the assignee's provider and its ids off that
+          // assignee's runner, so both halves of what made this model selectable move here. Left
+          // behind, it would submit an id the new assignee's runtime has never heard of.
+          onChange={(val) => onChange({ ...draft, assigneeId: val ?? undefined, model: undefined })}
+        />
+      </FormRow>
+      <FormRow label="Provider">
+        <Select
+          style={{ width: '100%' }}
+          value={draft.provider ?? undefined}
+          // Unpinned is the normal case, so say what it actually does rather than "None".
+          placeholder={assignee ? `Assignee's (${assignee.provider ?? 'claude'})` : "Assignee's"}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          loading={providersQ.isLoading}
+          disabled={pending}
+          options={mergedProviderOptions(configuredProviders)}
+          // Changing the provider — or clearing it back to the assignee's — drops the model with
+          // it: a model id only means anything inside one provider's model space, so leaving it
+          // behind would submit a stale id against a provider that has never heard of it.
+          onChange={(val) => onChange({ ...draft, provider: val ?? undefined, model: undefined })}
+        />
+      </FormRow>
+      <FormRow label="Model">
+        <Select
+          style={{ width: '100%' }}
+          value={draft.model ?? undefined}
+          placeholder="Provider default"
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          loading={runnersQ.isLoading}
+          disabled={pending}
+          // A model the catalogue doesn't name still has to render as itself rather than vanish
+          // out of the box it is sitting in. Reachable while the dialog is open: these option
+          // sources are live queries, so a runner heartbeat can retire an id already picked.
+          options={
+            draft.model != null && !modelOptions.some((o) => o.value === draft.model)
+              ? [...modelOptions, { value: draft.model, label: draft.model }]
+              : modelOptions
+          }
+          onChange={(val) => onChange({ ...draft, model: val ?? undefined })}
+        />
+      </FormRow>
+
+      {/* The server's own message, inline and verbatim. Actionable because everything that was
+          typed is still on screen beside it and the dialog's own Create button is still live —
+          so the fix is to correct the field it names and press it again, with no second Retry
+          control saying the same thing a few pixels away. */}
+      {error ? (
+        <Alert type="error" showIcon message="Task could not be created" description={error.message} />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The New task dialog: one top-level task in this project, with an optional provider/model pin.
+ *
+ * `open` is controlled by the section that offers it, so the dialog itself is mounted with the
+ * section and its body — and therefore its three option queries — costs nothing until the reader
+ * actually asks to add a task.
+ */
+export function NewProjectTaskModal({
+  projectId,
+  open,
+  onClose,
+}: {
+  projectId: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<NewProjectTaskDraft>(EMPTY_NEW_TASK_DRAFT);
+  const create = useMutation({
+    mutationFn: (values: NewProjectTaskDraft) => createProjectTask(projectId, values),
+    onSuccess: () => {
+      setDraft(EMPTY_NEW_TASK_DRAFT);
+      onClose();
+      invalidateAfterProjectTaskCreate(qc, projectId);
+    },
+  });
+  // A title of nothing but spaces names a task nobody can find again. The body trims before it
+  // sends, so this is what stops the empty string that trim would produce from being sent at all.
+  const titled = draft.title.trim().length > 0;
+
+  return (
+    <Modal
+      title="New task"
+      open={open}
+      // Cancel keeps what was typed — a mis-clicked Cancel should not cost a filled-in form — but
+      // drops a failed attempt's error, so reopening does not greet the reader with it.
+      onCancel={() => {
+        create.reset();
+        onClose();
+      }}
+      onOk={() => create.mutate(draft)}
+      okText="Create task"
+      confirmLoading={create.isPending}
+      okButtonProps={{ disabled: !titled }}
+    >
+      <NewProjectTaskForm
+        draft={draft}
+        onChange={setDraft}
+        error={create.error}
+        pending={create.isPending}
+      />
+    </Modal>
   );
 }
