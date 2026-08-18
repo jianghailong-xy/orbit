@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -351,6 +351,10 @@ interface ProjectTask {
   createdAt: string;
   updatedAt: string;
   dueDate?: string | null;
+  /** When this task starts on its own, once. Deliberately NOT `dueDate`, which sits right above
+   *  it: that is a deadline nothing dispatches on, this is the trigger the server acts on. Absent
+   *  — or null — on every task that has never been scheduled, which is most of them. */
+  runAt?: string | null;
   assignee?: { id: string; name: string } | null;
   childCount: number;
 }
@@ -363,6 +367,32 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
   DONE: 'green',
   CANCELLED: 'default',
 };
+
+/** How a scheduled start is written on a row, matching the rest of the app's short instants. */
+const RUN_AT_FORMAT: Intl.DateTimeFormatOptions = {
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+};
+
+/**
+ * A stored `runAt` as the two spellings a row needs at once.
+ *
+ * `local` is the viewer's own wall clock — an instant shown in UTC is the wrong time for everyone
+ * outside it, and the reader is the person deciding whether that start is soon. `iso` is the same
+ * instant exactly, normalized through `toISOString` so the machine-readable half is one canonical
+ * UTC spelling whatever the payload happened to carry.
+ *
+ * Null for an absent, cleared or unparseable value alike, so a row renders no schedule at all
+ * rather than the words "Invalid Date" — the one thing a stray `new Date(...)` puts on screen.
+ */
+export function scheduledStart(runAt: string | null | undefined): { iso: string; local: string } | null {
+  if (!runAt) return null;
+  const at = new Date(runAt);
+  if (Number.isNaN(at.getTime())) return null;
+  return { iso: at.toISOString(), local: at.toLocaleString([], RUN_AT_FORMAT) };
+}
 
 /**
  * The project's top-level tasks, read-only: the first page of them, each of which can be opened
@@ -456,6 +486,7 @@ function ProjectTasks({ projectId }: { projectId: string }) {
  */
 function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectTask }) {
   const [expanded, setExpanded] = useState(false);
+  const starts = scheduledStart(task.runAt);
 
   return (
     <List.Item style={{ display: 'block' }}>
@@ -466,6 +497,20 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
           title={
             <span>
               {task.title} <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
+              {/* Only on a task that actually has one — an unscheduled task is the normal case,
+                  and a "not scheduled" chip on every row would drown the few that are. Said as
+                  "Starts", never "Due": this is the trigger the server acts on, and the row
+                  deliberately shows no `dueDate` at all, so the word has only one meaning here.
+                  The <time> is what carries the precise instant for anything not reading the
+                  screen — `dateTime` in canonical UTC for machines, the same in `title` for a
+                  reader who needs the exact moment behind a to-the-minute local rendering. */}
+              {starts ? (
+                <Tag>
+                  <time dateTime={starts.iso} title={starts.iso}>
+                    Starts {starts.local}
+                  </time>
+                </Tag>
+              ) : null}
             </span>
           }
           description={excerpt(task.acceptanceCriteria, 'No acceptance criteria set')}
@@ -589,10 +634,94 @@ export interface NewProjectTaskDraft {
   assigneeId?: string;
   provider?: string;
   model?: string;
+  /** The `datetime-local` control's own value — `YYYY-MM-DDTHH:mm` on the VIEWER's wall clock, and
+   *  never what goes on the wire. Held in that spelling because it is the only one the control can
+   *  be handed back; `runAtIso` is the single place it becomes the UTC instant the API stores. */
+  runAtLocal?: string;
 }
 
 /** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
 export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
+
+/**
+ * A `datetime-local` value as the UTC instant `POST /tasks` stores — the one timezone conversion
+ * on this page, kept as a function so it can be tested without a browser.
+ *
+ * Built from the parsed COMPONENTS rather than from the string. Handing the string to `new Date`
+ * would read a date-time with no offset as local but a bare `YYYY-MM-DD` as UTC, so a date-only
+ * value would silently shift the schedule by the viewer's own offset; the component constructor
+ * has only one reading, and it is the viewer's zone — which is what the control collects.
+ *
+ * Then read straight back, because that constructor NORMALIZES an impossible wall time instead of
+ * refusing it, which would schedule a moment the reader never picked:
+ *   - Feb 31st becomes Mar 3rd — a date, silently, three days later.
+ *   - 02:30 on a spring-forward day becomes 03:30. That local time does not exist, and worse, it
+ *     lands on the very same instant as a deliberate 03:30 — so two different choices would be
+ *     indistinguishable afterwards.
+ *   - A year under 100 lands in the 1900s, the constructor's own two-digit-year rule.
+ * A time that is merely AMBIGUOUS is not impossible and stays accepted: 02:30 on a fall-back day
+ * happens twice, and reads back as 02:30, so it survives as the earlier of the two.
+ *
+ * Everything that fails — nothing chosen, a cleared field, a half-typed or impossible value —
+ * comes back undefined, the same absence an unscheduled task has always had. That is what keeps
+ * `''`, `Invalid Date` and a quietly-moved schedule off the wire alike.
+ */
+export function runAtIso(local: string | undefined): string | undefined {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(local ?? '');
+  if (!parts) return undefined;
+  const [year, month, day, hour, minute, second] = [
+    parts[1],
+    parts[2],
+    parts[3],
+    parts[4],
+    parts[5],
+    parts[6] ?? '0',
+  ].map(Number);
+
+  const at = new Date(year, month - 1, day, hour, minute, second);
+  const survived =
+    at.getFullYear() === year &&
+    at.getMonth() === month - 1 &&
+    at.getDate() === day &&
+    at.getHours() === hour &&
+    at.getMinutes() === minute &&
+    at.getSeconds() === second;
+  return survived ? at.toISOString() : undefined;
+}
+
+/** Said to the reader, and thrown at a caller that tries to send one anyway — one sentence, so the
+ *  two can never drift into describing the same refusal differently. */
+export const RUN_AT_IMPOSSIBLE =
+  'That is not a time that exists. Check the date — and on a daylight-saving change, your clock skips an hour.';
+
+/**
+ * What is wrong with the start the draft currently holds, or null when nothing is.
+ *
+ * Nothing chosen is not a problem: an unscheduled task is the normal case, and the whole point of
+ * the field being optional. A value that is THERE and cannot be converted is a different state
+ * entirely — the reader picked a moment, and every path out of here has to keep saying so rather
+ * than quietly treating it as though they had picked nothing.
+ *
+ * The gap this closes is narrow but real and reachable: a browser's datetime-local knows nothing
+ * about the reader's daylight-saving rules, so it will happily offer 02:30 on a spring-forward day
+ * — a time their own clock skips.
+ */
+export function runAtProblem(local: string | undefined): string | null {
+  if (!local) return null;
+  return runAtIso(local) ? null : RUN_AT_IMPOSSIBLE;
+}
+
+/**
+ * Whether the dialog's Create button may fire at all.
+ *
+ * Both halves are "the reader asked for something this form cannot send": a title of nothing but
+ * spaces names a task nobody can find again, and an impossible start is a schedule that cannot be
+ * honoured. Exported and total, so the disabled state can be asserted directly — the button itself
+ * lives behind a portal that a static render produces no markup for.
+ */
+export function canCreateProjectTask(draft: NewProjectTaskDraft): boolean {
+  return draft.title.trim().length > 0 && runAtProblem(draft.runAtLocal) === null;
+}
 
 /**
  * The body `POST /tasks` is given, from a draft and the project it is being created under.
@@ -606,6 +735,14 @@ export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
  * `''` is not "unselected" — it is OpenCode's own managed-model choice, a real selection — so what
  * is tested for is null/undefined rather than falsiness. The title is trimmed here, at the one
  * place the wire value is built, so no caller can send the untrimmed one.
+ *
+ * THROWS on a start that is present and impossible, rather than dropping it. Absence is how this
+ * body says "unscheduled", so silently omitting an unconvertible value would spend the reader's
+ * explicit choice on its exact opposite — a task created, successfully, with no schedule at all
+ * and nothing on screen to say so. Synchronous, so the mutation that calls it rejects and the
+ * dialog shows the same sentence the field does. The button is disabled long before this, which is
+ * what makes this the invariant rather than the error path: it holds for any caller, including one
+ * that never rendered the form.
  */
 export function newProjectTaskBody(
   projectId: string,
@@ -614,6 +751,14 @@ export function newProjectTaskBody(
   const body: Record<string, string> = { projectId, title: draft.title.trim() };
   const description = draft.description?.trim();
   if (description) body.description = description;
+  // Absent unless a time was actually chosen — an empty string here would be a 400, and a local
+  // "9/1/2026, 9:00 AM" would be a schedule the server reads as no date at all. But a value that
+  // is present and unusable is refused outright, never quietly dropped: see above.
+  if (draft.runAtLocal) {
+    const runAt = runAtIso(draft.runAtLocal);
+    if (!runAt) throw new Error(RUN_AT_IMPOSSIBLE);
+    body.runAt = runAt;
+  }
   if (draft.assigneeId != null) body.assigneeId = draft.assigneeId;
   if (draft.provider != null) body.provider = draft.provider;
   if (draft.model != null) body.model = draft.model;
@@ -701,6 +846,13 @@ export function NewProjectTaskForm({
   // only to decide what is OFFERED; it is never written into the draft, which is what keeps an
   // inherited provider inherited rather than pinned at the moment the form was open.
   const effectiveProvider = draft.provider ?? assignee?.provider ?? null;
+  // Recomputed on every keystroke rather than held in state: it is a pure reading of the draft,
+  // and a copy of it could go stale against the value the field is actually showing.
+  const runAtIssue = runAtProblem(draft.runAtLocal);
+  // One id for the line under the control, whichever of the two it is currently showing. Generated
+  // rather than written in, so mounting this form twice cannot put the same id in the document
+  // twice — which would silently point both inputs at the first one's text.
+  const runAtHelpId = useId();
   const modelOptions = useMemo(
     () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
     [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
@@ -724,6 +876,44 @@ export function NewProjectTaskForm({
           disabled={pending}
           onChange={(e) => onChange({ ...draft, description: e.target.value })}
         />
+      </FormRow>
+      {/* After the two fields that say WHAT the task is, before the three that say who and what
+          runs it: when it starts is a property of the task, not of the runtime picked for it. */}
+      <FormRow label="Start at">
+        <Input
+          type="datetime-local"
+          value={draft.runAtLocal ?? ''}
+          disabled={pending}
+          // Marked wrong on the control itself, not only in the text below it — `aria-invalid` is
+          // what carries that to a reader who never sees the red ring.
+          status={runAtIssue ? 'error' : undefined}
+          aria-invalid={runAtIssue ? true : undefined}
+          // `aria-invalid` alone only says THAT something is wrong. This is what lets the reason
+          // be read out with it — and it points at the same line either way, so the hint is
+          // announced on a field that is merely optional, not just the error on a broken one.
+          aria-describedby={runAtHelpId}
+          // '' is what clearing the control hands back, and it is not a time — folding it to
+          // undefined here keeps "unscheduled" spelled one way in the draft, so the body builder
+          // has one absence to read rather than two.
+          onChange={(e) => onChange({ ...draft, runAtLocal: e.target.value || undefined })}
+        />
+        {/* One line, either the hint or the problem. The reader has just picked a time their own
+            clock skips — a browser's datetime-local has no idea about their daylight-saving rules
+            — so what they need here is that sentence, not the general advice they have already
+            read. Inline and immediate: the alternative is finding out on a task that came back
+            with no schedule and nothing saying why. */}
+        {runAtIssue ? (
+          <Typography.Text id={runAtHelpId} type="danger" style={{ fontSize: 12 }}>
+            {runAtIssue}
+          </Typography.Text>
+        ) : (
+          // A datetime-local control shows no placeholder, so what the other optional fields say
+          // in one has to be said out loud here — including the two things the control itself
+          // cannot: whose clock it is read on, and that this fires once rather than repeating.
+          <Typography.Text id={runAtHelpId} type="secondary" style={{ fontSize: 12 }}>
+            Optional, in your own time zone. The task starts once, at that time.
+          </Typography.Text>
+        )}
       </FormRow>
       <FormRow label="Assignee">
         <Select
@@ -820,9 +1010,14 @@ export function NewProjectTaskModal({
       invalidateAfterProjectTaskCreate(qc, projectId);
     },
   });
-  // A title of nothing but spaces names a task nobody can find again. The body trims before it
-  // sends, so this is what stops the empty string that trim would produce from being sent at all.
-  const titled = draft.title.trim().length > 0;
+  // A title of nothing but spaces names a task nobody can find again, and an impossible start is a
+  // schedule that cannot be honoured. Both are the reader asking for something this form cannot
+  // send, so both close the button.
+  //
+  // Only the second is also refused by `newProjectTaskBody`, which is why that one holds for a
+  // caller the button never gated. A blank title is trimmed there, not rejected — what catches it
+  // past this point is the server's own `@MinLength(1)`, which the trim is what makes reachable.
+  const creatable = canCreateProjectTask(draft);
 
   return (
     <Modal
@@ -837,7 +1032,7 @@ export function NewProjectTaskModal({
       onOk={() => create.mutate(draft)}
       okText="Create task"
       confirmLoading={create.isPending}
-      okButtonProps={{ disabled: !titled }}
+      okButtonProps={{ disabled: !creatable }}
     >
       <NewProjectTaskForm
         draft={draft}

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath, URL } from 'node:url';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,11 @@ import {
   invalidateAfterProjectTaskCreate,
   newProjectTaskBody,
   openProjectCoordinator,
+  runAtIso,
+  runAtProblem,
+  scheduledStart,
+  RUN_AT_IMPOSSIBLE,
+  canCreateProjectTask,
   type NewProjectTaskDraft,
 } from './ProjectsPage';
 
@@ -1163,10 +1168,14 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     ).toBe('wire it up');
 
     // Whitespace-only never gets as far as the body: the dialog's own action is disabled, which a
-    // static render cannot reach (portal), so this reads the one place it is decided. `@MinLength(1)`
-    // on the server would happily accept '   ' — the trim is what makes this a real check.
-    expect(source).toContain('const titled = draft.title.trim().length > 0;');
-    expect(source).toContain('okButtonProps={{ disabled: !titled }}');
+    // static render cannot reach (portal) — so what is asserted is the predicate that decides it.
+    // `@MinLength(1)` on the server would happily accept '   ', so the trim is a real check.
+    expect(canCreateProjectTask({ title: '   ' })).toBe(false);
+    expect(canCreateProjectTask({ title: '' })).toBe(false);
+    expect(canCreateProjectTask({ title: 'Ship the pricing page' })).toBe(true);
+    // ...and that the dialog is wired to it, which only the source can show.
+    expect(source).toContain('const creatable = canCreateProjectTask(draft);');
+    expect(source).toContain('okButtonProps={{ disabled: !creatable }}');
   });
 
   it('keeps OpenCode’s managed-model choice, which is an empty string rather than no choice', () => {
@@ -1332,5 +1341,590 @@ describe('ProjectDetailPage — creating a top-level task', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
     ]);
+  });
+});
+
+/**
+ * A scheduled start is the one thing on this page whose correct answer depends on WHERE the reader
+ * is, so every assertion below runs in a pinned zone rather than the machine's own — otherwise the
+ * suite would pass in UTC (where local and UTC agree, and the bug this guards is invisible) and
+ * fail everywhere else. Node re-reads `process.env.TZ` on the next Date/Intl call, so setting it
+ * around one call is enough; restoring it is what keeps the rest of the file in the host's zone.
+ */
+function inTimeZone<T>(tz: string, fn: () => T): T {
+  const before = process.env.TZ;
+  process.env.TZ = tz;
+  try {
+    return fn();
+  } finally {
+    if (before === undefined) delete process.env.TZ;
+    else process.env.TZ = before;
+  }
+}
+
+// Two real zones on opposite sides of UTC, one of them on DST at the instant used below, so a
+// conversion that merely dropped the offset would land on a different day in at least one of them.
+const SHANGHAI = 'Asia/Shanghai'; // UTC+8 year-round
+const NEW_YORK = 'America/New_York'; // UTC-4 in September
+// Pinned for the DST edges alone. Berlin springs forward 02:00 -> 03:00 on 2026-03-29 (so 02:30
+// never happens that day) and falls back on 2026-10-25 (so 02:30 happens twice). Both dates are
+// fixed points in the past/future of a fixed tzdata rule, not "today", so nothing here drifts.
+const BERLIN = 'Europe/Berlin';
+
+describe('scheduling a new task — the local control and the UTC wire value', () => {
+  it('sends no runAt at all when no time was chosen', () => {
+    // Absent, not '' and not null: the server's `@IsOptional() @IsDateString()` rejects an empty
+    // string outright, and absence is the only spelling that means "unscheduled".
+    const bare = newProjectTaskBody('proj1', { title: 'Bare' });
+    expect('runAt' in bare).toBe(false);
+
+    // The other two ways "no time" reaches the body: a draft that holds the field but never got a
+    // value, and one the reader opened and then cleared — the control hands back '' for that.
+    for (const runAtLocal of [undefined, '']) {
+      expect('runAt' in newProjectTaskBody('proj1', { title: 'x', runAtLocal })).toBe(false);
+    }
+    expect(runAtIso(undefined)).toBeUndefined();
+    expect(runAtIso('')).toBeUndefined();
+
+    // And the form's reset state carries no schedule, so a scheduled task cannot leave its start
+    // behind on the next one created from the reopened dialog.
+    expect(EMPTY_NEW_TASK_DRAFT).toEqual({ title: '' });
+    expect('runAtLocal' in EMPTY_NEW_TASK_DRAFT).toBe(false);
+  });
+
+  it('converts the viewer’s local wall clock to the UTC instant, zone by zone', () => {
+    // The SAME wall-clock reading is three different instants in three zones — which is the whole
+    // job of this function, and what a naive `local + 'Z'` would get wrong in two of them.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T01:00:00.000Z');
+    expect(inTimeZone(NEW_YORK, () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T13:00:00.000Z');
+    expect(inTimeZone('UTC', () => runAtIso('2026-09-01T09:00'))).toBe('2026-09-01T09:00:00.000Z');
+
+    // Across midnight the conversion moves the DATE too, not just the clock: 09:00 in Shanghai on
+    // the 1st is still the previous day in UTC.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T07:30'))).toBe('2026-08-31T23:30:00.000Z');
+
+    // Seconds are accepted (some browsers' pickers emit them) and survive.
+    expect(inTimeZone('UTC', () => runAtIso('2026-09-01T09:00:30'))).toBe('2026-09-01T09:00:30.000Z');
+
+    // Whatever the zone, what goes on the wire is always canonical UTC ISO-8601 — never a locale
+    // rendering like "9/1/2026, 9:00 AM", which the server reads as no date at all.
+    for (const tz of [SHANGHAI, NEW_YORK, 'UTC']) {
+      expect(inTimeZone(tz, () => runAtIso('2026-09-01T09:00'))).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+      );
+    }
+  });
+
+  it('refuses a date with no time rather than silently shifting it by the viewer’s offset', () => {
+    // The trap this guards: `new Date('2026-09-01')` is parsed as UTC while
+    // `new Date('2026-09-01T09:00')` is parsed as LOCAL, so letting a date-only value through
+    // would schedule a Shanghai reader's task 8 hours off with no error anywhere.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-09-01'))).toBeUndefined();
+    // Proof the two really do disagree, so the guard above is closing a real gap and not noise.
+    expect(inTimeZone(SHANGHAI, () => new Date('2026-09-01').toISOString())).not.toBe(
+      inTimeZone(SHANGHAI, () => new Date('2026-09-01T00:00').toISOString()),
+    );
+  });
+
+  it('turns half-typed and impossible input into no schedule, never an Invalid Date', () => {
+    // What a partly-filled or hand-edited control can hand back. None of it may reach the wire,
+    // and none of it may throw — the dialog stays usable and simply carries no schedule.
+    //
+    // Pinned even though every case here is rejected in EVERY zone: the last two rows do reach the
+    // Date constructor, and a value's fate must never depend on where the suite happens to run.
+    inTimeZone(BERLIN, () => {
+      for (const bad of [
+        'tomorrow',
+        '2026-09-01T09', // hour, no minutes — a picker mid-edit
+        '9/1/2026, 9:00 AM', // a locale rendering, the value that must never be sent
+        '2026-09-01T09:00Z', // an offset spelling the control never produces
+        '2026-13-01T09:00', // no 13th month
+        '2026-09-01T25:00', // no 25th hour
+      ]) {
+        expect(runAtIso(bad)).toBeUndefined();
+        // Present but unusable: refused outright rather than dropped, so the reader's choice
+        // cannot be spent on its opposite — a task created with no schedule and nothing said.
+        expect(() => newProjectTaskBody('proj1', { title: 'x', runAtLocal: bad })).toThrow(
+          RUN_AT_IMPOSSIBLE,
+        );
+      }
+    });
+  });
+
+  it('refuses a date the calendar does not have, rather than rolling it forward', () => {
+    // A calendar is the same everywhere, so none of this depends on the zone — but the whole test
+    // is pinned regardless, because the EXPECTED ISO strings below do, and because a helper that
+    // is only sometimes wrapped is one edit away from being wrapped nowhere.
+    inTimeZone(BERLIN, () => {
+      // The Date constructor NORMALIZES rather than refusing, so Feb 31st is a real instant three
+      // days later — a schedule nobody picked, arriving with no error at all.
+      for (const impossible of ['2026-02-31T12:00', '2026-02-30T09:00', '2026-04-31T10:00']) {
+        expect(runAtIso(impossible)).toBeUndefined();
+        expect(() => newProjectTaskBody('proj1', { title: 'x', runAtLocal: impossible })).toThrow(
+          RUN_AT_IMPOSSIBLE,
+        );
+      }
+
+      // Proof the rollover is real, so the check above is closing a gap rather than restating the
+      // regex: the raw constructor turns Feb 31st into March.
+      expect(new Date(2026, 1, 31).getMonth()).toBe(2);
+
+      // The last real day of each of those months still goes through untouched.
+      expect(runAtIso('2026-02-28T12:00')).toBe('2026-02-28T11:00:00.000Z');
+      expect(runAtIso('2026-04-30T10:00')).toBe('2026-04-30T08:00:00.000Z');
+      // ...including a leap day in a year that has one.
+      expect(runAtIso('2028-02-29T12:00')).toBe('2028-02-29T11:00:00.000Z');
+      // ...and not in a year that does not.
+      expect(runAtIso('2026-02-29T12:00')).toBeUndefined();
+    });
+  });
+
+  it('refuses a wall time that the reader’s own clock skips on a spring-forward day', () => {
+    // ONE wrapper around every Berlin assertion, rather than one per call. This test is the only
+    // one here whose outcome really does change with the zone — 02:30 on this date is a perfectly
+    // ordinary time in UTC — so a single paired call left outside the wrapper would pass on this
+    // machine and fail on a UTC CI host. Scoping it structurally is what makes that impossible.
+    inTimeZone(BERLIN, () => {
+      // Berlin jumps 02:00 -> 03:00 on 2026-03-29, so 02:30 is a time that does not happen. Left
+      // to normalize it becomes 03:30 — and lands on the SAME instant as a deliberate 03:30, which
+      // is what makes this worse than being merely an hour off: afterwards the two choices are
+      // indistinguishable.
+      expect(runAtIso('2026-03-29T02:30')).toBeUndefined();
+      // ...and the body refuses it rather than carrying no schedule at all: this is the one case
+      // a real browser can actually hand over, so a silent downgrade here would be a schedule the
+      // reader picked and never got.
+      expect(() =>
+        newProjectTaskBody('proj1', { title: 'x', runAtLocal: '2026-03-29T02:30' }),
+      ).toThrow(RUN_AT_IMPOSSIBLE);
+
+      // Either side of the gap is a real time on that same day and converts normally — 01:30 still
+      // on CET (+1), 03:30 already on CEST (+2).
+      expect(runAtIso('2026-03-29T01:30')).toBe('2026-03-29T00:30:00.000Z');
+      expect(runAtIso('2026-03-29T03:30')).toBe('2026-03-29T01:30:00.000Z');
+
+      // The collision the guard prevents: without it, the skipped time and the real one would have
+      // produced one and the same instant.
+      expect(new Date(2026, 2, 29, 2, 30).toISOString()).toBe(
+        new Date(2026, 2, 29, 3, 30).toISOString(),
+      );
+
+      // AMBIGUOUS is not impossible, and must still go through: Berlin falls back on 2026-10-25,
+      // so 02:30 happens twice that day. It reads back as 02:30 either way, so it survives as the
+      // first of the two — refusing it would reject a time the reader's clock really does show.
+      expect(runAtIso('2026-10-25T02:30')).toBe('2026-10-25T00:30:00.000Z');
+    });
+
+    // The same wall time in a zone with no DST at all is untouched by any of this — which is also
+    // what proves the rejection above came from Berlin's rules and not from the value itself.
+    expect(inTimeZone(SHANGHAI, () => runAtIso('2026-03-29T02:30'))).toBe('2026-03-28T18:30:00.000Z');
+  });
+
+  it('never turns a schedule the reader picked into an unscheduled POST', () => {
+    // The downgrade this forbids: 02:30 on Berlin's spring-forward day is a time a real browser
+    // will hand over, and quietly omitting it would create the task successfully with no schedule
+    // — the exact opposite of what was asked for, reported as success.
+    const apiMock = vi.mocked(api);
+    apiMock.mockClear();
+    inTimeZone(BERLIN, () => {
+      expect(() =>
+        createProjectTask(encodeId(P1), { title: 'Run the nightly ingest', runAtLocal: '2026-03-29T02:30' }),
+      ).toThrow(RUN_AT_IMPOSSIBLE);
+    });
+    // Nothing reached the wire at all — in particular, no body with the schedule silently missing.
+    expect(apiMock).not.toHaveBeenCalled();
+
+    // The same draft with the start cleared is a different request, and a perfectly good one.
+    apiMock.mockClear();
+    createProjectTask(encodeId(P1), { title: 'Run the nightly ingest' });
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    expect((apiMock.mock.calls[0][1] as { body: Record<string, unknown> }).body).not.toHaveProperty(
+      'runAt',
+    );
+  });
+
+  it('surfaces the refusal as a failed mutation, which is what the dialog renders', async () => {
+    // The throw is synchronous inside the mutationFn; this is what proves react-query turns that
+    // into the error state the form's inline Alert already reads, rather than letting it escape.
+    //
+    // A calendar-impossible value rather than the DST one on purpose: it is refused in EVERY zone,
+    // so this test needs no pinning and cannot race the zone restore across its await.
+    const apiMock = vi.mocked(api);
+    apiMock.mockClear();
+    const observer = new MutationObserver(newClient(), {
+      mutationFn: (d: NewProjectTaskDraft) => createProjectTask(encodeId(P1), d),
+      retry: false,
+    });
+
+    await observer.mutate({ title: 'x', runAtLocal: '2026-02-31T12:00' }).catch(() => {});
+
+    const result = observer.getCurrentResult();
+    expect(result.isError).toBe(true);
+    // The same sentence the field itself shows — one message, so the two cannot disagree.
+    expect(result.error?.message).toBe(RUN_AT_IMPOSSIBLE);
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a year the constructor would quietly move into the 1900s', () => {
+    // `new Date(26, ...)` means 1926, not the year 26 — the constructor's two-digit-year rule. The
+    // control cannot produce this, but the round-trip is what makes it impossible rather than
+    // merely unlikely.
+    expect(inTimeZone(BERLIN, () => runAtIso('0026-09-01T09:00'))).toBeUndefined();
+    expect(inTimeZone(BERLIN, () => new Date(26, 8, 1, 9, 0, 0).getFullYear())).toBe(1926);
+  });
+
+  it('carries the schedule alongside every other choice, in one POST to /tasks', () => {
+    const apiMock = vi.mocked(api);
+    apiMock.mockClear();
+    inTimeZone(SHANGHAI, () =>
+      createProjectTask(encodeId(P1), {
+        title: 'Run the nightly ingest',
+        description: 'Kick it off before the EU morning',
+        assigneeId: 'w-codex',
+        provider: 'acme',
+        model: 'acme-1',
+        runAtLocal: '2026-09-01T09:00',
+      }),
+    );
+
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const [path, init] = apiMock.mock.calls[0] as [string, { method?: string; body?: Record<string, unknown> }];
+    expect(path).toBe('/tasks');
+    expect(init.method).toBe('POST');
+    // The schedule is one more field on the same body — it does not replace or disturb any of the
+    // fields that were already there, and it lands as UTC while the control held local.
+    expect(init.body).toEqual({
+      projectId: encodeId(P1),
+      title: 'Run the nightly ingest',
+      description: 'Kick it off before the EU morning',
+      runAt: '2026-09-01T01:00:00.000Z',
+      assigneeId: 'w-codex',
+      provider: 'acme',
+      model: 'acme-1',
+    });
+    // Named `runAt`, never `dueDate`: they are different fields on the server and only one of them
+    // starts anything.
+    expect(init.body).not.toHaveProperty('dueDate');
+  });
+});
+
+/**
+ * The one `<time>` element on a row, read as its parts.
+ *
+ * By attribute NAME rather than by substring: React's static renderer spells the prop out as
+ * `dateTime`, while HTML parses attribute names case-insensitively — so a browser sees `datetime`
+ * either way, and pinning one casing into every assertion would break on a renderer change that
+ * changes nothing a reader or a machine can observe.
+ */
+function timeTag(html: string): { instant: string; hover: string; text: string } | null {
+  const el = /<time\s+([^>]*)>([^<]*)<\/time>/i.exec(html);
+  if (!el) return null;
+  const attr = (name: string) => new RegExp(`\\b${name}="([^"]*)"`, 'i').exec(el[1])?.[1] ?? '';
+  return { instant: attr('datetime'), hover: attr('title'), text: el[2] };
+}
+
+describe('ProjectDetailPage — a task’s scheduled start on its row', () => {
+  /** The detail page with one root task, rendered in a pinned zone. */
+  function rowIn(tz: string, over: Record<string, unknown>) {
+    return inTimeZone(tz, () => {
+      const qc = newClient();
+      qc.setQueryData(['project', encodeId(P1)], detail());
+      qc.setQueryData(tasksKey(P1), { items: [task(over)], nextCursor: null });
+      return renderDetail(qc, encodeId(P1));
+    });
+  }
+
+  it('shows the start in the viewer’s own zone, with the exact instant on the <time>', () => {
+    const at = '2026-09-01T01:00:00.000Z';
+    const out = rowIn(SHANGHAI, { runAt: at });
+
+    // Rendered as a real <time>, so the precise instant is available to anything not reading the
+    // pixels — and in canonical UTC on both halves, which is the unambiguous spelling of the pair.
+    const shown = timeTag(out)!;
+    expect(shown.instant).toBe(at);
+    expect(shown.hover).toBe(at);
+    // Labelled for what it is. "Starts", not "Due".
+    expect(shown.text).toMatch(/^Starts /);
+    expect(out).not.toContain('Due');
+    // The visible half is the reader's own wall clock — 01:00Z is 09:00 in Shanghai, so the raw
+    // instant must NOT be what is written on the row.
+    expect(shown.text).not.toContain(at);
+    expect(shown.text).toBe(
+      `Starts ${inTimeZone(SHANGHAI, () =>
+        new Date(at).toLocaleString([], {
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
+      )}`,
+    );
+  });
+
+  it('renders the same instant differently for readers in different zones', () => {
+    // The assertion that cannot be satisfied by accident: one stored instant, two zones, and at
+    // this one it is not even the same DAY — 01:00Z on the 1st is the previous evening in New
+    // York. A row that printed the UTC string, or formatted with a hard-coded zone, would render
+    // identically in both and fail here whatever the host machine's own zone is.
+    const at = '2026-09-01T01:00:00.000Z';
+    const shanghai = rowIn(SHANGHAI, { runAt: at });
+    const newYork = rowIn(NEW_YORK, { runAt: at });
+
+    expect(shanghai).not.toBe(newYork);
+    // Both still name the identical instant to a machine...
+    expect(timeTag(shanghai)!.instant).toBe(at);
+    expect(timeTag(newYork)!.instant).toBe(at);
+    // ...while what a person reads rolls back to the previous day in New York only.
+    expect(timeTag(shanghai)!.text).not.toBe(timeTag(newYork)!.text);
+    expect(timeTag(newYork)!.text).toMatch(/31/);
+    expect(timeTag(shanghai)!.text).not.toMatch(/31/);
+  });
+
+  it('says nothing at all about scheduling on a task that has none', () => {
+    // Absent and null alike — most tasks are unscheduled, and a chip on every row would bury the
+    // few that are not.
+    for (const over of [{}, { runAt: null }]) {
+      const out = rowIn(SHANGHAI, over);
+      expect(out).not.toContain('Starts');
+      expect(out).not.toContain('<time');
+      // The row is otherwise unchanged: it still renders everything it always did.
+      expect(out).toContain('Design the landing page');
+      expect(out).toContain('OPEN');
+    }
+  });
+
+  it('never reads a due date as a start — they are different fields', () => {
+    // A deadline nothing dispatches on. This row has deliberately never shown one, and the
+    // scheduled-start chip must not become the place it leaks in.
+    const out = rowIn(SHANGHAI, { dueDate: '2026-09-30T00:00:00.000Z', runAt: null });
+    expect(out).not.toContain('Starts');
+    expect(out).not.toContain('2026-09-30');
+
+    // With BOTH set, only the start is shown, and it is the start's instant on the <time>.
+    const both = rowIn(SHANGHAI, {
+      dueDate: '2026-09-30T00:00:00.000Z',
+      runAt: '2026-09-01T01:00:00.000Z',
+    });
+    expect(timeTag(both)!.instant).toBe('2026-09-01T01:00:00.000Z');
+    expect(both).not.toContain('2026-09-30');
+  });
+
+  it('renders no schedule rather than the words "Invalid Date" when the value is unusable', () => {
+    // Not reachable through this app's own writes, but a row renders whatever the payload holds,
+    // and `new Date('nonsense')` formats to the literal text "Invalid Date" on screen.
+    for (const bad of ['not a date', '', '2026-13-01T00:00:00.000Z']) {
+      const out = rowIn(SHANGHAI, { runAt: bad });
+      expect(out).not.toContain('Invalid Date');
+      expect(out).not.toContain('Starts');
+      expect(out).toContain('Design the landing page');
+    }
+  });
+
+  it('normalizes whatever spelling the payload carried into one canonical instant', () => {
+    // Same moment, written three ways. The machine-readable half must be one string regardless,
+    // so anything comparing or sorting on it sees one spelling.
+    expect(scheduledStart('2026-09-01T01:00:00.000Z')!.iso).toBe('2026-09-01T01:00:00.000Z');
+    expect(scheduledStart('2026-09-01T01:00:00Z')!.iso).toBe('2026-09-01T01:00:00.000Z');
+    expect(scheduledStart('2026-09-01T09:00:00+08:00')!.iso).toBe('2026-09-01T01:00:00.000Z');
+    // And an offset spelling still renders in the READER's zone, not the one it was written in.
+    expect(timeTag(rowIn(NEW_YORK, { runAt: '2026-09-01T09:00:00+08:00' }))!.instant).toBe(
+      '2026-09-01T01:00:00.000Z',
+    );
+
+    // Nothing to render is null, not a throw and not a partial object.
+    expect(scheduledStart(null)).toBeNull();
+    expect(scheduledStart(undefined)).toBeNull();
+    expect(scheduledStart('')).toBeNull();
+    expect(scheduledStart('nope')).toBeNull();
+  });
+
+  it('survives a round trip: what the form sent is what the row reads back', () => {
+    // The two halves of this unit meet here. A reader in Shanghai picks 09:00 on the 1st, the wire
+    // carries the UTC instant, the server echoes it back on the task page, and the row has to show
+    // that same reader the 09:00 they picked — not 01:00.
+    const wire = inTimeZone(SHANGHAI, () => runAtIso('2026-09-01T09:00'))!;
+    expect(wire).toBe('2026-09-01T01:00:00.000Z');
+
+    const shown = inTimeZone(SHANGHAI, () => scheduledStart(wire)!.local);
+    const picked = inTimeZone(SHANGHAI, () =>
+      new Date('2026-09-01T09:00').toLocaleString([], {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+    );
+    expect(shown).toBe(picked);
+    expect(rowIn(SHANGHAI, { runAt: wire })).toContain(`Starts ${shown}`);
+  });
+});
+
+describe('the New task form’s Start at control', () => {
+  /** The form body on its own — an antd Modal renders through a portal, which a static render
+   *  produces no markup for, so this is the only place its fields can be read. */
+  function renderForm(draft: NewProjectTaskDraft, over: { pending?: boolean } = {}) {
+    const qc = newClient();
+    qc.setQueryData(['workspaces'], []);
+    qc.setQueryData(['providers'], []);
+    qc.setQueryData(['runners'], []);
+    return renderToStaticMarkup(
+      <QueryClientProvider client={qc}>
+        <NewProjectTaskForm
+          draft={draft}
+          onChange={() => {}}
+          error={null}
+          pending={over.pending ?? false}
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('offers one clearly labelled datetime control, empty until a time is chosen', () => {
+    const out = renderForm({ title: 'x' });
+
+    // Named for what it does. "Start at" is a trigger; "Due" would be a deadline, which this page
+    // has no control for at all.
+    expect(out).toContain('>Start at<');
+    expect(out).not.toContain('>Due<');
+    expect(out).not.toContain('>Due date<');
+
+    // A real datetime-local input — a plain text box would accept "next tuesday" and a date-only
+    // input would drop the time this field exists to collect.
+    expect(out).toMatch(/<input[^>]*type="datetime-local"/);
+    // Nothing chosen renders as empty, never as a placeholder string that could be submitted.
+    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*value=""/);
+    // ...and it says whose clock it reads and that it fires once, which the control cannot show
+    // itself (a datetime-local ignores `placeholder`).
+    expect(out).toContain('in your own time zone');
+    expect(out).toContain('starts once');
+  });
+
+  it('holds the local value it was handed, in the control’s own spelling', () => {
+    // The draft keeps the wall-clock string, NOT the UTC instant: handing a `...Z` value back to a
+    // datetime-local control blanks it, silently losing what the reader picked.
+    const out = renderForm({ title: 'x', runAtLocal: '2026-09-01T09:00' });
+    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*value="2026-09-01T09:00"/);
+    expect(out).not.toContain('value="2026-09-01T01:00:00.000Z"');
+  });
+
+  it('goes disabled with the rest of the form while the task is being created', () => {
+    // A schedule changed mid-flight would not reach the request that is already gone.
+    expect(renderForm({ title: 'x', runAtLocal: '2026-09-01T09:00' }, { pending: true })).toMatch(
+      /<input[^>]*type="datetime-local"[^>]*disabled/,
+    );
+    expect(renderForm({ title: 'x', runAtLocal: '2026-09-01T09:00' })).not.toMatch(
+      /<input[^>]*type="datetime-local"[^>]*disabled/,
+    );
+  });
+
+  it('names the problem on the field itself when the picked time cannot happen', () => {
+    // 02:30 on Berlin's spring-forward day: a value the control will genuinely offer, because a
+    // datetime-local knows nothing about the reader's daylight-saving rules.
+    const out = inTimeZone(BERLIN, () => renderForm({ title: 'x', runAtLocal: '2026-03-29T02:30' }));
+
+    // Said inline, in full, where the reader is looking — not swallowed and not deferred to a
+    // task that comes back later with no schedule on it.
+    expect(out).toContain(RUN_AT_IMPOSSIBLE);
+    // Marked wrong on the control, for eyes and for anything reading the accessibility tree.
+    expect(out).toMatch(/<input[^>]*type="datetime-local"[^>]*aria-invalid="true"/);
+    expect(out).toContain('ant-input-status-error');
+    // What they typed is still there to correct — clearing it for them would lose the choice just
+    // as surely as sending nothing would.
+    expect(out).toMatch(/<input[^>]*value="2026-03-29T02:30"/);
+    // The general hint gives way to the specific problem, rather than stacking two lines.
+    expect(out).not.toContain('The task starts once, at that time.');
+  });
+
+  it('says nothing of the sort while the field is empty or holds a real time', () => {
+    // An empty field is not an error — the whole field is optional, and an unscheduled task is the
+    // normal case. This is the assertion that keeps the message off everyone else's screen.
+    for (const draft of [
+      { title: 'x' },
+      { title: 'x', runAtLocal: undefined },
+      // Either side of the same gap, and an ambiguous fall-back time, are all real choices.
+      { title: 'x', runAtLocal: '2026-03-29T01:30' },
+      { title: 'x', runAtLocal: '2026-03-29T03:30' },
+      { title: 'x', runAtLocal: '2026-10-25T02:30' },
+    ]) {
+      const out = inTimeZone(BERLIN, () => renderForm(draft));
+      expect(out).not.toContain(RUN_AT_IMPOSSIBLE);
+      expect(out).not.toContain('aria-invalid');
+      expect(out).not.toContain('ant-input-status-error');
+      expect(out).toContain('The task starts once, at that time.');
+    }
+  });
+
+  it('closes the Create button on an impossible start, and only while it is impossible', () => {
+    // The button lives behind the Modal's portal, which a static render produces no markup for, so
+    // the predicate that decides it is what gets asserted — the dialog's wiring to it is checked
+    // where the rest of the dialog's wiring is.
+    inTimeZone(BERLIN, () => {
+      expect(canCreateProjectTask({ title: 'x', runAtLocal: '2026-03-29T02:30' })).toBe(false);
+      // Fixing the time reopens it...
+      expect(canCreateProjectTask({ title: 'x', runAtLocal: '2026-03-29T03:30' })).toBe(true);
+      // ...as does clearing it, since no schedule at all was always allowed.
+      expect(canCreateProjectTask({ title: 'x' })).toBe(true);
+      // A good time cannot rescue a bad title, and vice versa: both gates are real.
+      expect(canCreateProjectTask({ title: '  ', runAtLocal: '2026-03-29T03:30' })).toBe(false);
+      expect(canCreateProjectTask({ title: '  ', runAtLocal: '2026-03-29T02:30' })).toBe(false);
+
+      // And the predicate agrees with the field, so the button cannot be open on a draft the form
+      // is showing an error for — nor closed on one it is not.
+      for (const local of ['2026-03-29T02:30', '2026-03-29T03:30', '2026-02-31T12:00', undefined]) {
+        expect(canCreateProjectTask({ title: 'x', runAtLocal: local })).toBe(
+          runAtProblem(local) === null,
+        );
+      }
+    });
+  });
+
+  it('points the control at the line that explains it, hint and error alike', () => {
+    // `aria-invalid` says THAT the field is wrong; this is what carries WHY. Asserted as an
+    // association rather than against a literal id — the id is generated, and what matters is
+    // that the two ends agree, which is the whole of what a screen reader follows.
+    const described = (html: string) => /<input[^>]*type="datetime-local"[^>]*aria-describedby="([^"]+)"/.exec(html)?.[1];
+    const textAt = (html: string, id: string) =>
+      new RegExp(`<[a-z]+[^>]*\\bid="${id}"[^>]*>([^<]*)<`, 'i').exec(html)?.[1];
+
+    // The optional case: the field is fine, and what gets announced with it is the hint that says
+    // whose clock it reads and that it fires once.
+    const ok = inTimeZone(BERLIN, () => renderForm({ title: 'x', runAtLocal: '2026-03-29T03:30' }));
+    const okId = described(ok)!;
+    expect(okId).toBeTruthy();
+    expect(textAt(ok, okId)).toContain('Optional, in your own time zone');
+
+    // The broken case: the SAME association now resolves to the reason it is broken, so the
+    // announcement is the actual problem rather than a bare "invalid".
+    const bad = inTimeZone(BERLIN, () => renderForm({ title: 'x', runAtLocal: '2026-03-29T02:30' }));
+    const badId = described(bad)!;
+    expect(badId).toBeTruthy();
+    expect(textAt(bad, badId)).toBe(RUN_AT_IMPOSSIBLE);
+
+    // Described in both states, not only when it fails — a field that loses its description the
+    // moment it becomes valid is one a reader can never hear the instructions for.
+    expect(described(inTimeZone(BERLIN, () => renderForm({ title: 'x' })))).toBeTruthy();
+
+    // And the id is the form's own, not a constant: two forms in one document must not collide.
+    const two = renderToStaticMarkup(
+      <QueryClientProvider client={newClient()}>
+        <NewProjectTaskForm draft={{ title: 'a' }} onChange={() => {}} error={null} pending={false} />
+        <NewProjectTaskForm draft={{ title: 'b' }} onChange={() => {}} error={null} pending={false} />
+      </QueryClientProvider>,
+    );
+    const ids = [...two.matchAll(/type="datetime-local"[^>]*aria-describedby="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('leaves every field that was already there exactly as it was', () => {
+    // The schedule is an addition, not a rearrangement: the five controls this form has always had
+    // still render, still in order, still holding what they were handed.
+    const out = renderForm({ title: 'Ship it', description: 'Copy is signed off' });
+    for (const label of ['>Title<', '>Description<', '>Start at<', '>Assignee<', '>Provider<', '>Model<']) {
+      expect(out).toContain(label);
+    }
+    expect(out.indexOf('>Description<')).toBeLessThan(out.indexOf('>Start at<'));
+    expect(out.indexOf('>Start at<')).toBeLessThan(out.indexOf('>Assignee<'));
+    expect(out).toContain('value="Ship it"');
+    expect(out).toContain('Copy is signed off');
   });
 });
