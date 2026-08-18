@@ -6,6 +6,9 @@ import { parseReferences, ReferenceExpansionService } from './reference-expansio
 const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 const OWNER = '5ccdf9b9-6871-49a6-8595-839c6a1f79d2';
+/** What those two are called everywhere the agent can see them, `task_get` / `tasklist_get` included. */
+const LIST_PUBLIC_ID = uuidToBase62(LIST_ID);
+const TASK_PUBLIC_ID = uuidToBase62(TASK_ID);
 
 const listRef = (id = LIST_ID) => `[FineWeb](orbit-list:${id})`;
 const taskRef = (id = TASK_ID) => `[W 009](orbit-task:${id})`;
@@ -91,7 +94,7 @@ test('a list reference appends the shape of the list, not its tasks', async () =
 
   const out = (await service.expand(OWNER, `帮我看下 ${listRef()} 卡在哪`))!;
 
-  assert.match(out, /<referenced-list id="6ba7b810/);
+  assert.ok(out.includes(`<referenced-list id="${LIST_PUBLIC_ID}">`), out);
   assert.match(out, /FineWeb CC-MAIN-2025-26/);
   assert.match(out, /DONE 249 \/ OPEN 248/);
   // Attribution rides along, so "is this a prompt problem" is answerable without a second call.
@@ -110,9 +113,34 @@ test('a task reference leads with whether anything ever ran', async () => {
 
   const out = (await service.expand(OWNER, `查一下 ${taskRef()}`))!;
 
-  assert.match(out, /<referenced-task id="550e8400/);
+  assert.ok(out.includes(`<referenced-task id="${TASK_PUBLIC_ID}">`), out);
   assert.match(out, /共 3 次，其中执行过 turn 的 0 次/);
   assert.match(out, /最近一次：FAILED \(infrastructure\), 0 turns/);
+});
+
+test('both blocks name their row by its public id, never by the uuid the column holds', async () => {
+  // The expansion is prose delivered to the agent, and prose is the one boundary
+  // PublicIdInterceptor does not cover: it rewrites response *fields*, and a message is not one.
+  // The id here is the entry point the block exists to hand over — what the agent passes to
+  // task_get / tasklist_get to fetch what this deliberately does not carry — so spelled unlike
+  // every other id in the run it is least usable exactly where it matters most.
+  //
+  // Referenced by uuid on purpose: the lookup still takes uuids, so this pins the encode to the
+  // render rather than to the input spelling.
+  const { service } = makeService();
+
+  const out = (await service.expand(OWNER, `看下 ${listRef()} 和 ${taskRef()}`))!;
+
+  // Not a no-op codec, or every assertion below would hold for the bug too.
+  assert.notEqual(LIST_PUBLIC_ID, LIST_ID);
+  assert.notEqual(TASK_PUBLIC_ID, TASK_ID);
+  assert.ok(out.includes(`<referenced-list id="${LIST_PUBLIC_ID}">`), out);
+  assert.ok(out.includes(`<referenced-task id="${TASK_PUBLIC_ID}">`), out);
+  // Scoped to what was appended: the user's own words are kept verbatim ahead of it, uuids and
+  // all, and rewriting those is the thing expanding at delivery exists to avoid.
+  const expansion = out.slice(out.indexOf('<referenced-'));
+  assert.equal(expansion.includes(LIST_ID), false, 'the raw list uuid reached the agent');
+  assert.equal(expansion.includes(TASK_ID), false, 'the raw task uuid reached the agent');
 });
 
 test('a reference the sender does not own expands to nothing, not an error', async () => {

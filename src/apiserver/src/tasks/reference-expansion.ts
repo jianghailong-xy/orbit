@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
-import { classifyFailure, FailureCause, toUuid } from '@orbit/shared';
+import { classifyFailure, FailureCause, toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -39,6 +39,12 @@ interface Reference {
  * deployment's task descriptions total ~11 MB; a list reference that inlined them would blow the
  * context window on one message. The agent already has task_list / task_get / tasklist_get, so
  * an entry point is worth more than a dump, and it can fetch what it actually needs.
+ *
+ * That id is spelled base62, the same as the `id` those tools answer with — and the same one the
+ * agent has to pass back to reach the row it names. Prose is the one boundary
+ * `PublicIdInterceptor` cannot reach, since it rewrites response *fields* and a delivered message
+ * is not one, so the encode happens here, where the id becomes text. An entry point spelled
+ * unlike every other id in the run is not one.
  */
 @Injectable()
 export class ReferenceExpansionService {
@@ -114,7 +120,7 @@ export class ReferenceExpansionService {
         .map(([k, v]) => `${k} ${v}`)
         .join(' / ') || '无';
     return [
-      `<referenced-list id="${list.id}">`,
+      `<referenced-list id="${uuidToBase62(list.id)}">`,
       `  标题   ${list.title}`,
       `  规模   ${counts}`,
       `  在跑   ${live}`,
@@ -164,7 +170,7 @@ export class ReferenceExpansionService {
       ? `${lastRun.status}${lastRun.error ? ` (${classifyFailure(lastRun.error)})` : ''}, ${lastRun.numTurns} turns`
       : '从未运行';
     return [
-      `<referenced-task id="${task.id}">`,
+      `<referenced-task id="${uuidToBase62(task.id)}">`,
       `  标题   ${task.title}`,
       `  状态   ${task.status}${task.isForeman ? ' · 协调任务' : ''}${task.verifiesTaskId ? ' · 验收任务' : ''}`,
       `  所属   ${task.list?.title ?? '(无列表)'} · 负责 ${task.assignee?.name ?? '(未指派)'}`,
