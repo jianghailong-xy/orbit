@@ -24,6 +24,7 @@ function row(id: string, overrides: Record<string, unknown> = {}) {
     createdAt: new Date('2026-08-01T12:00:00.000Z'),
     updatedAt: new Date('2026-08-01T12:00:00.000Z'),
     dueDate: null,
+    runAt: null,
     assignee: null,
     _count: { children: 0 },
     ...overrides,
@@ -52,7 +53,15 @@ function serviceWith(opts: {
       findMany: async (args: any) => {
         calls.findMany.push(args);
         opts.onFindMany?.(args);
-        return opts.tasks ?? [];
+        // Projected through the `select` the service asked for, the way Prisma would. A stub that
+        // hands back whatever the fixture holds makes every "the page returns X" assertion pass
+        // whether or not X was selected at all — so a column dropped from the select would be
+        // caught only by the shape test below, and never by the tests about what a client reads.
+        return (opts.tasks ?? []).map((task) =>
+          Object.fromEntries(
+            Object.entries(task as Record<string, unknown>).filter(([k]) => k in args.select),
+          ),
+        );
       },
     },
   } as never, {} as never);
@@ -337,6 +346,11 @@ test('a page row carries the tree’s fields and none of the heavy ones', async 
     'createdAt',
     'updatedAt',
     'dueDate',
+    // Both instants, and they are not the same question: `dueDate` is when the work is wanted by,
+    // `runAt` is when it starts on its own. This select is independent of TASK_LIST_SELECT, so a
+    // column added there does not arrive here — and a schedule the task API accepts but the
+    // project tree cannot read back looks to a client exactly like a write that was lost.
+    'runAt',
   ]) {
     assert.equal(select[field], true, `${field} belongs on a tree row`);
   }
@@ -351,6 +365,42 @@ test('a page row carries the tree’s fields and none of the heavy ones', async 
   assert.equal(items[0].childCount, 3);
   assert.equal('_count' in items[0], false, 'the tally is reported as childCount');
   assert.equal('description' in items[0], false);
+});
+
+test('a scheduled row reads its schedule back, as a UTC instant', async () => {
+  // The gap this closes: a schedule set through the task API was stored and then unreadable here,
+  // because this select is its own list and had only `dueDate`. A client could write the field and
+  // never see it again, which is indistinguishable from the write having failed.
+  const runAt = new Date('2026-09-01T09:00:00.000Z');
+  const { service } = serviceWith({
+    tasks: [
+      row('00000000-0000-7000-8000-0000000000e1', {
+        runAt,
+        dueDate: new Date('2026-09-30T00:00:00.000Z'),
+      }),
+    ],
+  });
+
+  const { items } = await service.taskPage(OWNER_ID, PROJECT_ID);
+
+  assert.deepEqual(items[0].runAt, runAt);
+  // Independent of the deadline, and not confused with it: a task can be scheduled without one
+  // and given one without a schedule.
+  assert.deepEqual(items[0].dueDate, new Date('2026-09-30T00:00:00.000Z'));
+  // What the client actually receives. Nest JSON-serialises the Date, and the stored instant is
+  // UTC, so "9am" cannot arrive as somebody's local wall clock.
+  assert.equal(JSON.parse(JSON.stringify(items[0])).runAt, '2026-09-01T09:00:00.000Z');
+});
+
+test('an unscheduled row reads back as null rather than going missing', async () => {
+  const { service } = serviceWith({ tasks: [row('00000000-0000-7000-8000-0000000000e2')] });
+
+  const { items } = await service.taskPage(OWNER_ID, PROJECT_ID);
+
+  // The overwhelming majority of rows. `null` is the answer "not scheduled"; an absent key would
+  // leave a client unable to tell that from "this endpoint does not report schedules".
+  assert.equal('runAt' in items[0], true);
+  assert.equal(items[0].runAt, null);
 });
 
 test('childCount is a counted aggregate, scoped like the page it would open', async () => {

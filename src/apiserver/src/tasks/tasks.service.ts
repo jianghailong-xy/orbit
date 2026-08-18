@@ -101,6 +101,7 @@ export const TASK_LIST_SELECT = {
   creatorId: true,
   assigneeId: true,
   dueDate: true,
+  runAt: true,
   createdAt: true,
   updatedAt: true,
   listId: true,
@@ -185,11 +186,64 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- A schedule that has not come due yet is a veto, and it has to be one HERE as well as on the
+  -- instant path (see triggerDependents): a task scheduled for Sunday whose last prerequisite
+  -- lands on Friday is ready in every other sense, and without this clause the sweep would start
+  -- it on Friday. "Earliest automatic start" has to hold against every automatic starter, not
+  -- just the one that motivated it. NULL — no schedule at all — permits, which is what every
+  -- task that predates the column is.
+  AND (t.run_at IS NULL OR t.run_at <= now())
   AND EXISTS (
     SELECT 1 FROM task_dependency d
     JOIN task p ON p.id = d.depends_on_task_id
     WHERE d.task_id = t.id AND p.status = 'DONE'::task_status
   )
+  AND NOT EXISTS (
+    SELECT 1 FROM task_dependency d
+    JOIN task p ON p.id = d.depends_on_task_id
+    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM session s
+    WHERE s.task_id = t.id
+      AND s.status IN (${Prisma.join(
+        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+        ', ',
+      )})
+  )`;
+
+/**
+ * The scheduled sweep's candidate predicate (see dispatchDueScheduledTasks), correlated to an
+ * outer `task t`. Anchored on `run_at`, which is the one selective thing about it: a schedule is
+ * rare, the partial index (migration 0110) holds only the tasks that have one, and every other
+ * clause here is a re-check over the handful that are actually due.
+ *
+ * Deliberately NOT AUTO_RUN_READY_SQL with a date bolted on, and the differences are the whole
+ * point of the feature:
+ *
+ *   * `auto_run_when_ready` is not required. That flag answers "should finishing a prerequisite
+ *     start this", which is a question about dependencies; a clock is a different trigger, and a
+ *     task with no dependencies at all is the ordinary case for one.
+ *   * Prerequisites are not required to EXIST, only to be finished. The auto-run sweep insists a
+ *     candidate have them because "all zero prerequisites are done" is not a reason to start
+ *     anything. Here the reason to start is the time, and the dependencies are only a veto.
+ *
+ * What it shares with the auto-run sweep it shares exactly, because these are the standing rules
+ * about dispatching a task rather than anything to do with scheduling: OPEN, not held by a paused
+ * list, an assignee bound to a runner, no prerequisite outstanding, and nothing already occupying
+ * it (TASK_OCCUPYING, so an idle-but-live session counts — a scheduled run must not barge in on a
+ * session that is merely waiting for a human).
+ *
+ * Every one of those is filtered here rather than left for execute() to reject, and not only for
+ * speed: a schedule whose task is unassigned or paused is retained, not consumed, so letting it
+ * reach execute() would log one rejection per task per minute for as long as the condition lasts.
+ */
+const SCHEDULED_DUE_SQL = Prisma.sql`
+  t.run_at IS NOT NULL
+  AND t.run_at <= now()
+  AND t.status = 'OPEN'::task_status
+  AND t.dispatch_hold = false
+  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND NOT EXISTS (
     SELECT 1 FROM task_dependency d
     JOIN task p ON p.id = d.depends_on_task_id
@@ -283,6 +337,54 @@ export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
 // because a quota is not evidence the task is broken — it recovers on its own schedule, and
 // the only job here is to stop burning a session a minute while waiting for it.
 export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
+
+// How many due tasks one scheduled sweep will look at (see dispatchDueScheduledTasks). A bound on
+// the pass, not a quota on the schedule: what it does not take this minute it takes the next, in
+// the same order, because the tasks it left keep their `run_at` and stay due. It exists so that
+// somebody scheduling ten thousand tasks for one instant produces a series of ordinary sweeps
+// rather than one that holds the timer for minutes and starves the two sweeps behind it.
+export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
+
+/**
+ * What an automatic trigger saw when it picked a task, carried into the dispatch so the dispatch
+ * can tell whether it is still acting on the same facts.
+ *
+ * Every automatic path is a scan followed by a re-read: the sweep (or triggerDependents) selects
+ * candidates, then `execute` loads each one again to dispatch it. A user editing the schedule in
+ * that window is not an exotic race — it is somebody looking at the task and changing their mind,
+ * which is most likely precisely when the task is about to run. Without this the automatic call is
+ * indistinguishable from a person pressing Run, and `execute` treats a future `runAt` as something
+ * a person may override: it would start the task early AND consume the schedule they had just set.
+ *
+ * `observedRunAt` is deliberately nullable rather than optional, and `null` is a real assertion
+ * rather than "no opinion": an unscheduled task that acquires a schedule mid-flight is the same
+ * race, and reconcileReadyTasks/triggerDependents select unscheduled tasks all day.
+ */
+export interface AutoDispatch {
+  /** The task's `runAt` as the candidate scan saw it. `null` means it was unscheduled. */
+  observedRunAt: Date | null;
+}
+
+/**
+ * Whether an automatic trigger may still act, given what the dispatch's own read found.
+ *
+ * Two ways to lose the right: the value moved (rescheduled, cancelled, or newly scheduled under an
+ * unscheduled candidate), or it now points into the future. The second is implied by the first for
+ * every caller in this file — they all select `run_at IS NULL OR run_at <= now()` — and is stated
+ * anyway, because "an automatic trigger never starts a task before its time" should be checkable
+ * where the decision is made rather than by auditing three candidate scans.
+ *
+ * Comparison is by instant, not identity: these are two different Date objects for the same row.
+ */
+export function autoDispatchStillValid(
+  current: Date | null,
+  observed: Date | null,
+  now: number = Date.now(),
+): boolean {
+  if ((current?.getTime() ?? null) !== (observed?.getTime() ?? null)) return false;
+  if (current !== null && current.getTime() > now) return false;
+  return true;
+}
 
 // Brake on repeat foremen for the same stall.
 //
@@ -609,13 +711,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Periodic backstop for auto-run edges triggerDependents can't catch (see
     // reconcileReadyTasks). Single-replica assumption, same as ReaperService.
     this.reconcileTimer = setInterval(() => {
-      // Both sweeps ride this one timer. A second setInterval is how the reconciler once ended
-      // up running twice a minute (TasksService was provided by two modules), and the symptom —
-      // duplicate dispatch — took a production incident to spot. Sequential, not concurrent, so
-      // the foreman sees the dispatch decisions this same tick already made.
+      // All three sweeps ride this one timer. A second setInterval is how the reconciler once
+      // ended up running twice a minute (TasksService was provided by two modules), and the
+      // symptom — duplicate dispatch — took a production incident to spot. Sequential, not
+      // concurrent, so the foreman sees the dispatch decisions this same tick already made.
       this.reconcileReadyTasks()
         .catch((e) =>
           this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        // The clock trigger rides the same timer, for the reason above and one of its own: a task
+        // can be both due and dependency-ready, and running the two sweeps sequentially means the
+        // second sees what the first already dispatched. A schedule is therefore honoured within
+        // one RECONCILE_INTERVAL_MS of coming due, which is the resolution the field promises —
+        // `run_at` is the earliest start, not an alarm.
+        .then(() => this.dispatchDueScheduledTasks())
+        .catch((e) =>
+          this.logger.error(`scheduled sweep failed: ${e instanceof Error ? e.message : e}`),
         )
         .then(() => this.dispatchStalledListForemen())
         .catch((e) =>
@@ -1191,6 +1302,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       parentTaskId: dto.parentTaskId,
       acceptanceCriteria: dto.acceptanceCriteria,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      // Omitted means unscheduled. The `undefined` is what makes that true without a default:
+      // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
+      // created before this column was born NULL.
+      runAt: dto.runAt ? new Date(dto.runAt) : undefined,
       labels: dto.labels ? normalizeTaskLabels(dto.labels) : undefined,
       provider: dto.provider,
       model: dto.model,
@@ -1323,11 +1438,47 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let blocked = 0;
     let needsManualStart = 0;
     let notDispatchable = 0;
+    let scheduled = 0;
     let internalEdges = 0;
     let externalEdges = 0;
+    const now = Date.now();
     for (const item of items) {
       internalEdges += item.dependsOnRefs?.length ?? 0;
       externalEdges += item.dependsOnTaskIds?.length ?? 0;
+      // `CreateTaskBatchItemDto` extends `CreateTaskDto`, so a batch item can carry a schedule,
+      // and a schedule is a SECOND trigger with rules of its own (SCHEDULED_DUE_SQL).
+      const runAt = item.runAt ? new Date(item.runAt) : null;
+      // A prerequisite created by this same batch is OPEN the moment it exists, so anything
+      // naming one waits — no need to consult the graph for it.
+      const waitsOnBatch = (item.dependsOnRefs?.length ?? 0) > 0;
+      const waitsOnExisting = (item.dependsOnTaskIds ?? []).some(
+        (id) => statusOf.get(id) !== TaskStatus.DONE,
+      );
+      // What both sweeps require of a task before they will dispatch it at all.
+      const runnable =
+        !!item.assigneeId &&
+        !!runnerOf.get(item.assigneeId) &&
+        !(item.listId && pausedLists.has(item.listId));
+      // A scheduled item is classified by what is ACTUALLY standing between it and a run, in the
+      // order the sweep would hit them — not by its schedule alone. The clock is the last of the
+      // conditions to be checked, never the first, because `scheduled` is the strongest claim on
+      // this card: it says nobody has to do anything and nothing has to finish. An item that is
+      // also unassigned, or in a paused list, or waiting on a prerequisite does not meet that
+      // description, and filing it under `scheduled` would promise a run that never comes.
+      //
+      // `autoRunWhenReady` is deliberately not consulted here, and a prerequisite is not required
+      // to exist: both are answers to the dependency question, and this trigger is the clock.
+      if (runAt) {
+        if (waitsOnBatch || waitsOnExisting) blocked += 1;
+        else if (!runnable) notDispatchable += 1;
+        // Everything is in place and the only thing left is the time.
+        else if (runAt.getTime() > now) scheduled += 1;
+        // Already due on arrival. Without this branch a batch scheduled for "now" reported fifty
+        // tasks that "wait for a person" and then started all fifty within the minute — the same
+        // class of wrong as the case below, in the direction the card exists to prevent.
+        else startingNow += 1;
+        continue;
+      }
       // A task with no prerequisites is never auto-run, however runnable it looks: the sweep's
       // predicate requires a prerequisite that is DONE (AUTO_RUN_READY_SQL), because auto-run
       // means "start when what you were waiting for finishes" — not "start because nothing is in
@@ -1342,22 +1493,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         needsManualStart += 1;
         continue;
       }
-      // A prerequisite created by this same batch is OPEN the moment it exists, so anything
-      // naming one waits — no need to consult the graph for it.
-      const waitsOnBatch = (item.dependsOnRefs?.length ?? 0) > 0;
-      const waitsOnExisting = (item.dependsOnTaskIds ?? []).some(
-        (id) => statusOf.get(id) !== TaskStatus.DONE,
-      );
       if (waitsOnBatch || waitsOnExisting) {
         blocked += 1;
         continue;
       }
-      const dispatchable =
-        item.autoRunWhenReady !== false &&
-        !!item.assigneeId &&
-        !!runnerOf.get(item.assigneeId) &&
-        !(item.listId && pausedLists.has(item.listId));
-      if (dispatchable) startingNow += 1;
+      if (item.autoRunWhenReady !== false && runnable) startingNow += 1;
       else notDispatchable += 1;
     }
     return {
@@ -1371,6 +1511,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Worth separating from `blocked`, because these do not start when something finishes —
       // they wait for a person, and a batch that is silently all of these did nothing.
       notDispatchable,
+      // Ready in every respect except the time: assigned, on a live runner, not held by a paused
+      // list, nothing outstanding to wait for. Nobody has to do anything and nothing has to
+      // finish — these start on their own, later. An item that is scheduled AND missing one of
+      // those is counted by what is actually stopping it, above, because this bucket is a promise
+      // that the run will arrive unattended. Named rather than folded into any of the four, all
+      // of which would misdescribe it; a client that predates the field ignores it and simply
+      // does not count these as starting now, which is the true statement.
+      scheduled,
       internalEdges,
       externalEdges,
       lists: lists.map((l) => ({ id: l.id, title: l.title })),
@@ -2914,6 +3062,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       description: dto.description,
       status: dto.status,
       dueDate: dto.dueDate === null ? null : dto.dueDate ? new Date(dto.dueDate) : undefined,
+      // Three-state, same as dueDate: omitted preserves the schedule, null cancels it, an instant
+      // (re)schedules. Cancelling is a plain write with no dispatch consequence — nothing has been
+      // consumed, so there is nothing to put back.
+      runAt: dto.runAt === null ? null : dto.runAt ? new Date(dto.runAt) : undefined,
       // Whole-set replacement, not a merge: omitted keeps the current labels, [] clears them.
       // A merge would leave no way to remove one.
       labels: dto.labels === undefined ? undefined : normalizeTaskLabels(dto.labels),
@@ -3204,16 +3356,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         status: true,
         autoRunWhenReady: true,
+        runAt: true,
         assignee: { select: { id: true, runnerId: true } },
       },
     });
+    const now = new Date();
     for (const dep of dependents) {
       if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
       if (dep.status !== 'OPEN') continue; // already running/done/cancelled — leave it
       if (!dep.autoRunWhenReady) continue; // gate kept, manual trigger only
+      // Scheduled for later: being ready is not permission to start early. The schedule is kept,
+      // not consumed — dispatchDueScheduledTasks picks the task up once it comes due, and by then
+      // this same READY state is one of the things it re-checks. Two independent triggers, and
+      // the later of the two is the one that fires.
+      if (dep.runAt && dep.runAt > now) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
       try {
-        await this.execute(ownerId, dep.id);
+        // Carrying what this scan read: between here and execute's own re-read, the user may have
+        // scheduled this task for later, and starting it now would both jump the appointment and
+        // erase it. `dep.runAt` is usually null — an unscheduled dependent — which is an assertion
+        // of exactly that, not an absence of one.
+        await this.execute(ownerId, dep.id, { observedRunAt: dep.runAt });
       } catch (e) {
         this.logger.warn(
           `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -3254,11 +3417,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
         listId: string | null;
+        runAt: Date | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId"
+             t.list_id AS "listId", t.run_at AS "runAt"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -3285,6 +3449,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
+      // Read here so the dispatch below can prove it is still acting on this row. The predicate
+      // admits `run_at IS NULL OR run_at <= now()`, so this is null for almost every candidate —
+      // and null is the assertion that matters, since scheduling a previously unscheduled task is
+      // the commonest way for this scan to be overtaken.
+      runAt: row.runAt,
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
@@ -3320,6 +3489,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let atCapacity = 0;
+    let rescheduled = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
@@ -3364,8 +3534,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       try {
-        await this.execute(t.ownerId, t.id);
-        this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
+        const res = await this.execute(t.ownerId, t.id, { observedRunAt: t.runAt });
+        // A task scheduled out from under this pass is not dispatched and must not be logged as
+        // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
+        if (res.ok) this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
+        else rescheduled += 1;
       } catch (e) {
         this.logger.warn(
           `reconcile auto-run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -3391,6 +3564,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `auto-run: ${atCapacity} ready task(s) left for a later sweep — no free slot to claim them`,
       );
     }
+    if (rescheduled > 0) {
+      this.logger.log(
+        `auto-run: ${rescheduled} ready task(s) were rescheduled mid-sweep — their new schedule stands`,
+      );
+    }
     for (const [listId, e] of perList) {
       if (e.quota > 0) {
         await this.recordListEvent(
@@ -3407,6 +3585,91 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
         );
       }
+    }
+  }
+
+  /**
+   * Start the tasks whose scheduled time has arrived.
+   *
+   * The whole of the scheduling feature's runtime: a task carries an optional `run_at`, and this
+   * is what reads it. Everything a run needs to be correct — which workspace, which
+   * provider/model, whether its prerequisites are finished, whether its list is paused, whether
+   * something is already running it, whether the runner has a slot — is decided by the code that
+   * already decides it, because this dispatches through {@link execute} rather than creating a
+   * session itself. A second way to start a task is a second set of rules to keep in step, and
+   * the schedule is a trigger, not an execution model.
+   *
+   * At-least-once, and it has to be: a schedule that is due but cannot run right now — nothing
+   * assigned, its list paused, a prerequisite still open — is skipped by the predicate WITHOUT
+   * being consumed, so the next sweep reconsiders it. Missing the moment must not lose the
+   * appointment; the appointment says "not before", not "then or never". What stops that from
+   * becoming a repeat is the consumption on the other side: the first accepted run clears
+   * `run_at`, and the task leaves the candidate set for good.
+   *
+   * The double-dispatch this leaves possible — this sweep and the auto-run sweep both finding the
+   * same due, ready task — is absorbed where every other duplicate trigger in this service already
+   * is, by runWorkspaceOnTask's session dedup. Both sweeps also ride the same timer, sequentially,
+   * so in practice the second one runs after the first has already taken the task out of scope.
+   */
+  private async dispatchDueScheduledTasks(): Promise<void> {
+    // Ordered by when they came due, so a sweep that cannot dispatch everything takes the
+    // longest-overdue work first rather than an arbitrary slice; `id` only breaks ties, so the
+    // order is total and the same list twice in a row means the same decisions twice in a row.
+    const due = await this.prisma.$queryRaw<
+      { id: string; ownerId: string; runnerId: string; listId: string | null; runAt: Date }[]
+    >`
+      SELECT t.id, t.owner_id AS "ownerId", a.runner_id AS "runnerId", t.list_id AS "listId",
+             t.run_at AS "runAt"
+      FROM task t
+      JOIN workspace a ON a.id = t.assignee_id
+      WHERE ${SCHEDULED_DUE_SQL}
+      ORDER BY t.run_at ASC, t.id ASC
+      LIMIT ${SCHEDULED_DISPATCH_MAX_PER_SWEEP}`;
+    if (due.length === 0) return;
+    // Only now — the query above is one partial-index scan that finds nothing on almost every
+    // sweep, and a deployment with no schedules should pay for exactly that and no more.
+    const budget = await this.materialisationBudget();
+    let dispatched = 0;
+    let atCapacity = 0;
+    let rescheduled = 0;
+    for (const t of due) {
+      // The same brake the auto-run sweep takes, for the same reason: materialising past what the
+      // runner can claim produces sessions that sit PENDING and buy nothing. Here it is also what
+      // makes "left for a later sweep" true rather than a hope — the task keeps its `run_at`, so
+      // it is still due, and the sweep that finds a free slot is the one that starts it.
+      if (!takeBudget(budget, t.runnerId, t.listId)) {
+        atCapacity += 1;
+        continue;
+      }
+      try {
+        // The appointment this pass is keeping, carried so the dispatch can check it is still the
+        // one on the row. A user who moves a due task to next week between the scan and here has
+        // replaced the reason this loop had for starting it, and the sweep stands down: it starts
+        // nothing, consumes nothing, and the new schedule is left to fire on its own.
+        const res = await this.execute(t.ownerId, t.id, { observedRunAt: t.runAt });
+        if (res.ok) dispatched += 1;
+        else rescheduled += 1;
+      } catch (e) {
+        // The schedule is untouched on this path (execute consumes it only after a run is away),
+        // so the next sweep tries again. Warn rather than error: a task whose runner went offline
+        // between the scan and the dispatch is an ordinary race, not a fault.
+        this.logger.warn(
+          `scheduled run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+    if (dispatched > 0) this.logger.log(`scheduled: ${dispatched} due task(s) dispatched`);
+    if (rescheduled > 0) {
+      // Worth a line of its own: "the schedule fired and nothing ran" is otherwise indistinguishable
+      // from a bug, and this is the one case where it is the correct outcome.
+      this.logger.log(
+        `scheduled: ${rescheduled} due task(s) were rescheduled mid-sweep — their new schedule stands`,
+      );
+    }
+    if (atCapacity > 0) {
+      this.logger.log(
+        `scheduled: ${atCapacity} due task(s) left for a later sweep — no free slot to claim them`,
+      );
     }
   }
 
@@ -4196,7 +4459,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * resume-first-else-create flow as an @-mention, but as a user-facing action, so a
    * missing assignee / runner becomes a hard error instead of a silent skip.
    */
-  async execute(ownerId: string, id: string) {
+  async execute(ownerId: string, id: string, auto?: AutoDispatch) {
     const task = await this.prisma.task.findFirst({
       where: { id, ownerId },
       select: {
@@ -4210,11 +4473,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         isForeman: true,
         verifiesTaskId: true,
         dispatchHold: true,
+        runAt: true,
         list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    // The schedule fence, and it comes before every other check because it decides whether this
+    // call has any business running at all. Only automatic triggers pass `auto`: an explicit Run
+    // Now is a person deciding to start the work despite the schedule, which is exactly the case
+    // the fence must NOT block (see the consumption below). A sweep that has been overtaken by a
+    // reschedule simply stands down — the task keeps whatever schedule it now has, and the sweep
+    // that runs after that instant is the one that starts it.
+    if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
+      return { ok: false as const, skipped: 'rescheduled' as const };
+    }
     const depState = (await this.dependencyStatesFor([id])).get(id) ?? 'NONE';
     if (!canRun(depState)) {
       throw new BadRequestException(
@@ -4248,7 +4521,45 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : undefined,
     );
     if (task.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, task.id);
-    return { ok: true, sessionId };
+    // The run is away, so the appointment has been kept — including when this call IS the button
+    // that superseded it. A future run_at is deliberately not a veto on this path: "the earliest
+    // time it starts by itself" says nothing about a person deciding to start it now, and a Run
+    // button that refused would leave the only way to run a scheduled task early being to cancel
+    // its schedule first.
+    await this.consumeRunAt(ownerId, task.id, task.runAt);
+    return { ok: true as const, sessionId };
+  }
+
+  /**
+   * Spend a one-shot schedule: the task has been dispatched, so `run_at` goes back to NULL and
+   * the task will not be started by the clock again.
+   *
+   * Compare-and-set on the instant the caller read, NOT a blind `update({ runAt: null })`. A
+   * dispatch is several awaits long — the read, the dependency check, the session create — and a
+   * user rescheduling the task inside that window has stated a new intention about a run that had
+   * not happened yet. Matching on the old value makes that write win: the clear applies to the
+   * appointment that was kept, and a different one is left standing. It is also what makes the
+   * consumption exactly-once under an at-least-once sweep, since the second attempt matches
+   * nothing.
+   *
+   * Unscheduled tasks — the overwhelming majority, and every task that predates the column — cost
+   * one comparison and no query at all.
+   */
+  private async consumeRunAt(
+    ownerId: string,
+    taskId: string,
+    runAt: Date | null | undefined,
+  ): Promise<void> {
+    if (!runAt) return;
+    const res = await this.prisma.task.updateMany({
+      where: { id: taskId, ownerId, runAt },
+      data: { runAt: null },
+    });
+    // Only when it actually cleared: a lost CAS means somebody else's schedule is now on the row,
+    // and telling their clients the task changed because we failed to change it is noise.
+    if (res.count > 0) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
   }
 
   /**
@@ -4335,6 +4646,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         provider: true,
         model: true,
         status: true,
+        runAt: true,
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
         // different prompt depending on which button started it.
         isForeman: true,
@@ -4399,6 +4711,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           batch,
         );
         if (t.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, t.id);
+        // A bulk Run keeps the appointment the same way the single one does. Without this a task
+        // started here would keep its schedule and be started again by the clock afterwards —
+        // "one-shot" has to mean one run, not one run per way of starting it.
+        await this.consumeRunAt(ownerId, t.id, t.runAt);
         return { id: t.id, ok: true as const, sessionId };
       } catch (e) {
         this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);

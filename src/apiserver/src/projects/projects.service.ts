@@ -47,6 +47,11 @@ const PROJECT_TASK_TREE_SELECT = {
   createdAt: true,
   updatedAt: true,
   dueDate: true,
+  // Both instants a row carries, and they answer different questions: `dueDate` is when the work
+  // is wanted by, `runAt` is when it starts by itself. Omitting this one made a schedule saved
+  // through the task API unreadable through the project tree — the client could set it and then
+  // could not see it, which reads as the write having been lost.
+  runAt: true,
   assignee: { select: { id: true, name: true } },
 } satisfies Prisma.TaskSelect;
 

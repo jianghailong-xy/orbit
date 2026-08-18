@@ -53,6 +53,13 @@ export class CreateTaskDto {
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string;
   @IsOptional() @IsDateString() dueDate?: string;
+  // The earliest time this task may start automatically (ISO 8601, stored and returned UTC).
+  // Omitted means unscheduled, which is what every task has always been. Distinct from dueDate on
+  // purpose: that is a deadline nothing dispatches on, this is a trigger — see Task.runAt.
+  //
+  // One-shot. The first run actually accepted consumes it, so there is no recurrence to express
+  // and no cron expression to accept.
+  @IsOptional() @IsDateString() runAt?: string;
   // Provider/model this task's runs use, overriding the assignee workspace's own. The provider must
   // be a built-in engine slug or one of the caller's enabled configured providers; omitted (or
   // null) inherits from the assignee, which is the historical behaviour.
@@ -149,6 +156,11 @@ export class UpdateTaskDto {
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string | null;
   @IsOptional() @IsDateString() dueDate?: string | null;
+  // Three-state like dueDate above: omit to keep the current schedule, null to cancel it, an ISO
+  // instant to (re)schedule. Rescheduling a task whose dispatch is in flight is safe — the
+  // consumption is a compare-and-set on the instant it read, so this write wins rather than being
+  // cleared by the run it raced.
+  @IsOptional() @IsDateString() runAt?: string | null;
   // null goes back to inheriting the assignee workspace's provider/model; a string pins this task's
   // runs to that provider / model id. Omit to leave the current pin alone.
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;

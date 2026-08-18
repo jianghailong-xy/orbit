@@ -1341,6 +1341,23 @@ model Task {
   /// (a snapshot id, a shard) rather than judgements, and facts arrive already spelled.
   labels           String[]    @default([])
   dueDate          DateTime?   @map("due_date")
+  /// The earliest time this task may start automatically. A trigger, and the only column here that
+  /// is one: `dueDate` states when the work is wanted BY and nothing reads it, while a sweep reads
+  /// this one and dispatches on it. The two are independent — a task can be scheduled without a
+  /// deadline and given a deadline without a schedule — and conflating them would make setting a
+  /// due date start the work.
+  ///
+  /// NULL means unscheduled, which is every task that exists today and every task created without
+  /// the field. Non-NULL is one-shot: the first run that is actually accepted consumes it back to
+  /// NULL (compare-and-set on the observed instant, so a reschedule racing the dispatch survives),
+  /// so this can never become a recurrence by accident. A schedule that cannot run yet — no
+  /// assignee, its list paused, a prerequisite outstanding — is left alone rather than consumed,
+  /// and the next sweep reconsiders it.
+  ///
+  /// Stored UTC, like every other instant here. Not to be confused with the `scheduledAt` column
+  /// migration 0001 put on the long-deleted execution `Task`: that table is gone, and this is a
+  /// property of the human-facing task, not of a run.
+  runAt            DateTime?   @map("run_at")
   // Per-task override for the runs this task dispatches: a built-in engine slug
   // ("claude"/"codex"/"kimi"/"opencode") or one of the owner's configured ModelProvider slugs,
   // and a model id inside that provider's space. NULL keeps the historical behaviour — the run
@@ -1416,6 +1433,11 @@ model Task {
   @@index([ownerId, projectId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_project_root_created_id_idx")
   @@index([ownerId, projectId, parentTaskId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_project_child_created_id_idx")
   @@index([status])
+  /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
+  /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the
+  /// same trade `session_quota_retry_at_idx` and 0108's pair already carry. It is what keeps the
+  /// index sized to the scheduled tasks rather than to the six figures of tasks that are not.
+  @@index([runAt], map: "task_run_at_idx")
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this
   /// subject" and "how many has it had" — key on this column.
