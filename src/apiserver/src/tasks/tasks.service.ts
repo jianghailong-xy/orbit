@@ -17,6 +17,7 @@ import {
   SessionEndReason,
   TaskStatus,
   USAGE_LIMIT_ERROR_MARKERS,
+  uuidToBase62,
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
@@ -3145,10 +3146,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * It is told to reject by putting the subject back to IN_PROGRESS, which is the state a failed
    * run already lands on, so a rejected task rejoins the normal flow instead of needing one of
    * its own.
+   *
+   * The id it carries is spelled base62, the same as the `id` the verifier gets back from
+   * `task_get` — and the same one it has to pass to `task_comment` and `task_update` to land its
+   * verdict on the subject. Prose is the one boundary `PublicIdInterceptor` cannot reach, since
+   * it rewrites response *fields* and a description is not one, so the encode happens here, where
+   * the id becomes text.
    */
   private buildVerificationBrief(title: string, taskId: string, unevidenced = false): string {
     return (
-      `任务「${title}」（id: ${taskId}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
+      `任务「${title}」（id: ${uuidToBase62(taskId)}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
       (unevidenced
         ? `⚠️ 系统已先行检查：该任务**没有任何一次运行执行过哪怕一个 turn**。这说明"完成"背后没有执行记录支撑，` +
           `是很强的存疑信号——但它不是结论，请照下面的顺序查完再判。\n\n`
