@@ -6,10 +6,22 @@ import { api } from '../api';
 import { encodeId, routeId } from '../lib/idCodec';
 import { providersQuery, runnersQuery, workspacesQuery } from '../lib/queries';
 import {
+  RUN_AT_IMPOSSIBLE,
+  runAtIso,
+  runAtProblem,
+  scheduledStart,
+} from '../lib/taskSchedule';
+import {
   mergedProviderOptions,
   modelOptionsForProvider,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
+
+// Re-exported, not re-implemented: the conversion between an instant and the viewer's wall clock
+// now belongs to lib/taskSchedule, shared with the task panel's own Start at editor. This page
+// keeps the names it has always exported so that everything reading a project's schedule — its
+// rows, its New task dialog, and the tests over both — still has one place to import from.
+export { RUN_AT_IMPOSSIBLE, runAtIso, runAtProblem, scheduledStart };
 
 interface Project {
   id: string;
@@ -368,32 +380,6 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
   CANCELLED: 'default',
 };
 
-/** How a scheduled start is written on a row, matching the rest of the app's short instants. */
-const RUN_AT_FORMAT: Intl.DateTimeFormatOptions = {
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-};
-
-/**
- * A stored `runAt` as the two spellings a row needs at once.
- *
- * `local` is the viewer's own wall clock — an instant shown in UTC is the wrong time for everyone
- * outside it, and the reader is the person deciding whether that start is soon. `iso` is the same
- * instant exactly, normalized through `toISOString` so the machine-readable half is one canonical
- * UTC spelling whatever the payload happened to carry.
- *
- * Null for an absent, cleared or unparseable value alike, so a row renders no schedule at all
- * rather than the words "Invalid Date" — the one thing a stray `new Date(...)` puts on screen.
- */
-export function scheduledStart(runAt: string | null | undefined): { iso: string; local: string } | null {
-  if (!runAt) return null;
-  const at = new Date(runAt);
-  if (Number.isNaN(at.getTime())) return null;
-  return { iso: at.toISOString(), local: at.toLocaleString([], RUN_AT_FORMAT) };
-}
-
 /**
  * The project's top-level tasks, read-only: the first page of them, each of which can be opened
  * onto its own direct children.
@@ -642,74 +628,6 @@ export interface NewProjectTaskDraft {
 
 /** A form with nothing filled in — what the dialog opens on, and what it returns to on success. */
 export const EMPTY_NEW_TASK_DRAFT: NewProjectTaskDraft = { title: '' };
-
-/**
- * A `datetime-local` value as the UTC instant `POST /tasks` stores — the one timezone conversion
- * on this page, kept as a function so it can be tested without a browser.
- *
- * Built from the parsed COMPONENTS rather than from the string. Handing the string to `new Date`
- * would read a date-time with no offset as local but a bare `YYYY-MM-DD` as UTC, so a date-only
- * value would silently shift the schedule by the viewer's own offset; the component constructor
- * has only one reading, and it is the viewer's zone — which is what the control collects.
- *
- * Then read straight back, because that constructor NORMALIZES an impossible wall time instead of
- * refusing it, which would schedule a moment the reader never picked:
- *   - Feb 31st becomes Mar 3rd — a date, silently, three days later.
- *   - 02:30 on a spring-forward day becomes 03:30. That local time does not exist, and worse, it
- *     lands on the very same instant as a deliberate 03:30 — so two different choices would be
- *     indistinguishable afterwards.
- *   - A year under 100 lands in the 1900s, the constructor's own two-digit-year rule.
- * A time that is merely AMBIGUOUS is not impossible and stays accepted: 02:30 on a fall-back day
- * happens twice, and reads back as 02:30, so it survives as the earlier of the two.
- *
- * Everything that fails — nothing chosen, a cleared field, a half-typed or impossible value —
- * comes back undefined, the same absence an unscheduled task has always had. That is what keeps
- * `''`, `Invalid Date` and a quietly-moved schedule off the wire alike.
- */
-export function runAtIso(local: string | undefined): string | undefined {
-  const parts = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(local ?? '');
-  if (!parts) return undefined;
-  const [year, month, day, hour, minute, second] = [
-    parts[1],
-    parts[2],
-    parts[3],
-    parts[4],
-    parts[5],
-    parts[6] ?? '0',
-  ].map(Number);
-
-  const at = new Date(year, month - 1, day, hour, minute, second);
-  const survived =
-    at.getFullYear() === year &&
-    at.getMonth() === month - 1 &&
-    at.getDate() === day &&
-    at.getHours() === hour &&
-    at.getMinutes() === minute &&
-    at.getSeconds() === second;
-  return survived ? at.toISOString() : undefined;
-}
-
-/** Said to the reader, and thrown at a caller that tries to send one anyway — one sentence, so the
- *  two can never drift into describing the same refusal differently. */
-export const RUN_AT_IMPOSSIBLE =
-  'That is not a time that exists. Check the date — and on a daylight-saving change, your clock skips an hour.';
-
-/**
- * What is wrong with the start the draft currently holds, or null when nothing is.
- *
- * Nothing chosen is not a problem: an unscheduled task is the normal case, and the whole point of
- * the field being optional. A value that is THERE and cannot be converted is a different state
- * entirely — the reader picked a moment, and every path out of here has to keep saying so rather
- * than quietly treating it as though they had picked nothing.
- *
- * The gap this closes is narrow but real and reachable: a browser's datetime-local knows nothing
- * about the reader's daylight-saving rules, so it will happily offer 02:30 on a spring-forward day
- * — a time their own clock skips.
- */
-export function runAtProblem(local: string | undefined): string | null {
-  if (!local) return null;
-  return runAtIso(local) ? null : RUN_AT_IMPOSSIBLE;
-}
 
 /**
  * Whether the dialog's Create button may fire at all.

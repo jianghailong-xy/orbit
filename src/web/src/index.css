@@ -6671,6 +6671,31 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--bg-hover);
   border-radius: 4px;
 }
+/* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
+   input, its two actions, and the line under them — stacks in the remaining column. */
+.tdp-schedule {
+  align-items: flex-start;
+}
+.tdp-schedule-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tdp-schedule-actions {
+  display: flex;
+  gap: 8px;
+}
+.tdp-schedule-hint,
+.tdp-schedule-error {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tdp-schedule-error {
+  color: var(--error);
+}
+
 /* Wrapper around the description's Markdown render — no pre-wrap here, the `.md`
    child is real HTML. Description markdown inherits the 13px panel size rather
    than .md's 14px, same as .tdp-comment-text. */
