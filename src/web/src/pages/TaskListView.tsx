@@ -30,6 +30,7 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
+import { scheduledStart } from '../lib/taskSchedule';
 import {
   canDispatchTask,
   canStartTask,
@@ -833,6 +834,11 @@ export function TaskListView() {
     // blocked, or already done. FAILED reframes the same action as "Retry".
     const canRunRow = canStartTask(r);
     const isRetry = r.status === 'FAILED';
+    // When the server will start this task by itself, read on the viewer's own wall clock. Null
+    // for the ordinary unscheduled row and for an unreadable value alike, so neither renders a
+    // marker — and neither renders the words "Invalid Date". `scheduledStart` owns that rule;
+    // the project page's rows read the same one, so the two cannot drift.
+    const starts = scheduledStart(r.runAt);
     return (
       <div
         className={`task-row clickable${selected ? ' selected' : ''}${
@@ -880,6 +886,36 @@ export function TaskListView() {
                 }}
               />
             </Tooltip>
+          ) : null}
+          {/* Beside the title rather than in a column of its own: a scheduled start is a property
+              of the few rows that have one, and a column of its own would spend width on every
+              row that does not. "Starts", never "Due" — this is the moment the server acts on, and
+              the row shows no `dueDate` at all, so the word has one meaning here.
+
+              The row has to say three things and can only show two, so the third is text that is
+              clipped rather than absent:
+                - the VISIBLE text is the reader's own wall clock, to the minute, which is what
+                  makes "is this soon?" answerable at a glance;
+                - `dateTime` is that same instant in canonical UTC, for anything parsing the page;
+                - the clipped suffix completes the sentence a screen reader reads out. It is real
+                  text content, not `aria-label`: `<time>` maps to the `generic` role, and ARIA
+                  prohibits naming `generic`, so a label there is not a name a browser is obliged
+                  to expose — the same objection that rules out leaning on `title`, which plenty
+                  of setups never announce and a touch device has no way to reach at all. Text
+                  content has no such caveat. Name-from-content concatenates the element's text in
+                  order, so the suffix only adds what is missing — that it fires ONCE, and whose
+                  clock the time is written on — instead of repeating the words above it.
+              `title` stays for a sighted reader hovering, where it can also afford the exact
+              instant a to-the-minute local rendering rounds off. */}
+          {starts ? (
+            <time
+              className="task-run-at"
+              dateTime={starts.iso}
+              title={`Starts once, at ${starts.local} in your own time zone (${starts.iso})`}
+            >
+              Starts {starts.local}
+              <span className="task-run-at-note">, once, in your own time zone</span>
+            </time>
           ) : null}
         </div>
         {showAssigneeCol && (

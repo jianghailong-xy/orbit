@@ -2244,6 +2244,31 @@ body {
 .task-title:hover {
   color: var(--brand);
 }
+/* A one-shot scheduled start, on the few rows that carry one. Secondary to the title in size and
+   colour, and never shrunk: `flex: none` hands the whole cell's shrink to the title beside it, so
+   a long title ellipses while the instant stays readable. Inline text, so the 44px row keeps its
+   height and the windowing arithmetic above it stays arithmetic. */
+.task-run-at {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* The half of that marker only a screen reader reads: ", once, in your own time zone", clipped
+   out of the pixels because there is no room on a 44px row for a sentence the visible text can
+   imply. CLIPPED, not `display: none` or `visibility: hidden` — those take it out of the
+   accessibility tree along with the pixels, which is the whole thing it exists to stay in. Out of
+   flow, so it costs the title cell no width and the row no height. Scoped to this one class
+   rather than added as a general utility: nothing else here needs it yet. */
+.task-run-at-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 @keyframes tp-queued-fade {
   0%,
   100% {
