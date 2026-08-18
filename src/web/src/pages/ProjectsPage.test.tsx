@@ -6,7 +6,14 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
-import { ProjectDetailPage, ProjectTaskLevel, ProjectsPage } from './ProjectsPage';
+import {
+  ProjectCoordinatorControl,
+  ProjectDetailPage,
+  ProjectTaskLevel,
+  ProjectsPage,
+  coordinatorSessionPath,
+  openProjectCoordinator,
+} from './ProjectsPage';
 
 // react-query never dispatches a fetch during a static (effect-free) render — confirmed by
 // instrumenting it directly, matching TaskListView.test.tsx's own note that these tests must
@@ -26,6 +33,9 @@ const P3 = '0195c0de-0000-7000-8000-000000000003';
 // A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
 // what goes on the wire has to be the short public id whichever spelling the row was handed.
 const T1 = '0195c0de-0000-7000-8000-0000000000a1';
+// A session id in the raw-UUID spelling the coordinator response can still carry, alongside the
+// short public id the web normally holds: one route has to come out of either.
+const S1 = '0195c0de-0000-7000-8000-0000000000b1';
 
 function renderPage(qc: QueryClient) {
   return renderToStaticMarkup(
@@ -96,10 +106,10 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id> and the two task-page levels — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the coordinator POST and the two task-page levels — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if a fifth
+    // Fails if any call grows extra args or a query string, if a path changes, or if a sixth
     // api(...) call is added anywhere in the file. The arg pattern allows two levels of nesting so
     // that neither encodeURIComponent(...) nor the encodeId(...) inside it cuts the match short —
     // a call it cannot parse drops out of this list entirely, which fails the assertion too.
@@ -112,6 +122,13 @@ describe('ProjectsPage', () => {
     expect(apiCalls).toEqual([
       "'/projects'",
       '`/projects/${encodeURIComponent(id!)}`',
+      // The only WRITE on this page, and the reason it is one: resolve-or-create, so a stale or
+      // trashed binding is repaired server-side rather than followed. Method and body are held
+      // here as literally as the path, because an empty body is the whole contract of this unit —
+      // a `workspaceId` appearing in it would be a workspace picker that no longer exists in the
+      // UI, and a method other than POST would be a read of a pointer this page must not trust.
+      // What it actually puts on the wire is asserted at runtime further down.
+      "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} }",
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
@@ -121,7 +138,7 @@ describe('ProjectsPage', () => {
       // through encodeId so the server is named a parent the way it names one itself, and escaped
       // like the path segment above. What each of these two fetches is asserted at runtime further
       // down — base62 has nothing to escape, so the escaping itself is held here — and this list
-      // is what proves there is no THIRD task-page spelling and no fifth endpoint in the file.
+      // is what proves there is no THIRD task-page spelling and no sixth endpoint in the file.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?parentId=${encodeURIComponent(encodeId(parentTaskId))}&limit=100`',
     ]);
     // ...that `id` is the normalized route id, not the raw param — the detail URL and the cache
@@ -770,5 +787,190 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       nextCursor: null,
     });
     expect(renderLevel(qc, encodeId(P1), 't1')).not.toContain('More subtasks exist');
+  });
+});
+
+describe('ProjectDetailPage — coordinator', () => {
+  /** The section on its own, in one state. A static render cannot press the button, so every state
+   *  past the first is only reachable by handing it in. */
+  function renderControl(
+    props: Partial<Parameters<typeof ProjectCoordinatorControl>[0]> = {},
+  ): string {
+    return renderToStaticMarkup(
+      <ProjectCoordinatorControl
+        bound={false}
+        pending={false}
+        error={null}
+        onOpen={() => {}}
+        {...props}
+      />,
+    );
+  }
+
+  /** The one call `openProjectCoordinator` makes, read off the module mock. */
+  function postOf(projectId: string): [string, { method?: string; body?: unknown }] {
+    const apiMock = vi.mocked(api);
+    apiMock.mockClear();
+    void openProjectCoordinator(projectId);
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const [path, init] = apiMock.mock.calls[0];
+    return [path, (init ?? {}) as { method?: string; body?: unknown }];
+  }
+
+  it('posts an empty body to exactly this project’s coordinator, id escaped into the path', () => {
+    // A project id chosen unescapable-looking on purpose: a real base62 id has nothing to escape,
+    // so it would hide a missing encodeURIComponent here just as it would in the task pages.
+    const [path, init] = postOf('p/1');
+    expect(path).toBe('/projects/p%2F1/coordinator');
+    expect(init).toEqual({ method: 'POST', body: {} });
+
+    // Spelled out again, because `toEqual({...})` on an empty body is easy to misread as "any
+    // body": POST is what makes this resolve-or-create rather than a read, and the body must carry
+    // NO workspaceId — that emptiness is what makes this unit picker-free, and what hands the
+    // choice (and the actionable 400) to the server.
+    expect(init.method).toBe('POST');
+    expect(Object.keys(init.body as Record<string, unknown>)).toEqual([]);
+
+    // ...and an id that already arrived as a public id goes out unchanged, not mangled by the
+    // escaping above.
+    expect(postOf(encodeId(P1))[0]).toBe(`/projects/${encodeId(P1)}/coordinator`);
+  });
+
+  it('turns either spelling of the RETURNED session id into one canonical route', () => {
+    // The response is the only place this id comes from, and it can arrive in either spelling.
+    expect(coordinatorSessionPath(S1)).toBe(`/sessions/${encodeId(S1)}`);
+    expect(coordinatorSessionPath(encodeId(S1))).toBe(`/sessions/${encodeId(S1)}`);
+    expect(coordinatorSessionPath(S1)).not.toContain(S1); // the raw UUID must not reach the URL
+    // base62 has nothing to escape, so the string above cannot show whether it was escaped at all
+    // — the call itself is what keeps a future id alphabet safe. Same reason as the row link.
+    expect(source).toContain('`/sessions/${encodeURIComponent(encodeId(sessionId))}`');
+  });
+
+  it('offers to OPEN the coordinator a project already names — as a button, not a link', () => {
+    const out = renderControl({ bound: true });
+    expect(out).toContain('Coordinator');
+    expect(out).toContain('A project has exactly one coordinator session');
+    expect(out).toContain('Open coordinator');
+    expect(out).not.toContain('Start coordinator');
+    // Never a deep link: the bound id is an input to the LABEL and nothing else, so that a pointer
+    // which has since gone to Trash is repaired by the POST instead of followed into it.
+    expect(out).toMatch(/<button[^>]*>[\s\S]*?Open coordinator/);
+    expect(out).not.toContain('href');
+  });
+
+  it('offers to START one on a project that has never had a coordinator', () => {
+    const out = renderControl({ bound: false });
+    expect(out).toContain('Start coordinator');
+    expect(out).not.toContain('Open coordinator');
+    expect(out).not.toContain('href'); // same request from the same control, either way round
+  });
+
+  it('disables the action while one is being opened, so a second press cannot open a second', () => {
+    const out = renderControl({ bound: true, pending: true });
+    expect(out).toMatch(/<button[^>]*\bdisabled\b/);
+    expect(out).toContain('ant-btn-loading'); // and says so, rather than going quiet
+    expect(out).toContain('Open coordinator'); // still named, so the wait is attached to something
+  });
+
+  it('shows the server’s own message inline, with a Retry firing the same request', () => {
+    // The server's exact 400 for the one failure a reader can act on. This unit has no picker, so
+    // this message IS the fallback — it has to arrive whole rather than summarised into "failed".
+    const message =
+      'no workspace to open the coordinator in — none of this project’s tasks has an assignee ' +
+      'to borrow one from. Assign a task, or pass workspaceId.';
+    const out = renderControl({ bound: false, error: new Error(message) });
+    expect(out).toContain('Coordinator could not be opened');
+    expect(out).toContain(message);
+    expect(out).toContain('Retry');
+    // The primary action stays on screen beside the error, so the page is not left with Retry as
+    // its only control — and the failure stays inline rather than navigating anywhere.
+    expect(out).toContain('Start coordinator');
+
+    // Retry is the SAME handler the primary action uses — a static render cannot press either, so
+    // the one place both are wired is what says so.
+    expect(source).toContain(
+      '<Button type="primary" loading={pending} disabled={pending} onClick={onOpen}>',
+    );
+    expect(source).toMatch(/<Button size="small" danger onClick=\{onOpen\}>\s*Retry/);
+  });
+
+  it('navigates with the session the server returned, never the pointer the project carried', () => {
+    expect(source).toContain(
+      'onSuccess: (result) => navigate(coordinatorSessionPath(result.sessionId))',
+    );
+    // The bound id decides the label and nothing else. A route built from it would follow exactly
+    // the stale pointer the POST exists to repair.
+    expect(source).toContain('bound={Boolean(p.coordinatorSessionId)}');
+    expect(source).not.toMatch(/coordinatorSessionPath\(\s*p\.coordinatorSessionId/);
+    expect(source).not.toMatch(/\/sessions\/\$\{[^}]*coordinatorSessionId/);
+    // ...and the request is guarded by the normalized route id, keyed per project so two open in
+    // two tabs cannot share one in-flight or failed state.
+    expect(source).toContain('return openProjectCoordinator(id);');
+    expect(source).toContain("mutationKey: ['project', id, 'coordinator']");
+  });
+
+  it('appears only once the project itself has loaded', async () => {
+    // Still loading: nothing seeded.
+    expect(renderDetail(newClient(), encodeId(P1))).not.toContain('Coordinator');
+
+    // Failed: the page has no project to coordinate, so it must not offer to open one.
+    const failed = newClient();
+    await failed.prefetchQuery({
+      queryKey: ['project', encodeId(P1)],
+      queryFn: () => Promise.reject(new Error('network down')),
+    });
+    expect(renderDetail(failed, encodeId(P1))).not.toContain('Coordinator');
+
+    // No :id in the route at all — nothing was asked for, so there is nothing to open either.
+    const missingId = renderToStaticMarkup(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter initialEntries={['/projects']}>
+          <Routes>
+            <Route path="/projects" element={<ProjectDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(missingId).not.toContain('Coordinator');
+  });
+
+  it('sits between the project’s own fields and its tasks, reading the bound pointer for its label', () => {
+    const qc = newClient();
+    qc.setQueryData(['project', encodeId(P1)], detail({ coordinatorSessionId: encodeId(S1) }));
+    qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
+    const out = renderDetail(qc, encodeId(P1));
+
+    // The section is there, named, and knows this project already has one...
+    expect(out).toContain('>Coordinator<');
+    expect(out).toContain('Open coordinator');
+    // ...ahead of the tasks, and with everything else on the page still around it.
+    expect(out.indexOf('>Coordinator<')).toBeLessThan(out.indexOf('>Tasks<'));
+    expect(out).toContain('Website Revamp');
+    expect(out).toContain('5 tasks');
+    expect(out).toContain('Land behind a flag, then flip it');
+    expect(out).toContain('Design the landing page');
+
+    // A null pointer is the other label, from the same control and the same request.
+    const unbound = newClient();
+    unbound.setQueryData(['project', encodeId(P1)], detail({ coordinatorSessionId: null }));
+    const out2 = renderDetail(unbound, encodeId(P1));
+    expect(out2).toContain('Start coordinator');
+    expect(out2).not.toContain('Open coordinator');
+  });
+
+  it('keeps a failed coordinator out of the project’s way', () => {
+    // The section is a sibling of the fields and of the task list, and the error lives INSIDE the
+    // section — so the only thing a failure can take down is the section itself. A static render
+    // cannot fail the mutation, so this reads the two places that decide it.
+    const control = source.indexOf('<ProjectCoordinatorControl');
+    expect(control).toBeGreaterThan(-1);
+    expect(control).toBeLessThan(source.indexOf('<ProjectTasks projectId={id} />'));
+    // Nothing on the page is rendered conditionally on the coordinator's failure...
+    expect(source).not.toMatch(/coordinator\.(isError|error)\s*\?/);
+    // ...and the failed section still stands up whole on its own: heading, action and message.
+    const out = renderControl({ error: new Error('boom') });
+    expect(out).toContain('Coordinator');
+    expect(out).toContain('Start coordinator');
+    expect(out).toContain('boom');
   });
 });
