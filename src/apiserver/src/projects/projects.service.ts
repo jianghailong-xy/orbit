@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProjectStatus, TaskStatus } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
@@ -506,6 +507,12 @@ export class ProjectsService {
    * coordinator is a thing — so it names the project and carries its id, which is the only thing
    * in the message that ties the conversation back to a row.
    *
+   * That id is spelled base62, the same as the `id` the agent gets back from `project_get`. Prose
+   * is the one boundary `PublicIdInterceptor` cannot reach — it rewrites response *fields*, and a
+   * message body is not one — so the encode happens here, where the id becomes text. An id worth
+   * carrying is an id meant to be used, and a coordinator told one spelling and shown another has
+   * no way to tell it is looking at its own project.
+   *
    * It claims no tools. This slice binds a session to a project and stops there: nothing yet
    * exposes "start this task", "file a subtask" or a project read to a runner, and a prompt that
    * told the agent otherwise would produce an opening turn spent hunting for tools that are not
@@ -513,7 +520,7 @@ export class ProjectsService {
    */
   private static buildCoordinatorOpening(title: string, projectId: string): string {
     return (
-      `你是项目「${title}」（id: ${projectId}）的协调会话。\n\n` +
+      `你是项目「${title}」（id: ${uuidToBase62(projectId)}）的协调会话。\n\n` +
       `这里用来跟进这个项目的进展、协调它下面的任务，不是用来替它干活的。项目本身记着目标、验收标准和作业指导，` +
       `任务记着各自的状态、层级和归属——请先把这两样读一遍，弄清楚现在停在哪里，再简短汇报现状。\n\n` +
       `现阶段你只负责读和说：不要假设自己手上有能直接开跑任务、改任务状态或指挥 runner 的工具。` +

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { uuidToBase62 } from '@orbit/shared';
 import { ProjectsService } from './projects.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000a1';
+/** What that project is called everywhere the agent can see it, `project_get` included. */
+const PROJECT_PUBLIC_ID = uuidToBase62(PROJECT_ID);
 
 const SESSION_NEW = 'session-new';
 const SESSION_BOUND = 'session-bound';
@@ -700,7 +703,21 @@ test('the opening message names the project and carries its id', async () => {
   const { title, prompt } = f.created[0][1];
   assert.ok(title.includes('Ship the coordinator'), title);
   assert.ok(prompt.includes('Ship the coordinator'), prompt);
-  assert.ok(prompt.includes(PROJECT_ID), prompt);
+  assert.ok(prompt.includes(PROJECT_PUBLIC_ID), prompt);
+});
+
+test('the id it carries is the public one, not the uuid the column holds', async () => {
+  // Prose is the boundary PublicIdInterceptor does not cover: it rewrites response fields, and
+  // this id lives in a message body. Left as a uuid it is the one id in the whole conversation
+  // spelled differently from every other — `project_get` answers base62 — so the coordinator
+  // cannot tell the project it was told about from the project it just read.
+  const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
+
+  await f.open();
+
+  const prompt: string = f.created[0][1].prompt;
+  assert.ok(prompt.includes(PROJECT_PUBLIC_ID), prompt);
+  assert.equal(prompt.includes(PROJECT_ID), false, 'the raw uuid reached the agent');
 });
 
 test('the opening message claims no tools this slice has not shipped', async () => {
