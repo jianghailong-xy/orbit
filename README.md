@@ -83,6 +83,12 @@ Highlights:
 - **Bring-your-own model providers** — beyond an engine's own login, an admin (or a user, for a
   personal row) can connect an API-compatible vendor from a preset catalogue; the session then
   borrows the matching runtime CLI with that key injected. See `src/shared/src/providerPresets.ts`.
+- **Projects, and who/with-what/where** — a `Project` groups the work; a `Task` is one piece of
+  it. Which **Agent** does it, which **Provider/Model** it runs on, and which **Workspace/Runner**
+  it runs in are three independent resolution chains, so picking an assignee can no longer decide
+  which machine the job lands on. Runtime requirements (`macos`, `xcode`, `gpu`) select a runner
+  from what the runner itself reports it can do, and every run stores an immutable snapshot of
+  what was resolved. See [`docs/project-agent-contract.md`](docs/project-agent-contract.md).
 - **Cost/usage from the source** — runners report the engine's own per-turn cost/token usage
   where it exposes it (e.g. Claude Code's `total_cost_usd` / `usage`); the control plane
   aggregates these (see caveat below).
@@ -268,7 +274,8 @@ src/
   ios/        XcodeGen spec + iOS entry; reuses OrbitApp's SwiftUI sources in place
 gateway/      nginx reverse proxy (web + /api on one origin)
 docs/         design records (interactive sessions, session lifecycle, realtime control
-              plane, badge sync, quota retry, session search, native clients)
+              plane, badge sync, quota retry, session search, native clients,
+              project/agent domain contract)
 ```
 
 ## Useful scripts (root)
