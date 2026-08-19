@@ -85,6 +85,41 @@ system_identifier=7675796122992578594 version=16.14
 
 测试完成后精确删除上述容器和网络，再按精确名字 inspect，二者均为 not found。全过程没有列举、连接、`docker exec` 或传入任何共享控制面 PostgreSQL 的名字、数据库、IP 或凭据；没有在共享数据库执行任何 DDL/DML。
 
+### 3.1 运行时中断后的 `pcc11-*` 恢复复验
+
+同类运行时故障中断会话后，没有重建或覆盖已有独立 spec；恢复时先对磁盘上的
+`coordinator-v110-adversarial.spec.ts` 原样执行 strict 编译（exit 0），并记录
+`sha256=7240edcaa30c8236b04a625482f6dce380196a4d15c77e919ab100ef490b6163`。随后只新建一次
+`pcc11-*` 隔离环境，无 volume：
+
+```text
+container: pcc11-v110r-pg-349bqgko-20260819n
+network:   pcc11-v110r-net-349bqgko-20260819n
+database:  pcc11_v110r_349bqgko_20260819n
+user:      pcc11_v110r_349bqgko
+host:      127.0.0.1:32778
+```
+
+创建前两个精确名字均为 not found。DDL 前预检与 safety gate 的结果一致：
+
+```text
+coordinator-pg-isolation database=pcc11_v110r_349bqgko_20260819n
+user=pcc11_v110r_349bqgko server=172.23.0.2/32:5432
+system_identifier=7675797770735771682 version=16.14
+```
+
+真实 PG `7/7`，三组正反控制均成立：
+
+1. PAC 正例 `{v:1,who,with,where}` 被 `EXECUTION_RESULT_SHAPE` 拒；反向控制删除 PAC 必需的 `v`
+   后通过，证明冲突落在 exact-key gate，而不是其它 context 字段。
+2. 健康 `detail={}` 的 CLAIMED action、Session 双向链接发布和 soft delete 均提交；反向故障注入 hard
+   delete 同样提交，但查询得到 APPLIED action 指向不存在 Session。
+3. 健康空数组账本随普通发布通过 D18；畸形 `retiredPins={}` 在初始 INSERT 提交，随后合法终态与修复
+   UPDATE 都稳定得到原生 SQLSTATE `22023`，不是 `EXECUTION_PIN_LEDGER`，且行保持 CLAIMED。
+
+结束后只删除上述 `pcc11-*` 容器与网络，精确 inspect 均为 not found。恢复复验同样没有访问共享
+PostgreSQL；目标工作树的 staged 修改与任何外部 stash 未被读取、写入或移动。
+
 ## 4. 反例驱动故障矩阵
 
 | 场景 | 唯一权威状态 | 确定动作 / 幂等键 | 责任人与恢复 | v1.10 判定 |
