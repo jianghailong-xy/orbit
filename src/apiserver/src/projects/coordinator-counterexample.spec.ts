@@ -5617,3 +5617,446 @@ test('§26 names a test that exists for every finding, and points at clauses tha
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§26 points at §${m[1]}, which does not exist`);
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// Round nine (`PC-CX-47..49`, §27). The first eight rounds asked *when* a hard gate runs, *who*
+// decides its scope, and whether the closed set it compares against is really closed. This one
+// asks the question after all of those: **once it has run and returned success, what has it
+// actually proved?** D16 proved "a claimResolution exists" and called it "the session's pin equals
+// the frozen conclusion"; §4.3 I17-A claimed both digests equal recomputation while no database
+// object had ever read either column; the ledger proved "n − 1 rows" and called it provenance.
+// All three are one sentence: **a gate that only checks presence cannot prove correctness.**
+// ---------------------------------------------------------------------------------------------
+
+type Version19 = 'v18' | 'v19';
+
+const DEFERRED = 'DEFERRED_TO_CLAIM';
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/;
+const PIN_COMPONENTS = ['model', 'effort'] as const;
+type PinComponent = (typeof PIN_COMPONENTS)[number];
+
+/** §7.4 EC6-c: one `claimResolution.<component>` record — old value, new value, and where it came from. */
+type ClaimPart = { frozen?: string | null; value?: string | null; source?: string };
+type ClaimResolution = { generation?: number; at?: string; model?: ClaimPart; effort?: ClaimPart };
+/** §7.4 EC6-c: one `retiredPins[]` record — the six keys, no more and no fewer. */
+type RetiredPin = { generation?: number; component?: string; from?: string; to?: string; at?: string; reason?: string };
+
+type PinState = {
+  frozen: Record<PinComponent, string | null>;   // the action's frozen conclusion (EC2-b part ②)
+  snapshotFrozenAt: string;
+  claim: ClaimResolution | null;
+  retiredPins: RetiredPin[];
+  generation: number;                            // session.execution_pin_generation
+  session: Record<PinComponent, string | null>;  // what the session is actually running
+};
+
+type FoldResult = { ok: true; pin: Record<PinComponent, string | null> } | { ok: false; reason: string };
+
+function sameKeys(value: object, expected: readonly string[]): boolean {
+  return JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...expected].sort());
+}
+
+/**
+ * §7.7 D16 ⓪ `coordinator_pin_ledger_fold`, modelled field by field: EC6-c's closed shapes, then
+ * EC6-e's chain. It returns the pair the ledger folds to, so both callers can compare it against
+ * the value they hold — that is what "two-way" means from v1.9 on (D16-f).
+ */
+function foldPinLedger(state: PinState): FoldResult {
+  if (state.generation === 0) {
+    return state.claim === null && state.retiredPins.length === 0
+      ? { ok: true, pin: { model: null, effort: null } }
+      : { ok: false, reason: 'generation 0 but a claim is already recorded' };
+  }
+  const claim = state.claim;
+  if (claim === null || !sameKeys(claim, ['generation', 'at', 'model', 'effort'])) {
+    return { ok: false, reason: 'no first claim of EC6-c closed shape' };
+  }
+  if (claim.generation !== 1 || typeof claim.at !== 'string' || !ISO_UTC.test(claim.at)
+      || Date.parse(claim.at) < Date.parse(state.snapshotFrozenAt)) {
+    return { ok: false, reason: 'first claim has no generation 1 or no valid moment' };
+  }
+  const pin: Record<PinComponent, string | null> = { model: null, effort: null };
+  for (const component of PIN_COMPONENTS) {
+    const part = claim[component];
+    if (!part || !sameKeys(part, ['frozen', 'value', 'source'])) {
+      return { ok: false, reason: `${component} recorded without frozen/value/source` };
+    }
+    // The binding PC-CX-47 turns on: the record cannot launder a frozen value the action never froze.
+    if (part.frozen !== state.frozen[component]) {
+      return { ok: false, reason: `claims a frozen ${component} the action never froze` };
+    }
+    if (part.frozen === DEFERRED) {
+      if (part.source !== 'RESOLVED_AT_CLAIM' || !part.value || part.value === DEFERRED) {
+        return { ok: false, reason: `defers ${component} to claim but records no resolved value` };
+      }
+    } else if (part.source !== 'FROZEN_CONTEXT' || part.value !== part.frozen) {
+      return { ok: false, reason: `records a ${component} other than the concrete value the action froze` };
+    }
+    pin[component] = part.value ?? null;
+  }
+  if (state.retiredPins.length !== state.generation - 1) {
+    return { ok: false, reason: `generation ${state.generation} with ${state.retiredPins.length} retired pins` };
+  }
+  let previous = Date.parse(claim.at);
+  for (const [i, entry] of state.retiredPins.entries()) {
+    if (!sameKeys(entry, ['generation', 'component', 'from', 'to', 'at', 'reason'])) {
+      return { ok: false, reason: `retiredPins[${i}] is not EC6-c's closed record` };
+    }
+    const component = entry.component as PinComponent;
+    if (!PIN_COMPONENTS.includes(component) || entry.reason !== 'RUNTIME_RETIRED'
+        || entry.generation !== i + 2 || typeof entry.at !== 'string' || !ISO_UTC.test(entry.at)
+        || Date.parse(entry.at) < previous || entry.from !== pin[component]
+        || !entry.to || entry.to === entry.from) {
+      return { ok: false, reason: `retiredPins[${i}] does not continue the chain` };
+    }
+    previous = Date.parse(entry.at);
+    pin[component] = entry.to;
+  }
+  return { ok: true, pin };
+}
+
+/** Does the commit point admit this state? v1.8 counted; v1.9 folds and compares against the session. */
+function pinLedgerAdmits(version: Version19, state: PinState): boolean {
+  if (version === 'v18') {
+    // v1.8's two D16 functions, verbatim: existence and cardinality. Neither reads a single field
+    // of either record, and neither compares the session's own model/effort with anything.
+    return state.generation === 0
+      ? state.claim === null && state.retiredPins.length === 0
+      : state.claim !== null && state.retiredPins.length === state.generation - 1;
+  }
+  const folded = foldPinLedger(state);
+  return folded.ok && folded.pin.model === state.session.model && folded.pin.effort === state.session.effort;
+}
+
+/** §7.7 D17 `coordinator_canonical_json`: keys in C order, arrays in place, scalars as JSON. */
+function canonicalJson(value: unknown): string {
+  if (value === null || value === undefined) return 'null';
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((k) => `${JSON.stringify(k)}:${canonicalJson(record[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+function executionDigest(value: unknown): string {
+  return createHash('sha256').update(canonicalJson(value)).digest('hex');
+}
+
+/** §7.4 EC2-a's nine components, read from the contract rather than copied by hand. */
+function ec2aComponents(): string[] {
+  const dispatch = section(PCC, '7.4');
+  const clause = dispatch.slice(dispatch.indexOf('- **EC2-a（'), dispatch.indexOf('- **EC2-b（'));
+  const listed = clause.slice(clause.indexOf('恰好九个键'), clause.indexOf('值可以是 JSON null'));
+  return Array.from(listed.matchAll(/`([A-Za-z]+)`/g), (m) => m[1]);
+}
+
+type ActionRow = {
+  subjectType: string;
+  subjectId: string;
+  context: Record<string, unknown>;
+  contextDigest: string;
+  resultDigest: string;
+};
+
+/** §7.7 D17: both digests equal the digest of their own authoritative half, and the halves agree. */
+function digestGateAdmits(version: Version19, row: ActionRow): boolean {
+  if (version === 'v18') return true;   // no database object read either digest column at all
+  const auth = row.context.authorization as Record<string, unknown> | undefined;
+  if (!auth || typeof auth !== 'object' || !sameKeys(auth, ec2aComponents())) return false;
+  if (row.context.model === undefined || row.context.model === null) return false;
+  if (row.context.effort === undefined || row.context.effort === null) return false;
+  if (row.contextDigest !== executionDigest(auth)) return false;
+  const { authorization: _authorization, ...resultHalf } = row.context;
+  if (row.resultDigest !== executionDigest(resultHalf)) return false;
+  return auth.resolvedAgentId === row.context.agentId
+    && auth.workspaceId === row.context.workspaceId
+    && auth.runnerId === row.context.assignedRunnerId
+    && auth.providerSlug === row.context.provider
+    && auth.model === row.context.model
+    && (row.subjectType !== 'TASK' || auth.taskId === row.subjectId);
+}
+
+const FROZEN_AT_19 = '2026-08-19T00:00:00.000Z';
+const CLAIMED_AT_19 = '2026-08-19T00:01:00.000Z';
+const RETIRED_AT_19 = '2026-08-19T00:02:00.000Z';
+
+/** A legal first claim of a concrete frozen conclusion — the shape every case below perturbs. */
+function concreteClaim(): PinState {
+  return {
+    frozen: { model: 'model-v1', effort: 'high' },
+    snapshotFrozenAt: FROZEN_AT_19,
+    claim: {
+      generation: 1,
+      at: CLAIMED_AT_19,
+      model: { frozen: 'model-v1', value: 'model-v1', source: 'FROZEN_CONTEXT' },
+      effort: { frozen: 'high', value: 'high', source: 'FROZEN_CONTEXT' },
+    },
+    retiredPins: [],
+    generation: 1,
+    session: { model: 'model-v1', effort: 'high' },
+  };
+}
+
+test('PC-CX-47 the first claim can only pin what the action froze, or what it atomically recorded', () => {
+  // The review's witness, verbatim: a decision frozen as model-v1/high, a session that actually
+  // runs model-evil/low, and an empty object in the ledger to satisfy `claimResolution IS NOT NULL`.
+  const reviewed: PinState = {
+    ...concreteClaim(), claim: {} as ClaimResolution, session: { model: 'model-evil', effort: 'low' },
+  };
+  assert.equal(pinLedgerAdmits('v18', reviewed), true,
+    'the P1: v1.8 commits a session whose pin contradicts the frozen conclusion');
+  assert.equal(pinLedgerAdmits('v19', reviewed), false, 'v1.9 must refuse it');
+
+  // Both branches of EC2-b part ②, and the legal path through each.
+  const deferred: PinState = {
+    frozen: { model: DEFERRED, effort: 'high' },
+    snapshotFrozenAt: FROZEN_AT_19,
+    claim: {
+      generation: 1,
+      at: CLAIMED_AT_19,
+      model: { frozen: DEFERRED, value: 'runtime-default-v3', source: 'RESOLVED_AT_CLAIM' },
+      effort: { frozen: 'high', value: 'high', source: 'FROZEN_CONTEXT' },
+    },
+    retiredPins: [],
+    generation: 1,
+    session: { model: 'runtime-default-v3', effort: 'high' },
+  };
+  assert.equal(pinLedgerAdmits('v19', concreteClaim()), true, 'a concrete first claim of the frozen value must commit');
+  assert.equal(pinLedgerAdmits('v19', deferred), true, 'a deferred first claim that records what it resolved must commit');
+
+  const cases: [string, PinState][] = [
+    ['a concrete claim whose session ran something else',
+      { ...concreteClaim(), session: { model: 'model-evil', effort: 'high' } }],
+    ['a claim that rewrites the frozen value into DEFERRED_TO_CLAIM to admit anything',
+      { ...concreteClaim(), claim: { ...concreteClaim().claim, model: { frozen: DEFERRED, value: 'model-evil', source: 'RESOLVED_AT_CLAIM' } } as ClaimResolution,
+        session: { model: 'model-evil', effort: 'high' } }],
+    ['a concrete claim that records a value other than the frozen one',
+      { ...concreteClaim(), claim: { ...concreteClaim().claim, model: { frozen: 'model-v1', value: 'model-evil', source: 'FROZEN_CONTEXT' } } as ClaimResolution,
+        session: { model: 'model-evil', effort: 'high' } }],
+    ['a deferred claim that records no resolved value',
+      { ...deferred, claim: { ...deferred.claim, model: { frozen: DEFERRED, value: null, source: 'RESOLVED_AT_CLAIM' } } as ClaimResolution }],
+    ['a deferred claim that records the sentinel as if it were a value',
+      { ...deferred, claim: { ...deferred.claim, model: { frozen: DEFERRED, value: DEFERRED, source: 'RESOLVED_AT_CLAIM' } } as ClaimResolution,
+        session: { model: DEFERRED, effort: 'high' } }],
+    ['a context that froze no conclusion at all, which v1.7/v1.8 called "冻结值为空"',
+      { ...concreteClaim(), frozen: { model: null, effort: 'high' },
+        claim: { ...concreteClaim().claim, model: { frozen: null, value: 'model-evil', source: 'RESOLVED_AT_CLAIM' } } as ClaimResolution,
+        session: { model: 'model-evil', effort: 'high' } }],
+  ];
+  for (const [label, state] of cases) {
+    assert.equal(pinLedgerAdmits('v19', state), false, `${label}: v1.9 must refuse it`);
+    assert.equal(pinLedgerAdmits('v18', state), true, `${label}: v1.8 must still admit it (reverse control)`);
+  }
+
+  // …and the clauses that say so, plus the one database object that enforces them.
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('- **EC6-c（claim 冻结列怎么记'), '§7.4 no longer states how the claim is recorded');
+  assert.ok(dispatch.includes('- **EC6-e（'), '§7.4 does not require the ledger to fold back to the session pin');
+  assert.match(dispatch, /DEFERRED_TO_CLAIM/, 'EC6-c no longer names the deferred conclusion');
+  const seven = section(PCC, '7.7');
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.match(d16, /coordinator_pin_ledger_fold/, 'D16 does not compare the pin with the frozen conclusion');
+  assert.match(d16, /session % runs %\/% while action % records/, 'D16 does not compare the session pin with the ledger');
+  assert.match(section(PCC, '4.3'), /逐字等于 `session\.model` \/ `session\.effort`/, 'I17-A2 is still only about cardinality');
+  assert.match(section(PCC, '15'), /\*\*F47\*\*/, '§15 has no fault row for a pin that contradicts the frozen conclusion');
+});
+
+test('PC-CX-48 both digests are recomputed at commit, not merely frozen', () => {
+  const authorization = {
+    resolvedAgentId: 'a1', projectMemberId: 'm1', taskId: 't1', taskAssigneeAgentId: 'a1',
+    providerSlug: 'claude', model: 'model-v1', workspaceId: 'w1', runnerId: 'r1', coordinatorWorkspaceId: null,
+  };
+  const context: Record<string, unknown> = {
+    agentId: 'a1', workspaceId: 'w1', assignedRunnerId: 'r1', provider: 'claude', providerBuiltin: true,
+    requiredCapabilities: ['linux'], permissionMode: 'read-only', model: 'model-v1', effort: 'high',
+    resolution: { v: 1, who: { source: 'task' } }, snapshotFrozenAt: FROZEN_AT_19, authorization,
+  };
+  const { authorization: _drop, ...resultHalf } = context;
+  const honest: ActionRow = {
+    subjectType: 'TASK', subjectId: 't1', context,
+    contextDigest: executionDigest(authorization), resultDigest: executionDigest(resultHalf),
+  };
+  assert.equal(digestGateAdmits('v19', honest), true, 'an honestly computed pair of digests must commit');
+
+  // The review's witness: correct context, correct session, arbitrary result digest.
+  const forged: ActionRow = { ...honest, resultDigest: 'forged-result-digest' };
+  assert.equal(digestGateAdmits('v18', forged), true, 'the P1: v1.8 has no object that reads either digest column');
+  assert.equal(digestGateAdmits('v19', forged), false, 'v1.9 must refuse a forged result digest');
+
+  const cases: [string, ActionRow][] = [
+    ['a forged authorization digest', { ...honest, contextDigest: 'forged-context-digest' }],
+    ['an authorization half missing one of EC2-a\'s components', {
+      ...honest,
+      context: { ...context, authorization: Object.fromEntries(Object.entries(authorization).filter(([k]) => k !== 'runnerId')) },
+    }],
+    ['two halves that describe two different dispatches', {
+      ...honest, context: { ...context, authorization: { ...authorization, resolvedAgentId: 'a2' } },
+    }],
+    ['an authorization half naming another task than the action\'s own subject', {
+      ...honest, context: { ...context, authorization: { ...authorization, taskId: 't2' } },
+    }],
+    ['a context that freezes no model conclusion', {
+      ...honest, context: { ...context, model: null },
+    }],
+  ];
+  for (const [label, row] of cases) {
+    assert.equal(digestGateAdmits('v19', row), false, `${label}: v1.9 must refuse it`);
+    assert.equal(digestGateAdmits('v18', row), true, `${label}: v1.8 must still admit it (reverse control)`);
+  }
+
+  // Canonicalisation is what makes the recomputation a definition rather than a label: the same
+  // value written with different key order has to produce the same digest, in any writer.
+  const reordered = Object.fromEntries(Object.entries(context).reverse());
+  assert.notDeepEqual(Object.keys(reordered), Object.keys(context), 'the reordered fixture must really differ');
+  assert.equal(canonicalJson(reordered), canonicalJson(context), 'canonical form must not depend on key order');
+  assert.equal(executionDigest(reordered), executionDigest(context), 'and neither must the digest');
+  // …while any component moving does move it — a digest that ignores a component proves nothing.
+  assert.notEqual(executionDigest({ ...resultHalf, effort: 'low' }), executionDigest(resultHalf));
+  assert.notEqual(executionDigest({ ...authorization, runnerId: 'r2' }), executionDigest(authorization));
+
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('- **EC2-d（'), '§7.4 does not say where each digest\'s authoritative input lives');
+  assert.match(dispatch, /sha256\(canonical\(executionContext\.authorization\)\)/, 'EC2-a has no executable canonical form');
+  assert.match(dispatch, /canonical\(executionContext - 'authorization'\)/, 'EC2-b still digests the whole column');
+  const seven = section(PCC, '7.7');
+  const d17 = seven.slice(seven.indexOf('#### D17 '), seven.indexOf('#### D7 '));
+  assert.match(d17, /CREATE CONSTRAINT TRIGGER project_action_execution_digest_check/, 'D17 has no object');
+  assert.match(d17, /DEFERRABLE INITIALLY DEFERRED/, 'D17 does not run at the commit point');
+  assert.match(d17, /EXECUTION_DIGEST_MISMATCH/, 'a forged digest has no typed refusal');
+  assert.match(d17, /LANGUAGE plpgsql IMMUTABLE/, 'the canonicalisation is not declared immutable');
+  for (const clause of ['**D17-a（', '**D17-b（', '**D17-c（', '**D17-d（', '**D17-e（']) {
+    assert.ok(d17.includes(clause), `D17 does not state ${clause}）`);
+  }
+  assert.ok(seven.includes('**D14-h（'), 'D14 does not say what it proves that D17 does not');
+  assert.match(section(PCC, '15'), /\*\*F48\*\*/, '§15 has no fault row for a forged digest');
+});
+
+test('PC-CX-49 the pin ledger has a closed shape and a chain that folds back to the session', () => {
+  // The review's witness: generation 2, an empty claim record and an empty retiredPin record.
+  const reviewed: PinState = {
+    ...concreteClaim(), claim: {} as ClaimResolution, retiredPins: [{} as RetiredPin], generation: 2,
+    session: { model: 'model-v2', effort: 'high' },
+  };
+  assert.equal(pinLedgerAdmits('v18', reviewed), true, 'the P1: v1.8 commits a ledger that says nothing');
+  assert.equal(pinLedgerAdmits('v19', reviewed), false, 'v1.9 must refuse it');
+
+  const retired = (over: Partial<RetiredPin> = {}): RetiredPin => ({
+    generation: 2, component: 'model', from: 'model-v1', to: 'model-v2', at: RETIRED_AT_19,
+    reason: 'RUNTIME_RETIRED', ...over,
+  });
+  const legal: PinState = {
+    ...concreteClaim(), retiredPins: [retired()], generation: 2, session: { model: 'model-v2', effort: 'high' },
+  };
+  assert.equal(pinLedgerAdmits('v19', legal), true, 'one retiredPin that records itself must commit');
+  const twice: PinState = {
+    ...concreteClaim(), generation: 3, session: { model: 'model-v3', effort: 'high' },
+    retiredPins: [retired(), retired({ generation: 3, from: 'model-v2', to: 'model-v3' })],
+  };
+  assert.equal(pinLedgerAdmits('v19', twice), true, 'and the chain keeps holding as it grows');
+
+  const cases: [string, PinState][] = [
+    ['an empty retiredPin record', { ...legal, retiredPins: [{} as RetiredPin] }],
+    ['a record missing its reason', { ...legal, retiredPins: [{ generation: 2, component: 'model', from: 'model-v1', to: 'model-v2', at: RETIRED_AT_19 } as RetiredPin] }],
+    ['a record carrying an extra key', { ...legal, retiredPins: [{ ...retired(), note: 'why not' } as RetiredPin] }],
+    ['a record whose reason is not the one PAC §6 reserves', { ...legal, retiredPins: [retired({ reason: 'BECAUSE_I_SAID_SO' })] }],
+    ['a record for a component PAC §6 does not freeze at first claim', { ...legal, retiredPins: [retired({ component: 'provider' })] }],
+    ['a broken chain: from does not continue the claim', { ...legal, retiredPins: [retired({ from: 'model-v0' })] }],
+    ['a record whose generation does not match its position', { ...legal, retiredPins: [retired({ generation: 5 })] }],
+    ['a record whose moment runs backwards', { ...legal, retiredPins: [retired({ at: FROZEN_AT_19 })] }],
+    ['a rewrite that rewrites nothing', { ...legal, retiredPins: [retired({ to: 'model-v1' })], session: { model: 'model-v1', effort: 'high' } }],
+    ['a chain that folds to something other than the session pin', { ...legal, session: { model: 'model-v9', effort: 'high' } }],
+  ];
+  for (const [label, state] of cases) {
+    assert.equal(pinLedgerAdmits('v19', state), false, `${label}: v1.9 must refuse it`);
+    assert.equal(pinLedgerAdmits('v18', state), true, `${label}: v1.8 must still admit it (reverse control)`);
+  }
+  // Cardinality is still necessary — v1.9 adds to v1.8's predicate, it does not replace it.
+  for (const state of [{ ...legal, retiredPins: [] }, { ...legal, retiredPins: [retired(), retired({ generation: 3 })] }]) {
+    assert.equal(pinLedgerAdmits('v19', state), false, 'a ledger of the wrong length must still be refused');
+    assert.equal(pinLedgerAdmits('v18', state), false, 'and v1.8 refused that half already');
+  }
+
+  const dispatch = section(PCC, '7.4');
+  const ec6c = dispatch.slice(dispatch.indexOf('- **EC6-c（'), dispatch.indexOf('- **EC6-d（'));
+  for (const key of ['generation', 'component', 'from', 'to', 'at', 'reason', 'frozen', 'value', 'source']) {
+    assert.ok(ec6c.includes(`\`${key}\``), `EC6-c does not name the ${key} field`);
+  }
+  assert.match(ec6c, /RUNTIME_RETIRED/, 'EC6-c does not close the set of reasons');
+  const seven = section(PCC, '7.7');
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.match(d16, /CREATE CONSTRAINT TRIGGER session_execution_result_check/, 'the session side has no object');
+  assert.match(d16, /CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check/, 'the action side has no object');
+  assert.equal((d16.match(/coordinator_pin_ledger_fold\(/g) ?? []).length, 3,
+    'the two directions must judge by one shared function, defined once and called from each side');
+  assert.ok(d16.includes('**D16-f（'), 'D16 does not argue why the judgement is one function');
+  assert.match(section(PCC, '15'), /\*\*F49\*\*/, '§15 has no fault row for a ledger that says nothing');
+});
+
+test('mutation check: every fence added for PC-CX-47..49 is load-bearing', () => {
+  // Same discipline as the seven mutation checks above: remove exactly one thing v1.9 added and the
+  // published counterexample has to come back.
+  const emptyClaim: PinState = {
+    ...concreteClaim(), claim: {} as ClaimResolution, session: { model: 'model-evil', effort: 'low' },
+  };
+  const emptyLedger: PinState = {
+    ...concreteClaim(), claim: {} as ClaimResolution, retiredPins: [{} as RetiredPin], generation: 2,
+    session: { model: 'model-v2', effort: 'high' },
+  };
+  const forged: ActionRow = {
+    subjectType: 'TASK', subjectId: 't1',
+    context: { agentId: 'a1', model: 'model-v1', effort: 'high', authorization: {} },
+    contextDigest: 'frozen-a', resultDigest: 'forged-result-digest',
+  };
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-47',
+      fence: 'the field-by-field binding of the claim to the frozen conclusion (§7.4 EC6-c / EC6-e)',
+      defectReappears: () => pinLedgerAdmits('v18', emptyClaim),
+    },
+    {
+      finding: 'PC-CX-48',
+      fence: 'the commit-time recomputation of both digests (§7.7 D17)',
+      defectReappears: () => digestGateAdmits('v18', forged),
+    },
+    {
+      finding: 'PC-CX-49',
+      fence: 'the closed record shapes and the folded chain (§7.7 D16 ⓪)',
+      defectReappears: () => pinLedgerAdmits('v18', emptyLedger),
+    },
+  ];
+  assert.equal(mutants.length, 3, 'unit 02 raised three findings against v1.8');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable, while the legal paths still commit.
+  assert.equal(pinLedgerAdmits('v19', emptyClaim), false);
+  assert.equal(pinLedgerAdmits('v19', emptyLedger), false);
+  assert.equal(digestGateAdmits('v19', forged), false);
+  assert.equal(pinLedgerAdmits('v19', concreteClaim()), true);
+});
+
+test('§27 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§26 have, for the ninth round. All three are claims about what a real
+  // server does — a field-by-field binding, a recomputed digest and a folded chain — so the
+  // Postgres file is checked by name as well.
+  const rows = tables(section(PCC, '27'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-47', 'PC-CX-48', 'PC-CX-49']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§27 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '27').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 3, '§27 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§27 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '27').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§27 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§27 points at §${m[1]}, which does not exist`);
+  }
+});

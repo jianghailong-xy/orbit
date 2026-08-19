@@ -36,6 +36,7 @@ const REVIEW_V14 = readFileSync(path.join(REPO, 'docs/project-coordinator-contra
 const REVIEW_V15 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.5.md'), 'utf8');
 const REVIEW_V16 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.6.md'), 'utf8');
 const REVIEW_V17 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.7.md'), 'utf8');
+const REVIEW_V18 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.8.md'), 'utf8');
 /** §1–§18: the normative body. §19–§26 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
@@ -1131,4 +1132,126 @@ test('the create-frozen set is PAC §6’s whole table, and the pin ledger has a
   assert.match(section(PCC, '15'), /\*\*F46\*\*/, '§15 has no fault row for a disagreeing ledger');
   // The migration verification has to grow with the objects it verifies (§12.1 G5).
   assert.match(section(PCC, '12.1'), /session_execution_result_check/, 'G5 does not verify the new commit-point objects');
+});
+
+// ---------------------------------------------------------------------------------------------
+// v1.9 — `PC-CX-47..49`
+// ---------------------------------------------------------------------------------------------
+
+test('§27 answers every finding unit 02 raised against v1.8, and names a test that exists', () => {
+  // Round nine, read exactly the way the first eight are: as evidence. Its findings are numbered
+  // from 47, and the report refers back to the earlier ones, so the new ones are the ones above 46.
+  const cited = new Set(Array.from(REVIEW_V18.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 46).sort();
+  assert.deepEqual(raised, ['47', '48', '49'], 'unit 02 raised three findings against v1.8');
+
+  const rows = tables(section(PCC, '27'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§27 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22', '23', '24', '25', '26']
+    .flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `27.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§27.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the nine reviews are read, never edited', () => {
+  // Same pin as the eight-review version above, extended to round nine. Three P1s and a FAIL
+  // verdict: those are the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V18, /FAIL/, 'the ninth review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V18.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 46).length,
+    3,
+  );
+  // The review's own §6 evidence has to still be there: a revision that deleted the reproduction
+  // would leave §27's reverse controls pointing at nothing.
+  for (const evidence of ['model-evil', 'claimResolution={}', 'retiredPins=[{}]', 'forged']) {
+    assert.ok(REVIEW_V18.includes(evidence), `the ninth review no longer contains its ${evidence} evidence`);
+  }
+});
+
+test('the first claim is bound to the frozen conclusion, and the ledger folds back to the session', () => {
+  // PC-CX-47 and PC-CX-49, one shape read twice: a gate that checks presence and is read as if it
+  // had checked correctness. The fix has to be a closed shape plus a chain, not one more count.
+  const dispatch = section(PCC, '7.4');
+  const ec6c = dispatch.slice(dispatch.indexOf('- **EC6-c（'), dispatch.indexOf('- **EC6-d（'));
+  for (const field of ['frozen', 'value', 'source', 'generation', 'component', 'from', 'to', 'at', 'reason']) {
+    assert.ok(ec6c.includes(`\`${field}\``), `EC6-c does not name the ${field} field of the two records`);
+  }
+  assert.match(ec6c, /DEFERRED_TO_CLAIM/, 'EC6-c no longer states the deferred conclusion as a literal');
+  assert.match(ec6c, /RUNTIME_RETIRED/, 'EC6-c does not close the set of retiredPin reasons');
+  assert.ok(dispatch.includes('- **EC6-e（'), '§7.4 does not require the ledger to fold back to the session pin');
+
+  const seven = section(PCC, '7.7');
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.match(d16, /CREATE OR REPLACE FUNCTION coordinator_pin_ledger_fold/, 'D16 has no shared judgement');
+  assert.equal((d16.match(/coordinator_pin_ledger_fold\(/g) ?? []).length, 3,
+    'the two directions must judge by one function defined once and called from each side');
+  assert.match(d16, /session % runs %\/% while action % records/, 'D16 does not compare the session pin with the ledger');
+  assert.ok(d16.includes('**D16-f（'), 'D16 does not argue why the judgement is one function');
+  const d16Sql = d16.slice(d16.indexOf('```sql'), d16.lastIndexOf('```'));
+  assert.equal((d16Sql.match(/^\s+DEFERRABLE INITIALLY DEFERRED$/gm) ?? []).length, 2,
+    'both directions must still be deferred, or the statement order inside the transaction starts to matter');
+
+  // v1.8's cardinality-only reading may not survive in the normative body without provenance.
+  const stale = NORMATIVE.split('\n').map((l) => bare(l))
+    .filter((l) => l.includes('代次 1 ⇒ 有 claimResolution、retiredPins 恰好 0 条') && !/v1\.[1-8]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative line still reads the ledger as a row count');
+  assert.match(section(PCC, '4.3'), /逐字等于 `session\.model` \/ `session\.effort`/, 'I17-A2 is still only about cardinality');
+  assert.match(section(PCC, '15'), /\*\*F47\*\*/, '§15 has no fault row for a pin that contradicts the frozen conclusion');
+  assert.match(section(PCC, '15'), /\*\*F49\*\*/, '§15 has no fault row for a ledger that says nothing');
+  assert.match(section(PCC, '12.1'), /coordinator_pin_ledger_fold/, 'G5 does not verify the new commit-point judgement');
+});
+
+test('both digests are recomputed from an authoritative input the database can read', () => {
+  // PC-CX-48. I17-A claimed both digests equalled a recomputation and attributed the claim to
+  // D15+D16, while §26.5 admitted in the same document that a forged one commits. The fix is a
+  // canonicalisation the database can execute — not a second copy of PAC's resolution chain.
+  const dispatch = section(PCC, '7.4');
+  assert.match(dispatch, /sha256\(canonical\(executionContext\.authorization\)\)/, 'EC2-a has no executable canonical form');
+  assert.match(dispatch, /canonical\(executionContext - 'authorization'\)/, 'EC2-b still digests the whole column');
+  assert.ok(dispatch.includes('- **EC2-d（'), '§7.4 does not say where each digest\'s authoritative input lives');
+
+  const seven = section(PCC, '7.7');
+  const d17 = seven.slice(seven.indexOf('#### D17 '), seven.indexOf('#### D7 '));
+  assert.ok(d17.length > 0, '§7.7 has no D17');
+  assert.match(d17, /CREATE OR REPLACE FUNCTION coordinator_canonical_json/, 'the canonicalisation has no object');
+  assert.match(d17, /LANGUAGE plpgsql IMMUTABLE/, 'the canonicalisation is not declared immutable');
+  assert.match(d17, /CREATE CONSTRAINT TRIGGER project_action_execution_digest_check/, 'D17 has no commit-point object');
+  assert.match(d17, /DEFERRABLE INITIALLY DEFERRED/, 'D17 does not run at the commit point');
+  assert.match(d17, /EXECUTION_DIGEST_MISMATCH/, 'a forged digest has no typed refusal');
+  for (const clause of ['**D17-a（', '**D17-b（', '**D17-c（', '**D17-d（', '**D17-e（']) {
+    assert.ok(d17.includes(clause), `D17 does not state ${clause}）`);
+  }
+  assert.ok(seven.includes('**D14-h（'), 'D14 does not say what it proves that D17 does not');
+  assert.match(seven.slice(seven.indexOf('#### D14 '), seven.indexOf('#### D15 ')), /coordinator_execution_digest/,
+    'the resolver and the recomputation must use one digest function, or two gates disagree about one column');
+
+  // §26.5's admission may not stand as the current answer: it is registered and marked superseded.
+  const superseded = tables(section(PCC, '22.8'))[0];
+  const phrases = column(superseded, '被取代的字样').map(bare);
+  assert.ok(phrases.includes('仍然只由 I17-A 的审计查询发现，而不是被拒绝'),
+    '§22.8 does not register the sentence that admitted a forged digest');
+  assert.match(section(PCC, '26.5'), /v1\.9 已取代/, '§26.5 does not say which revision replaced it');
+  assert.match(section(PCC, '15'), /\*\*F48\*\*/, '§15 has no fault row for a forged digest');
+  assert.match(section(PCC, '12.1'), /project_action_execution_digest_check/, 'G5 does not verify the digest gate');
 });
