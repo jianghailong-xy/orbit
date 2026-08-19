@@ -32,6 +32,7 @@ const REVIEW_V12 = readFileSync(path.join(REPO, 'docs/project-coordinator-contra
 const COUNTEREXAMPLES = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
 
 const REVIEW_V13 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.3.md'), 'utf8');
+const REVIEW_V14 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.4.md'), 'utf8');
 /** §1–§18: the normative body. §19–§22 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
@@ -463,21 +464,21 @@ test('the revision logs are marked non-normative, and only they may quote a supe
   // §0 RL1 plus §22.8's ledger is: every superseded sentence is registered, and a line quoting one
   // must carry its provenance (a version number or the finding id). A line that quotes one without
   // provenance is a rule that is still alive.
-  for (const n of ['19', '20', '21', '22']) {
+  for (const n of ['19', '20', '21', '22', '23']) {
     const body = section(PCC, n);
     assert.match(body.split('\n').slice(0, 4).join('\n'), /本节是非规范的/, `§${n} is not marked non-normative`);
   }
 
   const ledger = tables(section(PCC, '22.8'))[0];
   const phrases = column(ledger, '被取代的字样').map(bare);
-  assert.ok(phrases.length >= 6, '§22.8 no longer registers the superseded sentences');
+  assert.ok(phrases.length >= 12, '§22.8 no longer registers every superseded sentence (v1.5 added six)');
   for (const phrase of phrases) {
     assert.ok(PCC.includes(phrase), `the ledger registers "${phrase}", which appears nowhere at all — a typo makes the row a no-op`);
     for (const [i, line] of NORMATIVE.split('\n').entries()) {
       if (!line.includes(phrase)) continue;
       assert.match(
         line,
-        /v1\.[1-4]|PC-CX-\d\d/,
+        /v1\.[1-5]|PC-CX-\d\d/,
         `a superseded rule is alive in the normative body (§22.8 registers "${phrase}"):\n  line ${i + 1}: ${line.trim()}`,
       );
     }
@@ -615,4 +616,130 @@ test('the decision input is complete: every column a rule reads is a field the i
   }
   assert.match(input, /decisionInputHash/, 'the hash was not renamed to cover the whole input');
   assert.match(section(PCC, '6.2'), /decisionInputHash/, 'the outcome does not record which input it decided on');
+});
+
+test('§23 answers every finding unit 02 raised against v1.4, and names a test that exists', () => {
+  // Round five, read exactly the way the first four are: as evidence. Its findings are numbered
+  // from 28, and the report refers back to the earlier ones, so the new ones are the ones above 27.
+  const cited = new Set(Array.from(REVIEW_V14.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 27).sort();
+  assert.deepEqual(raised, ['28', '29', '30', '31'], 'unit 02 raised four findings against v1.4');
+
+  const rows = tables(section(PCC, '23'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§23 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22'].flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `23.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§23.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the five reviews are read, never edited', () => {
+  // Same pin as the four-review version above, extended to round five. Two P0s and two P1s, and a
+  // FAIL verdict: those are the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V14, /FAIL/, 'the fifth review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V14.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 27).length,
+    4,
+  );
+});
+
+test('the cap is stated with a tense: an admission limit, not a current-state ceiling', () => {
+  // PC-CX-28 is the second instance of the PC-CX-21 shape, one round later and in a clause the
+  // same revision had just written: a property that only holds at one moment, frozen as if it held
+  // at every moment. What is pinned here is the shape of the replacement, and the fact that the
+  // over-cap state it admits is described rather than left undefined.
+  const invariants = section(PCC, '4.3');
+  assert.match(invariants, /\*\*I16-A（准入，恒成立）\*\*/, '§4.3 does not state the standing half of I16');
+  assert.match(invariants, /\*\*I16-B（提交时授权，点态）\*\*/, '§4.3 does not state the commit-time half of I16');
+
+  const gate = section(PCC, '9.6');
+  assert.match(gate, /\*\*CAP0（`maxConcurrentTasks` 是准入上限/, '§9.6 does not freeze which of the two readings applies');
+  for (const rule of ['**CAP0-a', '**CAP0-b', '**CAP0-c', '**CAP4']) {
+    assert.ok(gate.includes(rule), `§9.6 does not state ${rule}`);
+  }
+  // The choice between "refuse the decrease" and "redefine the limit" is a product decision, so it
+  // has to be argued in the document rather than left as whichever the implementer prefers.
+  const options = tables(gate).find((t) => bare(t[0][0]) === '选项');
+  assert.ok(options, 'CAP0 must argue the two options the review offered, not silently pick one');
+  assert.equal(options.length - 1, 2, 'the review offered exactly two');
+  assert.match(section(PCC, '6.1'), /overCapBy/, 'an over-cap project has to be visible in the decision input');
+  assert.match(section(PCC, '15'), /\*\*F34\*\*/, '§15 has no fault row for a cap lowered under load');
+});
+
+test('the execution context is frozen, re-resolved at commit, and proved by the database', () => {
+  // PC-CX-29, checked the way PC-CX-25 is: a P0 is answered by a database object, and the two words
+  // that carry it (`FOR SHARE`) are invisible in `pg_trigger` and in `migrate diff`, so §12.1 G5 has
+  // to keep asking for them by name.
+  const dispatch = section(PCC, '7.4');
+  for (const rule of ['**A6', '**EC1', '**EC2', '**EC3', '**EC4', '**EC5']) {
+    assert.ok(dispatch.includes(rule), `§7.4 does not state ${rule}`);
+  }
+  const ec1 = tables(dispatch).find((t) => bare(t[0][t[0].length - 1]) === 'revokedInput');
+  assert.ok(ec1, 'EC1 no longer lists the closed read set');
+  assert.equal(ec1.length - 1, 8, 'EC1 froze eight inputs');
+  const ec5 = tables(dispatch).find((t) => bare(t[0][0]) === 'revokedInput');
+  assert.ok(ec5, 'EC5 no longer maps each revoked input to a consequence');
+  const declared = column(ec1, 'revokedInput').map(bare);
+  const mapped = column(ec5, 'revokedInput').map(bare).flatMap((c) => c.split(' · '));
+  assert.deepEqual([...mapped].sort(), [...declared].sort(), 'EC5 must be a total function over EC1\'s closed enum');
+
+  const objects = column(tables(section(PCC, '2.4'))[1], '对象').map(bare);
+  assert.ok(objects.includes('session_execution_context_guard'), 'D14 is not frozen in §2.4');
+  assert.ok(section(PCC, '12.1').includes('session_execution_context_guard'), 'D14 is frozen but never created by the migration');
+  assert.match(section(PCC, '12.1'), /`resolve_execution_context_locked` 存在\*\*且函数体里含 `FOR SHARE`/,
+    'the migration is not verified for the two words that carry this P0');
+  assert.match(section(PCC, '4.3'), /\*\*I17（执行上下文在提交点复核/, 'the standing invariant is not stated');
+  assert.match(section(PCC, '15'), /\*\*F35\*\*/, '§15 has no fault row for a revoked execution context');
+  // EC3 and D14 do different jobs, and the difference is a real Postgres behaviour rather than a
+  // preference — a deferred constraint trigger takes its locks at COMMIT, not at INSERT.
+  assert.match(section(PCC, '7.7'), /\*\*D14-e（EC3 与 D14 的分工/, 'the division of labour between EC3 and D14 is not stated');
+});
+
+test('the decision input declares the action history, and a rate-limited request has a clock', () => {
+  // PC-CX-30 and PC-CX-31 are both completeness failures of a closed list: one in the harvest
+  // surface behind S8, one in §10.4's list of what may set `nextWakeAt`. Both are pinned as lists.
+  const input = section(PCC, '6.1');
+  assert.match(input, /"actions":/, 'the world projection does not carry the action history its rules read');
+  assert.match(input, /"coordinatorSession"/, '§7.3\'s turn preconditions read a row the input does not carry');
+  assert.match(input, /"turnWindows"/, 'TR2\'s window has no due-fact in evaluation (S5)');
+  assert.ok(input.includes('**S9'), '§6.1 does not state S9');
+  const s9 = tables(input).find((t) => bare(t[0][0]) === '字段');
+  assert.ok(s9, 'S9 no longer states the minimal projection');
+  assert.equal(s9.length - 1, 3, 'the minimal action projection is three fields');
+  for (const rule of column(s9, '唯一读它的规则').map(bare)) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(rule);
+    assert.ok(m && headingNumbers(PCC).has(m[1]), `S9 says ${rule} reads a field, but that section does not exist`);
+  }
+
+  const turns = section(PCC, '7.6');
+  for (const rule of ['**TR2-a', '**TR2-b', '**TR2-c', '**TR2-d', '**TR2-e']) {
+    assert.ok(turns.includes(rule), `§7.6 does not state ${rule}`);
+  }
+  const timing = section(PCC, '10.4');
+  const wakeList = timing.slice(timing.indexOf('取所有**适用项的最小值**'), timing.indexOf('**N-null'));
+  assert.match(wakeList, /^7\. /m, '§10.4\'s closed list has no seventh item');
+  assert.match(timing, /上面 1–7 条/, 'N-null still counts six, so a pending request can stop the clock');
+  assert.match(section(PCC, '4.3'), /\*\*I18（显式请求不丢失/, 'nothing states that an explicit request cannot be lost');
+  assert.match(section(PCC, '7.2'), /\*\*TF5/, 'the MANUAL turnFacts cell has no rule behind it');
+  assert.match(section(PCC, '15'), /\*\*F36\*\*/, '§15 has no fault row for a rate-limited manual trigger');
 });

@@ -1197,3 +1197,476 @@ test('PC-CX-26 on real Postgres: policy revocation and the project cap are one g
   assert.deepEqual(uncapped.inserted.sort(), ['auto', 'manual'], 'PC-CX-26 B must reproduce: the per-task index cannot bound a project');
   assert.deepEqual(uncapped.refusals, []);
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.5 · `PC-CX-28..31` — the three claims that are about the server, not about the contract's
+// own rules.
+//
+//   - `PC-CX-28`: a shared row lock linearises the two writes, but it cannot make a *later* legal
+//     cap decrease retroactively forbid an *earlier* legal admission. That is a statement about
+//     what a row lock does and does not buy, so it runs against a real server.
+//   - `PC-CX-29`: `FOR SHARE` conflicts with the `FOR NO KEY UPDATE` that `UPDATE agent SET
+//     enabled = false` takes, and `FOR KEY SHARE` does not. A model asserting that is asserting
+//     that its author read the lock-conflict table correctly.
+//   - `PC-CX-31`: the pending request is a row behind a partial unique index, and "it survives a
+//     restart" means "re-reading the same rows gives the same answer" — again a database claim.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const V15_SCHEMA = 'pcc_v15';
+
+function isolated15(body: string): string {
+  return `
+    DROP SCHEMA IF EXISTS ${V15_SCHEMA} CASCADE;
+    CREATE SCHEMA ${V15_SCHEMA};
+    SET search_path TO ${V15_SCHEMA};
+    ${body}
+  `;
+}
+
+/**
+ * §9.6 CAP0/CAP1 — admission, and the audit that makes I16-A checkable after the fact. `admitted_*`
+ * is what CAP0-c requires the inserting transaction to record: the pair `(count, max)` it read
+ * under the shared row lock. Without it the invariant would need a reconstruction of history.
+ */
+const CAP_SCHEMA_V15 = isolated15(`
+  CREATE TABLE project (id text PRIMARY KEY, max_concurrent_tasks int NOT NULL, config_revision bigint NOT NULL DEFAULT 0);
+  CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id));
+  CREATE TABLE session (
+    id text PRIMARY KEY,
+    task_id text NOT NULL REFERENCES task(id),
+    status text NOT NULL,
+    deleted_at timestamptz,
+    admitted_in_flight int NOT NULL,
+    admitted_max int NOT NULL
+  );
+  CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
+    WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+  CREATE TABLE cap_write (id bigserial PRIMARY KEY, old_max int NOT NULL, new_max int NOT NULL, in_flight_at_write int NOT NULL);
+  INSERT INTO project VALUES ('p1', 2, 7);
+  INSERT INTO task VALUES ('A', 'p1'), ('B', 'p1'), ('C', 'p1');
+  INSERT INTO session VALUES ('pre-existing', 'A', 'RUNNING', NULL, 0, 2);
+`);
+
+/** CAP0-a, as an entry point would write it: one row lock, one count, one decision. */
+async function admitPg(c: Client, id: string, task: string): Promise<boolean> {
+  await c.query('BEGIN');
+  const max = (await c.query<{ max_concurrent_tasks: number }>(
+    `SELECT max_concurrent_tasks FROM project WHERE id = 'p1' FOR NO KEY UPDATE`)).rows[0].max_concurrent_tasks;
+  const inFlight = Number((await c.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM session s JOIN task t ON t.id = s.task_id
+      WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING')`)).rows[0].n);
+  if (inFlight >= max) { await c.query('ROLLBACK'); return false; }
+  await c.query(
+    `INSERT INTO session (id, task_id, status, admitted_in_flight, admitted_max) VALUES ($1, $2, 'PENDING', $3, $4)`,
+    [id, task, inFlight, max]);
+  await c.query('COMMIT');
+  return true;
+}
+
+/** CAP0-b: the human write is never refused, and it records what it saw (CAP4.2). */
+async function lowerCapPg(c: Client, newMax: number): Promise<void> {
+  await c.query('BEGIN');
+  const max = (await c.query<{ max_concurrent_tasks: number }>(
+    `SELECT max_concurrent_tasks FROM project WHERE id = 'p1' FOR NO KEY UPDATE`)).rows[0].max_concurrent_tasks;
+  const inFlight = Number((await c.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM session s JOIN task t ON t.id = s.task_id
+      WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING')`)).rows[0].n);
+  await c.query(`INSERT INTO cap_write (old_max, new_max, in_flight_at_write) VALUES ($1, $2, $3)`, [max, newMax, inFlight]);
+  await c.query(`UPDATE project SET max_concurrent_tasks = $1, config_revision = config_revision + 1 WHERE id = 'p1'`, [newMax]);
+  await c.query('COMMIT');
+}
+
+/** I16-A on the committed state: no claim was admitted while it was already at the cap. */
+async function admissionInvariantPg(c: Client): Promise<{ violations: number; overCapBy: number; claims: number; max: number }> {
+  const row = (await c.query<{ violations: string; over_cap_by: string; claims: string; max: number }>(`
+    SELECT
+      (SELECT count(*)::text FROM session WHERE admitted_in_flight >= admitted_max) AS violations,
+      GREATEST(0, (SELECT count(*) FROM session s JOIN task t ON t.id = s.task_id
+                    WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING'))
+                  - (SELECT max_concurrent_tasks FROM project WHERE id = 'p1'))::text AS over_cap_by,
+      (SELECT count(*)::text FROM session s JOIN task t ON t.id = s.task_id
+        WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING')) AS claims,
+      (SELECT max_concurrent_tasks FROM project WHERE id = 'p1') AS max
+  `)).rows[0];
+  return { violations: Number(row.violations), overCapBy: Number(row.over_cap_by), claims: Number(row.claims), max: row.max };
+}
+
+test('PC-CX-28 on real Postgres: lowering the cap never breaks the admission invariant',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    for (const order of ['USER_FIRST', 'COORDINATOR_FIRST'] as const) {
+      const [setup, human, loop] = await Promise.all([connect(), connect(), connect()]);
+      try {
+        await setup.query(CAP_SCHEMA_V15);
+        for (const c of [human, loop]) await c.query(`SET search_path TO ${V15_SCHEMA}`);
+
+        let admitted: boolean;
+        if (order === 'USER_FIRST') {
+          await lowerCapPg(human, 1);
+          admitted = await admitPg(loop, 'coordinator', 'B');
+        } else {
+          // The coordinator takes the same row lock and holds it; the human write queues behind it.
+          await loop.query('BEGIN');
+          const max = (await loop.query<{ max_concurrent_tasks: number }>(
+            `SELECT max_concurrent_tasks FROM project WHERE id = 'p1' FOR NO KEY UPDATE`)).rows[0].max_concurrent_tasks;
+          const inFlight = Number((await loop.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM session s JOIN task t ON t.id = s.task_id
+              WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING')`)).rows[0].n);
+          const queued = watch(lowerCapPg(human, 1));
+          await settle();
+          assert.equal(queued.settled(), false, 'the cap write must wait on the same project row the admission locked');
+          assert.ok(inFlight < max);
+          await loop.query(
+            `INSERT INTO session (id, task_id, status, admitted_in_flight, admitted_max) VALUES ('coordinator','B','PENDING',$1,$2)`,
+            [inFlight, max]);
+          await loop.query('COMMIT');
+          await queued.promise;
+          admitted = true;
+        }
+
+        const state = await admissionInvariantPg(setup);
+        assert.equal(state.violations, 0, `${order}: I16-A must hold on the committed state`);
+        assert.equal(state.max, 1, `${order}: the human cap write is never refused (CAP0-b)`);
+        const writes = (await setup.query<{ old_max: number; new_max: number; in_flight_at_write: number }>(
+          `SELECT old_max, new_max, in_flight_at_write FROM cap_write ORDER BY id`)).rows;
+        assert.equal(writes.length, 1, `${order}: exactly one cap write, and it committed`);
+
+        if (order === 'USER_FIRST') {
+          assert.equal(admitted, false, 'USER_FIRST: the cap is already 1, so the dispatch is refused admission');
+          assert.equal(state.claims, 1);
+          assert.equal(state.overCapBy, 0);
+          assert.deepEqual(writes[0], { old_max: 2, new_max: 1, in_flight_at_write: 1 });
+        } else {
+          assert.equal(admitted, true, 'COORDINATOR_FIRST: admitted while count < max, which is legal');
+          assert.equal(state.claims, 2);
+          assert.equal(state.overCapBy, 1, 'and the result is a visible over-cap state, not a violated invariant');
+          assert.deepEqual(writes[0], { old_max: 2, new_max: 1, in_flight_at_write: 2 }, 'CAP4.2: the write records what it saw');
+          // v1.4's sentence, on this committed state. It is the state the review published.
+          assert.ok(state.claims > state.max, 'PC-CX-28 must reproduce: "committed claims <= max" is false here');
+
+          // CAP4.1 — bounded and self-draining. Nothing is admitted while over cap; when enough
+          // in-flight work ends that `count < max`, admission resumes with no human action.
+          assert.equal(await admitPg(loop, 'while-over-cap', 'C'), false, 'no entry point is admitted while over cap');
+          await setup.query(`UPDATE session SET status = 'SUCCEEDED' WHERE id = 'pre-existing'`);
+          assert.equal((await admissionInvariantPg(setup)).overCapBy, 0, 'over cap converges as sessions end');
+          assert.equal(await admitPg(loop, 'still-at-cap', 'C'), false, 'at the cap is still not below it');
+          await setup.query(`UPDATE session SET status = 'SUCCEEDED' WHERE id = 'coordinator'`);
+          assert.equal(await admitPg(loop, 'after-drain', 'C'), true, 'and admission resumes as soon as count < max');
+          assert.equal((await admissionInvariantPg(setup)).violations, 0, 'I16-A held through the whole sequence');
+        }
+      } finally {
+        await Promise.all([setup.end(), human.end(), loop.end()]);
+      }
+    }
+  });
+
+/**
+ * §7.4 EC1 + §7.7 D14 — the eight rows, and the deferred guard that re-reads them at COMMIT.
+ * `resolve_execution_context_locked` is D14-a: it takes `FOR SHARE` on every row it reads, so a
+ * concurrent revocation must queue behind it rather than slip past an MVCC snapshot.
+ */
+const EC_SCHEMA_V15 = isolated15(`
+  CREATE TABLE project (id text PRIMARY KEY, coordinator_workspace_id text NOT NULL);
+  CREATE TABLE agent (id text PRIMARY KEY, enabled boolean NOT NULL, deleted_at timestamptz);
+  CREATE TABLE project_member (project_id text NOT NULL REFERENCES project(id), agent_id text NOT NULL REFERENCES agent(id), PRIMARY KEY (project_id, agent_id));
+  CREATE TABLE provider (slug text PRIMARY KEY, available boolean NOT NULL);
+  CREATE TABLE workspace (id text PRIMARY KEY, deleted_at timestamptz, runner_id text NOT NULL);
+  CREATE TABLE runner (id text PRIMARY KEY, online boolean NOT NULL);
+  CREATE TABLE task (
+    id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id),
+    assignee_agent_id text NOT NULL REFERENCES agent(id), provider text NOT NULL, model text NOT NULL,
+    workspace_id text NOT NULL REFERENCES workspace(id)
+  );
+  CREATE TABLE project_action (
+    id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id),
+    type text NOT NULL, status text NOT NULL, execution_context text[], execution_context_digest text
+  );
+  CREATE TABLE session (
+    id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id), status text NOT NULL,
+    dispatch_origin text NOT NULL, project_action_id text REFERENCES project_action(id), agent_id text REFERENCES agent(id)
+  );
+
+  -- D14-a. Reads exactly EC1's eight inputs, all FOR SHARE, in §8.6 LO1's order, and returns the
+  -- resolved context (EC2's nine components, in EC1 row order), its digest, and — when the chain
+  -- cannot resolve at all — the input that stopped it.
+  CREATE FUNCTION resolve_execution_context_locked(p_task text, p_agent text)
+    RETURNS TABLE (digest text, ctx text[], revoked_input text) AS $fn$
+  DECLARE t record; a record; m record; pv record; w record; r record; p record; c text[];
+  BEGIN
+    SELECT * INTO p FROM project WHERE id = (SELECT project_id FROM task WHERE id = p_task) FOR SHARE;
+    SELECT * INTO m FROM project_member WHERE project_id = p.id AND agent_id = p_agent FOR SHARE;
+    SELECT * INTO a FROM agent WHERE id = p_agent FOR SHARE;
+    SELECT * INTO t FROM task WHERE id = p_task FOR SHARE;
+    SELECT * INTO w FROM workspace WHERE id = t.workspace_id FOR SHARE;
+    SELECT * INTO r FROM runner WHERE id = w.runner_id FOR SHARE;
+    SELECT * INTO pv FROM provider WHERE slug = t.provider FOR SHARE;
+
+    IF a.id IS NULL OR NOT a.enabled OR a.deleted_at IS NOT NULL THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'AGENT'; RETURN; END IF;
+    IF m.agent_id IS NULL THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'MEMBERSHIP'; RETURN; END IF;
+    IF t.assignee_agent_id <> p_agent THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'TASK'; RETURN; END IF;
+    IF pv.slug IS NULL OR NOT pv.available THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'PROVIDER'; RETURN; END IF;
+    IF t.model IS NULL THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'MODEL'; RETURN; END IF;
+    IF w.deleted_at IS NOT NULL THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'WORKSPACE'; RETURN; END IF;
+    IF NOT r.online THEN RETURN QUERY SELECT NULL::text, NULL::text[], 'RUNNER'; RETURN; END IF;
+
+    c := ARRAY[p_agent, m.agent_id, t.id, t.assignee_agent_id, pv.slug, t.model, w.id, r.id, p.coordinator_workspace_id];
+    RETURN QUERY SELECT md5(array_to_string(c, '|')), c, NULL::text;
+  END;
+  $fn$ LANGUAGE plpgsql;
+
+  CREATE FUNCTION session_execution_context_guard() RETURNS trigger AS $fn$
+  DECLARE frozen text; frozen_ctx text[]; observed text; observed_ctx text[]; revoked text;
+          -- EC1's row number per EC2 component, so "first difference" is "smallest EC1 row" (EC4).
+          labels text[] := ARRAY['AGENT','MEMBERSHIP','TASK','TASK','PROVIDER','MODEL','WORKSPACE','RUNNER','COORDINATOR_WORKSPACE'];
+          i int;
+  BEGIN
+    IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+    SELECT a.execution_context_digest, a.execution_context INTO frozen, frozen_ctx
+      FROM project_action a WHERE a.id = NEW.project_action_id;
+    SELECT ec.digest, ec.ctx, ec.revoked_input INTO observed, observed_ctx, revoked
+      FROM resolve_execution_context_locked(NEW.task_id, NEW.agent_id) ec;
+    IF observed IS DISTINCT FROM frozen THEN
+      IF revoked IS NULL AND observed_ctx IS NOT NULL AND frozen_ctx IS NOT NULL THEN
+        FOR i IN 1 .. array_length(labels, 1) LOOP
+          IF observed_ctx[i] IS DISTINCT FROM frozen_ctx[i] THEN revoked := labels[i]; EXIT; END IF;
+        END LOOP;
+      END IF;
+      RAISE EXCEPTION 'EXECUTION_CONTEXT_REVOKED: %', COALESCE(revoked, 'UNKNOWN');
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+
+  CREATE CONSTRAINT TRIGGER session_execution_context_guard
+    AFTER INSERT OR UPDATE OF project_action_id, dispatch_origin, task_id, agent_id ON session
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION session_execution_context_guard();
+
+  INSERT INTO project VALUES ('p1', 'w-coord');
+  INSERT INTO agent VALUES ('a1', true, NULL), ('a2', true, NULL);
+  INSERT INTO project_member VALUES ('p1', 'a1');
+  INSERT INTO provider VALUES ('claude', true);
+  INSERT INTO runner VALUES ('r1', true);
+  INSERT INTO workspace VALUES ('w1', NULL, 'r1'), ('w-coord', NULL, 'r1');
+  INSERT INTO task VALUES ('t1', 'p1', 'a1', 'claude', 'claude-opus-5', 'w1');
+`);
+
+/** The eight revocations of EC1, as the single statement a human entry point would run. */
+const EC_REVOCATIONS: { input: string; sql: string }[] = [
+  { input: 'AGENT', sql: `UPDATE agent SET enabled = false WHERE id = 'a1'` },
+  { input: 'MEMBERSHIP', sql: `DELETE FROM project_member WHERE project_id = 'p1' AND agent_id = 'a1'` },
+  { input: 'TASK', sql: `UPDATE task SET assignee_agent_id = 'a2' WHERE id = 't1'` },
+  { input: 'PROVIDER', sql: `UPDATE provider SET available = false WHERE slug = 'claude'` },
+  { input: 'MODEL', sql: `UPDATE task SET model = 'claude-sonnet-5' WHERE id = 't1'` },
+  { input: 'WORKSPACE', sql: `UPDATE workspace SET deleted_at = now() WHERE id = 'w1'` },
+  { input: 'RUNNER', sql: `UPDATE runner SET online = false WHERE id = 'r1'` },
+  { input: 'COORDINATOR_WORKSPACE', sql: `UPDATE project SET coordinator_workspace_id = 'w1' WHERE id = 'p1'` },
+];
+
+test('PC-CX-29 on real Postgres: the deferred guard refuses a revoked execution context',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const [setup, human, loop] = await Promise.all([connect(), connect(), connect()]);
+    try {
+      await setup.query(EC_SCHEMA_V15);
+      for (const c of [human, loop]) await c.query(`SET search_path TO ${V15_SCHEMA}`);
+      const resolved = (await setup.query<{ digest: string; ctx: string[] }>(
+        `SELECT digest, ctx FROM resolve_execution_context_locked('t1', 'a1')`)).rows[0];
+      const { digest: frozen, ctx: frozenCtx } = resolved;
+      assert.ok(frozen, 'the fixture must resolve before anything is revoked');
+
+      const reset = async (): Promise<void> => {
+        await setup.query(`DELETE FROM session; DELETE FROM project_action`);
+        await setup.query(`UPDATE agent SET enabled = true, deleted_at = NULL`);
+        await setup.query(`INSERT INTO project_member VALUES ('p1','a1') ON CONFLICT DO NOTHING`);
+        await setup.query(`UPDATE provider SET available = true`);
+        await setup.query(`UPDATE runner SET online = true`);
+        await setup.query(`UPDATE workspace SET deleted_at = NULL`);
+        await setup.query(`UPDATE task SET assignee_agent_id = 'a1', model = 'claude-opus-5', provider = 'claude'`);
+        await setup.query(`UPDATE project SET coordinator_workspace_id = 'w-coord'`);
+        await setup.query(`INSERT INTO project_action VALUES ('act-1','p1','DISPATCH_TASK','APPLIED',$1,$2)`, [frozenCtx, frozen]);
+      };
+
+      // USER_FIRST: the revocation commits first, and the coordinator's insert is refused at COMMIT
+      // — by the database, so it holds for any binary. `revokedInput` names the EC1 row.
+      for (const { input, sql } of EC_REVOCATIONS) {
+        await reset();
+        await human.query(sql);
+        let refusal: string | null = null;
+        await loop.query('BEGIN');
+        await loop.query(`INSERT INTO session VALUES ('stale','t1','PENDING','COORDINATOR','act-1','a1')`);
+        try { await loop.query('COMMIT'); } catch (e) {
+          refusal = /EXECUTION_CONTEXT_REVOKED: [A-Z_]+/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`;
+          await loop.query('ROLLBACK');
+        }
+        assert.equal(refusal, `EXECUTION_CONTEXT_REVOKED: ${input}`, `${input}/USER_FIRST: the guard must refuse, and name the input`);
+        const n = Number((await setup.query<{ n: string }>(`SELECT count(*)::text AS n FROM session`)).rows[0].n);
+        assert.equal(n, 0, `${input}/USER_FIRST: no session may exist after a revoked context`);
+      }
+
+      // COORDINATOR_FIRST: §7.4 EC3 is what makes this order reachable. A DEFERRABLE INITIALLY
+      // DEFERRED trigger takes its locks at COMMIT, not at INSERT — so D14 alone would let a
+      // revocation slip in between the two and then refuse. EC3 has the service take the same
+      // FOR SHARE *before* inserting, inside the same transaction, and from that point the
+      // revocation has to queue. That is the division of labour between EC3 and D14, observed.
+      await reset();
+      await loop.query('BEGIN');
+      const atCommit = (await loop.query<{ digest: string }>(
+        `SELECT digest FROM resolve_execution_context_locked('t1', 'a1')`)).rows[0].digest;
+      assert.equal(atCommit, frozen, 'EC3: the re-resolution matches the frozen digest, so the dispatch is still authorised');
+      const queued = watch(human.query(`UPDATE agent SET enabled = false WHERE id = 'a1'`));
+      await settle();
+      assert.equal(queued.settled(), false, 'the revocation must queue behind the FOR SHARE EC3 took');
+      await loop.query(`INSERT INTO session VALUES ('legal','t1','PENDING','COORDINATOR','act-1','a1')`);
+      await loop.query('COMMIT');
+      await queued.promise;
+      assert.equal(Number((await setup.query<{ n: string }>(`SELECT count(*)::text AS n FROM session`)).rows[0].n), 1,
+        'COORDINATOR_FIRST: a dispatch committed while still authorised is legal');
+      assert.equal((await setup.query<{ enabled: boolean }>(`SELECT enabled FROM agent WHERE id = 'a1'`)).rows[0].enabled, false,
+        'and the human write then takes effect');
+
+      // The version-independent half: an old binary that skips EC3 entirely still cannot commit a
+      // revoked context, because the deferred guard re-reads at COMMIT. Here the revocation lands
+      // *after* the insert and *before* the commit — the window EC3 closes and D14 backstops.
+      await reset();
+      await loop.query('BEGIN');
+      await loop.query(`INSERT INTO session VALUES ('stale','t1','PENDING','COORDINATOR','act-1','a1')`);
+      await human.query(`UPDATE agent SET enabled = false WHERE id = 'a1'`);
+      let lateRefusal: string | null = null;
+      try { await loop.query('COMMIT'); } catch (e) {
+        lateRefusal = /EXECUTION_CONTEXT_REVOKED: [A-Z_]+/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`;
+        await loop.query('ROLLBACK');
+      }
+      assert.equal(lateRefusal, 'EXECUTION_CONTEXT_REVOKED: AGENT', 'D14 must catch a revocation that lands after the insert');
+      assert.equal(Number((await setup.query<{ n: string }>(`SELECT count(*)::text AS n FROM session`)).rows[0].n), 0);
+
+      // Negative control: drop the guard (leaving §9.6 AU1's four project fields as the only gate)
+      // and the published counterexample commits — "agent disabled + a session resolved to it".
+      await reset();
+      await setup.query(`DROP TRIGGER session_execution_context_guard ON session`);
+      await human.query(`UPDATE agent SET enabled = false WHERE id = 'a1'`);
+      await loop.query(`INSERT INTO session VALUES ('stale','t1','PENDING','COORDINATOR','act-1','a1')`);
+      const bad = (await setup.query<{ enabled: boolean; sessions: string }>(`
+        SELECT a.enabled, count(s.id)::text AS sessions FROM agent a LEFT JOIN session s ON s.agent_id = a.id
+         WHERE a.id = 'a1' GROUP BY a.enabled`)).rows[0];
+      assert.equal(bad.enabled, false);
+      assert.equal(Number(bad.sessions), 1, 'PC-CX-29 must reproduce on a real server without D14');
+    } finally {
+      await Promise.all([setup.end(), human.end(), loop.end()]);
+    }
+  });
+
+/**
+ * §7.6 TR2-a–TR2-e — the pending request is a `project_event` row behind §5.4's partial unique
+ * index, and the window anchor is a `project_action` row. Both claims ("it survives a restart",
+ * "a redelivery collapses onto one row") are about the database.
+ */
+const RATE_LIMIT_SCHEMA_V15 = isolated15(`
+  CREATE TABLE project_runtime (project_id text PRIMARY KEY, next_wake_at bigint, next_wake_reason text);
+  CREATE TABLE project_action (
+    idempotency_key text PRIMARY KEY, project_id text NOT NULL, type text NOT NULL,
+    status text NOT NULL, reason_code text, generation bigint NOT NULL, created_at bigint NOT NULL
+  );
+  CREATE TABLE project_event (
+    id bigserial PRIMARY KEY, project_id text NOT NULL, kind text NOT NULL, dedupe_key text NOT NULL,
+    occurrences int NOT NULL DEFAULT 1, consumed_at bigint, next_attempt_at bigint
+  );
+  CREATE UNIQUE INDEX project_event_open_dedupe_idx ON project_event (project_id, dedupe_key) WHERE consumed_at IS NULL;
+  INSERT INTO project_runtime VALUES ('p1', NULL, NULL);
+`);
+
+test('PC-CX-31 on real Postgres: a rate-limited manual trigger survives, and fires once',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    const WINDOW = 60_000;
+    try {
+      await c.query(RATE_LIMIT_SCHEMA_V15);
+      const raise = async (dedupeKey: string): Promise<void> => {
+        await c.query(
+          `INSERT INTO project_event (project_id, kind, dedupe_key) VALUES ('p1','user.manual_trigger',$1)
+             ON CONFLICT (project_id, dedupe_key) WHERE consumed_at IS NULL
+             DO UPDATE SET occurrences = project_event.occurrences + 1`, [dedupeKey]);
+      };
+      const pending = async (): Promise<{ dedupe_key: string; next_attempt_at: string | null }[]> =>
+        (await c.query<{ dedupe_key: string; next_attempt_at: string | null }>(
+          `SELECT dedupe_key, next_attempt_at::text FROM project_event
+            WHERE consumed_at IS NULL AND kind = 'user.manual_trigger' ORDER BY dedupe_key`)).rows;
+
+      /** One reconcile, at `now`. TR2-a reads the anchor from the ledger, never from memory. */
+      const reconcile = async (now: number): Promise<'TURN' | 'RATE_LIMITED' | 'IDLE'> => {
+        const requests = await pending();
+        if (requests.length === 0) return 'IDLE';
+        const anchor = (await c.query<{ idempotency_key: string; created_at: string }>(
+          `SELECT idempotency_key, created_at::text FROM project_action
+            WHERE project_id='p1' AND type='OPEN_COORDINATOR_TURN' AND status='APPLIED' AND reason_code='MANUAL' AND generation=0
+            ORDER BY created_at DESC LIMIT 1`)).rows[0];
+        const windowEndsAt = anchor ? Number(anchor.created_at) + WINDOW : -1;
+        if (now < windowEndsAt) {
+          await c.query(`UPDATE project_event SET next_attempt_at = $1 WHERE consumed_at IS NULL AND kind='user.manual_trigger'`, [windowEndsAt]);
+          await c.query(`UPDATE project_runtime SET next_wake_at = $1, next_wake_reason = 'manual trigger rate-limited' WHERE project_id='p1'`, [windowEndsAt]);
+          return 'RATE_LIMITED';
+        }
+        // TF5: one digest over the whole pending set, so N requests collapse onto one turn.
+        const digest = requests.map((r) => r.dedupe_key).sort().join(',');
+        await c.query(
+          `INSERT INTO project_action VALUES ($1,'p1','OPEN_COORDINATOR_TURN','APPLIED','MANUAL',0,$2)`,
+          [`pc:v1:p1:turn:0:${digest}`, now]);
+        await c.query(`UPDATE project_event SET consumed_at = $1, next_attempt_at = NULL WHERE consumed_at IS NULL AND kind='user.manual_trigger'`, [now]);
+        await c.query(`UPDATE project_runtime SET next_wake_at = $1, next_wake_reason = 'turn in flight' WHERE project_id='p1'`, [now + WINDOW]);
+        return 'TURN';
+      };
+
+      await raise('manual:1');
+      assert.equal(await reconcile(0), 'TURN', 'the first request opens a turn');
+
+      await raise('manual:2');
+      assert.equal(await reconcile(10_000), 'RATE_LIMITED', 'a second request inside the window is refused a turn');
+      assert.deepEqual(await pending(), [{ dedupe_key: 'manual:2', next_attempt_at: '60000' }],
+        'TR2-b/c: the request stays, and its retry time is the window boundary');
+      const runtime = (await c.query<{ next_wake_at: string; next_wake_reason: string }>(
+        `SELECT next_wake_at::text, next_wake_reason FROM project_runtime WHERE project_id='p1'`)).rows[0];
+      assert.deepEqual(runtime, { next_wake_at: '60000', next_wake_reason: 'manual trigger rate-limited' },
+        '§10.4 item 7: the wake points at the same boundary and says why');
+
+      // Redelivery: §5.4's partial unique index collapses it onto the same row, so `occurrences`
+      // moves and nothing else does — TF5's digest, and therefore the turn key, is unchanged (I14).
+      await raise('manual:2');
+      await raise('manual:2');
+      const dup = (await c.query<{ n: string; occ: number }>(
+        `SELECT count(*)::text AS n, max(occurrences) AS occ FROM project_event WHERE consumed_at IS NULL`)).rows[0];
+      assert.deepEqual({ n: Number(dup.n), occ: dup.occ }, { n: 1, occ: 3 }, 'redelivery is one row with a counter, not three requests');
+
+      // A third distinct request inside the same window joins the pending set — it does not queue
+      // a third turn.
+      await raise('manual:3');
+      assert.equal(await reconcile(30_000), 'RATE_LIMITED');
+      assert.equal((await pending()).length, 2);
+
+      // "Survives a restart" is literally "re-read the same rows": nothing above lives in memory.
+      const fresh = await connect();
+      try {
+        await fresh.query(`SET search_path TO ${V15_SCHEMA}`);
+        const anchor = (await fresh.query<{ created_at: string }>(
+          `SELECT created_at::text FROM project_action WHERE reason_code='MANUAL' ORDER BY created_at DESC LIMIT 1`)).rows[0];
+        assert.equal(Number(anchor.created_at) + WINDOW, 60_000, 'the window anchor is a committed row, not process state');
+      } finally { await fresh.end(); }
+
+      // The boundary: exactly one turn, answering and consuming the whole pending set.
+      assert.equal(await reconcile(60_000), 'TURN');
+      assert.deepEqual(await pending(), [], 'TR2-c: answered, therefore consumed');
+      const turns = (await c.query<{ idempotency_key: string }>(
+        `SELECT idempotency_key FROM project_action WHERE type='OPEN_COORDINATOR_TURN' ORDER BY created_at`)).rows;
+      assert.deepEqual(turns.map((t) => t.idempotency_key), ['pc:v1:p1:turn:0:manual:1', 'pc:v1:p1:turn:0:manual:2,manual:3'],
+        'two turns in total: one per window, the second answering both pending requests');
+
+      // Negative control — v1.4 reading A: consume the rate-limited request. It is gone, and the
+      // boundary passes without it ever running.
+      await c.query(`DELETE FROM project_event; DELETE FROM project_action`);
+      await raise('manual:1');
+      await reconcile(0);
+      await raise('manual:2');
+      await c.query(`UPDATE project_event SET consumed_at = 10000 WHERE consumed_at IS NULL`); // "consume it anyway"
+      assert.deepEqual(await pending(), [], 'PC-CX-31 reading A must reproduce: the request is gone');
+      assert.equal(await reconcile(60_000), 'IDLE', 'and the boundary passes with nothing to run');
+    } finally {
+      await c.end();
+    }
+  });

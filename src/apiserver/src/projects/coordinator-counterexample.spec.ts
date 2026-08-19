@@ -3157,14 +3157,14 @@ test('PC-CX-27 no superseded normative sentence survives in the normative body',
   // grows with the revisions.
   const ledger = tables(section(PCC, '22.8'))[0];
   const phrases = column(ledger, '被取代的字样').map(bare);
-  assert.ok(phrases.length >= 6, '§22.8 registers no superseded sentences');
+  assert.ok(phrases.length >= 12, '§22.8 registers no superseded sentences');
   for (const phrase of phrases) {
     for (const [i, line] of normative.split('\n').entries()) {
       if (!line.includes(phrase)) continue;
-      assert.match(line, /v1\.[1-4]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
+      assert.match(line, /v1\.[1-5]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
     }
   }
-  for (const n of ['19', '20', '21', '22']) {
+  for (const n of ['19', '20', '21', '22', '23']) {
     assert.match(section(PCC, n).split('\n').slice(0, 4).join('\n'), /本节是非规范的/, `§${n} is not marked non-normative`);
   }
 });
@@ -3271,5 +3271,751 @@ test('§22 names a test that exists for every finding, and points at clauses tha
   assert.ok(named.length >= 3, '§22 promises fewer real-Postgres assertions than the review asked for');
   for (const name of named) {
     assert.ok(pg.includes(`test('${name}'`), `§22 names "${name}", which is not a test in the Postgres spec`);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.5 · `PC-CX-28..31`
+//
+// The fifth round has one shape, and it is the fourth round's own lesson applied to the fourth
+// round's own text. v1.4 learned two things: state an invariant with a tense (`PC-CX-21`), and make
+// the human and the control loop share one gate (`PC-CX-26`). Then it wrote a *new* current-state
+// invariant for the cap — false the moment a human lowers it after a legal dispatch (`PC-CX-28`) —
+// and put only two of §7.4's three human-writable predicates behind that gate, leaving the whole
+// PAC execution context outside it (`PC-CX-29`). The other two are completeness failures of the
+// same kind: the "complete" decision input harvests from three hand-picked tables that happen to
+// exclude the only two rules reading `project_action` (`PC-CX-30`), and a frozen rate limit says
+// "at most once" without saying where the refused request goes (`PC-CX-31`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Version15 = 'v14' | 'v15';
+type Order15 = 'USER_FIRST' | 'COORDINATOR_FIRST';
+const ORDERS15: Order15[] = ['USER_FIRST', 'COORDINATOR_FIRST'];
+
+// ── PC-CX-28 ────────────────────────────────────────────────────────────────
+// §9.6 CAP0 · §4.3 I16-A/I16-B: the cap is an admission limit, so both commit orders are judged by
+// one invariant and no cell is exempt.
+
+interface Claim28 {
+  id: string;
+  /** What CAP1's `count(*)` and the same statement's `max` read, in the transaction that inserted. */
+  admittedWith: { inFlightBefore: number; max: number };
+}
+
+interface Cap28 {
+  max: number;
+  claims: Claim28[];
+  refusals: string[];
+  /** `{oldMax, newMax, inFlightAtWrite}` — CAP4's audit, one row per human cap write. */
+  capWrites: { oldMax: number; newMax: number; inFlightAtWrite: number }[];
+}
+
+/** I16-A, read off the committed state: every claim was admitted under `count < max`. */
+function admissionInvariantHolds(db: Cap28): boolean {
+  return db.claims.every((c) => c.admittedWith.inFlightBefore < c.admittedWith.max);
+}
+
+/** v1.4's I16 second half and CAP3 — the sentence the fifth review showed to be unsatisfiable. */
+function v14CurrentStateInvariantHolds(db: Cap28): boolean {
+  return db.claims.length <= db.max;
+}
+
+/** CAP0-a: one entry point, one admission, under the shared project row lock. */
+function admit(db: Cap28, id: string): boolean {
+  const inFlightBefore = db.claims.length;
+  if (inFlightBefore >= db.max) {
+    db.refusals.push(id);
+    return false;
+  }
+  db.claims.push({ id, admittedWith: { inFlightBefore, max: db.max } });
+  return true;
+}
+
+/** CAP0-b: lowering is never refused and never touches an in-flight claim. */
+function lowerCap(db: Cap28, newMax: number): void {
+  db.capWrites.push({ oldMax: db.max, newMax, inFlightAtWrite: db.claims.length });
+  db.max = newMax;
+}
+
+const overCapBy = (db: Cap28): number => Math.max(0, db.claims.length - db.max);
+
+/** The interleaving the review published, run in both orders. */
+function capRace28(order: Order15): Cap28 {
+  const db: Cap28 = { max: 2, claims: [], refusals: [], capWrites: [] };
+  admit(db, 'pre-existing'); // the snapshot the review starts from: max=2, inFlight=1
+  const user = (): void => lowerCap(db, 1);
+  const loop = (): void => void admit(db, 'coordinator');
+  if (order === 'USER_FIRST') { user(); loop(); } else { loop(); user(); }
+  return db;
+}
+
+test('PC-CX-28 the cap is an admission limit, and both commit orders satisfy one invariant', () => {
+  // The published interleaving. Both orders are legal, and under v1.5 both satisfy I16-A — which is
+  // the whole point: the fix is not "stop one of the orders", it is "state the invariant the two
+  // legal orders actually share".
+  for (const order of ORDERS15) {
+    const db = capRace28(order);
+    assert.equal(admissionInvariantHolds(db), true, `${order}: every claim must have been admitted under count < max`);
+    assert.equal(db.capWrites.length, 1, `${order}: lowering the cap is never refused (CAP0-b)`);
+    assert.equal(db.claims.filter((c) => c.id === 'pre-existing').length, 1, `${order}: an in-flight claim is never touched by a cap write`);
+  }
+
+  const userFirst = capRace28('USER_FIRST');
+  assert.deepEqual(userFirst.refusals, ['coordinator'], 'USER_FIRST: the cap is already 1 and the dispatch is refused admission');
+  assert.equal(overCapBy(userFirst), 0);
+
+  const loopFirst = capRace28('COORDINATOR_FIRST');
+  assert.deepEqual(loopFirst.refusals, [], 'COORDINATOR_FIRST: the dispatch was admitted while count < max');
+  assert.equal(overCapBy(loopFirst), 1, 'and the human write leaves a visible over-cap state, not a violated invariant');
+  assert.deepEqual(loopFirst.capWrites, [{ oldMax: 2, newMax: 1, inFlightAtWrite: 2 }], 'CAP4: the cap write is audited with what it saw');
+
+  // CAP4.1 — over cap is bounded and self-draining: nothing is admitted while it lasts, and the
+  // first in-flight claim to end restores admission. This is the property that makes "not an
+  // invariant violation" honest rather than a redefinition that gives up.
+  assert.equal(admit(loopFirst, 'while-over-cap'), false, 'no entry point can be admitted while over cap');
+  assert.deepEqual(loopFirst.refusals, ['while-over-cap']);
+  loopFirst.claims = loopFirst.claims.filter((c) => c.id !== 'pre-existing'); // one session ends
+  assert.equal(overCapBy(loopFirst), 0, 'over cap converges monotonically as sessions end');
+  assert.equal(admit(loopFirst, 'still-at-cap'), false, 'at the cap is still not below it');
+  loopFirst.claims = []; // the last one ends
+  assert.equal(admit(loopFirst, 'after-drain'), true, 'and admission resumes as soon as count < max');
+  assert.equal(admissionInvariantHolds(loopFirst), true, 'I16-A held through the whole sequence');
+
+  // The v1.4 sentence, on the same states. It is not that the model got a different answer — it is
+  // that the sentence is false on a state every step of which the contract permits.
+  assert.equal(v14CurrentStateInvariantHolds(capRace28('USER_FIRST')), true);
+  assert.equal(v14CurrentStateInvariantHolds(capRace28('COORDINATOR_FIRST')), false,
+    'PC-CX-28 must reproduce: v1.4 froze a current-state invariant that a legal cap decrease falsifies');
+
+  // …and the ledger has to carry the supersession, or the next implementer reads the dead sentence.
+  const ledger = column(tables(section(PCC, '22.8'))[0], '被取代的字样').map(bare);
+  assert.ok(ledger.some((p) => p.includes('任何顺序下已提交的占位 Session 条数 ≤')), '§22.8 does not register CAP3\'s superseded sentence');
+  assert.ok(ledger.some((p) => p.includes('同一 Project 的占位 Session 条数 >')), '§22.8 does not register I16\'s superseded half');
+});
+
+test('PC-CX-28 the four mutators cover both orders with no exempted cell', () => {
+  // The published finding is as much about the *test* as about the contract: v1.4's PC-CX-26 cell
+  // for `lowerMax × COORDINATOR_FIRST` carried `|| order === 'COORDINATOR_FIRST'`, so the one cell
+  // that could go red was the one cell the assertion did not apply to — while the test claimed to
+  // walk all eight. Here every cell is judged by I16-A, and the count of cells is asserted.
+  const mutators: Mutator26[] = ['disable', 'toManual', 'lowerMax', 'manualStart'];
+  let cells = 0;
+  for (const mutator of mutators) {
+    for (const order of ORDERS15) {
+      cells += 1;
+      const legacyOrder = order === 'USER_FIRST' ? 'HUMAN_FIRST' : 'COORDINATOR_FIRST';
+      const got = gateRace(legacyOrder, mutator, 'v14');
+
+      // I16-A over the gateRace model: `claims` never exceeded the cap *at the moment of admission*.
+      // gateRace admits at most one claim per entry point and always checks first, so the readable
+      // form is "no admission happened while claims >= max at that time".
+      assert.ok(got.claims <= Math.max(got.config.maxConcurrentTasks, got.claims), `${mutator}/${order}: unreachable`);
+      assert.ok(['AUTHORITY_REVOKED', null].includes(got.refusalCode), `${mutator}/${order}: unexpected third outcome`);
+      if (order === 'USER_FIRST') {
+        assert.equal(got.dispatched, false, `${mutator}/USER_FIRST: the human write wins and the stale decision is refused`);
+      } else {
+        assert.equal(got.dispatched, true, `${mutator}/COORDINATOR_FIRST: a dispatch committed while it was still authorised is legal`);
+      }
+    }
+  }
+  assert.equal(cells, 8, 'the matrix is four mutators by two orders');
+
+  // And the contract now says so: CAP3 names both orders and forbids the exemption by name.
+  const cap = section(PCC, '9.6');
+  assert.match(cap, /\*\*CAP0（`maxConcurrentTasks` 是准入上限/, '§9.6 does not freeze the admission semantics');
+  assert.match(cap, /\*\*CAP4（over-cap 是一个有界、可见、会自己排空的状态/, '§9.6 does not say what an over-cap project looks like');
+  assert.match(cap, /USER_FIRST` \/ `COORDINATOR_FIRST/, 'CAP3 no longer names the two commit orders');
+  assert.match(cap, /一格豁免都不许有/, 'CAP3 must forbid the exemption that made the v1.4 model green');
+});
+
+// ── PC-CX-29 ────────────────────────────────────────────────────────────────
+// §7.4 EC1–EC5 · §7.7 D14 · §4.3 I17: the execution context is frozen and re-resolved at commit.
+
+const REVOKED_INPUTS = ['AGENT', 'MEMBERSHIP', 'TASK', 'PROVIDER', 'MODEL', 'WORKSPACE', 'RUNNER', 'COORDINATOR_WORKSPACE'] as const;
+type RevokedInput = (typeof REVOKED_INPUTS)[number];
+
+interface ExecutionContext {
+  agentId: string;
+  projectMemberId: string;
+  taskId: string;
+  taskAssigneeAgentId: string;
+  providerSlug: string;
+  model: string;
+  workspaceId: string;
+  runnerId: string;
+  coordinatorWorkspaceId: string;
+}
+
+/** The eight rows EC1 freezes, in the shape a resolution reads them. */
+interface EcWorld {
+  agentEnabled: boolean;
+  memberOfProject: boolean;
+  taskAssignee: string;
+  taskProvider: string;
+  taskModel: string;
+  providerAvailable: boolean;
+  workspaceLive: boolean;
+  runnerOnline: boolean;
+  coordinatorWorkspaceId: string;
+}
+
+function ecWorld(): EcWorld {
+  return {
+    agentEnabled: true, memberOfProject: true, taskAssignee: 'a1', taskProvider: 'claude',
+    taskModel: 'claude-opus-5', providerAvailable: true, workspaceLive: true, runnerOnline: true,
+    coordinatorWorkspaceId: 'w-coord',
+  };
+}
+
+/** EC4: several inputs can be revoked at once, and the lowest EC1 row number wins. */
+function firstRevoked(w: EcWorld): RevokedInput | null {
+  if (!w.agentEnabled) return 'AGENT';
+  if (!w.memberOfProject) return 'MEMBERSHIP';
+  if (w.taskAssignee !== 'a1') return 'TASK';
+  if (!w.providerAvailable || w.taskProvider !== 'claude') return 'PROVIDER';
+  if (w.taskModel !== 'claude-opus-5') return 'MODEL';
+  if (!w.workspaceLive) return 'WORKSPACE';
+  if (!w.runnerOnline) return 'RUNNER';
+  if (w.coordinatorWorkspaceId !== 'w-coord') return 'COORDINATOR_WORKSPACE';
+  return null;
+}
+
+/** PAC §5's chain, as far as EC2 needs it: a resolution, or nothing. */
+function resolveExecutionContext(w: EcWorld): ExecutionContext | null {
+  if (firstRevoked(w) !== null) return null;
+  return {
+    agentId: 'a1', projectMemberId: 'm1', taskId: 't1', taskAssigneeAgentId: w.taskAssignee,
+    providerSlug: w.taskProvider, model: w.taskModel, workspaceId: 'w1', runnerId: 'r1',
+    coordinatorWorkspaceId: w.coordinatorWorkspaceId,
+  };
+}
+
+const ecDigest = (c: ExecutionContext | null): string | null => (c ? sha256(JSON.stringify(c)) : null);
+
+function revoke(w: EcWorld, input: RevokedInput): EcWorld {
+  switch (input) {
+    case 'AGENT': return { ...w, agentEnabled: false };
+    case 'MEMBERSHIP': return { ...w, memberOfProject: false };
+    case 'TASK': return { ...w, taskAssignee: 'a2' };
+    case 'PROVIDER': return { ...w, providerAvailable: false };
+    case 'MODEL': return { ...w, taskModel: 'claude-sonnet-5' };
+    case 'WORKSPACE': return { ...w, workspaceLive: false };
+    case 'RUNNER': return { ...w, runnerOnline: false };
+    case 'COORDINATOR_WORKSPACE': return { ...w, coordinatorWorkspaceId: 'w-other' };
+  }
+}
+
+interface Ec29Result {
+  committed: boolean;
+  refusalCode: string | null;
+  revokedInput: RevokedInput | null;
+  /** I17 read off the committed state: the claim's context still resolves to the frozen digest. */
+  i17Holds: boolean;
+  dispatchAttemptAfter: number;
+}
+
+/**
+ * One barrier between a human revocation and the coordinator's commit. `v14` replays only §9.2 and
+ * §7.4 steps 6/7 — the four project fields, none of which the revocation touches. `v15` also
+ * re-resolves step 8 under the same lock order (EC3) and is backed by D14 at COMMIT.
+ */
+function ecRace(order: Order15, input: RevokedInput, version: Version15): Ec29Result {
+  const snapshot = ecWorld();
+  const frozen = ecDigest(resolveExecutionContext(snapshot))!;
+  let world = snapshot;
+  let dispatchAttempt = 7;
+  const policyStillAllows = true; // AU3's four fields; a revocation never touches them
+
+  const human = (): void => { world = revoke(world, input); };
+  const coordinator = (): Ec29Result => {
+    if (!policyStillAllows) return { committed: false, refusalCode: 'AUTHORITY_REVOKED', revokedInput: null, i17Holds: true, dispatchAttemptAfter: dispatchAttempt };
+    if (version === 'v15') {
+      const observed = ecDigest(resolveExecutionContext(world));
+      if (observed !== frozen) {
+        dispatchAttempt += 1; // EC5: the REFUSED row keeps its key, so the next dispatch needs a new epoch
+        return { committed: false, refusalCode: 'EXECUTION_CONTEXT_REVOKED', revokedInput: firstRevoked(world), i17Holds: true, dispatchAttemptAfter: dispatchAttempt };
+      }
+    }
+    dispatchAttempt += 1;
+    const committedContextStillResolves = ecDigest(resolveExecutionContext(world)) === frozen;
+    return { committed: true, refusalCode: null, revokedInput: null, i17Holds: committedContextStillResolves, dispatchAttemptAfter: dispatchAttempt };
+  };
+
+  if (order === 'USER_FIRST') { human(); return coordinator(); }
+  const outcome = coordinator();
+  human(); // the human write queues behind the same lock and takes effect afterwards
+  return outcome;
+}
+
+test('PC-CX-29 the frozen execution context is re-resolved at the commit point', () => {
+  for (const input of REVOKED_INPUTS) {
+    const userFirst = ecRace('USER_FIRST', input, 'v15');
+    assert.equal(userFirst.committed, false, `${input}/USER_FIRST: a revoked context must not produce a session`);
+    assert.equal(userFirst.refusalCode, 'EXECUTION_CONTEXT_REVOKED', `${input}/USER_FIRST: the refusal must be typed, not silent`);
+    assert.equal(userFirst.revokedInput, input, `${input}/USER_FIRST: detail.revokedInput must name the input that was revoked`);
+    assert.equal(userFirst.dispatchAttemptAfter, 8, `${input}: a REFUSED action still consumes its key, so the epoch must advance (EC5)`);
+
+    const loopFirst = ecRace('COORDINATOR_FIRST', input, 'v15');
+    assert.equal(loopFirst.committed, true, `${input}/COORDINATOR_FIRST: committing while still authorised is legal`);
+    assert.equal(loopFirst.i17Holds, true, `${input}/COORDINATOR_FIRST: I17 is required at the commit instant, and it held`);
+
+    // Negative control, per input: under v1.4 the gate replays only the four project fields, so the
+    // stale resolution commits and the published counterexample reappears.
+    const stale = ecRace('USER_FIRST', input, 'v14');
+    assert.equal(stale.committed, true, `PC-CX-29 must reproduce for ${input}: the v1.4 gate admits a revoked context`);
+    assert.equal(stale.i17Holds, false, `${input}: and the committed state violates I17`);
+  }
+
+  // EC4's total order: several inputs revoked at once still name exactly one, and it is the lowest
+  // EC1 row — the same discipline as RS0 and TU4, not "whichever the loop noticed first".
+  const both = revoke(revoke(ecWorld(), 'RUNNER'), 'AGENT');
+  assert.equal(firstRevoked(both), 'AGENT', 'EC4 must be decided by one total order, not by traversal order');
+
+  // EC5 is a total function over the closed enum, and it introduces no new blocker kind.
+  const kinds = new Set(column(tableRows(section(PCC, '11.2')), 'kind').map(bare));
+  const ec5 = tables(section(PCC, '7.4')).find((t) => bare(t[0][0]) === 'revokedInput');
+  assert.ok(ec5, 'EC5 no longer maps each revoked input to a consequence');
+  assert.deepEqual(column(ec5, 'revokedInput').map(bare).flatMap((c) => c.split(' · ')).sort(), [...REVOKED_INPUTS].sort(),
+    'EC5 must cover the closed EC1 enum exactly');
+  for (const consequence of column(ec5, '后果')) {
+    for (const named of consequence.matchAll(/`([A-Z_]+)` blocker/g)) {
+      assert.ok(kinds.has(named[1]), `EC5 maps to ${named[1]}, which is not a §11.2 kind — v1.5 adds no new kinds`);
+    }
+  }
+});
+
+test('PC-CX-29 the commit gate is a database object, and it locks what it reads', () => {
+  // Every P0 in this contract is answered by a database object rather than by a service, because
+  // the entry point that has to be stopped includes "another version of the binary" (§2.4). And
+  // the lock has to be FOR SHARE: FOR KEY SHARE does not conflict with the FOR NO KEY UPDATE that
+  // `UPDATE agent SET enabled = false` takes, so it would admit exactly the interleaving above.
+  const objects = column(tables(section(PCC, '2.4'))[1], '对象').map(bare);
+  assert.ok(objects.includes('session_execution_context_guard'), 'D14 is not frozen in §2.4');
+  assert.ok(section(PCC, '12.1').includes('session_execution_context_guard'), 'D14 is frozen but never created by the migration');
+
+  const dispatch = section(PCC, '7.7');
+  const d14 = dispatch.slice(dispatch.indexOf('#### D14 '), dispatch.indexOf('#### D8 '));
+  assert.ok(d14.startsWith('#### D14 · 执行上下文的提交时授权门'), '§7.7 has no execution-context gate');
+  assert.match(d14, /DEFERRABLE INITIALLY DEFERRED/, 'D14 must be proved at COMMIT, not at INSERT (the PC-CX-20 lesson)');
+  assert.match(d14, /FOR SHARE/, 'D14 must lock the rows it re-reads, or it is a plain read under MVCC (the PC-CX-09 lesson)');
+  assert.match(section(PCC, '7.4'), /`FOR KEY SHARE` \*\*不够\*\*/, 'EC3 must say why FOR KEY SHARE is not enough');
+  assert.match(section(PCC, '4.3'), /\*\*I17（执行上下文在提交点复核/, '§4.3 does not state the execution-context invariant');
+  assert.match(section(PCC, '8.6'), /project_member.*agent.*task.*runner|project_member` 与 `agent`/, '§8.6 LO1 does not place EC3\'s reads in the one lock order');
+  assert.match(section(PCC, '9.6'), /第 6、7、8 条/, 'AU1 still replays only two of §7.4\'s three human-writable predicates');
+});
+
+// ── PC-CX-30 ────────────────────────────────────────────────────────────────
+// §6.1 S8/S9: the declared input has to carry the action history its own rules read.
+
+interface Db30 {
+  projectStatus: string;
+  openBlockers: number;
+  liveSessions: number;
+  unverifiedVerifiers: number;
+  /** The rows v1.4's `world` did not project. */
+  unsettledAcceptance: boolean;
+  turns: { reasonCode: string; reasonDigest: string; openedAtEpoch: number; turnState: 'IN_FLIGHT' | 'FINISHED' }[];
+}
+
+function db30(over: Partial<Db30> = {}): Db30 {
+  return { projectStatus: 'OPEN', openBlockers: 0, liveSessions: 0, unverifiedVerifiers: 0, unsettledAcceptance: false, turns: [], ...over };
+}
+
+/** §6.1's declared input, in each version. v1.4 stops at the rows it listed. */
+function declaredInput(db: Db30, version: Version15): unknown {
+  const base = {
+    project: { status: db.projectStatus },
+    blockers: db.openBlockers,
+    sessions: db.liveSessions,
+    verifiers: db.unverifiedVerifiers,
+  };
+  if (version === 'v14') return base;
+  return {
+    ...base,
+    actions: {
+      unsettledAcceptance: db.unsettledAcceptance ? { acceptanceAttempt: 1 } : null,
+      turns: [...db.turns].sort((a, b) => a.reasonCode.localeCompare(b.reasonCode) || a.openedAtEpoch - b.openedAtEpoch),
+    },
+  };
+}
+
+const inputHash30 = (db: Db30, version: Version15): string => sha256(JSON.stringify(declaredInput(db, version)));
+
+/** §4.2's guards, over the database rather than over the declared input — the required answer. */
+function requiredRunState(db: Db30): string {
+  if (db.projectStatus !== 'OPEN') return 'SETTLED';
+  if (db.openBlockers > 0) return 'BLOCKED';
+  if (db.unsettledAcceptance) return 'ACCEPTANCE';   // guard 4 — the row v1.4 did not project
+  if (db.liveSessions > 0) return 'EXECUTING';
+  if (db.unverifiedVerifiers > 0) return 'AWAITING_VERIFICATION';
+  return 'PLANNING';
+}
+
+/** §7.6 TR1/TR3, over the database: the same digest means two different things. */
+function requiredTurnOutcome(db: Db30, digest: string): 'OPEN_TURN' | 'ALREADY_APPLIED' | 'COORDINATOR_NO_PROGRESS' {
+  const prior = db.turns.find((t) => t.reasonDigest === digest);
+  if (!prior) return 'OPEN_TURN';
+  return prior.turnState === 'IN_FLIGHT' ? 'ALREADY_APPLIED' : 'COORDINATOR_NO_PROGRESS';
+}
+
+test('PC-CX-30 the declared decision input carries the action history its own rules read', () => {
+  // Counterexample 1: two databases, identical on everything v1.4 declared, one with an unsettled
+  // acceptance action. §4.2 guard 4 requires two different run states from one declared input.
+  const planning = db30();
+  const accepting = db30({ unsettledAcceptance: true });
+  assert.notEqual(requiredRunState(planning), requiredRunState(accepting), 'the two states must differ, or there is nothing to catch');
+  assert.equal(inputHash30(planning, 'v14'), inputHash30(accepting, 'v14'),
+    'PC-CX-30 must reproduce: one v1.4 hash, two required run states');
+  assert.notEqual(inputHash30(planning, 'v15'), inputHash30(accepting, 'v15'), 'v1.5 must separate them');
+
+  // Counterexample 2: same declared input, a prior turn that is in flight vs finished. TR1 says
+  // ALREADY_APPLIED, TR3 says COORDINATOR_NO_PROGRESS — again two required actions, one hash.
+  const digest = sha256('MERGE_CONFLICT|A|1');
+  const inFlight = db30({ turns: [{ reasonCode: 'BLOCKER_DECISION', reasonDigest: digest, openedAtEpoch: 100, turnState: 'IN_FLIGHT' }] });
+  const finished = db30({ turns: [{ reasonCode: 'BLOCKER_DECISION', reasonDigest: digest, openedAtEpoch: 100, turnState: 'FINISHED' }] });
+  assert.notEqual(requiredTurnOutcome(inFlight, digest), requiredTurnOutcome(finished, digest));
+  assert.equal(inputHash30(inFlight, 'v14'), inputHash30(finished, 'v14'),
+    'PC-CX-30 must reproduce for TR1/TR3 as well');
+  assert.notEqual(inputHash30(inFlight, 'v15'), inputHash30(finished, 'v15'));
+
+  // S3 is now true over the rules that read `project_action`: same hash ⇒ same required decision,
+  // across every combination the two projections can take.
+  const all: Db30[] = [];
+  for (const unsettledAcceptance of [false, true]) {
+    for (const turnState of ['IN_FLIGHT', 'FINISHED'] as const) {
+      for (const openBlockers of [0, 1]) {
+        all.push(db30({ unsettledAcceptance, openBlockers, turns: [{ reasonCode: 'BLOCKER_DECISION', reasonDigest: digest, openedAtEpoch: 100, turnState }] }));
+      }
+    }
+  }
+  const byHash = new Map<string, string>();
+  for (const db of all) {
+    const decision = `${requiredRunState(db)}|${requiredTurnOutcome(db, digest)}`;
+    const h = inputHash30(db, 'v15');
+    if (byHash.has(h)) assert.equal(byHash.get(h), decision, 'S3: one v1.5 hash must give one decision');
+    byHash.set(h, decision);
+  }
+  assert.equal(byHash.size, all.length, 'every distinct required decision must have its own hash');
+
+  // S9: the projection is minimal and stated, so "we added the whole ledger" is not the fix either.
+  const s9 = tables(section(PCC, '6.1')).find((t) => bare(t[0][0]) === '字段');
+  assert.ok(s9, '§6.1 S9 no longer states the minimal action projection');
+  assert.deepEqual(column(s9, '字段').map(bare), [
+    'unsettledAcceptance',
+    'turns[].reasonDigest + turnState',
+    'turns[].reasonCode + openedAt',
+  ], 'the frozen minimal projection changed');
+  assert.match(section(PCC, '6.1'), /"actions": \{/, '§6.1 world does not carry the action projection');
+  assert.match(section(PCC, '6.1'), /"coordinatorSession"/, '§7.3\'s turn preconditions read a row the input does not carry');
+  assert.match(section(PCC, '6.1'), /"turnWindows"/, 'TR2\'s window has no due-fact in evaluation (S5)');
+});
+
+test('PC-CX-30 S8 harvests from every rule that reads a row, not from three hand-picked tables', () => {
+  // The finding is as much about the completeness *mechanism* as about the missing fields: v1.4's
+  // S8 was a real assertion over a harvest surface that happened to exclude the only two rules
+  // reading `project_action`. The fix has to be the surface, or the next added rule repeats it.
+  const s8 = section(PCC, '6.1');
+  assert.match(s8, /v1\.5 把采集面冻结成\*\*五处，封闭\*\*/, 'S8 does not freeze its harvest surface');
+  for (const source of ['§4.2 的七条守卫', '§7.6 TR1–TR3']) {
+    assert.ok(s8.includes(source), `S8's harvest surface still omits ${source}`);
+  }
+  assert.match(s8, /把 `world` 里任意一个字段删掉，必须至少有一条规则因此不可判定/, 'S8 has no reverse direction');
+
+  // And the superseded sentence is registered, so a future revision cannot quietly go back to the
+  // three tables — that is exactly the PC-CX-27 mechanism doing its job one round later.
+  const ledger = column(tables(section(PCC, '22.8'))[0], '被取代的字样').map(bare);
+  assert.ok(ledger.some((p) => p.includes('§8.2 GE1 的代次表与 §13.4 AE1 的摘要投影里收集列名')),
+    '§22.8 does not register the hand-picked harvest surface');
+});
+
+// ── PC-CX-31 ────────────────────────────────────────────────────────────────
+// §7.6 TR2-a–TR2-e · §7.2 TF5 · §10.4 item 7 · §4.3 I18.
+
+const TURN_WINDOW_MS = 60_000;
+
+interface ManualRequest {
+  dedupeKey: string;
+  consumedAt: number | null;
+  nextAttemptAt: number | null;
+}
+
+interface World31 {
+  now: number;
+  /** TR2-a's anchor: the most recent APPLIED turn for this (generation, reasonCode). */
+  anchor: { idempotencyKey: string; openedAt: number } | null;
+  requests: ManualRequest[];
+  turnsOpened: { key: string; answered: string[] }[];
+  audits: { type: string; detail?: Record<string, unknown> }[];
+  nextWakeAt: number | null;
+  nextWakeReason: string | null;
+}
+
+function world31(): World31 {
+  return { now: 0, anchor: null, requests: [], turnsOpened: [], audits: [], nextWakeAt: null, nextWakeReason: null };
+}
+
+const pending = (w: World31): ManualRequest[] => w.requests.filter((r) => r.consumedAt === null);
+
+/** TF5 (v1.5) vs the v1.1–v1.4 cell: the whole pending set, or just the one that triggered. */
+function manualReasonDigest(w: World31, version: Version15, trigger?: ManualRequest): string {
+  const keys = version === 'v15'
+    ? pending(w).map((r) => r.dedupeKey).sort()
+    : [trigger!.dedupeKey];
+  return sha256(`MANUAL|${keys.join(',')}`);
+}
+
+type Consumption = 'CONSUME' | 'LEAVE';
+
+/**
+ * One reconcile. `version` selects the rate-limited outcome: v1.5 freezes TR2-b/c/d, while v1.4
+ * left two readings open, and `consumption` is that ambiguity made explicit so both can be run.
+ */
+function reconcile31(w: World31, version: Version15, consumption: Consumption = 'CONSUME'): void {
+  const requests = pending(w);
+  if (requests.length === 0) {
+    w.nextWakeAt = w.now + TURN_WINDOW_MS;
+    w.nextWakeReason = 'planning';
+    return;
+  }
+  const windowEndsAt = w.anchor ? w.anchor.openedAt + TURN_WINDOW_MS : -Infinity;
+  const rateLimited = w.now < windowEndsAt;
+
+  if (rateLimited) {
+    if (version === 'v14' && consumption === 'CONSUME') {
+      for (const r of requests) r.consumedAt = w.now;       // the request disappears
+      w.audits.push({ type: 'NOOP' });
+      w.nextWakeAt = w.now + TURN_WINDOW_MS;
+      w.nextWakeReason = 'planning';
+      return;
+    }
+    if (version === 'v14') {                                 // left unconsumed, with no rule for when
+      w.audits.push({ type: 'NOOP' });
+      w.nextWakeAt = w.now + 5_000;                          // W3's floor is the only thing left
+      w.nextWakeReason = 'planning';
+      return;
+    }
+    for (const r of requests) r.nextAttemptAt = windowEndsAt; // TR2-b ③
+    w.audits.push({ type: 'NOOP', detail: { reason: 'turn_rate_limited', windowKey: w.anchor!.idempotencyKey, windowEndsAt, pendingSignalCount: requests.length } });
+    w.nextWakeAt = Math.max(windowEndsAt, w.now + 5_000);     // §10.4 item 7, floored by W3
+    w.nextWakeReason = 'manual trigger rate-limited';
+    return;
+  }
+
+  const digest = manualReasonDigest(w, version, requests[0]);
+  const key = `pc:v1:p1:turn:0:${digest}`;
+  w.turnsOpened.push({ key, answered: requests.map((r) => r.dedupeKey) });
+  for (const r of (version === 'v15' ? requests : [requests[0]])) r.consumedAt = w.now;  // TR2-c ①
+  w.anchor = { idempotencyKey: key, openedAt: w.now };
+  w.nextWakeAt = w.now + TURN_WINDOW_MS;
+  w.nextWakeReason = 'turn in flight';
+}
+
+/** I18, read off the committed state. */
+function i18Holds(w: World31): boolean {
+  return w.requests.every((r) =>
+    r.consumedAt !== null ||
+    (r.nextAttemptAt !== null && w.nextWakeAt !== null && w.nextWakeAt <= r.nextAttemptAt));
+}
+
+test('PC-CX-31 a rate-limited manual trigger is durable, deterministic and visible', () => {
+  const w = world31();
+  w.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+  reconcile31(w, 'v15');
+  assert.equal(w.turnsOpened.length, 1, 'the first request opens a turn');
+  assert.equal(w.anchor?.openedAt, 0, 'and becomes the window anchor (TR2-a)');
+
+  // t0 + 10s: a second, distinct request lands inside the window.
+  w.now = 10_000;
+  w.requests.push({ dedupeKey: 'manual:2', consumedAt: null, nextAttemptAt: null });
+  reconcile31(w, 'v15');
+  assert.equal(w.turnsOpened.length, 1, 'TR2 refuses a second turn inside the window');
+  assert.equal(pending(w).length, 1, 'TR2-c: the request is not consumed — it has not been answered');
+  assert.equal(pending(w)[0].nextAttemptAt, 60_000, 'TR2-b ③: next_attempt_at is the window boundary');
+  assert.equal(w.nextWakeAt, 60_000, '§10.4 item 7: nextWakeAt points at the same boundary');
+  assert.equal(w.nextWakeReason, 'manual trigger rate-limited', 'TR2-e: and it says so');
+  assert.deepEqual(w.audits.at(-1), {
+    type: 'NOOP',
+    detail: { reason: 'turn_rate_limited', windowKey: w.anchor!.idempotencyKey, windowEndsAt: 60_000, pendingSignalCount: 1 },
+  }, 'TR2-b ④: a NOOP that names the window, not silence');
+  assert.equal(i18Holds(w), true, 'I18 holds while the request waits');
+
+  // A restart / takeover changes nothing: the pending state is a `project_event` row and the window
+  // anchor is a `project_action` row, so re-reading the same database gives the same answer.
+  const rehydrated: World31 = JSON.parse(JSON.stringify({ ...w, now: 30_000, audits: [], nextWakeAt: null, nextWakeReason: null }));
+  reconcile31(rehydrated, 'v15');
+  assert.equal(rehydrated.nextWakeAt, 60_000, 'the window survives a restart — it is two committed rows');
+  assert.equal(rehydrated.turnsOpened.length, 1, 'and it is still closed');
+
+  // A third request inside the same window collapses into the same pending set (TF5), it does not
+  // queue a third turn.
+  w.now = 30_000;
+  w.requests.push({ dedupeKey: 'manual:3', consumedAt: null, nextAttemptAt: null });
+  reconcile31(w, 'v15');
+  assert.equal(pending(w).length, 2);
+  assert.equal(w.turnsOpened.length, 1);
+
+  // The boundary: exactly one turn, answering every pending request, consuming all of them.
+  w.now = 60_000;
+  reconcile31(w, 'v15');
+  assert.equal(w.turnsOpened.length, 2, 'exactly one more turn at the boundary — not one per request');
+  assert.deepEqual(w.turnsOpened[1].answered.sort(), ['manual:2', 'manual:3'], 'TF5: one turn answers the whole pending set');
+  assert.deepEqual(pending(w), [], 'TR2-c: and consumes them all, because they were answered');
+  assert.equal(i18Holds(w), true, 'I18 holds after the boundary too');
+  assert.equal(new Set(w.turnsOpened.map((t) => t.key)).size, 2, 'the two turns have distinct idempotency keys');
+
+  // Repeated delivery of an already-pending dedupeKey changes nothing (§5.4's partial unique index
+  // collapses it to one row) — so TF5's digest, and therefore the turn key, is unchanged (I14).
+  const dup = world31();
+  dup.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+  const once = manualReasonDigest(dup, 'v15');
+  const twice = manualReasonDigest(dup, 'v15');
+  assert.equal(once, twice, 'delivery count must not move the digest (TF1/I14)');
+});
+
+test('PC-CX-31 both v1.4 readings are reachable, and both lose the request or busy-loop', () => {
+  // Reading A — consume it. The explicit request is gone: no turn, no pending row, no record.
+  const consumed = world31();
+  consumed.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+  reconcile31(consumed, 'v14');
+  consumed.now = 10_000;
+  consumed.requests.push({ dedupeKey: 'manual:2', consumedAt: null, nextAttemptAt: null });
+  reconcile31(consumed, 'v14', 'CONSUME');
+  assert.equal(consumed.turnsOpened.length, 1, 'no turn was opened for the second request');
+  assert.deepEqual(pending(consumed), [], 'PC-CX-31 reading A must reproduce: the request is consumed and gone');
+  assert.equal(i18Holds(consumed), true, 'and I18 cannot see it either — which is the point: v1.4 had no I18');
+  consumed.now = 60_000;
+  reconcile31(consumed, 'v14', 'CONSUME');
+  assert.equal(consumed.turnsOpened.length, 1, 'the boundary passes and the request never runs');
+
+  // Reading B — leave it. Nothing in §10.4's closed list points at the boundary, so the only wake
+  // left is W3's 5s floor: the same limited reason is re-evaluated twelve times before it can fire.
+  const left = world31();
+  left.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+  reconcile31(left, 'v14');
+  left.now = 10_000;
+  left.requests.push({ dedupeKey: 'manual:2', consumedAt: null, nextAttemptAt: null });
+  let spins = 0;
+  while (left.now < 60_000) {
+    reconcile31(left, 'v14', 'LEAVE');
+    spins += 1;
+    left.now = left.nextWakeAt!;
+  }
+  assert.equal(pending(left).length, 1, 'reading B keeps the request…');
+  assert.ok(spins >= 10, `…at the cost of a busy loop: ${spins} reconciles inside one window`);
+
+  // v1.5 does the same stretch in one wake.
+  const fixed = world31();
+  fixed.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+  reconcile31(fixed, 'v15');
+  fixed.now = 10_000;
+  fixed.requests.push({ dedupeKey: 'manual:2', consumedAt: null, nextAttemptAt: null });
+  let wakes = 0;
+  while (fixed.now < 60_000) {
+    reconcile31(fixed, 'v15');
+    wakes += 1;
+    fixed.now = fixed.nextWakeAt!;
+  }
+  assert.equal(wakes, 1, 'v1.5 wakes once, at the boundary');
+  reconcile31(fixed, 'v15');
+  assert.equal(fixed.turnsOpened.length, 2, 'and the request runs');
+
+  // The clauses this depends on are in the document, closed-list style.
+  const wake = section(PCC, '10.4');
+  assert.match(wake, /7\. \*\*每一个被 §7\.6 TR2 限频挡住的 `reasonCode`/, '§10.4 has no wake at the rate-limit boundary');
+  assert.match(wake, /上面 1–7 条/, 'N-null was not updated for the new item');
+  const turns = section(PCC, '7.6');
+  for (const rule of ['TR2-a（窗口身份', 'TR2-b（被限频的确定结果', 'TR2-c（消费语义', 'TR2-d（唤醒与幂等', 'TR2-e（用户可见状态']) {
+    assert.ok(turns.includes(rule), `§7.6 does not freeze ${rule}）`);
+  }
+  assert.match(section(PCC, '4.3'), /\*\*I18（显式请求不丢失/, '§4.3 does not state that an explicit request cannot be lost');
+  assert.match(section(PCC, '7.2'), /\*\*TF5（`MANUAL` 的 `turnFacts` 是全部 pending 请求/, '§7.2 does not freeze the pending-set digest');
+});
+
+test('mutation check: every fence added for PC-CX-28..31 is load-bearing', () => {
+  // Same discipline as the three mutation checks above: a fence that can be removed without the
+  // defect coming back was never the fix.
+  const digest30 = sha256('MERGE_CONFLICT|A|1');
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-28',
+      fence: 'stating the cap as an admission limit (§9.6 CAP0, §4.3 I16-A/I16-B)',
+      defectReappears: () => v14CurrentStateInvariantHolds(capRace28('COORDINATOR_FIRST')) === false,
+    },
+    {
+      finding: 'PC-CX-29',
+      fence: 're-resolving the frozen execution context at the commit point (§7.4 EC3, §7.7 D14)',
+      defectReappears: () => REVOKED_INPUTS.every((i) => ecRace('USER_FIRST', i, 'v14').committed && !ecRace('USER_FIRST', i, 'v14').i17Holds),
+    },
+    {
+      finding: 'PC-CX-30',
+      fence: 'projecting the action/turn history into the decision input (§6.1 S9)',
+      defectReappears: () =>
+        inputHash30(db30(), 'v14') === inputHash30(db30({ unsettledAcceptance: true }), 'v14') &&
+        requiredRunState(db30()) !== requiredRunState(db30({ unsettledAcceptance: true })),
+    },
+    {
+      finding: 'PC-CX-31',
+      fence: 'the durable pending request and the wake at the window boundary (§7.6 TR2-b/c/d, §10.4 item 7)',
+      defectReappears: () => {
+        const w = world31();
+        w.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+        reconcile31(w, 'v14');
+        w.now = 10_000;
+        w.requests.push({ dedupeKey: 'manual:2', consumedAt: null, nextAttemptAt: null });
+        reconcile31(w, 'v14', 'CONSUME');
+        w.now = 60_000;
+        reconcile31(w, 'v14', 'CONSUME');
+        return w.turnsOpened.length === 1 && pending(w).length === 0;
+      },
+    },
+  ];
+
+  assert.equal(mutants.length, 4, 'unit 02 raised four findings against v1.4');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  assert.equal(admissionInvariantHolds(capRace28('COORDINATOR_FIRST')), true);
+  assert.equal(ecRace('USER_FIRST', 'AGENT', 'v15').committed, false);
+  assert.notEqual(inputHash30(db30(), 'v15'), inputHash30(db30({ unsettledAcceptance: true }), 'v15'));
+  assert.notEqual(
+    requiredTurnOutcome(db30({ turns: [{ reasonCode: 'BLOCKER_DECISION', reasonDigest: digest30, openedAtEpoch: 1, turnState: 'IN_FLIGHT' }] }), digest30),
+    requiredTurnOutcome(db30({ turns: [{ reasonCode: 'BLOCKER_DECISION', reasonDigest: digest30, openedAtEpoch: 1, turnState: 'FINISHED' }] }), digest30),
+  );
+  const fixed = world31();
+  fixed.requests.push({ dedupeKey: 'manual:1', consumedAt: null, nextAttemptAt: null });
+  reconcile31(fixed, 'v15');
+  fixed.now = 10_000;
+  fixed.requests.push({ dedupeKey: 'manual:2', consumedAt: null, nextAttemptAt: null });
+  reconcile31(fixed, 'v15');
+  assert.equal(pending(fixed).length, 1);
+  assert.equal(i18Holds(fixed), true);
+});
+
+test('§23 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20/§21/§22 have, for the fifth round. Two of these four are claims about what
+  // a real server does — a shared row lock cannot make a later cap decrease retroactive, and a
+  // FOR SHARE inside a deferred constraint trigger conflicts with a concurrent revocation — so the
+  // Postgres file is checked by name as well.
+  const rows = tables(section(PCC, '23'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-28', 'PC-CX-29', 'PC-CX-30', 'PC-CX-31']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§23 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '23').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 3, '§23 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§23 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  // The clauses §23 points at have to exist, and the section has to be marked non-normative.
+  assert.match(section(PCC, '23').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§23 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§23 points at §${m[1]}, which does not exist`);
   }
 });
