@@ -500,26 +500,39 @@ test('a first coordinator has nothing remembered and borrows as before', async (
   assert.equal(f.created[0][1].workspaceId, WORKSPACE_TASKS);
 });
 
-// A project an agent just recorded from inside a session: no coordinator yet, and NO TASKS to
-// borrow an assignee from. It is openable anyway, because `create` stored where the session that
-// recorded it was running.
+// A project an agent just recorded from inside a session: `createInSession` bound the recording
+// session as its coordinator, in the insert that created it, and NO TASKS exist to borrow an
+// assignee from. Opening it opens THAT conversation — the first call creates nothing.
 //
-// This is the whole reason that default exists. Without it, the first thing anyone could do with a
-// brand-new project was fail to open its coordinator — and the workaround was to file an assigned
-// task purely so a workspace could be borrowed, which makes a project's viability depend on work
-// nobody has decided on yet. `assignees: []` is deliberate: if this ever falls through to the task
-// fallback, there is nothing there and the call is a 400 rather than a quietly different workspace.
-test('a project created in a session opens its coordinator with no tasks at all', async () => {
-  const f = makeService({ coordinatorWorkspaceId: WORKSPACE_OTHER, assignees: [] });
+// This is what the binding is for. Before it, the first thing anyone could do with a brand-new
+// project was open a SECOND conversation about work that had just been planned in one — the
+// coordinator arrived knowing none of the reasoning, and the agent that did the planning was left
+// out of it. (The version before that was worse still: with no workspace recorded either, opening
+// failed outright unless somebody filed an assigned task purely so a workspace could be borrowed.)
+//
+// `assignees: []` is deliberate: if this ever falls through to the borrow-a-workspace fallback,
+// there is nothing there, so the call is a 400 rather than a quietly different workspace — the
+// regression shows up as a failure instead of as a plausible-looking session id.
+test('a project created in a session opens the session it was created in', async () => {
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: null },
+    coordinatorWorkspaceId: WORKSPACE_OTHER,
+    assignees: [],
+  });
 
-  const result = await f.open();
+  const first = await f.open();
+  const second = await f.open();
 
-  assert.deepEqual(result, {
-    sessionId: SESSION_NEW,
-    created: true,
+  assert.deepEqual(first, {
+    sessionId: SESSION_BOUND,
+    created: false,
     workspaceId: WORKSPACE_OTHER,
   });
-  assert.equal(f.created[0][1].workspaceId, WORKSPACE_OTHER);
+  // Repeated opens are the same answer, from the first one onward: `created` is never true for a
+  // project that arrived bound, because there was never a moment when it needed a coordinator.
+  assert.deepEqual(second, first);
+  assert.deepEqual(f.created, [], 'no session may be opened for a project that already has one');
+  assert.deepEqual(f.written, [], 'and nothing is rebound');
 });
 
 test('with no explicit workspace it opens where the project’s work already runs', async () => {

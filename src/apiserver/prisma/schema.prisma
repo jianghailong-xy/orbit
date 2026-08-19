@@ -1071,8 +1071,15 @@ model Project {
 
   status ProjectStatus @default(OPEN)
 
-  /// The session this project is coordinated from — one durable conversation per project, resolved
-  /// or created by `POST /projects/:id/coordinator`.
+  /// The session this project is coordinated from — one durable conversation per project.
+  ///
+  /// Written in either of two places, meaning the same thing in both. A project recorded from
+  /// inside an agent session is bound HERE, in the same insert that creates the project, to the
+  /// session that recorded it: the conversation a body of work was planned in is the conversation
+  /// about that body of work. Everything else is resolved or created by
+  /// `POST /projects/:id/coordinator`, which also replaces a binding whose session was trashed.
+  /// The value is server-derived from the authenticated session context in both cases and is never
+  /// accepted from a request body.
   ///
   /// A pointer, never a dependency, exactly as `TaskList.ownerSessionId` is: nothing on the
   /// dispatch path reads it, so a coordinator that dies, fails or is deleted cannot stall a single
@@ -1089,15 +1096,14 @@ model Project {
   /// Where this project's coordinator runs — recorded rather than read back off the session
   /// (`Session.workspaceId` is nullable and belongs to the session's own lifecycle).
   ///
-  /// Written in EITHER of two places, and it means the same thing in both. A project created from
-  /// inside an agent session is seeded here, server-side, with that session's own workspace, so it
-  /// has somewhere to be coordinated from before it holds a single task — the value is derived from
-  /// the authenticated session context, never accepted from a request body. Binding a coordinator
-  /// then writes the workspace that coordinator was actually opened in, which from that point is
-  /// what this column holds and what a replacement reopens in. So: the initial default while
-  /// nothing is bound, the bound workspace once something is, and the last one after a coordinator
-  /// is trashed. A project created outside a session (the user-facing POST /projects, or a headless
-  /// runner call) starts with this NULL and gets its value at bind time as before.
+  /// Written wherever `coordinator_session_id` is, in the same statement and off the same session
+  /// row, so the two can never disagree about where this project's coordinator runs. A project
+  /// recorded from inside an agent session takes the workspace that session was running in;
+  /// binding a coordinator afterwards writes the workspace it was opened in. So: the bound
+  /// workspace while something is bound, and the last one after a coordinator is trashed — which
+  /// is where its replacement reopens. A project created outside a session (the user-facing
+  /// POST /projects, or a headless runner call) starts with both columns NULL and gets them at
+  /// bind time.
   ///
   /// It is what a second request naming a DIFFERENT workspace is compared against — that is a 409,
   /// not a silent migration, because moving a coordinator is a decision with a conversation

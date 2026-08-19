@@ -39,17 +39,19 @@ export class RunnerProjectsController {
    * place rather than twice.
    *
    * X-Orbit-Session-Id is the one thing this door adds, and it is CONTEXT rather than a field:
-   * a project created from inside a session defaults its coordinator to that session's workspace,
-   * so the coordinator can be opened the moment the project exists rather than only once one of
-   * its tasks has an assignee to borrow a workspace from. It is deliberately not a body field —
-   * `workspaceId` on the DTO would be a caller-chosen workspace, and this is a fact about where
-   * the request came from that only the server can establish (`createInSession` resolves it under
-   * this runner and this owner, and refuses anything else).
+   * a project created from inside a session is bound, in the insert that creates it, to that
+   * session as its coordinator and to that session's workspace. So opening the coordinator comes
+   * back to the conversation the project was planned in, rather than starting a second one that
+   * knows none of it. It is deliberately not a body field — `sessionId` or `workspaceId` on the
+   * DTO would be caller-chosen, and this is a fact about where the request came from that only the
+   * server can establish (`createInSession` resolves it under this runner and this owner, and
+   * refuses anything else).
    *
    * No orchestration credential is asked for. Writing a project is authority `project_create`
-   * already has; the header narrows where the project's own coordinator will open, and grants
-   * nothing. The empty-string check is not cosmetic: a headless caller must reach `create`, and
-   * `''` would otherwise be looked up as a session and refused.
+   * already has; the header settles which conversation the project's own coordinator IS, and
+   * grants nothing — the session it names is the caller's own. The empty-string check is not
+   * cosmetic: a headless caller must reach `create`, and `''` would otherwise be looked up as a
+   * session and refused.
    */
   @Post('projects')
   createProject(

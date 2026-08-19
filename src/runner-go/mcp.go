@@ -259,8 +259,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		body := map[string]interface{}{"title": title}
 		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
 		// The calling session goes with it, the same as it does on task_create — here so the
-		// server can record this session's workspace as the project's coordinator default, which
-		// is what lets a project created in this turn be coordinated before it has any tasks.
+		// server can bind THIS session as the new project's coordinator, which is what makes
+		// opening the project later come back to this conversation instead of starting another.
 		raw, err := s.t.createProject(s.sessionID, body)
 		if err != nil {
 			return toolResult("create project failed: "+err.Error(), true)
@@ -1239,11 +1239,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"rather than waiting for somebody to type it in. The " +
 				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
 				"task_create_batch passing its projectId, which is what connects the work to what " +
-				"it is for. Created from inside a session, the project also remembers THIS " +
-				"session's workspace as where its coordinator is to be opened, so it can be " +
-				"coordinated straight away — you do not have to file a task first to give it " +
-				"somewhere to run. There is no workspace to pass and none to choose; created " +
-				"outside a session there is no such default.",
+				"it is for. Created from inside a session, the project is bound to THIS session " +
+				"as its coordinator, in the same write that creates it, along with the workspace " +
+				"this session runs in — so opening the project's coordinator later comes back to " +
+				"this conversation rather than starting a fresh one that knows none of it. There " +
+				"is nothing to pass and nothing to choose; created outside a session there is no " +
+				"such binding. One session coordinates at most one project: recording a second " +
+				"one from this same conversation is refused, and nothing is created.",
 			"inputSchema": obj(map[string]interface{}{
 				"title": map[string]interface{}{
 					"type":        "string",

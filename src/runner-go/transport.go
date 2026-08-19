@@ -800,12 +800,12 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 // one that drifts.
 //
 // sessionID travels in the header rather than the body, exactly as it does for a created task —
-// and for a stronger reason: the server reads it to record the calling session's workspace as
-// this project's coordinator default, so a project created here can have its coordinator opened
-// before it has a single task. A workspace in the BODY would be this process's claim about where
-// a coordinator should run; the header is a claim about which session is calling, which the
-// server checks against the session it has. Empty (headless) sends no header at all, and the
-// project is created with no default — see sessionHeader.
+// and for a stronger reason: the server reads it to bind the calling session as this project's
+// coordinator, along with the workspace that session runs in. A session or workspace in the BODY
+// would be this process's claim about which conversation coordinates the project; the header is a
+// claim about which session is calling, which the server checks against the session it has. Empty
+// (headless) sends no header at all, and the project is created bound to nothing — see
+// sessionHeader.
 func (t *Transport) createProject(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
@@ -818,9 +818,9 @@ func (t *Transport) createProject(sessionID string, body map[string]interface{})
 // how a field gets cleared, so nothing here may prune it. Deciding locally which fields are worth
 // forwarding is the one thing that would turn "clear the goal" into "leave the goal alone".
 //
-// No session header, unlike createProject: a project's coordinator default is settled when the
-// project is created, and an update sent from wherever the agent happens to be running now is not
-// a request to move it. Moving a coordinator is a decision someone makes on purpose.
+// No session header, unlike createProject: a project's coordinator is settled when the project is
+// created, and an update sent from wherever the agent happens to be running now is not a request
+// to move it. Moving a coordinator is a decision someone makes on purpose.
 func (t *Transport) updateProject(id string, body map[string]interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

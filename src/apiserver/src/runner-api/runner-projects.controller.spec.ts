@@ -138,10 +138,10 @@ function createSpy() {
   return { calls, controller: new RunnerProjectsController(projects) };
 }
 
-// The whole point of the header: a project an agent records while working somewhere should be
-// coordinated from where it was working, so its coordinator opens the moment it exists. The
-// runner id travels with the owner id because the header is the caller's own claim about itself —
-// see ProjectsService.sessionWorkspace.
+// The whole point of the header: a project an agent records while working on it should be
+// coordinated from the conversation it was planned in, so opening its coordinator comes back to
+// that conversation rather than starting another. The runner id travels with the owner id because
+// the header is the caller's own claim about itself — see ProjectsService.coordinatorFromSession.
 test('a project created from inside a session is created in that session’s context', async () => {
   const f = createSpy();
   const dto: CreateProjectDto = { title: 'Crawl', goal: 'Index the corpus' };

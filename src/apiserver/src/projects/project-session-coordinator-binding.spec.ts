@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { lastValueFrom, of } from 'rxjs';
 import { uuidToBase62 } from '@orbit/shared';
+import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { CreateProjectDto } from './dto';
 import { ProjectsService } from './projects.service';
 
@@ -11,6 +14,7 @@ const RUNNER_ID = '00000000-0000-7000-8000-0000000000b1';
 const OTHER_RUNNER_ID = '00000000-0000-7000-8000-0000000000b2';
 const SESSION_ID = '00000000-0000-7000-8000-0000000000c1';
 const WORKSPACE_ID = '00000000-0000-7000-8000-0000000000d1';
+const PROJECT_ID = '00000000-0000-7000-8000-0000000000e1';
 
 interface SessionRow {
   id: string;
@@ -76,7 +80,16 @@ function matches(row: SessionRow, where: Record<string, unknown>): boolean {
   return true;
 }
 
-function makeService(rows: SessionRow[] = [LIVE]) {
+/** The unique violation Postgres raises on `coordinator_session_id`, as Prisma reports it. */
+function uniqueCoordinator(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: '5.20.0',
+    meta: { target: ['coordinator_session_id'] },
+  });
+}
+
+function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
   const creates: Record<string, unknown>[] = [];
   const lookups: Record<string, unknown>[] = [];
   const prisma = {
@@ -89,16 +102,21 @@ function makeService(rows: SessionRow[] = [LIVE]) {
     },
     project: {
       create: async ({ data }: any) => {
+        // The row the insert WOULD have written is recorded before it fails, so a test can assert
+        // that a rejected create left nothing behind — the database writes no row for a statement
+        // that raises, and `creates` here is the statement rather than the row.
         creates.push(data);
-        return { id: 'project-1', ...data };
+        if (insertFails) throw insertFails;
+        return { id: PROJECT_ID, ...data };
       },
-      // A default applied by a follow-up write would leave a window in which the project exists
-      // and cannot be opened, so reaching for either of these is a failure, not an alternative.
+      // A binding applied by a follow-up write would leave a window in which the project exists
+      // pointing at no conversation, so reaching for either of these is a failure, not an
+      // alternative.
       update: async () => {
-        throw new Error('the coordinator default must be written in the create, not after it');
+        throw new Error('the coordinator binding must be written in the create, not after it');
       },
       updateMany: async () => {
-        throw new Error('the coordinator default must be written in the create, not after it');
+        throw new Error('the coordinator binding must be written in the create, not after it');
       },
     },
   } as never;
@@ -113,31 +131,71 @@ function makeService(rows: SessionRow[] = [LIVE]) {
   };
 }
 
+/**
+ * The created project as a CLIENT receives it, through the interceptor every non-machine response
+ * passes on its way out.
+ *
+ * The binding is only worth writing if it can be read back, and read back in the spelling the
+ * caller addresses things by: `id` in a payload an agent or the web app sees is base62, and the
+ * two coordinator columns are in `PUBLIC_ID_FIELDS` so that they are too. Asserting on the raw row
+ * would prove the column and not the contract.
+ */
+function asClientSees(body: unknown): Promise<Record<string, unknown>> {
+  class ProjectsController {}
+  const interceptor = new PublicIdInterceptor();
+  return lastValueFrom(
+    interceptor.intercept({ getClass: () => ProjectsController } as never, {
+      handle: () => of(body),
+    } as never),
+  ) as Promise<Record<string, unknown>>;
+}
+
 // ── The rule ──────────────────────────────────────────────────────────────────────────────────
 
-test('a project created inside a session remembers that session’s workspace', async () => {
+test('a project created inside a session is coordinated BY that session', async () => {
   const f = makeService();
 
   await f.inSession({ title: 'Crawl', goal: 'Index the corpus' });
 
   assert.equal(f.creates.length, 1);
+  // Both halves, off the one session row: the conversation the work was planned in, and where
+  // that conversation runs. Recording only the workspace was the near miss this test exists to
+  // pin — the project was openable, but opening it started a stranger in the right room.
+  assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
   assert.equal(f.creates[0].coordinatorWorkspaceId, WORKSPACE_ID);
-  // The project is still the project: the session decides where its coordinator opens and nothing
-  // about what the work is.
+  // The project is still the project: the session decides which conversation coordinates it and
+  // nothing about what the work is.
   assert.equal(f.creates[0].ownerId, OWNER_ID);
   assert.equal(f.creates[0].title, 'Crawl');
   assert.equal(f.creates[0].goal, 'Index the corpus');
 });
 
-// A project is openable or it is not, and it must not be briefly neither. One insert also means
-// there is no failure mode where the row lands and the default does not.
-test('the default is part of the insert, not a second write', async () => {
+// The binding as a client actually reads it: the project comes back already naming the session
+// and workspace it was created in, in base62. A binding written to a column nobody can read in
+// the spelling they address things by is a binding that does not exist to the caller — and the
+// agent that just created the project is the first caller that needs to act on it.
+test('the created project already names its session and workspace, in base62', async () => {
+  const f = makeService();
+
+  const created = await asClientSees(await f.inSession({ title: 'Crawl' }));
+
+  assert.equal(created.coordinatorSessionId, uuidToBase62(SESSION_ID));
+  assert.equal(created.coordinatorWorkspaceId, uuidToBase62(WORKSPACE_ID));
+  assert.equal(created.coordinatorSessionPublicId, uuidToBase62(SESSION_ID));
+  assert.equal(created.coordinatorWorkspacePublicId, uuidToBase62(WORKSPACE_ID));
+});
+
+// A project is bound or it is not, and it must not be briefly neither. One insert also means
+// there is no failure mode where the row lands and the binding does not — which is the whole of
+// "atomically", and the reason `update`/`updateMany` throw in the fixture above.
+test('both halves of the binding are part of the insert, not a second write', async () => {
   const f = makeService();
 
   await f.inSession({ title: 'Crawl' });
 
   assert.deepEqual(Object.keys(f.creates[0]).sort(), [
     'acceptanceCriteria',
+    'coordinatorSessionId',
     'coordinatorWorkspaceId',
     'goal',
     'instructions',
@@ -174,6 +232,9 @@ test('a base62 session id resolves to the same session', async () => {
   await f.inSession({ title: 'Crawl' }, uuidToBase62(SESSION_ID));
 
   assert.equal(f.lookups[0].id, SESSION_ID);
+  // Bound in the spelling the column keys by, not the spelling the header arrived in: a base62
+  // value in a `@db.Uuid` column is a P2023 at insert time, and the FK would name nothing.
+  assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
   assert.equal(f.creates[0].coordinatorWorkspaceId, WORKSPACE_ID);
 });
 
@@ -233,9 +294,9 @@ for (const [label, rows, sessionId] of REFUSED) {
       () => f.inSession({ title: 'Crawl' }, sessionId),
       (e: unknown) => e instanceof ForbiddenException,
     );
-    // The refusal is the point. A project created anyway, minus its default, is the unopenable
-    // project this path exists to stop producing — and one pointing at a borrowed workspace would
-    // be worse.
+    // The refusal is the point. A project created anyway, minus its binding, is the unbound
+    // project this path exists to stop producing — and one pointing at somebody else's
+    // conversation would be worse.
     assert.deepEqual(f.creates, []);
   });
 }
@@ -255,16 +316,75 @@ test('every refusal reads exactly the same', async () => {
   assert.equal(messages.size, 1, `refusals differ: ${[...messages].join(' | ')}`);
 });
 
+// ── One session coordinates at most one project ───────────────────────────────────────────────
+
+// `coordinator_session_id` is UNIQUE, so the SECOND project recorded from one conversation is a
+// unique violation rather than a second binding. Raised by the database, translated here: an
+// unhandled P2002 reaches the caller as a bare 500, which reads as "the server is broken" for
+// what is a rule the caller can act on.
+test('a second project from the same session is a 409, and writes nothing', async () => {
+  const f = makeService([LIVE], uniqueCoordinator());
+
+  await assert.rejects(
+    () => f.inSession({ title: 'Crawl again' }),
+    (e: unknown) => {
+      assert.ok(e instanceof ConflictException, `expected a 409, got ${String(e)}`);
+      assert.match(JSON.stringify(e.getResponse()), /coordinates at most one/);
+      return true;
+    },
+  );
+
+  // Half-written is the outcome that must be unreachable, and one statement is what makes it so:
+  // the insert that would have carried the binding is the insert that raised, so there is no
+  // project row, no dangling pointer, and nothing for the caller to clean up before retrying
+  // somewhere else. A create-then-bind implementation fails this by leaving the project behind.
+  assert.equal(f.creates.length, 1, 'exactly one statement was attempted');
+  assert.equal(f.creates[0].coordinatorSessionId, SESSION_ID);
+});
+
+// Only the unique violation, and only where one can happen. A P2002 is translated because there
+// is exactly one unique index this insert can hit; anything else — a dead connection, a failed FK
+// — is a different failure and must not be reported as "that session is taken".
+test('any other database failure is not dressed up as a conflict', async () => {
+  const other = new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed', {
+    code: 'P2003',
+    clientVersion: '5.20.0',
+  });
+  const f = makeService([LIVE], other);
+
+  await assert.rejects(
+    () => f.inSession({ title: 'Crawl' }),
+    (e: unknown) => e === other,
+  );
+});
+
+// The headless path seeds no coordinator, so it cannot violate that index — and a P2002 arriving
+// on it means something else entirely. Translating it would tell a cron bridge with no session at
+// all that its session already coordinates a project.
+test('a headless create never reports the session conflict', async () => {
+  const f = makeService([LIVE], uniqueCoordinator());
+
+  await assert.rejects(
+    () => f.headless({ title: 'Nightly sweep' }),
+    (e: unknown) =>
+      e instanceof Prisma.PrismaClientKnownRequestError && !(e instanceof ConflictException),
+  );
+});
+
 // ── What did not change ───────────────────────────────────────────────────────────────────────
 
-// The logged-in user's POST /projects has no current agent session to inherit from, and inventing
-// a global "current session" for it would be a guess. It keeps creating projects with no default,
-// which `coordinator` still answers by borrowing from the tasks or by asking.
-test('a create with no session context stores no default at all', async () => {
+// The logged-in user's POST /projects has no current agent session to bind, and inventing a
+// global "current session" for it would be a guess. It keeps creating projects bound to nothing,
+// which `coordinator` still answers by opening one — borrowing a workspace from the tasks, or
+// asking. This is the path that must not regress: the user-facing create has to go on working
+// exactly as it did.
+test('a create with no session context binds nothing at all', async () => {
   const f = makeService();
 
-  await f.headless({ title: 'Crawl' });
+  const created = await f.headless({ title: 'Crawl' });
 
+  assert.equal('coordinatorSessionId' in f.creates[0], false);
   assert.equal('coordinatorWorkspaceId' in f.creates[0], false);
+  assert.equal(created.title, 'Crawl', 'and it still creates the project');
   assert.deepEqual(f.lookups, [], 'a headless create must not look a session up');
 });

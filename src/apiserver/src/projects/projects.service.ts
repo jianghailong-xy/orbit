@@ -18,6 +18,21 @@ import {
 } from '../tasks/tasks.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
 
+/**
+ * What a project created from inside a session is bound to: the conversation it is coordinated
+ * from, and where that conversation runs.
+ *
+ * Both halves or neither, which is why it is one argument rather than two. A session with no
+ * record of where it was opened cannot answer what the next `coordinator` call asks of it, and a
+ * workspace with no session is the state this pair exists to stop producing — a project that opens
+ * a SECOND conversation about work that has already been discussed in one. `createInSession`
+ * resolves both from the same session row, so the two cannot disagree.
+ */
+export interface ProjectCoordinatorSeed {
+  sessionId: string;
+  workspaceId: string;
+}
+
 export interface ProjectTaskPageQuery {
   /** Absent = the project's top level. Present = that task's direct children, and only those. */
   parentId?: string;
@@ -74,13 +89,23 @@ export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
 
   /**
-   * One wording for "the session you said you are in is not one I will take a workspace from",
-   * whichever of the several reasons applies. See `sessionWorkspace`.
+   * One wording for "the session you said you are in is not one I will make a coordinator of",
+   * whichever of the several reasons applies. See `coordinatorFromSession`.
    */
-  private static readonly NO_SESSION_WORKSPACE =
-    'no workspace to record as this project’s coordinator default — the session this request ' +
-    'came from is not one this runner is running for this owner, or the workspace it ran in ' +
-    'cannot be run in';
+  private static readonly NO_SESSION_COORDINATOR =
+    'no session to record as this project’s coordinator — the session this request came from ' +
+    'is not one this runner is running for this owner, or the workspace it ran in cannot be run in';
+
+  /**
+   * The other half of the binding, refused. `coordinator_session_id` is UNIQUE, so a session
+   * coordinates at most one project; a second project recorded from the same conversation has to
+   * be told so rather than quietly landing unbound, because an unbound project reported as success
+   * is the defect this whole path exists to stop producing. Worded with the remedy in it: the
+   * caller is an agent deciding what to do next, not a person reading a log.
+   */
+  private static readonly ALREADY_COORDINATING =
+    'this session already coordinates another project, and a session coordinates at most one — ' +
+    'so this project was not created. Record it from a session that coordinates nothing yet.';
 
   /**
    * One wording for "this project's coordinator is not where you asked", whether that was noticed
@@ -125,43 +150,68 @@ export class ProjectsService {
   }
 
   /**
-   * `coordinatorWorkspaceId` is a SERVER-DERIVED argument, never a field of `CreateProjectDto`:
-   * the only caller that passes one is `createInSession`, which resolved it from the session the
-   * request came from. Putting it on the DTO would let any caller name any workspace on a project
-   * it is creating, and the coordinator would open there.
+   * `coordinator` is a SERVER-DERIVED argument, never a field of `CreateProjectDto`: the only
+   * caller that passes one is `createInSession`, which resolved it from the session the request
+   * came from. Putting it on the DTO would let any caller name any session and any workspace on a
+   * project it is creating — which is to say claim a conversation it does not own as this
+   * project’s coordinator, and point it into a workspace it was never given.
    */
-  async create(ownerId: string, dto: CreateProjectDto, coordinatorWorkspaceId?: string) {
+  async create(ownerId: string, dto: CreateProjectDto, coordinator?: ProjectCoordinatorSeed) {
     if (!dto.title) throw new BadRequestException('title is required');
-    return this.prisma.project.create({
-      data: {
-        title: dto.title,
-        ownerId,
-        goal: ProjectsService.blankToNull(dto.goal),
-        acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
-        instructions: ProjectsService.blankToNull(dto.instructions),
-        // Written in the same insert as the rest, so a project is never briefly openable-nowhere:
-        // there is no window in which it exists with the default not yet applied.
-        ...(coordinatorWorkspaceId ? { coordinatorWorkspaceId } : {}),
-      },
-    });
+    try {
+      // `await` inside the `try`, not a returned promise: a returned one rejects in the caller,
+      // where the catch below cannot see it.
+      return await this.prisma.project.create({
+        data: {
+          title: dto.title,
+          ownerId,
+          goal: ProjectsService.blankToNull(dto.goal),
+          acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
+          instructions: ProjectsService.blankToNull(dto.instructions),
+          // Both columns in the SAME insert as the project itself, which is the whole of
+          // "bound atomically": one statement, so there is no instant in which the project exists
+          // pointing at no conversation, and no failure in which the row lands and the binding
+          // does not. A second write would have both.
+          ...(coordinator
+            ? {
+                coordinatorSessionId: coordinator.sessionId,
+                coordinatorWorkspaceId: coordinator.workspaceId,
+              }
+            : {}),
+        },
+      });
+    } catch (e) {
+      // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
+      // only when a coordinator was seeded (`id` is a server-generated uuid v7). So P2002 here
+      // means one thing, and it is a 409 rather than the 500 an unhandled Prisma error becomes:
+      // "a session coordinates at most one project" is a rule the caller can act on.
+      //
+      // There is nothing half-written to clean up. A rejected INSERT writes no row, so the project
+      // this conflict is about does not exist — which is what makes the report safe to act on.
+      if (coordinator && e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(ProjectsService.ALREADY_COORDINATING);
+      }
+      throw e;
+    }
   }
 
   /**
    * A project recorded by an agent from inside a session, which is where a project usually gets
    * recorded now that `project_create` reaches a runner.
    *
-   * It defaults the coordinator to THAT session's workspace, because a project with no default is
-   * a project whose coordinator cannot be opened until somebody assigns one of its tasks —
-   * `coordinator` falls back to the busiest assignee, and a project created a second ago has no
-   * tasks at all. The workaround that produced was "file a task so the coordinator has a workspace
-   * to borrow", which makes a project's viability depend on work nobody has decided on yet.
+   * THAT session becomes the project's coordinator, and its workspace the workspace of record.
+   * The conversation in which a body of work was planned is the conversation about that body of
+   * work — so coming back to the project comes back to the reasoning, and `coordinator` hands the
+   * session back instead of opening a second one that knows none of it. Recording only the
+   * workspace was the near miss: the project was openable, but opening it started a stranger in
+   * the right room.
    *
-   * The workspace is the one the agent is already running in rather than one it names: an agent
-   * asked to set up a body of work is working somewhere, and that somewhere is the honest default.
-   * Nothing about it is client-controlled — see `sessionWorkspace`.
+   * Neither half is client-controlled: both are read off the session row this request came from,
+   * under this owner and this runner — see `coordinatorFromSession`.
    *
    * Headless `project_create` (a cron bridge, no session) keeps calling `create` and keeps getting
-   * a project with no default, which is the truthful answer: no session, no workspace to inherit.
+   * a project bound to nothing, which is the truthful answer: no session, nothing to inherit.
+   * `coordinator` opens one for it the way it always has.
    */
   async createInSession(
     ownerId: string,
@@ -169,11 +219,15 @@ export class ProjectsService {
     sessionId: string,
     dto: CreateProjectDto,
   ) {
-    return this.create(ownerId, dto, await this.sessionWorkspace(ownerId, runnerId, sessionId));
+    return this.create(
+      ownerId,
+      dto,
+      await this.coordinatorFromSession(ownerId, runnerId, sessionId),
+    );
   }
 
   /**
-   * The workspace of the session a runner request says it is coming from — or a 403.
+   * The session a runner request says it is coming from, and the workspace it runs in — or a 403.
    *
    * Scoped by BOTH `ownerId` and `assignedRunnerId`, so the header can only ever name a session
    * this very runner is running for this very owner. The credential authenticates a machine, and
@@ -188,14 +242,14 @@ export class ProjectsService {
    * an unusable `X-Orbit-Workspace-Id` with one: the id is context the caller asserted about
    * itself, not a resource it asked for.
    *
-   * Refusing is the point. Creating the project anyway, minus the default, is exactly the
-   * unopenable project this whole path exists to stop producing.
+   * Refusing is the point. Creating the project anyway, minus the binding, is exactly the
+   * coordinator-less project this whole path exists to stop producing.
    */
-  private async sessionWorkspace(
+  private async coordinatorFromSession(
     ownerId: string,
     runnerId: string,
     sessionId: string,
-  ): Promise<string> {
+  ): Promise<ProjectCoordinatorSeed> {
     let id: string;
     try {
       // `publicIdHeaders` already normalized base62 to a UUID; it deliberately leaves a value it
@@ -204,7 +258,7 @@ export class ProjectsService {
       // the P2023 a `@db.Uuid` column answers a base62-shaped string with.
       id = toUuid(sessionId);
     } catch {
-      throw new ForbiddenException(ProjectsService.NO_SESSION_WORKSPACE);
+      throw new ForbiddenException(ProjectsService.NO_SESSION_COORDINATOR);
     }
     const session = await this.prisma.session.findFirst({
       where: {
@@ -224,8 +278,10 @@ export class ProjectsService {
       },
       select: { workspaceId: true },
     });
-    if (!session?.workspaceId) throw new ForbiddenException(ProjectsService.NO_SESSION_WORKSPACE);
-    return session.workspaceId;
+    if (!session?.workspaceId) throw new ForbiddenException(ProjectsService.NO_SESSION_COORDINATOR);
+    // `id` rather than the header: what was validated is what gets bound, in the spelling the
+    // column keys by.
+    return { sessionId: id, workspaceId: session.workspaceId };
   }
 
   /**
@@ -397,6 +453,11 @@ export class ProjectsService {
    * says `created: false` the second time — it is not a "new coordinator" endpoint that happens to
    * be reachable twice.
    *
+   * A project recorded from inside a session arrives here ALREADY bound, to the conversation it
+   * was planned in (`createInSession`). So its first open creates nothing: the resolve branch
+   * hands that session straight back, which is the whole of "do not open a second conversation
+   * about work that has already been discussed in one".
+   *
    * A bound session is reused even when it has FAILED: that is a terminal state Orbit revives with
    * a new turn, and the history is the thing worth keeping. Only a session the user put in Trash,
    * or one deleted out from under the pointer, earns a replacement — those are the two cases where
@@ -453,10 +514,11 @@ export class ProjectsService {
     // reopened lands back in the same workspace, which is the whole point of having recorded it —
     // skipping straight to the busiest assignee would move the coordinator on the most ordinary
     // path there is, and move it silently, which is the exact migration the 409 above exists to
-    // refuse. And a project created from inside a session was SEEDED with that session's workspace
-    // at creation, so a project that has never been coordinated and holds no tasks at all opens
-    // here rather than falling through to a fallback with nothing in it. Both are the same read:
-    // this column is where the coordinator belongs, however it came to say so.
+    // refuse. And a project created from inside a session recorded that session's workspace at
+    // creation, so when the conversation it was planned in is trashed, its replacement opens where
+    // the planning happened rather than falling through to a fallback a task-less project has
+    // nothing in. Both are the same read: this column is where the coordinator belongs, however it
+    // came to say so.
     const runIn =
       workspaceId ?? (await this.lastCoordinatorWorkspace(ownerId, project)) ?? (await this.busiestAssignee(id));
     if (!runIn) {
@@ -574,10 +636,10 @@ export class ProjectsService {
   /**
    * The workspace this project records as its coordinator's, if that workspace can still run one.
    *
-   * "last" in the name is the case that named it — where the previous coordinator ran — but the
-   * column also holds the default `createInSession` seeded from the creating session, which no
-   * coordinator has run in yet. Both are read identically, and deliberately: the question here is
-   * "where does this project say its coordinator belongs", not "has one been there before".
+   * "last" in the name is the case that named it — where the previous coordinator ran — and the
+   * workspace `createInSession` recorded is the same fact arrived at from the other side: it is
+   * where the coordinator it bound at creation was already running. Both are read identically, and
+   * deliberately: the question here is "where does this project say its coordinator belongs".
    *
    * Checked for liveness rather than trusted. Workspaces are SOFT-deleted, so the FK's SET NULL
    * never fires for one and the column goes on naming a workspace `sessions.create` will refuse —
