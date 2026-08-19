@@ -3,6 +3,28 @@ services:
     image: postgres:16-alpine
     container_name: orbit-postgres
     restart: unless-stopped
+    # The image's entrypoint only fixes up PGDATA's ownership, so create and chown the
+    # archive here — still as root — before it drops to the postgres user. Without this
+    # archive_command cannot write into the bind mount and WAL archiving stalls.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'mkdir -p /archive/wal /archive/base && chown postgres:postgres /archive /archive/wal /archive/base && exec docker-entrypoint.sh "$$@"'
+      - --
+    # Continuous WAL archiving: every finished segment is gzipped into ./data/pg-archive
+    # (scripts/pg-archive-wal.sh), and a written-to database closes a segment at least
+    # every 5 minutes, so recovery lands within that of any moment. The pgbackup service
+    # takes the base backups those segments are replayed onto.
+    command:
+      - postgres
+      - -c
+      - archive_mode=on
+      - -c
+      - "archive_command=/usr/local/bin/pg-archive-wal.sh %p %f"
+      - -c
+      - archive_timeout=300
+      - -c
+      - wal_compression=on
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
@@ -11,11 +33,43 @@ services:
       - "5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
+      - ./data/pg-archive:/archive
+      - ./scripts/pg-archive-wal.sh:/usr/local/bin/pg-archive-wal.sh:ro
+      # Shared with pgbackup so base backups run over the unix socket, which pg_hba
+      # already trusts — no replication password anywhere.
+      - pg-socket:/var/run/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Periodic base backups + retention for the WAL archive above. Without a base backup
+  # the archived WAL has nothing to replay onto, so the two ship together.
+  pgbackup:
+    image: postgres:16-alpine
+    container_name: orbit-pgbackup
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/usr/local/bin/pg-backup.sh"]
+    environment:
+      # The bootstrap superuser initdb created (POSTGRES_USER above); no `postgres`
+      # role exists in this cluster.
+      PGHOST: /var/run/postgresql
+      PGUSER: orbit
+      PGDATABASE: postgres
+      # Seconds between base backups (default daily), how many to keep, and how much
+      # free disk to leave: a backup that would eat into that headroom is skipped with
+      # an error instead of filling the disk out from under Postgres.
+      ORBIT_BASE_BACKUP_INTERVAL: "${ORBIT_BASE_BACKUP_INTERVAL:-86400}"
+      ORBIT_BASE_BACKUP_KEEP: "${ORBIT_BASE_BACKUP_KEEP:-2}"
+      ORBIT_BACKUP_MIN_FREE_MB: "${ORBIT_BACKUP_MIN_FREE_MB:-2048}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./data/pg-archive:/archive
+      - ./scripts/pg-backup.sh:/usr/local/bin/pg-backup.sh:ro
+      - pg-socket:/var/run/postgresql
 
   apiserver:
     build:
@@ -107,3 +161,8 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+
+volumes:
+  # Only the Postgres socket directory: the archive itself is a bind mount under ./data
+  # so backups are visible (and copyable off the host) without docker.
+  pg-socket:

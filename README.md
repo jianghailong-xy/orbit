@@ -137,6 +137,12 @@ The apiserver applies pending Prisma migrations on boot, and the web UI + `/api`
 from the same origin (`http://localhost:2086`). To upgrade a running deployment later,
 rebuild and recreate only the services that changed — the `upgrade` skill automates this.
 
+Postgres comes up with continuous WAL archiving on, and a `pgbackup` sidecar takes a daily
+base backup into `./data/pg-archive` — together enough to restore the database to any moment,
+including just before a bad write. Copy that directory off the host (it shares a disk with the
+database) and keep [docs/postgres-backup-restore.md](docs/postgres-backup-restore.md) handy;
+it is the restore runbook.
+
 ### Run a runner (on the machine that should execute tasks)
 
 On a machine with the runtime(s) your workspaces will use installed and authenticated (see
