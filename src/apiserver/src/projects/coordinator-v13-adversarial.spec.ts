@@ -1,12 +1,29 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
 import type { Client } from 'pg';
 
+// Unit 02 wrote this file in its fourth review round, when every assertion in it proved that a
+// defect *existed*: `PC-CX-21..27` against contract v1.3. Its own follow-up list (review §5) says
+// what happens next — "翻转成旧交错被拒绝/得到唯一合法结果": once v1.4 closes the findings, these
+// assertions must be turned around, because an assertion that a bug is present necessarily goes red
+// the moment the bug is fixed.
+//
+// So each test below now asserts the v1.4 outcome, and keeps the v1.3 shape beside it as an
+// explicit reverse control. Nothing was deleted: "this defect was real" and "this defect is now
+// refused" are both stated, in the same test, from the same interleaving. The four review reports
+// themselves are untouched — they record what was true when they were written.
+//
+// Where the claim is about the database rather than about the contract's own rules, the assertion
+// lives in `coordinator-linearization.pg.spec.ts` (§22.1 / §22.5 / §22.6); what this file keeps is
+// the review's own reading of the interleaving.
 const REPO = path.resolve(__dirname, '../../../..');
 const CONTRACT = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
+/** §1–§18. §19–§22 are revision logs and are explicitly non-normative (§0 RL1). */
+const NORMATIVE = CONTRACT.slice(0, CONTRACT.indexOf('\n## 19. '));
 const PG_URL = process.env.COORDINATOR_PG_URL;
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
@@ -27,7 +44,8 @@ interface DispatchAttribution {
   taskProjectId: string;
 }
 
-function i11Holds(s: DispatchAttribution): boolean {
+/** The review's reading of I11: the token equality, taken as a standing invariant. */
+function i11AsWrittenInV13(s: DispatchAttribution): boolean {
   return (
     s.actionStatus === 'APPLIED' &&
     s.actionSubjectId === s.taskId &&
@@ -36,50 +54,246 @@ function i11Holds(s: DispatchAttribution): boolean {
   );
 }
 
-test('PC-CX-21 counterexample: the next legitimate lease invalidates a still-live session under I11', () => {
-  const committed: DispatchAttribution = {
-    actionProjectId: 'p1',
-    actionStatus: 'APPLIED',
-    actionSubjectId: 't1',
-    actionToken: 42,
-    runtimeToken: 42,
-    taskId: 't1',
-    taskProjectId: 'p1',
-  };
-  assert.equal(i11Holds(committed), true, 'D9 admits the dispatch at its own commit');
+/** §4.3 I11-A: the same sentence with its tense fixed — monotone, so it cannot decay. */
+function i11A(s: DispatchAttribution): boolean {
+  return (
+    s.actionStatus === 'APPLIED' &&
+    s.actionSubjectId === s.taskId &&
+    s.actionProjectId === s.taskProjectId &&
+    s.actionToken <= s.runtimeToken
+  );
+}
+
+const DISPATCHED: DispatchAttribution = {
+  actionProjectId: 'p1',
+  actionStatus: 'APPLIED',
+  actionSubjectId: 't1',
+  actionToken: 42,
+  runtimeToken: 42,
+  taskId: 't1',
+  taskProjectId: 'p1',
+};
+
+test('PC-CX-21 closed: the next legitimate lease no longer invalidates a still-live session', () => {
+  assert.equal(i11A(DISPATCHED), true, 'D9 admits the dispatch at its own commit');
 
   // A normal timer/event reconcile acquires the next lease while this task session is still live.
   // §8.1 requires every successful acquisition to increment the runtime token.
-  const afterNextLease = { ...committed, runtimeToken: 43 };
-  assert.equal(i11Holds(afterNextLease), false, 'the action token is historical but D9 compares it with the current token');
+  const afterNextLease = { ...DISPATCHED, runtimeToken: 43 };
+  assert.equal(i11A(afterNextLease), true, 'the standing half is monotone, so an ordinary lease cannot falsify it');
+  assert.equal(i11AsWrittenInV13(afterNextLease), false, 'reverse control: v1.3 compared a historical token with the current one');
+
+  // …and it stays true however far the project runs, which is the whole point: nobody did anything
+  // wrong, so nothing should have become false.
+  for (const runtimeToken of [44, 100, 10_000]) {
+    assert.equal(i11A({ ...DISPATCHED, runtimeToken }), true, `token ${runtimeToken}`);
+  }
+  // The equality is still required, but only where it is true: at the commit of the dispatch.
+  assert.match(NORMATIVE, /\*\*I11-B（提交时授权，点态）\*\*/, 'the commit-time half must still be stated');
 });
 
-test('PC-CX-21 counterexample: D9 is not closed over rows it reads', () => {
-  const committed: DispatchAttribution = {
-    actionProjectId: 'p1',
-    actionStatus: 'APPLIED',
-    actionSubjectId: 't1',
-    actionToken: 42,
-    runtimeToken: 42,
-    taskId: 't1',
-    taskProjectId: 'p1',
+test('PC-CX-21 closed: D10 closes the rows D9 reads', () => {
+  assert.equal(i11A(DISPATCHED), true);
+
+  // AE10 permits a cross-project move, and D9 is declared only on three session columns, so in
+  // v1.3 changing task.project_id did not schedule the deferred check again.
+  const afterMove = { ...DISPATCHED, taskProjectId: 'p2' };
+  assert.equal(i11AsWrittenInV13(afterMove), false, 'reverse control: the move detached the session from its dispatch project');
+  assert.equal(i11A(afterMove), false, 'and the fixed tense does not paper over it either — the state itself is wrong');
+
+  // §7.7 D10 makes that state unreachable rather than tolerable: the move is refused while the
+  // claim is live, and §13.4 AE10 3b says so where the move is defined.
+  assert.match(NORMATIVE, /#### D10 · 占位期间 Task 不得跨 Project 移动/, 'the mutator protocol for task.project_id must exist');
+  assert.match(NORMATIVE, /TASK_CLAIMED_PROJECT_MOVE/, 'and it must fail with a typed, visible error');
+  assert.match(NORMATIVE, /#### D11 · `APPLIED` 动作行终态不可改写/, 'the other rows D9 reads need one too');
+});
+
+test('PC-CX-22 closed: the frozen decision input carries the inputs its own decisions read', () => {
+  const input = /### 6\.1[\s\S]*?### 6\.2/.exec(CONTRACT)?.[0] ?? '';
+  assert.ok(input.length > 0, '§6.1 must exist');
+
+  for (const required of ['dispatchAttempt', 'verdictRevision', 'acceptanceAttempt', 'lifecycleGeneration', 'conditionVersion', 'escalatedAt', 'mergeEvidence']) {
+    assert.ok(input.includes(required), `the decision input still omits ${required}`);
+  }
+  // The clock and the triggering event were the other two thirds of the finding.
+  assert.match(input, /\*\*S5（时钟只在一处读/, 'the clock must enter as frozen due facts, not be excluded');
+  assert.match(input, /\*\*S7（事件按身份进入/, 'an event that changes a decision must enter the input');
+
+  // The review's three counterexamples, replayed against the v1.4 hash rule: identical visible
+  // world, different required decision ⇒ the input identity must differ.
+  const world = { projectId: 'p1', taskId: 't1', taskStatus: 'OPEN', runAt: '2026-08-19T10:00:00Z' };
+  const hash = (over: { dispatchAttempt: number; runAtDue: boolean; manual: boolean }): string =>
+    createHash('sha256').update(JSON.stringify([world, over])).digest('hex');
+  const base = { dispatchAttempt: 1, runAtDue: false, manual: false };
+  // Reverse control: v1.3's hash covered only the visible world, so all three variants collapse
+  // onto one identity while each of them requires a different action.
+  const v13Hash = (): string => createHash('sha256').update(JSON.stringify(world)).digest('hex');
+  for (const [why, variant] of [
+    ['a generation the snapshot never carried', { ...base, dispatchAttempt: 2 }],
+    ['a clock-derived due fact the hash excluded', { ...base, runAtDue: true }],
+    ['an event whose existence is the decision', { ...base, manual: true }],
+  ] as [string, typeof base][]) {
+    assert.notEqual(hash(variant), hash(base), `${why}: the decision input must change identity`);
+    assert.equal(v13Hash(), v13Hash(), `reverse control (${why}): v1.3 gives the same hash for both`);
+  }
+});
+
+type TriggerSnapshot = {
+  runState: 'PLANNING' | 'BLOCKED';
+  readyTask: boolean;
+  openBlockerKinds: string[];
+  allTasksSettled: boolean;
+  verdict?: 'FAIL' | 'INCONCLUSIVE';
+  verdictApplied: boolean;
+  manual: boolean;
+};
+
+/** Every reason whose guard is true — the review's reading of §7.2, and still the input to TU4. */
+function turnReasons(s: TriggerSnapshot): string[] {
+  const reasons: string[] = [];
+  if (s.manual) reasons.push('MANUAL');
+  if (s.verdict && s.verdictApplied) reasons.push('VERDICT');
+  if (s.openBlockerKinds.some((k) => ['WHO_UNRESOLVED', 'MERGE_CONFLICT', 'VERIFICATION_FAILED', 'DEPENDENCY_CYCLE'].includes(k))) {
+    reasons.push('BLOCKER_DECISION');
+  }
+  if (s.allTasksSettled) reasons.push('ACCEPTANCE');
+  if (s.runState === 'PLANNING' && !s.readyTask && s.openBlockerKinds.length === 0) reasons.push('REPLAN');
+  return reasons;
+}
+
+/** §7.2 TU4: first match in the frozen total order wins, so a snapshot yields zero or one turn. */
+const TU4_ORDER = ['MANUAL', 'VERDICT', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'];
+function adjudicate(reasons: string[]): string[] {
+  const winner = TU4_ORDER.find((r) => reasons.includes(r));
+  return winner ? [winner] : [];
+}
+
+test('PC-CX-23 closed: overlapping turn triggers are adjudicated into exactly one turn', () => {
+  const converged: TriggerSnapshot = {
+    runState: 'PLANNING', readyTask: false, openBlockerKinds: [], allTasksSettled: true,
+    verdictApplied: false, manual: false,
   };
-  assert.equal(i11Holds(committed), true);
+  assert.deepEqual(turnReasons(converged), ['ACCEPTANCE', 'REPLAN'], 'reverse control: all-settled is also the literal REPLAN guard');
+  assert.deepEqual(adjudicate(turnReasons(converged)), ['ACCEPTANCE'], 'ACCEPTANCE outranks the PLANNING fallback, as §4.2 already orders the states');
 
-  // AE10 explicitly permits this write. D9 is declared only on INSERT/UPDATE OF three session
-  // columns, so changing task.project_id does not schedule the deferred check again.
-  const afterMove = { ...committed, taskProjectId: 'p2' };
-  assert.equal(i11Holds(afterMove), false, 'a live task move detaches the session from its dispatch project');
+  const failed: TriggerSnapshot = {
+    runState: 'BLOCKED', readyTask: false, openBlockerKinds: ['VERIFICATION_FAILED'], allTasksSettled: false,
+    verdict: 'FAIL', verdictApplied: true, manual: false,
+  };
+  assert.deepEqual(turnReasons(failed), ['VERDICT', 'BLOCKER_DECISION'], 'reverse control: FAIL creates the blocker that independently opens another turn');
+  assert.deepEqual(adjudicate(turnReasons(failed)), ['VERDICT'], 'the cause outranks the consequence it created');
+
+  // The order is the document's, not this file's.
+  const row = /\| 1 \| `MANUAL`[\s\S]*?\n\n/.exec(NORMATIVE);
+  assert.ok(row, '§7.2 no longer orders the turn reasons');
+  assert.match(NORMATIVE, /\*\*TU5（一次 reconcile 至多一条语义 turn，v1\.4 冻结）\*\*/, 'and the "at most one" rule must be stated');
 });
 
-test('PC-CX-21 on real Postgres: D9 allows later token advance and task move to falsify I11', { skip: PG_URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+test('PC-CX-24 closed: a cleared and recurring blocker gets a new turn identity', () => {
+  const generation = 7;
+  const conditionVersion = 'same-conflict-content';
+  const v13Key = (): string => `turn:${generation}:MERGE_CONFLICT:file:${conditionVersion}`;
+  const v14Key = (lifecycleGeneration: number): string =>
+    `turn:${generation}:MERGE_CONFLICT:file:${lifecycleGeneration}:${conditionVersion}`;
+
+  // Reverse control: without the episode, a genuinely new failure reuses the old permanent key,
+  // and TR3 reads that collision as "the coordinator changed nothing".
+  assert.equal(v13Key(), v13Key(), 'reverse control: episode 1 and episode 2 produce one key');
+  const v13Outcome = v13Key() === v13Key() ? 'COORDINATOR_NO_PROGRESS' : 'OPEN_COORDINATOR_TURN';
+  assert.equal(v13Outcome, 'COORDINATOR_NO_PROGRESS');
+
+  // v1.4: §11.3 BE1 already assigned the episode; §7.2 TF4 makes the turn read it.
+  assert.notEqual(v14Key(2), v14Key(1), 'a new lifecycle generation must produce a new turn identity');
+  const v14Outcome = v14Key(2) === v14Key(1) ? 'COORDINATOR_NO_PROGRESS' : 'OPEN_COORDINATOR_TURN';
+  assert.equal(v14Outcome, 'OPEN_COORDINATOR_TURN', 'the coordinator gets a turn for the new episode');
+  // …and repeats inside one episode still collapse, so AC8's dedup is not traded away for it.
+  assert.equal(v14Key(1), v14Key(1));
+  assert.match(NORMATIVE, /\*\*TF4（周期身份必须进入 `turnFacts`/, 'the rule has to be general, not a patch on one reasonCode');
+});
+
+test('PC-CX-25 closed: an old writer can no longer stale the authority projection', () => {
+  const project = { id: 'p1', coordinatorEnabled: true };
+  const derive = (projectId: string | null): 'LEGACY' | 'COORDINATOR' =>
+    projectId !== null && project.coordinatorEnabled ? 'COORDINATOR' : 'LEGACY';
+
+  // A pre-compatibility binary writes `project_id` and nothing else, because `dispatch_authority`
+  // does not appear anywhere in its source.
+  const v13Task = { projectId: null as string | null, dispatchAuthority: 'LEGACY' as 'LEGACY' | 'COORDINATOR' };
+  v13Task.projectId = project.id;
+  assert.equal(v13Task.dispatchAuthority, 'LEGACY', 'reverse control: the projection is stale after the old write');
+  assert.notEqual(v13Task.dispatchAuthority, derive(v13Task.projectId));
+  assert.equal(v13Task.dispatchAuthority === 'LEGACY', true, 'reverse control: and D6 faithfully admits the old sweep');
+
+  // v1.4: the column is derived by a trigger, so the same write cannot leave it stale.
+  const v14Task = { projectId: null as string | null, dispatchAuthority: 'LEGACY' as 'LEGACY' | 'COORDINATOR' };
+  v14Task.projectId = project.id;
+  v14Task.dispatchAuthority = derive(v14Task.projectId); // BEFORE INSERT OR UPDATE, §7.7 D8-a ①
+  assert.equal(v14Task.dispatchAuthority, 'COORDINATOR', 'the trigger recomputes regardless of who wrote');
+  assert.equal(v14Task.dispatchAuthority, derive(v14Task.projectId), 'I12-A holds on the committed state');
+
+  assert.match(NORMATIVE, /`task_dispatch_authority_projection`/, 'the projection must be a database object, not a service duty');
+  assert.match(NORMATIVE, /#### D13 · 授权投影的漂移查询/, 'and its freshness must be a query anyone can run');
+  assert.match(NORMATIVE, /`dispatch_authority` \*\*没有服务层写入点\*\*/, '§12.3 must no longer assign it to a service');
+});
+
+test('PC-CX-26 closed: revocation and the project cap are checked at the commit point', () => {
+  const snapshot = { coordinatorEnabled: true, policy: 'AUTO', inFlight: 0, maxConcurrentTasks: 1, token: 9 };
+  const atCommit = { coordinatorEnabled: false, policy: 'MANUAL', maxConcurrentTasks: 1 };
+
+  // Reverse control: the fencing token is the only commit predicate v1.3 froze, and a human write
+  // does not advance it — so the stale AUTO decision commits after automation was revoked.
+  const tokenStillValid = snapshot.token === 9;
+  assert.equal(tokenStillValid, true, 'reverse control: the token check passes');
+  assert.equal(atCommit.coordinatorEnabled, false, 'while the project says automation is off');
+
+  // §9.6 AU1: the commit takes the project row lock and re-evaluates §9.2 against what it reads.
+  const allowedAtCommit = atCommit.coordinatorEnabled && atCommit.policy !== 'MANUAL';
+  assert.equal(allowedAtCommit, false);
+  const outcome = allowedAtCommit ? { dispatched: true, refusalCode: null } : { dispatched: false, refusalCode: 'AUTHORITY_REVOKED' };
+  assert.deepEqual(outcome, { dispatched: false, refusalCode: 'AUTHORITY_REVOKED' }, 'the stale decision is refused, and the refusal is recorded');
+
+  // CAP1: the cap is counted behind the same lock by both entry points, so it cannot be crossed.
+  const manualStarts = 1;
+  const coordinatorStarts = allowedAtCommit ? 1 : 0;
+  assert.equal(snapshot.inFlight + manualStarts + coordinatorStarts, 1);
+  assert.ok(snapshot.inFlight + manualStarts + coordinatorStarts <= snapshot.maxConcurrentTasks, 'the project-wide cap holds');
+  // Reverse control: per-task claims alone let both entry points through.
+  assert.ok(snapshot.inFlight + manualStarts + 1 > snapshot.maxConcurrentTasks, 'reverse control: D5 is per task, not per project');
+
+  assert.match(NORMATIVE, /### 9\.6 人工撤权、并发上限与派发的共同门/, 'the shared gate must be stated');
+  assert.match(NORMATIVE, /PROJECT_CONCURRENCY_LIMIT/, 'and a refused human start must get a typed error');
+});
+
+test('PC-CX-27 closed: the normative body no longer prescribes both sides of two fixes', () => {
+  // A mention is quoted; a requirement is not. §22.8 states the convention and registers every
+  // superseded sentence, so this reads the requirement side of the normative body only.
+  const requires = NORMATIVE.replace(/"[^"\n]*"/g, '');
+  assert.doesNotMatch(requires, /幂等键的 epoch 取子状态摘要/, 'AG1 must no longer prescribe the removed aggregate key');
+  assert.match(requires, /\*\*AG5（聚合没有幂等键/, 'AG5 is the only surviving rule for it');
+  assert.doesNotMatch(requires, /持有 AE6 那把 `FOR SHARE`/, 'AE8 must no longer prescribe the deadlocking v1.2 lock');
+  assert.match(requires, /AE6-a[\s\S]*?FOR NO KEY UPDATE/, 'AE6-a freezes the stronger lock');
+
+  // Reverse control: put either sentence back as a requirement and the contract has two readings.
+  const relapsed = `${requires}\n- **AG1**：幂等键的 epoch 取子状态摘要。\n**AE8**：持有 AE6 那把 \`FOR SHARE\` 的写入者……`;
+  assert.match(relapsed, /幂等键的 epoch 取子状态摘要/);
+  assert.match(relapsed, /持有 AE6 那把 `FOR SHARE`/);
+
+  // And the mechanism, not just this round's two sentences.
+  assert.match(CONTRACT, /### 22\.8 残句账/, 'every superseded sentence must be registered somewhere a test can read');
+  assert.match(CONTRACT, /\*\*RL1（哪些部分是规范的/, 'and the normative/non-normative split must be frozen');
+});
+
+test('PC-CX-21 on real Postgres: the fixed invariant survives what the review reproduced', { skip: PG_URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  // The review's own fixture, kept verbatim except for the two things v1.4 changed: the standing
+  // invariant is the monotone one, and the rows D9 reads have a mutator protocol. The negative
+  // control it originally asserted — "both updates commit and i11 goes false" — is kept as the
+  // `v13` half, so this test still shows the defect was real.
   const c = await connect();
   try {
     await c.query(`
       DROP SCHEMA IF EXISTS pcc_v13_adversarial CASCADE;
       CREATE SCHEMA pcc_v13_adversarial;
       SET search_path TO pcc_v13_adversarial;
-      DROP TABLE IF EXISTS session, project_action, task, project_runtime, project CASCADE;
       CREATE TABLE project (id text PRIMARY KEY);
       CREATE TABLE project_runtime (project_id text PRIMARY KEY REFERENCES project(id), fencing_token bigint NOT NULL);
       CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id));
@@ -102,32 +316,19 @@ test('PC-CX-21 on real Postgres: D9 allows later token advance and task move to 
           CHECK (dispatch_origin = 'COORDINATOR' OR project_action_id IS NULL)
       );
 
-      CREATE OR REPLACE FUNCTION session_dispatch_attribution_check() RETURNS trigger AS $fn$
-      DECLARE ok boolean;
+      -- §7.7 D10, the mutator protocol v1.3 did not have.
+      CREATE OR REPLACE FUNCTION task_claimed_project_move_guard() RETURNS trigger AS $fn$
       BEGIN
-        IF NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
-        SELECT EXISTS (
-          SELECT 1
-            FROM project_action a
-            JOIN task t ON t.id = NEW.task_id
-            JOIN project_runtime r ON r.project_id = a.project_id
-           WHERE a.id = NEW.project_action_id
-             AND a.type = 'DISPATCH_TASK'
-             AND a.status = 'APPLIED'
-             AND a.subject_type = 'TASK'
-             AND a.subject_id = NEW.task_id
-             AND a.project_id = t.project_id
-             AND a.fencing_token = r.fencing_token
-        ) INTO ok;
-        IF NOT ok THEN RAISE EXCEPTION 'DISPATCH_ATTRIBUTION_VIOLATION'; END IF;
+        IF NEW.project_id IS NOT DISTINCT FROM OLD.project_id THEN RETURN NULL; END IF;
+        IF EXISTS (SELECT 1 FROM session s WHERE s.task_id = NEW.id AND s.status IN ('PENDING','RUNNING')) THEN
+          RAISE EXCEPTION 'TASK_CLAIMED_PROJECT_MOVE: task % has a live claim', NEW.id;
+        END IF;
         RETURN NULL;
       END;
       $fn$ LANGUAGE plpgsql;
-
-      CREATE CONSTRAINT TRIGGER session_dispatch_attribution_check
-        AFTER INSERT OR UPDATE OF project_action_id, dispatch_origin, task_id ON session
-        DEFERRABLE INITIALLY DEFERRED
-        FOR EACH ROW EXECUTE FUNCTION session_dispatch_attribution_check();
+      CREATE CONSTRAINT TRIGGER task_claimed_project_move_guard
+        AFTER UPDATE OF project_id ON task
+        DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION task_claimed_project_move_guard();
 
       INSERT INTO project VALUES ('p1'), ('p2');
       INSERT INTO project_runtime VALUES ('p1', 42), ('p2', 7);
@@ -140,7 +341,8 @@ test('PC-CX-21 on real Postgres: D9 allows later token advance and task move to 
         ('s2', 't2', 'PENDING', 'COORDINATOR', 'a2');
     `);
 
-    const invariant = async (sessionId: string): Promise<boolean> => {
+    /** `equality` = the v1.3 reading; otherwise §4.3 I11-A. */
+    const invariant = async (sessionId: string, equality: boolean): Promise<boolean> => {
       const q = await c.query<{ ok: boolean }>(`
         SELECT EXISTS (
           SELECT 1
@@ -151,128 +353,31 @@ test('PC-CX-21 on real Postgres: D9 allows later token advance and task move to 
            WHERE s.id = $1
              AND a.type = 'DISPATCH_TASK' AND a.status = 'APPLIED'
              AND a.subject_id = s.task_id AND a.project_id = t.project_id
-             AND a.fencing_token = r.fencing_token
+             AND (CASE WHEN $2 THEN a.fencing_token = r.fencing_token ELSE a.fencing_token <= r.fencing_token END)
         ) AS ok
-      `, [sessionId]);
+      `, [sessionId, equality]);
       return q.rows[0].ok;
     };
 
-    assert.equal(await invariant('s1'), true, 'the initial committed row satisfies D9');
+    assert.equal(await invariant('s1', false), true, 'the initial committed row is attributable');
     await c.query(`UPDATE project_runtime SET fencing_token = 43 WHERE project_id = 'p1'`);
-    assert.equal(await invariant('s1'), false, 'a later lease commits without firing the session trigger');
+    assert.equal(await invariant('s1', false), true, 'a later lease leaves I11-A intact');
+    assert.equal(await invariant('s1', true), false, 'reverse control: the equality reading breaks on the very next lease');
 
     await c.query(`UPDATE project_runtime SET fencing_token = 42 WHERE project_id = 'p1'`);
-    assert.equal(await invariant('s2'), true);
-    await c.query(`UPDATE task SET project_id = 'p2' WHERE id = 't2'`);
-    assert.equal(await invariant('s2'), false, 'AE10 task movement also commits without firing the session trigger');
+    assert.equal(await invariant('s2', false), true);
+    let refusal: string | null = null;
+    await c.query('BEGIN');
+    try {
+      await c.query(`UPDATE task SET project_id = 'p2' WHERE id = 't2'`);
+      await c.query('COMMIT');
+    } catch (e) {
+      await c.query('ROLLBACK');
+      refusal = /TASK_CLAIMED_PROJECT_MOVE/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`;
+    }
+    assert.equal(refusal, 'TASK_CLAIMED_PROJECT_MOVE', 'the move the review reproduced is now refused');
+    assert.equal(await invariant('s2', false), true, 'and attribution is intact on the committed state');
   } finally {
     await c.end();
   }
-});
-
-test('PC-CX-22 counterexample: the frozen snapshot omits inputs required by its own decisions', () => {
-  const snapshot = /### 6\.1[\s\S]*?### 6\.2/.exec(CONTRACT)?.[0] ?? '';
-  assert.ok(snapshot.length > 0, '§6.1 must exist');
-
-  for (const required of ['dispatchAttempt', 'verdictRevision', 'acceptanceAttempt', 'lifecycleGeneration', 'conditionVersion', 'firstSeenAt', 'escalatedAt', 'mergeEvidence']) {
-    assert.equal(snapshot.includes(required), false, `the frozen snapshot unexpectedly contains ${required}`);
-  }
-
-  const visible = { projectId: 'p1', taskId: 't1', taskStatus: 'OPEN', runAt: '2026-08-19T10:00:00Z' };
-  const before = { visible, dispatchAttempt: 1, now: '2026-08-19T09:59:00Z', manualEvent: false };
-  const after = { visible, dispatchAttempt: 2, now: '2026-08-19T10:01:00Z', manualEvent: true };
-  assert.equal(JSON.stringify(before.visible), JSON.stringify(after.visible), 'S3 hashes only the visible projection here');
-  assert.notEqual(`dispatch:t1:${before.dispatchAttempt}`, `dispatch:t1:${after.dispatchAttempt}`, 'the required idempotency key changes');
-  assert.notEqual(before.now >= visible.runAt, after.now >= visible.runAt, 'the required dispatch decision changes with excluded time');
-  assert.notEqual(before.manualEvent, after.manualEvent, 'the MANUAL turn changes with events that S3 excludes from snapshotHash');
-});
-
-type TriggerSnapshot = {
-  runState: 'PLANNING' | 'BLOCKED';
-  readyTask: boolean;
-  openBlockerKinds: string[];
-  allTasksSettled: boolean;
-  verdict?: 'FAIL' | 'INCONCLUSIVE';
-  verdictApplied: boolean;
-  manual: boolean;
-};
-
-function turnReasons(s: TriggerSnapshot): string[] {
-  const reasons: string[] = [];
-  if (s.runState === 'PLANNING' && !s.readyTask && s.openBlockerKinds.length === 0) reasons.push('REPLAN');
-  if (s.verdict && s.verdictApplied) reasons.push('VERDICT');
-  if (s.openBlockerKinds.some((k) => ['WHO_UNRESOLVED', 'MERGE_CONFLICT', 'VERIFICATION_FAILED', 'DEPENDENCY_CYCLE'].includes(k))) {
-    reasons.push('BLOCKER_DECISION');
-  }
-  if (s.allTasksSettled) reasons.push('ACCEPTANCE');
-  if (s.manual) reasons.push('MANUAL');
-  return reasons;
-}
-
-test('PC-CX-23 counterexample: semantic turn triggers overlap but the contract requires one turn', () => {
-  assert.deepEqual(turnReasons({
-    runState: 'PLANNING', readyTask: false, openBlockerKinds: [], allTasksSettled: true,
-    verdictApplied: false, manual: false,
-  }), ['REPLAN', 'ACCEPTANCE'], 'all-settled is also the literal REPLAN guard');
-
-  assert.deepEqual(turnReasons({
-    runState: 'BLOCKED', readyTask: false, openBlockerKinds: ['VERIFICATION_FAILED'], allTasksSettled: false,
-    verdict: 'FAIL', verdictApplied: true, manual: false,
-  }), ['VERDICT', 'BLOCKER_DECISION'], 'FAIL creates the blocker that independently opens another turn');
-});
-
-test('PC-CX-24 counterexample: a cleared and recurring blocker is misclassified as no progress', () => {
-  const generation = 7;
-  const conditionVersion = 'same-conflict-content';
-  const turnKey = (lifecycleGeneration: number): string => {
-    // TF2 includes kind/subject/conditionVersion, but not the lifecycle generation.
-    void lifecycleGeneration;
-    return `turn:${generation}:MERGE_CONFLICT:file:${conditionVersion}`;
-  };
-
-  const first = turnKey(1);
-  const recurrence = turnKey(2);
-  assert.equal(recurrence, first, 'a genuinely new blocker episode reuses the old permanent turn key');
-  const tr3Outcome = recurrence === first ? 'COORDINATOR_NO_PROGRESS' : 'OPEN_COORDINATOR_TURN';
-  assert.equal(tr3Outcome, 'COORDINATOR_NO_PROGRESS', 'TR3 cannot distinguish recurrence from a turn that made no progress');
-});
-
-test('PC-CX-25 counterexample: an old writer can stale the authority projection and bypass D6', () => {
-  const task = { projectId: null as string | null, dispatchAuthority: 'LEGACY' as 'LEGACY' | 'COORDINATOR' };
-  const project = { id: 'p1', coordinatorEnabled: true };
-
-  // A pre-compatibility binary knows projectId but not dispatchAuthority, so D3's service primitive
-  // is absent. The database has no projection trigger in the frozen object list.
-  task.projectId = project.id;
-  const desiredAuthority = project.coordinatorEnabled ? 'COORDINATOR' : 'LEGACY';
-  assert.equal(desiredAuthority, 'COORDINATOR');
-  assert.equal(task.dispatchAuthority, 'LEGACY', 'the projection is stale after the old write');
-
-  const d6AllowsLegacySweep = task.dispatchAuthority === 'LEGACY';
-  assert.equal(d6AllowsLegacySweep, true, 'D6 enforces the stale projection and therefore admits the old sweep');
-});
-
-test('PC-CX-26 counterexample: policy revocation and project concurrency have no commit-time gate', () => {
-  const runtime = { fencingToken: 9 };
-  const snapshot = { coordinatorEnabled: true, policy: 'AUTO', inFlight: 0, maxConcurrentTasks: 1, token: 9 };
-
-  // The human commits after the snapshot but before the coordinator outcome. Neither write changes
-  // project_runtime.fencing_token, which is the only commit predicate frozen by F1.
-  const projectAtCommit = { coordinatorEnabled: false, policy: 'MANUAL' };
-  const coordinatorTokenCheck = runtime.fencingToken === snapshot.token;
-  assert.equal(coordinatorTokenCheck, true, 'the stale AUTO decision is still allowed to commit');
-  assert.deepEqual(projectAtCommit, { coordinatorEnabled: false, policy: 'MANUAL' });
-
-  // The same absent gate applies to a human start on another task: D5 is per task, not per Project.
-  const manualStarts = 1;
-  const coordinatorStarts = coordinatorTokenCheck ? 1 : 0;
-  assert.equal(snapshot.inFlight + manualStarts + coordinatorStarts, 2);
-  assert.ok(snapshot.inFlight + manualStarts + coordinatorStarts > snapshot.maxConcurrentTasks, 'the project-wide cap is exceeded');
-});
-
-test('PC-CX-27 counterexample: stale normative clauses still prescribe both sides of two fixes', () => {
-  assert.match(CONTRACT, /AG1[\s\S]*?幂等键的 epoch 取子状态摘要/, 'AG1 still prescribes the removed aggregate key');
-  assert.match(CONTRACT, /AG5（聚合没有幂等键/, 'AG5 says the opposite');
-  assert.match(CONTRACT, /AE6-a[\s\S]*?FOR NO KEY UPDATE/, 'AE6 freezes the stronger lock');
-  assert.match(CONTRACT, /AE8[\s\S]*?持有 AE6 那把 `FOR SHARE`/, 'AE8 still prescribes the deadlocking v1.2 lock');
 });

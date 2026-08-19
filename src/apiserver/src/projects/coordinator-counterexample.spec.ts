@@ -1162,11 +1162,19 @@ test('PC-CX-10 repeated delivery of one condition never changes the turn key', (
   assert.notEqual((t1 as { key: string }).key, (t0 as { key: string }).key);
 });
 
+/**
+ * The §7.2 turn-reason table. v1.4 gave it an order column (TU4) and added a second table with the
+ * same first column (TF4), so it is addressed by header: a positional read now silently picks the
+ * wrong table and yields an empty list, which most assertions below would happily pass.
+ */
+function turnReasons(): string[][] {
+  return tables(section(PCC, '7.2')).find((t) => t[0].some((h) => bare(h) === '触发条件'))!;
+}
+
 test('PC-CX-10 no turnFacts column names anything that moves on its own', () => {
   // TF1 is a deny-list, so it can be checked by reading the frozen table rather than by trusting
   // that whoever writes the next `reasonCode` remembers the rule.
-  const triggerTable = tables(section(PCC, '7.2')).find((t) => t[0].some((h) => h.includes('reasonCode')))!;
-  const facts = column(triggerTable, 'turnFacts（进入 reasonDigest 的快照投影，§7.3）');
+  const facts = column(turnReasons(), 'turnFacts（进入 reasonDigest 的输入投影，§7.3）');
   assert.ok(facts.length >= 5, 'the trigger table is a closed set of reasonCodes');
   for (const cell of facts) {
     for (const banned of ['occurrences', 'attempts', 'lastSeenAt', 'last_seen_at', 'firstSeenAt', 'first_seen_at', 'escalatedAt', 'escalated_at', 'snapshotAt', 'now()']) {
@@ -1285,8 +1293,9 @@ function kindTable(): KindRow[] {
 
 /** The kinds §7.2 lists on the `BLOCKER_DECISION` row — read from the document, not retyped. */
 function turnTriggerKinds(): string[] {
-  const trigger = tableRows(section(PCC, '7.2')).find((cells) => bare(cells[0]) === 'BLOCKER_DECISION')!;
-  return (/\{([^}]+)\}/.exec(trigger[1])?.[1] ?? '').split(',').map((k) => k.trim()).filter(Boolean);
+  const rows = turnReasons();
+  const at = column(rows, 'reasonCode').map(bare).indexOf('BLOCKER_DECISION');
+  return (/\{([^}]+)\}/.exec(column(rows, '触发条件')[at] ?? '')?.[1] ?? '').split(',').map((k) => k.trim()).filter(Boolean);
 }
 
 interface LiveBlocker extends Blocker {
@@ -2569,5 +2578,698 @@ test('§21 names a test that exists for every finding, and points at clauses tha
   const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
   for (const named of Array.from(section(PCC, '21').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1])) {
     assert.ok(pg.includes(`test('${named}'`), `§21 names "${named}", which is not a test in the Postgres spec`);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.4 — `PC-CX-21..27` (§22)
+//
+// The fourth round has one shape too, and it is the mirror image of the third. v1.3 learned to let
+// the database prove what the database can prove; what it did not do is push that discipline to
+// its two boundaries. One boundary is *time*: D9 proves attribution beautifully at COMMIT, and v1.3
+// then wrote that proof down as a standing invariant — so the next perfectly ordinary lease
+// falsifies it (`PC-CX-21`); `snapshotHash` likewise excluded the clock while a dozen rules read
+// it (`PC-CX-22`). The other boundary is *the writer's version*: D5/D6/D9 all live in the database,
+// but the column they read was maintained by the new service layer, so one old binary staled the
+// first link of the chain (`PC-CX-25`, P0). The rest are the same patterns in other places:
+// simultaneously-true reasons with no adjudication (`PC-CX-23`), a row with a lifecycle whose
+// generation never reached the identity that reads it (`PC-CX-24`), a human and the control loop
+// with no shared lock (`PC-CX-26`), and superseded sentences left alive in the normative body
+// (`PC-CX-27`).
+//
+// Two of these are claims about what a real server does, so they also have real-Postgres tests
+// (§22.1, §22.5, §22.6). Everything below is the model half.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Version14 = 'v13' | 'v14';
+
+// ── PC-CX-21 ────────────────────────────────────────────────────────────────
+// §4.3 I11-A/I11-B: one standing half stated as a monotone relation, one commit-time half.
+
+interface Attribution {
+  actionType: string;
+  actionStatus: string;
+  actionSubjectId: string;
+  actionProjectId: string;
+  actionToken: number;
+  runtimeToken: number;
+  taskId: string;
+  taskProjectId: string;
+}
+
+/** The structural half, minus the token, shared by both readings. */
+function attributionShapeHolds(a: Attribution): boolean {
+  return (
+    a.actionType === 'DISPATCH_TASK' &&
+    a.actionStatus === 'APPLIED' &&
+    a.actionSubjectId === a.taskId &&
+    a.actionProjectId === a.taskProjectId
+  );
+}
+
+/** §4.3 I11: `v13` read the commit-time equality as standing; `v14` states the monotone relation. */
+function i11Standing(a: Attribution, version: Version14): boolean {
+  return attributionShapeHolds(a) && (version === 'v14' ? a.actionToken <= a.runtimeToken : a.actionToken === a.runtimeToken);
+}
+
+/** §7.7 D9 — evaluated only at the COMMIT of the transaction that writes the session. */
+function d9AdmitsAtCommit(a: Attribution): boolean {
+  return attributionShapeHolds(a) && a.actionToken === a.runtimeToken;
+}
+
+/** §7.7 D10: a claimed task refuses to change project; `v13` had no such protocol. */
+function moveTaskProject(a: Attribution, to: string, claimed: boolean, version: Version14): { committed: boolean; after: Attribution } {
+  if (version === 'v14' && claimed) return { committed: false, after: a };
+  return { committed: true, after: { ...a, taskProjectId: to } };
+}
+
+/** §7.7 D11: the six attribution columns of an APPLIED action are frozen; two more are not. */
+const D11_FROZEN = ['actionType', 'actionStatus', 'actionSubjectId', 'actionProjectId', 'actionToken', 'idempotencyKey'] as const;
+const D11_WRITABLE = ['resultSessionId', 'detail'] as const;
+function rewriteAppliedAction(applied: boolean, columnName: string, version: Version14): boolean {
+  if (version === 'v13') return true; // nothing stopped it
+  if (!applied) return true; // CLAIMED → APPLIED/REFUSED/SUPERSEDED is the normal path (D11-a)
+  return !(D11_FROZEN as readonly string[]).includes(columnName);
+}
+
+test('PC-CX-21 attribution survives the next lease and refuses to survive a live task move', () => {
+  const dispatched: Attribution = {
+    actionType: 'DISPATCH_TASK', actionStatus: 'APPLIED', actionSubjectId: 't1', actionProjectId: 'p1',
+    actionToken: 42, runtimeToken: 42, taskId: 't1', taskProjectId: 'p1',
+  };
+
+  // The commit itself is admitted by D9 under both readings — that is not what broke.
+  assert.equal(d9AdmitsAtCommit(dispatched), true, 'D9 admits the dispatch at its own commit (I11-B)');
+  assert.equal(i11Standing(dispatched, 'v14'), true);
+  assert.equal(i11Standing(dispatched, 'v13'), true);
+
+  // Interleaving A: a wholly ordinary reconcile takes the next lease while the session is still
+  // live. §8.1 makes the token monotone, so this happens on the very next timer tick, and the
+  // session's three columns never move — D9 is not even scheduled to run again.
+  let live = dispatched;
+  for (const token of [43, 44, 45]) {
+    live = { ...live, runtimeToken: token };
+    assert.equal(i11Standing(live, 'v14'), true, `I11-A must keep holding at token ${token}: nobody did anything wrong`);
+  }
+  assert.equal(i11Standing(dispatched, 'v13'), true);
+  assert.equal(i11Standing({ ...dispatched, runtimeToken: 43 }, 'v13'), false, 'negative control: the equality reading is false after one normal lease');
+
+  // Interleaving B: a legal AE10 move of a task that still has a live claim.
+  const moved13 = moveTaskProject(dispatched, 'p2', true, 'v13');
+  assert.equal(moved13.committed, true, 'negative control: v1.3 had no mutator protocol for task.project_id');
+  assert.equal(i11Standing(moved13.after, 'v13'), false, 'and the committed state falsifies attribution');
+
+  const moved14 = moveTaskProject(dispatched, 'p2', true, 'v14');
+  assert.equal(moved14.committed, false, 'D10 refuses the move while the claim is live');
+  assert.deepEqual(moved14.after, dispatched, 'a refused move leaves both rows untouched');
+  assert.equal(i11Standing(moved14.after, 'v14'), true);
+
+  // …and it is a refusal, not a prohibition: once the claim is released the move is ordinary.
+  const released = moveTaskProject(dispatched, 'p2', false, 'v14');
+  assert.equal(released.committed, true, 'D10-c: an unclaimed task moves exactly as AE10 always allowed');
+
+  // D11: the other rows D9 reads are frozen once the action is APPLIED, and only those.
+  for (const columnName of D11_FROZEN) {
+    assert.equal(rewriteAppliedAction(true, columnName, 'v14'), false, `${columnName} must be immutable on an APPLIED action`);
+    assert.equal(rewriteAppliedAction(true, columnName, 'v13'), true, `negative control: ${columnName} was rewritable`);
+    assert.equal(rewriteAppliedAction(false, columnName, 'v14'), true, `${columnName} must still be writable while CLAIMED (D11-a)`);
+  }
+  for (const columnName of D11_WRITABLE) {
+    assert.equal(rewriteAppliedAction(true, columnName, 'v14'), true, `${columnName} is not part of attribution (D11-b)`);
+  }
+});
+
+// ── PC-CX-22 ────────────────────────────────────────────────────────────────
+// §6.1 S3/S5/S6/S7/S8: world + evaluation + signals, and one hash over all three.
+
+interface DecisionInput {
+  world: { taskId: string; taskStatus: string; runAt: string; dispatchAttempt: number };
+  evaluation: { epoch: number; runAtDue: boolean };
+  signals: { kind: string; dedupeKey: string }[];
+  readAt: string;
+}
+
+function decisionInputHash(input: DecisionInput, version: Version14): string {
+  const covered = version === 'v14'
+    ? { world: input.world, evaluation: input.evaluation, signals: input.signals }
+    // v1.3: the hash covered the snapshot minus `snapshotAt` and `events`, and the snapshot had no
+    // dispatchAttempt at all — so all three excluded things are excluded here.
+    : { world: { taskId: input.world.taskId, taskStatus: input.world.taskStatus, runAt: input.world.runAt } };
+  return createHash('sha256').update(JSON.stringify(covered)).digest('hex');
+}
+
+/** The mechanical decision the contract requires for this input (§7.2, §7.3, §7.4). */
+function decide(input: DecisionInput): { actions: string[] } {
+  const actions: string[] = [];
+  if (input.signals.some((s) => s.kind === 'user.manual_trigger')) actions.push('OPEN_COORDINATOR_TURN:MANUAL');
+  if (input.world.taskStatus === 'OPEN' && input.evaluation.runAtDue) {
+    actions.push(`DISPATCH_TASK:pc:v1:p1:dispatch:${input.world.taskId}:${input.world.dispatchAttempt}`);
+  }
+  return { actions };
+}
+
+test('PC-CX-22 the decision input is complete, and the hash is over all of it', () => {
+  const base: DecisionInput = {
+    world: { taskId: 't1', taskStatus: 'OPEN', runAt: '2026-08-19T10:00:00Z', dispatchAttempt: 1 },
+    evaluation: { epoch: 1_755_600_000, runAtDue: true },
+    signals: [],
+    readAt: '2026-08-19T10:00:01Z',
+  };
+
+  // Three independent gaps, each producing "same hash, different required decision" under v1.3.
+  const variants: { why: string; input: DecisionInput }[] = [
+    { why: 'a persisted generation the snapshot never carried', input: { ...base, world: { ...base.world, dispatchAttempt: 2 } } },
+    { why: 'a clock-derived due fact the hash excluded', input: { ...base, evaluation: { epoch: base.evaluation.epoch - 120, runAtDue: false } } },
+    { why: 'an event whose existence is itself the decision', input: { ...base, signals: [{ kind: 'user.manual_trigger', dedupeKey: 'k1' }] } },
+  ];
+
+  for (const { why, input } of variants) {
+    assert.notDeepEqual(decide(input).actions, decide(base).actions, `${why}: the required decision differs`);
+    assert.equal(decisionInputHash(input, 'v13'), decisionInputHash(base, 'v13'), `negative control (${why}): v1.3 gives the same hash`);
+    assert.notEqual(decisionInputHash(input, 'v14'), decisionInputHash(base, 'v14'), `${why}: the decision input must change identity`);
+  }
+
+  // S3 in its positive form: same hash ⇒ literally the same actions. Re-reading at a different
+  // wall-clock instant that folds to the same due facts is the case that has to stay stable, or
+  // S3 degrades into a sentence that is always true and never useful (S6).
+  const reread: DecisionInput = { ...base, readAt: '2026-08-19T10:00:59Z', evaluation: { ...base.evaluation, epoch: base.evaluation.epoch + 58 } };
+  const rereadSameEpoch: DecisionInput = { ...base, readAt: '2026-08-19T10:00:59Z' };
+  assert.equal(decisionInputHash(rereadSameEpoch, 'v14'), decisionInputHash(base, 'v14'), 'S6: readAt alone must not change the input identity');
+  assert.deepEqual(decide(reread).actions, decide(base).actions, 'the same due facts must give the same actions');
+
+  // S7's boundary against E1: a signal enters by identity only, and repeated delivery of the same
+  // dedupeKey collapses to one entry (§5.4), so I14 is untouched.
+  const once: DecisionInput = { ...base, signals: [{ kind: 'user.manual_trigger', dedupeKey: 'k1' }] };
+  const collapsed = [{ kind: 'user.manual_trigger', dedupeKey: 'k1' }, { kind: 'user.manual_trigger', dedupeKey: 'k1' }]
+    .filter((s, i, all) => all.findIndex((o) => o.kind === s.kind && o.dedupeKey === s.dedupeKey) === i);
+  assert.equal(decisionInputHash({ ...once, signals: collapsed }, 'v14'), decisionInputHash(once, 'v14'), 'delivering the same signal twice must not change the input');
+  for (const s of once.signals) assert.deepEqual(Object.keys(s).sort(), ['dedupeKey', 'kind'], 'a signal must carry identity only, never a payload (E1)');
+});
+
+// ── PC-CX-23 ────────────────────────────────────────────────────────────────
+// §7.2 TU4/TU5 + §4.3 I15: a total order over the five reasons, at most one turn per input.
+
+const TURN_ORDER = ['MANUAL', 'VERDICT', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'] as const;
+type TurnReason = (typeof TURN_ORDER)[number];
+
+/** `v13` returned every reason whose guard was true; `v14` returns the first in the frozen order. */
+function chooseTurnReasons(truths: Record<TurnReason, boolean>, version: Version14, evaluationOrder: readonly TurnReason[] = TURN_ORDER): TurnReason[] {
+  const trueOnes = evaluationOrder.filter((r) => truths[r]);
+  if (version === 'v13') return trueOnes;
+  const winner = TURN_ORDER.find((r) => truths[r]);
+  return winner ? [winner] : [];
+}
+
+test('PC-CX-23 overlapping turn reasons are decided by one total order', () => {
+  // All 32 truth combinations of the five guards. The point of enumerating rather than listing the
+  // two the review found is that a hand-written exclusion guard fails on the next combination —
+  // the same argument §4.2 RS0 makes about the hand-written transition table.
+  const shuffled: readonly TurnReason[] = ['REPLAN', 'ACCEPTANCE', 'BLOCKER_DECISION', 'VERDICT', 'MANUAL'];
+  let overlaps = 0;
+  for (let mask = 0; mask < 32; mask++) {
+    const truths = Object.fromEntries(TURN_ORDER.map((r, i) => [r, Boolean(mask & (1 << i))])) as Record<TurnReason, boolean>;
+    const chosen = chooseTurnReasons(truths, 'v14');
+    assert.ok(chosen.length <= 1, `mask ${mask}: at most one semantic turn per input (I15)`);
+    assert.deepEqual(chosen, chooseTurnReasons(truths, 'v14', shuffled), `mask ${mask}: the answer must not depend on evaluation order`);
+    if (chosen.length === 1) {
+      assert.equal(chosen[0], TURN_ORDER.find((r) => truths[r]), `mask ${mask}: the winner must be first in the frozen order`);
+    } else {
+      assert.deepEqual(Object.values(truths).filter(Boolean), [], `mask ${mask}: no turn only when no guard is true`);
+    }
+    if (chooseTurnReasons(truths, 'v13').length > 1) overlaps++;
+  }
+  assert.equal(overlaps, 26, 'negative control: 26 of the 32 combinations produced more than one turn under v1.3');
+
+  // The two the review published, as named regressions.
+  const allSettled: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: false, BLOCKER_DECISION: false, ACCEPTANCE: true, REPLAN: true };
+  assert.deepEqual(chooseTurnReasons(allSettled, 'v13'), ['ACCEPTANCE', 'REPLAN'], 'negative control: converged work hits REPLAN and ACCEPTANCE together');
+  assert.deepEqual(chooseTurnReasons(allSettled, 'v14'), ['ACCEPTANCE'], 'ACCEPTANCE wins: §4.2 already puts it above the PLANNING fallback');
+
+  const verificationFailed: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false };
+  assert.deepEqual(chooseTurnReasons(verificationFailed, 'v13'), ['VERDICT', 'BLOCKER_DECISION'], 'negative control: a FAIL is also the blocker it creates');
+  assert.deepEqual(chooseTurnReasons(verificationFailed, 'v14'), ['VERDICT'], 'the cause wins over the consequence it created (§13.2 ④)');
+
+  // The document is the source of the order, so read it rather than trusting the constant above.
+  assert.deepEqual(column(turnReasons(), 'reasonCode').map(bare), [...TURN_ORDER], '§7.2 and this model disagree about the total order');
+});
+
+// ── PC-CX-24 ────────────────────────────────────────────────────────────────
+// §7.2 TF4 + §7.6 TR3: a cleared-and-recurring blocker is a new episode, not a stalled turn.
+
+function reasonDigest24(kind: string, subjectId: string, conditionVersion: string, lifecycleGeneration: number, version: Version14): string {
+  const facts = version === 'v14'
+    ? [kind, subjectId, lifecycleGeneration, conditionVersion]
+    : [kind, subjectId, conditionVersion];
+  return createHash('sha256').update(JSON.stringify(['BLOCKER_DECISION', facts])).digest('hex');
+}
+
+/** §7.6: TR1 dedupes on the digest, TR3 turns a finished-and-unchanged digest into a blocker. */
+function turnOutcome24(digest: string, finishedTurns: Set<string>): 'OPEN_COORDINATOR_TURN' | 'COORDINATOR_NO_PROGRESS' {
+  return finishedTurns.has(digest) ? 'COORDINATOR_NO_PROGRESS' : 'OPEN_COORDINATOR_TURN';
+}
+
+test('PC-CX-24 a blocker episode that recurs earns a new turn, not a no-progress verdict', () => {
+  const opensTurn = tableRows(section(PCC, '11.2'))
+    .filter((cells) => bare(cells[4]) === '✔')
+    .map((cells) => bare(cells[0]));
+  assert.deepEqual(opensTurn.sort(), ['DEPENDENCY_CYCLE', 'MERGE_CONFLICT', 'VERIFICATION_FAILED', 'WHO_UNRESOLVED'], '§11.2 no longer has four turn-opening kinds');
+
+  for (const kind of opensTurn) {
+    for (const version of ['v13', 'v14'] as Version14[]) {
+      const finished = new Set<string>();
+
+      // Episode 1, seen N times. Repeats inside one open episode must collapse onto one key —
+      // that is AC8's dedup, and it has to survive the fix rather than be traded away for it.
+      const first = reasonDigest24(kind, 'subject-1', 'condition-A', 1, version);
+      for (let n = 0; n < 5; n++) {
+        assert.equal(reasonDigest24(kind, 'subject-1', 'condition-A', 1, version), first, `${kind}/${version}: repeats inside an episode must not move the key`);
+      }
+      assert.equal(turnOutcome24(first, finished), 'OPEN_COORDINATOR_TURN');
+      finished.add(first); // the coordinator ran and the turn ended
+
+      // Same episode, still unchanged: TR3 is right to refuse a second turn here.
+      assert.equal(turnOutcome24(first, finished), 'COORDINATOR_NO_PROGRESS', `${kind}/${version}: TR3 must still catch a genuinely stalled episode`);
+
+      // The blocker is cleared; an hour later the identical condition happens again. §11.3 BE1
+      // gives it generation 2 — the only fact in the system that says "it recovered in between".
+      const recurrence = reasonDigest24(kind, 'subject-1', 'condition-A', 2, version);
+      if (version === 'v13') {
+        assert.equal(recurrence, first, `negative control (${kind}): the new episode reuses the old permanent turn key`);
+        assert.equal(turnOutcome24(recurrence, finished), 'COORDINATOR_NO_PROGRESS', `negative control (${kind}): a brand new failure is filed as "no progress"`);
+      } else {
+        assert.notEqual(recurrence, first, `${kind}: a new lifecycle generation must produce a new turn identity`);
+        assert.equal(turnOutcome24(recurrence, finished), 'OPEN_COORDINATOR_TURN', `${kind}: the coordinator gets a turn for the new episode`);
+      }
+    }
+  }
+});
+
+// ── PC-CX-25 ────────────────────────────────────────────────────────────────
+// §7.7 D8-a/D12/D13 + §12.3 D3: the projection is derived by the database, not maintained.
+
+interface AuthorityDb {
+  projects: Record<string, { coordinatorEnabled: boolean }>;
+  tasks: Record<string, { projectId: string | null; dispatchAuthority: DispatchAuthority }>;
+  claims: Record<string, boolean>;
+}
+
+function derivedAuthority(db: AuthorityDb, projectId: string | null): DispatchAuthority {
+  return projectId !== null && db.projects[projectId]?.coordinatorEnabled ? 'COORDINATOR' : 'LEGACY';
+}
+
+/** §7.7 D13 — the drift query, as a predicate over committed state. */
+function authorityDrift(db: AuthorityDb): string[] {
+  return Object.entries(db.tasks)
+    .filter(([, t]) => t.dispatchAuthority !== derivedAuthority(db, t.projectId))
+    .map(([id]) => id);
+}
+
+/**
+ * A write of `task.project_id`. `oldWriter` is a binary that has never heard of
+ * `dispatch_authority`; under `v13` the projection was a service-layer duty it does not perform.
+ */
+function writeTaskProject(db: AuthorityDb, taskId: string, projectId: string | null, version: Version14, oldWriter: boolean): void {
+  db.tasks[taskId].projectId = projectId;
+  if (version === 'v14') db.tasks[taskId].dispatchAuthority = derivedAuthority(db, projectId); // trigger ①
+  else if (!oldWriter) db.tasks[taskId].dispatchAuthority = derivedAuthority(db, projectId); // D3 primitive
+}
+
+function flipCoordinatorEnabled(db: AuthorityDb, projectId: string, next: boolean, version: Version14): void {
+  db.projects[projectId].coordinatorEnabled = next;
+  for (const [id, t] of Object.entries(db.tasks)) {
+    if (t.projectId !== projectId) continue;
+    if (version === 'v13' && db.claims[id]) continue; // D8-b's skip: the claimed task keeps its value
+    t.dispatchAuthority = derivedAuthority(db, projectId); // trigger ② fans out unconditionally
+  }
+}
+
+function releaseClaim(db: AuthorityDb, taskId: string, version: Version14, oldWriter: boolean): void {
+  db.claims[taskId] = false;
+  // v1.2's third write point lived in the transaction that ends the session — and an old binary
+  // does not have it. v1.4 has no third write point at all: nothing went stale to repair.
+  if (version === 'v13' && !oldWriter) db.tasks[taskId].dispatchAuthority = derivedAuthority(db, db.tasks[taskId].projectId);
+}
+
+/** §7.7 D6, reading the authority under `FOR SHARE` — so it can never read a pre-flip value. */
+function d6Admits(db: AuthorityDb, taskId: string, origin: DispatchOrigin): boolean {
+  const authority = db.tasks[taskId].dispatchAuthority;
+  if (authority !== 'COORDINATOR') return origin !== 'COORDINATOR';
+  return origin !== 'LEGACY_SWEEP';
+}
+
+function freshDb(): AuthorityDb {
+  return {
+    projects: { p1: { coordinatorEnabled: true }, p0: { coordinatorEnabled: false } },
+    tasks: { t1: { projectId: 'p0', dispatchAuthority: 'LEGACY' }, t2: { projectId: 'p1', dispatchAuthority: 'COORDINATOR' } },
+    claims: { t1: false, t2: false },
+  };
+}
+
+test('PC-CX-25 the authority projection is derived by the database, not maintained by a service', () => {
+  // Minimal counterexample A: an old apiserver moves a legacy task into a coordinator-enabled
+  // project. It writes exactly one column, because that is the only column its code knows about.
+  for (const version of ['v13', 'v14'] as Version14[]) {
+    const db = freshDb();
+    writeTaskProject(db, 't1', 'p1', version, true);
+    if (version === 'v13') {
+      assert.deepEqual(authorityDrift(db), ['t1'], 'negative control: the projection is stale after the old write');
+      assert.equal(d6Admits(db, 't1', 'LEGACY_SWEEP'), true, 'negative control: D6 faithfully enforces the stale value and admits the old sweep');
+    } else {
+      assert.deepEqual(authorityDrift(db), [], 'the trigger recomputes regardless of who wrote, or what they knew');
+      assert.equal(d6Admits(db, 't1', 'LEGACY_SWEEP'), false, 'and the old sweep is refused');
+    }
+  }
+
+  // Minimal counterexample B: a claim in flight when the project is enabled, released by an old
+  // writer. v1.2 needed a repair there; v1.4 has nothing to repair because it never skipped.
+  for (const version of ['v13', 'v14'] as Version14[]) {
+    const db = freshDb();
+    db.projects.p1.coordinatorEnabled = false;
+    db.tasks.t2.dispatchAuthority = 'LEGACY';
+    db.claims.t2 = true;
+    flipCoordinatorEnabled(db, 'p1', true, version);
+    releaseClaim(db, 't2', version, true);
+    assert.deepEqual(authorityDrift(db), version === 'v13' ? ['t2'] : [], `${version}: claim release`);
+  }
+
+  // The rest of the write paths, each under an old writer, each asserted against the drift query.
+  const paths: { why: string; run: (db: AuthorityDb, version: Version14) => void }[] = [
+    { why: 'move-in', run: (db, v) => writeTaskProject(db, 't1', 'p1', v, true) },
+    { why: 'move-out', run: (db, v) => writeTaskProject(db, 't2', null, v, true) },
+    { why: 'cross-project move', run: (db, v) => writeTaskProject(db, 't2', 'p0', v, true) },
+    { why: 'enable', run: (db, v) => flipCoordinatorEnabled(db, 'p0', true, v) },
+    { why: 'disable', run: (db, v) => flipCoordinatorEnabled(db, 'p1', false, v) },
+  ];
+  for (const { why, run } of paths) {
+    const db = freshDb();
+    run(db, 'v14');
+    assert.deepEqual(authorityDrift(db), [], `${why}: I12-A must hold on every committed state`);
+  }
+
+  // I12-B: a pre-flip claim is bounded and cannot be joined by a new one. This is what replaces
+  // v1.2's "the flip waits for the claim" — and it is proved by D6 rather than by a skip.
+  const db = freshDb();
+  db.projects.p1.coordinatorEnabled = false;
+  db.tasks.t2.dispatchAuthority = 'LEGACY';
+  assert.equal(d6Admits(db, 't2', 'LEGACY_SWEEP'), true, 'before the flip a legacy claim is legal');
+  db.claims.t2 = true;
+  flipCoordinatorEnabled(db, 'p1', true, 'v14');
+  assert.deepEqual(authorityDrift(db), [], 'the flip is not deferred by the claim');
+  assert.equal(d6Admits(db, 't2', 'LEGACY_SWEEP'), false, 'after the flip no new legacy claim can be admitted (I12-B)');
+  assert.equal(db.claims.t2, true, 'and the run already in flight is never killed by a projection change');
+
+  // §12.3 D3 must no longer name service-layer write points at all — that is the whole fix.
+  assert.match(section(PCC, '12.3'), /`dispatch_authority` \*\*没有服务层写入点\*\*/, '§12.3 still assigns the projection to a service');
+});
+
+// ── PC-CX-26 ────────────────────────────────────────────────────────────────
+// §9.6 AU1/CAP1 + §4.3 I16: revocation, the cap and dispatch behind one project row lock.
+
+type Mutator26 = 'disable' | 'toManual' | 'lowerMax' | 'manualStart';
+
+interface ProjectConfig {
+  coordinatorEnabled: boolean;
+  automationPolicy: 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
+  maxConcurrentTasks: number;
+  configRevision: number;
+}
+
+interface GateResult {
+  dispatched: boolean;
+  refusalCode: string | null;
+  manualRefusalCode: string | null;
+  claims: number;
+  config: ProjectConfig;
+}
+
+function policyAllowsDispatch(config: ProjectConfig): boolean {
+  return config.coordinatorEnabled && config.automationPolicy !== 'MANUAL';
+}
+
+function applyMutator(config: ProjectConfig, mutator: Mutator26): ProjectConfig {
+  switch (mutator) {
+    case 'disable': return { ...config, coordinatorEnabled: false, configRevision: config.configRevision + 1 };
+    case 'toManual': return { ...config, automationPolicy: 'MANUAL', configRevision: config.configRevision + 1 };
+    case 'lowerMax': return { ...config, maxConcurrentTasks: 0, configRevision: config.configRevision + 1 };
+    case 'manualStart': return config; // a human start does not touch the project row
+  }
+}
+
+/**
+ * One barrier: the human write and the coordinator commit, in both orders. Under `v14` the
+ * coordinator's commit takes `project … FOR NO KEY UPDATE` first and re-reads (§9.6 AU1/CAP1);
+ * under `v13` its only commit predicate is the fencing token, which the human never advances.
+ */
+function gateRace(order: 'HUMAN_FIRST' | 'COORDINATOR_FIRST', mutator: Mutator26, version: Version14): GateResult {
+  const snapshot: ProjectConfig = { coordinatorEnabled: true, automationPolicy: 'AUTO', maxConcurrentTasks: 1, configRevision: 7 };
+  let config = snapshot;
+  let claims = 0;
+  let manualRefusalCode: string | null = null;
+
+  const humanWrite = (): void => {
+    if (mutator === 'manualStart') {
+      // CAP1: the human entry point takes the same lock and counts the same claims.
+      if (version === 'v14' && claims >= config.maxConcurrentTasks) manualRefusalCode = 'PROJECT_CONCURRENCY_LIMIT';
+      else claims += 1;
+      return;
+    }
+    config = applyMutator(config, mutator);
+  };
+
+  const coordinatorCommit = (): { dispatched: boolean; refusalCode: string | null } => {
+    if (version === 'v13') {
+      // The fencing token is still valid — the human never advanced it (§8.1 F1 is the only gate).
+      claims += 1;
+      return { dispatched: true, refusalCode: null };
+    }
+    if (!policyAllowsDispatch(config)) return { dispatched: false, refusalCode: 'AUTHORITY_REVOKED' };
+    if (claims >= config.maxConcurrentTasks) return { dispatched: false, refusalCode: 'AUTHORITY_REVOKED' };
+    claims += 1;
+    return { dispatched: true, refusalCode: null };
+  };
+
+  let outcome: { dispatched: boolean; refusalCode: string | null };
+  if (order === 'HUMAN_FIRST') { humanWrite(); outcome = coordinatorCommit(); }
+  else { outcome = coordinatorCommit(); humanWrite(); }
+  return { ...outcome, manualRefusalCode, claims, config };
+}
+
+test('PC-CX-26 revocation and the project cap share one gate with dispatch', () => {
+  const mutators: Mutator26[] = ['disable', 'toManual', 'lowerMax', 'manualStart'];
+  for (const mutator of mutators) {
+    for (const order of ['HUMAN_FIRST', 'COORDINATOR_FIRST'] as const) {
+      const got = gateRace(order, mutator, 'v14');
+
+      // I16's second half, for every cell: the cap is never crossed.
+      assert.ok(got.claims <= Math.max(got.config.maxConcurrentTasks, 0) || order === 'COORDINATOR_FIRST',
+        `${mutator}/${order}: the project cap must not be crossed`);
+
+      if (order === 'HUMAN_FIRST') {
+        assert.equal(got.dispatched, false, `${mutator}/HUMAN_FIRST: the human write wins and the stale decision is refused`);
+        assert.equal(got.refusalCode, 'AUTHORITY_REVOKED', `${mutator}/HUMAN_FIRST: the refusal must be recorded, not silent`);
+      } else {
+        assert.equal(got.dispatched, true, `${mutator}/COORDINATOR_FIRST: a dispatch committed while it was still authorised is legal`);
+        if (mutator === 'manualStart') {
+          assert.equal(got.manualRefusalCode, 'PROJECT_CONCURRENCY_LIMIT', 'the human entry point gets a typed error, not a 500 and not a silent queue');
+          assert.equal(got.claims, 1, 'and the cap still holds');
+        }
+      }
+      // AU1-a: exactly two outcomes exist. There is no third.
+      assert.ok(['AUTHORITY_REVOKED', null].includes(got.refusalCode), `${mutator}/${order}: unexpected third outcome`);
+    }
+  }
+
+  // Negative controls, one per counterexample the review published.
+  const revoked = gateRace('HUMAN_FIRST', 'disable', 'v13');
+  assert.equal(revoked.dispatched, true, 'negative control A: the stale AUTO decision commits after the human revoked it');
+  assert.equal(revoked.config.coordinatorEnabled, false, 'leaving "automation off + a session automation created"');
+
+  const capped = gateRace('HUMAN_FIRST', 'manualStart', 'v13');
+  assert.equal(capped.claims, 2, 'negative control B: per-task claims cannot enforce a project-wide cap');
+  assert.ok(capped.claims > capped.config.maxConcurrentTasks);
+
+  // AU2: the revision is what makes the race auditable and what keeps S3 honest.
+  assert.equal(applyMutator({ coordinatorEnabled: true, automationPolicy: 'AUTO', maxConcurrentTasks: 1, configRevision: 7 }, 'disable').configRevision, 8);
+});
+
+// ── PC-CX-27 ────────────────────────────────────────────────────────────────
+// §0 RL1 + §22.8: two implementers reading the same frozen text must build the same system.
+
+type Reading = 'KEYED' | 'CAS' | 'AMBIGUOUS';
+
+/**
+ * What a chunk of the normative body *requires*, as opposed to what it merely *mentions*. §22.8
+ * gives two conventions and they answer two different questions, so both are used and neither is
+ * a substitute for the other:
+ *
+ *   - may this line name a superseded sentence at all? → it must carry provenance (a version or a
+ *     finding id). That is the ledger scan at the bottom of this test.
+ *   - is this occurrence the operative clause? → a mention is written inside quotation marks, a
+ *     requirement is not. That is this function.
+ *
+ * Provenance alone cannot answer the second question, because a rule routinely cites the version
+ * that froze it (`**AE6-a（取锁，v1.3 修订）**`) — dropping every line with a version number would
+ * drop the current rules along with the history.
+ */
+function requires(text: string): string {
+  return text.replace(/"[^"\n]*"/g, '');
+}
+
+/** What §13.1 tells an implementer about `AGGREGATE_PARENT`'s idempotency key. */
+function readAggregateRule(text: string): Reading {
+  const body = requires(text);
+  const keyed = /幂等键的 epoch 取子状态摘要/.test(body);
+  const cas = /\*\*AG5（聚合没有幂等键/.test(body);
+  if (keyed && cas) return 'AMBIGUOUS';
+  return keyed ? 'KEYED' : 'CAS';
+}
+
+/** What §13.4 tells an implementer to lock when it writes an acceptance fact. */
+function readFactWriterLock(text: string): 'FOR SHARE' | 'FOR NO KEY UPDATE' | 'AMBIGUOUS' {
+  const body = requires(text);
+  const share = /持有 AE6 那把 `FOR SHARE`/.test(body) || /FROM project WHERE id = :p FOR SHARE/.test(body);
+  const noKey = /FOR NO KEY UPDATE` 作为事务里对 project 的第一次访问/.test(body);
+  if (share && noKey) return 'AMBIGUOUS';
+  return share ? 'FOR SHARE' : 'FOR NO KEY UPDATE';
+}
+
+test('PC-CX-27 no superseded normative sentence survives in the normative body', () => {
+  const normative = PCC.slice(0, PCC.indexOf('\n## 19. '));
+  const aggregate = section(PCC, '13.1');
+  const acceptance = section(PCC, '13.4');
+
+  // The two the fourth review caught: each had two frozen sentences prescribing opposite things,
+  // and each wrong reading resurrects a finding that was already closed.
+  assert.equal(readAggregateRule(aggregate), 'CAS', 'AG1 and AG5 must not both be readable (implementing AG1 revives PC-CX-17)');
+  assert.equal(readFactWriterLock(acceptance), 'FOR NO KEY UPDATE', 'AE8 and AE6-a must not both be readable (implementing AE8 revives PC-CX-19)');
+
+  // Negative control: the v1.3 sentences, put back verbatim as requirements rather than as
+  // quotations, make both questions unanswerable again.
+  const v13Aggregate = `${aggregate}\n- **AG1**：聚合是重算（幂等键的 epoch 取子状态摘要，§8.2）。`;
+  const v13Lock = `${acceptance}\n**AE8**：持有 AE6 那把 \`FOR SHARE\` 的写入者，在锁到手之后必须重读。`;
+  assert.equal(readAggregateRule(v13Aggregate), 'AMBIGUOUS', 'negative control: two frozen readings of the aggregate key');
+  assert.equal(readFactWriterLock(v13Lock), 'AMBIGUOUS', 'negative control: two frozen readings of the fact-writer lock');
+
+  // The mechanism, not just this round's two: §22.8 registers every superseded sentence, and a
+  // line in §1–§18 may only quote one if it carries its provenance. v1.3 answered PC-CX-15 with a
+  // static check over the two sections it already knew about; a 2000-line contract states a rule
+  // in five or six places, so the check has to be over the whole body and driven by a ledger that
+  // grows with the revisions.
+  const ledger = tables(section(PCC, '22.8'))[0];
+  const phrases = column(ledger, '被取代的字样').map(bare);
+  assert.ok(phrases.length >= 6, '§22.8 registers no superseded sentences');
+  for (const phrase of phrases) {
+    for (const [i, line] of normative.split('\n').entries()) {
+      if (!line.includes(phrase)) continue;
+      assert.match(line, /v1\.[1-4]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
+    }
+  }
+  for (const n of ['19', '20', '21', '22']) {
+    assert.match(section(PCC, n).split('\n').slice(0, 4).join('\n'), /本节是非规范的/, `§${n} is not marked non-normative`);
+  }
+});
+
+test('mutation check: every fence added for PC-CX-21..27 is load-bearing', () => {
+  // Same discipline as the two mutation checks above: a fence that can be removed without the
+  // defect coming back was never the fix. Each entry removes exactly one thing v1.4 added and
+  // asserts the published counterexample reappears.
+  const dispatched: Attribution = {
+    actionType: 'DISPATCH_TASK', actionStatus: 'APPLIED', actionSubjectId: 't1', actionProjectId: 'p1',
+    actionToken: 42, runtimeToken: 42, taskId: 't1', taskProjectId: 'p1',
+  };
+  const baseInput: DecisionInput = {
+    world: { taskId: 't1', taskStatus: 'OPEN', runAt: '2026-08-19T10:00:00Z', dispatchAttempt: 1 },
+    evaluation: { epoch: 1_755_600_000, runAtDue: true },
+    signals: [],
+    readAt: '2026-08-19T10:00:01Z',
+  };
+  const withAttempt2: DecisionInput = { ...baseInput, world: { ...baseInput.world, dispatchAttempt: 2 } };
+
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-21',
+      fence: 'the monotone standing form of I11 and D10/D11 (§4.3 I11-A, §7.7 D10/D11)',
+      defectReappears: () =>
+        !i11Standing({ ...dispatched, runtimeToken: 43 }, 'v13') &&
+        moveTaskProject(dispatched, 'p2', true, 'v13').committed &&
+        rewriteAppliedAction(true, 'actionSubjectId', 'v13'),
+    },
+    {
+      finding: 'PC-CX-22',
+      fence: 'hashing evaluation and signals alongside the world (§6.1 S3/S5/S7)',
+      defectReappears: () =>
+        decisionInputHash(withAttempt2, 'v13') === decisionInputHash(baseInput, 'v13') &&
+        JSON.stringify(decide(withAttempt2).actions) !== JSON.stringify(decide(baseInput).actions),
+    },
+    {
+      finding: 'PC-CX-23',
+      fence: 'the total order over the turn reasons (§7.2 TU4)',
+      defectReappears: () =>
+        chooseTurnReasons({ MANUAL: false, VERDICT: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false }, 'v13').length === 2,
+    },
+    {
+      finding: 'PC-CX-24',
+      fence: 'the lifecycle generation inside turnFacts (§7.2 TF4)',
+      defectReappears: () =>
+        reasonDigest24('MERGE_CONFLICT', 's', 'A', 2, 'v13') === reasonDigest24('MERGE_CONFLICT', 's', 'A', 1, 'v13'),
+    },
+    {
+      finding: 'PC-CX-25',
+      fence: 'the database-side authority projection (§7.7 D8-a / D12)',
+      defectReappears: () => {
+        const db = freshDb();
+        writeTaskProject(db, 't1', 'p1', 'v13', true);
+        return authorityDrift(db).length > 0 && d6Admits(db, 't1', 'LEGACY_SWEEP');
+      },
+    },
+    {
+      finding: 'PC-CX-26',
+      fence: 'the shared project row lock at the commit point (§9.6 AU1 / CAP1)',
+      defectReappears: () =>
+        gateRace('HUMAN_FIRST', 'disable', 'v13').dispatched && gateRace('HUMAN_FIRST', 'manualStart', 'v13').claims === 2,
+    },
+    {
+      finding: 'PC-CX-27',
+      fence: 'deleting the superseded sentences (§0 RL1, §22.8)',
+      defectReappears: () =>
+        readAggregateRule(`${section(PCC, '13.1')}\n- **AG1**：幂等键的 epoch 取子状态摘要。`) === 'AMBIGUOUS',
+    },
+  ];
+
+  assert.equal(mutants.length, 7, 'unit 02 raised seven findings against v1.3');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  assert.equal(i11Standing({ ...dispatched, runtimeToken: 43 }, 'v14'), true);
+  assert.equal(moveTaskProject(dispatched, 'p2', true, 'v14').committed, false);
+  assert.notEqual(decisionInputHash(withAttempt2, 'v14'), decisionInputHash(baseInput, 'v14'));
+  assert.equal(chooseTurnReasons({ MANUAL: false, VERDICT: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false }, 'v14').length, 1);
+  assert.notEqual(reasonDigest24('MERGE_CONFLICT', 's', 'A', 2, 'v14'), reasonDigest24('MERGE_CONFLICT', 's', 'A', 1, 'v14'));
+  const clean = freshDb();
+  writeTaskProject(clean, 't1', 'p1', 'v14', true);
+  assert.deepEqual(authorityDrift(clean), []);
+  assert.equal(gateRace('HUMAN_FIRST', 'disable', 'v14').dispatched, false);
+  assert.equal(readAggregateRule(section(PCC, '13.1')), 'CAS');
+});
+
+test('§22 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20 and §21 have, for the fourth round. Two of these seven are claims about
+  // what a real server does, so the Postgres file is checked by name as well — §22.1 and §22.5
+  // both assert things (a deferred trigger's scope, a projection trigger's row lock) that a model
+  // can only assert about its author's reading of the manual.
+  const rows = tables(section(PCC, '22'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-21', 'PC-CX-22', 'PC-CX-23', 'PC-CX-24', 'PC-CX-25', 'PC-CX-26', 'PC-CX-27']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§22 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '22').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 3, '§22 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§22 names "${name}", which is not a test in the Postgres spec`);
   }
 });

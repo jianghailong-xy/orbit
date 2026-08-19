@@ -657,3 +657,539 @@ test('PC-CX-20 on real Postgres: the v1.2 predicate admits a session it cannot a
     await c.end();
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.4 — the three findings of `PC-CX-21..27` whose claims are about the database itself.
+//
+// Everything here lives in its own schema. The v1.3 re-review lost a run to two spec files racing
+// to rebuild `public.task`, and the lesson generalises: a fixture that owns a schema cannot collide
+// with one that owns another, no matter what the runner decides to parallelise.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const V14_SCHEMA = 'pcc_v14';
+
+/** Session-scoped isolation for every v1.4 fixture below. */
+function isolated(body: string): string {
+  return `
+    DROP SCHEMA IF EXISTS ${V14_SCHEMA} CASCADE;
+    CREATE SCHEMA ${V14_SCHEMA};
+    SET search_path TO ${V14_SCHEMA};
+    ${body}
+  `;
+}
+
+/** §7.7 D9 + D10 + D11 — attribution, plus the mutator protocols for the rows D9 reads. */
+const ATTRIBUTION_V14 = isolated(`
+  CREATE TABLE project (id text PRIMARY KEY);
+  CREATE TABLE project_runtime (project_id text PRIMARY KEY REFERENCES project(id), fencing_token bigint NOT NULL);
+  CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id));
+  CREATE TABLE project_action (
+    id text PRIMARY KEY,
+    idempotency_key text UNIQUE NOT NULL,
+    project_id text NOT NULL REFERENCES project(id),
+    type text NOT NULL, status text NOT NULL,
+    subject_type text NOT NULL, subject_id text NOT NULL,
+    fencing_token bigint NOT NULL,
+    result_session_id text, detail text
+  );
+  CREATE TABLE session (
+    id text PRIMARY KEY,
+    task_id text NOT NULL REFERENCES task(id),
+    status text NOT NULL,
+    deleted_at timestamptz,
+    dispatch_origin text NOT NULL,
+    project_action_id text REFERENCES project_action(id),
+    CONSTRAINT session_action_only_for_coordinator_chk
+      CHECK (dispatch_origin = 'COORDINATOR' OR project_action_id IS NULL)
+  );
+
+  -- D9, verbatim from §7.7: the commit-time authorisation proof (I11-B).
+  CREATE OR REPLACE FUNCTION session_dispatch_attribution_check() RETURNS trigger AS $fn$
+  DECLARE ok boolean;
+  BEGIN
+    IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+    SELECT EXISTS (
+      SELECT 1 FROM project_action a
+        JOIN task t ON t.id = NEW.task_id
+        JOIN project_runtime r ON r.project_id = a.project_id
+       WHERE a.id = NEW.project_action_id
+         AND a.type = 'DISPATCH_TASK' AND a.status = 'APPLIED'
+         AND a.subject_type = 'TASK' AND a.subject_id = NEW.task_id
+         AND a.project_id = t.project_id AND a.fencing_token = r.fencing_token
+    ) INTO ok;
+    IF NOT ok THEN RAISE EXCEPTION 'DISPATCH_ATTRIBUTION_VIOLATION: session % is not attributable', NEW.id; END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+  CREATE CONSTRAINT TRIGGER session_dispatch_attribution_check
+    AFTER INSERT OR UPDATE OF project_action_id, dispatch_origin, task_id ON session
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION session_dispatch_attribution_check();
+
+  -- D10: a claimed task refuses to change project, so a.project_id = t.project_id cannot decay.
+  CREATE OR REPLACE FUNCTION task_claimed_project_move_guard() RETURNS trigger AS $fn$
+  BEGIN
+    IF NEW.project_id IS NOT DISTINCT FROM OLD.project_id THEN RETURN NULL; END IF;
+    IF EXISTS (SELECT 1 FROM session s WHERE s.task_id = NEW.id AND s.deleted_at IS NULL
+                 AND s.status IN ('PENDING','RUNNING')) THEN
+      RAISE EXCEPTION 'TASK_CLAIMED_PROJECT_MOVE: task % has a live claim and cannot change project', NEW.id;
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+  CREATE CONSTRAINT TRIGGER task_claimed_project_move_guard
+    AFTER UPDATE OF project_id ON task
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION task_claimed_project_move_guard();
+
+  -- D11: APPLIED is terminal, and its attribution columns are frozen with it.
+  CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $fn$
+  BEGIN
+    IF OLD.status <> 'APPLIED' THEN RETURN NEW; END IF;
+    IF NEW.status <> 'APPLIED'
+       OR NEW.type IS DISTINCT FROM OLD.type
+       OR NEW.subject_type IS DISTINCT FROM OLD.subject_type
+       OR NEW.subject_id IS DISTINCT FROM OLD.subject_id
+       OR NEW.project_id IS DISTINCT FROM OLD.project_id
+       OR NEW.fencing_token IS DISTINCT FROM OLD.fencing_token
+       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+      RAISE EXCEPTION 'ACTION_APPLIED_IMMUTABLE: action % is APPLIED', OLD.id;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+  CREATE TRIGGER project_action_applied_immutable_guard
+    BEFORE UPDATE ON project_action FOR EACH ROW EXECUTE FUNCTION project_action_applied_immutable_guard();
+
+  INSERT INTO project VALUES ('p1'), ('p2');
+  INSERT INTO project_runtime VALUES ('p1', 42), ('p2', 7);
+  INSERT INTO task VALUES ('X', 'p1');
+`);
+
+test('PC-CX-21 on real Postgres: the next lease keeps I11-A and a live task move is refused', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  const c = await connect();
+  try {
+    await c.query(ATTRIBUTION_V14);
+
+    /** §4.3 I11-A — the standing half, as one query over committed rows. */
+    const i11A = async (sessionId: string): Promise<boolean> => {
+      const q = await c.query<{ ok: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM session s
+             JOIN task t ON t.id = s.task_id
+             JOIN project_action a ON a.id = s.project_action_id
+             JOIN project_runtime r ON r.project_id = a.project_id
+            WHERE s.id = $1
+              AND a.type = 'DISPATCH_TASK' AND a.status = 'APPLIED'
+              AND a.subject_type = 'TASK' AND a.subject_id = s.task_id
+              AND a.project_id = t.project_id
+              AND a.fencing_token <= r.fencing_token
+         ) AS ok`, [sessionId]);
+      return q.rows[0].ok;
+    };
+    /** The v1.3 reading of the same sentence — the equality, taken as standing. */
+    const i11Equality = async (sessionId: string): Promise<boolean> => {
+      const q = await c.query<{ ok: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM session s
+             JOIN project_action a ON a.id = s.project_action_id
+             JOIN project_runtime r ON r.project_id = a.project_id
+            WHERE s.id = $1 AND a.fencing_token = r.fencing_token
+         ) AS ok`, [sessionId]);
+      return q.rows[0].ok;
+    };
+
+    // §8.3's statement order, which only commits because D9 is deferred (D9-b).
+    await c.query('BEGIN');
+    await c.query(`INSERT INTO project_action (id, idempotency_key, project_id, type, status, subject_type, subject_id, fencing_token)
+                   VALUES ('a1','pc:v1:p1:dispatch:X:0','p1','DISPATCH_TASK','CLAIMED','TASK','X',42)`);
+    await c.query(`INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id)
+                   VALUES ('s1','X','PENDING','COORDINATOR','a1')`);
+    await c.query(`UPDATE project_action SET status = 'APPLIED', result_session_id = 's1' WHERE id = 'a1'`);
+    await c.query('COMMIT');
+    assert.equal(await i11A('s1'), true, 'the dispatch is attributable the moment it commits');
+    assert.equal(await i11Equality('s1'), true, 'and so is the commit-time equality, at that moment');
+
+    // Interleaving A: the next few ordinary leases. §8.1 makes the token monotone; the session's
+    // three columns never move, so D9 is not scheduled again — and does not need to be.
+    for (const token of [43, 44, 45]) {
+      await c.query(`UPDATE project_runtime SET fencing_token = $1 WHERE project_id = 'p1'`, [token]);
+      assert.equal(await i11A('s1'), true, `I11-A must still hold at token ${token}`);
+    }
+    assert.equal(await i11Equality('s1'), false, 'negative control: the equality reading is false after one normal lease');
+    await c.query(`UPDATE project_runtime SET fencing_token = 42 WHERE project_id = 'p1'`);
+
+    // Interleaving B: a legal AE10 move while the claim is live. D10 refuses at COMMIT.
+    let refusal: string | null = null;
+    await c.query('BEGIN');
+    try {
+      await c.query(`UPDATE task SET project_id = 'p2' WHERE id = 'X'`);
+      await c.query('COMMIT');
+    } catch (e) {
+      await c.query('ROLLBACK');
+      refusal = /TASK_CLAIMED_PROJECT_MOVE/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`;
+    }
+    assert.equal(refusal, 'TASK_CLAIMED_PROJECT_MOVE', 'a live claim must refuse the move');
+    const stillHome = await c.query<{ project_id: string }>(`SELECT project_id FROM task WHERE id = 'X'`);
+    assert.equal(stillHome.rows[0].project_id, 'p1', 'a refused move leaves the row untouched');
+    assert.equal(await i11A('s1'), true);
+
+    // D10-c: it is a refusal, not a prohibition. Release the claim and the move is ordinary again.
+    await c.query(`UPDATE session SET status = 'SUCCEEDED' WHERE id = 's1'`);
+    await c.query(`UPDATE task SET project_id = 'p2' WHERE id = 'X'`);
+    const moved = await c.query<{ project_id: string }>(`SELECT project_id FROM task WHERE id = 'X'`);
+    assert.equal(moved.rows[0].project_id, 'p2', 'an unclaimed task moves exactly as AE10 always allowed');
+    await c.query(`UPDATE task SET project_id = 'p1' WHERE id = 'X'`);
+
+    // D11: the other rows D9 reads are frozen once the action is APPLIED — and only those.
+    const frozen: [string, string][] = [
+      ['type', `UPDATE project_action SET type = 'NOOP' WHERE id = 'a1'`],
+      ['status', `UPDATE project_action SET status = 'SUPERSEDED' WHERE id = 'a1'`],
+      ['subject_id', `UPDATE project_action SET subject_id = 'Y' WHERE id = 'a1'`],
+      ['project_id', `UPDATE project_action SET project_id = 'p2' WHERE id = 'a1'`],
+      ['fencing_token', `UPDATE project_action SET fencing_token = 99 WHERE id = 'a1'`],
+      ['idempotency_key', `UPDATE project_action SET idempotency_key = 'other' WHERE id = 'a1'`],
+    ];
+    for (const [name, sql] of frozen) {
+      let refused: string | null = null;
+      try { await c.query(sql); } catch (e) { refused = /ACTION_APPLIED_IMMUTABLE/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`; }
+      assert.equal(refused, 'ACTION_APPLIED_IMMUTABLE', `${name} must be immutable on an APPLIED action`);
+    }
+    await c.query(`UPDATE project_action SET detail = 'still writable' WHERE id = 'a1'`); // D11-b
+    assert.equal(await i11A('s1'), true, 'attribution survives every mutation attempt');
+
+    // …and the normal ledger transition is untouched, or §8.3's own path would be blocked.
+    await c.query(`INSERT INTO project_action (id, idempotency_key, project_id, type, status, subject_type, subject_id, fencing_token)
+                   VALUES ('a2','pc:v1:p1:dispatch:X:1','p1','DISPATCH_TASK','CLAIMED','TASK','X',42)`);
+    await c.query(`UPDATE project_action SET status = 'SUPERSEDED' WHERE id = 'a2'`);
+    const a2 = await c.query<{ status: string }>(`SELECT status FROM project_action WHERE id = 'a2'`);
+    assert.equal(a2.rows[0].status, 'SUPERSEDED', 'CLAIMED → SUPERSEDED is the normal path (D11-a)');
+  } finally {
+    await c.end();
+  }
+});
+
+/** §7.7 D8-a/D12 + D6. `projection` off = v1.2, where the column was a service-layer duty. */
+function authoritySchema(projection: boolean): string {
+  return isolated(`
+    CREATE TABLE project (id text PRIMARY KEY, coordinator_enabled boolean NOT NULL DEFAULT false);
+    CREATE TABLE task (
+      id text PRIMARY KEY,
+      project_id text REFERENCES project(id),
+      dispatch_authority text NOT NULL DEFAULT 'LEGACY'
+    );
+    CREATE TABLE session (
+      id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id),
+      status text NOT NULL, deleted_at timestamptz,
+      dispatch_origin text NOT NULL DEFAULT 'LEGACY_SWEEP'
+    );
+    CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
+      WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+
+    -- D6, unchanged: the insert-time admission that makes I12-B true.
+    CREATE OR REPLACE FUNCTION session_dispatch_authority_guard() RETURNS trigger AS $fn$
+    DECLARE authority text;
+    BEGIN
+      SELECT t.dispatch_authority INTO authority FROM task t WHERE t.id = NEW.task_id FOR SHARE;
+      IF authority IS DISTINCT FROM 'COORDINATOR' THEN
+        IF NEW.dispatch_origin = 'COORDINATOR' THEN
+          RAISE EXCEPTION 'DISPATCH_AUTHORITY_VIOLATION: coordinator dispatch on a LEGACY task %', NEW.task_id;
+        END IF;
+        RETURN NEW;
+      END IF;
+      IF NEW.dispatch_origin IN ('COORDINATOR','USER') THEN RETURN NEW; END IF;
+      RAISE EXCEPTION 'DISPATCH_AUTHORITY_VIOLATION: task % is COORDINATOR-authority', NEW.task_id;
+    END;
+    $fn$ LANGUAGE plpgsql;
+    CREATE TRIGGER session_dispatch_authority_guard
+      BEFORE INSERT ON session FOR EACH ROW EXECUTE FUNCTION session_dispatch_authority_guard();
+
+    ${projection ? `
+    CREATE OR REPLACE FUNCTION task_dispatch_authority_projection() RETURNS trigger AS $fn$
+    DECLARE enabled boolean;
+    BEGIN
+      IF NEW.project_id IS NULL THEN NEW.dispatch_authority := 'LEGACY'; RETURN NEW; END IF;
+      SELECT p.coordinator_enabled INTO enabled FROM project p WHERE p.id = NEW.project_id FOR SHARE;
+      NEW.dispatch_authority := CASE WHEN enabled THEN 'COORDINATOR' ELSE 'LEGACY' END;
+      RETURN NEW;
+    END;
+    $fn$ LANGUAGE plpgsql;
+    CREATE TRIGGER task_dispatch_authority_projection
+      BEFORE INSERT OR UPDATE OF project_id, dispatch_authority ON task
+      FOR EACH ROW EXECUTE FUNCTION task_dispatch_authority_projection();
+
+    CREATE OR REPLACE FUNCTION project_dispatch_authority_fanout() RETURNS trigger AS $fn$
+    BEGIN
+      IF NEW.coordinator_enabled IS NOT DISTINCT FROM OLD.coordinator_enabled THEN RETURN NULL; END IF;
+      UPDATE task SET dispatch_authority = dispatch_authority
+       WHERE id IN (SELECT id FROM task WHERE project_id = NEW.id ORDER BY id FOR NO KEY UPDATE);
+      RETURN NULL;
+    END;
+    $fn$ LANGUAGE plpgsql;
+    CREATE TRIGGER project_dispatch_authority_fanout
+      AFTER UPDATE OF coordinator_enabled ON project
+      FOR EACH ROW EXECUTE FUNCTION project_dispatch_authority_fanout();
+    ` : ''}
+
+    INSERT INTO project (id, coordinator_enabled) VALUES ('p1', true), ('p0', false);
+    INSERT INTO task (id, project_id) VALUES ('legacy', 'p0'), ('owned', 'p1'), ('orphan', NULL);
+    -- Both fixtures start consistent, so what the test measures is the old writer's writes rather
+    -- than the seed. Under v1.2 that consistency is the *service layer's* job at insert time, which
+    -- is exactly the assumption the finding is about — so here it is written out by hand.
+    ${projection ? '' : `UPDATE task SET dispatch_authority = 'COORDINATOR' WHERE project_id = 'p1';`}
+  `);
+}
+
+/** §7.7 D13 — the drift query, run against whatever is committed. */
+const DRIFT_SQL = `
+  SELECT t.id FROM task t LEFT JOIN project p ON p.id = t.project_id
+   WHERE t.dispatch_authority IS DISTINCT FROM
+         (CASE WHEN p.id IS NOT NULL AND p.coordinator_enabled THEN 'COORDINATOR' ELSE 'LEGACY' END)
+   ORDER BY t.id`;
+
+test('PC-CX-25 on real Postgres: an old writer cannot leave the authority projection stale', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  // Every write below is SQL an apiserver that has never heard of `dispatch_authority` would emit:
+  // it names `project_id`, `coordinator_enabled` or `session.status`, and nothing else. That is the
+  // whole point — the review's counterexample needs no race, only an old binary.
+  const c = await connect();
+  try {
+    for (const projection of [true, false]) {
+      await c.query(authoritySchema(projection));
+      const drift = async (): Promise<string[]> => (await c.query<{ id: string }>(DRIFT_SQL)).rows.map((r) => r.id);
+      const authorityOf = async (id: string): Promise<string> =>
+        (await c.query<{ a: string }>(`SELECT dispatch_authority AS a FROM task WHERE id = $1`, [id])).rows[0].a;
+      const label = projection ? 'v1.4' : 'negative control (v1.2)';
+
+      assert.deepEqual(await drift(), [], `${label}: the fixture starts consistent`);
+
+      // A. move-in: a legacy task lands in a coordinator-enabled project.
+      await c.query(`UPDATE task SET project_id = 'p1' WHERE id = 'legacy'`);
+      assert.deepEqual(await drift(), projection ? [] : ['legacy'], `${label}: after an old-writer move-in`);
+      const sweep = async (task: string, id: string): Promise<string | null> => {
+        try {
+          await c.query(`INSERT INTO session (id, task_id, status) VALUES ($1, $2, 'PENDING')`, [id, task]);
+          return null;
+        } catch (e) { return /DISPATCH_AUTHORITY_VIOLATION/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`; }
+      };
+      assert.equal(
+        await sweep('legacy', 'sweep-1'),
+        projection ? 'DISPATCH_AUTHORITY_VIOLATION' : null,
+        `${label}: D6 can only be as good as the column it reads`,
+      );
+
+      // B. a claim in flight when the project is enabled, released by an old writer. v1.2 needed a
+      // repair inside that transaction; v1.4 never skipped, so there is nothing to repair.
+      await c.query(`UPDATE project SET coordinator_enabled = false WHERE id = 'p1'`);
+      if (!projection) await c.query(`UPDATE task SET dispatch_authority = 'LEGACY' WHERE project_id = 'p1'`);
+      await c.query(`INSERT INTO session (id, task_id, status) VALUES ('claim-1', 'owned', 'RUNNING')`);
+      await c.query(`UPDATE project SET coordinator_enabled = true WHERE id = 'p1'`);
+      await c.query(`UPDATE session SET status = 'SUCCEEDED' WHERE id = 'claim-1'`);
+      assert.equal(
+        (await drift()).includes('owned'),
+        !projection,
+        `${label}: after an old writer ends a claim`,
+      );
+
+      // C. the remaining write paths, each emitted by a writer that does not know the column.
+      for (const [why, sql] of [
+        ['move-out', `UPDATE task SET project_id = NULL WHERE id = 'legacy'`],
+        ['cross-project move', `UPDATE task SET project_id = 'p0' WHERE id = 'legacy'`],
+        ['insert', `INSERT INTO task (id, project_id) VALUES ('fresh', 'p1')`],
+        ['disable', `UPDATE project SET coordinator_enabled = false WHERE id = 'p1'`],
+        ['enable', `UPDATE project SET coordinator_enabled = true WHERE id = 'p1'`],
+      ] as [string, string][]) {
+        await c.query(sql);
+        if (projection) assert.deepEqual(await drift(), [], `v1.4: ${why} must keep I12-A true`);
+      }
+      if (!projection) assert.ok((await drift()).length > 0, 'negative control: the projection is stale in several places at once');
+
+      // D. even a writer that sets the column directly cannot set it wrong: it is derived.
+      await c.query(`UPDATE task SET dispatch_authority = 'LEGACY' WHERE id = 'fresh'`);
+      assert.equal(await authorityOf('fresh'), projection ? 'COORDINATOR' : 'LEGACY', `${label}: a direct write to a derived column`);
+
+      // E. I12-B: after a flip, no new legacy claim can be admitted — that is what replaces v1.2's
+      // "the flip waits for the claim", and it is proved by D6 rather than by a skip.
+      if (projection) {
+        assert.deepEqual(await drift(), []);
+        assert.equal(await sweep('fresh', 'sweep-2'), 'DISPATCH_AUTHORITY_VIOLATION', 'no post-flip legacy claim');
+
+        // …and the other direction, because v1.4's flip no longer waits for a claim: after a
+        // disable, a COORDINATOR claim is the one that can no longer be admitted. I12-B is stated
+        // for both directions, so both are run.
+        const coordinatorClaim = async (task: string, id: string): Promise<string | null> => {
+          try {
+            await c.query(`INSERT INTO session (id, task_id, status, dispatch_origin) VALUES ($1, $2, 'PENDING', 'COORDINATOR')`, [id, task]);
+            return null;
+          } catch (e) { return /DISPATCH_AUTHORITY_VIOLATION/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`; }
+        };
+        assert.equal(await coordinatorClaim('fresh', 'auto-1'), null, 'a coordinator claim is legal while the project is enabled');
+        await c.query(`UPDATE session SET status = 'SUCCEEDED' WHERE id = 'auto-1'`);
+        await c.query(`UPDATE project SET coordinator_enabled = false WHERE id = 'p1'`);
+        assert.deepEqual(await drift(), [], 'the disable is projected too');
+        assert.equal(await coordinatorClaim('fresh', 'auto-2'), 'DISPATCH_AUTHORITY_VIOLATION', 'no post-disable coordinator claim');
+      }
+    }
+  } finally {
+    await c.end();
+  }
+});
+
+/** §9.6 AU1/CAP1 — the gate is LO1's first level, which the human write takes automatically. */
+const GATE_SCHEMA = isolated(`
+  CREATE TABLE project (
+    id text PRIMARY KEY,
+    coordinator_enabled boolean NOT NULL,
+    automation_policy text NOT NULL,
+    max_concurrent_tasks int NOT NULL,
+    config_revision bigint NOT NULL DEFAULT 0
+  );
+  CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id));
+  CREATE TABLE session (id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id), status text NOT NULL, deleted_at timestamptz);
+  CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
+    WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+  INSERT INTO project VALUES ('p1', true, 'AUTO', 1, 7);
+  INSERT INTO task VALUES ('A', 'p1'), ('B', 'p1');
+`);
+
+interface GateOutcome {
+  dispatched: boolean;
+  refusalCode: string | null;
+  blocked: boolean;
+  claims: number;
+  coordinatorEnabled: boolean;
+}
+
+/**
+ * One barrier between a human write and a coordinator commit. `gated` off = v1.3, whose only commit
+ * predicate was the fencing token — a value the human write never advances.
+ */
+async function gateRacePg(order: 'HUMAN_FIRST' | 'COORDINATOR_FIRST', gated: boolean): Promise<GateOutcome> {
+  const [setup, human, loop] = await Promise.all([connect(), connect(), connect()]);
+  let blocked = false;
+  try {
+    await setup.query(GATE_SCHEMA);
+    for (const c of [human, loop]) await c.query(`SET search_path TO ${V14_SCHEMA}`);
+
+    const humanRevoke = async (): Promise<void> => {
+      await human.query('BEGIN');
+      await human.query(`UPDATE project SET coordinator_enabled = false, config_revision = config_revision + 1 WHERE id = 'p1'`);
+      await human.query('COMMIT');
+    };
+    /** §6.3 step 8a: take LO1's first level, then re-read, then decide. */
+    const coordinatorCommit = async (): Promise<string | null> => {
+      await loop.query('BEGIN');
+      if (gated) {
+        const row = await loop.query<{ coordinator_enabled: boolean; automation_policy: string }>(
+          `SELECT coordinator_enabled, automation_policy FROM project WHERE id = 'p1' FOR NO KEY UPDATE`);
+        const allowed = row.rows[0].coordinator_enabled && row.rows[0].automation_policy !== 'MANUAL';
+        if (!allowed) { await loop.query('ROLLBACK'); return 'AUTHORITY_REVOKED'; }
+      }
+      await loop.query(`INSERT INTO session (id, task_id, status) VALUES ('auto-1', 'A', 'PENDING')`);
+      await loop.query('COMMIT');
+      return null;
+    };
+
+    let refusalCode: string | null;
+    if (order === 'HUMAN_FIRST') {
+      await humanRevoke();
+      refusalCode = await coordinatorCommit();
+    } else {
+      // The coordinator takes the lock first and holds it; the human write must wait for it.
+      await loop.query('BEGIN');
+      if (gated) await loop.query(`SELECT coordinator_enabled FROM project WHERE id = 'p1' FOR NO KEY UPDATE`);
+      const waiting = watch(humanRevoke());
+      await settle();
+      blocked = gated && !waiting.settled();
+      await loop.query(`INSERT INTO session (id, task_id, status) VALUES ('auto-1', 'A', 'PENDING')`);
+      await loop.query('COMMIT');
+      await waiting.promise;
+      refusalCode = null;
+    }
+
+    const claims = Number((await setup.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM session s JOIN task t ON t.id = s.task_id
+        WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING')`)).rows[0].n);
+    const enabled = (await setup.query<{ coordinator_enabled: boolean }>(
+      `SELECT coordinator_enabled FROM project WHERE id = 'p1'`)).rows[0].coordinator_enabled;
+    return { dispatched: refusalCode === null, refusalCode, blocked, claims, coordinatorEnabled: enabled };
+  } finally {
+    await Promise.all([setup.end(), human.end(), loop.end()]);
+  }
+}
+
+/** Two entry points racing for the last slot, both taking the same row lock (CAP1). */
+async function capRacePg(gated: boolean): Promise<{ inserted: string[]; refusals: string[]; blocked: boolean }> {
+  const [setup, manual, loop] = await Promise.all([connect(), connect(), connect()]);
+  try {
+    await setup.query(GATE_SCHEMA);
+    for (const c of [manual, loop]) await c.query(`SET search_path TO ${V14_SCHEMA}`);
+    const inserted: string[] = [];
+    const refusals: string[] = [];
+
+    const claim = async (c: Client, who: string, task: string): Promise<void> => {
+      await c.query('BEGIN');
+      if (gated) {
+        const max = (await c.query<{ max_concurrent_tasks: number }>(
+          `SELECT max_concurrent_tasks FROM project WHERE id = 'p1' FOR NO KEY UPDATE`)).rows[0].max_concurrent_tasks;
+        const n = Number((await c.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM session s JOIN task t ON t.id = s.task_id
+            WHERE t.project_id = 'p1' AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING')`)).rows[0].n);
+        if (n >= max) { await c.query('ROLLBACK'); refusals.push(who); return; }
+      }
+      await c.query(`INSERT INTO session (id, task_id, status) VALUES ($1, $2, 'PENDING')`, [who, task]);
+      await c.query('COMMIT');
+      inserted.push(who);
+    };
+
+    // The human takes the lock and holds it; the coordinator must queue behind the same row.
+    await manual.query('BEGIN');
+    let blocked = false;
+    if (gated) {
+      await manual.query(`SELECT max_concurrent_tasks FROM project WHERE id = 'p1' FOR NO KEY UPDATE`);
+      const queued = watch(claim(loop, 'auto', 'A'));
+      await settle();
+      blocked = !queued.settled();
+      await manual.query(`INSERT INTO session (id, task_id, status) VALUES ('manual', 'B', 'PENDING')`);
+      await manual.query('COMMIT');
+      inserted.push('manual');
+      await queued.promise;
+    } else {
+      await manual.query(`INSERT INTO session (id, task_id, status) VALUES ('manual', 'B', 'PENDING')`);
+      await manual.query('COMMIT');
+      inserted.push('manual');
+      await claim(loop, 'auto', 'A');
+    }
+    return { inserted, refusals, blocked };
+  } finally {
+    await Promise.all([setup.end(), manual.end(), loop.end()]);
+  }
+}
+
+test('PC-CX-26 on real Postgres: policy revocation and the project cap are one gate', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  // AU1-a says exactly two outcomes exist. This runs both orders against a real server, and the
+  // "blocked" flag is how the shared lock is observed rather than assumed.
+  const humanFirst = await gateRacePg('HUMAN_FIRST', true);
+  assert.equal(humanFirst.dispatched, false, 'the human write wins and the stale AUTO decision is refused');
+  assert.equal(humanFirst.refusalCode, 'AUTHORITY_REVOKED', 'and the refusal is recorded, not silent');
+  assert.equal(humanFirst.claims, 0, 'no session is created after automation was revoked');
+
+  const loopFirst = await gateRacePg('COORDINATOR_FIRST', true);
+  assert.equal(loopFirst.blocked, true, 'the human write must wait on the same project row the dispatch locked');
+  assert.equal(loopFirst.dispatched, true, 'a dispatch committed while it was still authorised is legal');
+  assert.equal(loopFirst.claims, 1);
+  assert.equal(loopFirst.coordinatorEnabled, false, 'and the human write then takes effect');
+
+  // Negative control: without the gate, the token alone lets the revoked decision through.
+  const ungated = await gateRacePg('HUMAN_FIRST', false);
+  assert.equal(ungated.dispatched, true, 'PC-CX-26 A must reproduce on a real server');
+  assert.equal(ungated.coordinatorEnabled, false);
+  assert.equal(ungated.claims, 1, 'automation off, and a session automation created after it was off');
+
+  // CAP1: two entry points, one slot. D5 is per task, so only the shared row lock can bound this.
+  const capped = await capRacePg(true);
+  assert.equal(capped.blocked, true, 'both entry points queue on the same project row');
+  assert.deepEqual(capped.inserted, ['manual', 'auto'].slice(0, 1), 'exactly one claim is created');
+  assert.deepEqual(capped.refusals, ['auto'], 'the loser is refused, and it is the automatic one');
+
+  const uncapped = await capRacePg(false);
+  assert.deepEqual(uncapped.inserted.sort(), ['auto', 'manual'], 'PC-CX-26 B must reproduce: the per-task index cannot bound a project');
+  assert.deepEqual(uncapped.refusals, []);
+});

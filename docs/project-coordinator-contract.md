@@ -1,4 +1,4 @@
-# Project Coordinator 控制环契约 v1.3
+# Project Coordinator 控制环契约 v1.4
 
 > **状态**：已冻结（frozen）。本文件是 `Project Coordinator 持续推进控制环` 的**单一权威契约**。
 > 03–23 阶段的每个实现与验证任务都必须与本文件一致；实现与本文件冲突时，先改本文件并说明理由，再改代码。
@@ -8,6 +8,8 @@
 > **v1.2 修订**：关闭 02 对 v1.1 的独立复审（[`project-coordinator-contract-review-02-v1.1.md`](./project-coordinator-contract-review-02-v1.1.md)）提出的 1 个 P0 与 5 个 P1 契约缺口 `PC-CX-09..14`。逐项闭环在 **§20**；规范条款落在 §4.1 · §4.3 · §7.2 · §7.7 · §8.2 · §9.5 · §10.3 · §11.2 · §11.5 · §12.1 · §12.3 · §13.4。v1.2 同样**不是措辞修订** —— 它给派发权切换与 Session 插入装上了**同一把数据库行锁**（v1.1 的触发器只做普通 `SELECT`，因此在 MVCC 下读得到已被改写但尚未提交之前的旧值）、把投递次数从幂等摘要里**移出去**、把 dispatch epoch 从可清零的 `failureCount` 换成**单调不复用**的 `task.dispatchAttempt`、把 `opensTurn` 从"当前 owner"改挂到 **kind**、给 `DONE` 与所有会改变验收事实的写路径装上**同一把项目行锁**，并让 `EXECUTING` 与活性判据**如实容纳**合法的 USER-origin Session。
 >
 > **v1.3 修订**：关闭 02 对 v1.2 的独立复审（[`project-coordinator-contract-review-02-v1.2.md`](./project-coordinator-contract-review-02-v1.2.md)）提出的 6 个 P1 契约缺口 `PC-CX-15..20`。逐项闭环在 **§21**；规范条款落在 §2.4 · §4.3 · §7.2 · §7.3 · §7.7 · §8.1 · §8.2 · §8.6 · §9.4 · §11.1 · §11.3 · §11.5 · §12.1 · §13.1 · §13.2 · §13.4。v1.3 同样**不是措辞修订** —— 它把"这件事发生了几次"从升级与通知里**彻底移出去**、给 blocker 装上**解除后仍然只进不退的生命周期代次**、把 verdict / 聚合 / 验收三个**可回环事实**的动作身份换成持久化单调代次（聚合直接改成无键的 current-state CAS）、把验收事实写入的封闭集合**从摘要的投影反推**出来（因此含 Task 跨 Project 移动、`verifiesTaskId` 改写与外部 ref 变化）、把 `FOR SHARE → UPDATE` 的锁升级换成**单一确定锁序 + 有界重试**，并让派发归属由**数据库自己**证明（延迟约束触发器 + CHECK），而不是只检查一个 id 非空。
+>
+> **v1.4 修订**：关闭 02 对 v1.3 的独立复审（[`project-coordinator-contract-review-02-v1.3.md`](./project-coordinator-contract-review-02-v1.3.md)）提出的 2 个 P0 与 5 个 P1 契约缺口 `PC-CX-21..27`。逐项闭环在 **§22**；规范条款落在 §2.4 · §4.3 · §6.1 · §6.2 · §6.3 · §7.2 · §7.4 · §7.7 · §8.1 · §8.5 · §8.6 · §9.2 · §9.4 · §9.6 · §10.3 · §12.1 · §12.3 · §12.4 · §13.1 · §13.4 · §19–§22。v1.4 同样**不是措辞修订** —— 它把 I11 的"当前 token"改成**提交时授权 + 终态不可变的历史关系**并给 D9 读取的每一行装上反向约束（在飞 Task 不得跨 Project 移动、`APPLIED` 动作行不可改写）、把 §6.1 从"快照"升级成**完整的 `decisionInput`**（补齐全部代次字段、把时钟折成冻结的到期事实、把会改变决策的事件按身份纳入）并让 `decisionInputHash` 覆盖它的全部、给五个语义 turn 原因装上**首个为真者胜的全序**并冻结"一次 reconcile 至多一条语义 turn"、把 blocker 的 `lifecycleGeneration` 纳入 `turnFacts`、把 `task.dispatch_authority` 从"服务层维护的投影"改成**数据库自己维护并可验证的派生列**（因此旧写端不可能留下 stale `LEGACY`）、给人工撤权与并发上限装上**与派发提交共享的 project 行锁**，并把修订日志 §19–§22 明确降级为**非规范**、给残留旧规范句建一张可被静态检查的账。
 >
 > **适用分支**：`feat/project`（`main` 里没有 `Project`）。
 > **代码基线**：`c088ee04 docs(project): freeze the Project/Agent domain contract`。
@@ -22,6 +24,8 @@
 今天的 Project 是一个**被动的 Session 引用**：`project.coordinatorSessionId` 指向一段对话，而 schema 的注释把它写得很明白 —— "A pointer, never a dependency, exactly as `TaskList.ownerSessionId` is: nothing on the dispatch path reads it"。于是一个 OPEN 的 Project 可以在没有任何人发现的情况下**静默空转**：没有任务在跑，没有阻塞被记录，没有下一次检查被安排，控制面上它和一个正在飞速推进的项目长得一模一样。
 
 本文把它升级成一个**事件驱动、可恢复、可审计的控制环**，并且只用两件事换：一组执行基础设施表，和一小组落在 `project` / `task` 上的业务字段。**不新增任何业务实体**（§2.3）。
+
+**RL1（哪些部分是规范的，v1.4 冻结，PC-CX-27）**：**§1–§18 是规范正文，§19–§22 是非规范的修订日志。** 修订日志记录每一轮审查提出了什么、当时的规则是什么形状、为什么改 —— 它们对实现**没有约束力**，与正文冲突时一律以正文为准。这条规则的作用是让"删掉被取代的旧规范句"成为一件可以机械检查的事：一句被取代的规范，要么被删，要么只能出现在 §19–§22 或反例测试里。02 的第四轮审查发现正文里同时留着 AG1 与 AG5（聚合有键 / 无键）、AE8 与 AE6-a（`FOR SHARE` / `FOR NO KEY UPDATE`）两对相反的规范，按哪一条实现都能引用"冻结"二字（`PC-CX-27`）。§22 因此额外维护一张**残句账**，契约测试对正文逐条扫描它。
 
 ---
 
@@ -100,7 +104,7 @@ PAC §1 的两层分法与 R1/R2/R3 三条规则**原样生效**，本文的所�
 | `project_blocker` | 结构化阻塞 | 同上 |
 | `project_decision` | 决策审计 | 同上 |
 
-以及六列：`task.dispatchAuthority`（§12.3）、**`task.dispatchAttempt`（§8.2 DA1，v1.2 新增）**、**`task.verdictRevision`（§13.2 V7，v1.3 新增）**、`session.projectActionId`（§8.3）、`session.dispatchOrigin`（§7.7）、`project_runtime.*`（v1.3 起含 `acceptance_attempt`，§13.4 AE11）。
+以及七列：`task.dispatchAuthority`（§12.3，**v1.4 起是数据库自己维护的派生列**，见 §7.7 D12）、**`task.dispatchAttempt`（§8.2 DA1，v1.2 新增）**、**`task.verdictRevision`（§13.2 V7，v1.3 新增）**、`session.projectActionId`（§8.3）、`session.dispatchOrigin`（§7.7）、`project_runtime.*`（v1.3 起含 `acceptance_attempt`，§13.4 AE11）、**`project.configRevision`（§9.6 AU2，v1.4 新增）**。
 
 新表自己的列不计入上面这个数（它们随表一起来）：v1.3 给 `project_blocker` 加了 `lifecycle_generation`（§11.3 BE1），给 `project_runtime` 加了 `acceptance_attempt`（§13.4 AE11）。**这三个新计数（派发、blocker 周期、验收）与 `task.verdictRevision` 是同一条纪律的四个实例**：永久动作键的代次必须来自一个只进不退的持久化列（§8.2 GE1）。
 
@@ -113,6 +117,9 @@ PAC §1 的两层分法与 R1/R2/R3 三条规则**原样生效**，本文的所�
 | `session_dispatch_attribution_check` | `DEFERRABLE INITIALLY DEFERRED` constraint trigger | **提交时**证明 COORDINATOR 占位对应一条本 Task/本 Project/当前 token 的 `APPLIED` `DISPATCH_TASK`（§7.7 D9，v1.3 新增） |
 | `session_action_only_for_coordinator_chk` | `CHECK` constraint | 非 COORDINATOR origin 的 Session 不得带动作 id（§7.7 D9，v1.3 新增） |
 | `project_blocker_episode_idx` | unique index | 同一 `(project, dedupeKey)` 上的生命周期代次不可复用（§11.3 BE1，v1.3 新增） |
+| `task_claimed_project_move_guard` | `DEFERRABLE INITIALLY DEFERRED` constraint trigger | 有占位的 Task 不得改 `project_id`（§7.7 D10，v1.4 新增） |
+| `project_action_applied_immutable_guard` | `BEFORE UPDATE` trigger | `APPLIED` 动作行的归属列与 `status` 此后不可改写（§7.7 D11，v1.4 新增） |
+| `task_dispatch_authority_projection` | `BEFORE INSERT OR UPDATE` trigger（task）+ `AFTER UPDATE` trigger（project） | `task.dispatch_authority` 恒等于它的派生值，**由数据库维护**（§7.7 D12，v1.4 新增） |
 
 **为什么这两个必须在数据库里而不是在服务层**：它们要挡住的两个入口分别是"另一个进程的同一份代码"（PC-CX-01）和"另一个版本的旧代码"（PC-CX-02）。服务层的检查按定义只在写这段检查的那个二进制里存在，因此对第二个入口无效。
 
@@ -213,10 +220,24 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
 - **I8（纯函数，v1.1 新增）**：任何时刻持久化的 `run_state` 恒等于 `runStateOf` 对当次提交事务内快照的求值（§4.2 RS0）。等价的可测形式：把同一份 blocker 集合以任意排列输入，得到的 `run_state` 必须相同。
 - **I9（派发互斥，v1.1 新增）**：同一 Task 在任何时刻至多有一条**占位中**的 Session（§7.7 D5 的定义）。这条不由任何一段服务代码保证，而由数据库唯一索引保证；因此它对人工入口、控制环入口、legacy sweep 入口与**任何版本的二进制**同时成立。
 - **I10（DONE 与事实一致，v1.2 新增）**：任何已提交状态上，`project.status = DONE` ⟹ 存在一条 `decidedBy = COORDINATOR_AGENT`、逐条全 PASS、且 `acceptance_digest` 等于**对当前行重算**的 `acceptanceDigest` 的验收记录（§13.4 AE1）。这条由 §13.4 AE6/AE7 的项目行锁（写入侧）与 AE8 的原子重开（终态后侧）共同保证，可以对生产快照直接跑（`PC-CX-13`）。
-- **I11（派发归属，v1.2 新增）**：任何占位中的 Session 都可归属到一个入口：`dispatch_origin = 'COORDINATOR'` ⟹ `project_action_id` 非空且该动作 `APPLIED`；`= 'USER'` ⟹ 人的显式动作，`project_action_id` 为 NULL；`= 'LEGACY_SWEEP'` ⟹ 该 Task 的 `dispatch_authority = 'LEGACY'`。三条都由 §7.7 D6 触发器的放行分支保证，因此对任何版本的二进制成立。**"谁派的"是一次列查询，不是一次考古**（`PC-CX-14`）。**v1.3 收紧（PC-CX-20）**：v1.2 的 D6 只检查 `project_action_id IS NOT NULL`，它读不到本条声称保证的任何一列（type / status / subject / project / fencing token），因此这条不变量在真实数据库上**是可以被违反的** —— 插一条 `NOOP`/`CLAIMED` 的动作行就够了。v1.3 由 §7.7 D6 的完整谓词（插入时）与 D9 的可延迟约束触发器（**提交时**）共同保证，`USER`/`LEGACY_SWEEP` 那两句由 CHECK 约束保证。
-- **I12（授权投影一致，v1.2 新增）**：任何**已提交状态**上，占位 Session 的 `dispatch_origin` 必须被该 Task **当前**的 `dispatch_authority` 按 D6 的谓词允许 —— 即 `COORDINATOR` 权的 Task 上不存在 `LEGACY_SWEEP` 占位，`LEGACY` 权的 Task 上不存在 `COORDINATOR` 占位。v1.1 的 D6 只让这条在 `INSERT` 那一刻成立，派发权随后被翻转就会破坏它（`PC-CX-09`）；v1.2 由 §7.7 D8 让它在每一个已提交状态上恒成立。
+- **I11（派发归属，v1.2 新增）**：任何占位中的 Session 都可归属到一个入口：`dispatch_origin = 'COORDINATOR'` ⟹ `project_action_id` 非空且该动作 `APPLIED`；`= 'USER'` ⟹ 人的显式动作，`project_action_id` 为 NULL；`= 'LEGACY_SWEEP'` ⟹ 该 Task 的 `dispatch_authority = 'LEGACY'`。三条都由 §7.7 D6 触发器的放行分支保证，因此对任何版本的二进制成立。**"谁派的"是一次列查询，不是一次考古**（`PC-CX-14`）。**v1.3 收紧（PC-CX-20）**：v1.2 的 D6 只检查 `project_action_id IS NOT NULL`，它读不到本条声称保证的任何一列（type / status / subject / project / fencing token），因此这条不变量在真实数据库上**是可以被违反的** —— 插一条 `NOOP`/`CLAIMED` 的动作行就够了。v1.3 由 §7.7 D6 的完整谓词（插入时）与 D9 的可延迟约束触发器（**提交时**）共同保证，`USER`/`LEGACY_SWEEP` 那两句由 CHECK 约束保证。**v1.4 改述（PC-CX-21）**：v1.3 把本条写成"动作的 `fencing_token` 等于 runtime **当前** token"，那是一个**会被下一次正常租约弄假**的等式 —— reconcile 每成功取一次租约就 +1（§8.1），而被它派出去的 Session 仍然在飞。等式表达的是**提交时的授权**，不是一条恒成立的归属关系，把它写成不变量等于要求"这个项目此后不得再 reconcile"。v1.4 把这条不变量拆成**时态明确的两句**，两句都可以对任意已提交状态直接查：
+
+  - **I11-A（归属，恒成立）**：`dispatch_origin = 'COORDINATOR'` 的占位 Session ⟹ `project_action_id` 指向一条 `type = 'DISPATCH_TASK'`、`status = 'APPLIED'`、`subject_type = 'TASK'`、`subject_id = session.task_id`、`project_id = task.project_id` 的动作行，且 `action.fencing_token <= project_runtime.fencing_token`（token 单调，故这一项**只会保持为真**）。`USER` / `LEGACY_SWEEP` 两句逐字不变。这三行读到的每一列都被**反向约束**钉住：Task 的 `project_id` 在占位期间不可改（D10）、`APPLIED` 动作行的归属列不可改写（D11）、`fencing_token` 单调不回退（§8.1）。
+  - **I11-B（提交时授权，点态）**：一条 COORDINATOR 占位被提交的**那一刻**，`action.fencing_token = project_runtime.fencing_token`。它由 §7.7 D9 在 `COMMIT` 时执行，**只在那一刻成立**，此后不再被要求 —— 它证明的是"这次派发由当时的租约持有者提交"，不是"这个动作永远是最新的"。
+
+  两句合起来给出的正是审查要的东西：**归属用的是稳定的历史关系，token 的时态被限定在派发提交点**。
+- **I12（授权投影，v1.4 重写，PC-CX-25）**：v1.2 把这一条写成"占位来源与**当前**授权相容"，并用 §7.7 D8 的"有占位就不翻转"去维持它。那个维持方式有两个代价，第二个是 P0：一是它需要一个"占位释放时补投影"的第三写入点，二是**三个写入点全在新服务层**，于是一个不认识新列的旧写端把 Task 移进一个已启用 Coordinator 的 Project、或结束一条占位，都会留下 stale `LEGACY`，而 D6 会忠实地按这个陈旧值放行旧 sweep —— §12.4 声称"与二进制版本无关"的那一格因此是假的。v1.4 把它拆成两句，**第一句由数据库自己维护**：
+
+  - **I12-A（投影新鲜，恒成立，由 D12 保证）**：任何已提交状态上，`task.dispatch_authority` 恒等于它的派生式
+    `authorityOf(task) = (task.project_id IS NOT NULL ∧ project.coordinator_enabled) ? 'COORDINATOR' : 'LEGACY'`。
+    它由 §7.7 D12 的触发器在**每一次**写 `task.project_id` / `task.dispatch_authority` / `project.coordinator_enabled` 时重算，因此**对任何版本的二进制成立**，也因此可以写成一条对生产快照直接跑的漂移查询（D13）。
+  - **I12-B（无越权新派发，恒成立，由 D6 保证）**：**没有一条占位是在它的来源已经不被当前授权允许之后插入的** —— `COORDINATOR` 权的 Task 上不存在翻转之后插入的 `LEGACY_SWEEP` 占位，`LEGACY` 权的 Task 上不存在翻转之后插入的 `COORDINATOR` 占位。**两个方向都要写**，因为 v1.4 的翻转不再等占位，所以两个方向都可能留下一条 pre-flip 占位。这一句不需要观测插入时刻：D6 在 `FOR SHARE` 下读授权（§7.7 D6 / D8），因此翻转之后的越权插入在物理上不可能提交。推论是任何一条与当前授权不匹配的占位**必然**是翻转前插入的 —— 它是一个**有界**状态：随该 Session 落终态而消失，且不可能再产生新的。这两条 pre-flip 占位都不会导致重复派发：该 Task 有占位，§7.4 第 4 条与 D5 各挡一次。
+
+  **这是一次行为变更**：v1.2 的"有占位就不翻转"被删除（§7.7 D8）。买到的是"投影永不陈旧、且不依赖任何一个版本的服务层"，让出的是"翻转与占位来源在每个瞬间都相容"这句更强、但只由服务层维持因而其实并不成立的话。
 - **I13（动作身份单调，v1.3 新增）**：`project_action` 里每一条键的 `<epoch>` 都来自 §8.2 GE1 表里那个持久化、单调、永不复用的列（`AGGREGATE_PARENT` 无键、`OPEN_COORDINATOR_TURN` 按 GE4 例外）。可测形式：把世界从 A 变到 B 再变回 A，任何一个动作在第二个 A 上算出的键都不得等于它在第一个 A 上算出的键（`PC-CX-16` / `PC-CX-17`）。
 - **I14（重复投递等价，v1.3 新增）**：同一份世界事实被投递 N 次（任意 N、任意顺序、跨重启）后，持久化的 `run_state`、每条 blocker 的责任人/`recovery`/`required_action`/代次/`escalated_at`、通知条数与是否升级，都必须与 N = 1 时**逐字节相同**；允许随 N 变化的只有 `occurrences` 与 `last_seen_at`（§11.5 BL7 / ES5）。这是 §5.1 E1 从"事件不携带事实"推出来的那一半在**状态**上的形式（`PC-CX-15`）。
+- **I15（一次快照至多一条语义 turn，v1.4 新增，PC-CX-23）**：一次 reconcile 的 outcome 里 `type = 'OPEN_COORDINATOR_TURN'` 的动作**至多一条**，且它的 `reasonCode` 由 §7.2 TU4 的全序唯一决定。可测形式：枚举五个原因谓词的全部 32 个真值组合，每一组都恰好得到零或一个 `reasonCode`，且与遍历顺序无关。
+- **I16（授权在提交点复核，v1.4 新增，PC-CX-26）**：任何**已提交**的策略门控动作（§9.2 里不是三个 ✔✔✔ 行的那些），其提交事务在 `project` 行锁之后重读到的 `coordinator_enabled` / `automation_policy` / `max_concurrent_tasks` / `session_budget_per_day` 必须**仍然允许**它。等价的可查询形式：不存在"`coordinator_enabled = false` 之后由控制环创建的占位 Session"，也不存在"同一 Project 的占位 Session 条数 > `max_concurrent_tasks`"。由 §9.6 AU1 / CAP1 的共同 project 行锁保证。
 - **I5（不静默空转）**：`project.status = OPEN ∧ coordinatorEnabled ∧ run_state ∉ {AWAITING_HUMAN, SETTLED}` ⟹ `project_runtime.next_wake_at IS NOT NULL`。这是 AC3 的**可查询形式**（§10.3）。**v1.1 收紧**：`AWAITING_HUMAN` 的豁免不再是整个状态，而只是 §10.4 N-null 列出的那一种情形（全部 open blocker 都 `recovery = HUMAN` 且都已升级）；其余的 `AWAITING_HUMAN` 同样必须有 `next_wake_at`，由 §10.2 W4 的第 (ii) 支抓。
 - **I6（旧项目静默）**：迁移生成的 `project_runtime` 一律 `run_state = PLANNING`、`coordinatorEnabled = false`、`next_wake_at = NULL`，**不消费事件、不 reconcile**（§12.1）。
 - **I7（无越权）**：控制环发起的任何动作，其授权判定与同一动作由用户手动发起时**完全相同**（PAC §8.2 + §9.3）。Coordinator 不是一个更高的权限等级。
@@ -289,38 +310,71 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
 
 ## 6. Reconcile：输入与输出
 
-### 6.1 输入 —— Project 快照（冻结结构）
+### 6.1 输入 —— Decision Input（冻结结构，v1.4 重写，PC-CX-22）
 
 一次 reconcile 的输入是**一次读事务内**取到的一份内部一致的快照。跨行读必须在同一 `REPEATABLE READ` 事务里完成，否则"任务已 DONE 但 Session 还在飞"这类幻影组合会让状态机在两个状态间抖动。
+
+v1.3 把这一份东西叫"快照"，并让 `snapshotHash` 覆盖它、同时**排除**时钟与事件，然后要求"同 hash ⇒ 同机械决策"（S3）。那三件事不可能同时成立，而且缺口是三类而不是一类：**(1) 漏字段** —— §7.3 / §8.2 / §11 / §13 要求 `dispatchAttempt`、`verdictRevision`、`acceptanceAttempt`、`lifecycleGeneration`、`conditionVersion`、`escalatedAt`、`mergeEvidence` 决定动作键、升级与验收，而快照里一个都没有；**(2) 排除了时钟** —— `runAt` 到期、退避到期、升级到期、预算窗口边界全都要读时钟；**(3) 排除了事件** —— MANUAL turn 只由 `user.manual_trigger` 触发。三组都能造出"hash 相同、要求的动作不同"的反例。审查记为 `PC-CX-22`。
+
+v1.4 的答案是**把输入说全，并把它命名为 `decisionInput`**：三个部分，一个 hash 覆盖全部三部分。
+
+- **`world`** —— 数据库里的持久事实。**它的字段集不是手写的**：由 §7 / §8 / §9 / §10 / §11 / §13 的读集反推（S8），加一个字段就必须有一条读它的规范条款，反过来也一样。
+- **`evaluation`** —— 时钟的**唯一入口**。求值时刻被规范化成一个 epoch，所有与时间有关的判断在读快照时**一次性折成布尔/枚举的到期事实**（S5），此后没有任何一条规则再读 `now()`。
+- **`signals`** —— 会改变机械决策的事件，**只进身份不进负载**（S7）。今天这个集合只有一个成员，它必须被枚举出来而不是被默认掉。
 
 ```jsonc
 {
   "v": 1,
-  "snapshotAt": "2026-08-19T01:00:00.000Z",
-  "snapshotHash": "<sha256 of the canonical serialization>",   // §7.5 审计与重放用
-  "project":  { "id", "status", "coordinatorEnabled", "automationPolicy",
-                "maxConcurrentTasks", "sessionBudgetPerDay",
-                "coordinatorSessionId", "coordinatorWorkspaceId", "goal?", "acceptanceCriteria?" },
-  "runtime":  { "runState", "fencingToken", "coordinatorGeneration", "nextWakeAt", "lastReconcileAt" },
-  "team":     [ { "agentId", "role", "canCreateTasks", "canDelegate", "enabled" } ],   // PAC §3.2
-  "workspaces": [ { "workspaceId", "isDefault", "position", "runnerId",
-                    "runnerStatus", "capabilities", "capabilitiesReportedAt" } ],       // PAC §3.3 / PAC §3.5
-  "tasks":    [ { "id", "status", "parentTaskId", "completionPolicy", "assigneeAgentId",
-                  "provider", "model", "requiredCapabilities", "dispatchAuthority",
-                  "dispatchHold", "runAt", "verifiesTaskId",
-                  "dependsOnTaskIds", "failureCount", "lastFailureAt", "liveSessionIds" } ],
-  "sessions": [ { "id", "taskId", "runStatus", "pendingApprovals", "startedAt" } ],     // 仅本项目的在飞会话
-  "providers":[ { "slug", "available", "reason?" } ],
-  "blockers": [ { "id", "kind", "owner", "dedupeKey", "nextCheckAt", "subject" } ],
-  "budget":   { "sessionsStartedLast24h", "inFlight" },
-  "events":   [ { "id", "kind", "sourceType", "dedupeKey" } ]   // 本次唤醒消费的事件，仅用于审计
+  "readAt": "2026-08-19T01:00:00.000Z",          // provenance：不进 hash，落 project_decision（S6）
+  "decisionInputHash": "<sha256 of canonical(world ‖ evaluation ‖ signals)>",   // S3
+
+  "world": {
+    "project":  { "id", "status", "coordinatorEnabled", "automationPolicy",
+                  "maxConcurrentTasks", "sessionBudgetPerDay", "configRevision",
+                  "coordinatorSessionId", "coordinatorWorkspaceId", "goal?", "acceptanceCriteria?" },
+    "runtime":  { "runState", "fencingToken", "coordinatorGeneration", "nextWakeAt",
+                  "lastReconcileAt", "acceptanceAttempt" },
+    "team":     [ { "agentId", "role", "canCreateTasks", "canDelegate", "enabled" } ],   // PAC §3.2
+    "workspaces": [ { "workspaceId", "isDefault", "position", "runnerId",
+                      "runnerStatus", "capabilities", "capabilitiesReportedAt" } ],       // PAC §3.3 / PAC §3.5
+    "tasks":    [ { "id", "status", "parentTaskId", "completionPolicy", "assigneeAgentId",
+                    "provider", "model", "requiredCapabilities", "dispatchAuthority",
+                    "dispatchHold", "runAt", "verifiesTaskId", "verdict",
+                    "dependsOnTaskIds", "failureCount", "lastFailureAt", "liveSessionIds",
+                    "dispatchAttempt", "verdictRevision" } ],
+    "sessions": [ { "id", "taskId", "runStatus", "dispatchOrigin", "pendingApprovals", "startedAt" } ],
+    "providers":[ { "slug", "available", "reason?" } ],
+    "blockers": [ { "id", "kind", "owner", "recovery", "dedupeKey", "subject",
+                    "lifecycleGeneration", "conditionVersion", "escalatedAt", "nextCheckAt" } ],
+    "mergeEvidence": [ { "requirementId", "targetBranch", "contentHash", "refGeneration" } ],  // §13.4 AE9
+    "budget":   { "sessionsStartedLast24h", "inFlight" }
+  },
+
+  "evaluation": {                                 // 时钟的唯一入口（S5）
+    "epoch": 1755561600,                          // floor(readAt / 1s)，规范化后的求值时刻
+    "dueTasks":      { "<taskId>": { "runAtDue": true, "backoffExpired": false } },
+    "dueBlockers":   { "<blockerId>": { "nextCheckDue": true, "escalationDue": false } },
+    "budgetWindowRolled": false
+  },
+
+  "signals": [ { "kind": "user.manual_trigger", "dedupeKey": "…" } ]   // 身份，不含 payload（S7）
 }
 ```
 
-**S1**：快照**只含本 Project 的行**，且每一行都过 `ownerId` 租户边界（AC5）。跨租户泄漏是 P0。
-**S2**：出站（API/CLI/Web 展示这份快照时）所有 id 编 base62。快照内部落库为 UUID。这与 PAC B3 是同一个坑：**JSON 里的 id 不是列，编解码器不会自动处理**，必须显式转换并有测试断言。
-**S3**：`snapshotHash` 覆盖上表除 `snapshotAt` / `events` 外的全部内容的规范化序列化。**相同 hash 必须给出相同的机械决策**（§7.4），这是 11 单元"可重放审计"的判据。
-**S4**：快照**不含** `session.resolution` / Agent 的提示词全文 / 任务描述全文。它是一个决策输入，不是一份导出。要看细节走既有接口。
+**S1**：`world` **只含本 Project 的行**，且每一行都过 `ownerId` 租户边界（AC5）。跨租户泄漏是 P0。
+**S2**：出站（API/CLI/Web 展示这份输入时）所有 id 编 base62。内部落库为 UUID。这与 PAC B3 是同一个坑：**JSON 里的 id 不是列，编解码器不会自动处理**，必须显式转换并有测试断言。
+**S3（v1.4 重述）**：`decisionInputHash` 覆盖 **`world` + `evaluation` + `signals` 三部分的全部内容**的规范化序列化，只排除 `readAt`（S6）。**相同 hash 必须给出逐字相同的机械决策** —— 相同的 `actions`（含每个 `idempotencyKey`）、相同的 `blockersOpened`/`blockersCleared`、相同的 `nextWakeAt`。这是 11 单元"可重放审计"的判据，也是 v1.4 第一次让这句话为真：v1.3 的 hash 排除了时钟与事件，而两者都决定动作。
+**S4**：`world` **不含** `session.resolution` / Agent 的提示词全文 / 任务描述全文。它是一个决策输入，不是一份导出。要看细节走既有接口。
+**S5（时钟只在一处读，v1.4 冻结）**：`evaluation.epoch` 是**唯一**允许读时钟的地方。所有"到了没有"的判断在读输入时按这个 epoch **一次性求值**并冻结成 `evaluation` 里的布尔：`runAtDue`（§7.4 第 1 条）、`backoffExpired`（§9.5 Q3）、`nextCheckDue` 与 `escalationDue`（§11.5 ES4 / §10.4 第 2 条）、`budgetWindowRolled`（§9.4）。**§7–§13 的任何一条规则都不得再读 `now()`**；要写 `now()` 的地方只剩两处，都不参与决策：`nextWakeAt` 的落库值与展示字段（`last_seen_at` 等）。判据是一句可测的话：**把同一份 `world` 配上两个不同的 `epoch`，只要折出来的到期事实相同，决策就必须逐字相同；只要有一项到期事实不同，`decisionInputHash` 就必须不同。**
+**S6（`readAt` 是出处不是输入）**：`readAt` 落在 `project_decision` 上供人对时间线，**不进 hash** —— 否则每一次 reconcile 的 hash 都不同，S3 就退化成一句永远为真也永远无用的话。它与 `evaluation.epoch` 的分工是：epoch 是**被决策读到的**时间，`readAt` 是**这次读发生在**什么时候。
+**S7（事件按身份进入，负载仍然不读，v1.4 冻结）**：一个事件只有在**它本身会改变机械决策**时才进入 `signals`，并且只进 `(kind, dedupeKey)` 两项。触发集合是**封闭的**，v1 只有一个成员：
+
+| `kind` | 它改变的决策 | 条款 |
+|---|---|---|
+| `user.manual_trigger` | 是否开一条 `reasonCode = MANUAL` 的 turn | §7.2 |
+
+  其余全部 kind 是**纯脏标记**：它们决定"要不要重新看一眼"，不决定"看完之后做什么"，因此不进 `signals`、不进 hash。**这与 §5.1 E1 不冲突，两者的分界要写死**：E1 禁止的是"从事件负载里读业务状态"（`if (event.payload.status === …)`），S7 承认的是"这条事件的**存在**本身就是一件被请求的事"。前者是把事实的权威源换成了一条可能重复、可能乱序的消息；后者是把一个**用户动作**如实记下来。重复投递同一个 `dedupeKey` 仍然只得到 `signals` 里的**一项**（§5.4 的 partial unique index 已经把它收敛到一行），因此 I14 的"投递 N 次与 N = 1 逐字节相同"照常成立。
+**S8（字段集由读集反推，不是手写，v1.4 冻结）**：`world` 的字段集必须**能从规范条款机械导出** —— 每一条会影响 `actions` / `idempotencyKey` / `blockers` / `nextWakeAt` / 验收判定的规则，其读到的每一个持久化列都必须出现在 `world` 里；反过来，`world` 里的每一个字段都必须有至少一条规则读它。这与 §13.4 AE6-c 是同一条纪律：**"完整"必须是一条断言，不能是一个形容词**。契约测试从 §7.3 的动作表、§8.2 GE1 的代次表与 §13.4 AE1 的摘要投影里收集列名，与本节逐条比对，并另行核对 §11.1 的五问都能从 `blockers` 投影里读到；漏一个就红。
 
 ### 6.2 输出 —— Reconcile Outcome（冻结结构）
 
@@ -329,6 +383,8 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
   "v": 1,
   "reconcileId": "<uuid>",
   "fencingToken": 42,
+  "decisionInputHash": "<sha256>",        // §6.1 S3：这次决策是对哪一份输入做的
+  "configRevision": 7,                    // §9.6 AU2：决策时读到的授权版本，提交时复核
   "runStateBefore": "PLANNING",
   "runStateAfter":  "EXECUTING",
   "decidedBy": "ORCHESTRATOR",            // 或 "COORDINATOR_AGENT"
@@ -337,6 +393,8 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
   "blockersCleared": [ "<blockerId>" ],
   "nextWakeAt": "2026-08-19T01:02:00.000Z",
   "nextWakeReason": "in-flight session may end",
+  "turnReason": "REPLAN",                 // §7.2 TU4 选中的那一个；无 turn 时为 null
+  "suppressedTurnReasons": [ "ACCEPTANCE" ],   // TU4 里同时为真但被全序压下去的（审计用，v1.4）
   "consumedEventIds": [ "<eventId>" ]
 }
 ```
@@ -350,14 +408,20 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
  2. 读一致快照（§6.1）。
  3. 判定 run_state（§4.2 的守卫函数 `runStateOf`；输入只有快照）。
  4. 计算机械动作集合（§7.3 的机械子集）。策略门（§9）在这里，不在动作执行处。
- 5. 若需要语义判断（§7.2 的触发条件）→ 追加一个 OPEN_COORDINATOR_TURN 动作，本次不再追加派发动作。
+ 5. 若需要语义判断（§7.2）→ 按 TU4 的全序选出**恰好一个** reasonCode，追加**至多一条** OPEN_COORDINATOR_TURN，
+    其余同时为真的原因记进 suppressedTurnReasons；本次不再追加派发动作（R1）。
  6. 计算 blocker 的开/关（§11）。
  7. 计算 nextWakeAt（§10.4）。
- 8. 一个事务：token 校验 + 动作账本 + blocker + 审计行 + 事件消费 + runtime 更新。
+ 8. 一个事务，按 §8.6 LO1 的全序取锁：
+    8a. 若本次 outcome 含任何被 §9.2 门控的动作或任何验收事实写入 → 先取 project 行锁（§9.6 AU1 / §13.4 AE6-a），
+        锁到手后**重读**授权与并发（AU1 / CAP1）；不再被允许的动作记 REFUSED(AUTHORITY_REVOKED) 并跳过其副作用。
+    8b. token 校验 + 动作账本 + blocker + 审计行 + 事件消费 + runtime 更新。
  9. 释放租约。
 ```
 
 **R1**：第 5 步的"本次不再追加派发动作"是刻意的：一次 reconcile 要么按已知的图往前走，要么请协调器重新看图，**不同时做**。同时做会让协调器的判断建立在一份已经被自己这一 tick 改过的图上。
+
+**R3（v1.4 新增，PC-CX-26）**：第 8a 步的重读**不是**"再判断一次"，而是把第 4 步的策略门在**提交点**重放一遍。第 4 步读的是快照，第 8a 步读的是锁到手之后的一条新语句 —— `READ COMMITTED` 下它必然看得见任何已提交的人工写入。两次判定不一致时**以第 8a 步为准**，并且只影响被门控的那些动作：outcome 的其余部分照常提交（§8.5 C2 的同一形状）。
 
 **R2**：整个 reconcile 有硬上限 **5 分钟**（含租约续期）；超时即放弃提交、释放租约、`nextWakeAt = now + 60s`，并记一条 `reconcile_timeout` 审计行。**超时不得静默重试**。
 
@@ -380,15 +444,36 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
 
 v1.1 把触发条件改成一张**表**，每条有一个 `reasonCode`，并且第 3 条改为**读一个封闭的 kind 列表**而不是读 `owner`：
 
-| `reasonCode` | 触发条件 | `turnFacts`（进入 `reasonDigest` 的快照投影，§7.3） |
-|---|---|---|
-| `REPLAN` | `runStateOf` = `PLANNING` 且没有任何可派发任务，且没有 open blocker（"图不够，需要重规划"） | 全部 Task 的 `(id, status, parentTaskId, dependsOnTaskIds, verifiesTaskId)` 排序摘要 |
-| `VERDICT` | 出现 FAIL / INCONCLUSIVE 的验证 verdict，且 §13.2 的机械退回已完成 | `(verifierTaskId, verdict)` 排序摘要 |
-| `BLOCKER_DECISION` | 存在一条 open blocker，其 kind ∈ **`{WHO_UNRESOLVED, MERGE_CONFLICT, VERIFICATION_FAILED, DEPENDENCY_CYCLE}`**（§11.2 中 `opensTurn = ✔` 的全部行），**且该 blocker `escalated_at IS NULL`**（§11.2 BL6，v1.2 新增） | 触发的那些 blocker 的 `(kind, subjectId, conditionVersion)` 排序摘要（TF2） |
-| `ACCEPTANCE` | 全部 Task 收敛，准备进入 `ACCEPTANCE`（§13.4） | §13.4 的 `acceptanceDigest` |
-| `MANUAL` | 用户显式要求（`user.manual_trigger`） | 触发事件的 `dedupeKey` |
+| 序 | `reasonCode` | 触发条件 | `turnFacts`（进入 `reasonDigest` 的输入投影，§7.3） |
+|---:|---|---|---|
+| 1 | `MANUAL` | 用户显式要求（`signals` 里有 `user.manual_trigger`，§6.1 S7） | 触发信号的 `dedupeKey` |
+| 2 | `VERDICT` | 出现 FAIL / INCONCLUSIVE 的验证 verdict，且 §13.2 的机械退回已完成 | `(verifierTaskId, verdictRevision, verdict)` 排序摘要（TF4） |
+| 3 | `BLOCKER_DECISION` | 存在一条 open blocker，其 kind ∈ **`{WHO_UNRESOLVED, MERGE_CONFLICT, VERIFICATION_FAILED, DEPENDENCY_CYCLE}`**（§11.2 中 `opensTurn = ✔` 的全部行），**且该 blocker `escalated_at IS NULL`**（§11.2 BL6，v1.2 新增） | 触发的那些 blocker 的 `(kind, subjectId, lifecycleGeneration, conditionVersion)` 排序摘要（TF2 / TF4） |
+| 4 | `ACCEPTANCE` | 全部 Task 收敛，准备进入 `ACCEPTANCE`（§13.4） | `(acceptanceDigest, acceptanceAttempt)`（TF4） |
+| 5 | `REPLAN` | `runStateOf` = `PLANNING` 且没有任何可派发任务，且没有 open blocker（"图不够，需要重规划"） | 全部 Task 的 `(id, status, parentTaskId, dependsOnTaskIds, verifiesTaskId)` 排序摘要 |
 
 **TU1（唯一规则）**：**是否开 turn 只由上表决定，不由 blocker 的 `owner` 决定。** `owner` 回答"谁能解决"，`opensTurn` 回答"控制环要不要为它叫醒协调器"，两者是两个问题。为防止它们各自漂移，§11.2 冻结一条可机械核对的双向约束 **BL4**：`opensTurn = ✔` ⟺ `owner = COORDINATOR`。上表第 3 行的四个 kind 因此**恰好**是 §11.2 中 `owner = COORDINATOR` 的全部行 —— 契约测试逐字比对这两处。
+
+**TU4（唯一裁决：首个为真者胜，v1.4 冻结，PC-CX-23）**：v1.1–v1.3 把上表当成五条**各自独立**的触发条件，既没有互斥守卫也没有优先级，而它们**确实会同时为真**：
+
+- 全部 Task 收敛、验证全 PASS、无 blocker、无 live Session、无未收敛的验收动作 ⇒ `runStateOf = PLANNING` 且无可派发任务且无 open blocker ⇒ **`REPLAN` 为真**；同一份事实又满足"全部 Task 收敛，准备进入 `ACCEPTANCE`" ⇒ **`ACCEPTANCE` 也为真**。
+- 验证 FAIL 的机械退回完成 ⇒ **`VERDICT` 为真**；同一次退回按 §13.2 必然开一条 `VERIFICATION_FAILED` blocker，它在 `opensTurn = ✔` 的列表里 ⇒ **`BLOCKER_DECISION` 也为真**。
+
+两个 reasonCode 的 `reasonDigest` 不同、TR2 的限频按 reasonCode 分桶、TR1 的幂等键也不同 —— 于是同一份输入可以合法地开出**两条** turn，或者取决于实现遍历顺序开出**其中一条**。审查记为 `PC-CX-23`。
+
+v1.4 用与 §4.2 RS0 **完全相同**的手法解决：不补互斥守卫（手写的互斥在下一个组合上必然漏），而是给上表一个**总序**，**按序求值、首个为真者胜**。上表的"序"列即是该全序：
+
+> `MANUAL ≻ VERDICT ≻ BLOCKER_DECISION ≻ ACCEPTANCE ≻ REPLAN`
+
+**为什么是这个顺序**，每一格都能从已冻结的条款读出来，不是新发明：
+
+- **人优先于机器**（1 最高）：`user.manual_trigger` 是一个人的显式请求；§9.3 与项目 instructions 都把最终控制权留给人，而一个被别的原因顶掉的显式请求就是一次静默忽略。
+- **原因优先于后果**（2 ≻ 3）：`VERIFICATION_FAILED` blocker **是** verdict 的产物（§13.2 的 FAIL 第 ④ 条）。选后果就丢掉了 `(verifierTaskId, verdict)` 这组事实，而协调器需要的正是它。
+- **阻塞优先于验收**（3 ≻ 4）：§4.2 守卫 3 ≻ 4 已经冻结了"阻塞优先于验收"，turn 的顺序不得与状态的顺序相反。
+- **验收优先于重规划**（4 ≻ 5）：§4.2 守卫 4 ≻ 7（`ACCEPTANCE ≻ PLANNING`）的同一句话。"全部 Task 收敛"意味着图已经走完，此时叫协调器"重规划"正是 foreman 事故的形状。
+- **`REPLAN` 是兜底而不是一个条件**：与 `PLANNING` 之于状态一样，它的含义就是"其余四条都不成立"。
+
+**TU5（一次 reconcile 至多一条语义 turn，v1.4 冻结）**：§6.3 第 5 步产生的 `OPEN_COORDINATOR_TURN` **至多一条**（I15）。同时为真的其余原因写进 `project_decision.suppressedTurnReasons`（§6.2）—— 它们不是被丢掉了，是被记下来了：如果被压下去的那个原因下一次仍然为真，它自然会在下一次 reconcile 胜出。可测形式：枚举五个谓词的全部 32 个组合，每一组断言 `|actions ∩ {OPEN_COORDINATOR_TURN}| ≤ 1` 且选中的 reasonCode 唯一、与遍历顺序无关。
 
 **TU2（任务失败永不开 turn）**：`TEST_FAILED` 在 v1.1 中 `owner = USER`、`opensTurn = ✘`，且**只在 `failureCount ≥ MAX_AUTO_RUN_FAILURES` 时才被创建**（§9.5 Q3 的表）。退避期内根本没有 blocker，只有一条写明理由的 `NOOP` 审计行和一个指向退避到期时刻的 `nextWakeAt`。于是 v1 的两条规则在 v1.1 里指向同一个动作：**不开 turn**。失败有既有的退避与重试（§9.5），协调器不是重试机制。这是对既有 foreman 事故的直接吸取：一个"停滞就派一个协调者"的规则在停滞无法被协调者解决时会永远重派。
 
@@ -400,7 +485,23 @@ v1.1 把触发条件改成一张**表**，每条有一个 `reasonCode`，并且�
 2. **墙钟**：`first_seen_at` / `last_seen_at` / `escalated_at` / `snapshotAt` / 任何 `now()`；
 3. 任何**自增序号**（除 id 本身）。
 
-判据是一句可测的话：**把同一份世界状态重复投递 N 次、乱序投递、或重启后重投，`turnFacts` 必须逐字节相同。** v1.1 把 blocker 的 `occurrences` 放进了 `BLOCKER_DECISION` 的 `turnFacts`，于是同一个合并冲突每被观测一次就换一个 `reasonDigest`：TR1 把它当"事实变了"，TR3 的 no-progress 判定永远命中不了，每 60 秒（TR2 的限频窗）就能合法地再开一个 turn —— 这正是 E1"事件是信号不是事实"要禁止的东西，从后门回来了。审查记为 `PC-CX-10`。
+判据是一句可测的话：**把同一份世界状态重复投递 N 次、乱序投递、或重启后重投，`turnFacts` 必须逐字节相同。**
+
+**TF1 的分界（v1.4 澄清，PC-CX-24）**：第 3 项"任何自增序号"**只针对随观测前进的计数**。一个**只在世界真的开始了一个新周期时才前进**的持久化代次（`lifecycle_generation` / `verdict_revision` / `acceptance_attempt`）不但允许、而且被 TF4 **要求**进入 `turnFacts`。两者的判据就是 §8.2 GE2 的那一句：**把世界从 A 变到 B 再变回 A** —— 观测计数在没有 B 的情况下也会前进（因此它破坏"事实没变则键没变"），周期代次不会（因此它只在"确实是新的一次"时改变键）。写死这条分界是必要的：v1.2 把 `occurrences` 赶出去时用的理由是"它是一个会自己前进的数"，那句话如果不加限定，就会把**必须**进来的代次也一并挡在外面 —— 而这正是 `PC-CX-24` 发生的方式。
+
+**TF4（周期身份必须进入 `turnFacts`，v1.4 冻结，PC-CX-24）**：`turnFacts` 里每一项若取自一行**有生命周期的**行，就**必须**带上那一行的代次：
+
+| `reasonCode` | 代次项 | 落库位置 |
+|---|---|---|
+| `BLOCKER_DECISION` | `lifecycle_generation` | `project_blocker`（§11.3 BE1） |
+| `VERDICT` | `verdict_revision` | `task`（§13.2 V7） |
+| `ACCEPTANCE` | `acceptance_attempt` | `project_runtime`（§13.4 AE11） |
+
+  **最小反例（本条要挡住的东西）**：`MERGE_CONFLICT` episode 1 的 `condition_version = A`，协调器开 turn、解决冲突、blocker clear。一小时后同一文件集再次冲突，episode 2 的 `condition_version` 仍然是 `A` —— 因为 TF2 定义它是"产生这条 blocker 的那些快照事实"的摘要，而那些事实**真的**一模一样。于是 `reasonDigest` 与 episode 1 逐字节相同，而 episode 1 的那一次 turn 早已结束 ⇒ §7.6 TR3 判定"上一次 turn 没有改变它自己被叫醒的那些事实" ⇒ **不开 turn，直接开 `COORDINATOR_NO_PROGRESS` 交给人**。协调器连一次处理这个**新故障**的机会都没有。审查记为 `PC-CX-24`。
+
+  **要害是一句话**：TR3 从"当前条件和上次相同"推出了"中间从未恢复过"，而这个推理只有在**没有中间状态**时才成立。`lifecycle_generation` 就是那个中间状态的证据 —— 它在 blocker 被解除后复发时必然前进（§11.3 BE1），因此 episode 2 得到一个新的 `reasonDigest`、一条新的 turn 键，而**同一个 open episode 内的重复**（代次不变、条件不变）仍然撞同一个键，TR1 的去重与 TR3 的 no-progress 判定逐字不变。
+
+v1.1 把 blocker 的 `occurrences` 放进了 `BLOCKER_DECISION` 的 `turnFacts`，于是同一个合并冲突每被观测一次就换一个 `reasonDigest`：TR1 把它当"事实变了"，TR3 的 no-progress 判定永远命中不了，每 60 秒（TR2 的限频窗）就能合法地再开一个 turn —— 这正是 E1"事件是信号不是事实"要禁止的东西，从后门回来了。审查记为 `PC-CX-10`。
 
 **TF2（`conditionVersion`，v1.2 冻结）**：blocker 进入 `turnFacts` 的那一项是 `project_blocker.condition_version` —— **产生这条 blocker 的那些快照事实**的规范化摘要，而不是它被看见过几次：
 
@@ -441,16 +542,18 @@ v1.1 这一格里的第三项是 `occurrences`，v1.2 换成 `conditionVersion`�
 
 按顺序判定，**任一失败即不派发**，并按 §11 决定是否开 blocker：
 
-1. `task.status = OPEN` 且 `dispatchHold = false` 且（`runAt IS NULL` 或已到期）。
+1. `task.status = OPEN` 且 `dispatchHold = false` 且（`runAt IS NULL` 或 `evaluation.dueTasks[id].runAtDue`，§6.1 S5）。
 2. `task.dispatchAuthority = 'COORDINATOR'`（§12.3）。
 3. 全部前置依赖 DONE；若 `verifiesTaskId` 非空，被验证任务已 DONE 且未被退回（§13.2）。
 4. 该 Task 没有在飞 Session（`liveSessionIds` 为空）。
-5. 失败退避未生效（复用既有 `AUTO_RUN_RETRY_BACKOFF_MS` / `MAX_AUTO_RUN_FAILURES`，§9.5）。
-6. 并发未超 `project.maxConcurrentTasks`；24h Session 预算未超 `sessionBudgetPerDay`。
-7. 策略允许（§9.2）；若判定"需审批"，改为 `REQUEST_APPROVAL`。
+5. 失败退避未生效（`evaluation.dueTasks[id].backoffExpired`；阈值复用既有 `AUTO_RUN_RETRY_BACKOFF_MS` / `MAX_AUTO_RUN_FAILURES`，§9.5）。
+6. 并发未超 `project.maxConcurrentTasks`；24h Session 预算未超 `sessionBudgetPerDay`。**这一条在快照上判一次、在提交点再判一次**（§9.6 CAP1）—— 快照上的判定只是为了不白跑，唯一有效的那次在 project 行锁之后。
+7. 策略允许（§9.2）；若判定"需审批"，改为 `REQUEST_APPROVAL`。**同样在提交点复核**（§9.6 AU1）：用户可以在第 7 条与提交之间把 Coordinator 关掉。
 8. PAC §5 的 `resolveExecutionContext(task)` 成功解析出 (agent, provider/model, workspace/runner)。**失败即 REFUSE**，按 PAC §12 的错误码映射成 blocker（§11.2），**绝不改派、绝不换引擎**。
 
 **A3**：第 8 步**完全复用** PAC 的解析链，控制环不得有第二套解析。控制环唯一被允许做的是"决定这一件事要不要现在派"，"派成什么样"永远是 PAC §7 的三条链。
+
+**A5（v1.4 新增，PC-CX-26）**：第 6、7 两条与第 4 条是**同一种东西** —— 都是读快照得出的乐观前置。第 4 条的真正互斥在 §7.7 D5（数据库唯一索引），第 6、7 条的真正互斥在 §9.6 的 project 行锁。**把任何一条快照读当成门就是 `PC-CX-01` 的形状**，只是对象从"另一个进程"换成了"另一个人"。
 
 **A4（v1.1 新增）**：第 4 条（"没有在飞 Session"）是**乐观前置**，不是互斥。它读的是快照，而快照读与 session 插入之间存在人工入口和其它进程的写窗口。真正的互斥是 §7.7 的数据库 primitive；第 4 条只负责在绝大多数情况下避免白跑一次冲突。**任何把第 4 条当成互斥的实现都是 `PC-CX-01`。**
 
@@ -474,6 +577,8 @@ v1.1 把它拆成三条互不重叠的前置：
   1. **不再开 turn**（否则就是 foreman 事故的形状）；
   2. 开一条 `COORDINATOR_NO_PROGRESS` blocker（§11.2，`owner = USER`、`recovery = HUMAN`、`opensTurn = ✘`），`subject` 指向该 `reasonDigest`，`detail` 带上 `reasonCode` 与上一次 turn 的 Session id；
   3. 该 blocker 的自动解除条件就是 **`reasonDigest` 变了**（§11.4 的重算，BL3）—— 事实一变，旧 digest 不再成立，blocker 自动 clear，新 digest 自然获得一次新的 turn。
+
+  **TR3 的成立前提（v1.4 冻结，PC-CX-24）**：本条从"同一个 `reasonDigest`"推出"上一次 turn 没有改变事实"，这个推理**只有在 `reasonDigest` 能区分周期时才成立**。因此 `turnFacts` 必须按 §7.2 TF4 带上产生它的那一行的代次；否则一个**被解决过、后来复发**的 blocker 会撞上历史 digest，被本条误判成"协调器上次没干活"并直接交给人。**TR3 判的是"没进展"，不是"又坏了一次"** —— 两者在数据库里的区别就是那个代次。
 
   若同一 digest 的上一次 turn **还在飞**，则命中 TR1 的幂等键冲突，按 §8.5 记 `ALREADY_APPLIED` 并继续提交本次 outcome，**不开** `COORDINATOR_NO_PROGRESS`（还没结束，谈不上没进展）。
 
@@ -623,41 +728,169 @@ ALTER TABLE session
 
 **D9-c（`fencing_token` 这一项为什么能比）**：§8.1 F1 要求提交事务里有一条 `UPDATE project_runtime … WHERE fencing_token = :token`，它对该行取排他锁，因此在本事务提交前**没有任何别的 reconcile 能推进这个 token**。于是"动作行的 token = `project_runtime` 当前 token"在提交时刻等价于"这个动作是由当前租约持有者提交的"。一次被接管的旧实例即使绕过应用层直接插行，它的 token 已经落后，这条比较为假，提交被拒。
 
-**D9-d（可测形式）**：真实 Postgres 上建**带外键的** `project_action` 表，正例（`DISPATCH_TASK`/`APPLIED`/本 Task/本 Project/当前 token）提交成功并在 `COMMIT` 之后断言 I11；六个反例逐个断言提交被拒：错 type（`NOOP`）、错 status（`CLAIMED` 停在那里不改）、错 Task、错 Project、陈旧 fencing token、以及 `USER` origin 带非空动作 id。**断言必须落在 `COMMIT` 之后**，因为这一项要证明的就是"已提交状态上成立"。
+**D9-d（可测形式）**：真实 Postgres 上建**带外键的** `project_action` 表，正例（`DISPATCH_TASK`/`APPLIED`/本 Task/本 Project/当前 token）提交成功并在 `COMMIT` 之后断言 I11-A；六个反例逐个断言提交被拒：错 type（`NOOP`）、错 status（`CLAIMED` 停在那里不改）、错 Task、错 Project、陈旧 fencing token、以及 `USER` origin 带非空动作 id。**断言必须落在 `COMMIT` 之后**，因为这一项要证明的就是"已提交状态上成立"。
 
-#### D8 · 派发权切换协议（v1.2 新增，PC-CX-09）
+**D9-e（token 那一项是提交时授权，不是恒等式，v1.4 冻结，PC-CX-21）**：`a.fencing_token = r.fencing_token` 这一行**只在本触发器执行的那一刻**被要求。它证明的是 I11-B（"这次派发由当时的租约持有者提交"），**不是** I11-A（"这条占位归谁"）。v1.3 把这两件事写成同一条不变量，于是**下一次完全正常的租约**就把它弄假了：任何一次事件/定时唤醒成功取到租约都会让 token +1（§8.1），而被上一次派发出去的 Session 仍然在飞、Session 的三列一列没动、D9 因此根本不会再执行 —— 查询已提交状态得到 `action.token = 42 ≠ runtime.token = 43`，"不变量"为假，而系统里**没有任何东西做错**。审查记为 `PC-CX-21` 的前一半。
 
-D6 的触发器现在会在 task 行上取 `FOR SHARE`；这一条冻结**另一侧**的义务，两侧合起来才构成一个"数据库可证明的共同线性化点"。
+  v1.4 的修正只在**不变量的写法**上，触发器一个字不改：恒成立的那一句用**单调关系** `action.fencing_token <= project_runtime.fencing_token`（§4.3 I11-A）。它的意思是"这次派发是在本项目某一次不晚于当前的租约下被授权的"，配上 D9 在提交点强制的等号，两句合起来恰好等于"由**它自己那一次**的租约持有者授权"。**token 只会增，所以 I11-A 一旦为真就永远为真** —— 这才是一条不变量该有的形状。
 
-**D8-a（唯一 primitive）**：`dispatch_authority` 的**每一个**写入点（§12.3 D3 的三处）都必须先在同一事务里对目标 task 行取 `FOR NO KEY UPDATE`，**再**读该 Task 的占位情况，**最后**才写。顺序不可交换：先读后锁会读到一份可能在等锁期间被别人改掉的事实。任何一个不走这个 primitive 的写入点都让 I12 失效。
+  这条修正只有在 D9 读到的**其它行**也不会被改的前提下才成立，因此 v1.4 给它们各配一条反向约束：`task.project_id`（D10）、`project_action` 的归属列与 `status`（D11）。**一条硬门读到的每一行，都必须有一个封闭的 mutator 协议** —— 否则它证明的只是"插入那一刻"，而这正是 `PC-CX-09`／`PC-CX-20` 已经交过两次的学费。
+
+#### D10 · 占位期间 Task 不得跨 Project 移动（v1.4 新增，PC-CX-21）
+
+D9 的谓词里有 `a.project_id = t.project_id`。`t.project_id` 是一个**别人可以改**的列 —— §13.4 AE10 明确允许 Task 跨 Project 移动，而 D9 只声明在 `session` 的三列上，移动 Task 时它**不会执行**。于是一条完全合法的移动就能让一条在飞 Session 的归属静默失真：动作属于 P1，Task 已属于 P2。
+
+修法与"归属必须由数据库证明"是同一条：给被读的那一行配一个**封闭的 mutator 协议**。最小且足够的协议是**在占位期间冻结这一列**：
 
 ```sql
-BEGIN;
-  -- 1) 先锁，按 id 升序（D8-c）。普通 UPDATE 自动取的就是这把锁，因此**任何版本的二进制**
-  --    在改这一列时都会与 D6 的 FOR SHARE 互斥 —— 这一半的正确性不依赖代码，依赖 Postgres。
-  SELECT id FROM task
-   WHERE project_id = :p AND id = ANY(:ids)
-   ORDER BY id
-     FOR NO KEY UPDATE;
+CREATE OR REPLACE FUNCTION task_claimed_project_move_guard() RETURNS trigger AS $$
+BEGIN
+  IF NEW.project_id IS NOT DISTINCT FROM OLD.project_id THEN RETURN NULL; END IF;
+  IF EXISTS (SELECT 1 FROM session s
+              WHERE s.task_id = NEW.id AND s.deleted_at IS NULL
+                AND s.status IN ('PENDING','RUNNING')) THEN
+    RAISE EXCEPTION 'TASK_CLAIMED_PROJECT_MOVE: task % has a live claim and cannot change project', NEW.id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
 
-  -- 2) 锁已持有，这是一条**新语句**，READ COMMITTED 会取新快照 —— 因此它看得见每一个
-  --    "在我们等锁期间提交"的占位插入。反过来，此刻不可能有新的占位插入正在进行：
-  --    它的 BEFORE INSERT 触发器会卡在 FOR SHARE 上，直到本事务结束。
-  UPDATE task SET dispatch_authority = :next
-   WHERE id = ANY(:ids)
-     AND NOT EXISTS (SELECT 1 FROM session s
-                      WHERE s.task_id = task.id AND s.deleted_at IS NULL
-                        AND s.status IN ('PENDING','RUNNING'));
-COMMIT;
+CREATE CONSTRAINT TRIGGER task_claimed_project_move_guard
+  AFTER UPDATE OF project_id ON task
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION task_claimed_project_move_guard();
 ```
 
-**D8-b（持有占位的 Task 不翻转，两个方向都不）**：上面的 `NOT EXISTS` 是本条的全部内容。一个正在被占位的 Task **保持它当前的派发权**，直到占位释放；释放它的那个事务（Session 落终态）在**同一事务**里补做这次投影（§12.3 D3 的第三个写入点）。于是不存在任何一个已提交状态含有"授权与占位来源不匹配"的组合（I12），也不需要去取消一条已经在跑的 Session —— **控制环从不因为一次投影变更去杀掉别人已经启动的运行**。为什么补投影没有窗口：释放占位与翻转授权在同一个事务里，因此任何 legacy sweep 的插入要么排在它前面（Task 仍是 `LEGACY`，但占位还在，被 D5 挡住），要么排在它后面（Task 已是 `COORDINATOR`，被 D6 挡住）。
+**D10-a（为什么是"禁止"而不是"原子迁移"）**：迁移一条在飞 Session 的归属，意味着要在同一事务里把它的动作行也搬到新 Project、并重算新 Project 的 fencing token 关系 —— 那会让 `project_action` 的 `project_id` 变成可写列，而 D11 刚刚把它冻住。**移动一个正在跑的任务本来就不是一个有明确语义的操作**（它在跑的那份代码、那台机器、那条分支都是按旧 Project 解析出来的，PAC §5），因此这里选的是让它成为一次**可见的失败**：调用方等这次运行结束再移，或者先取消它。错误码 `TASK_CLAIMED_PROJECT_MOVE`，与 `PROJECT_FACT_WRITE_CONTENDED` 同型 —— **有类型、可重试，不是 500**。
 
-**D8-c（锁序）**：批量翻转按 `task.id` **升序**取锁；一次插入多条 Session 的事务（batch execute）同样按 `task_id` 升序插入。两个方向用同一个全序，因此不会互相死锁。若仍撞上死锁，Postgres 会中止其中一个 —— 那是 fail closed，不是正确性问题。
+**D10-b（为什么必须可延迟）**：AE10 的跨 Project 移动是一个**多行事务**（两个 project 锁 + task 行）。一个立即执行的触发器会在语句中途拒绝一次其实在提交时已经合法的移动（例如同一事务先取消了那条 Session 再移动）。可延迟让判据落在**提交时的最终状态**上，与 D9 同一个理由。
+
+**D10-c（它不阻止什么）**：不影响没有占位的 Task 移动（AE10 逐字不变）、不影响 `parentTaskId` 改父、不影响 `verifiesTaskId` 改指 —— 后两者不进 D9 的谓词。
+
+#### D11 · `APPLIED` 动作行终态不可改写（v1.4 新增，PC-CX-21）
+
+I11-A 读 `project_action` 的 `type` / `status` / `subject_type` / `subject_id` / `project_id` / `fencing_token`。D9 在提交时验过一次，但它同样只声明在 `session` 上：**此后任何一次 `UPDATE project_action` 都不会让它重跑**。一条 `APPLIED` 的派发动作被改成 `SUPERSEDED`、或者 `subject_id` 被改掉，归属就断了，而没有任何东西会发现。
+
+```sql
+CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $$
+BEGIN
+  IF OLD.status <> 'APPLIED' THEN RETURN NEW; END IF;          -- CLAIMED → APPLIED/REFUSED/SUPERSEDED 照常
+  IF NEW.status <> 'APPLIED'
+     OR NEW.type IS DISTINCT FROM OLD.type
+     OR NEW.subject_type IS DISTINCT FROM OLD.subject_type
+     OR NEW.subject_id IS DISTINCT FROM OLD.subject_id
+     OR NEW.project_id IS DISTINCT FROM OLD.project_id
+     OR NEW.fencing_token IS DISTINCT FROM OLD.fencing_token
+     OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+    RAISE EXCEPTION 'ACTION_APPLIED_IMMUTABLE: action % is APPLIED; its identity and attribution are frozen', OLD.id;
+  END IF;
+  RETURN NEW;                                                   -- result_session_id / detail 仍可补写
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER project_action_applied_immutable_guard
+  BEFORE UPDATE ON project_action
+  FOR EACH ROW EXECUTE FUNCTION project_action_applied_immutable_guard();
+```
+
+**D11-a**：`APPLIED` 是**终态**。`status` 的合法转移此后恰好是 `CLAIMED → {APPLIED, REFUSED, SUPERSEDED}` 三条，且三个终态都不再出去 —— 这与 §8.2 GE1"历史行永不删除"是同一条纪律的另一半：**历史不但不能被删，也不能被改**。
+
+**D11-b**：仍然可写的只有 `result_session_id` 与 `detail`（§8.3 的语句顺序要在插完 Session 之后回填前者），它们不进 I11-A 的谓词。
+
+**D11-c（可测形式）**：真实 Postgres 上对一条 `APPLIED` 行逐列尝试改写，断言六列全部被拒、两列仍可写；再断言 `CLAIMED → APPLIED` 与 `CLAIMED → SUPERSEDED` 照常通过（否则 §8.3 的正常路径会被自己挡住）。
+
+#### D12 · `dispatch_authority` 由数据库维护（v1.4 新增，PC-CX-25）
+
+见 §12.3 D3 与下面的 D8。这一条与 D5 / D6 / D9 / D10 / D11 一样，**必须由数据库自己执行**，理由也一样：它要挡住的入口是"另一个版本的旧代码"。
+
+#### D13 · 授权投影的漂移查询（v1.4 新增，PC-CX-25）
+
+I12-A 是可查询的，因此它必须**被查**。下面这条语句对任何已提交状态返回 **0 行**；返回非 0 即为 P0：
+
+```sql
+SELECT t.id, t.dispatch_authority AS projected,
+       CASE WHEN p.id IS NOT NULL AND p.coordinator_enabled THEN 'COORDINATOR' ELSE 'LEGACY' END AS derived
+  FROM task t
+  LEFT JOIN project p ON p.id = t.project_id
+ WHERE t.dispatch_authority IS DISTINCT FROM
+       (CASE WHEN p.id IS NOT NULL AND p.coordinator_enabled THEN 'COORDINATOR' ELSE 'LEGACY' END);
+```
+
+**D13-a**：它是 04 / 19 / 22 单元的断言，也是运维可以对生产直接跑的一条 —— 与 §4.3 I10 同型。**"投影是新鲜的"从此是一条查询，不是一条承诺。**
+**D13-b**：这条查询 join 了 `project`，而 §12.3 D2 禁止的是**派发路径**去 join `project`。两者不冲突：D2 管的是"刹车不能挂在一张可以被删掉的行上"，而这里是一条**离线校验**，它的作用恰恰是证明刹车（task 行上的那一列）没有跑偏。
+
+#### D8 · 派发权投影由数据库维护（v1.2 新增，v1.4 重写，PC-CX-09 / PC-CX-25）
+
+D6 的触发器会在 task 行上取 `FOR SHARE`；这一条冻结**另一侧**的义务，两侧合起来才构成一个"数据库可证明的共同线性化点"。
+
+**v1.4 为什么重写这一条**：v1.2 把义务写成"`dispatch_authority` 的三个写入点都必须走同一个服务层 primitive"。那句话有一个它自己无法承认的前提 —— **写入点全在新服务层**。一个不认识这一列的旧 apiserver 把 Task 移进一个已启用 Coordinator 的 Project（它只写 `task.project_id`），或者结束一条占位（v1.2 的第三个写入点），都不会执行那个 primitive；投影因此停在 `LEGACY`，而 D6 会**忠实地按这个陈旧值放行旧 sweep**。§12.4 与 D7-note 同时声称"混合版本的正确性由数据库约束对任何版本成立"，这一格是假的。审查记为 `PC-CX-25`，判 **P0**。
+
+v1.4 的答案是把投影从"一个必须被正确维护的列"改成**一个数据库自己计算的派生列**：
+
+**D8-a（唯一 primitive，v1.4 重写）**：`task.dispatch_authority` **不再由任何服务层写入**。它由两个触发器维护，因此**任何版本的二进制、任何写入路径**（包括直接 SQL）都无法让它陈旧：
+
+```sql
+-- ① 写 task 的那一侧：这一列的值永远由派生式决定，谁写都一样。
+CREATE OR REPLACE FUNCTION task_dispatch_authority_projection() RETURNS trigger AS $$
+DECLARE enabled boolean;
+BEGIN
+  IF NEW.project_id IS NULL THEN
+    NEW.dispatch_authority := 'LEGACY';                     -- §12.2 的约 11 万行，逐字节不变
+    RETURN NEW;
+  END IF;
+  -- `FOR SHARE` 与 ② 的 `UPDATE project`（自动取 FOR NO KEY UPDATE）冲突，因此本行与翻转被强制排序；
+  -- 这与 D6 里那两个词是同一个理由，也同样是这一条成立的**前提**而不是谨慎。
+  SELECT p.coordinator_enabled INTO enabled FROM project p WHERE p.id = NEW.project_id FOR SHARE;
+  NEW.dispatch_authority := CASE WHEN enabled THEN 'COORDINATOR' ELSE 'LEGACY' END;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER task_dispatch_authority_projection
+  BEFORE INSERT OR UPDATE OF project_id, dispatch_authority ON task
+  FOR EACH ROW EXECUTE FUNCTION task_dispatch_authority_projection();
+
+-- ② 写 project 的那一侧：翻转 coordinator_enabled 时重算这个项目的全部 Task。
+--    本事务已持有 project 行的 FOR NO KEY UPDATE（UPDATE 自动取），因此这是 LO1 的 project → task 顺序；
+--    子查询按 id 升序取锁（D8-c），与批量插入 Session 的方向一致，不会成环。
+CREATE OR REPLACE FUNCTION project_dispatch_authority_fanout() RETURNS trigger AS $$
+BEGIN
+  IF NEW.coordinator_enabled IS NOT DISTINCT FROM OLD.coordinator_enabled THEN RETURN NULL; END IF;
+  UPDATE task SET dispatch_authority = dispatch_authority          -- 触发 ①，由它算出新值
+   WHERE id IN (SELECT id FROM task WHERE project_id = NEW.id ORDER BY id FOR NO KEY UPDATE);
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER project_dispatch_authority_fanout
+  AFTER UPDATE OF coordinator_enabled ON project
+  FOR EACH ROW EXECUTE FUNCTION project_dispatch_authority_fanout();
+```
+
+**D8-b（有占位的 Task 照常翻转，v1.4 行为变更）**：v1.2 用 `NOT EXISTS (…占位…)` **跳过**有占位的 Task，为的是让 I12 的旧写法（"占位来源与当前授权在每个瞬间都相容"）成立。那个跳过要付两笔账，第二笔是 P0：
+
+1. 它需要一个"占位释放时补投影"的第三写入点，而那个写入点只能在**结束 Session 的那个事务**里 —— 它会在 `session`（LO1 第四级）之后再去写 `task`（第三级），是全序里唯一一处**回头取锁**；
+2. 那个写入点同样在服务层，因此旧写端结束占位 ⇒ 投影永久停在 `LEGACY` ⇒ 旧 sweep 可以再派一次（`PC-CX-25` 的最小反例 B）。
+
+v1.4 直接删掉这个跳过，代价是承认一个**有界的**中间状态：翻转发生时如果有一条占位在飞（启用时是 `LEGACY_SWEEP`，停用时是 `COORDINATOR`，**两个方向对称**），它会继续跑到结束。这**不是**一个新的越权：
+
+- 那条 Session 是**翻转之前**合法插入的（D6 在翻转前放行），不是一次新的派发；
+- 翻转**之后**的 legacy 插入在物理上不可能 —— D6 的 `FOR SHARE` 与翻转的 `FOR NO KEY UPDATE` 冲突，等锁后 EvalPlanQual 必然读到翻转后的值并拒绝（下面 D8-c/D8-d 的原论证逐字不变）；
+- 控制环也不会趁机重复派发：该 Task 有占位，§7.4 第 4 条与 D5 各挡一次。
+
+因此 I12 被拆成 I12-A（投影新鲜，由本条保证）与 I12-B（无越权**新**派发，由 D6 保证），而"永不因为一次投影变更去杀掉别人已经启动的运行"这句话**逐字保留** —— v1.2 是靠不翻转来兑现它，v1.4 是靠不干涉在飞的运行来兑现它，后者不需要任何服务层配合。
+
+**D8-c（锁序）**：批量重算按 `task.id` **升序**取锁；一次插入多条 Session 的事务（batch execute）同样按 `task_id` 升序插入。两个方向用同一个全序，因此不会互相死锁。若仍撞上死锁，Postgres 会中止其中一个 —— 那是 fail closed，按 §8.6 LO4 有界重试。
 
 **D8-d（隔离级别）**：本协议在 `READ COMMITTED` 下成立，靠的是"等锁后重取最新行版本"。若某个入口跑在 `REPEATABLE READ` 下，`FOR SHARE` 撞上并发更新会直接抛 `40001` 序列化失败并中止**那一个入口**的事务 —— 同样 fail closed。两种隔离级别下都不存在"读到旧授权并放行"的第三种结果。
 
-**D8-note**：为什么不给 task 加一个 `authority_generation` 再做 CAS：generation 也要被读出来才能比较，而**普通读在 MVCC 下看不见未提交的写**，正是 `PC-CX-09` 本身。缺的从来不是一个版本号，是一次**冲突的锁**。加列只会让人以为问题解决了。
+**D8-e（触发器 ① 的锁与 LO1，v1.4 冻结）**：触发器 ① 从一次 `task` 写（LO1 第三级）里去读 `project`（第一级）并取 `FOR SHARE`，这是全序里唯一一处**由数据库代为发起**的逆序访问，必须写明白：
+
+- **新二进制**：写 `task.project_id` 的事务按 §13.4 AE10 / §8.6 LO2 **本来就先取了那两把 project 锁**，因此触发器要的锁已在手，顺序仍是 `project → task`，不产生新的等待。
+- **旧二进制**：它不取 project 锁，于是可能与一次并发的 `coordinator_enabled` 翻转成环。结果是 `40P01`，**一方被中止** —— 这正是我们要的：**fail closed，绝不 stale**。它落在 §8.6 LO4 的有界重试里，最终要么成功、要么变成一个有类型的冲突错误。
+- 把 `FOR SHARE` 去掉就没有环了，代价是"翻转与新任务写入"这一对回到不可串行化：新任务读到翻转前的值、翻转的 fan-out 又看不见这条未提交的新行，投影就地陈旧 —— 也就是这条 P0 本身。**买到的是"永不陈旧"，付出的是"极少数情况下一次可见的中止"。**
+
+**D8-note**：为什么不给 task 加一个 `authority_generation` 再做 CAS：generation 也要被读出来才能比较，而**普通读在 MVCC 下看不见未提交的写**，正是 `PC-CX-09` 本身。缺的从来不是一个版本号，是一次**冲突的锁**。加列只会让人以为问题解决了。v1.4 再补一句同型的话：缺的也从来不是"再多一个服务层写入点"，是**让这一列根本不由服务层写**。
 
 #### D7 · Rollout 顺序（运维层，不承担正确性）
 
@@ -697,6 +930,8 @@ COMMIT;
   UPDATE project_runtime SET … WHERE project_id = :p AND fencing_token = :token
   ```
   影响行数为 0 即整个事务回滚。**这是"旧回包被拒绝"的唯一实现方式**（AC9 / 单元 19）。**v1.3 修订**：v1.2 写的是"第一句永远是"，而一次 outcome 常常同时是 §13.4 AE6 的验收事实写入（`APPLY_VERIFICATION_VERDICT` 会改 Task 状态），那条路径要求先取 `project` 行锁 —— 两句"必须第一"不可能同时成立。v1.3 的唯一顺序由 §8.6 LO1 给出：**`project` → `project_runtime` → `task` → `session`**，fencing token 条件落在 `project_runtime` 那一步，且**恒在任何副作用之前**。要害不是它是不是第一句，是它在副作用之前、并且全系统只有一个取锁顺序（`PC-CX-19`）。
+
+**F0（token 证明的是提交时的授权，v1.4 冻结，PC-CX-21）**：`fencing_token` 回答的问题恰好一个 —— **"这次提交是不是由当时的租约持有者做的"**。它**不是**一条可以对历史行永久比对的等式：每一次成功取租约都让它 +1，而上一次派发出去的 Session 通常还在飞。任何一条把"动作的 token 等于 runtime **当前** token"写成不变量的条款都会被**下一次完全正常的租约**弄假（§4.3 I11-B / §7.7 D9-e）。恒成立的写法只有单调关系 `action.fencing_token <= project_runtime.fencing_token`。
 
 **F1**：**任何**写入控制环状态的语句都必须带 `fencing_token` 条件 —— 包括 `project_action` 的插入、blocker 的开关、审计行。少一处就是一个可以被过期持有者写脏的口子。
 **F2**：**取不到租约不是错误**，不开 blocker、不记 FAIL，只记一条 `lease_contended` 的 debug 审计并安排下次唤醒。把租约竞争当失败会在滚动升级的几十秒里刷出一屏假告警。
@@ -829,6 +1064,8 @@ COMMIT;
 3. **跳过对应的副作用**（不再插第二条 Session、不再投第二条消息）。
 4. **继续提交 outcome 的全部其余部分** —— `blockersOpened` / `blockersCleared` / `project_decision` / `nextWakeAt` / `project_event.consumed_at` 一个都不能少。
 
+**C6（撤权不是冲突，但走同一个形状，v1.4 新增，PC-CX-26）**：§9.6 AU1 的复核判定一个动作"此刻已不被允许"时，它**不是**一次唯一约束冲突，但处理方式与 C2 逐字相同：该动作记 `status = REFUSED`、`refusal_code = AUTHORITY_REVOKED`，**跳过它的副作用**，outcome 的其余部分（blocker、审计行、`nextWakeAt`、`consumed_at`）一个不少地提交。理由与 C2 一样：把它做成回滚会让本次一同要提交的事件消费丢掉，控制环在这条事件上活锁 —— 那正是 `PC-CX-04`，只是触发它的从"键冲突"换成了"人改了主意"。
+
 **C3（唯一的合法回滚）**：整事务回滚的合法原因**恰好一个** —— §8.1 的 fencing token 条件影响 0 行，即本实例已被接管。此时回滚是对的：接管者持有更大的 token，它会重新 reconcile 同一份事实，而本实例什么都不该留下。
 
 **C4（未分类异常，fail closed 但不活锁）**：C1 覆盖之外的任何异常都会 abort 事务，因此**不可能**在同一事务里补救。处理方式冻结为：
@@ -849,7 +1086,7 @@ v1.2 分三处各自加了一把锁（D6 的 task `FOR SHARE`、D8 的 task `FOR
 
 > **`project`（按 id 升序） → `project_runtime`（同一 project） → `task`（按 id 升序） → `session`（按 id 升序）**
 
-一个事务可以只取其中一段（只写 task 的授权翻转就只取第三级），但**不得跳回去**：已经取过 `task` 的事务不得再去取 `project`。这条是防死锁的全部依据 —— 环只可能出现在两个事务以相反顺序取同两把锁时，而全序把这种可能性从系统里删掉了。
+一个事务可以只取其中一段（只写 `coordinator_enabled` 的翻转就从第一级开始、由触发器带到第三级），但**不得跳回去**：已经取过 `task` 的事务不得再去取 `project`。**v1.4 起，含任何被 §9.2 门控的动作的 reconcile 提交事务同样从第一级开始**（§9.6 AU1），因此它与验收事实写入者、与人工策略写入者共用同一把 `project` 行锁，顺序不变。唯一一处由数据库代为发起的逆序访问是 §7.7 D8-e 的投影触发器，那一处的边界与代价在 D8-e 里逐条写明。这条是防死锁的全部依据 —— 环只可能出现在两个事务以相反顺序取同两把锁时，而全序把这种可能性从系统里删掉了。
 
 **LO2（跨 Project）**：一次事务涉及两个 Project（唯一的情形是 §13.4 AE10 的 Task 跨 Project 移动）时，**两个 `project` 行按 id 升序先后取满**，然后才往下走。反向移动（B→A）因此与正向移动（A→B）取同一顺序，两个方向并发不会成环。
 
@@ -898,6 +1135,8 @@ v1.2 分三处各自加了一把锁（D6 的 task `FOR SHARE`、D8 的 task `FOR
 
 **最后一行是硬门**：**任何策略下控制环都不能自己把 Project 标 DONE**。它只能在验收全 PASS 之后产生一个"可以标 DONE"的提议（§13.4）。这是 AC12 的字面要求，也是项目 instructions 里"登录用户保留最终控制权"的落点。
 
+**P4（矩阵在提交点再走一遍，v1.4 新增，PC-CX-26）**：本矩阵在 §6.3 第 4 步按快照求值一次，在第 8a 步按 project 行锁之后重读的那一行**再求值一次**（§9.6 AU1）。两次不一致时以第二次为准：被撤销的动作记 `REFUSED` / `refusal_code = AUTHORITY_REVOKED`，outcome 其余部分照常提交。**只有第二次是门，第一次只是为了不白跑。**
+
 **P2**：`⚠` 的实现是一条 `owner = USER` 的 blocker + 一条 `REQUEST_APPROVAL` 动作，**不是**一个静默的跳过。用户必须能在 Web/API/CLI 上看到"控制环想做 X，等你点头"。
 **P3**：矩阵是**表驱动**的，单元 12 必须以数据表形式实现并逐格测试（`policy × action × 条件`），不允许写成一串 if。
 
@@ -913,7 +1152,7 @@ v1.2 分三处各自加了一把锁（D6 的 task `FOR SHARE`、D8 的 task `FOR
 
 v1 的预算只有两个整数，都在 `project` 上：
 
-- `maxConcurrentTasks`：本项目同时在飞的 Session 上限（不含 Coordinator Session 本身）。
+- `maxConcurrentTasks`：本项目同时在飞的 Session 上限（不含 Coordinator Session 本身）。**v1.4 冻结：它是一个对全部入口成立的硬上限**，见 §9.6 CAP1。
 - `sessionBudgetPerDay`：滚动 24h 内**由控制环发起**的 Session 数上限。用户手动发起的不计入。
 
 **两个上限的恢复方式不同，因此持久化形式也不同（v1.1 修订，PC-CX-05）**：
@@ -965,6 +1204,58 @@ v1 把 `BUDGET_EXHAUSTED` 的 owner 写成 `USER`。那是一处**内部矛盾**
 | `failureCount ≥ MAX` ⇒ `TEST_FAILED`（`USER`/`HUMAN`） | `AWAITING_HUMAN`（守卫 2） | 升级到期时刻 | blocker |
 
 v1.1 的 §19 汇总表把退避期的权威状态直接写成 `EXECUTING`，那是把"某个 Task 的贡献"误当成了"项目的状态"：在只有一个失败任务的最小场景里守卫 5 根本不成立，`runStateOf` 只能返回 `PLANNING`，于是同一个场景在两处得到两个答案（`PC-CX-11` 的后半）。**汇总表不是状态的来源，`runStateOf` 才是**；§20.3 的断言逐行核对这张表。
+
+### 9.6 人工撤权、并发上限与派发的共同门（v1.4 新增，PC-CX-26）
+
+§9.2 的矩阵、§7.4 的第 6/7 条与 §9.4 的两个上限**全部只在快照上被读过一次**，而一次 reconcile 的唯一提交条件是 §8.1 F1 的 fencing token。用户改 `coordinatorEnabled` / `automationPolicy` / `maxConcurrentTasks` / `sessionBudgetPerDay` **不推进 token**，人工"开始执行"也不推进它。于是两件事都能发生，而且都留下一个说不清是谁越权的已提交状态：
+
+- **反例 A（撤权后仍派发）**：控制环在 `AUTO` 快照上决定派发；用户随后提交 `coordinatorEnabled = false` 或 `AUTO → MANUAL`；控制环的 token 仍然有效，Session 照常插入。最终状态是"**自动化已被关掉 + 一条关掉之后由控制环创建的 Session**"。
+- **反例 B（并发上限被越过）**：快照 `inFlight = 0`、`max = 1`。用户手动启动 Task B，控制环同时派 Task A。D5 是 **per-Task** 的唯一索引，两个 Task 的键不同，两边都成功 ⇒ `inFlight = 2`。
+
+审查记为 `PC-CX-26`。两个反例是同一个缺口：**没有一个所有入口都必然经过的、project 级的线性化点。** token 是 reconcile 之间的锁，不是 reconcile 与人之间的锁。
+
+**AU1（授权复核门，冻结）**：任何 outcome，只要它含有**至少一个被 §9.2 门控的动作**（即不是 `SCHEDULE_WAKE` / `NOOP` / `RAISE_BLOCKER` / `CLEAR_BLOCKER` / `AGGREGATE_PARENT` 这五个三策略全 ✔ 的行），其提交事务的**第一句**必须是
+
+```sql
+SELECT coordinator_enabled, automation_policy, max_concurrent_tasks, session_budget_per_day, config_revision
+  FROM project WHERE id = :p FOR NO KEY UPDATE;
+```
+
+锁到手之后（这是一条**新语句**，`READ COMMITTED` 取新快照）用**读回来的这一行**重跑 §9.2 与 §7.4 的第 6、7 条。任何一个动作因此不再被允许 ⇒ 该动作记 `status = REFUSED`、`refusal_code = AUTHORITY_REVOKED`，**跳过它的副作用**，outcome 其余部分照常提交（§8.5 C2 的同一形状），并把 `configRevision` 的前后值写进 `project_decision.detail`。
+
+**AU1-a（为什么这一把锁就够）**：用户改这四个字段的语句是 `UPDATE project SET … WHERE id = :p`，Postgres 对它**自动取 `FOR NO KEY UPDATE`**。同一把锁 ⇒ 两者互斥 ⇒ 只有两种提交顺序，每一种的结果都是唯一确定的：
+
+| 顺序 | 结果 |
+|---|---|
+| 人工写先提交 | 控制环等锁 → 读到新值 → 被撤销的动作 `REFUSED(AUTHORITY_REVOKED)` → **不产生 Session** |
+| 控制环先提交 | 人工写等锁 → 控制环的 Session 已存在且合法（它是在授权仍有效时提交的）→ 人工写照常生效，此后不再有新的自动派发 |
+
+  **不存在第三种结果**，也不需要任何新的 primitive —— 它就是 §8.6 LO1 第一级的那把锁，控制环本来就在验收事实写入时取它（§13.4 AE6-a）。v1.4 只是把"什么时候必须取"从"写验收事实时"扩到"提交任何被策略门控的动作时"。
+
+**AU2（`project.config_revision`，冻结）**：`BigInt NOT NULL DEFAULT 0`，**上述四个字段的每一次写入都 +1**，单调不复用（与 §8.2 GE1 同一条纪律）。它进 `decisionInput.world.project`（§6.1），因此：
+
+- **S3 成立**：授权变化必然改变 `decisionInputHash`，"同 hash ⇒ 同决策"不会被一个看不见的输入弄假；
+- **审计可读**：`project_decision` 同时记下"决策时读到的 revision"与"提交时读到的 revision"，一次撤权竞态因此是**一行可以直接看的记录**，不是一次考古；
+- **它不是并发控制**：互斥是 AU1 的那把锁，revision 只是让这件事**可观测**。把 revision 当成 CAS 会重蹈 D8-note 的覆辙 —— 普通读在 MVCC 下看不见未提交的写。
+
+**AU3（哪些字段算"授权"，封闭）**：恰好四个 —— `coordinator_enabled`、`automation_policy`、`max_concurrent_tasks`、`session_budget_per_day`。改标题、改 goal、改 `acceptanceCriteria`、改 `coordinatorWorkspaceId` **不**进这个集合（前三个走 §13.4 AE6 的验收事实门，最后一个只影响轮换落点）。**一个字段同时进两个集合是允许的**（`acceptanceCriteria` 只在 AE6 里），但一个能改变 §9.2 判定的字段不在 AU3 里就是缺陷，契约测试从 §9.2 与 §7.4 的读集反推本表。
+
+**CAP1（并发上限是所有入口共享的硬门，冻结）**：`maxConcurrentTasks` 对**每一个**会为该 Project 的 Task 创建占位 Session 的入口成立 —— 控制环 `DISPATCH_TASK` **与**人工"开始执行"。两者都必须在 AU1 的那把 project 行锁**之后**执行
+
+```sql
+SELECT count(*) FROM session s JOIN task t ON t.id = s.task_id
+ WHERE t.project_id = :p AND s.deleted_at IS NULL AND s.status IN ('PENDING','RUNNING');
+```
+
+并在 `count >= max_concurrent_tasks` 时拒绝本次插入。因为两个入口持有同一把行锁，这个 `count` 在它们之间是**精确**的，上限**不可能被并发越过**（I16 的后半）。
+
+**CAP1-a（人工入口被拒时的确定性结果）**：返回有类型的 `PROJECT_CONCURRENCY_LIMIT`，带上该 Project 当前的 `max_concurrent_tasks` 与占着槽位的 Task id 列表。**它不是 500，也不是静默排队。** 这不是控制环在否决用户：上限是**用户自己设的那个数**，错误信息直接指向改它的地方。控制环入口被拒时走 §9.4 的既有形状：一条写明理由的 `NOOP` 审计行 + `nextWakeAt = now + 60s`，**不开 blocker**。
+
+**CAP1-b（为什么没有把它做成数据库约束）**：一个"每个 project 至多 N 条占位"的约束不能用唯一索引表达，只能用约束触发器 —— 而这里**不需要**它对旧二进制成立：`coordinatorEnabled = true` 的 Project，其全部 Task 的 `dispatch_authority` 必为 `COORDINATOR`（I12-A），而旧 sweep 对 `COORDINATOR` 权的 Task 一律被 D6 拒绝（I12-B）。因此该 Project 上能创建占位的入口**恰好只剩控制环与人工两个**，两个都在新二进制里，一把共享的行锁足够。**这是一次有论证的取舍，不是遗漏** —— 论证依赖 I12-A/I12-B，若将来任何一条被削弱，本条必须重新评估。
+
+**CAP2（`sessionBudgetPerDay` 不变）**：它只约束控制环发起的 Session（§9.4），因此只在 AU1 的复核里判一次，超出即 `BUDGET_EXHAUSTED` blocker（`SYSTEM`/`TIME`）。人工发起的不计入，也不被它拒绝。
+
+**CAP3（可测形式）**：双事务 barrier，四个 mutator（`coordinatorEnabled = false`、`AUTO → MANUAL`、`max` 调低、人工启动另一个 Task）× 两个提交顺序，每一格都断言结果落在 AU1-a 表的两行之一；并断言**任何顺序下**已提交的占位 Session 条数 ≤ `max_concurrent_tasks`。真实 Postgres 上跑两条连接。
 
 ---
 
@@ -1019,7 +1310,7 @@ SELECT p.id
 
 对每个 `status = OPEN ∧ coordinatorEnabled ∧ run_state ∉ {AWAITING_HUMAN, SETTLED}` 的 Project，**下列至少一条为真**：
 
-- **(a)** 存在一条本项目 Task 的 LIVE Session，**且它可归属**（I11）—— 要么是某条 `project_action(type = DISPATCH_TASK, status = APPLIED)` 的 `result_session`，要么 `dispatch_origin = 'USER'`。**v1.2 修订**：v1.1 只认前一支，于是"用户手动启动了唯一那个任务"这个完全正常的局面在活性查询上四条全不成立，被判 P0 违约（`PC-CX-14`）。人的显式动作是项目在推进的**证据**，不是漏洞；它不该被要求去伪装成一条控制环动作；
+- **(a)** 存在一条本项目 Task 的 LIVE Session，**且它可归属**（I11-A —— **恒成立的那一句**，不是 D9 提交时的那个等号；用当前 token 去比历史动作会让这一条在下一次租约之后必然为假，`PC-CX-21`）—— 要么是某条 `project_action(type = DISPATCH_TASK, status = APPLIED)` 的 `result_session`，要么 `dispatch_origin = 'USER'`。**v1.2 修订**：v1.1 只认前一支，于是"用户手动启动了唯一那个任务"这个完全正常的局面在活性查询上四条全不成立，被判 P0 违约（`PC-CX-14`）。人的显式动作是项目在推进的**证据**，不是漏洞；它不该被要求去伪装成一条控制环动作；
 - **(b)** 存在一次在飞的 Coordinator Turn；
 - **(c)** 存在 ≥1 条 open blocker，且**五个字段齐全**（§11.1）：`kind`、`owner`、`recovery`、`required_action`、`next_check_at`；
 - **(d)** `project_runtime.next_wake_at` 非空且在未来，且 `next_wake_reason` 非空。
@@ -1195,7 +1486,7 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 | 步骤 | 内容 | 幂等性 |
 |---|---|---|
 | 1 | 建枚举 `ProjectRunState` / `ProjectAutomationPolicy` / `TaskCompletionPolicy` / `DispatchAuthority` / **`DispatchOrigin`** / **`BlockerRecovery`**；建表 `project_runtime` / `project_event` / `project_action` / `project_blocker` / `project_decision` | prisma migrate 单次 |
-| 2 | 加列：`project.coordinator_enabled` / `automation_policy` / `max_concurrent_tasks` / `session_budget_per_day`；`task.completion_policy` / `dispatch_authority` / **`task.dispatch_attempt`（`BigInt NOT NULL DEFAULT 0`，§8.2 DA1，v1.2 新增）** / **`task.verdict_revision`（`BigInt NOT NULL DEFAULT 0`，§13.2 V7，v1.3 新增）**；`session.project_action_id` / **`session.dispatch_origin`（DB 默认 `'LEGACY_SWEEP'`，§7.7 D6-a 依赖这个默认值）** | 全部**可空或有默认** |
+| 2 | 加列：`project.coordinator_enabled` / `automation_policy` / `max_concurrent_tasks` / `session_budget_per_day` / **`config_revision`（`BigInt NOT NULL DEFAULT 0`，§9.6 AU2，v1.4 新增）**；`task.completion_policy` / `dispatch_authority` / **`task.dispatch_attempt`（`BigInt NOT NULL DEFAULT 0`，§8.2 DA1，v1.2 新增）** / **`task.verdict_revision`（`BigInt NOT NULL DEFAULT 0`，§13.2 V7，v1.3 新增）**；`session.project_action_id` / **`session.dispatch_origin`（DB 默认 `'LEGACY_SWEEP'`，§7.7 D6-a 依赖这个默认值）** | 全部**可空或有默认** |
 | 3 | 为每个既有 Project 回填一行 `project_runtime`：`run_state = 'PLANNING'`、`fencing_token = 0`、`next_wake_at = NULL`、`coordinator_generation = 0` | `ON CONFLICT (project_id) DO NOTHING` |
 | **3b** | **收敛存量重复占位**：对每个 `task_id`，保留 `created_at` 最新的一条 `status IN ('PENDING','RUNNING') AND deleted_at IS NULL` 的 Session，其余置 `status = 'CANCELLED'`、`end_reason = 'duplicate_live_session_reconciled'`；**把受影响行数打进迁移输出**（§7.7 D5-c）。**必须在步骤 6 建唯一索引之前**，否则迁移在生产上直接失败 | 幂等（再跑一次影响 0 行） |
 | 4 | 既有 Project 一律 `coordinator_enabled = false`、`automation_policy = 'MANUAL'` | 列默认即如此（见 G1） |
@@ -1203,13 +1494,14 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 | 6 | 建索引：`project_event (project_id, dedupe_key) WHERE consumed_at IS NULL`、`project_event (next_attempt_at) WHERE consumed_at IS NULL`、`project_blocker (project_id, dedupe_key) WHERE resolved_at IS NULL`、`project_runtime (next_wake_at) WHERE next_wake_at IS NOT NULL`、`project_action (idempotency_key)`、`project_decision (project_id, created_at DESC)`、**`session_task_execution_claim_idx`（§7.7 D5）**、**`project_blocker_episode_idx`（§11.3 BE1，v1.3 新增：`(project_id, dedupe_key, lifecycle_generation)`，覆盖全部行而非仅 open 行）** | `CREATE … IF NOT EXISTS` |
 | **6b** | **建触发器** `session_dispatch_authority_guard`（§7.7 D6）。它必须与步骤 2 的 `session.dispatch_origin` 在**同一次迁移**里落地：只有列没有触发器等于没有硬门，只有触发器没有默认值等于旧二进制插不进任何 Session。**函数体里的 `FOR SHARE` 是 §7.7 D8 的一半，漏掉它整条 `PC-CX-09` 就回来了，而且不会有任何编译期或 `migrate diff` 的信号** | `CREATE OR REPLACE` + `DROP TRIGGER IF EXISTS` |
 | **6c** | **建归属约束**（§7.7 D9，v1.3 新增）：可延迟约束触发器 `session_dispatch_attribution_check` + CHECK 约束 `session_action_only_for_coordinator_chk`。两者必须与步骤 2 的 `session.project_action_id` 同一次迁移落地；CHECK 在建之前需先把存量里"非 COORDINATOR origin 却带动作 id"的行收敛为 NULL（迁移前不存在这种行，因为这一列本身是新的，但**必须写成幂等语句**以便回滚后重放） | `DROP … IF EXISTS` + `CREATE`；`ADD CONSTRAINT … NOT VALID` 后 `VALIDATE` |
+| **6d** | **建 v1.4 的三个数据库对象**：`task_claimed_project_move_guard`（D10，可延迟约束触发器）、`project_action_applied_immutable_guard`（D11，`BEFORE UPDATE`）、`task_dispatch_authority_projection` + `project_dispatch_authority_fanout`（D12/D8-a，两个投影触发器）。**建投影触发器之前必须先按 D13 的派生式回填一次存量**（`UPDATE task SET dispatch_authority = dispatch_authority` 即可，触发器会算出正确值），否则迁移完成的那一刻投影就已经是陈旧的 —— 阶段 A 的存量全是 `LEGACY`、全部 Project 的 `coordinator_enabled` 全是 false，回填因此是一次 0 变更的空跑，但**必须写进迁移**，否则回滚重放后就不是了 | `DROP … IF EXISTS` + `CREATE`；回填幂等 |
 | 7 | **不含任何 `DROP COLUMN`** | 同 PAC M4 |
 
 - **G1（关键）**：列默认值与"新建 Project 的默认"是**两个不同的值**，不能靠一个 `@default` 同时表达。`automation_policy` 的**数据库默认是 `MANUAL`**（保护存量），**服务层在创建新 Project 时显式写入 `GUARDED_AUTO`**。反过来做（默认 GUARDED_AUTO + 迁移里 UPDATE 存量）会在迁移与新代码上线之间留一个窗口，窗口里创建的项目全是自动的。同理 `coordinator_enabled` 数据库默认 `false`，新建时显式 `true`。**04 单元必须同时测这两条**：迁移后存量为 MANUAL/false，且新建为 GUARDED_AUTO/true。
 - **G2**：迁移**不回填任何 blocker、不产生任何事件、不安排任何唤醒**。迁移完成的那一刻，控制环对存量项目**完全静默**。
 - **G3**：用户为一个既有 Project 打开 `coordinatorEnabled` 时，服务层必须**同时**要求一个显式的 `automationPolicy`（不给默认），并在同一事务里产生一条 `user.policy_changed` 事件把它接进环里。"沿用安全默认"= 不动它；"明确选择策略" = 打开时必须选。
 - **G4**：迁移必须在**空库**和**生产快照**上各跑一次、`migrate diff` 对新增列为空。验证手法照 PAC M3：一次性 throwaway postgres 跑 `prisma migrate deploy` + `migrate diff`，`grep` 自己新增的列名，而不是看 drift 总数。
-- **G5（v1.1 新增，v1.2 扩充）**：步骤 3b / 6 / 6b 三件事**都不是 Prisma schema 能表达的**（partial unique index 的谓词、plpgsql 触发器、数据收敛），因此它们是迁移文件里的裸 SQL。**既有教训：裸 SQL 躲得过编译期检查** —— `prisma migrate diff` 也不会告诉你触发器没了。因此 04 单元的迁移验证必须**显式**查这三样东西存在（`pg_indexes` / `pg_trigger` / 收敛后每个 task 的占位 Session 计数 ≤ 1），而不是只看 `migrate diff` 为空。**v1.2 再加一条**：还要显式断言触发器函数体里含 `FOR SHARE`（`pg_get_functiondef` 上 grep），因为一个少了两个词的触发器与一个正确的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是那个 P0。**v1.3 再加三条**：断言 `session_dispatch_attribution_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（`pg_trigger.tgdeferrable AND tginitdeferred`；一个立即执行的同名触发器会让 §8.3 的语句顺序无法提交，症状是所有派发失败）、断言 CHECK 约束存在（`pg_constraint`）、断言 `project_blocker_episode_idx` 覆盖的是全部行而不是 open 行（`pg_indexes.indexdef` 里**没有** `WHERE`）。三样都是裸 SQL 的产物，`migrate diff` 一样看不见。
+- **G5（v1.1 新增，v1.2 扩充）**：步骤 3b / 6 / 6b 三件事**都不是 Prisma schema 能表达的**（partial unique index 的谓词、plpgsql 触发器、数据收敛），因此它们是迁移文件里的裸 SQL。**既有教训：裸 SQL 躲得过编译期检查** —— `prisma migrate diff` 也不会告诉你触发器没了。因此 04 单元的迁移验证必须**显式**查这三样东西存在（`pg_indexes` / `pg_trigger` / 收敛后每个 task 的占位 Session 计数 ≤ 1），而不是只看 `migrate diff` 为空。**v1.2 再加一条**：还要显式断言触发器函数体里含 `FOR SHARE`（`pg_get_functiondef` 上 grep），因为一个少了两个词的触发器与一个正确的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是那个 P0。**v1.3 再加三条**：断言 `session_dispatch_attribution_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（`pg_trigger.tgdeferrable AND tginitdeferred`；一个立即执行的同名触发器会让 §8.3 的语句顺序无法提交，症状是所有派发失败）、断言 CHECK 约束存在（`pg_constraint`）、断言 `project_blocker_episode_idx` 覆盖的是全部行而不是 open 行（`pg_indexes.indexdef` 里**没有** `WHERE`）。三样都是裸 SQL 的产物，`migrate diff` 一样看不见。**v1.4 再加四条**：断言 `task_dispatch_authority_projection` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，翻转与并发的任务写入就不再互斥，`PC-CX-25` 的第三种形状立刻回来，而 `pg_trigger` 里看不出差别，同 v1.2 那一条）、断言 `task_claimed_project_move_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**、断言 `project_action_applied_immutable_guard` 存在，以及**直接跑一次 §7.7 D13 的漂移查询并断言返回 0 行**（这一条比前三条都强：它不问对象在不在，它问结果对不对）。
 
 ### 12.2 没有 Project 的 Task（约 11 万行）
 
@@ -1226,12 +1518,16 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
 - **D1**：既有三条 sweep 的候选查询一律追加 `AND dispatch_authority = 'LEGACY'`。
 - **D2（关键）**：**派发权必须投影在 task 行上，绝不能靠 join `project` 判断**。既有教训：sweep 去 join `task_list` 判 paused，结果那一行可以被删掉 —— 刹车跟着一起没了，55517 条孤儿任务继续跑。`project` 行同样可以被删/改，因此判据必须在 task 自己身上。
-- **D3（v1.2 修订）**：`dispatch_authority` 的写入点恰好**三处**，且**每一处都必须走 §7.7 D8-a 的 `FOR NO KEY UPDATE` → 读占位 → 写 的同一个 primitive**：
-  1. Task 被填上 / 移出一个 `coordinatorEnabled = true` 的 `projectId`；
-  2. Project 的 `coordinatorEnabled` 被切换（同一事务批量更新其 Task）；
-  3. **（v1.2 新增）占位释放时的补投影**：一条占位 Session 落终态的那个事务，在**同一事务**里把该 Task 的 `dispatch_authority` 补齐到它应有的值。这一处存在的唯一理由是 D8-b —— 持有占位的 Task 在 1/2 里被跳过，总得有人在占位消失时把它补上，而"占位消失"这个事实只有那个事务知道。
+- **D3（v1.4 重写，PC-CX-25）**：`dispatch_authority` **没有服务层写入点**。它是一个**派生列**，值恒等于
+  `authorityOf(task) = (task.project_id IS NOT NULL ∧ project.coordinator_enabled) ? 'COORDINATOR' : 'LEGACY'`，
+  由 §7.7 D8-a 的两个触发器在**每一次**下列写入时重算，无论写它的是哪一个版本的二进制、走的是服务层还是裸 SQL：
+  1. `task.project_id` 被写（新建、填入、移出、跨 Project 移动）；
+  2. `project.coordinator_enabled` 被切换（fan-out 到该项目全部 Task，按 id 升序取锁）；
+  3. 任何人试图**直接写** `task.dispatch_authority` —— 触发器一律用派生值覆盖，因此**写不进一个错的值**。
 
-  三处用同一个 primitive 不是整洁癖：D8-a 的正确性论证里"此刻不可能有新的占位插入正在进行"依赖**所有**授权写入者都持有那把与 D6 的 `FOR SHARE` 冲突的锁。漏掉任何一处，I12 在那一条路径上就不成立。**用户手动"开始执行"仍然不受 `dispatch_authority` 约束** —— 那是人的显式动作，走既有路径（`dispatch_origin = 'USER'`，D6 显式放行），并产生一条 `user.manual_trigger` 事件让控制环知道。
+  v1.2 这里写的是"恰好三处服务层写入点，每处都走同一个 primitive"，其中第三处是"占位释放时的补投影"。三处全在新服务层，于是旧写端做前两件事的任何一件都会留下 stale `LEGACY`，而 D6 会按这个陈旧值放行旧 sweep（`PC-CX-25`，P0）；第三处还额外要求在 `session` 之后回头写 `task`，是 §8.6 LO1 全序里唯一一处逆序。v1.4 把维护责任整体交给数据库，三处一起消失：**投影不可能陈旧，因为没有人在维护它** —— 它就是那个派生式本身。新鲜度由 §7.7 D13 的漂移查询随时可验（I12-A）。
+
+  **用户手动"开始执行"仍然不受 `dispatch_authority` 约束** —— 那是人的显式动作，走既有路径（`dispatch_origin = 'USER'`，D6 显式放行），并产生一条 `user.manual_trigger` 事件让控制环知道。
 - **D4**：`task.autoRunWhenReady` 对 `COORDINATOR` 权的任务**无效**（它是 legacy sweep 的开关）。UI 必须据此说明，不能让用户以为关掉它就停了。
 - **D5 / D6 / D7（v1.1 新增，见 §7.7）**：`dispatch_authority` 这一列本身只是一个**投影**，它回答"该由谁派"，但**不能**阻止别人派 —— 它只在读它的那个二进制里有效。真正阻止越权与重复的是 §7.7 的唯一索引（D5）与触发器（D6），D7 是让这两者在滚动升级期间连告警都不产生的部署顺序。**本节（§12.3）与 §7.7 的分工是：§12.3 说"应该由谁派"，§7.7 说"凭什么别人派不了"。** v1 只有前一半，因此 `PC-CX-02` 成立。
 
@@ -1239,7 +1535,7 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
 | 组合 | 期望行为 |
 |---|---|
-| **新旧 apiserver 并存（滚动升级）** | 旧实例不认识 `project_event`，不消费；新实例正常消费。**新实例之间**由 fencing token 串行化（§8.1）；**新旧之间** fencing token 完全无效（旧实例根本不取租约），因此由 §7.7 的 D5 唯一索引（至多一条占位 Session）+ D6 触发器（`COORDINATOR` 权任务拒绝无派发权的插入）保证，两者都在数据库里执行，与二进制版本无关。D7 的两阶段部署使正常升级路径下连触发器都不会命中。**v1 在这一格里把"旧实例不消费事件"当成了"旧实例不会派发"，这两件事不相干** —— 旧实例的三条 legacy sweep 照样在跑（`PC-CX-02`）。19/22 单元必须构造"旧 sweep 查询 + 新 Coordinator + 同一个 Task"的场景，而不是两个新实例 |
+| **新旧 apiserver 并存（滚动升级）** | 旧实例不认识 `project_event`，不消费；新实例正常消费。**新实例之间**由 fencing token 串行化（§8.1）；**新旧之间** fencing token 完全无效（旧实例根本不取租约），因此由 §7.7 的 D5 唯一索引（至多一条占位 Session）+ D6 触发器（`COORDINATOR` 权任务拒绝无派发权的插入）保证，两者都在数据库里执行，与二进制版本无关。D7 的两阶段部署使正常升级路径下连触发器都不会命中。**v1 在这一格里把"旧实例不消费事件"当成了"旧实例不会派发"，这两件事不相干** —— 旧实例的三条 legacy sweep 照样在跑（`PC-CX-02`）。**v1.2 又留下了这一格的第二个假前提**：D6 忠实执行 `task.dispatch_authority`，而那一列当时由**新服务层**维护，于是旧写端移动 Task 或结束占位都能留下 stale `LEGACY` 并被旧 sweep 合法放行（`PC-CX-25`，P0）。v1.4 起这一列由 §7.7 D8-a 的触发器维护、由 D13 的漂移查询可验，**这一格才第一次真的"与二进制版本无关"**。19/22 单元必须构造"**旧二进制的裸 SQL** 写 `task.project_id` + 新 Coordinator + 同一个 Task"的场景，而不只是旧 sweep 的 INSERT，也不是两个新实例 |
 | **新 apiserver × 旧 runner** | 控制环不改 runner 契约。runner 侧无改动 ⇒ 无需 bump 版本；**若后续单元真的改了 runner，必须 bump 版本并重建 web 镜像**（PAC §11.5，既有部署纪律） |
 | **旧 web / iOS / macOS × 新 apiserver** | 所有既有接口形状不变，新字段以**可选字段**追加。旧端看不到 Coordinator 状态，但 Project/Task/Session 的读写完全照常。Swift 端对新增可选字段的解码必须实测过 —— 既有教训：wire 变更而原生端没跟，只会静默漏改 |
 | **新 web × 旧数据** | 无 `project_runtime` 行（理论上不该出现，迁移已回填）时展示"未启用"空态，不报错 |
@@ -1265,7 +1561,7 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 | `ALL_CHILDREN_DONE` | 全部直接子任务 ∈ {DONE, CANCELLED} 且至少一个 DONE |
 | `VERIFICATION_PASSED` | 满足 `ALL_CHILDREN_DONE`，**且**指向本任务的验证任务（`verifiesTaskId = this`）全部 DONE 且 verdict = PASS |
 
-- **AG1**：聚合是**重算**，不是增量累加。输入是子任务当前状态集合，因此重复事件、乱序、并发完成都收敛到同一结果（幂等键的 epoch 取子状态摘要，§8.2）。
+- **AG1（v1.4 修订，PC-CX-27）**：聚合是**重算**，不是增量累加。输入是子任务当前状态集合，因此重复事件、乱序、并发完成都收敛到同一结果。**它没有幂等键**：正确形状是下面 AG5 的 current-state CAS。v1.2–v1.3 这一句的尾巴写着"幂等键的 epoch 取子状态摘要"，而 §7.3 / §8.2 / AG5 在 v1.3 已经把它冻结成无键 —— 同一件事在正文里有两套相反的规范，按哪一条实现都能引用"冻结"条款（`PC-CX-27`）。该尾巴已删除。
 - **AG2**：聚合**自底向上**逐层进行，一次 reconcile 内可跨多层；成环由既有的 `parentTaskId` 约束与 `task-dag` 检查挡住，检测到环即开 `DEPENDENCY_CYCLE` blocker 并停止聚合。
 - **AG3**：子任务从 DONE 被改回 OPEN（重开）时，父任务**必须跟着回退**（`DONE → OPEN`），否则聚合状态会单向锁死。这条要单独测。
 - **AG4**：`completionPolicy` 对**没有子任务**的 Task 无效（不能靠"零个子任务全 DONE"把一个叶子任务判完成）。
@@ -1383,7 +1679,7 @@ acceptanceDigest = sha256(canonical({
 
 "两个事务都能提交"这个第三种结果因此在物理上不存在。这就是审查要的"共同线性化门"：**它是一把锁，不是一个约定**。
 
-**AE8（终态后的事实写入 ⇒ 原子重开，v1.2 冻结）**：持有 AE6 那把 `FOR SHARE` 的写入者，在锁到手之后**必须重读 `project.status`**；若已是 `DONE`，它必须在**同一个事务**里把 `status` 改回 `OPEN`，并写一条 `user.project_edited` 事件与一行 `reopened_by_fact_change` 审计（记明是哪一项事实变了）。**不允许**提交一个"`DONE` + 与之不匹配的验收事实"的状态（I10）。
+**AE8（终态后的事实写入 ⇒ 原子重开，v1.2 冻结，v1.4 修订锁名 PC-CX-27）**：持有 AE6-a 那把 `FOR NO KEY UPDATE` 的写入者，在锁到手之后**必须重读 `project.status`**；若已是 `DONE`，它必须在**同一个事务**里把 `status` 改回 `OPEN`，并写一条 `user.project_edited` 事件与一行 `reopened_by_fact_change` 审计（记明是哪一项事实变了）。**不允许**提交一个"`DONE` + 与之不匹配的验收事实"的状态（I10）。**锁名这两个词是规范的一部分**：v1.3 在 AE6-a 把它改成 `FOR NO KEY UPDATE`（LO3 禁止升级，`PC-CX-19`），却把本条里的 `FOR SHARE` 留在了原地 —— 照本条字面实现就会复活那个真实的 `40P01`（`PC-CX-27`）。§22 的残句账把这两个词列为必须消失的其中一条。
 
 三条推论，每条都要测：
 
@@ -1403,6 +1699,7 @@ acceptanceDigest = sha256(canonical({
 1. 按 §8.6 LO2 **对两个 project 行按 id 升序各取一把 `FOR NO KEY UPDATE`**，然后才写 task 行（LO1：project → task）。反向移动取到的是同一顺序，因此 A→B 与 B→A 并发不会成环。
 2. **两个 Project 各自独立走 AE8**：源项目若已 `DONE`（少了一个 Task，摘要变了）重开，目标项目若已 `DONE`（多了一个 Task）也重开。v1.2 的漏洞正是这里 —— §12.3 D3 早就写明存在"Task 填入/移出 `projectId`"的写路径，而 AE6 那张手写表里没有它，于是一个已 `DONE` 的项目可以被另一个事务悄悄改掉它的 taskSet（`PC-CX-18`）。
 3. 从"没有 Project 的 Task"（§12.2 的约 11 万行）移入时只有目标 Project 需要锁与重开；移出到"没有 Project"时只有源 Project 需要。
+3b. **（v1.4 新增，PC-CX-21）持有占位的 Task 不得移动**：§7.7 D10 的可延迟约束触发器在提交时拒绝，错误码 `TASK_CLAIMED_PROJECT_MOVE`。理由不是验收摘要，是**派发归属**：一条在飞 Session 的动作行属于源 Project，移动之后 I11-A 的 `a.project_id = t.project_id` 立刻为假，而 D9 声明在 `session` 的三列上、根本不会因为这次写而执行。调用方的确定性出路恰好两条：等这次运行结束，或先取消它。
 4. **不要把外键的锁当成这把锁**（真实 Postgres 上量过）：`task.project_id` 是外键，写它会让 Postgres 对被引用的 project 行取 `FOR KEY SHARE`，而 `FOR KEY SHARE` 与 AE7 的 `FOR UPDATE` **冲突** —— 于是"移动先、`DONE` 后"这一个方向**碰巧**被排上了序，`DONE` 等锁后重算、发现摘要变了、正确地拒绝。这不是一个门：它只存在于这一个投影（另外三个投影的写不碰 `project` 的任何外键），而且在"`DONE` 先、移动后"那个方向什么也不做 —— 没有任何东西会让移动者去看一眼这个项目是不是已经 `DONE` 了，AE8 因此永远不触发。**一个只在一半方向上成立、且永远不重开的顺序，不能替代 AE10。**
 
 **AE11（`acceptance` 的代次来源，v1.3 冻结，PC-CX-17）**：`project_runtime.acceptance_attempt BigInt NOT NULL DEFAULT 0`，**单调递增、永不复用、任何路径不得清零**。`RUN_PROJECT_ACCEPTANCE` 的键取**快照里读到的**值；`+1` 只发生在**动作行插入成功**的同一个事务里，与 fencing token 条件一起提交 —— 与 §8.2 DA2 逐字同型，因此两个推论也相同：同一份快照重复 reconcile 得到同一个键（副作用恰好一次），一次真正的重新验收得到新键（`FAIL → 改 → 再验收`不会被历史键吞掉）。v1.2 只写了 `<attempt>` 三个字而没有任何字段定义它，那等于把动作身份留给实现去发明（`PC-CX-17`）。
@@ -1421,20 +1718,21 @@ acceptanceDigest = sha256(canonical({
 |---|---|---|---|---|---|
 | **AC1** | Project 绑定稳定 coordinatorAgent 与默认协调 Workspace；Coordinator Session 可轮换可恢复；公开 ID 全 Base62 | §1.2 · §7.5 · §2.2 | **复用**（Coordinator Agent = PAC §3.2 `project_member`；协调 Workspace = 既有 `coordinatorWorkspaceId`）+ **基础设施**（`coordinator_generation`） | 03 · 04 · 19 | 03 `+`轮换后 Agent 不变、generation+1 · 03 `-`第二个 Coordinator（PAC T2 并发写）· 04 `-`轮换到不同 workspace → 409 · `public-id-coverage.spec.ts` |
 | **AC2** | 六类来源经事务 outbox 唤醒 reconcile；重复/乱序/重启不重复执行 | §5 全节 · §8.3 | **基础设施**（`project_event`） | 05 · 06 · 07 · 08 | 05 `+`业务写与 outbox 原子提交/回滚 · 06 `-`事务回滚无孤儿事件 · 06 `+`batch 只产一条（N3）· 07 `+`多播只扇给相关项目（N2）· 08 故障注入：重复投递副作用恰好一次、乱序收敛、重启恢复 |
-| **AC3** | 活性：OPEN 且不等人工时按时启动下一步，或持久化完整 blocker，不静默空转 | §10 全节 · I5 | **基础设施**（`project_runtime.next_wake_at`、`project_blocker`） | 09 · 10 · 22 | 09 `+`SLO 内进入合法状态 · 10 §10.3 四条断言对故障注入全程成立 · 10 `-`无 busy loop（W3）· 09 `-`只注册一个定时器（W1） |
-| **AC4** | manual/guarded-auto/auto + 权限/并发/预算/重试/退避/审批边界；默认 guarded-auto | §9 全节 | **业务**（`automationPolicy`/`coordinatorEnabled`/`maxConcurrentTasks`/`sessionBudgetPerDay`）+ **基础设施**（策略求值） | 12 · 14 | 12 表驱动逐格覆盖 §9.2 · 12 `+`新建 Project 为 GUARDED_AUTO 且存量为 MANUAL（G1）· 14 `-`越权/竞态 fail closed · 14 `-`空 fallback 绝不换 Provider |
-| **AC5** | 一致快照 + 记录每次判断的输入/决策/动作/幂等键 | §6.1 · §6.2 · §8.2 | **基础设施**（`project_decision`、`snapshotHash`） | 11 | 11 `+`快照内部一致且带租户边界 · 11 `+`同 hash ⇒ 同机械决策（S3）· 11 `-`陈旧 token 提交被拒并触发新 reconcile · 11 `-``resolution`/快照出站为 base62（S2 / PAC B3） |
+| **AC3** | 活性：OPEN 且不等人工时按时启动下一步，或持久化完整 blocker，不静默空转 | §10 全节 · I5 · I15 | **基础设施**（`project_runtime.next_wake_at`、`project_blocker`） | 09 · 10 · 22 | 09 `+`SLO 内进入合法状态 · 10 §10.3 四条断言对故障注入全程成立（(a) 用 I11-A 的恒成立形式）· 10 `-`无 busy loop（W3）· 09 `-`只注册一个定时器（W1）· 09 `+`32 个原因组合各至多一条语义 turn（TU4/TU5） |
+| **AC4** | manual/guarded-auto/auto + 权限/并发/预算/重试/退避/审批边界；默认 guarded-auto | §9 全节（含 §9.6） | **业务**（`automationPolicy`/`coordinatorEnabled`/`maxConcurrentTasks`/`sessionBudgetPerDay`）+ **基础设施**（策略求值、`config_revision`） | 12 · 14 | 12 表驱动逐格覆盖 §9.2 · 12 `+`新建 Project 为 GUARDED_AUTO 且存量为 MANUAL（G1）· 14 `-`越权/竞态 fail closed · 14 `-`撤权后旧决策记 `AUTHORITY_REVOKED` 且不产生 Session（AU1，PG）· 14 `-`人工启动 + 控制环派发不越 cap（CAP1，PG）· 14 `-`空 fallback 绝不换 Provider |
+| **AC5** | 一致快照 + 记录每次判断的输入/决策/动作/幂等键 | §6.1 · §6.2 · §8.2 | **基础设施**（`project_decision`、`decisionInputHash`） | 11 | 11 `+`输入内部一致且带租户边界 · 11 `+`同 hash ⇒ 同机械决策（S3，含时钟折成的到期事实与 manual 信号）· 11 `+`字段集由读集反推、双向比对（S8）· 11 `-`陈旧 token 提交被拒并触发新 reconcile · 11 `-``resolution`/输入出站为 base62（S2 / PAC B3） |
 | **AC6** | 验证失败可原生退回、建缺陷子任务、阻断下游；不靠提示词 | §13.2 | **业务**（既有 `verifiesTaskId` 的语义扩展，**无新实体**） | 16 · 18 | 16 `+`FAIL 三件事都发生 · 16 `-`重复 verdict 不重复退回（V2）· 16 `-`下游未修复前不可派发（V3）· 18 属性测试固定 seed 可复现 |
 | **AC7** | 父 Task/阶段的聚合完成策略，无需人工维护汇总节点 | §13.1 | **业务**（`task.completionPolicy`；阶段= 父 Task，**不新增实体**，§2.3） | 15 · 18 | 15 `+`ALL_CHILDREN_DONE / VERIFICATION_PASSED · 15 `+`多层子树自底向上 · 15 `-`子任务重开时父任务回退（AG3）· 15 `-`空父节点不自动完成（AG4）· 15 `+`并发完成幂等 |
-| **AC8** | 六类情形都有结构化 blocker 与去重升级；不得静默 fallback | §11 全节 · §9.3 | **基础设施**（`project_blocker`）+ **复用**（kind 直接沿用 PAC §12 错误码） | 17 · 18 | 17 `+`每类 blocker 四字段齐全 · 17 `-`同因重复事件不新建行（§11.3 partial unique）· 17 `+`条件消失自动解除并重算（BL3）· 17 `-`未知失败 fail closed（BL2）· 17 `-`升级至多通知一次 |
-| **AC9** | 崩溃/Session 结束/Runner 离线/接管/混合版本后能恢复，不丢任务、不重复启动、不越权 | §8.1 · §8.4 · §12.4 · I7 | **基础设施**（fencing token、`project_action`） | 19 · 22 | 19 `-`旧 fencing token 提交影响 0 行 · 19 `+`两实例并发只有一个提交 · 19 `+`Coordinator Session 死后轮换继续推进 · 22 端到端故障注入矩阵（§15） |
+| **AC8** | 六类情形都有结构化 blocker 与去重升级；不得静默 fallback | §11 全节 · §9.3 · §7.2 TF4 | **基础设施**（`project_blocker`）+ **复用**（kind 直接沿用 PAC §12 错误码） | 17 · 18 | 17 `+`每类 blocker 五字段齐全 · 17 `-`同因重复事件不新建行（§11.3 partial unique）· 17 `+`条件消失自动解除并重算（BL3）· 17 `-`未知失败 fail closed（BL2）· 17 `-`升级至多通知一次 · 17 `+`clear 后同因复发获得新 turn 而不是 no-progress（TF4） |
+| **AC9** | 崩溃/Session 结束/Runner 离线/接管/混合版本后能恢复，不丢任务、不重复启动、不越权 | §8.1 · §8.4 · §12.4 · §7.7 D8–D13 · I7 | **基础设施**（fencing token、`project_action`、投影触发器） | 19 · 22 | 19 `-`旧 fencing token 提交影响 0 行 · 19 `+`两实例并发只有一个提交 · 19 `+`合法派发之后推进 token，I11-A 仍成立（PG）· 19 `-`在飞 Task 跨 Project 移动被拒（PG）· 19 `+`Coordinator Session 死后轮换继续推进 · 22 端到端故障注入矩阵（§15） |
 | **AC10** | Web/API/CLI 展示当前状态、最近决策、下一动作、阻塞、下次唤醒、验收证据；有可独立运行的测试 | §6.2 · §11.1 · §13.4 | **基础设施**（读接口） | 20 · 21 | 20 API/CLI/MCP parity + 鉴权 + 全 Base62 · 20 `-`陈旧/越权写入被拒 · 21 组件测试覆盖 loading/error/empty + 三策略 + 审批 + blocker + 离线 Runner + legacy Project · 21 `-`界面不得暗示 silent fallback |
-| **AC11** | 既有 Project 默认兼容、不被意外开启自动推进；迁移后须显式选策略或沿用安全默认 | §12.1 · §12.2 · §12.3 | **业务**（策略字段）+ **基础设施**（迁移、`dispatch_authority`） | 03 · 04 · 22 | 04 `M`迁移后存量 `coordinator_enabled = false` / `MANUAL`（G1 两条都测）· 04 `M`迁移不产生事件/唤醒（G2）· 04 `M`空库+生产快照 `migrate diff` 为空（G4）· 06 `+`无 Project 的 Task 派发逐字段不变（§12.2）· 14 `-`legacy sweep 不碰 `COORDINATOR` 权任务（D1） |
+| **AC11** | 既有 Project 默认兼容、不被意外开启自动推进；迁移后须显式选策略或沿用安全默认 | §12.1 · §12.2 · §12.3 · §7.7 D8-a · D13 | **业务**（策略字段）+ **基础设施**（迁移、投影触发器） | 03 · 04 · 22 | 04 `M`迁移后存量 `coordinator_enabled = false` / `MANUAL`（G1 两条都测）· 04 `M`迁移不产生事件/唤醒（G2）· 04 `M`空库+生产快照 `migrate diff` 为空（G4）· 04 `M`D13 漂移查询返回 0 行（G5）· 06 `+`无 Project 的 Task 派发逐字段不变（§12.2）· 14 `-`legacy sweep 不碰 `COORDINATOR` 权任务（D1）· 22 `-`旧二进制的裸 SQL 移动 Task 后投影仍不陈旧（PG） |
 | **AC12** | 全部任务完成后执行项目级验收并核对合并状态，全 PASS 才可标 DONE | §13.4 · §9.2 最后一行 | **业务**（`project.status` 的写入门）+ **基础设施**（验收记录） | 23 | 23 `-`任一 FAIL 时标 DONE 被服务端拒绝（硬门，第 5 条）· 23 `+`全 PASS 后可标 DONE · 23 `+`合并核对按内容而非 `--contains`（第 6 条）· 23 `-`控制环任何策略下都不能自己标 DONE |
 
-**总计**：业务字段 **5 个**（§2.2），新业务实体 **0 个**（§2.3），新基础设施表 **5 张** + 新列 **6 个**（§2.4）。
+**总计**：业务字段 **5 个**（§2.2），新业务实体 **0 个**（§2.3），新基础设施表 **5 张** + 新列 **7 个**（§2.4）。
 v1.1 相对 v1 只多了一列（`session.dispatch_origin`）与两个数据库约束对象（一个 partial unique index、一个 trigger，§2.4）。**新业务实体仍然是 0 个** —— 关闭两个 P0 靠的是把互斥挪进数据库，不是靠新概念。
 v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的列（`project_blocker.lifecycle_generation`、`project_runtime.acceptance_attempt`）与三个数据库约束对象（一个可延迟约束触发器、一个 CHECK、一个唯一索引，§2.4）。**新业务实体仍然是 0 个** —— 关闭这六项靠的是给已有的账本装上单调代次、给已有的锁排一个全序、让已有的触发器读它声称保证的那几列。
+v1.4 相对 v1.3 多一列（`project.config_revision`）与三组数据库对象（一个可延迟约束触发器 D10、一个 `BEFORE UPDATE` 触发器 D11、一组投影触发器 D12/D8-a，§2.4），并**删掉**了一处服务层义务（§12.3 D3 的三个写入点）。**新业务实体仍然是 0 个** —— 关闭这七项靠的是把不变量的时态说清楚、把决策输入说全、给同时为真的原因排一个全序、把一个投影交给数据库自己算，以及让人工与控制环共用一把本来就存在的行锁。
 
 ---
 
@@ -1474,6 +1772,13 @@ v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的�
 | **F26** | 动作幂等键冲突，且同一 tick 还有未消费事件与 blocker/nextWake 变化 | 动作恰好一行且记 `ALREADY_APPLIED`；事件 `consumed_at` 非空；blocker 与 `nextWakeAt` 已提交 | 无需动作 | §8.5 C1/C2 |
 | **F27** | 验收全 PASS 之后事实变化（标准 / 任务 / verdict / 合并内容） | `project.status` 仍为 `OPEN`；`DONE` 写入被拒，错误码 `ACCEPTANCE_EVIDENCE_STALE` | 重新验收，产生新摘要的记录 | §13.4 AE1/AE2 |
 
+| **F28** | 一次合法派发之后，同一 Project 的下一次正常租约推进 token，而那条 Session 仍在飞 | I11-A 仍为真（`action.token <= runtime.token`）；I11-B 不再被要求 | 无需动作 | §4.3 I11 · §7.7 D9-e · §8.1 F0 |
+| **F29** | 有占位的 Task 被要求跨 Project 移动 | 移动被拒，`TASK_CLAIMED_PROJECT_MOVE`；Task 与 Session 都不变 | 等运行结束或先取消，再移动 | §7.7 D10 · §13.4 AE10 第 3b 条 |
+| **F30** | 旧二进制用裸 SQL 把 Task 移进/移出一个 `coordinatorEnabled = true` 的 Project，或结束一条占位 | `task.dispatch_authority` **仍然等于派生值**（I12-A）；D13 漂移查询返回 0 行 | 无需动作；旧 sweep 随后被 D6 拒绝 | §7.7 D8-a · D12 · D13 |
+| **F31** | 用户在控制环决定派发之后、提交之前关掉 Coordinator / 降策略 / 调低 cap，或同时手动启动另一个 Task | 二选一且唯一：人工写先提交 ⇒ 该动作 `REFUSED(AUTHORITY_REVOKED)` 且**无 Session**；控制环先提交 ⇒ 人工写照常生效且此后无新自动派发。任何顺序下占位数 ≤ `max_concurrent_tasks` | 无需人工清理；控制环下一次 reconcile 按新授权重算 | §9.6 AU1 · CAP1 · §8.5 C6 |
+| **F32** | 同一份输入同时命中多个语义 turn 原因 | 恰好一条 `OPEN_COORDINATOR_TURN`，`reasonCode` 由 TU4 的全序唯一决定；被压下的原因记在 `suppressedTurnReasons` | 无需动作；被压下的原因下一次仍为真则自然胜出 | §7.2 TU4 · TU5 · I15 |
+| **F33** | 一条 `opensTurn` 的 blocker 被解决后，同一条件再次发生 | 新的 `lifecycle_generation` ⇒ 新的 `reasonDigest` ⇒ **一条新的 turn**；不是 `COORDINATOR_NO_PROGRESS` | 协调器照常处理这一次新故障 | §7.2 TF4 · §7.6 TR3 · §11.3 BE1 |
+
 **F-note**：F21/F22 是**唯一**两条"停下来等人"的兜底。它们存在的意义是让"控制环遇到了它不认识的东西"成为一个**看得见的状态**，而不是一次静默的 catch。
 
 ---
@@ -1506,6 +1811,14 @@ v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的�
 19. **唯一约束冲突用 `ON CONFLICT` 返回值表达，不用异常表达**（§8.5 C1）。Postgres 的唯一约束错误会 abort 整个事务，用异常表达冲突在物理上就无法"继续提交其余部分"。
 20. **验收证据靠摘要绑定新鲜度，不靠失效任务**（§13.4 AE4）。不需要任何定时器或触发器去"作废"旧记录；事实一变摘要就不匹配，旧记录在构造上不可用。
 
+以下 5 条是 v1.4 为关闭 `PC-CX-21..27` 新增的：
+
+21. **不变量必须写成时态明确的形式**（I11-A / I11-B、§8.1 F0）。"等于当前 token"看起来更严格，实际上是一条**会被系统的正常运转弄假**的话。恒成立的部分用单调关系与被反向约束钉住的历史列表达，点态的部分明确写成"只在提交时被要求"。**一条会自己变假的不变量比没有不变量更坏** —— 它会让下一个人去修一个没有坏的东西。
+22. **一条硬门读到的每一行，都必须有封闭的 mutator 协议**（D10 / D11）。D9 读 `task.project_id` 与 `project_action` 的六列，那就必须有东西保证这些列在它证明之后不再变。这是 `PC-CX-09` / `PC-CX-20` 同一教训的第三次：**"那一刻成立"不是"一直成立"**。
+23. **决策输入必须包含决策实际读到的全部东西，包括时钟与被请求的事件**（§6.1 S3/S5/S7/S8）。把时钟排除在 hash 之外看起来是为了让 hash 稳定，实际是让"同 hash ⇒ 同决策"变成一句假话。正确做法是把时钟折成**冻结的到期事实**，让它既进 hash 又不让 hash 每秒都变。
+24. **同时为真的原因用全序裁决，不用手写互斥**（TU4）。与 §4.2 RS0 是同一个决定：手写的互斥在下一个事实组合上必然漏，而全序天然完备、与遍历顺序无关。
+25. **一个必须永远正确的投影，不能由服务层维护**（D8-a / D12）。判据与 D5/D6 当初进数据库时逐字相同：要挡住的入口里有一个是"另一个版本的旧代码"。代价是一个由数据库代为发起的逆序锁访问（D8-e），它 fail closed；买到的是"投影不可能陈旧"，而且不需要任何一次部署做对。
+
 ---
 
 ## 17. 遗留的开放问题（不阻塞 03 阶段）
@@ -1532,6 +1845,7 @@ v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的�
 | 01A | 修订 `PC-CX-01..08` | §19 全表 | `src/apiserver/src/projects/coordinator-counterexample.spec.ts`（反例模型）+ 01 的文档自检扩展 |
 | 01B | 修订 `PC-CX-09..14` | §20 全表 | 同上 + `src/apiserver/src/projects/coordinator-linearization.pg.spec.ts`（真实 Postgres 双事务，见 §20.1） |
 | 01C | 修订 `PC-CX-15..20` | §21 全表 | 同上；真实 Postgres 覆盖 authority flip、`DONE` × 验收事实写、并发事实写与派发归属（§21.5 / §21.6） |
+| 01D | 修订 `PC-CX-21..27` | §22 全表 | 同上；真实 Postgres 覆盖 I11-A 在 token 前进/Task 移动下的稳定性、旧二进制写端下的投影新鲜度、撤权与 cap 的双事务 barrier（§22.1 / §22.5 / §22.6） |
 | 03 | Coordinator 身份、默认 Workspace、策略持久化 | §2.2 · §7.5 · §12.1 | `*.spec.ts`（`node --test`） |
 | 04 | 独立验证身份、策略迁移与 Base62 | §12.1 G1–G4 · §6.1 S2 | 同上 |
 | 05 | 事件信封、事务 outbox、投递 | §5.2 · §5.4 | 同上 |
@@ -1557,6 +1871,8 @@ v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的�
 ---
 
 ## 19. `PC-CX-01..08` 修订闭环
+
+> **本节是非规范的（non-normative）修订日志**（§0 RL1，v1.4 冻结）。它记录 v1.1 当时的事实与当时的推理，**不是现行规范**；任何一句与 §1–§18 冲突时一律以 §1–§18 为准。历史形状只允许出现在这里和反例测试里（`PC-CX-27`）。
 
 > **怎么读 §19–§21**：这三节是**修订日志**，记录每一轮当时的答案与当时的最小交错序列，因此它们引用的动作键是**那一轮**的。后续版本改过其中三个键（`blocker`、`verdict`、`acceptance`，均在 v1.3，§21），本文的**当前**键一律以 §7.3 的动作表与 §8.2 GE1 为准。日志不回写，理由与三份审查文档不回写相同：改掉历史会让"当时为什么这么想"变得不可复原。
 
@@ -1762,6 +2078,8 @@ v1 说"整事务回滚且视为成功"：于是 `E` 的 `consumed_at` 仍为 NUL
 
 ## 20. `PC-CX-09..14` 修订闭环（v1.2）
 
+> **本节是非规范的（non-normative）修订日志**（§0 RL1，v1.4 冻结）。它记录 v1.2 当时的事实与当时的推理，**不是现行规范**；任何一句与 §1–§18 冲突时一律以 §1–§18 为准。历史形状只允许出现在这里和反例测试里（`PC-CX-27`）。
+
 02 对 v1.1 的独立复审（[`project-coordinator-contract-review-02-v1.1.md`](./project-coordinator-contract-review-02-v1.1.md)）判 **FAIL / BLOCKED**，给出 1 个 P0 与 5 个 P1。本节是**逐项关闭的索引**，格式与 §19 相同。**两份审查文档都不因本次修订而改动** —— 它们记录的是 v1 与 v1.1 的事实，那些事实没有变；变的是契约。
 
 六项里有五项的形状是同一个：**v1.1 把一个"当时成立"的检查当成了"始终成立"的不变量**。触发器在 `INSERT` 那一刻读到的授权、验收记录被写下那一刻成立的事实、blocker 被创建那一刻的 owner、失败计数在那一刻的值 —— 每一个都会在之后被别的事务改掉，而 v1.1 没有任何机制把"那一刻"和"现在"绑在一起。v1.2 的答案在三处：**两把互相冲突的行锁**（§7.7 D8、§13.4 AE6/AE7）、**一个只进不退的 epoch**（§8.2 DA1），以及**把随时间前进的量从幂等摘要里赶出去**（§7.2 TF1）。
@@ -1926,6 +2244,8 @@ v1.1 在第 4 步**放行**：`BEFORE INSERT` 触发器里的普通 `SELECT t.di
 
 ## 21. `PC-CX-15..20` 修订闭环（v1.3）
 
+> **本节是非规范的（non-normative）修订日志**（§0 RL1，v1.4 冻结）。它记录 v1.3 当时的事实与当时的推理，**不是现行规范**；任何一句与 §1–§18 冲突时一律以 §1–§18 为准。历史形状只允许出现在这里和反例测试里（`PC-CX-27`）。
+
 02 对 v1.2 的独立复审（[`project-coordinator-contract-review-02-v1.2.md`](./project-coordinator-contract-review-02-v1.2.md)）判 **FAIL / BLOCKED**，给出 6 个 P1。本节是**逐项关闭的索引**，格式与 §19 / §20 相同。**三份审查文档都不因本次修订而改动** —— 它们记录的是 v1、v1.1 与 v1.2 的事实，那些事实没有变；变的是契约。
 
 六项里有四项的形状是同一个，而且是 v1.2 自己的修法**只做了一半**留下的：v1.2 学会了"把随时间前进的量赶出摘要"（TF1）和"用只进不退的计数当动作身份"（DA1），但**只在它当时正在看的那两个地方**做了。于是 `occurrences` 从 turn 摘要里被拿走、却还留在升级条件里（`PC-CX-15`）；`dispatch` 拿到了单调 epoch、而 blocker / verdict / aggregate / acceptance 四个键仍然由可回环的事实或一个没有定义的词构成（`PC-CX-16` / `PC-CX-17`）。另外两项则是 v1.2 新装的那些锁本身的账没算清：一张手写的"封闭集合"漏掉三条写路径（`PC-CX-18`），一次 `SHARE → UPDATE` 的锁升级在真实服务器上死锁、而 §8.1 F3 又同时宣称不许取第二把锁（`PC-CX-19`）。最后一项是把 v1.1 的老毛病挪了个位置：一条硬门读的列不是它声称保证的列（`PC-CX-20`）。
@@ -2073,3 +2393,196 @@ v1.3 的答案在四处：**一条代次纪律**（§8.2 GE1–GE4，管住五�
 - **没有给 Git 侧发明一把锁**。AE9 明确写下"行锁锁不住 ref"，给出的是有界延迟的检测 + 原子重开，以及两个观测点之间那个**真实存在的窗口**。把它写成互斥会好看很多，也会是假的。
 
 ---
+
+## 22. `PC-CX-21..27` 修订闭环（v1.4）
+
+> **本节是非规范的（non-normative）修订日志**（§0 RL1，v1.4 冻结）。它记录 v1.4 当时的事实与当时的推理，**不是现行规范**；任何一句与 §1–§18 冲突时一律以 §1–§18 为准。历史形状只允许出现在这里和反例测试里（`PC-CX-27`）。
+
+02 对 v1.3 的独立复审（[`project-coordinator-contract-review-02-v1.3.md`](./project-coordinator-contract-review-02-v1.3.md)）判 **FAIL / BLOCKED**，给出 2 个 P0、5 个 P1。本节是**逐项关闭的索引**，格式与 §19 / §20 / §21 相同。**四份审查文档都不因本次修订而改动** —— 它们记录的是 v1、v1.1、v1.2 与 v1.3 的事实，那些事实没有变；变的是契约。
+
+七项里有一条贯穿的线：**v1.3 学会了"让数据库证明它自己能证明的事"，但没有把这条纪律推到它的两个边界上。** 一个边界是**时间**：D9 在提交那一刻证明得很好，v1.3 却把那个等式写成了一条永久不变量，于是下一次完全正常的租约就把它弄假（`PC-CX-21`）；`snapshotHash` 同样把时钟排除在外，却让一堆读时钟的规则去用它（`PC-CX-22`）。另一个边界是**写入者的版本**：D5 / D6 / D9 都进了数据库，而它们读的那一列 `dispatch_authority` 仍然由新服务层维护，于是一个旧写端就能把这条链的第一环变成陈旧值（`PC-CX-25`，P0）。剩下三项是同类模式的其它实例：同时为真的原因没有裁决（`PC-CX-23`）、有生命周期的行没有把周期带进身份（`PC-CX-24`）、人和控制环没有共用一把锁（`PC-CX-26`）。最后一项是把前几轮的旧规范句留在了正文里（`PC-CX-27`）。
+
+v1.4 的答案在五处：**一组时态明确的不变量**（I11-A/I11-B、F0、D9-e）、**一组把硬门读到的行钉住的反向约束**（D10 / D11）、**一份完整的 `decisionInput`**（§6.1 S3/S5/S7/S8）、**两个全序**（TU4 的原因全序、§9.6 AU1 的授权门共用 LO1 第一级那把锁），以及**一个由数据库自己算的派生列**（D8-a / D12 / D13）。
+
+| ID | 级别 | 规范条款 | 权威状态 | 动作键 | 恢复路径 | 可执行断言 |
+|---|---|---|---|---|---|---|
+| `PC-CX-21` | **P0** | §4.3 I11 · §7.7 D9-e · D10 · D11 · §8.1 F0 · §10.3 · §13.4 AE10 | I11-A 恒成立（`action.token <= runtime.token` + 归属列被反向约束钉住）；I11-B 只在提交时被要求 | 不变（归属是约束，不是键） | 下一次租约照常推进，无需动作；在飞 Task 移动被拒 `TASK_CLAIMED_PROJECT_MOVE`，等运行结束或先取消 | `PC-CX-21 attribution survives the next lease and refuses to survive a live task move` |
+| `PC-CX-22` | P1 | §6.1 S3 · S5 · S6 · S7 · S8 · §6.2 · §7.4 | `decisionInput = world + evaluation + signals`，`decisionInputHash` 覆盖三者；同 hash ⇒ 逐字相同的 actions/blockers/nextWake | 全部代次字段进 `world`，因此键由输入唯一决定 | 无需恢复；字段集由读集反推，漏字段在契约测试里当场红 | `PC-CX-22 the decision input is complete, and the hash is over all of it` |
+| `PC-CX-23` | P1 | §7.2 TU4 · TU5 · §6.2 · §6.3 · §4.3 I15 | 五个原因按 `MANUAL ≻ VERDICT ≻ BLOCKER_DECISION ≻ ACCEPTANCE ≻ REPLAN` 首个为真者胜；一次 reconcile 至多一条语义 turn | `turn:<generation>:<reasonDigest>`，`reasonCode` 唯一因此键唯一 | 被压下的原因写进 `suppressedTurnReasons`，下一次仍为真则自然胜出 | `PC-CX-23 overlapping turn reasons are decided by one total order` |
+| `PC-CX-24` | P1 | §7.2 TF1 · TF4 · §7.6 TR3 · §11.3 BE1 | 同一 open episode 内重复 ⇒ 同 turn 键；clear 后复发 ⇒ 新 `lifecycleGeneration` ⇒ 新 turn 键 | `turn:<generation>:<reasonDigest>`，`turnFacts` 含 `lifecycleGeneration` | 复发合法获得一次新 turn，不再被 TR3 误判为 no-progress | `PC-CX-24 a blocker episode that recurs earns a new turn, not a no-progress verdict` |
+| `PC-CX-25` | **P0** | §7.7 D8-a · D8-b · D8-e · D12 · D13 · §12.3 D3 · §12.4 · §4.3 I12 | `task.dispatch_authority` 恒等于派生式（I12-A，触发器维护）；无越权**新**派发（I12-B，D6 保证） | 不变（投影是派生列，不是键） | 旧写端的任何写入都被触发器重算；D13 漂移查询对生产可直接跑，返回 0 行 | `PC-CX-25 the authority projection is derived by the database, not maintained by a service` |
+| `PC-CX-26` | P1 | §9.6 AU1 · AU2 · AU3 · CAP1 · CAP2 · §9.2 P4 · §8.5 C6 · §6.3 · §4.3 I16 | 撤权与派发提交共用 `project` 行锁，只有两种确定顺序；占位数恒 ≤ `maxConcurrentTasks` | 不变；撤销的动作记 `REFUSED` / `AUTHORITY_REVOKED` | 被撤销的动作不产生副作用，其余 outcome 照常提交；人工入口得到 `PROJECT_CONCURRENCY_LIMIT` | `PC-CX-26 revocation and the project cap share one gate with dispatch` |
+| `PC-CX-27` | P1 | §0 RL1 · §13.1 AG1 · §13.4 AE8 · §19–§22 的非规范声明 | 正文只保留现行规则；历史形状只在 §19–§22 与反例里 | 不变 | 残句账（§22.8）逐条被契约测试扫描，新增一条被取代的规范就必须登记一行 | `PC-CX-27 no superseded normative sentence survives in the normative body` |
+
+新增的模型断言在 [`coordinator-counterexample.spec.ts`](../src/apiserver/src/projects/coordinator-counterexample.spec.ts)，新增的真实 PostgreSQL 断言在 [`coordinator-linearization.pg.spec.ts`](../src/apiserver/src/projects/coordinator-linearization.pg.spec.ts)；02 在 v1.3 轮次留下的 [`coordinator-v13-adversarial.spec.ts`](../src/apiserver/src/projects/coordinator-v13-adversarial.spec.ts) 按该报告 §5 的要求**从"证明缺陷存在"翻转成"旧交错被拒绝/得到唯一合法结果"**，并把 v1.3 的形状原样保留为每条断言里的**反向对照**。
+
+### 22.1 `PC-CX-21` 归属用历史关系，token 只证明提交时的授权
+
+**最小交错序列**（两条，各自独立）：
+
+- **A（正常路径就能弄假）**：token = 42 的 reconcile 在一个事务里提交 `action(APPLIED, token = 42)` 与一条 COORDINATOR 占位，D9 在 `COMMIT` 时通过。60 秒兜底或任何一条事件触发下一次 reconcile，它**成功取到租约**，§8.1 让 `fencing_token` 走到 43。那条 Session 仍然在飞，它的三列一列没动，D9 因此**根本不会再执行**。查询已提交状态：`action.token = 42 ≠ runtime.token = 43` ⇒ v1.3 写法的 I11 为假。**系统里没有任何一个参与者做错了任何事**，而契约说这是 P0 活性违约。
+- **B（一次合法的人工操作）**：同样的占位已合法提交。人把这个 Task 从 P1 移到 P2 —— §13.4 AE10 明确允许，且 v1.3 只要求两个 Project 的验收事实门。Session 没有被更新，D9 只声明在 `session (project_action_id, dispatch_origin, task_id)` 上，**不会执行**。最终状态：动作属于 P1、Task 属于 P2，`a.project_id = t.project_id` 为假。
+
+**Postgres MVCC 与锁语义**：这一项的要害不是并发，是**声明范围**。一个 `AFTER … OF <columns>` 的约束触发器只在那些列被写时排队执行；它读到的其它表、其它行**不在它的声明里**，因此那些行怎么变它都不知道。v1.3 的 D9 读了四张表（`project_action` / `task` / `project_runtime` / `session`），却只声明在其中一张的三列上 —— 它证明的是"插入这条 Session 的那个事务提交时，这四张表凑起来是对的"，不多也不少。要把它变成一条**恒成立**的不变量，只有两条路：把读到的每一行都纳入声明（要给三张表各配触发器，且 `project_runtime.fencing_token` **每次租约都变**，那等于每次 reconcile 都要重验全项目的在飞 Session），或者**让不变量只依赖不会变的东西**。v1.4 选第二条：token 那一项换成单调关系（`<=` 一旦为真永远为真，因为 §8.1 的 token 只增），其余三项各配一个反向约束把它们钉成"占位期间不可变"——`task.project_id` 由 D10 冻结，`project_action` 的归属列与 `status` 由 D11 冻结。**代价明确**：在飞的 Task 不能跨 Project 移动（一次可见的、有类型的拒绝），`APPLIED` 的动作行不能被改写（本来也不该）。
+
+**权威状态**：§4.3 I11 拆成两句。**I11-A（恒成立）**：COORDINATOR 占位 ⟹ 存在 `DISPATCH_TASK`/`APPLIED`/本 Task/本 Project 的动作行，且 `action.fencing_token <= project_runtime.fencing_token`。**I11-B（点态）**：占位被提交的那一刻 `action.fencing_token = project_runtime.fencing_token`，由 D9 在 `COMMIT` 执行。§10.3 (a) 与 §15 F28 都改用前者。§8.1 新增 F0 把"token 回答什么问题"写死在租约那一节，免得下一个人再把它当恒等式用。
+
+**动作键**：不变。归属是**约束**不是键 —— 与 `PC-CX-02` / `PC-CX-09` / `PC-CX-20` 同型：跨入口、跨时间的性质不可能由一个只有一个入口会写的键来保证。
+
+**恢复路径**：交错 A 不需要恢复 —— 它本来就不是故障，v1.4 只是不再把它当故障。交错 B 变成一次**可见的失败**：`TASK_CLAIMED_PROJECT_MOVE`，调用方等这次运行结束再移，或者先取消它（§13.4 AE10 第 3b 条）。`APPLIED` 动作行的改写同样是可见失败：`ACTION_APPLIED_IMMUTABLE`。
+
+**可执行断言**：`PC-CX-21 attribution survives the next lease and refuses to survive a live task move` —— 模型侧断言 I11-A 在 token 从 42 走到 43、44、…之后仍为真，而 v1.3 的等式写法在第一次推进就假；真实 Postgres 侧由 `coordinator-linearization.pg.spec.ts` 的 `PC-CX-21 on real Postgres: the next lease keeps I11-A and a live task move is refused` 建带外键的四张表 + D9 + D10 + D11，跑：正常派发 → 推进 token → 断言 I11-A 仍真；在飞移动 → 断言提交被拒且状态不变；结束占位 → 再移动 → 断言成功；对 `APPLIED` 行逐列改写 → 断言六列被拒、两列可写。**反向对照**：把 I11 换回"等于当前 token"，同一序列在第一次租约推进后就产出 `i11 = false`；把 D10 去掉，在飞移动立刻提交成功并让归属断开 —— 与复审报告里那两行输出逐字对应。
+
+### 22.2 `PC-CX-22` 决策输入必须说全，时钟折成到期事实
+
+**最小交错序列**（三组，各自独立，v1.3 三处都缺）：
+
+- **漏字段**：两份快照在 §6.1 v1.3 的可见投影上**逐字相同**，但 `task.dispatch_attempt` 分别是 1 与 2。§7.3 要求的键分别是 `…:dispatch:<taskId>:1` 与 `…:dispatch:<taskId>:2` —— 同一个 hash，两个不同的动作身份。`verdict_revision` / `acceptance_attempt` / `lifecycle_generation` / `condition_version` / `escalated_at` / `mergeEvidence` 各能造一组同型反例。
+- **排除时钟**：同一份世界行、同一个 `runAt = 10:00`，在 09:59 与 10:01 各求值一次。S3 的 hash 相同（`snapshotAt` 被排除），而 §7.4 第 1 条要求的决定相反。退避到期、升级到期、预算窗口边界三处同型。
+- **排除事件**：两份世界行完全相同，其中一份的唤醒里有一条 `user.manual_trigger`。hash 相同，而 §7.2 要求的"是否开一条 MANUAL turn"相反。
+
+**Postgres MVCC 与锁语义**：这一项不靠锁，它是**审计与重放**的性质，但根因与 `PC-CX-15` 同源：一个判定读了一个没被记下来的输入。区别在于 `PC-CX-15` 的解法是**把那个输入赶出判定**（`occurrences` 本来就不该被读），而这三组的输入是**真的需要被读的** —— 代次决定动作身份、时钟决定到期、用户请求决定 MANUAL turn。因此解法只能是相反的方向：**把它们如实记进输入**。唯一要小心的是不能把 `now()` 直接塞进 hash（那样每次 reconcile 的 hash 都不同，S3 退化成一句永远为真也永远无用的话），所以 v1.4 引入 `evaluation`：时钟只在读输入时读一次，并**当场折成布尔的到期事实**；hash 覆盖这些布尔，不覆盖 `readAt`（S5 / S6）。事件同理，只进 `(kind, dedupeKey)` 身份、不进负载，因此 E1 逐字不变，而 §5.4 的 partial unique index 保证重复投递仍然只得到一项，I14 也不变（S7）。
+
+**权威状态**：§6.1 的输入结构从"快照"改成 `decisionInput = world + evaluation + signals`，`decisionInputHash` 覆盖三者。**S3 第一次成为一句真话**：相同 hash ⇒ 逐字相同的 `actions`（含每个 `idempotencyKey`）、`blockersOpened` / `blockersCleared`、`nextWakeAt`。§6.2 的 outcome 带上 `decisionInputHash` 与 `configRevision`，因此一次决策可以被完整重放。
+
+**动作键**：不变，但**第一次由输入唯一确定** —— 五个永久键的代次（§8.2 GE1 的表）现在全部在 `world` 里。
+
+**恢复路径**：本项没有运行期恢复路径可谈，它的"恢复"是**测试**：S8 把字段集变成一条从读集反推的双向断言，因此下一次有人加规则而忘了加字段，契约测试当场红，而不是等 11 单元发现审计重放对不上。
+
+**可执行断言**：`PC-CX-22 the decision input is complete, and the hash is over all of it` —— 三组反例各跑一遍：同 hash 必须蕴含同 actions/blockers/nextWake；把 `dispatchAttempt` / 到期事实 / manual 信号任一改动，hash 必须变；再从 §7.3、§8.2 GE1、§11.2、§13.4 AE1 收集列名，与 §6.1 的字段集**双向**比对（S8）。**反向对照**：把 `evaluation` 与 `signals` 从 hash 里去掉（回到 v1.3 的 S3），三组反例立刻各产出一对"同 hash、不同决策"。
+
+### 22.3 `PC-CX-23` 同时为真的原因由一个全序裁决
+
+**最小交错序列**（两条）：
+
+- **A**：全部 Task 收敛、验证全 PASS、无 blocker、无 live Session、无未收敛的验收动作。`runStateOf = PLANNING`（守卫 1–6 全不成立）且无可派发任务且无 open blocker ⇒ **`REPLAN` 为真**；"全部 Task 收敛，准备进入 `ACCEPTANCE`" ⇒ **`ACCEPTANCE` 也为真**。
+- **B**：验证 FAIL，§13.2 的机械退回已完成 ⇒ **`VERDICT` 为真**；同一次退回按 §13.2 第 ④ 条必然开一条 `VERIFICATION_FAILED` blocker，它在 §11.2 `opensTurn = ✔` 的四行里且 `escalated_at IS NULL` ⇒ **`BLOCKER_DECISION` 也为真**。
+
+两组里两个 reasonCode 的 `reasonDigest` 不同（TR1 按 digest 去重）、TR2 的限频按 reasonCode 分桶、§7.3 的键含 `reasonDigest` —— **没有任何一条既有规则会把它们合并**。于是同一份输入可以合法地开出两条 turn，或者开出其中一条而选哪一条取决于实现的遍历顺序。§6.3 第 5 步写的是"追加一个 `OPEN_COORDINATOR_TURN` 动作"，那句话假设了唯一性却没有任何东西保证它。
+
+**Postgres MVCC 与锁语义**：这一项与数据库无关，它是**判定函数的完备性**问题，和 `PC-CX-03` 是同一个形状 —— v1 用一张手写转移表表达 `run_state`，在混合 blocker 上同时要求两个值。那一次的答案是 §4.2 RS0：**换掉判定方式**，用按序求值、首个为真者胜的守卫函数。v1.4 对 turn 原因用**完全相同**的手法，理由也相同：手写的互斥守卫（例如给 `REPLAN` 补一个"且 ACCEPTANCE 不成立"）在下一个事实组合上必然再漏一次，而全序天然完备、与遍历顺序无关、可以对全部 32 个真值组合穷举。
+
+**权威状态**：§7.2 的表加一列"序"，TU4 冻结全序 `MANUAL ≻ VERDICT ≻ BLOCKER_DECISION ≻ ACCEPTANCE ≻ REPLAN`，每一格的理由都从已冻结的条款读出（人优先于机器、原因优先于后果、§4.2 守卫 3 ≻ 4、守卫 4 ≻ 7、兜底就是兜底）。TU5 与 I15 冻结"一次 reconcile 至多一条语义 turn"，被压下的原因写进 §6.2 的 `suppressedTurnReasons`。
+
+**动作键**：`pc:v1:<projectId>:turn:<generation>:<reasonDigest>`，形状不变。变的是 `reasonCode` 唯一，因此 `reasonDigest` 唯一，因此键唯一 —— 一次快照不可能产出两条不同键的 turn 动作。
+
+**恢复路径**：被压下的原因**不会丢**。它没有被消费掉，也没有被记成已处理；如果下一次 reconcile 它仍然为真（而胜过它的那个已经不成立了），它自然胜出并获得自己的 turn。`suppressedTurnReasons` 让这件事在审计里看得见，而不是靠推理。
+
+**可执行断言**：`PC-CX-23 overlapping turn reasons are decided by one total order` —— 表驱动枚举五个谓词的全部 32 个布尔组合，每一组断言选中的 reasonCode 恰好零或一个、等于全序里第一个为真的那个、且与谓词求值顺序无关；交错 A 与 B 各作为具名回归用例。**反向对照**：去掉全序（回到 v1.3 的"五条独立触发条件"），A 与 B 立刻各产出两个 reasonCode、两条不同键的 turn 动作。
+
+### 22.4 `PC-CX-24` 周期身份必须进入 turn 的事实
+
+**最小交错序列**：
+
+1. `MERGE_CONFLICT(subject = 分支/文件集)` 首次发生，`lifecycle_generation = 1`，`condition_version = A`（TF2：`(targetBranch, sorted(冲突路径), 冲突侧内容摘要)`）。`BLOCKER_DECISION` 开一条 turn，键 `turn:<g>:sha256(BLOCKER_DECISION ‖ (MERGE_CONFLICT, subject, A))`。
+2. 协调器解决冲突，blocker 按 §11.4 自动解除（`resolved_at` 落库，**行还在**）。那条 turn 结束。
+3. 一小时后，**同一个文件集、同样的内容**再次冲突。§11.3 BE1 正确地开出 episode 2（`lifecycle_generation = 2`），而 `condition_version` **仍然是 `A`** —— TF2 定义它是"产生这条 blocker 的那些快照事实"的摘要，而那些事实真的一模一样。
+4. `turnFacts = (kind, subjectId, conditionVersion)` ⇒ `reasonDigest` 与第 1 步**逐字节相同** ⇒ §7.6 TR3 看到"同一 `(generation, reasonDigest)` 的 turn 已存在且已结束" ⇒ **不开 turn**，直接开 `COORDINATOR_NO_PROGRESS`（`owner = USER`）。协调器对这个**新故障**一次机会都没有，项目直接停在等人。
+
+**Postgres MVCC 与锁语义**：数据库这一侧其实已经是对的 —— v1.3 的 BE1 让 `lifecycle_generation` 在插入的同一条语句里单调分配，两个唯一索引兜底（§11.3 BE2），`RAISE_BLOCKER` 的键也已经带上了它。缺的是**另一个消费者没有跟上**：`turnFacts` 仍然停在 v1.2 的三元组。这与 `PC-CX-15` 是同一个形状 —— v1.2 把 `occurrences` 从 turn 摘要里拿掉却留在升级里，v1.3 把代次加进 blocker 键却没加进 turn 摘要。**一个修法只做了一半，剩下的那一半会在另一个消费者身上原样复发**，这已经是第三次。因此 v1.4 不只改这一格，而是冻结 TF4：**`turnFacts` 里每一项若取自一行有生命周期的行，就必须带上那一行的代次**，并逐行给出三个消费者（blocker / verdict / acceptance）。
+
+顺带要把 TF1 的分界写死：TF1 第 3 项"任何自增序号"如果照字面读，会把**必须**进来的周期代次也挡在外面 —— 而这正是本项发生的方式。判据用 §8.2 GE2 那一句：**把世界从 A 变到 B 再变回 A**，观测计数在没有 B 时也会前进（因此破坏"事实没变则键没变"），周期代次不会。
+
+**权威状态**：同一 open episode 内的重复仍然得到**同一个** turn 键（TR1 的去重、AC8 的"不重复通知"逐字不变）；`clear → 同因复发` **必然**得到一个新的 `reasonDigest`、一条新的 turn。TR3 因此只在它真正想说的那件事上命中：**同一个 episode 里，协调器已经被叫醒过一次而事实没有变**。§7.6 补一条"TR3 的成立前提"，把这个推理的边界写在它自己旁边。
+
+**动作键**：`pc:v1:<projectId>:turn:<generation>:<reasonDigest>`，其中 `turnFacts` 为 `(kind, subjectId, lifecycleGeneration, conditionVersion)` 排序摘要。`VERDICT` 与 `ACCEPTANCE` 同步补上 `verdictRevision` 与 `acceptanceAttempt`（TF4 的表）—— 它们是同一个缺口的另外两个实例，只是审查这一轮只撞到了 blocker 那一个。
+
+**恢复路径**：复发获得一次新的 turn，协调器照常处理。若这一次 turn 结束后事实仍然没变（同一 episode、同一 conditionVersion），TR3 才正确地开 `COORDINATOR_NO_PROGRESS` 交给人；而那条 blocker 的自动解除条件仍然是 `reasonDigest` 变了（BL3），因此下一次真正的变化会把它自动清掉。
+
+**可执行断言**：`PC-CX-24 a blocker episode that recurs earns a new turn, not a no-progress verdict` —— 对 §11.2 全部 `opensTurn = ✔` 的四个 kind 跑 `open → 重复投递 ×N → turn → clear → 同因复发`，断言：episode 1 内的 N 次重复恒为同一 turn 键；复发后 `lifecycle_generation` 为 2、`reasonDigest` 与 episode 1 不同、动作是 `OPEN_COORDINATOR_TURN` 而**不是** `COORDINATOR_NO_PROGRESS`；同 episode 内的第二次同 digest turn 仍然按 TR3 转 blocker。**反向对照**：把 `lifecycleGeneration` 从 `turnFacts` 里去掉（回到 v1.3 的三元组），同一序列立刻在复发处产出 `COORDINATOR_NO_PROGRESS`。
+
+### 22.5 `PC-CX-25` 派发权投影由数据库自己算
+
+**最小交错序列**（两条，都只需要一个"不认识新列"的旧写端）：
+
+- **A（移入）**：Project `P` 已 `coordinatorEnabled = true`，其全部 Task 的 `dispatch_authority = 'COORDINATOR'`。一个旧 apiserver 把一条 legacy Task 移进 `P` —— 它只会写 `UPDATE task SET project_id = :p WHERE id = :t`，因为它的代码里根本没有 `dispatch_authority` 这个名字。投影停在 `LEGACY`。旧 sweep 随后按 `AND dispatch_authority = 'LEGACY'` 选中它并插入一条 `LEGACY_SWEEP` 占位：**D6 读到 `LEGACY`，合法放行**。按 `P` 的真实配置，这个 Task 本该由控制环派。
+- **B（占位释放）**：启用 Coordinator 时有一条 `LEGACY_SWEEP` 占位在飞，v1.2 的 D8-b 正确地跳过了这个 Task。那条 Session 由旧写端结束（`UPDATE session SET status = 'COMPLETED'`），旧事务当然不会执行 v1.2 D3 的第三个写入点。Task **永久**停在 `LEGACY`，旧 sweep 可以一次又一次地派它。
+
+两条都不需要竞态、不需要并发、不需要任何人做错事 —— 只需要滚动升级窗口里还有一个旧进程在跑，而 §12.4 与 D7-note 恰恰把"旧实例不能被观测到已退出"当成了必须承受的前提，并声称正确性由数据库承担。**这一格是假的**，判 P0。
+
+**Postgres MVCC 与锁语义**：D5 / D6 / D9 都在数据库里，理由写得很清楚——"要挡住的两个入口一个是另一个进程的同一份代码，一个是另一个版本的旧代码；服务层的检查按定义对第二个无效"。但这条链的**第一环**（D6 读的那一列）仍然由服务层维护，于是整条链的强度等于最弱的那一环。修法只能是把这一环也放进数据库，而"放进数据库"有两种形状：一个**约束**（拒绝陈旧写入）或一个**投影触发器**（把写入改对）。这里必须是后者：旧写端写的是 `project_id`，它并不知道自己在改派发权，拒绝它等于让 legacy 路径在滚动升级期间大面积失败。因此 D8-a 的触发器 ① 在 `BEFORE INSERT OR UPDATE OF project_id, dispatch_authority ON task` 上**用派生值覆盖 `NEW.dispatch_authority`** —— 谁写、写成什么都一样，这一列**写不进一个错的值**。另一侧触发器 ② 在 `AFTER UPDATE OF coordinator_enabled ON project` 上 fan-out 到该项目全部 Task，按 id 升序取锁（D8-c，与批量插入 Session 同一个全序）。
+
+触发器 ① 里的 `FOR SHARE` 与 D6 里的那两个词是同一个理由，也同样是**前提而不是谨慎**：没有它，"一条并发插入的新 Task 读到翻转前的值"与"翻转的 fan-out 看不见这条未提交的新行"会同时成立，投影就地陈旧 —— 也就是这条 P0 的第三种形状。它的代价被 D8-e 逐条写明：这是全序里唯一一处由数据库代为发起的逆序访问，新二进制因为已经按 AE10 / LO2 先取了 project 锁而不受影响，旧二进制可能与一次并发翻转成环并拿到 `40P01`，**那是 fail closed，落进 §8.6 LO4 的有界重试**。
+
+删掉 D8-b 的 `NOT EXISTS` 是本项的第二半，它同时消掉了反例 B 和 LO1 里唯一一处逆序写入点。代价是承认一个**有界**的中间状态：翻转时在飞的那条 `LEGACY_SWEEP` 占位会跑完。它不是越权 —— 它是翻转**之前**由 D6 合法放行的；翻转**之后**的 legacy 插入在物理上不可能（D6 的 `FOR SHARE` 与翻转的 `FOR NO KEY UPDATE` 冲突，等锁后 EvalPlanQual 必然读到新值并拒绝）。因此 I12 拆成 I12-A（投影新鲜）与 I12-B（无越权**新**派发），而"控制环从不因为一次投影变更去杀掉别人已经启动的运行"这句话逐字保留。
+
+**权威状态**：I12-A —— 任何已提交状态上 `task.dispatch_authority` 恒等于 `authorityOf(task)`，**由触发器保证，因此对任何版本的二进制成立**；I12-B —— `COORDINATOR` 权 Task 上不存在翻转之后插入的 `LEGACY_SWEEP` 占位，由 D6 保证。§12.3 D3 的三个服务层写入点**一起删除**；§12.4 的混合版本格改写。
+
+**动作键**：不变。投影是一个派生列，不是一个动作。
+
+**恢复路径**：不需要恢复 —— 陈旧在构造上不会发生。需要的是**可验证**：§7.7 D13 给出一条漂移查询，对生产快照直接跑，返回非 0 行即 P0；§12.1 G5 把它列为迁移验证必查的第四样（前三样只问对象在不在，这一样问结果对不对）。
+
+**可执行断言**：`PC-CX-25 the authority projection is derived by the database, not maintained by a service` —— 模型侧断言投影的每一个写入路径（含旧写端的裸 SQL）都落在派生式上、且 §12.3 D3 不再有服务层写入点；真实 Postgres 侧由 `coordinator-linearization.pg.spec.ts` 的 `PC-CX-25 on real Postgres: an old writer cannot leave the authority projection stale` 建真表真触发器，用**只写 `project_id`、完全不提 `dispatch_authority` 的 SQL**（这就是旧二进制）跑 move-in / move-out / 翻转 / 结束占位四种写入，每一次都断言 D13 的漂移查询返回 0 行，并断言翻转之后的 `LEGACY_SWEEP` 插入被 D6 拒绝。**反向对照**：去掉投影触发器（回到 v1.2 的"服务层维护"），同一段旧写端 SQL 立刻留下 `dispatch_authority = 'LEGACY'` 而派生值是 `COORDINATOR`，D6 随后放行那条 legacy 占位 —— 与复审报告里的最小反例 A 逐字对应。
+
+### 22.6 `PC-CX-26` 撤权、并发上限与派发共用一把锁
+
+**最小交错序列**（两条）：
+
+- **A（撤权后仍派发）**：快照 `coordinatorEnabled = true`、`policy = AUTO`、`token = 9`。控制环决定派发 Task A。用户在这之后提交 `coordinatorEnabled = false`（或 `AUTO → MANUAL`、或把 `max` 调到 0）。用户的那条 `UPDATE project` **不推进 `fencing_token`** —— token 是 reconcile 之间的锁，不是 reconcile 与人之间的锁。控制环的提交事务里唯一的硬条件 `WHERE fencing_token = 9` **仍然成立**，Session 照常插入。最终已提交状态：**自动化已被关掉 + 一条关掉之后由控制环创建的 Session**。
+- **B（cap 被越过）**：快照 `inFlight = 0`、`maxConcurrentTasks = 1`。用户手动启动 Task B，控制环同时派 Task A。§7.7 D5 是 **per-Task** 的 partial unique index，两个 Task 的索引键不同，两条插入互不冲突，两边都成功 ⇒ `inFlight = 2`。§7.4 第 6 条读的是快照，快照里那时确实是 0。
+
+**Postgres MVCC 与锁语义**：这一项的答案不需要任何新 primitive，它需要的只是**认出那把锁本来就在**。用户改这四个字段的语句是 `UPDATE project SET … WHERE id = :p`，Postgres 对它自动取 `FOR NO KEY UPDATE`；而 §8.6 LO1 的第一级、§13.4 AE6-a 的第一句，取的正是同一行同一把锁。v1.3 只是没有要求**派发**也去取它 —— 验收事实写入取，策略门控的派发不取。AU1 把这个要求补上：含任何被 §9.2 门控的动作的提交事务，**第一句**取 `project … FOR NO KEY UPDATE`，锁到手后用**读回来的那一行**重跑 §9.2 与 §7.4 第 6、7 条（这是一条新语句，`READ COMMITTED` 必然看得见已提交的人工写）。两者互斥之后只剩两种提交顺序，每一种的结果都唯一确定（AU1-a 的表），**不存在顺序不明的第三种状态**。
+
+cap 那一半同理：两个入口在同一把锁之后各数一次占位（CAP1 的 `count(*)`），因为持有同一把行锁，这个计数在它们之间是**精确**的，上限不可能被并发越过。这里必须回答"为什么不做成数据库约束"，答案是一段可以被检查的论证而不是省略（CAP1-b）：`coordinatorEnabled = true` 的 Project，其全部 Task 的授权必为 `COORDINATOR`（I12-A），而旧 sweep 对 `COORDINATOR` 权 Task 一律被 D6 拒绝（I12-B），因此该 Project 上能创建占位的入口**恰好只剩控制环与人工两个**，两个都在新二进制里。**这个论证依赖 I12-A/I12-B，若将来任何一条被削弱，本条必须重新评估** —— 写下来是为了让那次重新评估会真的发生。
+
+`config_revision`（AU2）不是并发控制，互斥是那把锁；它的作用有两个：让授权变化必然改变 `decisionInputHash`（S3 因此不会被一个看不见的输入弄假），以及让"决策时的 revision"与"提交时的 revision"成为 `project_decision` 里两个可以直接读的数，一次撤权竞态因此是一行记录而不是一次考古。
+
+**权威状态**：I16 —— 任何已提交的策略门控动作，其提交事务重读到的授权仍然允许它；且不存在"`coordinator_enabled = false` 之后由控制环创建的占位"，不存在"同一 Project 占位数 > `max_concurrent_tasks`"。两句都可以对生产快照直接查。
+
+**动作键**：不变。被撤销的动作**仍然占它的键**（键已经写进 `project_action`），只是 `status = REFUSED`、`refusal_code = AUTHORITY_REVOKED` —— 这是对的：那次决策确实发生过，只是没有被执行，审计里必须留下。
+
+**恢复路径**：§8.5 C6 —— 被撤销的动作跳过副作用，outcome 其余部分（blocker / 审计行 / `nextWakeAt` / `consumed_at`）照常提交。把它做成回滚就会把事件消费一起丢掉，控制环在这条事件上活锁，那正是 `PC-CX-04`。人工入口撞 cap 时得到有类型的 `PROJECT_CONCURRENCY_LIMIT`，带上用户自己设的那个数和占着槽位的 Task —— **不是 500，也不是静默排队**。
+
+**可执行断言**：`PC-CX-26 revocation and the project cap share one gate with dispatch` —— 模型侧对四个 mutator（`coordinatorEnabled = false`、`AUTO → MANUAL`、`max` 调低、人工启动另一个 Task）× 两个提交顺序枚举八格，每格断言结果落在 AU1-a 的两行之一、且占位数 ≤ `max`；真实 Postgres 侧由 `coordinator-linearization.pg.spec.ts` 的 `PC-CX-26 on real Postgres: policy revocation and the project cap are one gate` 用两条真实连接跑 barrier：一条改策略/cap，一条走 AU1 的取锁—重读—插入，两个顺序各跑一遍。**反向对照**：去掉 AU1 的第一句（回到只有 token 条件），交错 A 立刻提交出"`coordinator_enabled = false` + 控制环创建的 Session"，交错 B 立刻产出 `inFlight = 2 > max = 1`。
+
+### 22.7 `PC-CX-27` 正文只留现行规则
+
+**最小交错序列**（这一项没有运行期交错，它的"交错"发生在两个实现者之间）：
+
+1. 实现者甲读 §13.1 AG1："聚合……（幂等键的 epoch 取子状态摘要，§8.2）"，于是给 `AGGREGATE_PARENT` 写了一个带 `childrenDigest` 的永久键。这**复活了 `PC-CX-17`**：`DONE → OPEN → DONE` 的第三次撞历史键，父任务永久停在 `OPEN`。
+2. 实现者乙读 §13.1 AG5："`AGGREGATE_PARENT` 是一次对当前子状态的重算……**它不进 `project_action`**"，于是写了 CAS。
+3. 两个人都能引用"冻结"二字，而契约**没有唯一裁决**。
+
+同一形状的第二处：§13.4 AE8 写着"持有 AE6 那把 `FOR SHARE` 的写入者"，而 AE6-a 与 §8.6 LO3 在 v1.3 已经把它冻结成 `FOR NO KEY UPDATE`，理由正是 `FOR SHARE → UPDATE` 的锁升级在真实服务器上产出 `40P01`。**照 AE8 字面实现就会复活 `PC-CX-19`。**
+
+**Postgres MVCC 与锁语义**：这一项与数据库无关，但它的成因值得写下来，因为它是本项目**第三次**在同一个地方摔跤：§9.4 的三级升级阶梯与 `occurrences > 10` 在 v1.1→v1.2 里留了两轮（`PC-CX-15`），v1.3 的修法给它加了一条**静态断言**（"§9.4 与 §11.5 里不再有 `occurrences >` 阈值或三级阶梯的字样"）。那条断言是对的，但它只覆盖了**它自己那一处**。一份两千行的契约里，一条规范会出现在动作表、键模板、闭环日志、验收映射、迁移步骤五六个地方，改其中一处而漏掉别处是必然事件，不是疏忽。**所以修法不能是"这次改仔细一点"，只能是一条会随修订一起长大的机制。**
+
+**权威状态**：§0 RL1 冻结"**§1–§18 是规范正文，§19–§22 是非规范的修订日志**"，并在四个修订日志各加一条横幅。于是"一句被取代的规范"有了一个精确的判据：它要么被删，要么只能出现在 §19–§22 或反例测试里。§13.1 AG1 的尾巴与 §13.4 AE8 的 `FOR SHARE` **已删除**。
+
+**动作键**：不变。
+
+**恢复路径**：§22.8 的**残句账**。每一条被取代的规范登记一行：被取代的字样、取而代之的条款、以及它复活时会重新变成哪个 `PC-CX-`。契约测试对 §1–§18 逐条扫描这张表，命中即红。下一轮修订如果又取代了一条规范而没登记，`PC-CX-27` 会以完全相同的方式复发 —— 因此登记这一行本身也是修订流程的一部分（§22.9）。
+
+**可执行断言**：`PC-CX-27 no superseded normative sentence survives in the normative body` —— 从 §22.8 读出全部"被取代的字样"，断言它们在 §1–§18 里一次都不出现（在 §19–§22 里出现多少次都行，那是日志）；另断言 §19–§22 每一节的开头都有非规范横幅、且 `AGGREGATE_PARENT` 在 §7.3 的键列恒为"无"。**反向对照**：把 AG1 的尾巴或 AE8 的 `FOR SHARE` 放回去，这条断言当场红 —— 这正是它与 v1.3 那条只盯 §9.4 的断言的差别。
+
+### 22.8 残句账（v1.4 新增，`PC-CX-27` 的可执行形式）
+
+**本表是规范的**（它被 §0 RL1 引用，且契约测试直接读它），尽管它长在一个非规范的小节里 —— 与 §19–§22 其余部分的分工是：那些记录"当时是什么样"，本表记录"现在**不许**再出现什么"。
+
+每一行的读法：**"被取代的字样"这一列里的文本，在 §1–§18 里只允许出现在一条带出处标记的行上**。出处标记 = 该行同时含有一个版本号（`v1.1` / `v1.2` / `v1.3` / `v1.4`）或一个 `PC-CX-nn`。这条约定同时服务两件事：给读者一个"这句话是历史，不是要求"的即时信号，给静态检查一个可靠的锚。**一条既没有出处标记、又命中本表的行，就是一条活着的旧规范。**
+
+| 被取代的字样 | 现行条款 | 复活会变成 |
+|---|---|---|
+| `幂等键的 epoch 取子状态摘要` | §13.1 AG5（`AGGREGATE_PARENT` 无键，current-state CAS） | `PC-CX-17` |
+| `持有 AE6 那把` | §13.4 AE6-a · §8.6 LO3（`FOR NO KEY UPDATE`，不升级） | `PC-CX-19` |
+| `FROM project WHERE id = :p FOR SHARE` | §13.4 AE6-a（`FOR NO KEY UPDATE`） | `PC-CX-19` |
+| `occurrences > 10` | §11.5 ES4（唯一触发是存活时长） | `PC-CX-15` |
+| `SYSTEM → COORDINATOR → USER` | §11.5 ES3（升级恰好一步，目标恒为 `USER`） | `PC-CX-12` |
+| `的写入点恰好` | §12.3 D3 · §7.7 D8-a（派生列，没有服务层写入点） | `PC-CX-25` |
+| `保持它当前的派发权` | §7.7 D8-b（照常翻转，承认有界的 pre-flip 占位） | `PC-CX-25` |
+
+**登记规则（冻结）**：一次修订如果**取代**了一条规范（而不只是补充），必须在本表加一行；如果只是新增，不加。判据是一句话：**如果有人照旧句子实现，会不会得到一个已经被审查记过号的缺陷？** 会，就必须登记。
+
+**为什么 `PC-CX-21` 没有自己的一行**：它修的不是一句被写错的规范，而是**一条不变量被写成了错误的时态** —— §4.3 的 I11 没有哪一句需要被禁止再出现，它被**拆成**了 I11-A 与 I11-B。照 v1.3 的 §4.1 / §10.3 字面实现不会产生那个缺陷（那两处只是引用 I11），产生缺陷的是把 D9 的等号当成恒成立。因此按登记规则它不入表，改由契约测试的**结构断言**盯住：§4.3 必须同时定义 I11-A（含 `<=`）与 I11-B（含"提交时"）、§7.7 必须有 D9-e、§10.3 (a) 必须引用 I11-A 而不是裸的 I11。**账要记得诚实：一条不适用的规则不该被硬塞进表里凑数。**
+
+### 22.9 本次修订**没有**做的事
+
+同 §19.9 / §20.7 / §21.7，边界要写清楚：
+
+- **本次修订仍不含实现**。03–23 单元一行业务代码都还没写；`project.config_revision`、D10 / D11 / D12 的四个触发器、AU1 的取锁与重读、`evaluation` 的到期事实目前都是**契约条款**，不是数据库里的对象或代码里的函数。真实 PostgreSQL 测试建的是**测试用的表**，它们证明的是"这些 SQL 语义成立"，不是"迁移已经写好了"，后者归 03 / 04 单元（§12.1 G5 已列出必须显式验证的十一样东西）。
+- **四份审查文档一字未改**（任务的硬约束）。它们记录的是 v1、v1.1、v1.2 与 v1.3 的事实；v1.4 的回应写在本节。
+- **02 在 v1.3 轮留下的 `coordinator-v13-adversarial.spec.ts` 被翻转，不是被删**。那份 spec 的每一条断言原本证明"缺陷存在"，修好之后它们必然与新契约冲突；该报告 §5 的后续清单明确要求"把它们从证明缺陷存在翻转成旧交错被拒绝/得到唯一合法结果"。翻转后每条断言**同时保留 v1.3 的形状作为反向对照**，因此"这个缺陷当初真的存在"与"它现在真的被挡住了"在同一个测试里各有一句。
+- **三处行为变更，不是措辞澄清**，写在这里以免下一个人以为它们只是没写全：§4.3 I11 从"等于当前 token"改成"`<=` + 提交时等号"（并因此需要 D10 / D11 两条反向约束）；§7.7 D8-b 从"有占位就不翻转"改成"照常翻转，承认一个有界的 pre-flip 占位"（并因此删掉 §12.3 D3 的三个服务层写入点）；§9.6 AU1 让**每一个策略门控动作**的提交事务都取 project 行锁（代价是同一 Project 的派发与人工策略写之间会排队）。
+- **cap 没有做成数据库约束**。CAP1-b 给出了论证与它依赖的两条前提；这是一次有论证的取舍，不是遗漏，而且论证写成了"若前提被削弱必须重新评估"的形式。
+- **没有给"不经过 Orbit 的 `git push`"发明一把锁**。§13.4 AE9-d 那条边界逐字不变：有界延迟的检测 + 原子重开，不是互斥。
+- **`evaluation` 的到期事实只有模型级断言**。它是一段读输入时的求值策略，不是数据库语义；等 09 / 11 单元写出快照读与决策记录，才有真实入口可测。

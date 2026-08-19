@@ -31,6 +31,20 @@ const REVIEW_V11 = readFileSync(path.join(REPO, 'docs/project-coordinator-contra
 const REVIEW_V12 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.2.md'), 'utf8');
 const COUNTEREXAMPLES = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
 
+const REVIEW_V13 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.3.md'), 'utf8');
+/** §1–§18: the normative body. §19–§22 are revision logs and are explicitly non-normative (§0 RL1). */
+const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
+/**
+ * The §7.2 turn-reason table. §7.2 holds three tables (the mechanical/semantic split, the reasons,
+ * and TF4's generation map), so address it by its headers: `tableRows` would concatenate all three
+ * and TF4's first column is also `reasonCode`, which makes a positional read silently wrong.
+ */
+function turnReasonTable(): string[][] {
+  const found = tables(section(PCC, '7.2')).find((t) => t[0].some((h) => bare(h) === '触发条件'));
+  assert.ok(found, '§7.2 no longer states the turn-reason table');
+  return found;
+}
+
 test('every cross-reference into the frozen Project/Agent contract resolves', () => {
   const pacHeadings = headingNumbers(PAC);
   const refs = new Set(Array.from(PCC.matchAll(/PAC §(\d+(?:\.\d+)?)/g), (m) => m[1]));
@@ -111,9 +125,14 @@ test('BL4 holds: the blockers that open a coordinator turn are exactly the ones 
   const opensTurn = kinds.filter((_, i) => opens[i] === '✔').sort();
   assert.deepEqual(opensTurn, ownedByCoordinator, 'BL4: opensTurn = ✔ must be exactly owner = COORDINATOR');
 
-  const trigger = tableRows(section(PCC, '7.2')).find((cells) => bare(cells[0]) === 'BLOCKER_DECISION');
-  assert.ok(trigger, '§7.2 no longer names the blocker-driven turn trigger');
-  const listed = (/\{([^}]+)\}/.exec(trigger[1])?.[1] ?? '').split(',').map((k) => k.trim()).filter(Boolean).sort();
+  // v1.4 gave the turn-reason table an order column and added a second table (TF4), so address it
+  // by header rather than by position: `tableRows` concatenates every table in the section, and the
+  // TF4 table also has a `reasonCode` first column — reading the wrong one silently yields [].
+  const reasons = turnReasonTable();
+  const conditions = column(reasons, '触发条件');
+  const at = column(reasons, 'reasonCode').map(bare).indexOf('BLOCKER_DECISION');
+  assert.ok(at >= 0, '§7.2 no longer names the blocker-driven turn trigger');
+  const listed = (/\{([^}]+)\}/.exec(conditions[at])?.[1] ?? '').split(',').map((k) => k.trim()).filter(Boolean).sort();
   assert.deepEqual(listed, ownedByCoordinator, '§7.2 and §11.2 disagree about which blockers open a turn');
   assert.ok(!listed.includes('TEST_FAILED'), 'a task failure must never be on the turn-opening list (TU2)');
 });
@@ -386,4 +405,214 @@ test('the P0 findings are answered by a database constraint, not by application 
   // so the only place they can be held is here and in the migration's own verification.
   assert.match(section(PCC, '7.7'), /FOR SHARE/, 'the authority guard must take a lock that conflicts with the flip');
   assert.match(migration, /FOR SHARE/, 'and the migration must be verified for it, not just for the trigger existing');
+});
+
+// ---------------------------------------------------------------------------------------------
+// v1.4 — `PC-CX-21..27`
+// ---------------------------------------------------------------------------------------------
+
+test('§22 answers every finding unit 02 raised against v1.3, and names a test that exists', () => {
+  // Round four, read exactly the way the first three are: as evidence. Its findings are numbered
+  // from 21, and the report refers back to the earlier ones, so the new ones are the ones above 20.
+  const cited = new Set(Array.from(REVIEW_V13.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 20).sort();
+  assert.deepEqual(raised, ['21', '22', '23', '24', '25', '26', '27'], 'unit 02 raised seven findings against v1.3');
+
+  const rows = tables(section(PCC, '22'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§22 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21'].flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `22.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§22.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the four reviews are read, never edited', () => {
+  // Same pin as the three-review version above, extended to round four. Nothing here can prove a
+  // file was not edited; what it pins is the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V13, /FAIL/, 'the fourth review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V13.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 20).length,
+    7,
+  );
+});
+
+test('the revision logs are marked non-normative, and only they may quote a superseded rule', () => {
+  // PC-CX-27: §9.4 carried a deleted escalation ladder for two rounds, and v1.3 answered it with a
+  // static check that scanned §9.4 and §11.5 — the two places it already knew about. A 2000-line
+  // contract states each rule in five or six places, so "look harder next time" is not a mechanism.
+  // §0 RL1 plus §22.8's ledger is: every superseded sentence is registered, and a line quoting one
+  // must carry its provenance (a version number or the finding id). A line that quotes one without
+  // provenance is a rule that is still alive.
+  for (const n of ['19', '20', '21', '22']) {
+    const body = section(PCC, n);
+    assert.match(body.split('\n').slice(0, 4).join('\n'), /本节是非规范的/, `§${n} is not marked non-normative`);
+  }
+
+  const ledger = tables(section(PCC, '22.8'))[0];
+  const phrases = column(ledger, '被取代的字样').map(bare);
+  assert.ok(phrases.length >= 6, '§22.8 no longer registers the superseded sentences');
+  for (const phrase of phrases) {
+    assert.ok(PCC.includes(phrase), `the ledger registers "${phrase}", which appears nowhere at all — a typo makes the row a no-op`);
+    for (const [i, line] of NORMATIVE.split('\n').entries()) {
+      if (!line.includes(phrase)) continue;
+      assert.match(
+        line,
+        /v1\.[1-4]|PC-CX-\d\d/,
+        `a superseded rule is alive in the normative body (§22.8 registers "${phrase}"):\n  line ${i + 1}: ${line.trim()}`,
+      );
+    }
+  }
+  // …and the two the fourth review actually caught have to be gone, not merely provenance-tagged.
+  assert.doesNotMatch(section(PCC, '13.1'), /幂等键的 epoch 取子状态摘要，§8\.2/, 'AG1 still prescribes the removed aggregate key');
+  assert.doesNotMatch(section(PCC, '13.4'), /持有 AE6 那把 `FOR SHARE`/, 'AE8 still prescribes the deadlocking v1.2 lock');
+});
+
+test('I11 is stated with a tense: one standing half, one commit-time half', () => {
+  // PC-CX-21 has no ledger row on purpose (§22.8 says why): nothing was mis-worded, an invariant
+  // was stated in a tense that the system's own normal operation falsifies. What can be held is
+  // the shape of the replacement — and that every clause reading it reads the standing half.
+  const invariants = section(PCC, '4.3');
+  assert.match(invariants, /\*\*I11-A（归属，恒成立）\*\*/, '§4.3 does not state the standing half of I11');
+  assert.match(invariants, /\*\*I11-B（提交时授权，点态）\*\*/, '§4.3 does not state the commit-time half of I11');
+  assert.match(invariants, /action\.fencing_token <= project_runtime\.fencing_token/, 'the standing half must be the monotone relation, not the equality');
+  assert.match(section(PCC, '10.3'), /I11-A/, '§10.3 (a) must lean on the standing half; the equality is false after the next lease');
+  assert.match(section(PCC, '8.1'), /\*\*F0/, '§8.1 must say what the fencing token answers, next to the lease itself');
+
+  // The rows D9 reads must each have a closed mutator protocol, or "proved at commit" decays back
+  // into "proved at insert" — the lesson PC-CX-09 and PC-CX-20 already charged twice for.
+  const dispatch = section(PCC, '7.7');
+  assert.match(dispatch, /#### D10 · 占位期间 Task 不得跨 Project 移动/, 'task.project_id has no mutator protocol');
+  assert.match(dispatch, /#### D11 · `APPLIED` 动作行终态不可改写/, 'project_action has no mutator protocol');
+  assert.match(dispatch, /\*\*D9-e/, 'D9 does not say which of its predicates is commit-time only');
+});
+
+test('the turn reasons are a total order, and at most one turn comes out of one input', () => {
+  // PC-CX-23, checked the way PC-CX-03 is: the fix is only a fix if the order is stated in the
+  // document as an ordered, total column — a prose sentence about priority drifts from the table.
+  const rows = turnReasonTable();
+  const order = column(rows, '序').map(bare);
+  const codes = column(rows, 'reasonCode').map(bare);
+  assert.deepEqual(order, ['1', '2', '3', '4', '5'], '§7.2 no longer orders the turn reasons');
+  assert.deepEqual(codes, ['MANUAL', 'VERDICT', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'], 'the frozen total order changed');
+  assert.equal(new Set(codes).size, codes.length, 'two rows share a reasonCode');
+  assert.match(section(PCC, '7.2'), /\*\*TU4（唯一裁决：首个为真者胜/, '§7.2 states the order but not the rule that reads it');
+  assert.match(section(PCC, '4.3'), /\*\*I15/, 'the "at most one semantic turn" invariant is not stated');
+
+  // PC-CX-24: every reason drawn from a row that has a lifecycle must carry that row's generation,
+  // or a cleared-and-recurring episode collides with the turn key of the episode before it.
+  const tf4 = tables(section(PCC, '7.2')).find((t) => t[0][0].replace(/[`*]/g, '').trim() === 'reasonCode' && t[0].length === 3);
+  assert.ok(tf4, 'TF4 no longer lists which reasons carry a generation');
+  assert.deepEqual(column(tf4, 'reasonCode').map(bare).sort(), ['ACCEPTANCE', 'BLOCKER_DECISION', 'VERDICT']);
+  const facts = column(rows, 'turnFacts（进入 reasonDigest 的输入投影，§7.3）');
+  for (const [i, generation] of column(tf4, '代次项').map(bare).entries()) {
+    const code = bare(column(tf4, 'reasonCode')[i]);
+    const camel = generation.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+    assert.match(facts[codes.indexOf(code)], new RegExp(camel), `${code}'s turnFacts does not carry ${generation}`);
+  }
+});
+
+test('the authority projection is derived by the database, and its freshness is a query', () => {
+  // PC-CX-25 is a P0, and P0s in this contract are answered by database objects, never by a
+  // service — the same judgement §2.4 already applies to D5/D6. What is checked here is that the
+  // objects are frozen, that the migration creates them, that the service write points are gone,
+  // and that the freshness claim is stated as something anyone can run against production.
+  const objects = column(tables(section(PCC, '2.4'))[1], '对象').map(bare);
+  for (const object of ['task_dispatch_authority_projection', 'task_claimed_project_move_guard', 'project_action_applied_immutable_guard']) {
+    assert.ok(objects.includes(object), `${object} is not frozen in §2.4`);
+    assert.ok(section(PCC, '12.1').includes(object), `${object} is frozen in §2.4 but never created by the migration`);
+  }
+  assert.match(section(PCC, '7.7'), /#### D13 · 授权投影的漂移查询/, 'I12-A claims to be queryable but no query is given');
+  assert.match(section(PCC, '4.3'), /\*\*I12-A（投影新鲜，恒成立，由 D12 保证）\*\*/, '§4.3 does not state the freshness invariant');
+  assert.match(section(PCC, '4.3'), /\*\*I12-B（无越权新派发，恒成立，由 D6 保证）\*\*/, '§4.3 does not state what replaces the old I12');
+  // The trigger's `FOR SHARE` is invisible in pg_trigger and in `migrate diff`, exactly like D6's —
+  // and it is what makes a concurrent flip and a task write mutually exclusive. §12.1 G5 has to
+  // keep asking for it by name, or a two-word regression ships with no signal at all.
+  assert.match(section(PCC, '7.7'), /SELECT p\.coordinator_enabled INTO enabled FROM project p WHERE p\.id = NEW\.project_id FOR SHARE/, 'the projection trigger no longer locks the project row');
+  assert.match(section(PCC, '12.1'), /task_dispatch_authority_projection` 存在\*\*且函数体里含 `FOR SHARE`/, 'the migration is not verified for the two words that carry the P0');
+});
+
+test('policy revocation, the project cap and dispatch share one gate', () => {
+  // PC-CX-26. The gate is a row lock that already existed (LO1's first level, AE6-a's first
+  // statement); what was missing is that dispatch never took it. So what is asserted here is that
+  // §9.6 exists, that it is the same lock, and that the closed set of "authority" fields is stated
+  // rather than left to whoever writes the policy evaluator.
+  const gate = section(PCC, '9.6');
+  assert.match(gate, /\*\*AU1（授权复核门，冻结）\*\*/, '§9.6 states no re-check gate');
+  assert.match(gate, /FROM project WHERE id = :p FOR NO KEY UPDATE/, 'the gate must be the same project row lock LO1 already freezes');
+  assert.match(gate, /\*\*CAP1（并发上限是所有入口共享的硬门，冻结）\*\*/, '§9.6 does not freeze whether a human may cross the cap');
+  assert.match(gate, /\*\*CAP1-b/, 'CAP1 must argue why it is not a database constraint, not simply omit one');
+  const fields = ['coordinator_enabled', 'automation_policy', 'max_concurrent_tasks', 'session_budget_per_day'];
+  for (const field of fields) assert.ok(gate.includes(field), `${field} is not in the closed authority set (AU3)`);
+  assert.match(section(PCC, '4.3'), /\*\*I16/, 'the commit-time authorisation invariant is not stated');
+  assert.match(section(PCC, '8.5'), /AUTHORITY_REVOKED/, 'a revoked action must have the same non-rollback shape as a key conflict (C2/C6)');
+  assert.match(section(PCC, '9.2'), /\*\*P4/, 'the policy matrix does not say it is evaluated twice');
+});
+
+test('the decision input is complete: every column a rule reads is a field the input carries', () => {
+  // PC-CX-22 / §6.1 S8. This is the one assertion that has to be derived rather than listed,
+  // because the failure mode is "someone added a rule and forgot the field". The columns are
+  // harvested from the tables that name them — the action table's key templates, GE1's generation
+  // column, and the acceptance digest's projections — and every one has to appear in §6.1.
+  const input = section(PCC, '6.1');
+  const generations = column(tables(section(PCC, '8.2'))[0], '落库位置').join(' ');
+  const harvested = new Set<string>();
+  for (const key of column(tableRows(section(PCC, '7.3')), '幂等键（§8.2）').map(bare)) {
+    for (const m of key.matchAll(/<([a-zA-Z]+)>/g)) if (m[1] !== 'projectId') harvested.add(m[1]);
+  }
+  for (const m of generations.matchAll(/`([a-z_]+\.[a-z_]+)`/g)) harvested.add(m[1].split('.')[1]);
+  // AE1's four digest projections: three are computed from fields the input already carries, one
+  // (`mergeEvidence`) is a projection of rows that live nowhere else, so only it has to appear
+  // verbatim. The mapping is written out because it is the one place where "the rule reads X" is
+  // not the same string as "the input carries X".
+  const digestSources: Record<string, string[]> = {
+    criteriaRevision: ['acceptanceCriteria'],
+    taskSet: ['status', 'completionPolicy'],
+    verdicts: ['verdict', 'verifiesTaskId'],
+    mergeEvidence: ['mergeEvidence'],
+  };
+  const projections = Array.from(section(PCC, '13.4').matchAll(/^\s{2}(criteriaRevision|taskSet|verdicts|mergeEvidence)\s*:/gm), (m) => m[1]);
+  assert.deepEqual([...new Set(projections)].sort(), ['criteriaRevision', 'mergeEvidence', 'taskSet', 'verdicts'], 'AE1 no longer states four projections');
+  for (const projection of projections) for (const source of digestSources[projection]) harvested.add(source);
+  assert.ok(harvested.size >= 8, 'nothing was harvested; the tables this reads have moved');
+
+  const camel = (snake: string): string => snake.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+  const missing = [...harvested].filter((column_) => {
+    const name = camel(column_);
+    return !new RegExp(`\\b${name}\\b`).test(input) && !/^(taskId|verifierTaskId|blockerId|targetIdempotencyKey|kind|subjectId|generation|reasonDigest)$/.test(name);
+  });
+  assert.deepEqual(missing, [], 'a rule reads a column the decision input does not carry (§6.1 S8)');
+
+  // §11.1's five questions are answered from the blocker projection, so every one of them has to
+  // be a field the input carries — `run_state` (owner), the clock (recovery, nextCheckAt) and the
+  // turn digest (kind, subject) are all decided from it.
+  const blockers = /"blockers":\s*\[([\s\S]*?)\]/.exec(input)?.[1] ?? '';
+  for (const field of ['kind', 'owner', 'recovery', 'nextCheckAt', 'subject']) {
+    assert.ok(blockers.includes(field), `§11.1 asks "${field}" of every blocker, but the input does not carry it`);
+  }
+
+  for (const rule of ['**S5', '**S6', '**S7', '**S8']) {
+    assert.ok(input.includes(rule), `§6.1 does not state ${rule}`);
+  }
+  assert.match(input, /decisionInputHash/, 'the hash was not renamed to cover the whole input');
+  assert.match(section(PCC, '6.2'), /decisionInputHash/, 'the outcome does not record which input it decided on');
 });
