@@ -165,11 +165,16 @@ test('PC-CX-56 on isolated Postgres: the declared Project purge commits and leav
           id text PRIMARY KEY,
           project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
           status text NOT NULL,
-          result_session_id text
+          result_session_id text,
+          -- v1.13 (PC-CX-60): D20 ⓪ reads the action type and the Session origin, because D20-c
+          -- always excluded a USER Session and a non-dispatch action. The two columns carry the
+          -- in-scope defaults so every assertion below is the same fixture it was in v1.12.
+          type text NOT NULL DEFAULT 'DISPATCH_TASK'
         );
         CREATE TABLE session (
           id text PRIMARY KEY,
-          project_action_id text UNIQUE
+          project_action_id text UNIQUE,
+          dispatch_origin text NOT NULL DEFAULT 'COORDINATOR'
         );
         CREATE INDEX project_action_result_session_idx ON project_action(result_session_id);
         CREATE INDEX project_action_project_idx ON project_action(project_id);

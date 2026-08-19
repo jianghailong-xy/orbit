@@ -5034,3 +5034,479 @@ test('PC-CX-57 on real Postgres: a legacy malformed ledger still cannot rewrite 
       await c.end();
     }
   });
+
+// -------------------------------------------------------------------------------------------------
+// v1.13 — `PC-CX-58..61`. Round thirteen asked one question of all four: does exactly one sentence
+// decide this rule? Two clauses gave the lineage FK two initial modes (58); the migration table and
+// the normative function bodies described two object sets for one version (59); D20-c's prose and
+// D20 ③-3's SQL described two different sets of rows to delete (60); and the purge's snapshot and a
+// concurrent publication had no shared linearization point, so the winner depended on the scheduler
+// rather than on a rule (61).
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * §7.7 D20 as v1.13 states it, on top of `installPurge112`'s tables and lineage constraint. Three
+ * switches keep the superseded shapes reachable as reverse controls: `snapshot: 'v112'` is the raw
+ * `OR` union D20-c never authorised, `lockLedger: false` drops ③-2, and `publishFence: false` drops
+ * ④ — the pair whose absence is `PC-CX-61`.
+ */
+async function installPurge113(c: Client, options: {
+  snapshot?: 'v113' | 'v112'; lockLedger?: boolean; publishFence?: boolean; base?: boolean;
+} = {}): Promise<void> {
+  const { snapshot = 'v113', lockLedger = true, publishFence = true, base = true } = options;
+  if (base) await installPurge112(c);
+  // ⓪ D20-c's quantification domain, as one function. ② and ③ both read it and neither restates it.
+  await c.query(`
+    CREATE OR REPLACE FUNCTION coordinator_purge_ledger_pairs(p_project_id text)
+    RETURNS TABLE (action_id text, session_id text, in_scope boolean, reason text)
+    LANGUAGE sql STABLE AS $fn$
+      SELECT a.id, s.id,
+             COALESCE(s.dispatch_origin = 'COORDINATOR'
+                  AND a.type = 'DISPATCH_TASK'
+                  AND s.project_action_id IS NOT DISTINCT FROM a.id
+                  AND ((a.status =  'APPLIED' AND a.result_session_id IS NOT DISTINCT FROM s.id)
+                    OR (a.status <> 'APPLIED' AND a.result_session_id IS NULL))
+                  AND NOT EXISTS (SELECT 1 FROM project_action o
+                                   WHERE o.result_session_id = s.id
+                                     AND o.project_id IS DISTINCT FROM p_project_id), false),
+             CASE WHEN s.dispatch_origin <> 'COORDINATOR' THEN 'the session is not a COORDINATOR placeholder'
+                  WHEN a.type <> 'DISPATCH_TASK'          THEN 'the action is not a DISPATCH_TASK'
+                  WHEN s.project_action_id IS DISTINCT FROM a.id
+                                                          THEN 'the link is one-way: the session does not point back'
+                  WHEN a.status =  'APPLIED' AND a.result_session_id IS DISTINCT FROM s.id
+                                                          THEN 'the applied dispatch does not point at this session'
+                  WHEN a.status <> 'APPLIED' AND a.result_session_id IS NOT NULL
+                                                          THEN 'an unpublished dispatch already carries a result link'
+                  WHEN EXISTS (SELECT 1 FROM project_action o
+                                WHERE o.result_session_id = s.id
+                                  AND o.project_id IS DISTINCT FROM p_project_id)
+                                                          THEN 'another project ledger points at this session too'
+                  ELSE 'in scope' END
+        FROM project_action a
+        JOIN session s ON (s.project_action_id = a.id OR a.result_session_id = s.id)
+       WHERE a.project_id = p_project_id;
+    $fn$;
+
+    CREATE OR REPLACE FUNCTION project_purge_fence() RETURNS trigger AS $fn$
+    DECLARE bad record; stranded bigint;
+    BEGIN
+      SELECT * INTO bad FROM coordinator_purge_ledger_pairs(OLD.id)
+       WHERE NOT in_scope ORDER BY action_id, session_id LIMIT 1;
+      IF FOUND THEN
+        RAISE EXCEPTION 'PROJECT_PURGE_UNDECIDABLE: project % links action % to session % but % (owner=USER, recovery=HUMAN: adjudicate that link first; nothing was deleted)',
+          OLD.id, bad.action_id, bad.session_id, bad.reason;
+      END IF;
+      IF current_setting('coordinator.purging_project', true) IS NOT DISTINCT FROM OLD.id THEN
+        RETURN OLD;
+      END IF;
+      SELECT count(DISTINCT session_id) INTO stranded
+        FROM coordinator_purge_ledger_pairs(OLD.id) WHERE in_scope;
+      IF stranded > 0 THEN
+        RAISE EXCEPTION 'PROJECT_PURGE_UNDECLARED: project % still owns % coordinator placeholder session(s) whose lineage points into its action ledger (owner=SYSTEM, recovery=EVENT: call coordinator_purge_project(%) — it is the only public purge, and it removes the project, its ledger and those placeholders in one transaction)',
+          OLD.id, stranded, quote_literal(OLD.id);
+      END IF;
+      RETURN OLD;
+    END;
+    $fn$ LANGUAGE plpgsql;
+
+    CREATE OR REPLACE FUNCTION coordinator_purge_lock_ledger(p_project_id text) RETURNS void AS $fn$
+    BEGIN
+      PERFORM 1 FROM project_action WHERE project_id = p_project_id ORDER BY id FOR UPDATE NOWAIT;
+    EXCEPTION WHEN lock_not_available THEN
+      RAISE EXCEPTION 'PROJECT_PURGE_CONTENDED: project % has an in-flight dispatch holding one of its action rows outside the publish fence (owner=SYSTEM, recovery=EVENT: retry coordinator_purge_project(%) after that transaction settles — this transaction changed nothing and the purge is idempotent)',
+        p_project_id, quote_literal(p_project_id);
+    END;
+    $fn$ LANGUAGE plpgsql VOLATILE;
+
+    CREATE OR REPLACE FUNCTION coordinator_project_publish_fence() RETURNS trigger AS $fn$
+    DECLARE p_id text;
+    BEGIN
+      IF TG_TABLE_NAME = 'session' THEN
+        IF NEW.project_action_id IS NULL THEN RETURN NEW; END IF;
+        SELECT a.project_id INTO p_id FROM project_action a WHERE a.id = NEW.project_action_id;
+        IF NOT FOUND THEN RETURN NEW; END IF;
+      ELSE
+        p_id := NEW.project_id;
+      END IF;
+      PERFORM 1 FROM project WHERE id = p_id FOR KEY SHARE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'PROJECT_PURGED: project % was physically purged while this dispatch was in flight (owner=SYSTEM, recovery=EVENT: this dispatch is void — the ledger it would join no longer exists; do not retry it against this project)', p_id;
+      END IF;
+      RETURN NEW;
+    END;
+    $fn$ LANGUAGE plpgsql VOLATILE;
+  `);
+  await c.query(`
+    CREATE OR REPLACE FUNCTION coordinator_purge_project(p_project_id text,
+      OUT purged_actions bigint, OUT purged_sessions bigint) AS $fn$
+    DECLARE doomed text[]; bad record;
+    BEGIN
+      purged_actions := 0; purged_sessions := 0;
+      PERFORM 1 FROM project WHERE id = p_project_id FOR UPDATE;
+      IF NOT FOUND THEN RETURN; END IF;
+      ${lockLedger ? 'PERFORM coordinator_purge_lock_ledger(p_project_id);' : ''}
+      SELECT * INTO bad FROM coordinator_purge_ledger_pairs(p_project_id)
+       WHERE NOT in_scope ORDER BY action_id, session_id LIMIT 1;
+      IF FOUND THEN
+        RAISE EXCEPTION 'PROJECT_PURGE_UNDECIDABLE: project % links action % to session % but % (owner=USER, recovery=HUMAN: adjudicate that link first; nothing was deleted)',
+          p_project_id, bad.action_id, bad.session_id, bad.reason;
+      END IF;
+      PERFORM set_config('coordinator.purging_project', p_project_id, true);
+      SET CONSTRAINTS session_project_action_fk DEFERRED;
+      ${snapshot === 'v113'
+    ? `SELECT COALESCE(array_agg(DISTINCT session_id), '{}'::text[]) INTO doomed
+           FROM coordinator_purge_ledger_pairs(p_project_id) WHERE in_scope;`
+    : `SELECT COALESCE(array_agg(DISTINCT s.id), '{}'::text[]) INTO doomed
+           FROM session s JOIN project_action a ON a.id = s.project_action_id OR a.result_session_id = s.id
+          WHERE a.project_id = p_project_id;`}
+      SELECT count(*) INTO purged_actions FROM project_action WHERE project_id = p_project_id;
+      DELETE FROM project WHERE id = p_project_id;
+      DELETE FROM session WHERE id = ANY(doomed);
+      GET DIAGNOSTICS purged_sessions = ROW_COUNT;
+    END;
+    $fn$ LANGUAGE plpgsql;
+  `);
+  if (publishFence) {
+    await c.query(`
+      CREATE TRIGGER coordinator_project_publish_fence BEFORE INSERT OR UPDATE ON project_action
+        FOR EACH ROW EXECUTE FUNCTION coordinator_project_publish_fence();
+      CREATE TRIGGER coordinator_project_publish_fence BEFORE INSERT ON session
+        FOR EACH ROW EXECUTE FUNCTION coordinator_project_publish_fence();
+    `);
+  }
+}
+
+/** §12.1 step 6g2 and 6h, executed: the objects each is required to leave behind, from the catalog. */
+const OBJECT_CENSUS_113 = `
+  WITH ns AS (SELECT current_schema()::regnamespace AS oid),
+       trg AS (SELECT t.* FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
+                WHERE NOT t.tgisinternal AND c.relnamespace = (SELECT oid FROM ns)),
+       con AS (SELECT c.* FROM pg_constraint c WHERE c.connamespace = (SELECT oid FROM ns))
+  SELECT
+    (SELECT (t.tgtype & 4) > 0 FROM trg t WHERE t.tgname = 'project_action_result_ledger_mutator') AS d18_insert,
+    (SELECT (t.tgtype & 16) > 0 FROM trg t WHERE t.tgname = 'project_action_result_ledger_mutator') AS d18_update,
+    (SELECT c.confdeltype::text FROM con c WHERE c.conname = 'project_action_result_session_fk') AS d19_fk,
+    (SELECT count(*)::int FROM trg t WHERE t.tgname = 'session_result_link_delete_guard') AS d19_guard,
+    (SELECT c.condeferrable FROM con c WHERE c.conname = 'session_project_action_fk') AS fk_deferrable,
+    (SELECT c.condeferred FROM con c WHERE c.conname = 'session_project_action_fk') AS fk_deferred,
+    (SELECT c.confdeltype::text FROM con c WHERE c.conname = 'session_project_action_fk') AS fk_delete,
+    (SELECT count(*)::int FROM pg_proc p WHERE p.pronamespace = (SELECT oid FROM ns)
+        AND p.proname IN ('coordinator_purge_ledger_pairs','coordinator_purge_lock_ledger',
+                          'coordinator_purge_project','project_purge_fence','coordinator_project_publish_fence')) AS d20_functions,
+    (SELECT count(*)::int FROM trg t
+      WHERE t.tgname IN ('project_purge_fence','coordinator_project_publish_fence')) AS d20_triggers`;
+
+test('PC-CX-58 on real Postgres: the lineage FK is immediate by default and deferrable only on demand',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await installV19(c);
+      await installPurge113(c);
+      assert.equal(await seedPurgeFixture(c), '', 'the ordinary dispatch must commit first');
+      const fk = async () => (await c.query<{ condeferrable: boolean; condeferred: boolean;
+        confdeltype: string; confupdtype: string }>(`
+        SELECT condeferrable, condeferred, confdeltype::text, confupdtype::text FROM pg_constraint
+         WHERE conname='session_project_action_fk' AND connamespace = current_schema()::regnamespace`)).rows[0];
+      // All four columns together: two of them are identical in a same-named CASCADE constraint.
+      assert.deepEqual(await fk(), { condeferrable: true, condeferred: false, confdeltype: 'a', confupdtype: 'a' },
+        'the catalog does not agree with the one initial mode §2.4 / D20 ① / step 6h all state');
+
+      // The half that matters is not a column, it is *when* the database refuses.
+      assert.match(await txn(c, async () => { await c.query(`DELETE FROM project_action WHERE id='act1'`); }),
+        /session_project_action_fk/, 'an ordinary transaction must be refused, exactly as v1.11 RESTRICT was');
+      let statement = 'accepted';
+      assert.match(await txn(c, async () => {
+        await c.query(`SET CONSTRAINTS session_project_action_fk DEFERRED`);
+        await c.query(`DELETE FROM project_action WHERE id='act1'`).catch((e: unknown) => {
+          statement = String((e as { message?: string }).message); });
+      }), /session_project_action_fk/, 'a declared purge must still be proved at COMMIT');
+      assert.equal(statement, 'accepted',
+        'and only there: with the constraint deferred the statement itself must pass — that is the difference '
+        + 'the two v1.12 clauses disagreed about');
+
+      // Reverse control: v1.11's immediate RESTRICT is the same name and a different pair of columns.
+      await installV19(c);
+      await installPurge112(c, { lineage: 'v111' });
+      assert.deepEqual((await c.query<{ condeferrable: boolean; confdeltype: string }>(`
+        SELECT condeferrable, confdeltype::text FROM pg_constraint
+         WHERE conname='session_project_action_fk' AND connamespace = current_schema()::regnamespace`)).rows[0],
+      { condeferrable: false, confdeltype: 'r' },
+      'PC-CX-58: the superseded reading is still distinguishable in exactly these columns');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-59 on real Postgres: empty / v1.10 / v1.11 all converge on the same object set',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      // §12.1 step 6g2, executed. ② is a DROP + CREATE because `CREATE OR REPLACE FUNCTION` cannot
+      // change a trigger's event list — a v1.10 database that only replaces the body keeps an
+      // INSERT-blind ledger gate, and nothing in `pg_proc` says so.
+      const step6g2 = async (): Promise<void> => {
+        await c.query('DROP TRIGGER IF EXISTS project_action_result_ledger_mutator ON project_action');
+        await c.query(D18_V112);
+        await c.query(`CREATE TRIGGER project_action_result_ledger_mutator
+                         BEFORE INSERT OR UPDATE ON project_action
+                         FOR EACH ROW EXECUTE FUNCTION project_action_result_ledger_mutator()`);
+        await c.query('DROP TRIGGER IF EXISTS session_result_link_delete_guard ON session');
+        await c.query('ALTER TABLE project_action DROP CONSTRAINT IF EXISTS project_action_result_session_fk');
+        await c.query(D19_V111);
+      };
+      const census = async () => (await c.query(OBJECT_CENSUS_113)).rows[0];
+      const paths: [string, Parameters<typeof installV19>[1]][] = [
+        ['empty', { mutator: false, sessionDelete: false }],
+        ['v1.10', { mutatorEvents: 'update', sessionDelete: false }],
+        ['v1.11', {}],
+      ];
+      const converged: Record<string, unknown>[] = [];
+      for (const [label, start] of paths) {
+        await installV19(c, start);
+        await step6g2();                  // 6g2
+        await installPurge113(c);         // 6h
+        converged.push({ label, ...(await census()) });
+      }
+      for (const row of converged.slice(1)) {
+        assert.deepEqual({ ...row, label: undefined }, { ...converged[0], label: undefined },
+          `the ${row.label} starting point does not converge on the same object set as an empty database`);
+      }
+      assert.deepEqual({ ...converged[0], label: undefined }, {
+        label: undefined,
+        d18_insert: true, d18_update: true, d19_fk: 'r', d19_guard: 1,
+        fk_deferrable: true, fk_deferred: false, fk_delete: 'a',
+        d20_functions: 5, d20_triggers: 3,
+      }, 'the converged object set is not the one §7.7 D18 / D19 / D20 specify');
+
+      // …and the event surface is not decoration: on every path a malformed initial ledger and a
+      // physical delete of a published result Session are both refused (D18 ⓪ / D19 ②).
+      assert.match(await txn(c, async () => {
+        await c.query(claimAction19('act-mal', 'k-mal').replace(`'{}'::jsonb`, `'{"retiredPins":{}}'::jsonb`));
+      }), /EXECUTION_PIN_LEDGER/, 'the converged D18 must refuse a malformed ledger on INSERT');
+      assert.equal(await seedPurgeFixture(c), '');
+      assert.match(await txn(c, async () => { await c.query(`DELETE FROM session WHERE id='s1'`); }),
+        /SESSION_RESULT_LINK_REFERENCED/, 'the converged D19 must refuse a physical delete of a published result');
+
+      // Reverse control: v1.12's table had no 6g2, so a v1.10 database went straight to 6h.
+      await installV19(c, { mutatorEvents: 'update', sessionDelete: false });
+      await installPurge113(c);
+      const skipped = await census();
+      assert.equal(skipped.d18_insert, false, 'PC-CX-59 must reproduce: D18 stays UPDATE-only without 6g2');
+      assert.equal(skipped.d19_fk, null, 'PC-CX-59 must reproduce: D19 structural half is never created');
+      assert.equal(skipped.d19_guard, 0, 'PC-CX-59 must reproduce: D19 typed half is never created');
+      assert.equal(await txn(c, async () => {
+        await c.query(claimAction19('act-mal2', 'k-mal2').replace(`'{}'::jsonb`, `'{"retiredPins":{}}'::jsonb`));
+      }), '', 'PC-CX-59 must reproduce: the v1.10 answer to a malformed initial ledger is to accept it');
+    } finally {
+      await c.end();
+    }
+  });
+
+/** The five shapes D20-c excludes, each on its own Project, plus the Session that must survive. */
+const UNDECIDABLE_113: { project: string; seed: (p: string) => string; reason: RegExp; kept: string }[] = [
+  { project: 'p-user', kept: 'u-user', reason: /not a COORDINATOR placeholder/,
+    seed: (p) => `INSERT INTO session (id, task_id, status, dispatch_origin) VALUES ('u-user', NULL, 'RUNNING', 'USER');
+      ${claimAction19(`${p}-a`, `${p}-k`).replace(`'p1','DISPATCH_TASK'`, `'${p}','DISPATCH_TASK'`)};
+      UPDATE project_action SET status='REFUSED', result_session_id='u-user' WHERE id='${p}-a';` },
+  { project: 'p-oneway', kept: 'u-oneway', reason: /one-way/,
+    seed: (p) => `INSERT INTO session (id, task_id, status, dispatch_origin) VALUES ('u-oneway', NULL, 'RUNNING', 'COORDINATOR');
+      ${claimAction19(`${p}-a`, `${p}-k`).replace(`'p1','DISPATCH_TASK'`, `'${p}','DISPATCH_TASK'`)};
+      UPDATE project_action SET status='REFUSED', result_session_id='u-oneway' WHERE id='${p}-a';` },
+  { project: 'p-type', kept: 'u-type', reason: /not a DISPATCH_TASK/,
+    seed: (p) => `${claimAction19(`${p}-a`, `${p}-k`)
+    .replace(`'p1','DISPATCH_TASK'`, `'${p}','ROTATE_COORDINATOR_SESSION'`)};
+      INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id)
+        VALUES ('u-type', NULL, 'RUNNING', 'COORDINATOR', '${p}-a');` },
+];
+
+test('PC-CX-60 on real Postgres: every undecidable link fails closed on both entry points',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await installV19(c);
+      await installPurge113(c);
+      assert.equal(await seedPurgeFixture(c), '', 'the ordinary dispatch must commit first');
+      // These shapes cannot be written through the v1.13 topology at all — D16's commit-time gate
+      // refuses every one of them (`EXECUTION_RESULT_LINK`), which is exactly why D20-i calls them
+      // existing data rather than a legal state. So they are seeded the way D18-e ④ models an old
+      // write end: gates off, row in, gates back on. That is the only way this data ever appears.
+      for (const shape of UNDECIDABLE_113) {
+        assert.equal(await txn(c, async () => {
+          await c.query(`INSERT INTO project VALUES ('${shape.project}')`);
+        }), '', `${shape.project}: the Project itself must commit normally`);
+        await c.query('ALTER TABLE project_action DISABLE TRIGGER USER');
+        await c.query('ALTER TABLE session DISABLE TRIGGER USER');
+        const seeded = await txn(c, async () => { await c.query(shape.seed(shape.project)); });
+        await c.query('ALTER TABLE project_action ENABLE TRIGGER USER');
+        await c.query('ALTER TABLE session ENABLE TRIGGER USER');
+        assert.equal(seeded, '', `${shape.project}: the legacy fixture must land to be worth refusing`);
+        assert.match(await txn(c, async () => {
+          await c.query(`UPDATE project_action SET detail = detail || '{"display":"x"}'::jsonb WHERE id='${shape.project}-a'`);
+        }), /EXECUTION_RESULT_LINK|PROJECT_PURGED|^$/,
+        `${shape.project}: sanity — the shape is one the live gates would not have admitted`);
+      }
+
+      for (const shape of UNDECIDABLE_113) {
+        const answers: string[] = [];
+        for (const sql of [`SELECT * FROM coordinator_purge_project('${shape.project}')`,
+          `DELETE FROM project WHERE id='${shape.project}'`]) {
+          const answer = await txn(c, async () => { await c.query(sql); });
+          assert.match(answer, /PROJECT_PURGE_UNDECIDABLE/, `${shape.project}: not refused with D20-i's typed code`);
+          assert.match(answer, shape.reason, `${shape.project}: refused for the wrong reason`);
+          assert.match(answer, /owner=USER, recovery=HUMAN/, `${shape.project}: the refusal names no owner`);
+          answers.push(answer);
+        }
+        assert.equal(answers[0], answers[1],
+          `${shape.project}: the function and the bare DELETE give different answers — that is PC-CX-60`);
+        assert.equal((await c.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM session WHERE id='${shape.kept}'`)).rows[0].n, '1',
+        `${shape.project}: the Session D20-c excludes was deleted anyway`);
+      }
+
+      // Positive controls, so "it refuses everything" cannot pass this test.
+      assert.deepEqual((await c.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`)).rows[0], { purged_actions: '1', purged_sessions: '1' },
+      'a well-formed linked Project must still purge in one call');
+      assert.equal(await txn(c, async () => { await c.query(`DELETE FROM project WHERE id='p-empty'`); }), '',
+        'and an empty Project must still delete on a bare statement');
+
+      // Reverse control: v1.12's raw OR union, with the adjudication that gates it removed.
+      await installV19(c);
+      await installPurge113(c, { snapshot: 'v112' });
+      await c.query(`CREATE OR REPLACE FUNCTION coordinator_purge_ledger_pairs(p_project_id text)
+        RETURNS TABLE (action_id text, session_id text, in_scope boolean, reason text)
+        LANGUAGE sql STABLE AS $fn$
+          SELECT a.id, s.id, true, 'v1.12 admitted every pair'
+            FROM project_action a JOIN session s ON (s.project_action_id = a.id OR a.result_session_id = s.id)
+           WHERE a.project_id = p_project_id;
+        $fn$`);
+      assert.equal(await seedPurgeFixture(c), '');
+      const user = UNDECIDABLE_113[0];
+      assert.equal(await txn(c, async () => {
+        await c.query(`INSERT INTO project VALUES ('${user.project}')`);
+      }), '');
+      await c.query('ALTER TABLE project_action DISABLE TRIGGER USER');
+      await c.query('ALTER TABLE session DISABLE TRIGGER USER');
+      assert.equal(await txn(c, async () => { await c.query(user.seed(user.project)); }), '');
+      await c.query('ALTER TABLE project_action ENABLE TRIGGER USER');
+      await c.query('ALTER TABLE session ENABLE TRIGGER USER');
+      assert.deepEqual((await c.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('${user.project}')`)).rows[0],
+      { purged_actions: '1', purged_sessions: '1' },
+      'PC-CX-60 must reproduce: the v1.12 OR union treats a reverse link alone as permission to delete');
+      assert.equal((await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM session WHERE id='${user.kept}'`)).rows[0].n, '0',
+      'PC-CX-60 must reproduce: the USER Session D20-c excludes is physically deleted');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-61 on real Postgres: both commit orders have a typed winner',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const purger = await connect();
+    const publisher = await connect();
+    try {
+      const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 250));
+      const late = (id: string): string =>
+        `INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id)
+           VALUES ('${id}', NULL, 'RUNNING', 'COORDINATOR', 'act-late')`;
+      const seedRace = async (): Promise<void> => {
+        await installV19(purger);
+        await installPurge113(purger);
+        await publisher.query(`SET search_path TO ${V19_SCHEMA}`);
+        assert.equal(await seedPurgeFixture(purger), '', 'the published dispatch must commit first');
+        assert.equal(await txn(purger, async () => { await purger.query(claimAction19('act-late', 'k-late')); }), '',
+          'and the unpublished action the race turns on must exist');
+      };
+
+      // ── purge-wins. The publication queues on the shared Project row and gets a typed answer.
+      await seedRace();
+      await purger.query('BEGIN');
+      const purge1 = purger.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`);
+      await settle();
+      await publisher.query('BEGIN');
+      let parked = true;
+      const publish1 = publisher.query(late('s-late'))
+        .then(() => { parked = false; return 'committed'; })
+        .catch((e: unknown) => { parked = false; return String((e as { message?: string }).message); });
+      await settle();
+      assert.equal(parked, true, 'the publication did not queue on the shared linearization point');
+      assert.deepEqual((await purge1).rows[0], { purged_actions: '2', purged_sessions: '1' });
+      await purger.query('COMMIT');
+      const loser = await publish1;
+      assert.match(loser, /PROJECT_PURGED/, 'the losing publication got no typed result');
+      assert.match(loser, /owner=SYSTEM, recovery=EVENT/, 'the losing publication got no owner or recovery');
+      assert.doesNotMatch(loser, /23503/, 'a bare 23503 is the structural backstop, not normal control flow');
+      await publisher.query('ROLLBACK');
+      assert.deepEqual((await purger.query<{ projects: string; actions: string; sessions: string }>(
+        PURGE_CENSUS)).rows[0], { projects: '2', actions: '1', sessions: '0' },
+      'purge-wins must leave nothing of p1 behind');
+
+      // ── publish-wins. The purge queues on ③-1 and the late placeholder is inside its snapshot.
+      await seedRace();
+      await publisher.query('BEGIN');
+      await publisher.query(late('s-late'));
+      await publisher.query(`UPDATE project_action SET status='APPLIED', result_session_id='s-late' WHERE id='act-late'`);
+      await purger.query('BEGIN');
+      const purge2 = purger.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`).then((r) => r.rows[0])
+        .catch((e: unknown) => String((e as { message?: string }).message));
+      await settle();
+      await publisher.query('COMMIT');
+      assert.deepEqual(await purge2, { purged_actions: '2', purged_sessions: '2' },
+        'publish-wins must sweep the placeholder that committed before the snapshot');
+      await purger.query('COMMIT');
+      assert.equal((await purger.query<{ n: string }>(PURGE_ORPHANS)).rows[0].n, '0',
+        'publish-wins must leave no orphan lineage');
+
+      // ── the bypass: a writer that skipped ④ holds an action row lock. NOWAIT ⇒ typed, not 40P01.
+      await seedRace();
+      await purger.query('DROP TRIGGER coordinator_project_publish_fence ON project_action');
+      await publisher.query('BEGIN');
+      await publisher.query(`UPDATE project_action SET detail = detail || '{"display":"x"}'::jsonb WHERE id='act-late'`);
+      await purger.query('BEGIN');
+      const contended = await purger.query(`SELECT * FROM coordinator_purge_project('p1')`)
+        .then(() => 'committed').catch((e: unknown) => String((e as { message?: string }).message));
+      assert.match(contended, /PROJECT_PURGE_CONTENDED/, 'the bypass produced a native deadlock, not a typed refusal');
+      assert.match(contended, /owner=SYSTEM, recovery=EVENT/, 'the contention refusal names no owner or recovery');
+      await purger.query('ROLLBACK');
+      await publisher.query('COMMIT');
+      assert.deepEqual((await purger.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`)).rows[0], { purged_actions: '2', purged_sessions: '1' },
+      'the retry after that transaction settles must succeed — the refusal has to be idempotent');
+
+      // ── reverse control: without ③-2 and ④ the same interleaving aborts the whole purge at COMMIT.
+      await seedRace();
+      await purger.query('DROP TRIGGER coordinator_project_publish_fence ON project_action');
+      await purger.query('DROP TRIGGER coordinator_project_publish_fence ON session');
+      await installPurge113(purger, { lockLedger: false, publishFence: false, base: false });
+      await purger.query('BEGIN');
+      await purger.query(`SELECT 1 FROM project WHERE id='p1' FOR UPDATE`);
+      await purger.query(`SELECT set_config('coordinator.purging_project','p1',true)`);
+      await purger.query(`SET CONSTRAINTS session_project_action_fk DEFERRED`);
+      const doomed = (await purger.query<{ doomed: string[] }>(
+        `SELECT COALESCE(array_agg(DISTINCT session_id), '{}'::text[]) AS doomed
+           FROM coordinator_purge_ledger_pairs('p1') WHERE in_scope`)).rows[0].doomed;
+      assert.deepEqual(doomed, ['s1'], 'positive control: the late publication is not in the snapshot yet');
+      await publisher.query('BEGIN');
+      await publisher.query(late('s-late'));
+      await publisher.query(`UPDATE project_action SET status='APPLIED', result_session_id='s-late' WHERE id='act-late'`);
+      await publisher.query('COMMIT');
+      await purger.query(`DELETE FROM project WHERE id='p1'`);
+      await purger.query(`DELETE FROM session WHERE id = ANY($1::text[])`, [doomed]);
+      const aborted = await purger.query('COMMIT').then(() => 'committed')
+        .catch((e: unknown) => String((e as { message?: string }).message));
+      assert.match(aborted, /session_project_action_fk/,
+        'PC-CX-61 must reproduce: without ③-2 and ④ the stale snapshot aborts the whole purge at COMMIT');
+      assert.deepEqual((await purger.query<{ projects: string; actions: string; sessions: string }>(
+        PURGE_CENSUS)).rows[0], { projects: '3', actions: '3', sessions: '2' },
+      'PC-CX-61 must reproduce: the structural gate saves the invariant by rolling everything back — '
+        + 'p1 keeps both of its actions and both Sessions, exactly as the review reported');
+    } finally {
+      await purger.query('ROLLBACK').catch(() => undefined);
+      await publisher.query('ROLLBACK').catch(() => undefined);
+      await Promise.all([purger.end(), publisher.end()]);
+    }
+  });

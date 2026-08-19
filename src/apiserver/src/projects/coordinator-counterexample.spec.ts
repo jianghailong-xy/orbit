@@ -6824,3 +6824,289 @@ test('§30 names a test that exists for every finding, and points at clauses tha
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§30 points at §${m[1]}, which does not exist`);
   }
 });
+
+// -------------------------------------------------------------------------------------------------
+// v1.13 — `PC-CX-58..61`
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * Round thirteen asked one question of all four findings: does exactly one sentence decide this
+ * rule? Each of the four had two sources — two clauses, a table and a function body, a paragraph and
+ * a predicate, two locks that did not know about each other — and two sources is no authority at all.
+ */
+test('PC-CX-58 the lineage foreign key has exactly one initial mode', () => {
+  // The document half. Four current clauses state this constraint; v1.12 had one of them disagreeing,
+  // and both were in §1–§18, so "which one is normative" had no answer.
+  const infra = section(PCC, '2.4');
+  const onDelete = infra.split('\n').find((l) => l.includes('session.projectActionId → project_action.id')) ?? '';
+  const seven = section(PCC, '7.7');
+  const d20 = seven.slice(seven.indexOf('#### D20 '), seven.indexOf('#### D7 '));
+  const d19 = seven.slice(seven.indexOf('#### D19 '), seven.indexOf('#### D20 '));
+  const step6h = section(PCC, '12.1').split('\n').find((l) => l.includes('**6h**')) ?? '';
+  for (const [where, text] of [['§2.4', onDelete], ['D20 ①', d20], ['D19-c', d19], ['step 6h', step6h]] as const) {
+    assert.match(text, /INITIALLY IMMEDIATE/, `${where} no longer states the single initial mode`);
+    assert.doesNotMatch(text, /INITIALLY DEFERRED/, `${where} gives the lineage FK a second initial mode`);
+  }
+  assert.ok(d20.includes('**D20-l（'), 'D20 does not state the uniqueness as a clause of its own');
+  // The superseded reading survives exactly where §0 RL1 allows it, and nowhere else.
+  const normative = PCC.slice(0, PCC.indexOf('\n## 19. '));
+  assert.doesNotMatch(normative, /NO ACTION DEFERRABLE INITIALLY DEFERRED/,
+    'the superseded wording is still alive in the normative body');
+  assert.match(section(PCC, '31.5'), /NO ACTION DEFERRABLE INITIALLY DEFERRED/,
+    '§31.5 no longer quotes it verbatim, so §22.8 registers a phrase that appears nowhere');
+
+  // The behaviour half, modelled: the two readings differ in *when* a violating statement fails, and
+  // D20's whole protocol depends on "immediate by default, deferred only inside a declared purge".
+  type Mode = 'immediate' | 'deferred';
+  const failsAt = (mode: Mode, declaredPurge: boolean): 'statement' | 'commit' =>
+    (mode === 'deferred' || declaredPurge ? 'commit' : 'statement');
+  assert.equal(failsAt('immediate', false), 'statement',
+    'the current mode must refuse an ordinary violation on that statement, as v1.11 RESTRICT did');
+  assert.equal(failsAt('immediate', true), 'commit',
+    'and a declared purge must be able to push the same check to the commit point, or D20 ③ has no order that works');
+  assert.equal(failsAt('deferred', false), 'commit',
+    'PC-CX-58 must reproduce: the superseded reading moves every ordinary violation to the commit point');
+  assert.notEqual(failsAt('immediate', false), failsAt('deferred', false),
+    'the two readings would have to differ observably, or this finding would be a typo rather than a defect');
+  // The catalog columns the migration has to assert, and why three are not enough.
+  for (const col of ['condeferrable', 'condeferred', 'confdeltype', 'confupdtype']) {
+    assert.ok(section(PCC, '12.1').includes(col), `§12.1 G5 does not assert ${col}`);
+  }
+});
+
+/** §12.1's steps, as the set of database objects each leaves behind. */
+type Objects = { d18Events: 'update' | 'insert-update'; d19Fk: boolean; d19Guard: boolean; d20: boolean };
+const START: Record<string, Objects> =
+  { empty: { d18Events: 'update', d19Fk: false, d19Guard: false, d20: false },
+    'v1.10': { d18Events: 'update', d19Fk: false, d19Guard: false, d20: false },
+    'v1.11': { d18Events: 'insert-update', d19Fk: true, d19Guard: true, d20: false } };
+function migrate(from: Objects, steps: { has6g2: boolean }): Objects {
+  // 6g2 (v1.13): audits, then D18 rebuilt as BEFORE INSERT OR UPDATE, then D19's two objects.
+  const after = steps.has6g2
+    ? { ...from, d18Events: 'insert-update' as const, d19Fk: true, d19Guard: true }
+    : { ...from };
+  return { ...after, d20: true };            // 6h
+}
+
+test('PC-CX-59 the one-shot migration installs every v1.11 hard gate', () => {
+  const withRow = Object.entries(START).map(([label, start]) => [label, migrate(start, { has6g2: true })] as const);
+  for (const [label, objects] of withRow) {
+    assert.deepEqual(objects, { d18Events: 'insert-update', d19Fk: true, d19Guard: true, d20: true },
+      `the ${label} starting point does not converge on the object set §7.7 D18 / D19 / D20 specify`);
+  }
+  // Reverse control: v1.12's table had no such row, so a v1.10 or empty database landed short.
+  for (const label of ['empty', 'v1.10']) {
+    assert.deepEqual(migrate(START[label], { has6g2: false }),
+      { d18Events: 'update', d19Fk: false, d19Guard: false, d20: true },
+      `PC-CX-59 must reproduce: without 6g2 the ${label} path lands "v1.10 + D20"`);
+  }
+
+  // The document half: the row exists, installs all three objects, and is ordered.
+  const migration = section(PCC, '12.1');
+  const row6g2 = migration.split('\n').find((l) => l.includes('**6g2**')) ?? '';
+  assert.ok(row6g2, '§12.1 still has no migration row for the three v1.11 objects');
+  for (const object of ['project_action_result_session_fk', 'session_result_link_delete_guard',
+    'project_action_result_ledger_mutator', 'BEFORE INSERT OR UPDATE']) {
+    assert.ok(row6g2.includes(object), `6g2 does not install ${object}`);
+  }
+  assert.ok(row6g2.indexOf('D18-e') < row6g2.indexOf('BEFORE INSERT OR UPDATE'),
+    'the existing-data audits must precede the gate they decide');
+  assert.ok(row6g2.indexOf('D19-e') < row6g2.indexOf('project_action_result_session_fk'),
+    'D19-e must precede the foreign key that cannot be created while it returns rows');
+  assert.ok(migration.indexOf('**6g2**') < migration.indexOf('**6h**'), '6g2 must precede 6h');
+  assert.match(migration, /㉓/, 'G5 does not verify the three migration paths converge');
+  assert.match(section(PCC, '15'), /\*\*F59\*\*/, '§15 has no fault row for a migration that skips a version');
+});
+
+/** §7.7 D20 ⓪: one `(action, session)` pair of a ledger, and whether D20-c admits it. */
+type Pair = { action: string; session: string; origin: 'COORDINATOR' | 'USER'; type: string; status: string;
+  link: string | null; lineage: string | null; alsoReferencedElsewhere?: boolean };
+function inScope(p: Pair): boolean {
+  return p.origin === 'COORDINATOR' && p.type === 'DISPATCH_TASK' && p.lineage === p.action
+    && (p.status === 'APPLIED' ? p.link === p.session : p.link === null)
+    && !p.alsoReferencedElsewhere;
+}
+/** v1.12 ③-3: the union of the two paths, with none of the other four conditions. */
+function inScopeV112(p: Pair): boolean {
+  return p.lineage === p.action || p.link === p.session;
+}
+type PurgeAnswer = { outcome: 'committed' | 'undecidable' | 'undeclared'; deleted: string[] };
+function purge113(pairs: Pair[], entry: 'function' | 'bare'): PurgeAnswer {
+  // D20-i: both entry points adjudicate the same domain, in the same order, before anything moves.
+  if (pairs.some((p) => !inScope(p))) return { outcome: 'undecidable', deleted: [] };
+  const scope = pairs.filter(inScope).map((p) => p.session);
+  if (entry === 'bare' && scope.length > 0) return { outcome: 'undeclared', deleted: [] };
+  return { outcome: 'committed', deleted: scope };
+}
+function purge112(pairs: Pair[], entry: 'function' | 'bare'): PurgeAnswer {
+  if (entry === 'bare') {
+    // v1.12's fence only counted the lineage half of the union.
+    const stranded = pairs.filter((p) => p.lineage === p.action);
+    return stranded.length > 0 ? { outcome: 'undeclared', deleted: [] } : { outcome: 'committed', deleted: [] };
+  }
+  return { outcome: 'committed', deleted: pairs.filter(inScopeV112).map((p) => p.session) };
+}
+
+test('PC-CX-60 the purge collection predicate is D20-c, mechanically', () => {
+  const userOrigin: Pair = { action: 'a1', session: 'u1', origin: 'USER', type: 'DISPATCH_TASK',
+    status: 'REFUSED', link: 'u1', lineage: null };
+  const wellFormed: Pair = { action: 'a1', session: 's1', origin: 'COORDINATOR', type: 'DISPATCH_TASK',
+    status: 'APPLIED', link: 's1', lineage: 'a1' };
+  const unpublished: Pair = { ...wellFormed, session: 's2', status: 'CLAIMED', link: null };
+  const shapes: [string, Pair][] = [
+    ['USER-origin', userOrigin],
+    ['one-way', { ...wellFormed, lineage: null }],
+    ['cross-Project', { ...wellFormed, alsoReferencedElsewhere: true }],
+    ['wrong action type', { ...wellFormed, type: 'ROTATE_COORDINATOR_SESSION' }],
+    ['unpublished with a link', { ...unpublished, link: 's2' }],
+  ];
+  for (const [label, shape] of shapes) {
+    for (const entry of ['function', 'bare'] as const) {
+      assert.deepEqual(purge113([shape], entry), { outcome: 'undecidable', deleted: [] },
+        `${label} via the ${entry} entry must fail closed with nothing deleted`);
+    }
+    assert.equal(purge113([shape], 'function').outcome, purge113([shape], 'bare').outcome,
+      `${label}: the two entry points must give the same answer — that is PC-CX-60`);
+  }
+  // Positive controls, so "refuse everything" cannot pass.
+  assert.deepEqual(purge113([wellFormed], 'function'), { outcome: 'committed', deleted: ['s1'] },
+    'a well-formed placeholder must still be swept');
+  assert.deepEqual(purge113([unpublished], 'function'), { outcome: 'committed', deleted: ['s2'] },
+    'an unpublished placeholder is in scope too — the action never got to publish');
+  assert.deepEqual(purge113([], 'bare'), { outcome: 'committed', deleted: [] },
+    'a Project with nothing to strand must still delete on a bare statement');
+
+  // Reverse control: the review's exact observation — one fact, two committed results.
+  assert.deepEqual(purge112([userOrigin], 'function'), { outcome: 'committed', deleted: ['u1'] },
+    'PC-CX-60 must reproduce: the v1.12 union deletes the USER Session D20-c excludes');
+  assert.deepEqual(purge112([userOrigin], 'bare'), { outcome: 'committed', deleted: [] },
+    'PC-CX-60 must reproduce: the bare DELETE keeps the same Session, so the entry point decides');
+  assert.notDeepEqual(purge112([userOrigin], 'function').deleted, purge112([userOrigin], 'bare').deleted,
+    'and that difference is the whole finding: D20-f claimed the two committed result sets are equal');
+
+  // The document half: one definition, two readers, and a typed way out.
+  const seven = section(PCC, '7.7');
+  const d20 = seven.slice(seven.indexOf('#### D20 '), seven.indexOf('#### D7 '));
+  assert.match(d20, /coordinator_purge_ledger_pairs/, 'D20 has no single definition of its quantification domain');
+  assert.ok(d20.includes('**D20-i（'), 'D20 does not say what happens to a pair it cannot adjudicate');
+  assert.match(d20, /PROJECT_PURGE_UNDECIDABLE/, 'the fail-closed refusal has no typed code');
+  assert.match(d20, /owner=USER, recovery=HUMAN/, 'the fail-closed refusal names no owner or recovery');
+  assert.match(section(PCC, '15'), /\*\*F60\*\*/, '§15 has no fault row for an undecidable ledger link');
+  assert.match(section(PCC, '12.1'), /㉔/, 'G5 does not verify that both entry points read the one definition');
+});
+
+/** §7.7 D20-k: the two commit orders, plus the bypass ③-2's NOWAIT turns into a typed refusal. */
+type RaceOutcome = { purge: string; publish: string };
+function race(order: 'purge-first' | 'publish-first' | 'bypass',
+  gates: { lockLedger: boolean; publishFence: boolean }): RaceOutcome {
+  if (order === 'publish-first') return { purge: '(n,m) committed', publish: 'committed' };
+  if (order === 'bypass') {
+    // A writer that skipped ④ holds an action row lock while the purge holds the Project row.
+    return gates.lockLedger
+      ? { purge: 'PROJECT_PURGE_CONTENDED', publish: 'committed' }
+      : { purge: '40P01', publish: 'committed' };
+  }
+  if (!gates.publishFence) {
+    // v1.12: nothing stops the publication landing between the snapshot and the cascade.
+    return { purge: '23503', publish: 'committed' };
+  }
+  return { purge: '(n,m) committed', publish: 'PROJECT_PURGED' };
+}
+
+test('PC-CX-61 purge and publication share one linearization point', () => {
+  const v113 = { lockLedger: true, publishFence: true };
+  assert.deepEqual(race('publish-first', v113), { purge: '(n,m) committed', publish: 'committed' },
+    'publish-wins: the purge queues on ③-1 and the late placeholder is inside its snapshot');
+  assert.deepEqual(race('purge-first', v113), { purge: '(n,m) committed', publish: 'PROJECT_PURGED' },
+    'purge-wins: the publication must lose with a typed result, not a bare 23503');
+  assert.deepEqual(race('bypass', v113), { purge: 'PROJECT_PURGE_CONTENDED', publish: 'committed' },
+    'a writer that bypasses ④ must produce a typed, retryable refusal rather than a deadlock');
+  for (const order of ['purge-first', 'publish-first', 'bypass'] as const) {
+    for (const side of ['purge', 'publish'] as const) {
+      assert.doesNotMatch(race(order, v113)[side], /^(23503|40P01)$/,
+        `${order}: the ${side} side still gets a native database error as normal control flow`);
+    }
+  }
+  // Reverse controls: each gate on its own is what the finding turns on.
+  assert.equal(race('purge-first', { ...v113, publishFence: false }).purge, '23503',
+    'PC-CX-61 must reproduce: without ④ the stale snapshot aborts the whole purge at COMMIT');
+  assert.equal(race('bypass', { ...v113, lockLedger: false }).purge, '40P01',
+    'and without ③-2 the NOWAIT the same bypass is a native deadlock, with no owner and no recovery');
+
+  const seven = section(PCC, '7.7');
+  const d20 = seven.slice(seven.indexOf('#### D20 '), seven.indexOf('#### D7 '));
+  assert.match(d20, /coordinator_project_publish_fence/, 'D20 has no publish-side fence');
+  assert.match(d20, /FOR KEY SHARE/, 'the publish fence takes no lock that conflicts with the purge');
+  assert.match(d20, /FOR UPDATE NOWAIT/, 'D20 has no answer for a writer that bypasses the fence');
+  assert.match(d20, /PROJECT_PURGED/, 'the losing publication has no typed code');
+  assert.match(d20, /PROJECT_PURGE_CONTENDED/, 'the contention path has no typed code');
+  for (const clause of ['**D20-j（', '**D20-k（']) {
+    assert.ok(d20.includes(clause), `D20 does not state ${clause}）`);
+  }
+  assert.match(section(PCC, '15'), /\*\*F61\*\*/, '§15 has no fault row for the purge/publish race');
+  assert.match(section(PCC, '12.1'), /㉕/, 'G5 does not verify the two commit orders');
+});
+
+test('mutation check: every fence added for PC-CX-58..61 is load-bearing', () => {
+  const userOrigin: Pair = { action: 'a1', session: 'u1', origin: 'USER', type: 'DISPATCH_TASK',
+    status: 'REFUSED', link: 'u1', lineage: null };
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-58',
+      fence: 'the single initial mode stated in D20-l (§2.4 · D19-c · D20 ① · §12.1 6h)',
+      // Two readings that fail at different moments is the defect; one reading is the fix.
+      defectReappears: () => PCC.slice(0, PCC.indexOf('\n## 19. ')).includes('NO ACTION DEFERRABLE INITIALLY DEFERRED'),
+    },
+    {
+      finding: 'PC-CX-59',
+      fence: 'migration step 6g2 (§12.1)',
+      defectReappears: () => migrate(START['v1.10'], { has6g2: false }).d19Fk === false
+        && migrate(START.empty, { has6g2: false }).d18Events === 'update',
+    },
+    {
+      finding: 'PC-CX-60',
+      fence: 'the ⓪ quantification domain read by both entry points (§7.7 D20 ⓪ · D20-i)',
+      defectReappears: () => purge112([userOrigin], 'function').deleted.length === 1
+        && purge112([userOrigin], 'bare').deleted.length === 0,
+    },
+    {
+      finding: 'PC-CX-61',
+      fence: 'the shared Project linearization point (§7.7 D20 ③-2 · ④ · D20-j)',
+      defectReappears: () => race('purge-first', { lockLedger: true, publishFence: false }).purge === '23503'
+        && race('bypass', { lockLedger: false, publishFence: true }).purge === '40P01',
+    },
+  ];
+  for (const mutant of mutants) {
+    if (mutant.finding === 'PC-CX-58') {
+      assert.equal(mutant.defectReappears(), false,
+        'PC-CX-58: the superseded wording must be gone from §1–§18, which is the whole fix');
+      continue;
+    }
+    assert.equal(mutant.defectReappears(), true,
+      `${mutant.finding}: removing ${mutant.fence} does not bring the published counterexample back, so it is not what closed it`);
+  }
+});
+
+test('§31 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§30 have, for the thirteenth round.
+  const rows = tables(section(PCC, '31'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-58', 'PC-CX-59', 'PC-CX-60', 'PC-CX-61']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`) || self.includes(`test("${name}"`),
+      `§31 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '31').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 4, '§31 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§31 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '31').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§31 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§31 points at §${m[1]}, which does not exist`);
+  }
+});

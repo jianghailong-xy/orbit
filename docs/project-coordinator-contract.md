@@ -1,4 +1,4 @@
-# Project Coordinator 控制环契约 v1.12
+# Project Coordinator 控制环契约 v1.13
 
 > **状态**：已冻结（frozen）。本文件是 `Project Coordinator 持续推进控制环` 的**单一权威契约**。
 > 03–23 阶段的每个实现与验证任务都必须与本文件一致；实现与本文件冲突时，先改本文件并说明理由，再改代码。
@@ -24,6 +24,8 @@
 > **v1.10 修订**：关闭 02 对 v1.9 的独立复审（[`project-coordinator-contract-review-02-v1.9.md`](./project-coordinator-contract-review-02-v1.9.md)）提出的 3 个 P1 契约缺口 `PC-CX-50..52`。逐项闭环在 **§28**；规范条款落在 §4.3 · §7.4 · §7.7 · §12.1 · §15 · §22.8。v1.10 同样**不是措辞修订** —— 三项里有一条贯穿的线：**一条硬门读到的那个东西，不等于它要判的那个东西**。D16 的动作侧第一句读 `NEW.result_session_id`，而那一列是 D11 放开的可写列 —— 清空它就把这条硬门连同它的对象一起关掉，`detail` 随后可以被重写成一本空账（`PC-CX-50`）；`DEFERRABLE` 延迟的是**执行时刻**，每个 row event 手上仍然是**排队那条语句**产生的 `NEW` 元组，因此同一事务里先补一次 heartbeat 再完成首次 claim，最终状态合法却被一条历史中间态确定性拒绝、原样重试还会再拒一次（`PC-CX-51`）；D17 只问两条结论是不是 SQL NULL，而空字符串不是 NULL，EC2-b 宣称"恰好三部分、封闭"的那一半也从来没有被任何对象数过键（`PC-CX-52`）。v1.10 的答案是四处：**新增 D18 给 D11 放开的两列一个封闭、单调的专用 mutator**（结果链接一次性发布后冻结，账本只追加、不重写、不截断）、**每一条可延迟 row constraint 在提交点按稳定键重读自己那一行的最终版本**（判的因此是"要提交的那个状态"，不是"排队时的那个状态"）、**D16 的动作侧不再以"链接为空"早退，而是把 `APPLIED` 派发的双向链接本身当成判据**、以及**新增 ⓪ 号 `coordinator_execution_result_shape`：EC2-b 的结果半有一张闭合的键×类型表，缺键、多键、错型、空串都在提交点被拒，D15 / D16 / D17 三处各调用它一次**。
 > **v1.11 修订**：关闭 02 对 v1.10 的独立复审（[`project-coordinator-contract-review-02-v1.10.md`](./project-coordinator-contract-review-02-v1.10.md)）提出的 1 个 P0 与 2 个 P1 契约缺口 `PC-CX-53..55`。逐项闭环在 **§29**；规范条款落在 §2.4 · §4.3 · §7.4 · §7.7 · §12.1 · §15 · §18 · §22.8。v1.11 同样**不是措辞修订** —— 三项里有一条贯穿的线：**这道门开在正确的位置上吗**。`PC-CX-53` 的门框比 PAC §7.5 画小了一格（`ARRAY['where','who','with']` 对 PAC 逐字要求必写的 `v` 视而不见），于是**每一份合规的 resolution 都被拒、正常派发没有合法路径** —— 前十轮全是“错的能进来”，这一条是“对的进不来”；`PC-CX-54` 的门少开在一个动词上（三个对象全部声明在 `INSERT` / `UPDATE`，而“Session 缺失”的入口是 `DELETE`），软删之后的 purge 留下一条指向不存在 Session 的 `APPLIED` 派发；`PC-CX-55` 的门开在它自己够不到的地方（类型判定写在 `jsonb_array_elements` 之后，而后者对一个对象直接抛 `22023`），配上“只声明在 `UPDATE` 上”，一本畸形的初始账本能提交并把永久动作键永久锁死。答案在四处：**EC2-b3 把 `resolution` 那一行也写成由 PAC §7.5 反推的键×类型表，并把关闭判据定成一条真实派发正例**、**新增 D19 给 `DELETE` 配一条 `ON DELETE RESTRICT` 外键加一条类型化的 `BEFORE DELETE`**、**D18 改成 `BEFORE INSERT OR UPDATE` 且类型判定排在任何 `jsonb_array_*` 之前**、以及 **`coordinator_pin_ledger_fold` 在提交点第一句验同一件事**。
 > **v1.12 修订**：关闭 02 对 v1.11 的独立复审（[`project-coordinator-contract-review-02-v1.11.md`](./project-coordinator-contract-review-02-v1.11.md)）提出的 2 个 P1 契约缺口 `PC-CX-56..57`。逐项闭环在 **§30**；规范条款落在 §2.4 · §4.3 · §7.7 · §8.2 · §12.1 · §15 · §18 · §22.8。v1.12 同样**不是措辞修订** —— 两项有一条贯穿的线：**这道门关掉的，是不是它要关的那件事**。`PC-CX-56` 关多了：§2.4 把"账本 ↔ Session"两侧都写成**立即** `RESTRICT`，再加上五张表随 `project` 级联，三条规范咬成一个环 —— Session 先删被 D19 拒（预期），动作行先删违反 §8.2 GE1，**Project 先删则被 Session 那一侧的 `RESTRICT` 当场拒绝那次级联**，于是 D19-c 承诺的"物理清除的粒度是 Project"在真实拓扑上**一条可提交的事务都没有**；摘掉任一侧又各自留下 orphan 或违反 GE1，**没有唯一权威状态**。这与 `PC-CX-53` 同格：不是"错的能进来"，是"对的进不来"。`PC-CX-57` 关错了对象：D18 ⓪ 的存量兼容分支要跳过的只是 `retiredPins` 自己的数组展开，写下来却是 `RETURN NEW` —— 一句落在 ① ② **之前**的返回，于是"结果链接一次性发布后冻结"与"`claimResolution` 只写一次"被一个**与它们无关的 sibling key 的顶层类型**一起关掉；同一条 claim 改写，账本是合法数组时被拒、是旧畸形对象时通过，**规则不唯一**。v1.12 的答案在三处：**§2.4 第二条 on-delete 从立即 `RESTRICT` 改成可延迟的 `NO ACTION`（默认仍立即，`RESTRICT` 在 PostgreSQL 里永远不能被延迟）**、**新增 §7.7 D20 —— `coordinator_purge_project()` 是唯一的公开 purge 入口，`project_purge_fence` 给裸 `DELETE FROM project` 一条类型化拒绝，而"没有 orphan"由那条可延迟外键在提交点无条件证明**、以及 **D18 ⓪ 的例外只置一个 `ledger_untouched` 标志，被跳过的量化域收成 ③ 一条**（D18-h）。§8.2 GE1 同时写明它唯一的例外：一份账本随它的 Project **整份**消失，**不是**逐条删除。
+> **v1.13 修订**：关闭 02 对 v1.12 的独立复审（[`project-coordinator-contract-review-02-v1.12.md`](./project-coordinator-contract-review-02-v1.12.md)）提出的 1 个 P0 与 3 个 P1 契约缺口 `PC-CX-58..61`。逐项闭环在 **§31**；规范条款落在 §2.4 · §7.7 · §12.1 · §15 · §18 · §22.8。v1.13 同样**不是措辞修订** —— 四项有一条贯穿的线：**一条规范只有一句话说了算吗**。`PC-CX-58`：同一条 lineage 外键的初始模式在现行正文里有两个答案（§2.4 / D20 ① / 步骤 6h 写 `INITIALLY IMMEDIATE`，D19-c 写的却是**默认延迟**的那一版）—— 错误发生在语句上还是提交点上，因此有两个合法答案。`PC-CX-59`：§12.1 的一次性迁移表从 v1.10 直接跳到 v1.12，**整张表里没有一行安装 v1.11 的三个对象**，于是"规范函数体"与"权威迁移表"对同一个版本给出两套数据库对象集合。`PC-CX-60`（**P0**）：D20-c 的散文与 D20 ③-3 的 SQL 各写了一遍同一个集合，而 SQL 那一份宽得多 —— 一次 purge 会**永久删除**散文明确排除的 USER-origin Session，同一份事实上的裸 `DELETE` 却保留它。`PC-CX-61`：D20 ③ 的 doomed 快照与它的级联之间有一个窗口，一次落进窗口的合法发布让整个 purge 在 `COMMIT` 得到原生 `23503` —— 一条被明文承诺可以并发的操作没有 typed 结果、没有 owner、没有确定的赢家。v1.13 的答案在四处：**D19-c 与全文统一成唯一的 `DEFERRABLE INITIALLY IMMEDIATE`**（D20-l 写成一条可静态检查的唯一性条款，历史措辞只留在 §31.5）、**§12.1 新增步骤 6g2 显式安装全部 v1.11 硬门**（审计 → D18 重建为 `BEFORE INSERT OR UPDATE` → D19 外键 → D19 触发器 → 6h 的 D20）、**D20 的量化域收成 ⓪ 号 `coordinator_purge_ledger_pairs()`，② 与 ③ 只读它，说不清的链接一律 typed fail closed**（`PROJECT_PURGE_UNDECIDABLE`，owner=USER / recovery=HUMAN）、以及 **purge 与派发发布无条件共享 `project` 行这个持久 fence 与线性化点**（③-2 的 `FOR UPDATE NOWAIT` + ④ 号 `coordinator_project_publish_fence`），两个提交顺序各有 typed 结果，可延迟外键退回**纯结构兜底**。
+
 > **适用分支**：`feat/project`（`main` 里没有 `Project`）。
 > **代码基线**：`c088ee04 docs(project): freeze the Project/Agent domain contract`。
 > **前置契约**：[`docs/project-agent-contract.md`](./project-agent-contract.md)（下称 **PAC**）。本文**不重新定义** PAC 已冻结的任何术语、字段、解析链或错误码；凡引用一律写作 `PAC §n`。
@@ -140,6 +142,9 @@ PAC §1 的两层分法与 R1/R2/R3 三条规则**原样生效**，本文的所�
 | `session_result_link_delete_guard` | `BEFORE DELETE` trigger（session） | 同一件事的类型化那一半：`SESSION_RESULT_LINK_REFERENCED`，带 owner 与 recovery（§7.7 D19，v1.11 新增） |
 | `project_purge_fence` | `BEFORE DELETE` trigger（project） | 一条没有声明自己是 Project purge 的裸 `DELETE FROM project`，如果会搁浅占位，得到 `PROJECT_PURGE_UNDECLARED`（§7.7 D20，v1.12 新增，`PC-CX-56`） |
 | `coordinator_purge_project` | function | **物理清除 Project 的唯一公开入口**：一个事务里删 Project、级联整份账本、删这本账认下的占位（§7.7 D20，v1.12 新增，`PC-CX-56`） |
+| `coordinator_purge_ledger_pairs` | function | **一次 purge 的量化域本身**：这本账触到的每一对 `(action, session)`，以及这一对是不是 D20-c 认下的 COORDINATOR 占位。`project_purge_fence` 与 `coordinator_purge_project` **都只读它**（§7.7 D20 ⓪ · D20-c · D20-i，v1.13 新增，`PC-CX-60`） |
+| `coordinator_purge_lock_ledger` | function | purge 在快照之前把这本账的每一条动作行 `FOR UPDATE NOWAIT` 取到手；取不到 ⇒ typed `PROJECT_PURGE_CONTENDED`，**而不是 `40P01`**（§7.7 D20 ③-lock · D20-j，v1.13 新增，`PC-CX-61`） |
+| `coordinator_project_publish_fence` | `BEFORE INSERT OR UPDATE` trigger（project_action）+ `BEFORE INSERT` trigger（session） | 发布那一侧的**同一个线性化点**：写这本账之前先取 Project 行的 `FOR KEY SHARE`；Project 已被清除时得到 typed `PROJECT_PURGED` 而不是裸 `23503`（§7.7 D20 ④ · D20-j · D20-k，v1.13 新增，`PC-CX-61`） |
 
 **三条跨"账本 ↔ Session"的 id 列，on-delete 语义在这里冻结（v1.11 新增，`PC-CX-54`；v1.12 修订第二行，`PC-CX-56`）**：v1.3–v1.10 只写了这些列存在，
 没有写"被指的那一行消失时会发生什么"，而那正是 §4.3 I17-A3 唯一没有对象在看的那个动词。
@@ -150,7 +155,7 @@ v1.12 只动第二行的一个词（`RESTRICT` → 可延迟的 `NO ACTION`）�
 | 列 | on-delete | 理由 |
 |---|---|---|
 | `project_action.result_session_id → session.id` | **RESTRICT** | `CASCADE` 会删掉历史动作行（违反 §8.2 GE1），`SET NULL` 会把已发布的链接清空（那正是 `PC-CX-50` 的第一条语句）。§7.7 D19 |
-| `session.projectActionId → project_action.id` | **NO ACTION**，`DEFERRABLE INITIALLY IMMEDIATE`（v1.12 修订，`PC-CX-56`） | 与上一行同一条理由的对偶：这一列是 §4.3 I17-A3 的 lineage 列，由 §7.7 D15 冻成 create 之后只读，`CASCADE` / `SET NULL` 各绕过那道冻结的一半。**默认行为与 v1.11 的 `RESTRICT` 逐字相同**（同一条语句、同一个 `23503`）；改的只有一件事：`RESTRICT` 在 PostgreSQL 里**永远不能被延迟**，而一次**声明过自己是 Project purge** 的事务必须能把这条检查推到提交点，否则 §2.4 的级联与 §7.7 D19-c 承诺的那条 purge 路径**在真实拓扑上不存在**。§7.7 D20 |
+| `session.projectActionId → project_action.id` | **NO ACTION**，`DEFERRABLE INITIALLY IMMEDIATE`（v1.12 修订，`PC-CX-56`；**这是本文唯一的初始模式**，v1.13 收口 `PC-CX-58`，见 §7.7 D20-l） | 与上一行同一条理由的对偶：这一列是 §4.3 I17-A3 的 lineage 列，由 §7.7 D15 冻成 create 之后只读，`CASCADE` / `SET NULL` 各绕过那道冻结的一半。**默认行为与 v1.11 的 `RESTRICT` 逐字相同**（同一条语句、同一个 `23503`）；改的只有一件事：`RESTRICT` 在 PostgreSQL 里**永远不能被延迟**，而一次**声明过自己是 Project purge** 的事务必须能把这条检查推到提交点，否则 §2.4 的级联与 §7.7 D19-c 承诺的那条 purge 路径**在真实拓扑上不存在**。§7.7 D20 |
 | `project_decision.coordinator_session_id` | **无外键**（历史 id） | §7.5 逐字要求"保留每次决策**当时**的 Session id，因此轮换后仍能按代数回放历史"。加外键会让历史随 Session 一起消失（§8.2 GE1）。**这是一个被声明的选择，不是一个漏掉的外键**（§7.7 D19-b） |
 
 **为什么这两个必须在数据库里而不是在服务层**：它们要挡住的两个入口分别是"另一个进程的同一份代码"（PC-CX-01）和"另一个版本的旧代码"（PC-CX-02）。服务层的检查按定义只在写这段检查的那个二进制里存在，因此对第二个入口无效。
@@ -2061,8 +2066,13 @@ Project 级联删掉 `project_action`，`session.project_action_id` 那一侧的
 得到 `SQLSTATE 23503 constraint=session_project_action_fk`，Project 与三行**全部仍在**（`PC-CX-56`）。
 两个立即 `RESTRICT` 加上"链接两侧都不可清"，让三种删除顺序**一条都不成立**。
 **v1.12 把这条协议写成一条真的可提交的事务，条款在 §7.7 D20**：`session.projectActionId` 那一侧改成
-`NO ACTION DEFERRABLE INITIALLY DEFERRED`（`RESTRICT` 在 PostgreSQL 里**永远不能被延迟**），
+`NO ACTION DEFERRABLE INITIALLY IMMEDIATE`（`RESTRICT` 在 PostgreSQL 里**永远不能被延迟**，而 `NO ACTION` 可以 ——
+**默认仍然立即**，只有一次按 D20 ③-4 声明过自己是 Project purge 的事务才用 `SET CONSTRAINTS … DEFERRED` 把它推到提交点），
 `coordinator_purge_project()` 是唯一的公开入口，`project_purge_fence` 给裸 `DELETE FROM project` 一条类型化的拒绝。
+**v1.13 修订本句（`PC-CX-58`）**：v1.12 这里写的是**默认延迟**的那一版（`INITIALLY` 后面那个词与其余三处相反），
+与 §2.4 的 on-delete 表、§7.7 D20 ① 的 SQL 与 §12.1 步骤 6h 三处**同属现行规范**的 `INITIALLY IMMEDIATE` 正面冲突 —— 两句都不是历史日志，
+于是"一条普通事务里的越界写在哪一刻失败"有两个合法答案。**这条外键的初始模式在全文只有一个**，写在 §7.7 D20-l；
+被取代的那半句逐字抄在 §31.5。
 **本条与 D20 的分工**：本条说"一条 Session 什么时候不可删"，D20 说"那本账什么时候、怎么整份消失"。
 
 **这仍然是一条被声明的界限，不是一个没人发现的洞**（与 D17-g / §28.4 是同一条纪律）：需要按 Session 粒度做保留期清理的场景，
@@ -2087,7 +2097,7 @@ Project 级联删掉 `project_action`，`session.project_action_id` 那一侧的
 **反向对照**：把触发器与外键**都**去掉，`UPDATE … deleted_at` 与随后的 `DELETE` **各自提交成功**，查询得到
 `{status:'APPLIED', result_session_id:'session-delete', session_exists:false}` —— 与复审报告 §6 `PC-CX-54` 的那一行输出逐字对应。
 
-#### D20 · Project 的物理清除是一条被声明的、单事务的协议（v1.12 新增，PC-CX-56）
+#### D20 · Project 的物理清除是一条被声明的、单事务的协议（v1.12 新增，v1.13 把量化域收成一个函数、并让它与派发发布共享同一个线性化点，PC-CX-56 / PC-CX-60 / PC-CX-61）
 
 §7.7 D19-c 从 v1.11 起就把"物理清除的粒度是 Project"写成了一条被声明的界限，并把执行方式写成一句话：
 "`project_action` 只随 §2.4 的 `project` 级联一起消失，那之后这条 Session 就是一条普通 Session，照常可删"（v1.11 的原句，已由 `PC-CX-56` 取代，登记在 §22.8）。
@@ -2106,11 +2116,17 @@ Project 级联删掉 `project_action`，`session.project_action_id` 那一侧的
 **没有唯一权威状态**：保持两个立即 `RESTRICT` ⇒ Project 永远不可 purge；摘掉任一侧 ⇒ 允许 orphan 或违反 GE1。
 这与 `PC-CX-53` 是同一格的第二次 —— **不是"错的能进来"，是"对的进不来"**：一整类被契约明文承诺的合法操作没有可执行路径。
 
+**v1.13 补的是同一条协议的另外两个半句**（`PC-CX-60` / `PC-CX-61`）：v1.12 写清了"这本账整份消失"的**顺序**，
+但没写清它**删哪些行**（③-3 的 `OR` 谓词比 D20-c 的散文宽，一条 USER-origin Session 会被它带走），
+也没写清它与**并发发布**之间的先后（快照与级联之间有一个窗口，落进窗口的一次合法发布让整个 purge 在 `COMMIT` 得原生 `23503`）。
+两条的答案都写在同一处：**量化域收成一个函数（⓪），两个入口都只读它；Project 行既是持久 fence 也是线性化点，purge 与发布无条件共享它。**
+
 ```sql
 -- ① `RESTRICT` 在 PostgreSQL 里**永远不能被延迟**（"NO ACTION allows the check to be deferred until later
 --    in the transaction, whereas RESTRICT does not"）。因此这一侧换成可延迟的 `NO ACTION`，
---    并且 **INITIALLY IMMEDIATE** —— 默认行为与 v1.11 的 `RESTRICT` 逐字相同（同一条语句、同一个 23503），
---    唯一的区别是：一次**声明过自己是 Project purge** 的事务可以把它推到提交点（③）。
+--    并且 **INITIALLY IMMEDIATE**。**本文对这条外键只有这一个初始模式**（D20-l，v1.13 收口 `PC-CX-58`）：
+--    默认行为与 v1.11 的 `RESTRICT` 逐字相同（同一条语句、同一个 23503），唯一的区别是
+--    一次**声明过自己是 Project purge** 的事务可以用 `SET CONSTRAINTS … DEFERRED` 把它推到提交点（③-5）。
 --    另一侧（`project_action.result_session_id`）**一个字不动**，仍是立即 `RESTRICT`：purge 里它从来不需要被延迟，
 --    因为账本先消失、占位后删（D20-b）。
 ALTER TABLE session
@@ -2119,17 +2135,63 @@ ALTER TABLE session
   ON DELETE NO ACTION ON UPDATE NO ACTION
   DEFERRABLE INITIALLY IMMEDIATE;
 
+-- ⓪ D20-c 的量化域本身（v1.13 新增，`PC-CX-60`）：**一个函数、一份定义、两个调用点**（② 与 ③）。
+--    它返回这本账**触到**的每一对 `(action, session)`——两条路各取一次（lineage 与结果链接）——
+--    并对每一对回答一个布尔：这一对是不是 D20-c 认下的那种 COORDINATOR 占位。
+--    `in_scope` 为真的那些 Session 就是 purge 删的第三类东西，**一个不多**；为假的每一对都是
+--    **这本账说不清的链接**，purge 必须在动任何一行之前 fail closed（D20-i）。
+--    v1.12 这里是写在 ③ 里的一句 `a.id = s.project_action_id OR a.result_session_id = s.id`，
+--    而 D20-c 的散文还要求 COORDINATOR origin、正确的动作类型、发布与链接同真同假、双向互指 ——
+--    **一句 SQL 与一段散文分头长大**，那正是 `PC-CX-37` / `PC-CX-44` 已经付过两次钱的形状（D16-f）。
+--    收成一个函数之后，"收集"与"授权"在结构上**不可能**再给出两个答案。
+CREATE OR REPLACE FUNCTION coordinator_purge_ledger_pairs(p_project_id text)
+RETURNS TABLE (action_id text, session_id text, in_scope boolean, reason text)
+LANGUAGE sql STABLE AS $$
+  SELECT a.id, s.id,
+         COALESCE(s.dispatch_origin = 'COORDINATOR'
+              AND a.type = 'DISPATCH_TASK'
+              AND s.project_action_id IS NOT DISTINCT FROM a.id
+              AND ((a.status =  'APPLIED' AND a.result_session_id IS NOT DISTINCT FROM s.id)
+                OR (a.status <> 'APPLIED' AND a.result_session_id IS NULL))
+              AND NOT EXISTS (SELECT 1 FROM project_action o
+                               WHERE o.result_session_id = s.id
+                                 AND o.project_id IS DISTINCT FROM p_project_id), false),
+         CASE WHEN s.dispatch_origin <> 'COORDINATOR' THEN 'the session is not a COORDINATOR placeholder'
+              WHEN a.type <> 'DISPATCH_TASK'          THEN 'the action is not a DISPATCH_TASK'
+              WHEN s.project_action_id IS DISTINCT FROM a.id
+                                                      THEN 'the link is one-way: the session does not point back'
+              WHEN a.status =  'APPLIED' AND a.result_session_id IS DISTINCT FROM s.id
+                                                      THEN 'the applied dispatch does not point at this session'
+              WHEN a.status <> 'APPLIED' AND a.result_session_id IS NOT NULL
+                                                      THEN 'an unpublished dispatch already carries a result link'
+              WHEN EXISTS (SELECT 1 FROM project_action o
+                            WHERE o.result_session_id = s.id
+                              AND o.project_id IS DISTINCT FROM p_project_id)
+                                                      THEN 'another project ledger points at this session too'
+              ELSE 'in scope' END
+    FROM project_action a
+    JOIN session s ON (s.project_action_id = a.id OR a.result_session_id = s.id)
+   WHERE a.project_id = p_project_id;
+$$;
+
 -- ② 类型那一半：一条**没有声明**自己是 purge 的裸 `DELETE FROM project`，如果会搁浅占位，就在**那条语句**上
 --    拿到本契约的错误码、责任人与恢复，而不是一个提交点的裸 23503。分工与 D18-d / D19 ② 逐字相同。
+--    **v1.13（PC-CX-60）：量化域的裁决排在最前面，而且它读的是同一个 ⓪** —— 因此"这本账说不清"这件事
+--    对 ③ 号函数与裸 `DELETE` 是**同一个答案**，D20-f 的"结果集合相同"才真的成立。
 CREATE OR REPLACE FUNCTION project_purge_fence() RETURNS trigger AS $$
-DECLARE stranded bigint;
+DECLARE bad record; stranded bigint;
 BEGIN
+  SELECT * INTO bad FROM coordinator_purge_ledger_pairs(OLD.id)
+   WHERE NOT in_scope ORDER BY action_id, session_id LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION 'PROJECT_PURGE_UNDECIDABLE: project % links action % to session % but % (owner=USER, recovery=HUMAN: adjudicate that link first; nothing was deleted)',
+      OLD.id, bad.action_id, bad.session_id, bad.reason;
+  END IF;
   IF current_setting('coordinator.purging_project', true) IS NOT DISTINCT FROM OLD.id THEN
     RETURN OLD;                       -- 本事务已按 ③ 声明过自己，它会把占位一起删掉
   END IF;
-  SELECT count(*) INTO stranded
-    FROM session s JOIN project_action a ON a.id = s.project_action_id
-   WHERE a.project_id = OLD.id;
+  SELECT count(DISTINCT session_id) INTO stranded
+    FROM coordinator_purge_ledger_pairs(OLD.id) WHERE in_scope;
   IF stranded > 0 THEN
     RAISE EXCEPTION 'PROJECT_PURGE_UNDECLARED: project % still owns % coordinator placeholder session(s) whose lineage points into its action ledger (owner=SYSTEM, recovery=EVENT: call coordinator_purge_project(%) — it is the only public purge, and it removes the project, its ledger and those placeholders in one transaction)',
       OLD.id, stranded, quote_literal(OLD.id);
@@ -2142,33 +2204,97 @@ CREATE TRIGGER project_purge_fence
   BEFORE DELETE ON project
   FOR EACH ROW EXECUTE FUNCTION project_purge_fence();
 
+-- ③-lock（v1.13 新增，`PC-CX-61`）：把这本账的每一条动作行也取到手，**NOWAIT**。
+--    正常拓扑下它一次都不会失败 —— ④ 号 fence 让每一个写端都先取 Project 行锁，因此握着动作行锁的事务
+--    必然也握着 Project 行锁，purge 早在 ③-1 就排上队了。它要挡的是**另一半**：一个绕过 ④ 的写端
+--    （旧二进制、裸 SQL、被摘掉的触发器）握着动作行锁而没有 Project 行锁 —— 那正好是一个环。
+--    `NOWAIT` 把这个环变成一条**类型化、确定、可幂等重试**的拒绝，而不是 PostgreSQL 的 `40P01`
+--    （谁死取决于调度，而且谁都拿不到 owner 与 recovery）。**两条各自够用，两条都要有**，同 D20-d。
+CREATE OR REPLACE FUNCTION coordinator_purge_lock_ledger(p_project_id text) RETURNS void AS $$
+BEGIN
+  PERFORM 1 FROM project_action WHERE project_id = p_project_id ORDER BY id FOR UPDATE NOWAIT;
+EXCEPTION WHEN lock_not_available THEN
+  RAISE EXCEPTION 'PROJECT_PURGE_CONTENDED: project % has an in-flight dispatch holding one of its action rows outside the publish fence (owner=SYSTEM, recovery=EVENT: retry coordinator_purge_project(%) after that transaction settles — this transaction changed nothing and the purge is idempotent)',
+    p_project_id, quote_literal(p_project_id);
+END;
+$$ LANGUAGE plpgsql VOLATILE;
+
 -- ③ 唯一的公开入口。它对**任何** Project 都成立（空的、只有账本的、有链接的），因此它是唯一需要被记住的那一条。
 CREATE OR REPLACE FUNCTION coordinator_purge_project(p_project_id text,
   OUT purged_actions bigint, OUT purged_sessions bigint) AS $$
-DECLARE doomed text[];
+DECLARE doomed text[]; bad record;
 BEGIN
   purged_actions := 0; purged_sessions := 0;
-  -- ③-1 取 Project 行锁。并发的第二次 purge 在这里排队，醒来时看到行已消失 ⇒ 干净的 (0,0)（D20-e）。
+  -- ③-1 取 Project 行锁。**这就是本条与派发发布共享的那个线性化点**（D20-j）：④ 号 fence 让每一次
+  --      会把 Session 挂进这本账、或者往这本账里加/改一条动作行的写入都先取同一行的 `FOR KEY SHARE`。
+  --      并发的第二次 purge 同样在这里排队，醒来时看到行已消失 ⇒ 干净的 (0,0)（D20-e）。
   PERFORM 1 FROM project WHERE id = p_project_id FOR UPDATE;
   IF NOT FOUND THEN RETURN; END IF;
-  -- ③-2 声明 fence：本事务是一次对**这一个** Project 的 purge。事务局部，提交或回滚后自动消失。
+  -- ③-2 把这本账的每一条动作行也取到手（见 ③-lock）。此后**没有任何写端**能给这本账加一条动作行
+  --      （新 action 的外键要 Project 行的 `KEY SHARE`，被 ③-1 挡住）、发布一条既有动作行、或者把一条
+  --      Session 挂进来（那条 `INSERT` 先撞 ④，再撞动作行的 `KEY SHARE`）。
+  --      ⇒ ③-6 的快照到 ③-7 的级联之间**没有窗口**（D20-j，`PC-CX-61`）。
+  PERFORM coordinator_purge_lock_ledger(p_project_id);
+  -- ③-3 量化域先被裁决一次：这本账触到的每一对 (action, session) 都必须是 ⓪ 认下的那种占位。
+  --      **一对说不清就整个 fail closed，一行都不删**（D20-i，`PC-CX-60`）。它排在 ③-4 之前，
+  --      因此这条事务在声明自己是 purge、在延迟任何约束、在删任何一行之前就已经停下来了。
+  SELECT * INTO bad FROM coordinator_purge_ledger_pairs(p_project_id)
+   WHERE NOT in_scope ORDER BY action_id, session_id LIMIT 1;
+  IF FOUND THEN
+    RAISE EXCEPTION 'PROJECT_PURGE_UNDECIDABLE: project % links action % to session % but % (owner=USER, recovery=HUMAN: adjudicate that link first; nothing was deleted)',
+      p_project_id, bad.action_id, bad.session_id, bad.reason;
+  END IF;
+  -- ③-4 声明 fence：本事务是一次对**这一个** Project 的 purge。事务局部，提交或回滚后自动消失。
   PERFORM set_config('coordinator.purging_project', p_project_id, true);
+  -- ③-5 只推迟 lineage 那一条外键的**执行时刻**。它在 ③-8 只是结构兜底（D20-d）：③-2 之后
+  --      正常并发已经进不来，它要证明的是伪造 fence 或绕过 ④ 的写端同样留不下 orphan。
   SET CONSTRAINTS session_project_action_fk DEFERRED;
-  -- ③-3 先记下这本账认下的占位 —— 级联之后就再也查不出它们了。两条路各取一次（lineage 与结果链接）。
-  SELECT COALESCE(array_agg(DISTINCT s.id), '{}'::text[]) INTO doomed
-    FROM session s JOIN project_action a
-      ON a.id = s.project_action_id OR a.result_session_id = s.id
-   WHERE a.project_id = p_project_id;
+  -- ③-6 记下这本账认下的占位 —— 级联之后就再也查不出它们了。**谓词就是 ⓪，一个字不重写**。
+  SELECT COALESCE(array_agg(DISTINCT session_id), '{}'::text[]) INTO doomed
+    FROM coordinator_purge_ledger_pairs(p_project_id) WHERE in_scope;
   SELECT count(*) INTO purged_actions FROM project_action WHERE project_id = p_project_id;
-  -- ③-4 删 Project：五张控制环表随 §2.4 的级联整份消失（GE1 的那个被声明的例外，**不是逐条删除**）。
+  -- ③-7 删 Project：五张控制环表随 §2.4 的级联整份消失（GE1 的那个被声明的例外，**不是逐条删除**）。
   DELETE FROM project WHERE id = p_project_id;
-  -- ③-5 账本没了，D19 与 ② 号外键也就没有要保护的东西：现在删占位，两道门都放行且都没有被摘掉。
+  -- ③-8 账本没了，D19 与 ② 号外键也就没有要保护的东西：现在删占位，两道门都放行且都没有被摘掉。
   DELETE FROM session WHERE id = ANY(doomed);
   GET DIAGNOSTICS purged_sessions = ROW_COUNT;
-  -- ③-6 COMMIT：被延迟的 `session_project_action_fk` 在这里重查一遍。**这就是"无 orphan"的证明**，
+  -- ③-9 COMMIT：被延迟的 `session_project_action_fk` 在这里重查一遍。**这就是"无 orphan"的证明**，
   --      它在同一个事务里可验证，而且对**任何**写端成立 —— 包括一条伪造了 fence 却没删占位的事务。
 END;
 $$ LANGUAGE plpgsql;
+
+-- ④ 发布那一侧的**同一个**线性化点（v1.13 新增，`PC-CX-61`）。任何一次会把 Session 挂进某本账、
+--    或者往某本账里加/改一条动作行的写入，在动那本账之前先取它 Project 行的 `FOR KEY SHARE`：
+--    与 ③-1 的 `FOR UPDATE` 互斥，与另一次派发（同样是 `KEY SHARE`）、与一次普通的
+--    `UPDATE project SET …`（`FOR NO KEY UPDATE`）**都不互斥**。
+--    **因此它不是一把新锁，它就是外键本来要取的那一把** —— 只是被提到了写之前，
+--    并且在 Project 已经消失时给出一条类型化的答案而不是裸 `23503`（D20-k）。
+--    触发器名按字母序排在 `project_action_*` 之前，因此"这本账还在不在"永远先于账本内部的判据被回答。
+CREATE OR REPLACE FUNCTION coordinator_project_publish_fence() RETURNS trigger AS $$
+DECLARE p_id text;
+BEGIN
+  IF TG_TABLE_NAME = 'session' THEN
+    IF NEW.project_action_id IS NULL THEN RETURN NEW; END IF;   -- 不进任何账本的 Session 与本条无关
+    SELECT a.project_id INTO p_id FROM project_action a WHERE a.id = NEW.project_action_id;
+    IF NOT FOUND THEN RETURN NEW; END IF;   -- 动作行不存在：由 D9 / D14 与 ③ 号外键各自给出答案
+  ELSE
+    p_id := NEW.project_id;
+  END IF;
+  PERFORM 1 FROM project WHERE id = p_id FOR KEY SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PROJECT_PURGED: project % was physically purged while this dispatch was in flight (owner=SYSTEM, recovery=EVENT: this dispatch is void — the ledger it would join no longer exists; do not retry it against this project)', p_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql VOLATILE;
+
+CREATE TRIGGER coordinator_project_publish_fence
+  BEFORE INSERT OR UPDATE ON project_action
+  FOR EACH ROW EXECUTE FUNCTION coordinator_project_publish_fence();
+
+CREATE TRIGGER coordinator_project_publish_fence
+  BEFORE INSERT ON session
+  FOR EACH ROW EXECUTE FUNCTION coordinator_project_publish_fence();
 ```
 
 **D20-a（四条候选，为什么是这一条）**：复审给了两条出路，加上 v1.11 已经比过的两条，一共四条：
@@ -2191,29 +2317,106 @@ v1.10 那一次要的是"判的必须是要提交的那个状态"；本条要的
 **没有任何一道门被摘掉、被禁用或被绕过**，它们只是发现自己要保护的那本账已经整份消失了。
 这也是为什么 `project_action.result_session_id` 那一侧**不需要**变成可延迟的：purge 里它从来不会在"账本还在"的时候被撞上。
 
-**D20-c（一次 purge 的量化域，写下来）**：`coordinator_purge_project(p)` 删掉的**恰好**是三样东西，一样不多：
+**D20-c（一次 purge 的量化域，写下来，v1.13 把第 3 条收进 ⓪ 号函数，PC-CX-60）**：`coordinator_purge_project(p)`
+删掉的**恰好**是三样东西，一样不多：
 
 1. `project` 那一行；
 2. §2.4 的五张控制环表里 `project_id = p` 的全部行（由级联，**整份、原子、不逐条**）；
-3. 那本账认下的 COORDINATOR 占位 Session —— 定义是 `s.project_action_id = a.id ∨ a.result_session_id = s.id`（`a.project_id = p`）。
+3. 那本账认下的 COORDINATOR 占位 Session —— **定义就是 ⓪ 号函数返回 `in_scope = true` 的那些行，不是另一句散文**。
+   ⓪ 逐条要求：Session 的 `dispatch_origin = 'COORDINATOR'`、动作行的 `type = 'DISPATCH_TASK'`、
+   **Session 的 lineage 指着这条动作行**（`s.project_action_id = a.id`）、**发布与链接同真同假**
+   （`APPLIED` ⇒ `result_session_id = s.id`；非 `APPLIED` ⇒ `result_session_id IS NULL`），
+   并且**没有别的 Project 的账本也指着这条 Session**。
 
 **不包括**：任何 USER-origin Session、任何别的 Project 的占位、`project_decision.coordinator_session_id` 指过的历史 Session
 （那一列**没有外键**，D19-b 已经写明这是一个被声明的选择）、以及 `project.coordinatorSessionId` 指着的那条协调 Session
 （它是 `SetNull` 的指针，不是 lineage）。**产品层"用户删除 Session"仍然只是软删**（D19-b 逐字不变）：
 本条不是 Session 的保留期工具，它是"把一个 Project 连同它的控制环历史整份抹掉"这一件事的唯一实现。
 
+**v1.12 的 SQL 与这一段散文不是同一句话**：③-3 当时写的是（`PC-CX-60`，被取代的原句登记在 §22.8、逐字抄在 §31.5）
+`ON a.id = s.project_action_id OR a.result_session_id = s.id`，**只有两条路，没有其余五个条件**（`PC-CX-60`）。
+于是一条 `REFUSED` 的 `DISPATCH_TASK` 单向指着一条 `dispatch_origin = 'USER'`、`project_action_id IS NULL` 的 Session 时，
+`coordinator_purge_project()` 会把那条 USER Session **物理删除**，而同一份事实上的裸 `DELETE FROM project`
+（fence 只查了 `OR` 的第一半）**提交并保留**它 —— 同一件事两个已提交结果，D20-f 的"结果集合相同"当场为假。
+**这一格与 `PC-CX-37`（denylist 与它保护的表分头长大）、`PC-CX-44`（冻结集的手工副本）是同一形状的第三次**：
+一段散文与一句 SQL 各写一遍同一个集合。v1.13 因此把这个集合收进 ⓪，② 与 ③ 都只**读**它、不再各自重写。
+
+**D20-i（说不清的链接必须 fail closed，v1.13 新增，PC-CX-60）**：⓪ 返回的每一对 `in_scope = false`
+都是**这本账触到、而 D20-c 不认**的一条链接。对它们，本条的答案**不是"跳过"，是"整个停下"**：
+`coordinator_purge_project()` 在 ③-3、裸 `DELETE FROM project` 在 ② 号 fence 的第一句，各得到一条
+`PROJECT_PURGE_UNDECIDABLE`（`owner=USER`，`recovery=HUMAN`，消息里带那一对的 action id、session id 与具体原因），
+**一行都不删、一个约束都还没被延迟**。理由有三条，每一条单独成立：
+
+1. **"跳过"会把不该删的删掉的对偶变成把不该留的留下**：一条 `in_scope = false` 的 lineage 如果被跳过，
+   `DELETE FROM project` 的级联照样带走它指着的动作行，`COMMIT` 时那条可延迟外键会给出一个裸 `23503` ——
+   一条**没有 owner、没有 recovery 的失败**，正是本条要消灭的东西。
+2. **哪一侧权威没有规则**：一条单向链接、一条跨 Project 的链接、一条 `REFUSED` 却带着结果链接的动作行，
+   都是 D16 的提交时门（§7.7 D16 ②）**本来就会拒绝**的形状 —— 它们只可能来自本轮硬门落地之前的存量、
+   或者一个绕过全部触发器的写端。**迁移不代为猜测哪一侧权威**（D18-e ① ② ③ · D19-e · D20-g 的同一条纪律），
+   一次 purge 更不该代为猜测：purge 是不可逆的。
+3. **它让两个入口给出同一个答案**：② 与 ③ 读同一个 ⓪、按同一个顺序裁决，因此 D20-f 的"结果集合相同"
+   在**畸形数据上也成立**——两条路要么都提交同一份结果，要么都得到同一条 typed 拒绝。
+
+**人工裁决的入口写下来**：按 §11.2 开一条 `USER / HUMAN` 的 blocker，`subject` 指向那个 Project，
+`detail` 带上 ⓪ 返回的全部 `in_scope = false` 行（action id、session id、reason）。裁决只有两种合法出口 ——
+把那条链接修回 D20-c 的形状（例如补上 lineage，或按 D18-e ④-a 的同一条纪律把畸形侧收敛），
+或者由人显式地把那条 Session 移出这本账；**两者都完成之后重跑同一个函数**，它是幂等的。
+
 **D20-d（fence 是协议声明，不是权限边界）**：`coordinator.purging_project` 这个事务局部设置**挡不住**一个存心的写端 ——
 它可以自己 `set_config` 再裸删。**这是故意的，也是安全的**：② 号 fence 承担的是"把一次误用变成一条有类型、有 owner、
 有 recovery 的拒绝"，而"不许留下 orphan"这件事由 ① 号那条**可延迟外键在提交点无条件**承担 ——
 它对任何版本的二进制、任何语句顺序、任何伪造的 fence 都成立（伪造 fence 却不删占位的事务在 `COMMIT` 得到 23503，整事务回滚）。
 **两条各自够用，两条都要有**，理由与 D18-d / D19 ① ② 逐字相同。
+**v1.13 补一句量化域**（`PC-CX-61`）：正常并发下 ① 号在提交点**无事可做** —— ③-2 与 ④ 已经让"快照之后还能插进来"这件事不存在。
+**因此一条裸 `23503 session_project_action_fk` 从今以后只有一个含义：有人绕过了 ④ 号 fence 或伪造了 ② 号声明。**
+它是结构兜底，不是正常控制流；一条正常的 purge/派发并发**不产生**它（D20-k）。
 
-**D20-e（并发：两次 purge、一次 purge 撞一次派发）**：③-1 的 `FOR UPDATE` 是全部的并发语义。
-两个事务同时 purge 同一个 Project：第二个在 ③-1 排队，第一个提交后它重读发现行已消失，返回 `(0, 0)` ——
-**一次干净的幂等 no-op，不是一个错误**（与 §8.5 C2 的 `ALREADY_APPLIED` 是同一条纪律）。
-一次 purge 与一次派发相撞：派发要插一条指向该 Project 某条 action 的 Session，那条 `INSERT` 需要 action 行上的 `KEY SHARE`，
-而 purge 正持有它的删除锁 —— 派发排队，purge 提交后它得到 `23503`（它引用的 action 行已经不在），整个派发事务回滚。
-**永远不会出现"派发成功了但它的账本已经没了"**。
+**D20-e（并发：两次 purge、一次 purge 撞一次派发，v1.13 重写，PC-CX-61）**：③-1 的 `FOR UPDATE` 加上 ④ 号 fence 的
+`FOR KEY SHARE` 是全部的并发语义。**两个事务同时 purge 同一个 Project**：第二个在 ③-1 排队，第一个提交后它重读发现行已消失，
+返回 `(0, 0)` —— **一次干净的幂等 no-op，不是一个错误**（与 §8.5 C2 的 `ALREADY_APPLIED` 是同一条纪律）。
+**一次 purge 撞一次派发**的两个提交顺序都有确定的、类型化的结果，写在 D20-k。
+
+**v1.12 这一格是错的，逐字记在这里**：它写的是"派发要插一条指向该 Project 某条 action 的 Session，那条 `INSERT` 需要
+action 行上的 `KEY SHARE`，而 purge 正持有它的删除锁 —— 派发排队"。那句话只描述了**派发晚于 ③-7 的级联**的情形；
+真正的窗口在**③-6 的快照与 ③-7 的级联之间** —— 那时 purge 只持有 Project 行锁，一条发布**既不碰 Project 行、
+也不碰快照里的任何一行**（它改的是另一条 action、插的是另一条 Session），于是它畅通无阻地提交，
+purge 随后按陈旧快照删除，`COMMIT` 得到 `23503 constraint=session_project_action_fk`，**整个 purge 回滚**（`PC-CX-61`）。
+**一条被 D20-e 明文承诺可以并发的合法操作，只拿得到一个原生数据库错误**：没有 typed owner、没有 recovery，
+重试成不成功取决于调度而不是任何持久代次。v1.13 的答案不是"把窗口调小"，是**让那个窗口不存在**（D20-j）。
+
+**D20-j（purge 与派发发布的共同线性化点与持久 fence，v1.13 新增，PC-CX-61）**：本条**不新增任何事实来源**（§2.3）：
+
+- **持久 fence 就是 `project` 那一行本身**。"这个 Project 还在不在"是一条已经存在的、事务性的、崩溃安全的事实；
+  purge 提交的那一刻它变成"不在"，此后**任何**写端读到的都是同一个答案。不需要一列 `purged_at`，
+  也不需要一张 purge 表 —— 那正是 D20-a 拒掉 tombstone 的同一条理由。
+- **线性化点就是那一行上的锁**。purge 在 ③-1 取 `FOR UPDATE`；④ 号 fence 让每一次"会把 Session 挂进某本账、
+  或者往某本账里加/改一条动作行"的写入先取 `FOR KEY SHARE`。两者互斥，因此**purge 与发布之间存在一个全序**，
+  而且这个全序**对任何写端无条件成立**——④ 是数据库对象，不是服务层约定（D8-a / D12 的同一条纪律）。
+- **③-2 让快照到级联之间没有窗口**。取到 Project 行锁之后，新动作行插不进来（它的外键要同一行的 `KEY SHARE`）；
+  再把这本账的每一条动作行都 `FOR UPDATE` 到手之后，既有动作行发布不了、新 Session 也挂不进来
+  （那条 `INSERT` 的外键要动作行的 `KEY SHARE`）。**③-6 的快照因此就是 ③-7 那一刻的事实。**
+- **锁顺序是 Project → action，两边一致**（§8.6 LO1 的同一条纪律）：④ 号在 `session` 的 `BEFORE INSERT` 上先取 Project 行
+  再撞动作行外键；在 `project_action` 的 `UPDATE` 上，PostgreSQL 会先锁那一行、再执行 `BEFORE` 触发器，
+  **这一条是反的** —— 而那正是 ③-2 用 `NOWAIT` 而不是等待的原因：一个反序的写端把环变成一条 typed 拒绝
+  （`PROJECT_PURGE_CONTENDED`），而不是 `40P01`。**反向对照写在 D20-h**：把 ③-2 的 `NOWAIT` 去掉，
+  同一个交错稳定得到原生 `40P01 deadlock detected`。
+- **代价写下来**：`project_action` 的每一次 `INSERT` / `UPDATE` 多一次按主键的 Project 行读 + 一次 `KEY SHARE`
+  （`INSERT` 上那把锁外键本来就要取，等于零）；`session` 只在 `project_action_id` 非空时多这一次，
+  **心跳与状态更新一次都不多**（本条不声明在 `session` 的 `UPDATE` 上 —— lineage 由 D15 冻成 create 之后只读，
+  一条 Session 因此不可能被 `UPDATE` 挂进或移出一本账）。`project_action` 不在任何热路径上（D18-a 已经付过同一笔账）。
+
+**D20-k（两个提交顺序各自的 typed 结果与重试语义，v1.13 新增，PC-CX-61）**：一次 purge 与一次派发发布相撞，
+**只有两种顺序，两种都有确定的赢家、类型化的结果与确定的恢复**：
+
+| 顺序 | 输家拿到什么 | owner / recovery | 幂等与重试 |
+|---|---|---|---|
+| **publish-wins**（发布先拿到 Project 行的 `KEY SHARE`） | purge 在 ③-1 排队；发布提交后它继续，**新占位已经在 ③-6 的快照里**，返回 `(n, m)` 并提交 | 无失败方 | purge 本来就是一次性的；同一个 Project 再调一次返回 `(0,0)` |
+| **purge-wins**（purge 先拿到 `FOR UPDATE`） | 发布阻塞在 ④；purge 提交后它读不到 Project 行，得到 `PROJECT_PURGED`，**整个派发事务回滚** | `SYSTEM` / `EVENT` | **不重试**：这条派发是空的，它要加入的那本账已经不存在。重试确定性地再得到同一条错误（Project 行不会回来），因此它不是"稍后再试"，是"这次派发作废" |
+| （旁路）绕过 ④ 的写端握着动作行锁 | purge 在 ③-2 得到 `PROJECT_PURGE_CONTENDED` | `SYSTEM` / `EVENT` | **可重试且幂等**：本事务一个字没改，那个写端提交/回滚之后原样重跑同一个函数即可 |
+
+**三条都不是裸 `23503`，也不是 `40P01`**。`23503 session_project_action_fk` 在提交点只剩一个含义（D20-d），
+`40P01` 被 ③-2 的 `NOWAIT` 换成了上表第三行。**"合法操作永远有一个已提交状态或一条带 owner 的 typed 拒绝"**
+—— 这就是 §10 活性 SLO 与 AC2/AC3 在本条上的形式。
 
 **D20-f（它不阻止什么）**：不影响软删、结束、失败、取消（全是 `UPDATE`）。不影响一条从未发布链接、也没有 lineage 的
 Session 的物理删除（D19-d 逐字不变）。不影响 §7.5 的 Coordinator Session 轮换。不影响一个**没有占位可搁浅**的 Project 被裸删
@@ -2221,26 +2424,81 @@ Session 的物理删除（D19-d 逐字不变）。不影响 §7.5 的 Coordinato
 `DELETE FROM project` 照常提交，级联照常带走账本。**因为那两条路的已提交结果集合与 ③ 号函数完全相同**，
 所以"公开语义唯一"这句话在这里成立：`coordinator_purge_project()` 是**唯一需要被记住**的入口，裸 `DELETE` 是它在
 "没有东西会被搁浅"时的退化情形，而一旦会搁浅就被 ② 号当场类型化拒绝。
+**v1.13 把这句话补成三分之三**（`PC-CX-60`）：两条路在**畸形数据上也给同一个答案** —— ② 与 ③ 读同一个 ⓪、
+按同一个顺序裁决，因此 `PROJECT_PURGE_UNDECIDABLE` / `PROJECT_PURGE_UNDECLARED` / 提交，三种结局对同一份事实唯一。
+**唯一仍然只属于 ③ 号函数的是并发协议**：裸 `DELETE` 没有 ③-2，因此它撞上一个绕过 ④ 的写端时只能得到
+PostgreSQL 的 `40P01`。这是"为什么要记住那一个入口"的第二条理由，写在这里而不是留给下一个人去发现。
 
-**D20-g（存量审计与迁移义务）**：建 ① 号约束之前必须跑一条查询并给一个 typed owner（§30.4）：
+**D20-g（存量审计与迁移义务，v1.13 补第二条，PC-CX-58 / PC-CX-60）**：建 ① 号约束之前必须跑一条查询并给一个 typed owner（§30.4）：
 `session.project_action_id` 非空而那条 action **不存在**的行。**返回 0 行才允许建约束**（与 D19-e 逐字同一条纪律：
 一条建不起来的约束会让整个迁移失败，因此它必须单独被跑一次）；非 0 的行按 §11.2 开一条 `USER / HUMAN` 的人工裁决，
 `detail` 带上 Session id 与那个已经消失的 action id ——**迁移不代为猜测哪一侧权威**。
 从 v1.11 的 `RESTRICT` 迁到本条要 `DROP CONSTRAINT` 再 `ADD CONSTRAINT`（PostgreSQL 不能把一条既有外键**改**成可延迟的），
-因此 §12.1 的步骤 6h 必须**先** drop 后 add，并在同一次迁移里断言 `pg_constraint.condeferrable` 为真、`condeferred` 为假。
+因此 §12.1 的步骤 6h 必须**先** drop 后 add，并在同一次迁移里断言 `pg_constraint.condeferrable` 为真、`condeferred` 为假、
+`confdeltype = 'a'`（三列一起断言 —— 一条同名的立即 `RESTRICT` 外键一样存在、一样叫这个名字，差别只在这三列）。
+**v1.13 再加一条（`PC-CX-60`）**：建 ④ 号 fence 之前必须对**每一个** Project 跑一次 ⓪ 并断言
+`in_scope = false` 的行数为 0 —— 这一条不问对象在不在，它问存量数据认不认得（与 §12.1 G5 第 ⑫ ⑯ 条是同一种检查）。
+非 0 的行按 D20-i 的同一条出口开 `USER / HUMAN` 人工裁决；**它不阻塞迁移本身**（那些行在 v1.13 之前就存在，
+而本轮不改变它们的任何一条已提交事实），但它必须在迁移输出里被数出来，否则第一次 purge 才发现它就晚了。
 
-**D20-h（可测形式）**：真实 Postgres、完整 FK/trigger 拓扑上 ——
+**D20-h（可测形式，v1.13 扩到量化域与两个提交顺序）**：真实 Postgres、完整 FK/trigger 拓扑上 ——
+
 **正例**：`coordinator_purge_project('p-linked')` 在**一个事务**里提交，返回 `(1, 1)`，`project` / `project_action` / `session`
 三张表上这个 Project 的行全部消失，且 `session.project_action_id` 指向缺失 action 的行数为 **0**（同一事务内可查）；
-一个**空** Project 的裸 `DELETE FROM project` 提交；一个只有账本、没有占位的 Project 的裸 `DELETE` 也提交（级联带走账本）。
-**反例**：有链接 Project 的裸 `DELETE FROM project` 得到 `PROJECT_PURGE_UNDECLARED`（**语句级**，带 owner 与 recovery），
+一个**空** Project 的裸 `DELETE FROM project` 提交；一个只有账本、没有占位的 Project 的裸 `DELETE` 也提交（级联带走账本）；
+一条**还没发布**的占位（动作停在 `CLAIMED`、`result_session_id IS NULL`）照常在 `in_scope` 里，purge 返回 `(1, 1)`。
+
+**反例（v1.12 就有的）**：有链接 Project 的裸 `DELETE FROM project` 得到 `PROJECT_PURGE_UNDECLARED`（**语句级**，带 owner 与 recovery），
 且 Project 与三行一个不少；`DELETE FROM session` 单独走仍得到 `SESSION_RESULT_LINK_REFERENCED`（D19 一个字不变）；
 伪造 fence 却不删占位的事务在 `COMMIT` 得到 `23503 session_project_action_fk`，整事务回滚、状态一动不动。
-**并发**：两个事务同时 purge 同一个 Project ⇒ 先到的返回 `(1, 1)` 并提交，后到的排队后返回 `(0, 0)`，两者都不报错、都不留 orphan。
+
+**反例（v1.13 新增，量化域，`PC-CX-60`）**：下面五种形状**各跑两遍**（一遍 `coordinator_purge_project()`、一遍裸 `DELETE FROM project`），
+断言两遍得到**逐字相同**的 `PROJECT_PURGE_UNDECIDABLE`、且三张表一行未动 —— ① 一条 `REFUSED` 的 `DISPATCH_TASK`
+单向指着一条 `dispatch_origin = 'USER'` 的 Session（这就是复审 §3 `PC-CX-60` 的最小反例）；
+② 一条已 `APPLIED` 的动作指着一条**不反向指回来**的 COORDINATOR Session；③ 一条合法占位**同时**被另一个 Project 的账本指着；
+④ 占位挂在一条**不是 `DISPATCH_TASK`** 的动作行上；⑤ 一条**非 `APPLIED`** 的动作行已经带着结果链接。
+**并且断言那条 USER Session 在两条路上都还在**——这一条比"purge 报错了"强：它证明的是**数据没丢**。
+
+**并发（v1.12 就有的）**：两个事务同时 purge 同一个 Project ⇒ 先到的返回 `(1, 1)` 并提交，后到的排队后返回 `(0, 0)`，两者都不报错、都不留 orphan。
+
+**并发（v1.13 新增，两个提交顺序，`PC-CX-61`）**：一个 Project 有 `a-old ↔ s-old` 与一条尚未发布的 `a-late` ——
+**purge-wins**：purge 先进函数，发布方随后 `INSERT` 指向 `a-late` 的 `s-late`，断言它**阻塞**；purge 返回 `(2, 1)` 并提交；
+发布方醒来得到 `PROJECT_PURGED`（**不是** `23503`），整个派发回滚。
+**publish-wins**：发布方先在同一事务里插 `s-late` 并把 `a-late` 发布成 `APPLIED`，purge 随后进函数并**阻塞在 ③-1**；
+发布方提交后 purge 返回 `(2, 2)` 并提交 —— **`s-late` 在快照里**，没有 orphan、没有 `23503`。
+**旁路**：把 ④ 号触发器从 `project_action` 上摘掉（模拟一个绕过 fence 的写端），让它握住 `a-late` 的行锁，
+purge 得到 `PROJECT_PURGE_CONTENDED`（**不是** `40P01`）、一个字没改；那个写端提交之后原样重跑，purge 成功。
+
 **反向对照**：把 ① 号换回 v1.11 的立即 `RESTRICT`，同一个 `coordinator_purge_project` 调用得到
-`23503 constraint=session_project_action_fk`，Project 与三行全部仍在 —— 与复审报告 §3 `PC-CX-56` 的第 3 条输出逐字对应；
+`23503 constraint=session_project_action_fk`，Project 与三行全部仍在 —— 与复审报告（v1.11 轮）§3 `PC-CX-56` 的第 3 条输出逐字对应；
 再把 ③ 号外键整个摘掉，Project 删得掉，而 `session.project_action_id = 'a1'` 且 `a1` 不存在 ——
 与该报告第 4 条的 orphan 输出逐字对应。
+**v1.13 再加三条反向对照**：把 ⓪ 号换回 v1.12 的裸 `OR` 谓词，第 ① 种形状上函数删掉 USER Session 而裸 `DELETE` 保留它
+—— 与复审报告（v1.12 轮）§3 `PC-CX-60` 的 witness 逐字对应；把 ③-2 与 ④ 一起去掉，逐句停在 ③-6 之后插入一次完整发布，
+purge 在 `COMMIT` 得到 `23503` 并整事务回滚 —— 与该报告 `PC-CX-61` 的 witness 逐字对应；
+只把 ③-2 的 `NOWAIT` 去掉（保留 ④），同一个旁路交错得到原生 `40P01 deadlock detected`。
+
+**D20-l（这条外键的初始模式在全文只有一个，v1.13 新增，PC-CX-58）**：`session_project_action_fk` 是
+`ON DELETE NO ACTION ON UPDATE NO ACTION DEFERRABLE **INITIALLY IMMEDIATE**` —— §2.4 的 on-delete 表、
+本条 ① 号 SQL、§12.1 步骤 6h 与 §7.7 D19-c **四处逐字相同**，这是**现行规范里唯一被允许出现的初始模式**。
+v1.12 的 D19-c 曾写成**默认延迟**的那一版（`PC-CX-58`），那半句已被取代并逐字移进 §31.5 的非规范日志 ——
+**历史措辞只允许出现在 §19–§31 的修订日志与反例测试里**（§0 RL1 · `PC-CX-27` 的同一条纪律）。
+
+**这不是措辞洁癖，两个答案是两种运行时行为**：`INITIALLY IMMEDIATE` 让**每一条**普通语句在**它自己**那一刻检查引用，
+越界写得到一个落在那条语句上的 `23503`（与 v1.11 的 `RESTRICT` 逐字相同）；**默认延迟**的那一版让**每一个事务**默认把
+检查推到提交点，于是同一条越界写先提交、再在 `COMMIT` 整事务回滚。**错误发生的时刻、调用方拿到的动作结果、
+以及混合版本下两个二进制看到的顺序，三样都因此不同**；而 §7.7 D20 的整条协议恰好建立在"默认立即、只有声明过的 purge 才延迟"
+这半句上 —— 默认延迟会让 ② 号 fence 的语句级拒绝退化成一个提交点错误，D20-d 的"两条各自够用"少掉一条。
+
+**唯一性怎么被守住**（三条，缺一条就会再长出第二个答案）：
+
+1. **静态**：契约自检逐字比较上述四处的初始模式，任何一处与其余三处不同即失败（§12.1 G5 第 ㉒ 条的模型那一半）。
+2. **实测**：迁移与 04 单元在真实 `pg_constraint` 上断言 `condeferrable` 为真、`condeferred` 为**假**、`confdeltype = 'a'`、
+   `confupdtype = 'a'` —— 四列一起（§12.1 G5 第 ⑳ 条，v1.13 补上 `confupdtype`）。**只断言前两列不够**：
+   一条 `ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE` 的同名外键前两列一模一样。
+3. **行为**：同一次测试里真的跑一遍 —— 一条普通事务里的 `DELETE FROM project_action`（有 Session 指着它）
+   在**那条语句**上得到 `23503`（不是在 `COMMIT`），而一次 `SET CONSTRAINTS session_project_action_fk DEFERRED`
+   之后的同一条语句要到 `COMMIT` 才失败。**这一条比前两条都强：它不问目录列写了什么，它问数据库什么时候拒。**
 
 #### D7 · Rollout 顺序（运维层，不承担正确性）
 
@@ -2913,14 +3171,15 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 | **6e** | **建 v1.5 的执行上下文门**：`resolve_execution_context_locked(task_id, agent_id)`（§7.7 D14-a，**`VOLATILE`**、只读、按 §8.6 LO1 的顺序 `FOR SHARE`；漏写 `VOLATILE` 会让它每次调用抛 `0A000`，见 D14-f）与可延迟约束触发器 `session_execution_context_guard`（D14）。两者必须与 `project_action.execution_context` / `execution_context_digest` / `reason_code` 三列在**同一次迁移**里落地：只有列没有触发器等于没有硬门，只有触发器没有列会让每一次插入都因读不到冻结摘要而失败。建触发器之前**不需要**回填 —— 阶段 A 没有任何 `dispatch_origin = 'COORDINATOR'` 的存量占位（这一列本身是新的），但**必须写成幂等语句**以便回滚后重放 | `DROP … IF EXISTS` + `CREATE OR REPLACE` |
 | **6f** | **建 v1.7 的两个数据库对象**：`session_execution_snapshot_guard`（D15，`BEFORE INSERT OR UPDATE` on `session`）与**重建** `project_action_applied_immutable_guard`（D11 的 v1.7 闭集 allowlist 形式 —— 它必须与步骤 2 的 `execution_result_digest` 在**同一次迁移**里落地，否则新列一落地就是一列**可被任意改写**的冻结摘要）。建 D15 之前**不需要**回填：阶段 A 没有任何 `dispatch_origin = 'COORDINATOR'` 的存量占位；但**必须写成幂等语句**以便回滚后重放。**`project_event.disposition` 的回填（已消费行 → `'RECONCILED'`）必须在建立任何断言之前完成**，否则 §5.5 EV2 的"没有第四个"在迁移完成那一刻就是假的 | `DROP … IF EXISTS` + `CREATE OR REPLACE`；回填幂等 |
 | **6g** | **建 v1.10 的对象并重建五条可延迟约束**（`PC-CX-50` / `PC-CX-51` / `PC-CX-52`）：新增 `coordinator_execution_result_shape`（§7.7 D17 的 ⓪ 号，`IMMUTABLE`）与 `project_action_result_ledger_mutator`（§7.7 D18，`BEFORE UPDATE` on `project_action`）；**重建** `session_dispatch_attribution_check`（D9）/ `task_claimed_project_move_guard`（D10）/ `session_execution_context_guard`（D14）/ `session_execution_result_check` + `project_action_pin_ledger_check`（D16）/ `project_action_execution_digest_check`（D17）—— 五条的函数体第一句都改成按稳定键重读最终行（D9-f），`project_action_pin_ledger_check` 的触发器还必须**去掉 `UPDATE OF detail, result_session_id` 列清单**（`DROP TRIGGER` + `CREATE`，`CREATE OR REPLACE` 改不了触发器的事件列表）。**建 D18 之前必须先跑 D18-e 的三条存量审计并断言全部 0 行**：`APPLIED` 而链接为空、链接不对称、账本与代次对不上；非 0 行按 §11.2 开 `USER / HUMAN` 人工裁决，迁移**不代为收敛**（与步骤 3b 那次"迁移可以自己收敛"恰好相反：那一次两条占位哪条留下有一个确定规则，这一次哪一侧权威没有规则） | `DROP … IF EXISTS` + `CREATE OR REPLACE`；审计只读 |
-| **6h** | **建 v1.12 的 Project purge 协议**（`PC-CX-56`）：**先** `DROP CONSTRAINT IF EXISTS session_project_action_fk` **再** `ADD CONSTRAINT … FOREIGN KEY (project_action_id) REFERENCES project_action(id) ON DELETE NO ACTION ON UPDATE NO ACTION DEFERRABLE INITIALLY IMMEDIATE`（PostgreSQL 不能把一条既有外键**改**成可延迟的），建 `project_purge_fence`（`BEFORE DELETE` on `project`）与 `coordinator_purge_project()`（§7.7 D20），并建 `project_action (project_id)` 索引（级联与 fence 查询都扫它）。**`ADD CONSTRAINT` 之前必须先跑 D20-g 的存量审计并得到 0 行** | 幂等：drop/add 成对，函数 `CREATE OR REPLACE` |
+| **6g2** | **建 v1.11 的三个硬门**（`PC-CX-53` / `PC-CX-54` / `PC-CX-55`；**v1.13 新增这一行，`PC-CX-59`** —— v1.12 的表从 6g 直接跳到 6h，于是一次按本表执行的迁移落地的是"v1.10 + D20"，D19 的两个对象根本不存在、D18 仍然只监听 `UPDATE`，而 G5 第 ⑱ ⑲ 条却要"验证"它们）。**四件事按依赖顺序，一件都不能提前**：① **先跑 D18-e 的四条存量审计**（`APPLIED` 而链接为空、链接不对称、账本与代次对不上、`retiredPins` 既不是数组也不是 SQL NULL）与 **D19-e 的一条存量审计**（`result_session_id` 非空而那条 Session 不存在）——前三条与 D19-e 返回 0 行才允许继续，第 ④ 条按 D18-e ④-a 由迁移自己收敛未发布的行、④-b 对已 `APPLIED` 的行开 `USER / HUMAN` 人工裁决；② **重建 `project_action_result_ledger_mutator` 为 `BEFORE INSERT OR UPDATE`**（§7.7 D18 —— `CREATE OR REPLACE` **改不了**触发器的事件列表，必须 `DROP TRIGGER` + `CREATE`；只改函数体等于把 ⓪ 号类型判定留在一个进不来的事件面上），函数体同时落 v1.11 的"类型判定排在任何 `jsonb_array_` 之前"与 v1.12 的 `ledger_untouched` 控制流（D18-g / D18-h）；③ **建 `project_action_result_session_fk`**（`ON DELETE RESTRICT ON UPDATE RESTRICT`，§7.7 D19 ①）与它需要的 `project_action (result_session_id)` 索引 —— **必须排在 ① 的 D19-e 审计之后**，非 0 行时这条外键根本建不起来、整个迁移失败；④ **建 `session_result_link_delete_guard`**（`BEFORE DELETE` on `session`，§7.7 D19 ②）。**本行必须整体排在 6h 之前**：6h 的 D20-g 审计与 `ADD CONSTRAINT` 假定账本两侧的硬门已经在位 | `DROP … IF EXISTS` + `CREATE`／`ADD CONSTRAINT` 前 `DROP CONSTRAINT IF EXISTS`；审计只读，④-a 的收敛幂等（再跑一次影响 0 行） |
+| **6h** | **建 v1.12 的 Project purge 协议与 v1.13 的量化域/线性化点**（`PC-CX-56` / `PC-CX-60` / `PC-CX-61`），**排在 6g2 之后**：**先** `DROP CONSTRAINT IF EXISTS session_project_action_fk` **再** `ADD CONSTRAINT … FOREIGN KEY (project_action_id) REFERENCES project_action(id) ON DELETE NO ACTION ON UPDATE NO ACTION DEFERRABLE INITIALLY IMMEDIATE`（PostgreSQL 不能把一条既有外键**改**成可延迟的；**初始模式全文只有这一个**，§7.7 D20-l），建 `coordinator_purge_ledger_pairs()`（§7.7 D20 ⓪，量化域本身）、`coordinator_purge_lock_ledger()`（D20 ③-lock）、`project_purge_fence`（`BEFORE DELETE` on `project`）、`coordinator_purge_project()`（D20 ③）与 `coordinator_project_publish_fence`（**两条触发器**：`BEFORE INSERT OR UPDATE` on `project_action` 与 `BEFORE INSERT` on `session`，D20 ④），并建 `project_action (project_id)` 索引（级联、fence 查询与 ③-2 的取锁都扫它）。**`ADD CONSTRAINT` 之前必须先跑 D20-g 的第一条存量审计并得到 0 行**；**建 ④ 号之前必须对每个 Project 跑一次 ⓪ 并把 `in_scope = false` 的行数打进迁移输出**（D20-g 第二条，非 0 行按 D20-i 开 `USER / HUMAN` 人工裁决，不阻塞迁移） | 幂等：drop/add 成对，函数 `CREATE OR REPLACE`，触发器 `DROP … IF EXISTS` + `CREATE`；两条审计只读 |
 | 7 | **不含任何 `DROP COLUMN`** | 同 PAC M4 |
 
 - **G1（关键）**：列默认值与"新建 Project 的默认"是**两个不同的值**，不能靠一个 `@default` 同时表达。`automation_policy` 的**数据库默认是 `MANUAL`**（保护存量），**服务层在创建新 Project 时显式写入 `GUARDED_AUTO`**。反过来做（默认 GUARDED_AUTO + 迁移里 UPDATE 存量）会在迁移与新代码上线之间留一个窗口，窗口里创建的项目全是自动的。同理 `coordinator_enabled` 数据库默认 `false`，新建时显式 `true`。**04 单元必须同时测这两条**：迁移后存量为 MANUAL/false，且新建为 GUARDED_AUTO/true。
 - **G2**：迁移**不回填任何 blocker、不产生任何事件、不安排任何唤醒**。迁移完成的那一刻，控制环对存量项目**完全静默**。
 - **G3**：用户为一个既有 Project 打开 `coordinatorEnabled` 时，服务层必须**同时**要求一个显式的 `automationPolicy`（不给默认），并在同一事务里产生一条 `user.policy_changed` 事件把它接进环里。"沿用安全默认"= 不动它；"明确选择策略" = 打开时必须选。
 - **G4**：迁移必须在**空库**和**生产快照**上各跑一次、`migrate diff` 对新增列为空。验证手法照 PAC M3：一次性 throwaway postgres 跑 `prisma migrate deploy` + `migrate diff`，`grep` 自己新增的列名，而不是看 drift 总数。
-- **G5（v1.1 新增，v1.2 扩充）**：步骤 3b / 6 / 6b 三件事**都不是 Prisma schema 能表达的**（partial unique index 的谓词、plpgsql 触发器、数据收敛），因此它们是迁移文件里的裸 SQL。**既有教训：裸 SQL 躲得过编译期检查** —— `prisma migrate diff` 也不会告诉你触发器没了。因此 04 单元的迁移验证必须**显式**查这三样东西存在（`pg_indexes` / `pg_trigger` / 收敛后每个 task 的占位 Session 计数 ≤ 1），而不是只看 `migrate diff` 为空。**v1.2 再加一条**：还要显式断言触发器函数体里含 `FOR SHARE`（`pg_get_functiondef` 上 grep），因为一个少了两个词的触发器与一个正确的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是那个 P0。**v1.3 再加三条**：断言 `session_dispatch_attribution_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（`pg_trigger.tgdeferrable AND tginitdeferred`；一个立即执行的同名触发器会让 §8.3 的语句顺序无法提交，症状是所有派发失败）、断言 CHECK 约束存在（`pg_constraint`）、断言 `project_blocker_episode_idx` 覆盖的是全部行而不是 open 行（`pg_indexes.indexdef` 里**没有** `WHERE`）。三样都是裸 SQL 的产物，`migrate diff` 一样看不见。**v1.4 再加四条**：断言 `task_dispatch_authority_projection` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，翻转与并发的任务写入就不再互斥，`PC-CX-25` 的第三种形状立刻回来，而 `pg_trigger` 里看不出差别，同 v1.2 那一条）、断言 `task_claimed_project_move_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**、断言 `project_action_applied_immutable_guard` 存在，以及**直接跑一次 §7.7 D13 的漂移查询并断言返回 0 行**（这一条比前三条都强：它不问对象在不在，它问结果对不对）。**v1.5 再加三条**：断言 `session_execution_context_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（立即执行的同名触发器会在 §8.3 的语句顺序中途要求一个还没写完的动作行，症状是所有派发失败）、断言 `resolve_execution_context_locked` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，撤权与派发就不再互斥，`PC-CX-29` 立刻回来，而 `pg_proc` 里看不出差别 —— 与 v1.2 / v1.4 那两条是同一种检查），以及**跑一次 I17-A 并断言返回 0 行**（每一条 COORDINATOR 占位的冻结快照列都等于它那条 `APPLIED` 动作行上的 `execution_context` 分量）。**v1.6 把这条的第三项换掉并再加三条（PC-CX-32 / PC-CX-34）**：v1.5 这里写的是"跑一次 I17 的可查询形式并断言返回 0 行（不存在解析到已禁用 Agent … 的 COORDINATOR 占位）"，**那个查询在一条每一步都合法的路径上必然非零**（人在合法派发之后撤权），因此它是一条会把正常状态判成迁移失败的断言，v1.6 换成上面的 I17-A；新加的三条是：断言 `pg_proc.provolatile = 'v'`（`resolve_execution_context_locked` 与 `session_execution_context_guard` 两个函数各一次，§7.7 D14-f —— 漏写 `VOLATILE` 的迁移函数体逐字相同、`FOR SHARE` 也照样 grep 得到，差别只在这一列，而按 `STABLE` 建出来的对象每次调用都抛 `0A000`）、**真的插一条 `dispatch_origin = 'COORDINATOR'` 的 Session 并 `COMMIT`**（正例提交成功、把 EC1 任一行撤销后得到 `EXECUTION_CONTEXT_REVOKED: <input>`；`CREATE FUNCTION` 成功不代表它能被调用，这正是 `PC-CX-32` 逃过 v1.5 全部检查的方式）、以及断言迁移建出来的 `project_event (next_attempt_at) WHERE consumed_at IS NULL` 索引存在（§10.2 W4 第 (iv) 支与 §5.4 的重投都扫它）。**v1.7 再加四条（PC-CX-37 / PC-CX-38 / PC-CX-42）**：① 对 `project_action_applied_immutable_guard` 跑一次**由 schema 驱动**的逐列 mutation —— 从 `information_schema.columns` 读出这张表的全部列，逐列改写一条 `APPLIED` 行，断言 `result_session_id` / `detail` 之外**每一列**都被 `ACTION_APPLIED_IMMUTABLE` 拒绝（**不是**断言某个固定的列数：v1.4 写死"六列"正是 `PC-CX-37` 的形状，一张 denylist 与它保护的表分头长大，而 `pg_get_functiondef` 上看不出差别）；② 断言 `session_execution_snapshot_guard` 存在，并**真的跑一遍 §7.7 D15-e 的三阶段**（create ⇒ `model IS NULL ∧ execution_pin_generation = 0`、首次 claim ⇒ 代次 1、`retiredPin` ⇒ 代次 2）与它的四个反例；③ **跑一次 I17-A 与 I17-A2 并各断言返回 0 行**（v1.5/v1.6 只有 I17-A，而它当时把 PAC 的 claim 冻结列也算了进去，因此在任何一条还没被 claim 的 PENDING 占位上必然非零 —— 那条断言会把正常状态判成迁移失败）；④ 断言 `project_event.disposition` 的存量回填完成（`consumed_at IS NOT NULL AND disposition IS NULL` 返回 0 行，§5.5 EV2）。**v1.8 再加四条（PC-CX-43 / PC-CX-44 / PC-CX-45 / PC-CX-46）**：⑤ 把第 ① 条那次 schema 驱动的逐列 mutation **再跑一遍在发布语句上** —— 插 `CLAIMED` 动作、插 Session，再逐列尝试"改这一列 + 置 `APPLIED`"，断言四列可写之外每一列都被 `ACTION_PUBLISH_IMMUTABLE` 拒绝，并断言干净的 `CLAIMED → APPLIED` / `CLAIMED → SUPERSEDED` 照常提交（只测已 `APPLIED` 的 OLD 行不够：那正是 `PC-CX-43` 逃过 v1.7 全部检查的方式）；⑥ 从 **PAC §6 的表**生成 create 冻结列清单，断言 D15 的 `INSERT` 分支与 D16 的等式**逐行覆盖**它（不是断言一个固定的列数），并真的插一条 `permission_mode` 与冻结上下文不同的 Session，断言得到 `EXECUTION_SNAPSHOT_MISMATCH`；⑦ 对 **D5 partial unique index 的每一个谓词列**做 UPDATE mutation，断言一条已有 live claim 的 COORDINATOR 占位不能被写出索引覆盖集（`EXECUTION_SNAPSHOT_FROZEN`），随后同一 Task 的第二条 live Session 仍然只能拿到唯一冲突；⑧ 断言 `session_execution_result_check` 与 `project_action_pin_ledger_check` 两个约束触发器存在**且都是 `DEFERRABLE INITIALLY DEFERRED` 的**，并真的跑一遍 D16-e 的正例与九个反例。**v1.9 再加四条（`PC-CX-47` / `PC-CX-48` / `PC-CX-49`）**：⑨ 断言 `coordinator_pin_ledger_fold` 存在，并真的跑一遍 D16-e **v1.9 新增的那八个反例与两个正例** —— 特别是"`claimResolution` 齐全但 Session 的 `model`/`effort` 不是它记的那一对"这一个：只断言账本的条数对不上会漏掉它，而它正是 `PC-CX-47` 的原形；⑩ 断言 `coordinator_canonical_json` 与 `coordinator_execution_digest` 存在**且都是 `IMMUTABLE` 的**（`pg_proc.provolatile = 'i'`，与 v1.6 那条 `provolatile` 断言是同一种检查：一个漏写 volatility 的迁移函数体逐字相同，差别只在这一列，而一个 `VOLATILE` 的规范化函数会让将来的派生列/函数索引建不出来）；⑪ 断言 `project_action_execution_digest_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**，并真的插一条 `execution_result_digest` 被伪造的 `DISPATCH_TASK` 行，断言 `COMMIT` 得到 `EXECUTION_DIGEST_MISMATCH`（只断言对象存在不够 —— 这一条要证明的恰好是"它在提交点真的会拒"）；⑫ **跑一次 §4.3 I17-A 的摘要那一半并断言返回 0 行**：`execution_context_digest` 与 `execution_result_digest` 各等于 `coordinator_execution_digest` 对自己那一半的重算值 —— 这一条比前三条都强，它不问对象在不在，它问存量数据对不对（与 v1.4 那条"直接跑一次 D13 的漂移查询"是同一种检查）。**v1.10 再加四条（`PC-CX-50` / `PC-CX-51` / `PC-CX-52`）**：⑬ 断言 `project_action_result_ledger_mutator` 存在（§7.7 D18），并真的跑一遍 D18-f 的五个正例与七个反例 —— 特别是"已 `APPLIED` 的行 `result_session_id = NULL`"与"`retiredPins` 就地改写"这两个：D11 的 allowlist 放行它们，而它们恰好是 `PC-CX-50` 的两条语句；⑭ 断言五条可延迟约束（`session_dispatch_attribution_check` / `task_claimed_project_move_guard` / `session_execution_context_guard` / `session_execution_result_check` / `project_action_pin_ledger_check` / `project_action_execution_digest_check`）的函数体里**都含有按稳定键重读最终行的那一句**（`pg_get_functiondef` 上 grep `WHERE id = NEW.id`，与 v1.2 / v1.4 / v1.5 那三条 `FOR SHARE` 断言是同一种检查：一个直接比 `NEW` 的触发器与一个重读最终行的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是 `PC-CX-51`），并**真的跑一遍**同一事务里"心跳 → claim → 代次"与"display 补写 → claim → 代次"两条路径，断言**都提交**；⑮ 断言 `project_action_pin_ledger_check` 的触发器**没有 `UPDATE OF` 列清单**（`pg_get_triggerdef` 上断言不含 `UPDATE OF`）——带列清单的同名触发器同样存在、同样可延迟，差别只在一条只改 `status` 的发布语句让不让它执行；⑯ 断言 `coordinator_execution_result_shape` 存在**且是 `IMMUTABLE` 的**，并**跑一次 EC2-b2 的存量审计**：对每一条带 `execution_context` 的 `DISPATCH_TASK` 行调用它，断言无一抛错（缺键、错型、空串、多键都会抛）——与 ⑫ 一样，这一条不问对象在不在，它问存量数据对不对。**v1.11 再加三条（`PC-CX-53` / `PC-CX-54` / `PC-CX-55`）**：⑰ **真的跑一次含 PAC §7.5 完整 `resolution`（带必需的 `v`）的正常派发并 `COMMIT`**（插 `CLAIMED` → 插占位 → 发布 `APPLIED`），断言它**提交成功**，再断言删掉 `v`、多一个 PAC 没有的顶层 key、`v` 写成字符串 / `0` / `1.5`、`who` 写成字符串各得到一次 `EXECUTION_RESULT_SHAPE`（EC2-b3）。**这是三条 v1.11 断言里唯一一条以“正例提交”为判据的** —— `PC-CX-53` 的形状恰好是“正常路径不存在”，而一组只有反例的断言对它一个字都说不出来；⑱ 断言 `project_action_result_session_fk` 存在**且 `pg_constraint.confdeltype = 'r'`**（`CASCADE` 或 `SET NULL` 的同名外键一样存在、一样叫这个名字，差别只在这一列，而那正好是 `PC-CX-54` 的两种错误答案）、断言 `session_result_link_delete_guard` 存在，并**真的删一次**：一条已发布结果 Session 的 `DELETE` 得到 `SESSION_RESULT_LINK_REFERENCED`，同一条 Session 的软删照常提交，一条没有动作行指着的 Session（Coordinator Session、或链接从未发布的占位）`DELETE` 照常提交；再**跑一次 D19-e 的存量审计**（`result_session_id` 非空而 Session 不存在的行返回 0 行 —— 非 0 时外键根本建不起来，整个迁移会失败）；⑲ 断言 `project_action_result_ledger_mutator` 的触发器**同时声明在 `INSERT` 上**（`pg_get_triggerdef` 上断言含 `INSERT` —— 一个只声明在 `UPDATE` 上的同名触发器一样存在、一样在 `pg_trigger` 里，差别只在畸形账本进不进得来），断言 `project_action_result_ledger_mutator` 与 `coordinator_pin_ledger_fold` 的函数体里**类型判定都排在第一个 `jsonb_array_` 之前**（`pg_get_functiondef` 上比两个位置 —— 与 v1.2 / v1.4 / v1.5 那三条 `FOR SHARE` 断言是同一种检查：顺序反了的函数体逐字包含同样的词），并**真的跑一遍 D18-e 第 ④ 条的存量路径**：畸形行审计出来 → ④-a 收敛 → ④-b 开 blocker → 再跑一次审计返回 0 行。**v1.12 再加两条（`PC-CX-56` / `PC-CX-57`）**：⑳ 断言 `session_project_action_fk` 存在**且 `pg_constraint.condeferrable` 为真、`condeferred` 为假、`confdeltype = 'a'`**（一条同名的立即 `RESTRICT` 外键一样存在、一样叫这个名字，差别只在这三列，而那正好是 `PC-CX-56` 的不可达环 —— 与 v1.11 第 ⑱ 条那句 `confdeltype = 'r'` 是同一种检查），断言 `project_purge_fence` 与 `coordinator_purge_project` 都存在，**再真的 purge 一次**：一个有链接 Project 走 `coordinator_purge_project()` 在**一个事务**里提交、三张表上它的行全部消失、`session.project_action_id` 指向缺失 action 的行数为 0；同一个 Project 的裸 `DELETE FROM project` 得到 `PROJECT_PURGE_UNDECLARED`；空 Project 与只有账本的 Project 的裸 `DELETE` 各自提交；最后**跑一次 D20-g 的存量审计**（`project_action_id` 非空而 action 不存在的行返回 0 行 —— 非 0 时约束根本建不起来）。㉑ 断言 `project_action_result_ledger_mutator` 的函数体里 **⓪ 号的兼容分支不是 `RETURN NEW`**（`pg_get_functiondef` 上断言 `IF OLD.result_session_id IS NOT NULL` 与 `IF OLD.detail ? 'claimResolution'` 两句都排在**任何一个** `RETURN NEW` 之外的兼容标志之后 —— 一个提前返回的函数体逐字包含同样的词、同样在 `pg_proc` 里，差别只在 ① ② 跑不跑得到，而那正好是 `PC-CX-57`），并**真的跑一遍**：一条存量畸形行上改写已记下的 `claimResolution` 得到 `EXECUTION_PIN_LEDGER`、清空已发布的链接得到 `ACTION_RESULT_LINK_FROZEN`，而同一条行的 `CLAIMED → REFUSED`、两种显式修复与一次**首次**写入 `claimResolution` 各自提交。
+- **G5（v1.1 新增，v1.2 扩充）**：步骤 3b / 6 / 6b 三件事**都不是 Prisma schema 能表达的**（partial unique index 的谓词、plpgsql 触发器、数据收敛），因此它们是迁移文件里的裸 SQL。**既有教训：裸 SQL 躲得过编译期检查** —— `prisma migrate diff` 也不会告诉你触发器没了。因此 04 单元的迁移验证必须**显式**查这三样东西存在（`pg_indexes` / `pg_trigger` / 收敛后每个 task 的占位 Session 计数 ≤ 1），而不是只看 `migrate diff` 为空。**v1.2 再加一条**：还要显式断言触发器函数体里含 `FOR SHARE`（`pg_get_functiondef` 上 grep），因为一个少了两个词的触发器与一个正确的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是那个 P0。**v1.3 再加三条**：断言 `session_dispatch_attribution_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（`pg_trigger.tgdeferrable AND tginitdeferred`；一个立即执行的同名触发器会让 §8.3 的语句顺序无法提交，症状是所有派发失败）、断言 CHECK 约束存在（`pg_constraint`）、断言 `project_blocker_episode_idx` 覆盖的是全部行而不是 open 行（`pg_indexes.indexdef` 里**没有** `WHERE`）。三样都是裸 SQL 的产物，`migrate diff` 一样看不见。**v1.4 再加四条**：断言 `task_dispatch_authority_projection` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，翻转与并发的任务写入就不再互斥，`PC-CX-25` 的第三种形状立刻回来，而 `pg_trigger` 里看不出差别，同 v1.2 那一条）、断言 `task_claimed_project_move_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**、断言 `project_action_applied_immutable_guard` 存在，以及**直接跑一次 §7.7 D13 的漂移查询并断言返回 0 行**（这一条比前三条都强：它不问对象在不在，它问结果对不对）。**v1.5 再加三条**：断言 `session_execution_context_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（立即执行的同名触发器会在 §8.3 的语句顺序中途要求一个还没写完的动作行，症状是所有派发失败）、断言 `resolve_execution_context_locked` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，撤权与派发就不再互斥，`PC-CX-29` 立刻回来，而 `pg_proc` 里看不出差别 —— 与 v1.2 / v1.4 那两条是同一种检查），以及**跑一次 I17-A 并断言返回 0 行**（每一条 COORDINATOR 占位的冻结快照列都等于它那条 `APPLIED` 动作行上的 `execution_context` 分量）。**v1.6 把这条的第三项换掉并再加三条（PC-CX-32 / PC-CX-34）**：v1.5 这里写的是"跑一次 I17 的可查询形式并断言返回 0 行（不存在解析到已禁用 Agent … 的 COORDINATOR 占位）"，**那个查询在一条每一步都合法的路径上必然非零**（人在合法派发之后撤权），因此它是一条会把正常状态判成迁移失败的断言，v1.6 换成上面的 I17-A；新加的三条是：断言 `pg_proc.provolatile = 'v'`（`resolve_execution_context_locked` 与 `session_execution_context_guard` 两个函数各一次，§7.7 D14-f —— 漏写 `VOLATILE` 的迁移函数体逐字相同、`FOR SHARE` 也照样 grep 得到，差别只在这一列，而按 `STABLE` 建出来的对象每次调用都抛 `0A000`）、**真的插一条 `dispatch_origin = 'COORDINATOR'` 的 Session 并 `COMMIT`**（正例提交成功、把 EC1 任一行撤销后得到 `EXECUTION_CONTEXT_REVOKED: <input>`；`CREATE FUNCTION` 成功不代表它能被调用，这正是 `PC-CX-32` 逃过 v1.5 全部检查的方式）、以及断言迁移建出来的 `project_event (next_attempt_at) WHERE consumed_at IS NULL` 索引存在（§10.2 W4 第 (iv) 支与 §5.4 的重投都扫它）。**v1.7 再加四条（PC-CX-37 / PC-CX-38 / PC-CX-42）**：① 对 `project_action_applied_immutable_guard` 跑一次**由 schema 驱动**的逐列 mutation —— 从 `information_schema.columns` 读出这张表的全部列，逐列改写一条 `APPLIED` 行，断言 `result_session_id` / `detail` 之外**每一列**都被 `ACTION_APPLIED_IMMUTABLE` 拒绝（**不是**断言某个固定的列数：v1.4 写死"六列"正是 `PC-CX-37` 的形状，一张 denylist 与它保护的表分头长大，而 `pg_get_functiondef` 上看不出差别）；② 断言 `session_execution_snapshot_guard` 存在，并**真的跑一遍 §7.7 D15-e 的三阶段**（create ⇒ `model IS NULL ∧ execution_pin_generation = 0`、首次 claim ⇒ 代次 1、`retiredPin` ⇒ 代次 2）与它的四个反例；③ **跑一次 I17-A 与 I17-A2 并各断言返回 0 行**（v1.5/v1.6 只有 I17-A，而它当时把 PAC 的 claim 冻结列也算了进去，因此在任何一条还没被 claim 的 PENDING 占位上必然非零 —— 那条断言会把正常状态判成迁移失败）；④ 断言 `project_event.disposition` 的存量回填完成（`consumed_at IS NOT NULL AND disposition IS NULL` 返回 0 行，§5.5 EV2）。**v1.8 再加四条（PC-CX-43 / PC-CX-44 / PC-CX-45 / PC-CX-46）**：⑤ 把第 ① 条那次 schema 驱动的逐列 mutation **再跑一遍在发布语句上** —— 插 `CLAIMED` 动作、插 Session，再逐列尝试"改这一列 + 置 `APPLIED`"，断言四列可写之外每一列都被 `ACTION_PUBLISH_IMMUTABLE` 拒绝，并断言干净的 `CLAIMED → APPLIED` / `CLAIMED → SUPERSEDED` 照常提交（只测已 `APPLIED` 的 OLD 行不够：那正是 `PC-CX-43` 逃过 v1.7 全部检查的方式）；⑥ 从 **PAC §6 的表**生成 create 冻结列清单，断言 D15 的 `INSERT` 分支与 D16 的等式**逐行覆盖**它（不是断言一个固定的列数），并真的插一条 `permission_mode` 与冻结上下文不同的 Session，断言得到 `EXECUTION_SNAPSHOT_MISMATCH`；⑦ 对 **D5 partial unique index 的每一个谓词列**做 UPDATE mutation，断言一条已有 live claim 的 COORDINATOR 占位不能被写出索引覆盖集（`EXECUTION_SNAPSHOT_FROZEN`），随后同一 Task 的第二条 live Session 仍然只能拿到唯一冲突；⑧ 断言 `session_execution_result_check` 与 `project_action_pin_ledger_check` 两个约束触发器存在**且都是 `DEFERRABLE INITIALLY DEFERRED` 的**，并真的跑一遍 D16-e 的正例与九个反例。**v1.9 再加四条（`PC-CX-47` / `PC-CX-48` / `PC-CX-49`）**：⑨ 断言 `coordinator_pin_ledger_fold` 存在，并真的跑一遍 D16-e **v1.9 新增的那八个反例与两个正例** —— 特别是"`claimResolution` 齐全但 Session 的 `model`/`effort` 不是它记的那一对"这一个：只断言账本的条数对不上会漏掉它，而它正是 `PC-CX-47` 的原形；⑩ 断言 `coordinator_canonical_json` 与 `coordinator_execution_digest` 存在**且都是 `IMMUTABLE` 的**（`pg_proc.provolatile = 'i'`，与 v1.6 那条 `provolatile` 断言是同一种检查：一个漏写 volatility 的迁移函数体逐字相同，差别只在这一列，而一个 `VOLATILE` 的规范化函数会让将来的派生列/函数索引建不出来）；⑪ 断言 `project_action_execution_digest_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**，并真的插一条 `execution_result_digest` 被伪造的 `DISPATCH_TASK` 行，断言 `COMMIT` 得到 `EXECUTION_DIGEST_MISMATCH`（只断言对象存在不够 —— 这一条要证明的恰好是"它在提交点真的会拒"）；⑫ **跑一次 §4.3 I17-A 的摘要那一半并断言返回 0 行**：`execution_context_digest` 与 `execution_result_digest` 各等于 `coordinator_execution_digest` 对自己那一半的重算值 —— 这一条比前三条都强，它不问对象在不在，它问存量数据对不对（与 v1.4 那条"直接跑一次 D13 的漂移查询"是同一种检查）。**v1.10 再加四条（`PC-CX-50` / `PC-CX-51` / `PC-CX-52`）**：⑬ 断言 `project_action_result_ledger_mutator` 存在（§7.7 D18），并真的跑一遍 D18-f 的五个正例与七个反例 —— 特别是"已 `APPLIED` 的行 `result_session_id = NULL`"与"`retiredPins` 就地改写"这两个：D11 的 allowlist 放行它们，而它们恰好是 `PC-CX-50` 的两条语句；⑭ 断言五条可延迟约束（`session_dispatch_attribution_check` / `task_claimed_project_move_guard` / `session_execution_context_guard` / `session_execution_result_check` / `project_action_pin_ledger_check` / `project_action_execution_digest_check`）的函数体里**都含有按稳定键重读最终行的那一句**（`pg_get_functiondef` 上 grep `WHERE id = NEW.id`，与 v1.2 / v1.4 / v1.5 那三条 `FOR SHARE` 断言是同一种检查：一个直接比 `NEW` 的触发器与一个重读最终行的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是 `PC-CX-51`），并**真的跑一遍**同一事务里"心跳 → claim → 代次"与"display 补写 → claim → 代次"两条路径，断言**都提交**；⑮ 断言 `project_action_pin_ledger_check` 的触发器**没有 `UPDATE OF` 列清单**（`pg_get_triggerdef` 上断言不含 `UPDATE OF`）——带列清单的同名触发器同样存在、同样可延迟，差别只在一条只改 `status` 的发布语句让不让它执行；⑯ 断言 `coordinator_execution_result_shape` 存在**且是 `IMMUTABLE` 的**，并**跑一次 EC2-b2 的存量审计**：对每一条带 `execution_context` 的 `DISPATCH_TASK` 行调用它，断言无一抛错（缺键、错型、空串、多键都会抛）——与 ⑫ 一样，这一条不问对象在不在，它问存量数据对不对。**v1.11 再加三条（`PC-CX-53` / `PC-CX-54` / `PC-CX-55`）**：⑰ **真的跑一次含 PAC §7.5 完整 `resolution`（带必需的 `v`）的正常派发并 `COMMIT`**（插 `CLAIMED` → 插占位 → 发布 `APPLIED`），断言它**提交成功**，再断言删掉 `v`、多一个 PAC 没有的顶层 key、`v` 写成字符串 / `0` / `1.5`、`who` 写成字符串各得到一次 `EXECUTION_RESULT_SHAPE`（EC2-b3）。**这是三条 v1.11 断言里唯一一条以“正例提交”为判据的** —— `PC-CX-53` 的形状恰好是“正常路径不存在”，而一组只有反例的断言对它一个字都说不出来；⑱ 断言 `project_action_result_session_fk` 存在**且 `pg_constraint.confdeltype = 'r'`**（`CASCADE` 或 `SET NULL` 的同名外键一样存在、一样叫这个名字，差别只在这一列，而那正好是 `PC-CX-54` 的两种错误答案）、断言 `session_result_link_delete_guard` 存在，并**真的删一次**：一条已发布结果 Session 的 `DELETE` 得到 `SESSION_RESULT_LINK_REFERENCED`，同一条 Session 的软删照常提交，一条没有动作行指着的 Session（Coordinator Session、或链接从未发布的占位）`DELETE` 照常提交；再**跑一次 D19-e 的存量审计**（`result_session_id` 非空而 Session 不存在的行返回 0 行 —— 非 0 时外键根本建不起来，整个迁移会失败）；⑲ 断言 `project_action_result_ledger_mutator` 的触发器**同时声明在 `INSERT` 上**（`pg_get_triggerdef` 上断言含 `INSERT` —— 一个只声明在 `UPDATE` 上的同名触发器一样存在、一样在 `pg_trigger` 里，差别只在畸形账本进不进得来），断言 `project_action_result_ledger_mutator` 与 `coordinator_pin_ledger_fold` 的函数体里**类型判定都排在第一个 `jsonb_array_` 之前**（`pg_get_functiondef` 上比两个位置 —— 与 v1.2 / v1.4 / v1.5 那三条 `FOR SHARE` 断言是同一种检查：顺序反了的函数体逐字包含同样的词），并**真的跑一遍 D18-e 第 ④ 条的存量路径**：畸形行审计出来 → ④-a 收敛 → ④-b 开 blocker → 再跑一次审计返回 0 行。**v1.12 再加两条（`PC-CX-56` / `PC-CX-57`）**：⑳ 断言 `session_project_action_fk` 存在**且 `pg_constraint.condeferrable` 为真、`condeferred` 为假、`confdeltype = 'a'`**（一条同名的立即 `RESTRICT` 外键一样存在、一样叫这个名字，差别只在这三列，而那正好是 `PC-CX-56` 的不可达环 —— 与 v1.11 第 ⑱ 条那句 `confdeltype = 'r'` 是同一种检查），断言 `project_purge_fence` 与 `coordinator_purge_project` 都存在，**再真的 purge 一次**：一个有链接 Project 走 `coordinator_purge_project()` 在**一个事务**里提交、三张表上它的行全部消失、`session.project_action_id` 指向缺失 action 的行数为 0；同一个 Project 的裸 `DELETE FROM project` 得到 `PROJECT_PURGE_UNDECLARED`；空 Project 与只有账本的 Project 的裸 `DELETE` 各自提交；最后**跑一次 D20-g 的存量审计**（`project_action_id` 非空而 action 不存在的行返回 0 行 —— 非 0 时约束根本建不起来）。㉑ 断言 `project_action_result_ledger_mutator` 的函数体里 **⓪ 号的兼容分支不是 `RETURN NEW`**（`pg_get_functiondef` 上断言 `IF OLD.result_session_id IS NOT NULL` 与 `IF OLD.detail ? 'claimResolution'` 两句都排在**任何一个** `RETURN NEW` 之外的兼容标志之后 —— 一个提前返回的函数体逐字包含同样的词、同样在 `pg_proc` 里，差别只在 ① ② 跑不跑得到，而那正好是 `PC-CX-57`），并**真的跑一遍**：一条存量畸形行上改写已记下的 `claimResolution` 得到 `EXECUTION_PIN_LEDGER`、清空已发布的链接得到 `ACTION_RESULT_LINK_FROZEN`，而同一条行的 `CLAIMED → REFUSED`、两种显式修复与一次**首次**写入 `claimResolution` 各自提交。 **v1.13 再加四条（`PC-CX-58` / `PC-CX-59` / `PC-CX-60` / `PC-CX-61`）**：㉒ **把第 ⑳ 条那次 `pg_constraint` 断言扩成四列**（`condeferrable` 真、`condeferred` **假**、`confdeltype = 'a'`、`confupdtype = 'a'`），并**真的跑一遍时刻**：一条普通事务里的 `DELETE FROM project_action`（有 Session 指着它）在**那条语句**上得到 `23503`，而 `SET CONSTRAINTS session_project_action_fk DEFERRED` 之后的同一条语句要到 `COMMIT` 才失败 —— 只断言目录列不够，一条 `ON DELETE CASCADE DEFERRABLE INITIALLY IMMEDIATE` 的同名外键前两列一模一样，而"什么时候拒"正是 `PC-CX-58` 的两个答案（§7.7 D20-l）；㉓ **按本表从三种起点各跑一次完整迁移并断言落地的对象集合逐字相同**（`PC-CX-59`）：**空库**、**v1.10 形状**（有 D18 的 `BEFORE UPDATE` 版、没有 D19 两个对象）、**v1.11 形状**（三个对象齐全、没有 D20）。三条路径跑完各断言：`project_action_result_ledger_mutator` 的 `pg_get_triggerdef` **含 `INSERT`**、`project_action_result_session_fk` 存在且 `confdeltype = 'r'`、`session_result_link_delete_guard` 存在、D20 的五个对象与两条 ④ 号触发器存在 ——**"验证对象存在"必须有一个先创建它的步骤**，v1.12 的表里没有，那正是 `PC-CX-59`；㉔ **断言 `project_purge_fence` 与 `coordinator_purge_project` 的函数体里都只出现 `coordinator_purge_ledger_pairs`、不出现第二份手写谓词**（`pg_get_functiondef` 上断言两者都含 `coordinator_purge_ledger_pairs(` 且都**不含** `a.result_session_id = s.id` 这半句 ——一份被抄了两遍的量化域两处都能通过"对象存在"检查，而它们的差别正好是 `PC-CX-60`），并**真的跑一遍五种畸形形状**：USER-origin、跨 Project、单向、错 action type、非 `APPLIED` 却带链接 —— 每一种都**各跑两遍**（函数与裸 `DELETE`），断言两遍得到**逐字相同**的 `PROJECT_PURGE_UNDECIDABLE` 且三张表一行未动；㉕ **断言两条 ④ 号触发器存在**（`pg_trigger` 上各一次，`project_action` 那条含 `INSERT` 与 `UPDATE`、`session` 那条只含 `INSERT`），断言 `coordinator_purge_lock_ledger` 的函数体里含 `NOWAIT` 且含 `lock_not_available` 处理分支（`pg_get_functiondef` 上 grep ——一个少了 `NOWAIT` 的同名函数逐字包含同样的词，而它们的差别正好是 `40P01` 与 typed `PROJECT_PURGE_CONTENDED`），并**真的跑一遍两个提交顺序**：purge-wins 得到 `(2,1)` + 发布方 `PROJECT_PURGED`，publish-wins 得到 `(2,2)` 且无 orphan（§7.7 D20-k）。
 
 ### 12.2 没有 Project 的 Task（约 11 万行）
 
@@ -3230,6 +3489,10 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | **F55** | 一条 `DISPATCH_TASK` 在 **`INSERT`** 时就带着一本畸形的账：`detail = {"retiredPins":{}}`（或字符串、数字、JSON `null`）。旧二进制、裸 SQL，或一次写歪的初始化 | 那一条 `INSERT` 被 `EXECUTION_PIN_LEDGER` 拒（§7.7 D18 ⓪，语句级）。**v1.10 这一格是坏的**：D18 只声明在 `UPDATE` 上，因此它提交得进去；此后 `CLAIMED → REFUSED` 这条正常终态转移与任何修复 `detail` 的尝试都在 `jsonb_array_elements` / `jsonb_array_length` 上抛 PostgreSQL 原生 `22023`，永久动作键被锁死且**拿不到一个类型化的拒绝** | 存量按 D18-e 第 ④ 条分类：**④-a 未发布的行由迁移自己收敛**（畸形值搬进 `detail.malformedRetiredPins`，删掉 `retiredPins`，留一条 `NOOP`），**④-b 已 `APPLIED` 的行开 `USER / HUMAN` 人工裁决**。落地之后：一条没有碰账本的终态转移照常提交，一次显式修复照常提交（D18-g 的两条出路） | §7.7 D18 · D18-e · D18-f · **D18-g** · D16 的 ⓪ · §7.4 EC6-c · §4.3 I17-A2 |
 | **F56** | 一个 Project 被**物理清除**，而它的账本里有已发布结果链接的 `APPLIED` 派发（占位 Session 两侧互指） | 唯一的公开入口是 `coordinator_purge_project(p)`（§7.7 D20 ③），**一个事务**：取 Project 行锁 → 声明 fence → 记下这本账认下的占位 → `DELETE FROM project`（五张控制环表随 §2.4 级联**整份**消失，这是 §8.2 GE1 唯一被声明的例外）→ 删那些占位 → `COMMIT` 时被延迟的 `session_project_action_fk` 证明**没有任何 Session 指向不存在的动作行**。裸 `DELETE FROM project` 如果会搁浅占位，在**那条语句**上得到 `PROJECT_PURGE_UNDECLARED`（带 owner 与 recovery）；空 Project 与只有账本的 Project 的裸 `DELETE` 照常提交 | 无需恢复；两个并发 purge 中后到的那个返回 `(0,0)`，是一次幂等 no-op。伪造 fence 却不删占位的事务在 `COMMIT` 被 `23503` 整事务回滚 | §2.4 · §4.3 I17-A3 · §7.7 **D20** · D20-a–D20-h · §8.2 GE1 · §12.1 G5 第 ⑳ 条 |
 | **F57** | 一条**存量畸形账本**（`detail.retiredPins` 不是数组，来自 D18 落地之前的旧写端）的动作行上，同一条语句在**不碰账本**的同时改写已记下的 `claimResolution`，或清空/换绑已发布的 `result_session_id` | 改写被拒：`EXECUTION_PIN_LEDGER: … rewrites a claimResolution` / `ACTION_RESULT_LINK_FROZEN`。D18 ⓪ 的存量兼容分支**只跳过 ③**（retiredPins 专属的数组展开与前缀判定），① ② 对合法账与畸形账**同一句话、无条件执行**（§7.7 D18-h） | 无需恢复，且 D18-g 的两条出路一个字不变：旧畸形行的 `CLAIMED → REFUSED` 与两种显式修复照常提交，一次**首次**写入 `claimResolution` 也照常提交 | §7.7 D18 · D18-f · D18-g · **D18-h** · §7.4 EC6-c · §12.1 G5 第 ㉑ 条 |
+| **F58** | 一份**混合版本**部署：一个二进制按 §2.4 / D20 ① 的立即语义写，另一个按"默认延迟"的读法写（v1.12 的 D19-c 曾给出这个答案）。同一条越界的 `DELETE FROM project_action` 在两边一个落在语句上、一个落在提交点 | **不存在两种答案**：`session_project_action_fk` 的初始模式全文只有一个 （`DEFERRABLE INITIALLY IMMEDIATE`，§7.7 D20-l），迁移在真实 `pg_constraint` 上断言四列并**真的跑一遍时刻**；一个按另一种读法建出来的数据库在 §12.1 G5 第 ㉒ 条上直接失败 | 无需恢复（本条是文档与迁移的唯一性，不产生已提交状态）；目录列不对时按 §11.2 开 `SYSTEM / EVENT`，重跑步骤 6h 的 drop/add | §2.4 · §7.7 **D20-l** · D19-c · §12.1 步骤 6h · G5 第 ⑳ ㉒ 条 · §31.1 |
+| **F59** | 一次**从空库或 v1.10 形状**执行的 `0111_project_coordinator`：迁移完成，服务层按 v1.13 的函数体运行，而数据库里没有 `project_action_result_session_fk`、没有 `session_result_link_delete_guard`、D18 仍只监听 `UPDATE` | **不可能**：步骤 6g2 显式安装这三样（审计 → D18 重建 → D19 外键 → D19 触发器），6h 排在它之后；空库 / v1.10 形状 / v1.11 形状三条路径跑完的对象集合**逐字相同**（§12.1 G5 第 ㉓ 条）。一次跳过 6g2 的迁移会让 G5 第 ⑱ ⑲ ㉓ 条同时失败，而不是等到第一次畸形 `INSERT` 或第一次 Session `DELETE` 才被发现 | 迁移失败即回滚重放（幂等）；D18-e ④-b 与 D19-e 的非 0 行按 §11.2 开 `USER / HUMAN` 人工裁决，**迁移不代为猜测** | §12.1 步骤 **6g2** · G5 第 ⑱ ⑲ ㉓ 条 · §7.7 D18-e · D19-e · §31.2 |
+| **F60** | 一次 Project purge，而这本账里有一条**说不清的链接**：单向指着一条 USER-origin Session、指着另一个 Project 的占位、挂在一条不是 `DISPATCH_TASK` 的动作行上、或者一条非 `APPLIED` 的动作行已经带着结果链接（存量、旧二进制或裸 SQL 留下的） | `coordinator_purge_project()` 在 ③-3、裸 `DELETE FROM project` 在 ② 号 fence 的第一句，**各得到逐字相同的** `PROJECT_PURGE_UNDECIDABLE`（`owner=USER`，`recovery=HUMAN`，消息带 action id / session id / 具体原因）；**三张表一行未动**，那条 Session 在两条路上都还在 | 按 §11.2 开 `USER / HUMAN` blocker，`detail` 带 ⓪ 返回的全部 `in_scope = false` 行；人裁决后（修回 D20-c 的形状，或把那条 Session 移出这本账）**原样重跑同一个函数**，它是幂等的 | §7.7 D20 ⓪ · **D20-c** · **D20-i** · D20-f · D20-h · §12.1 G5 第 ㉔ 条 · §31.3 |
+| **F61** | 一次 Project purge 与一次**派发发布**并发：发布方要给这本账插一条新占位并把它的动作行发布成 `APPLIED`，而 purge 已经（或即将）拿到 Project 行锁 | **两个提交顺序各有确定赢家**（§7.7 D20-k）：publish-wins ⇒ purge 在 ③-1 排队，醒来后新占位**已经在快照里**，返回 `(n, m)` 并提交；purge-wins ⇒ 发布方阻塞在 ④ 号 fence，醒来读不到 Project 行，得到 typed `PROJECT_PURGED` 并整事务回滚。**两条都不产生裸 `23503`，也不产生 `40P01`** | publish-wins 无失败方；purge-wins 的发布方 `SYSTEM / EVENT`，**这次派发作废、不重试**（Project 不会回来，重试确定性地得到同一条错误）；一个绕过 ④ 的写端握着动作行锁时 purge 得 `PROJECT_PURGE_CONTENDED`（`SYSTEM / EVENT`，**一个字没改、可原样重试**） | §7.7 D20 ③-lock · ④ · **D20-j** · **D20-k** · D20-d · D20-e · §12.1 G5 第 ㉕ 条 · §31.4 |
 
 **F-note**：F21/F22 是**唯一**两条"停下来等人"的兜底。它们存在的意义是让"控制环遇到了它不认识的东西"成为一个**看得见的状态**，而不是一次静默的 catch。
 
@@ -3306,6 +3569,7 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | 01J | 修订 `PC-CX-50..52` | §28 全表 | 同上；真实 Postgres 覆盖两列的专用 mutator 与双向链接、同一事务重复事件下的合法语句排列、结果半的键×类型形状（§28.1 / §28.2 / §28.3） |
 | 01K | 修订 `PC-CX-53..55` | §29 全表 | 同上；真实 Postgres 覆盖含 PAC §7.5 `v` 的正常派发正例、Session 物理删除的外键与类型化门、畸形初始账本的 INSERT 拒绝与存量修复路径（§29.1 / §29.2 / §29.3） |
 | 01L | 修订 `PC-CX-56..57` | §30 全表 | 同上；真实 Postgres 覆盖 Project 级 purge 的单事务正例（含空/只有账本/有链接三种 Project 的正反控制、并发 purge 的幂等 no-op、伪造 fence 在提交点被延迟外键拒）与存量畸形账本上 `claimResolution` / 结果链接两道硬门的无条件执行 |
+| 01M | 修订 `PC-CX-58..61` | §31 全表 | 同上；真实 Postgres 覆盖 lineage 外键四列目录属性与"什么时候拒"的两次实测、空库 / v1.10 / v1.11 三条迁移路径的对象集合等价、purge 量化域的五种畸形形状 × 两个入口的 typed fail closed 与数据不丢、purge 与派发发布两个提交顺序的 typed 结果与旁路 contention（§31.1 / §31.2 / §31.3 / §31.4） |
 | 03 | Coordinator 身份、默认 Workspace、策略持久化 | §2.2 · §7.5 · §12.1 | `*.spec.ts`（`node --test`） |
 | 04 | 独立验证身份、策略迁移与 Base62 | §12.1 G1–G4 · §6.1 S2 | 同上 |
 | 05 | 事件信封、事务 outbox、投递 | §5.2 · §5.4 | 同上 |
@@ -4075,6 +4339,11 @@ cap 那一半同理：两个入口在同一把锁之后各数一次占位（CAP1
 | `那之后这条 Session 就是一条普通 Session，照常可删` | §7.7 D19-c（v1.12 重写：粒度仍是 Project，而那条事务由 §7.7 D20 写出来，不是删掉 Project 就自然可删） | `PC-CX-56` |
 | `or delete the project so §2.4 takes the ledger with it` | §7.7 D19 ② 的消息（recovery 指向 coordinator_purge_project()，§7.7 D20） | `PC-CX-56` |
 | `IF TG_OP = 'UPDATE' AND 新旧账本逐字相同 THEN RETURN NEW` | §7.7 D18 ⓪（改成置 ledger_untouched 标志，① ② 继续执行；跳过的只有 ③）· D18-g 第 3 条 · D18-h | `PC-CX-57` |
+| `NO ACTION DEFERRABLE INITIALLY DEFERRED` | §7.7 D19-c（**`INITIALLY IMMEDIATE`** —— 全文唯一的初始模式，§7.7 D20-l · §2.4 · D20 ① · §12.1 步骤 6h） | `PC-CX-58` |
+| `ON a.id = s.project_action_id OR a.result_session_id = s.id` | §7.7 D20 ⓪ `coordinator_purge_ledger_pairs()`（量化域收成一个函数，② 与 ③ 只读它）· D20-c · D20-i | `PC-CX-60` |
+| `INTO stranded FROM session s JOIN project_action a ON a.id = s.project_action_id` | §7.7 D20 ②（先裁决 ⓪ 的 `in_scope = false`，再数 `in_scope = true`；两个入口同一个答案）· D20-f | `PC-CX-60` |
+| `派发排队，purge 提交后它得到 23503` | §7.7 D20-e（v1.13 重写：真正的窗口在 ③-6 与 ③-7 之间）· D20-j · D20-k · ④ 号 `coordinator_project_publish_fence` | `PC-CX-61` |
+| `③-1 的 FOR UPDATE 是全部的并发语义` | §7.7 D20-e（`FOR UPDATE` **加上** ④ 号 fence 的 `FOR KEY SHARE` 与 ③-2 的 `FOR UPDATE NOWAIT`）· D20-j | `PC-CX-61` |
 
 **登记规则（冻结）**：一次修订如果**取代**了一条规范（而不只是补充），必须在本表加一行；如果只是新增，不加。**v1.5 按这条规则加了六行**（`PC-CX-28` 两行、`PC-CX-29` 一行、`PC-CX-30` 一行、`PC-CX-31` 两行）；`PC-CX-29` 的另外那些新增条款（EC1–EC5、D14）**不入表**，因为它们没有取代任何一句话，只是补上了第 8 条一直缺的那道门。判据是一句话：**如果有人照旧句子实现，会不会得到一个已经被审查记过号的缺陷？** 会，就必须登记。**v1.6 按这条规则加了七行**（`PC-CX-32` 一行、`PC-CX-33` 一行、`PC-CX-34` 两行、`PC-CX-35` 两行、`PC-CX-36` 一行）；`PC-CX-36` 新增的 I18-B / I19 / W4 第 (iv) 支**不入表**，因为它们补的是一段一直没被写下来的形状，没有取代任何一句话。 **v1.7 按这条规则加了十行**（`PC-CX-37` 两行、`PC-CX-38` 一行、`PC-CX-39` 两行、`PC-CX-40` 两行、`PC-CX-41` 两行、`PC-CX-42` 一行）；v1.7 新增的 D15、EC2-b、EC5-a、EC6、§5.5 EV1–EV6、I17-A2、W5 第 6/7 条与 W4-b **不入表**，因为它们补的是一直缺的一道门或一段一直没被写下来的形状，没有取代任何一句话。**v1.8 按这条规则加了三行**（`PC-CX-43` 一行、`PC-CX-44` 一行、`PC-CX-45` 一行）；**v1.9 按这条规则加了六行**（`PC-CX-47` 两行、`PC-CX-48` 三行、`PC-CX-49` 两行 —— 其中 EC2-a 与 EC2-b 的两句旧公式各占一行，`§26.5` 那句"只由审计查询发现"占一行，因为照它实现就会得到 `PC-CX-48` 本身）；v1.9 新增的 EC2-d、EC6-e、D14-h、D16-f 与 D17 **不入表**，因为它们补的是一直缺的一道门，没有取代任何一句话。**v1.10 按这条规则加了四行**（`PC-CX-50` 三行、`PC-CX-52` 一行）；v1.10 新增的 D18、D9-f、EC2-b2 **不入表**，理由同上。**v1.11 按这条规则加了五行**（`PC-CX-53` 三行 —— exact-key 数组、它的错误消息、以及 D17-g 那条画小了一格的边界；`PC-CX-55` 两行 —— 无条件读 `OLD` 的那句声明、以及“三条查询”的审计条数）；v1.11 新增的 EC2-b3、D18-g、D19 与 §2.4 的 on-delete 表**不入表**，因为它们补的是一直缺的一道门或一段一直没被写下来的形状。**`PC-CX-54` 没有自己的一行**：它修的不是一句被写错的规范，而是**一句一直没有被写下来的规范** —— §2.4 从来没说过这条链接的 on-delete 是什么，照 v1.10 的字面实现不会产生一个“被取代的字样”，产生缺陷的是那一格的空白。按登记规则它不入表，改由契约测试的**结构断言**盯住：§2.4 必须有那张 on-delete 表、§7.7 必须有 D19 的两个对象、§4.3 I17-A3 必须提到 `DELETE`。**v1.7 的十行每一行登记的都是一句在 §1–§18 里真的写过、而现在已经不在的话**，不是复审报告里的概括 —— 一条永远匹配不上的行永远不会失败，那正是 v1.6 在自己的账上发现并修掉的毛病。
 
@@ -4874,3 +5143,107 @@ v1.8 的答案在四处：**一个按 `OLD.status` 分档、并给 `CLAIMED` 一
 - **没有放宽 D18 的任何合法写法**。只追加、前缀逐字冻结（③）一条不动；D18-g 的两条存量出路一条不动；`APPLIED` 行在提交点仍然要被 `coordinator_pin_ledger_fold` 完整折叠一遍。
 - **没有改任何一份独立审查报告**。十二份文档逐字不变（§26 / §27 / §28 / §29 的同一条纪律）。
 - **02 在 v1.11 轮留下的 `coordinator-v111-adversarial.spec.ts` 被翻转，不是被删**。理由与 §22.9 / §23.5 / §24.6 / §25.7 / §26.5 / §27.4 / §28.4 / §29.4 逐字相同：一条"缺陷存在"的断言在缺陷被修好的那一刻必然变红。翻转后每条断言**同时保留 v1.11 的形状作为反向对照**，v1.11 报告 §3 的两条 witness 与那条并发 typed error 正向控制一条不少。
+
+---
+
+## 31. `PC-CX-58..61` 修订闭环（v1.13）
+
+> **本节是非规范的（non-normative）修订日志**（§0 RL1，v1.4 冻结、v1.8 扩到 §26、v1.9 扩到 §27、v1.10 扩到 §28、v1.11 扩到 §29、v1.12 扩到 §30、v1.13 扩到本节）。它记录 v1.13 当时的事实与当时的推理，**不是现行规范**；任何一句与 §1–§18 冲突时一律以 §1–§18 为准。历史形状只允许出现在这里和反例测试里（`PC-CX-27`）。
+
+02 对 v1.12 的独立复审（[`project-coordinator-contract-review-02-v1.12.md`](./project-coordinator-contract-review-02-v1.12.md)）判 **FAIL / BLOCKED**，给出 1 个 P0 与 3 个 P1。本节是**逐项关闭的索引**，格式与 §19–§30 相同。**十三份审查文档都不因本次修订而改动** —— 它们记录的是 v1 到 v1.12 的事实，那些事实没有变；变的是契约。
+
+四项有一条贯穿的线。前十二轮问的是"这条硬门什么时候执行"、"它的作用域由谁决定"、"它比的那张清单全不全"、"它手上拿的是不是要判的那个东西"、"这道门开在正确的位置上吗"、"它关掉的是不是它要关的那件事"。这一轮问的是 —— **这条规范，是不是只有一句话说了算**。四项各是一种"两句话"：
+
+- `PC-CX-58`（P1）：**同一条外键，两个初始模式**。§2.4 的 on-delete 表、§7.7 D20 ① 的 SQL 与 §12.1 步骤 6h 写 `INITIALLY IMMEDIATE`；同属 §1–§18 现行规范的 §7.7 D19-c 写的是默认延迟的那一版。两句都不是历史日志。**错误落在语句上还是提交点上、调用方拿到什么、混合版本里两个二进制看到的顺序，因此各有两个合法答案**。
+- `PC-CX-59`（P1）：**同一个版本，两套数据库对象集合**。§12.1 声明 `0111_project_coordinator` 是**一次**迁移，而它的步骤表从 6g（v1.10 的 `BEFORE UPDATE` 版 D18）直接跳到 6h（v1.12 的 D20）。整张表里**没有一行**创建 `project_action_result_session_fk`、`session_result_link_delete_guard`，也没有把 D18 重建成 `BEFORE INSERT OR UPDATE`。G5 第 ⑱ ⑲ 条却要"验证这些对象"——**一条验证对象存在的断言，前面没有创建它的步骤**。规范函数体描述 v1.13，权威迁移表描述"v1.10 + D20"。
+- `PC-CX-60`（**P0**）：**同一个集合，一段散文与一句 SQL 各写了一遍**。D20-c 声明 purge 的第三类对象是"这本账认下的 COORDINATOR 占位"，并逐字排除"任何 USER-origin Session"；而 ③-3 的实际谓词只有 `a.id = s.project_action_id OR a.result_session_id = s.id`。于是一条 `REFUSED` 的 `DISPATCH_TASK` 单向指着一条 USER Session 时，函数把它**物理删除**，同一份事实上的裸 `DELETE`（fence 只查了 `OR` 的第一半）**保留**它 —— 两个已提交结果，D20-f 的"结果集合相同"当场为假，而且**第一次错误调用已经删了行，原样重试只返回 `(0,0)`**。
+- `PC-CX-61`（P1）：**同一次并发，两个赢家规则**。D20 ③-1 只锁 Project 行，③-3 读快照时不锁动作行，③-4 才级联。D20-e 却声称"发布者会在 purge 的 delete lock 上排队"——它忽略了**快照已完成、delete lock 尚未取得**的那个窗口。一次落进窗口的、完全合法的发布让整个 purge 在 `COMMIT` 得到原生 `23503`：没有 typed owner、没有 recovery，重试成不成功取决于调度。
+
+四句话是同一句话的四种写法：**一条规范如果有两个来源，它就没有权威状态**——不管那两个来源是两句散文、一句散文与一段 SQL、一张迁移表与一段函数体，还是两条互不知道对方的锁。v1.13 的答案在四处，每一处都是**把两个来源收成一个**：**D19-c 与全文统一到唯一的初始模式并加静态/目录/行为三重检查（D20-l）**、**§12.1 新增步骤 6g2 让迁移表与规范函数体逐字覆盖同一组对象**、**D20 的量化域收进 ⓪ 号 `coordinator_purge_ledger_pairs()`，② 与 ③ 只读它、说不清就 typed fail closed（D20-i）**、以及 **purge 与派发发布共享 `project` 那一行（持久 fence + 线性化点），③-2 的 `FOR UPDATE NOWAIT` 与 ④ 号 fence 让两个提交顺序各有 typed 结果（D20-j / D20-k）**。
+
+| ID | 级别 | 规范条款 | 权威状态 | 动作键 | 恢复路径 | 可执行断言 |
+|---|---|---|---|---|---|---|
+| `PC-CX-58` | P1 | §2.4 on-delete 表 · §7.7 **D20-l** · D20 ① · D19-c · §12.1 步骤 6h · G5 第 ⑳ ㉒ 条 · §15 F58 · §22.8 | `session_project_action_fk` 是 `ON DELETE NO ACTION ON UPDATE NO ACTION DEFERRABLE **INITIALLY IMMEDIATE**，**现行规范四处逐字相同、没有第二个答案**：默认对每一条语句立即检查（与 v1.11 的 `RESTRICT` 逐字相同的行为），只有一次按 D20 ③-4 声明过自己的 purge 事务用 `SET CONSTRAINTS … DEFERRED` 把它推到提交点 | 不变（外键的初始模式不进任何动作键） | 无需恢复：本项不产生已提交状态，它是文档与迁移的唯一性。一个按被取代的那半句建出来的数据库在 §12.1 G5 第 ㉒ 条的四列断言与"什么时候拒"的两次实测上直接失败，按 §11.2 开 `SYSTEM / EVENT`，重跑步骤 6h 的 drop/add | `PC-CX-58 the lineage foreign key has exactly one initial mode` |
+| `PC-CX-59` | P1 | §12.1 步骤 **6g2** · 步骤 6h · G5 第 ⑱ ⑲ ㉓ 条 · §7.7 D18 · D18-e · D19 · D19-e · §15 F59 · §22.8 | 一次 `0111_project_coordinator` 落地的对象集合**与 §7.7 的规范函数体逐字相同**，且**与起点无关**：空库、v1.10 形状、v1.11 形状三条路径跑完，D18 的事件面含 `INSERT`、`project_action_result_session_fk` 的 `confdeltype = 'r'`、`session_result_link_delete_guard` 存在、D20 的五个对象与两条 ④ 号触发器存在 | 迁移 id 不变（步骤是幂等的，重放安全） | 存量按 6g2 ① 的两组审计处置：D18-e ① ② ③ 与 D19-e 非 0 行按 §11.2 开 `USER / HUMAN` 人工裁决（**迁移不代为猜测哪一侧权威**），D18-e ④ 的未发布行由 ④-a 收敛、已 `APPLIED` 行由 ④-b 隔离。一次跳过 6g2 的迁移在 G5 第 ⑱ ⑲ ㉓ 条上失败并回滚重放 | `PC-CX-59 the one-shot migration installs every v1.11 hard gate` |
+| `PC-CX-60` | **P0** | §7.7 D20 ⓪ · **D20-c** · **D20-i** · D20 ② · ③-3 · D20-f · D20-g · D20-h · §12.1 G5 第 ㉔ 条 · §15 F60 · §22.8 | 一次 purge 的量化域**就是 ⓪ 号函数返回 `in_scope = true` 的那些行**，散文与 SQL 是同一句话。COORDINATOR origin、`DISPATCH_TASK`、lineage 指回来、发布与链接同真同假、没有别的 Project 也指着它 —— 五个条件缺一即 `in_scope = false`，而**任何一行 `in_scope = false` 都让两个入口各得到逐字相同的 `PROJECT_PURGE_UNDECIDABLE`（`owner=USER` / `recovery=HUMAN`），一行都不删** | 不变（purge 不进任何动作键。**这也是本项最危险的地方**：一次错误调用留下的是**永久删除的行**，而同一个键原样重试只返回 `(0,0)` —— 它自己无法告诉调用方"上一次删掉了什么"） | v1.13 之前的错误调用**不可恢复**（行已物理消失）。v1.13 之后：`in_scope = false` 的行按 §11.2 开 `USER / HUMAN` blocker，`detail` 带 ⓪ 的全部 offending 行；人裁决只有两个合法出口（修回 D20-c 的形状，或把那条 Session 移出这本账），完成后**原样重跑同一个函数**，它是幂等的。迁移侧由 D20-g 第二条把存量数出来 | `PC-CX-60 the purge collection predicate is D20-c, mechanically` |
+| `PC-CX-61` | P1 | §7.7 D20 ③-lock · ③-2 · ④ · **D20-j** · **D20-k** · D20-d · D20-e · §12.1 G5 第 ㉕ 条 · §15 F61 · §22.8 | purge 与派发发布**无条件共享 `project` 那一行**：它的存在与否是持久 fence，它上面的锁是线性化点（purge `FOR UPDATE`，④ 号 fence `FOR KEY SHARE`）。③-2 把这本账的动作行 `FOR UPDATE NOWAIT` 取到手，**因此 ③-6 的快照就是 ③-7 那一刻的事实**。两个提交顺序各有 typed 结果（D20-k）：publish-wins ⇒ `(n, m)` 并提交；purge-wins ⇒ 发布方 `PROJECT_PURGED` 并整事务回滚 | 不变（purge 不进动作键；派发的动作键在它自己的事务里随回滚一起消失） | **三条路各有确定 owner 与 recovery**：publish-wins 无失败方；purge-wins 的发布方 `SYSTEM / EVENT`，**这次派发作废、不重试**（Project 不会回来，重试确定性地得到同一条错误，因此它是终态而不是退避）；绕过 ④ 的写端握着动作行锁时 purge 得 `PROJECT_PURGE_CONTENDED`（`SYSTEM / EVENT`，**本事务一个字没改，可原样重试且幂等**）。裸 `23503` 与 `40P01` 都不再是正常控制流 | `PC-CX-61 purge and publication share one linearization point` |
+
+新增的模型断言在 [`coordinator-counterexample.spec.ts`](../src/apiserver/src/projects/coordinator-counterexample.spec.ts)，新增的真实 PostgreSQL 断言在 [`coordinator-linearization.pg.spec.ts`](../src/apiserver/src/projects/coordinator-linearization.pg.spec.ts)；02 在 v1.12 轮次留下的 [`coordinator-v112-adversarial.spec.ts`](../src/apiserver/src/projects/coordinator-v112-adversarial.spec.ts) 按 §26–§30 的同一条纪律**从"证明缺陷存在"翻转成"旧形状被拒绝／正常路径存在"**，并把 v1.12 的四个失败形状原样保留为每条断言里的**反向对照**。
+
+### 31.1 `PC-CX-58` 同一条外键的初始模式有两个现行答案
+
+**最小交错序列**（不需要并发，一条语句就够）：一个有链接的 Project，`s1.project_action_id = 'a1'`；`DELETE FROM project_action WHERE id='a1'`。按 §2.4 / D20 ① / 步骤 6h 建出来的数据库在**那条语句**上得到 `23503`；按 D19-c 那半句建出来的数据库让这条语句**通过**，到 `COMMIT` 才整事务回滚。**同一份契约、同一条语句、两个观察结果。**
+
+**Postgres MVCC 与锁语义**：与并发无关。差别只在 `pg_constraint.condeferred` 这一列：`INITIALLY IMMEDIATE` 的约束每条语句结束就检查，`INITIALLY DEFERRED` 的约束把检查排到提交点。**两者的 `condeferrable` 都是真、`conname` 一样、`confdeltype` 都是 `'a'`** —— 这正是为什么只断言"外键存在且可延迟"看不出差别，与 v1.11 第 ⑱ 条那句 `confdeltype = 'r'`、v1.12 第 ⑳ 条那三列是同一种检查的第三次。
+
+**权威状态**：§7.7 D19-c 改成 `INITIALLY IMMEDIATE` 并写明"默认仍立即，只有声明过的 purge 才延迟"；新增 **D20-l** 把唯一性写成一条可检查的条款（静态四处逐字比较、目录四列断言、**以及"什么时候拒"的两次行为实测**）；§2.4 on-delete 表第二行加一句"这是本文唯一的初始模式"；§12.1 步骤 6h 与 G5 第 ㉒ 条各补一句。被取代的那半句逐字抄在 §31.5。
+
+**动作键**：不变。
+
+**恢复路径**：本项不产生已提交状态 —— 它产生的是**两个都能自称合法的数据库形状**。因此关闭它的判据不是"反例不再复现"，而是**三重检查同时为真**：文档里四处逐字相同、真实 `pg_constraint` 四列正确、且同一条越界写在**语句**上而不是提交点上失败。
+
+**可执行断言**：`PC-CX-58 the lineage foreign key has exactly one initial mode`（模型：四处逐字比较 + `INITIALLY DEFERRED` 在 §1–§18 内不与 lineage 外键同现），`PC-CX-58 on real Postgres: the lineage FK is immediate by default and deferrable only on demand`（真实 PostgreSQL：`condeferrable/condeferred/confdeltype/confupdtype` 四列 + 普通事务语句级 `23503` + `SET CONSTRAINTS … DEFERRED` 之后的提交点 `23503`；反向对照按被取代的那半句建同名外键，第一条语句**通过**）。
+
+### 31.2 `PC-CX-59` 一次迁移跳过了它自己要验证的那些对象
+
+**最小交错序列**（不需要并发，按表执行一次就够）：从空库或 v1.10 形状按步骤 1→7 跑一遍。结果：D20 的对象在，D19 的两个对象**不在**，D18 仍只监听 `UPDATE`。于是 `INSERT INTO project_action (detail => '{"retiredPins":{}}')` **提交**（v1.10 的错误答案，`PC-CX-55`），一条已发布结果 Session 的 `DELETE` **提交**（v1.10 的错误答案，`PC-CX-54`）。**两条被 v1.11 明文关掉的路，在一次按权威迁移表执行的部署上重新打开。**
+
+**Postgres MVCC 与锁语义**：与并发无关。这一项完全是**文档的量化域**：`CREATE OR REPLACE FUNCTION` 改得了函数体，**改不了触发器的事件列表** —— 一个只声明在 `UPDATE` 上的 `project_action_result_ledger_mutator` 与一个声明在 `INSERT OR UPDATE` 上的同名触发器在 `pg_proc` 里逐字相同，差别只在 `pg_trigger.tgtype`，因此 6g2 ② 必须写成 `DROP TRIGGER` + `CREATE`（与 v1.10 步骤 6g 里 `project_action_pin_ledger_check` 去掉 `UPDATE OF` 列清单是同一条理由）。
+
+**权威状态**：§12.1 新增步骤 **6g2**，四件事按依赖顺序：**存量审计（D18-e 四条 + D19-e 一条）→ D18 重建为 `BEFORE INSERT OR UPDATE` → `project_action_result_session_fk` + 它的索引 → `session_result_link_delete_guard`**；6h 明确排在它之后。G5 新增第 ㉓ 条：**空库 / v1.10 形状 / v1.11 形状三条路径各跑一次完整迁移，断言落地的对象集合逐字相同**。
+
+**动作键**：迁移 id 固定，步骤幂等，重放安全。
+
+**恢复路径**：存量的两组审计各有 typed owner（D18-e ① ② ③ 与 D19-e ⇒ `USER / HUMAN` 人工裁决；D18-e ④-a ⇒ 迁移自己收敛）。**迁移不代为猜测哪一侧权威** —— 与 D18-e / D19-e / D20-g 逐字同一条纪律。
+
+**可执行断言**：`PC-CX-59 the one-shot migration installs every v1.11 hard gate`（模型：机械读 §12.1 步骤表，断言 6g2 存在、三个对象各被创建一次、6g2 排在 6h 之前、审计排在建外键之前），`PC-CX-59 on real Postgres: empty / v1.10 / v1.11 all converge on the same object set`（真实 PostgreSQL：三条路径跑完各断言 D18 事件面含 `INSERT`、D19 外键 `confdeltype = 'r'`、D19 触发器存在、D20 七个对象存在；反向对照跳过 6g2，同一组断言失败且畸形 `INSERT` 与 Session `DELETE` 各自提交）。
+
+### 31.3 `PC-CX-60` 一段散文与一句 SQL 各写了一遍同一个集合
+
+**最小交错序列**（两个 Project，各一条语句）：`p-function` 与 `p-bare` 各有一条 `REFUSED` 的 `DISPATCH_TASK`，`result_session_id` 分别指向一条 `dispatch_origin = 'USER'`、`project_action_id IS NULL` 的 Session。对第一组调用 `coordinator_purge_project()` ⇒ 返回 `(1, 1)`，**USER Session 被物理删除**；对第二组执行裸 `DELETE FROM project` ⇒ fence 只看 `OR` 的第一半、看到 0 条搁浅，**提交并保留** USER Session。同一份事实，两个已提交结果。
+
+**Postgres MVCC 与锁语义**：与并发无关。这一项的答案完全在**谓词**上：`a.id = s.project_action_id OR a.result_session_id = s.id` 是一个**两条路的并集**，而 D20-c 的散文要的是"**两条路都通、且方向一致、且 origin/type/status 都对**"的交集。**一个并集与一个交集写在同一份文档的两个地方，没有任何对象在看它们是不是同一个集合** —— 与 `PC-CX-37`（denylist 与它保护的表分头长大）、`PC-CX-44`（create 冻结集的手工副本）是同一形状的第三次，只是这一次两份副本一份是散文、一份是 SQL。
+
+**权威状态**：新增 **D20 ⓪ `coordinator_purge_ledger_pairs()`** —— 量化域本身成为一个函数，返回这本账触到的每一对 `(action, session)` 与一个 `in_scope` 布尔；**② 号 fence 与 ③ 号函数都只读它**。D20-c 改写成"定义就是 ⓪ 返回 `in_scope = true` 的那些行"并逐条列出五个条件；新增 **D20-i**：任何一行 `in_scope = false` ⇒ 两个入口各得到逐字相同的 `PROJECT_PURGE_UNDECIDABLE`（`owner=USER` / `recovery=HUMAN`，带 action id、session id 与原因），**一行都不删、一个约束都还没被延迟**；D20-f 补上"畸形数据上两条路也给同一个答案"；D20-g 新增第二条存量审计；§12.1 G5 新增第 ㉔ 条（**断言两处函数体里都只出现 ⓪、不出现第二份手写谓词**）。
+
+**动作键**：不变。purge 不进任何动作键 —— 这也是它最难恢复的地方：一次错误调用留下的是**永久删除的行**，而同一个输入原样重试只返回 `(0,0)`。
+
+**恢复路径**：v1.13 之前已经发生的错误调用**不可恢复**（行已物理消失，`deleted_at` 那块墓碑也一起没了）。v1.13 之后由 D20-i 的人工裁决出口承担：修回 D20-c 的形状，或由人显式把那条 Session 移出这本账，然后**原样重跑同一个函数**（幂等）。
+
+**可执行断言**：`PC-CX-60 the purge collection predicate is D20-c, mechanically`（模型：断言 ② 与 ③ 的函数体都只调用 ⓪、都不含第二份手写谓词，并断言 D20-c 的散文逐条对应 ⓪ 的五个条件），`PC-CX-60 on real Postgres: every undecidable link fails closed on both entry points`（真实 PostgreSQL：USER-origin / 跨 Project / 单向 / 错 action type / 非 `APPLIED` 却带链接五种形状 × 函数与裸 `DELETE` 两个入口 = 十次，全部得到逐字相同的 `PROJECT_PURGE_UNDECIDABLE` 且三张表一行未动；正例：合法链接、未发布占位、空 Project、只有账本的 Project 各自照常；反向对照换回 v1.12 的裸 `OR` 谓词，函数删掉 USER Session 而裸 `DELETE` 保留它 —— 复审报告 §3 `PC-CX-60` 的 witness 逐字重现）。
+
+### 31.4 `PC-CX-61` 快照与级联之间的窗口
+
+**最小交错序列**（两个事务，逐句执行 D20 ③）：Project 有 `a-old ↔ s-old` 与尚未发布的 `a-late`。purger 走到 ③-3 读完 doomed（只有 `['s-old']`）后暂停；publisher **不碰 Project 行**，插 `s-late → a-late` 并把 `a-late` 发布成 `APPLIED`，提交；purger 继续删 Project 与两条 action、只删旧快照里的 `s-old`，`COMMIT` 得 `23503 constraint=session_project_action_fk`，**整个 purge 回滚**，最终 `{project:1, action:2, session:2}`。正向对照：没有夹在快照后的发布时，同一函数返回 `(2,2)` 并提交。
+
+**Postgres MVCC 与锁语义**：这一项完全在**锁的覆盖面**上。`SELECT … FROM project WHERE id = p FOR UPDATE` 只锁 `project` 那一行；它挡得住**新增动作行**（外键要同一行的 `FOR KEY SHARE`，而 `KEY SHARE` 与 `UPDATE` 互斥），但挡不住**改一条既有动作行**，也挡不住**插一条指向既有动作行的 Session**——那两件事只需要 `project_action` 行上的锁。v1.13 因此补两侧：③-2 把这本账的动作行 `FOR UPDATE NOWAIT` 全部取到手（于是"改既有动作行"与"插指向它的 Session"都进不来），④ 号 fence 让**任何**这类写入先取 Project 行的 `FOR KEY SHARE`（于是两侧共享同一个全序，且失败是 typed 的）。**`NOWAIT` 不是性能选择，是正确性选择**：`UPDATE project_action` 会先锁行、再执行 `BEFORE` 触发器，因此发布方的锁顺序在这一步是反的；等待会得到 `40P01`（谁死取决于调度、谁都拿不到 owner），`NOWAIT` 把它换成一条 typed、可原样重试的 `PROJECT_PURGE_CONTENDED`。
+
+**权威状态**：新增 D20 **③-lock**（`coordinator_purge_lock_ledger()`）、**③-2**、**④**（`coordinator_project_publish_fence`，两条触发器）；D20-e 重写（v1.12 那一格的原句逐字记在 §31.5）；新增 **D20-j**（持久 fence = `project` 那一行本身；线性化点 = 它上面的锁；锁顺序与代价写下来）与 **D20-k**（两个提交顺序 × 一条旁路，各自的 typed 结果、owner、recovery 与幂等语义）；D20-d 补一句"裸 `23503` 从今以后只有一个含义"；§12.1 G5 新增第 ㉕ 条。
+
+**动作键**：不变。purge 不进动作键；派发的动作键在它自己的事务里随回滚一起消失，因此 purge-wins 之后**不留半条已提交的派发**。
+
+**恢复路径**：三条各有确定 owner 与 recovery，写在 D20-k。要点是**purge-wins 的发布方不重试** —— 它拿到的不是一次暂时性失败，而是"你要加入的那本账不存在了"这个终态；把它当成退避重试会得到一个永远重试的循环，那正是 §10 活性 SLO 要禁止的形状。
+
+**可执行断言**：`PC-CX-61 purge and publication share one linearization point`（模型：断言 ③-1 之后紧跟 ③-2 的取锁、快照排在取锁之后、④ 号在两张表上各有一条触发器、`coordinator_purge_lock_ledger` 含 `NOWAIT` 与 `lock_not_available` 分支），`PC-CX-61 on real Postgres: both commit orders have a typed winner`（真实 PostgreSQL：purge-wins ⇒ `(2,1)` 提交 + 发布方 `PROJECT_PURGED`；publish-wins ⇒ `(2,2)` 提交且无 orphan；旁路 ⇒ `PROJECT_PURGE_CONTENDED` 且一个字没改、settle 后原样重跑成功；反向对照 ⇒ 去掉 ③-2 与 ④ 后同一交错在 `COMMIT` 得 `23503` 并整事务回滚（复审报告 §3 `PC-CX-61` 的 witness 逐字重现），只去掉 `NOWAIT` 得原生 `40P01 deadlock detected`）。
+
+### 31.5 被 v1.13 取代的旧措辞，逐字抄在这里
+
+§22.8 的五条新登记按这里对齐（这一小节存在的唯一理由是：**一条被取代的规范句必须在文档里留得下、又不能留在正文里**，`PC-CX-27`）：
+
+1. §7.7 D19-c：session.projectActionId 那一侧改成 NO ACTION DEFERRABLE INITIALLY DEFERRED（RESTRICT 在 PostgreSQL 里永远不能被延迟）。
+2. §7.7 D20 ③-3 的收集谓词：FROM session s JOIN project_action a ON a.id = s.project_action_id OR a.result_session_id = s.id WHERE a.project_id = p_project_id。
+3. §7.7 D20 ② 的搁浅计数：SELECT count(*) INTO stranded FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE a.project_id = OLD.id。
+4. §7.7 D20-e：一次 purge 与一次派发相撞：派发要插一条指向该 Project 某条 action 的 Session，那条 INSERT 需要 action 行上的 KEY SHARE，而 purge 正持有它的删除锁 —— 派发排队，purge 提交后它得到 23503（它引用的 action 行已经不在），整个派发事务回滚。
+5. §7.7 D20-e 第一句：③-1 的 FOR UPDATE 是全部的并发语义。
+
+### 31.6 本次修订**没有**做的事
+
+- **没有改 PAC**。`docs/project-agent-contract.md` 逐字节不变。
+- **没有加新表、没有加新列**。§2.4 的八列一个不变。新增的四个数据库对象（两个函数、一个触发器函数与它的两条触发器）都不是表也不是列；`PC-CX-61` 用的"持久 fence"就是 `project` 那一行**本身的存在与否**，不是一列 `purged_at`，也不是一张 purge 表 —— 与 D20-a 拒掉 tombstone 是同一条理由（§2.3 不许第二个事实来源）。
+- **没有改变 v1.12 已经冻结的 purge 顺序**。D20-b 一个字不动：Project 先、占位后。改的是"删哪些"（⓪）与"什么时候没人能插进来"（③-2 / ④）。
+- **没有放宽 purge 的量化域**。v1.13 只会让它**更窄**：五个条件缺一即 `in_scope = false`，而 `in_scope = false` 的后果是**整个 purge 停下**，不是"跳过这一行继续删"。
+- **没有把 fence 当成权限边界**。D20-d 逐字不变：② 与 ④ 挡的是误用与竞态，"不许留下 orphan"仍由那条可延迟外键在提交点无条件承担；v1.13 只是补了一句"正常并发下它无事可做，因此一条裸 `23503` 从今以后只有一个含义"。
+- **没有让 purge 变成可重试的退避循环**。`PROJECT_PURGE_UNDECIDABLE` 与 purge-wins 的 `PROJECT_PURGED` 都是**终态**，只有 `PROJECT_PURGE_CONTENDED` 是可原样重试的（D20-k）。三者各自写明 owner 与 recovery，不留"再试一次也许就好了"的口子。
+- **仍然不含实现**。03–23 单元一行业务代码都没写；`coordinator_purge_ledger_pairs()` / `coordinator_project_publish_fence` 目前只存在于契约与两份 spec 的 fixture 里，真正的 Prisma 迁移（步骤 6g2 / 6h）要到 04 单元才跑。
+- **没有改任何一份独立审查报告**。十三份文档逐字不变（§26–§30 的同一条纪律）。
+- **02 在 v1.12 轮留下的 `coordinator-v112-adversarial.spec.ts` 被翻转，不是被删**。理由与 §22.9 / §23.5 / §24.6 / §25.7 / §26.5 / §27.4 / §28.4 / §29.4 / §30.4 逐字相同：一条"缺陷存在"的断言在缺陷被修好的那一刻必然变红。翻转后每条断言**同时保留 v1.12 的形状作为反向对照**，v1.12 报告 §3 的两条 PG witness 与两条静态 witness 一条不少。
