@@ -256,6 +256,6 @@ fault_function=0
 - 删除 `/tmp/pcc04-prisma-0110` 与父提交临时 worktree `/tmp/pcc04-parent-b9aa2e58`；
 - 删除本工作树中验证产生的 ignored build/dependency overlay；
 
-提交与合并步骤将复核 `feat-project-deploy` 的 staged `M README.md`、`D docs/project-agent-contract.md` 与 staged binary diff SHA-256 `966c46d48ff68e27f9a479eca869e92a8f203d6c2a4466eaa8d48a2d9fcf8105` 在 `--ff-only` 合并前后完全不变。
+提交与合并步骤已复核 `feat-project-deploy` 的 staged `M README.md`、`D docs/project-agent-contract.md` 与 staged binary diff SHA-256 `966c46d48ff68e27f9a479eca869e92a8f203d6c2a4466eaa8d48a2d9fcf8105` 在 `--ff-only` 合并前后完全不变。本验证分支相对 `86a89b93` 只增加本报告，并已安全 fast-forward 到 `feat/project`。
 
 由于结论是 FAIL，任务 04 不得置 DONE，也不得启动下游；本报告合并不改变这一状态。
