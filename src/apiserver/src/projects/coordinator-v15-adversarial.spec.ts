@@ -199,7 +199,9 @@ test('PC-CX-34: I17 has one tense per sentence, and the current-state query is g
   const fault = section('15');
   // The closed shape: a standing half over columns that stop changing, a point-in-time half that
   // D14 proves at COMMIT, and an explicit account of the state the deleted query used to forbid.
-  assert.ok(invariants.includes('**I17-A（快照与占位一致，恒成立'), 'the standing half is missing');
+  // v1.7 narrowed this heading to the create-frozen columns (PC-CX-38); the standing half is the
+  // same clause, so the assertion follows it rather than pinning a wording v1.7 superseded.
+  assert.ok(invariants.includes('**I17-A（create 冻结列与占位一致，恒成立'), 'the standing half is missing');
   assert.ok(invariants.includes('**I17-B（授权在提交那一刻成立，点态'), 'the commit-time half is missing');
   assert.ok(invariants.includes('**I17-c（那条被删掉的当前态查询是什么'), 'nothing says what the deleted query described');
   assert.match(fault, /控制环先提交[^\n]+人工写随后生效/, 'F35 still has to allow the coordinator-first ordering');
@@ -245,7 +247,8 @@ test('PC-CX-35: the last five seconds of a turn window have exactly one legal wa
   const timing = section('10.4');
   assert.match(turns, /next_attempt_at`[^\n]+窗口边界/, 'TR2-b still puts next_attempt_at on the boundary');
   assert.match(turns, /nextWakeAt ≤ windowEndsAt \+ 5s/, 'TR2-d must state the bound that has a solution');
-  assert.match(timing, /nextWakeAt` \*\*永远不小于 `now \+ 5s`/, 'W3 is unchanged: it is the hard floor');
+  assert.match(timing, /nextWakeAt` \*\*永远不小于 `evaluation\.epoch \+ 5s`/,
+    'W3 is still the hard floor; v1.7 only changed which clock it measures from (PC-CX-40)');
   assert.match(timing, /\*\*W5（一个候选表、一个确定的选择/, 'the arbitration between the candidates has to be frozen');
 
   // The second v1.5 conflict: an earlier candidate versus TR2-e's "point at the boundary". W5 takes
@@ -281,7 +284,7 @@ test('PC-CX-36: a manual trigger has a named shape from the moment it is committ
   assert.equal(shape({ consumedAt: null, nextAttemptAt: null, attempts: 3 }, null), 'NONE', 'attempted and dropped is still a defect');
 
   const invariants = section('4.3');
-  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I19（待消费事件的投递不变量']) {
+  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I19（待消费事件的责任域']) {
     assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
   }
   // The producer still owes nothing to `project_runtime` — the delivery obligation is a backstop

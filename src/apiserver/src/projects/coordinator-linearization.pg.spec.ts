@@ -2130,3 +2130,578 @@ test('PC-CX-36 on real Postgres: the backstop sees an event no consumer took',
       await c.end();
     }
   });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round seven (`PC-CX-37..42`, §25). Four of the six make claims that only a real server settles:
+// what a trigger that compares whole rows does when the schema grows, what a `BEFORE UPDATE`
+// mutator protocol admits across a session's three phases, whether an `ORDER BY` is deterministic
+// without a third key, and whether `text` ordering depends on the database collation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const V17_SCHEMA = 'pcc_v17';
+
+function isolated17(body: string): string {
+  return `
+    DROP SCHEMA IF EXISTS ${V17_SCHEMA} CASCADE;
+    CREATE SCHEMA ${V17_SCHEMA};
+    SET search_path TO ${V17_SCHEMA};
+    ${body}
+  `;
+}
+
+/** §7.7 D11 as v1.7 specifies it: whole-row comparison minus a two-column allowlist. */
+const D11_V17 = `
+  CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $fn$
+  DECLARE writable text[] := ARRAY['result_session_id', 'detail'];
+          changed  text;
+  BEGIN
+    IF OLD.status <> 'APPLIED' THEN RETURN NEW; END IF;
+    IF (to_jsonb(NEW) - writable) IS DISTINCT FROM (to_jsonb(OLD) - writable) THEN
+      SELECT string_agg(e.key, ',' ORDER BY e.key) INTO changed
+        FROM jsonb_each(to_jsonb(NEW) - writable) e
+       WHERE e.value IS DISTINCT FROM ((to_jsonb(OLD) - writable) -> e.key);
+      RAISE EXCEPTION 'ACTION_APPLIED_IMMUTABLE: action % is APPLIED; identity, attribution, frozen execution context and reason code are frozen (changed: %)',
+        OLD.id, changed;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/** …and as v1.4 wrote it: the six-column denylist that did not learn about v1.5's three columns. */
+const D11_V14 = `
+  CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $fn$
+  BEGIN
+    IF OLD.status <> 'APPLIED' THEN RETURN NEW; END IF;
+    IF NEW.status <> 'APPLIED'
+       OR NEW.type IS DISTINCT FROM OLD.type
+       OR NEW.subject_type IS DISTINCT FROM OLD.subject_type
+       OR NEW.subject_id IS DISTINCT FROM OLD.subject_id
+       OR NEW.project_id IS DISTINCT FROM OLD.project_id
+       OR NEW.fencing_token IS DISTINCT FROM OLD.fencing_token
+       OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key THEN
+      RAISE EXCEPTION 'ACTION_APPLIED_IMMUTABLE: action % is APPLIED', OLD.id;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+const ACTION_SCHEMA_V17 = isolated17(`
+  CREATE TABLE project_action (
+    id                     text PRIMARY KEY,
+    idempotency_key        text UNIQUE NOT NULL,
+    project_id             text NOT NULL,
+    type                   text NOT NULL,
+    status                 text NOT NULL,
+    subject_type           text NOT NULL,
+    subject_id             text NOT NULL,
+    fencing_token          bigint NOT NULL,
+    result_session_id      text,
+    detail                 jsonb,
+    execution_context      jsonb,
+    execution_context_digest text,
+    execution_result_digest  text,
+    reason_code            text
+  );
+  CREATE TABLE session (
+    id                       text PRIMARY KEY,
+    task_id                  text NOT NULL,
+    project_action_id        text REFERENCES project_action(id),
+    dispatch_origin          text NOT NULL,
+    status                   text NOT NULL,
+    agent_id                 text,
+    workspace_id             text,
+    assigned_runner_id       text,
+    provider                 text,
+    provider_builtin         boolean,
+    required_capabilities    text[],
+    model                    text,
+    effort                   text,
+    execution_pin_generation bigint NOT NULL DEFAULT 0
+  );
+`);
+
+/** Every column of `project_action`, read from the catalog rather than from a list in this file. */
+async function actionColumns(c: Client): Promise<string[]> {
+  const rows = (await c.query<{ column_name: string }>(`
+    SELECT column_name FROM information_schema.columns
+     WHERE table_schema = '${V17_SCHEMA}' AND table_name = 'project_action'
+     ORDER BY ordinal_position`)).rows;
+  return rows.map((r) => r.column_name);
+}
+
+/** A value that is guaranteed to differ from the current one, whatever the column's type is. */
+function mutationFor(column: string): string {
+  if (column === 'fencing_token') return '999';
+  if (column === 'execution_context' || column === 'detail') return `'{"provider":"codex"}'::jsonb`;
+  return `'mutated-${column}'`;
+}
+
+test('PC-CX-37 on real Postgres: the applied action row is frozen column by column, whatever the schema is',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(ACTION_SCHEMA_V17);
+      const seed = async (): Promise<void> => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(`
+          INSERT INTO project_action VALUES
+            ('act1','pc:v1:p1:dispatch:t1:0','p1','DISPATCH_TASK','APPLIED','TASK','t1',1,NULL,NULL,
+             '{"provider":"claude"}'::jsonb,'digest-a','digest-b','MANUAL')`);
+        await c.query(`
+          INSERT INTO session (id, task_id, project_action_id, dispatch_origin, status, provider)
+          VALUES ('s1','t1','act1','COORDINATOR','PENDING','claude')`);
+      };
+      const i17aViolations = async (): Promise<string> => (await c.query<{ n: string }>(`
+        SELECT count(*)::text AS n FROM session s JOIN project_action a ON a.id = s.project_action_id
+         WHERE s.provider IS DISTINCT FROM a.execution_context->>'provider'`)).rows[0].n;
+      const tryRewrite = async (column: string): Promise<string | null> => {
+        await c.query('BEGIN');
+        try {
+          await c.query(`UPDATE project_action SET ${column} = ${mutationFor(column)} WHERE id = 'act1'`);
+          await c.query('COMMIT');
+          return null;
+        } catch (error) {
+          await c.query('ROLLBACK');
+          return (error as Error).message;
+        }
+      };
+
+      // The allowlist, driven by the catalog. `id` is the primary key the trigger reports on, and
+      // rewriting it would change which row we are talking about, so it is excluded from the sweep.
+      const columns = (await actionColumns(c)).filter((col) => col !== 'id');
+      assert.ok(columns.includes('execution_result_digest'), 'the fixture must carry the column v1.7 adds');
+
+      await c.query(D11_V17);
+      await c.query(`DROP TRIGGER IF EXISTS project_action_applied_immutable_guard ON project_action;
+                     CREATE TRIGGER project_action_applied_immutable_guard BEFORE UPDATE ON project_action
+                       FOR EACH ROW EXECUTE FUNCTION project_action_applied_immutable_guard()`);
+      const writable: string[] = [];
+      for (const col of columns) {
+        await seed();
+        const failure = await tryRewrite(col);
+        if (failure === null) writable.push(col);
+        else assert.match(failure, /ACTION_APPLIED_IMMUTABLE/, `${col}: refused, but not by D11`);
+      }
+      assert.deepEqual(writable, ['result_session_id', 'detail'],
+        'exactly the allowlist stays writable, and it is read from the schema rather than from a list');
+
+      // The normal path still commits: §8.3 inserts CLAIMED, flips it, then backfills the session id.
+      await c.query(`DELETE FROM session; DELETE FROM project_action`);
+      await c.query(`INSERT INTO project_action VALUES ('act2','k2','p1','DISPATCH_TASK','CLAIMED','TASK','t2',1,NULL,NULL,NULL,NULL,NULL,NULL)`);
+      await c.query(`UPDATE project_action SET status = 'APPLIED' WHERE id = 'act2'`);
+      await c.query(`UPDATE project_action SET result_session_id = 's2' WHERE id = 'act2'`);
+      await c.query(`INSERT INTO project_action VALUES ('act3','k3','p1','DISPATCH_TASK','CLAIMED','TASK','t3',1,NULL,NULL,NULL,NULL,NULL,NULL)`);
+      await c.query(`UPDATE project_action SET status = 'SUPERSEDED' WHERE id = 'act3'`);
+      assert.equal((await c.query<{ n: string }>(`SELECT count(*)::text AS n FROM project_action`)).rows[0].n, '2',
+        'CLAIMED → APPLIED and CLAIMED → SUPERSEDED are the normal path and must not be blocked');
+
+      // Reverse control — v1.4's denylist, rebuilt verbatim. The three columns v1.5 added commit,
+      // and the review's exact observation comes back: a committed state that violates I17-A.
+      await c.query(D11_V14);
+      await seed();
+      await c.query(`UPDATE project_action
+                        SET execution_context = '{"provider":"codex"}'::jsonb,
+                            execution_context_digest = 'digest-codex',
+                            reason_code = 'REPLAN'
+                      WHERE id = 'act1'`);
+      const row = (await c.query<{ reason_code: string; provider: string; frozen_provider: string }>(`
+        SELECT a.reason_code, s.provider, a.execution_context->>'provider' AS frozen_provider
+          FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE s.id = 's1'`)).rows[0];
+      assert.deepEqual(row, { reason_code: 'REPLAN', provider: 'claude', frozen_provider: 'codex' },
+        'the v1.4 shape must still be reproducible — that is what makes the fix meaningful');
+      assert.equal(await i17aViolations(), '1', 'and it leaves a committed state that violates I17-A');
+
+      // …while the v1.7 object refuses the same statement and leaves the row alone.
+      await c.query(D11_V17);
+      await seed();
+      let message = '';
+      try {
+        await c.query(`UPDATE project_action SET execution_context = '{"provider":"codex"}'::jsonb, reason_code = 'REPLAN' WHERE id = 'act1'`);
+      } catch (error) {
+        message = (error as Error).message;
+      }
+      assert.match(message, /ACTION_APPLIED_IMMUTABLE/, 'the v1.7 object refuses the review\'s UPDATE');
+      assert.match(message, /changed: execution_context,reason_code/, 'and it names the columns that moved');
+      assert.equal(await i17aViolations(), '0', 'so I17-A still returns zero rows');
+    } finally {
+      await c.end();
+    }
+  });
+
+/** §7.7 D15: the create-frozen columns come from the action row, and the claim-frozen ones have a generation. */
+const D15_V17 = `
+  CREATE OR REPLACE FUNCTION session_execution_snapshot_guard() RETURNS trigger AS $fn$
+  DECLARE ctx jsonb;
+  BEGIN
+    IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NEW; END IF;
+    IF TG_OP = 'INSERT' THEN
+      SELECT a.execution_context INTO ctx FROM project_action a WHERE a.id = NEW.project_action_id;
+      IF ctx IS NULL
+         OR NEW.agent_id           IS DISTINCT FROM ctx->>'agentId'
+         OR NEW.workspace_id       IS DISTINCT FROM ctx->>'workspaceId'
+         OR NEW.assigned_runner_id IS DISTINCT FROM ctx->>'assignedRunnerId'
+         OR NEW.provider           IS DISTINCT FROM ctx->>'provider'
+         OR NEW.provider_builtin   IS DISTINCT FROM (ctx->>'providerBuiltin')::boolean
+         OR to_jsonb(NEW.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities' THEN
+        RAISE EXCEPTION 'EXECUTION_SNAPSHOT_MISMATCH: session % does not carry the frozen execution context of action %',
+          NEW.id, NEW.project_action_id;
+      END IF;
+      IF NEW.model IS NOT NULL OR NEW.effort IS NOT NULL OR NEW.execution_pin_generation <> 0 THEN
+        RAISE EXCEPTION 'EXECUTION_SNAPSHOT_MISMATCH: session % materializes claim-frozen columns at create', NEW.id;
+      END IF;
+      RETURN NEW;
+    END IF;
+    IF NEW.agent_id IS DISTINCT FROM OLD.agent_id
+       OR NEW.workspace_id IS DISTINCT FROM OLD.workspace_id
+       OR NEW.assigned_runner_id IS DISTINCT FROM OLD.assigned_runner_id
+       OR NEW.provider IS DISTINCT FROM OLD.provider
+       OR NEW.provider_builtin IS DISTINCT FROM OLD.provider_builtin
+       OR NEW.required_capabilities IS DISTINCT FROM OLD.required_capabilities
+       OR NEW.project_action_id IS DISTINCT FROM OLD.project_action_id THEN
+      RAISE EXCEPTION 'EXECUTION_SNAPSHOT_FROZEN: session % cannot rewrite a create-frozen column', OLD.id;
+    END IF;
+    IF NEW.model IS DISTINCT FROM OLD.model OR NEW.effort IS DISTINCT FROM OLD.effort THEN
+      IF NEW.execution_pin_generation <> OLD.execution_pin_generation + 1 THEN
+        RAISE EXCEPTION 'EXECUTION_PIN_GENERATION: session % rewrote model/effort without advancing the generation', OLD.id;
+      END IF;
+    ELSIF NEW.execution_pin_generation IS DISTINCT FROM OLD.execution_pin_generation THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_GENERATION: session % advanced the generation without rewriting anything', OLD.id;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+const FROZEN_CONTEXT = `'{"agentId":"a1","workspaceId":"w1","assignedRunnerId":"r1","provider":"claude",` +
+  `"providerBuiltin":true,"requiredCapabilities":["linux"],"model":"model-v1","effort":"high"}'::jsonb`;
+
+async function seedSnapshotFixture(c: Client): Promise<void> {
+  await c.query(`DELETE FROM session; DELETE FROM project_action`);
+  await c.query(`
+    INSERT INTO project_action VALUES
+      ('act1','pc:v1:p1:dispatch:t1:0','p1','DISPATCH_TASK','APPLIED','TASK','t1',1,NULL,NULL,
+       ${FROZEN_CONTEXT},'digest-a','digest-b','MANUAL')`);
+}
+
+const INSERT_PLACEHOLDER_V17 = `
+  INSERT INTO session (id, task_id, project_action_id, dispatch_origin, status,
+                       agent_id, workspace_id, assigned_runner_id, provider, provider_builtin, required_capabilities)
+  VALUES ('s1','t1','act1','COORDINATOR','PENDING','a1','w1','r1','claude',true,ARRAY['linux'])`;
+
+test('PC-CX-38 on real Postgres: the placeholder snapshot has three phases and one monotone generation',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(ACTION_SCHEMA_V17);
+      await c.query(D15_V17);
+      await c.query(`DROP TRIGGER IF EXISTS session_execution_snapshot_guard ON session;
+                     CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
+                       FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard()`);
+      // I17-A: only the create-frozen columns. I17-A2: the phase-indexed statement about the two
+      // columns PAC §6 freezes at first claim, read straight off the row.
+      const i17a = async (): Promise<string> => (await c.query<{ n: string }>(`
+        SELECT count(*)::text AS n FROM session s JOIN project_action a ON a.id = s.project_action_id
+         WHERE s.dispatch_origin = 'COORDINATOR'
+           AND (s.agent_id           IS DISTINCT FROM a.execution_context->>'agentId'
+             OR s.workspace_id       IS DISTINCT FROM a.execution_context->>'workspaceId'
+             OR s.assigned_runner_id IS DISTINCT FROM a.execution_context->>'assignedRunnerId'
+             OR s.provider           IS DISTINCT FROM a.execution_context->>'provider'
+             OR to_jsonb(s.required_capabilities) IS DISTINCT FROM a.execution_context->'requiredCapabilities')`)).rows[0].n;
+      const i17a2 = async (): Promise<string> => (await c.query<{ n: string }>(`
+        SELECT count(*)::text AS n FROM session s JOIN project_action a ON a.id = s.project_action_id
+         WHERE s.dispatch_origin = 'COORDINATOR'
+           AND NOT (
+                 (s.execution_pin_generation = 0 AND s.model IS NULL AND s.effort IS NULL)
+              OR (s.execution_pin_generation = 1
+                  AND (a.execution_context->>'model' IS NULL
+                       OR s.model IS NOT DISTINCT FROM a.execution_context->>'model'))
+              OR (s.execution_pin_generation >= 2
+                  AND jsonb_array_length(COALESCE(a.detail->'retiredPins','[]'::jsonb)) = s.execution_pin_generation - 1))`)).rows[0].n;
+      const phase = async (): Promise<{ model: string | null; effort: string | null; gen: string }> => {
+        const r = (await c.query<{ model: string | null; effort: string | null; gen: string }>(
+          `SELECT model, effort, execution_pin_generation::text AS gen FROM session WHERE id = 's1'`)).rows[0];
+        return r;
+      };
+      const refuses = async (sql: string): Promise<string> => {
+        try {
+          await c.query(sql);
+          return '';
+        } catch (error) {
+          return (error as Error).message;
+        }
+      };
+
+      await seedSnapshotFixture(c);
+      // Phase 0 — create. PAC §6 does not freeze model/effort here, so a NULL is the correct state.
+      await c.query(INSERT_PLACEHOLDER_V17);
+      assert.deepEqual(await phase(), { model: null, effort: null, gen: '0' });
+      assert.equal(await i17a(), '0', 'I17-A holds at create');
+      assert.equal(await i17a2(), '0', 'I17-A2 phase 0: the claim-frozen columns are not materialized yet');
+
+      // Phase 1 — first claim materializes them, and the generation records that it happened once.
+      await c.query(`UPDATE session SET model = 'model-v1', effort = 'high', execution_pin_generation = 1 WHERE id = 's1'`);
+      assert.deepEqual(await phase(), { model: 'model-v1', effort: 'high', gen: '1' });
+      assert.equal(await i17a2(), '0', 'I17-A2 phase 1: the materialized value equals the frozen one');
+
+      // Phase 2 — the runtime retires the pin. PAC §6 permits exactly this one rewrite, and D15
+      // makes it impossible to do it silently: the generation and the record move together.
+      await c.query(`UPDATE project_action SET detail = '{"retiredPins":[{"from":"model-v1","to":"model-v2"}]}'::jsonb WHERE id = 'act1'`);
+      await c.query(`UPDATE session SET model = 'model-v2', execution_pin_generation = 2 WHERE id = 's1'`);
+      assert.deepEqual(await phase(), { model: 'model-v2', effort: 'high', gen: '2' });
+      assert.equal(await i17a(), '0', 'the create-frozen columns never moved');
+      assert.equal(await i17a2(), '0', 'I17-A2 phase 2: one recorded retirement for one advanced generation');
+
+      // The four refusals D15-e names.
+      assert.match(await refuses(`UPDATE session SET provider = 'codex' WHERE id = 's1'`), /EXECUTION_SNAPSHOT_FROZEN/);
+      assert.match(await refuses(`UPDATE session SET model = 'model-v3' WHERE id = 's1'`), /EXECUTION_PIN_GENERATION/);
+      assert.match(await refuses(`UPDATE session SET execution_pin_generation = 5 WHERE id = 's1'`), /EXECUTION_PIN_GENERATION/);
+      await seedSnapshotFixture(c);
+      assert.match(
+        await refuses(`${INSERT_PLACEHOLDER_V17.replace("'PENDING',", "'PENDING',")} `.replace('required_capabilities)', 'required_capabilities, model)').replace("ARRAY['linux'])", "ARRAY['linux'],'model-v1')")),
+        /EXECUTION_SNAPSHOT_MISMATCH/, 'materializing a claim-frozen column at create must be refused');
+
+      // Reverse control — v1.6's I17-A, which compared `model` too. Phases 0 and 2 are legal states
+      // of a normal lifecycle, and it calls both of them violations.
+      await seedSnapshotFixture(c);
+      await c.query(INSERT_PLACEHOLDER_V17);
+      const i17aV16 = async (): Promise<string> => (await c.query<{ n: string }>(`
+        SELECT count(*)::text AS n FROM session s JOIN project_action a ON a.id = s.project_action_id
+         WHERE s.dispatch_origin = 'COORDINATOR' AND s.model IS DISTINCT FROM a.execution_context->>'model'`)).rows[0].n;
+      assert.equal(await i17aV16(), '1', 'PC-CX-38 must reproduce: v1.6 I17-A is false on a freshly created placeholder');
+      await c.query(`UPDATE session SET model = 'model-v1', effort = 'high', execution_pin_generation = 1 WHERE id = 's1'`);
+      assert.equal(await i17aV16(), '0', 'it is true only in the middle phase');
+      await c.query(`UPDATE session SET model = 'model-v2', execution_pin_generation = 2 WHERE id = 's1'`);
+      assert.equal(await i17aV16(), '1', 'and false again after the legal retiredPin rewrite');
+      assert.equal(await i17a2(), '1', 'I17-A2 also catches this one: the generation advanced with no record');
+    } finally {
+      await c.end();
+    }
+  });
+
+const WAKE_CANDIDATES_V17 = isolated17(`
+  CREATE TABLE wake_candidate (
+    at timestamptz NOT NULL, source int NOT NULL, subject_type text NOT NULL, subject_id text NOT NULL, reason text NOT NULL
+  );
+`);
+
+test('PC-CX-39 on real Postgres: the candidate order is total, and it does not depend on the collation',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(WAKE_CANDIDATES_V17);
+      const chosen = async (version: 'v16' | 'v17'): Promise<{ reason: string; rows: string }> => {
+        const order = version === 'v16'
+          ? 'at, source'
+          : 'at, source, subject_type COLLATE "C", subject_id COLLATE "C"';
+        const r = (await c.query<{ reason: string }>(`SELECT reason FROM wake_candidate ORDER BY ${order} LIMIT 1`)).rows[0];
+        const all = (await c.query<{ reason: string }>(`SELECT reason FROM wake_candidate ORDER BY ${order}`)).rows;
+        return { reason: r.reason, rows: all.map((x) => x.reason).join('|') };
+      };
+
+      // Two open blockers, both §10.4 item 1, both due at the same instant — the review's example.
+      const insert = async (order: 'forward' | 'reverse'): Promise<void> => {
+        await c.query('DELETE FROM wake_candidate');
+        const rows = [
+          `('${at(60_000)}',1,'BLOCKER','b1','provider blocker b1')`,
+          `('${at(60_000)}',1,'BLOCKER','b2','runner blocker b2')`,
+        ];
+        await c.query(`INSERT INTO wake_candidate VALUES ${(order === 'forward' ? rows : [...rows].reverse()).join(',')}`);
+      };
+
+      // v1.6's two keys leave the choice to the plan and the physical row order. `LIMIT 1` after an
+      // unstable sort is exactly the shape that looks deterministic in a test and is not.
+      await insert('forward');
+      const v16Forward = await chosen('v16');
+      await insert('reverse');
+      const v16Reverse = await chosen('v16');
+      assert.notEqual(v16Forward.reason, v16Reverse.reason,
+        'PC-CX-39 must reproduce: without a third key the winner follows the insertion order');
+
+      // v1.7: the same table, either way round, one answer — and the whole audit row matches too.
+      await insert('forward');
+      const v17Forward = await chosen('v17');
+      await insert('reverse');
+      const v17Reverse = await chosen('v17');
+      assert.deepEqual(v17Forward, v17Reverse, 'the four-key order does not depend on insertion order');
+      assert.equal(v17Forward.reason, 'provider blocker b1', 'and b1 < b2 by bytes');
+
+      // The fourth key is compared as bytes. `_` is 0x5f and `a` is 0x61, so C order puts `a_b`
+      // first; a locale that ignores punctuation puts `aab` first. The contract picks one.
+      await c.query(`DELETE FROM wake_candidate;
+        INSERT INTO wake_candidate VALUES
+          ('${at(60_000)}',3,'TASK','a_b','task a_b'),
+          ('${at(60_000)}',3,'TASK','aab','task aab')`);
+      const byBytes = (await c.query<{ reason: string }>(
+        `SELECT reason FROM wake_candidate ORDER BY at, source, subject_type COLLATE "C", subject_id COLLATE "C" LIMIT 1`)).rows[0];
+      assert.equal(byBytes.reason, 'task a_b', 'byte order is the one W5 specifies');
+      const byLocale = (await c.query<{ reason: string; ordered: boolean }>(`
+        SELECT reason, ('a_b' COLLATE "C") < ('aab' COLLATE "C") AS ordered FROM wake_candidate
+         ORDER BY at, source, subject_id COLLATE "C" LIMIT 1`)).rows[0];
+      assert.equal(byLocale.ordered, true, 'and it is the server, not this test, that decides what byte order means');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-40 on real Postgres: the same declared input yields the same wake at two wall clocks',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(WAKE_SCHEMA_V16);
+      // One declared input: the anchor action at t0 and one unconsumed manual trigger, so §10.4's
+      // item 7 offers the window boundary at 60s. `epoch` is what the decision read (58s).
+      await c.query(`INSERT INTO project_action VALUES ('k1','p1','OPEN_COORDINATOR_TURN','APPLIED','MANUAL',0,$1)`, [at(0)]);
+      await c.query(`INSERT INTO project_event (project_id, kind, dedupe_key, occurred_at) VALUES ('p1','user.manual_trigger','manual:1',$1)`, [at(0)]);
+
+      const wakeAt = async (clock: number): Promise<string> =>
+        (await c.query<{ next_wake_at: string }>(W5_SQL, [at(clock)])).rows[0].next_wake_at;
+
+      // v1.6 floored against the wall clock, which is not in the hash: two executions of the same
+      // declared input, one second apart, produce two wakes. S3 asks for one.
+      const epoch = 58_000;
+      const v16 = await Promise.all([58_000, 59_000].map((wall) => wakeAt(wall)));
+      assert.notEqual(v16[0], v16[1], 'PC-CX-40 must reproduce: the wall clock alone changes the answer');
+      assert.equal(Date.parse(v16[0]) - Date.parse(T0), 63_000);
+      assert.equal(Date.parse(v16[1]) - Date.parse(T0), 64_000);
+
+      // v1.7 floors against `evaluation.epoch`, which is in the hash. The wall clock the reconcile
+      // happens to run at cannot move it, so the same declared input has one answer.
+      const v17 = await Promise.all([0, 1, 4].map(() => wakeAt(epoch)));
+      assert.equal(new Set(v17).size, 1, 'one declared input, one wake');
+      assert.equal(Date.parse(v17[0]) - Date.parse(T0), 63_000, 'and it is the one the frozen epoch determines');
+
+      // A different epoch is a different declared input (it is inside `decisionInputHash`), so it
+      // may legitimately give a different wake — that is the half that keeps S5 and S3 consistent.
+      assert.equal(Date.parse(await wakeAt(59_000)) - Date.parse(T0), 64_000);
+    } finally {
+      await c.end();
+    }
+  });
+
+/** §5.5 EV3: the out-of-loop predicate, and the one statement that answers it. */
+const EV3_DISCARD = `
+  UPDATE project_event e
+     SET consumed_at = $1, disposition = 'DISCARDED_OUT_OF_LOOP'
+    FROM project p JOIN project_runtime r ON r.project_id = p.id
+   WHERE e.project_id = p.id AND e.consumed_at IS NULL
+     AND (p.status <> 'OPEN' OR NOT p.coordinator_enabled OR r.run_state = 'SETTLED')
+  RETURNING e.id`;
+
+test('PC-CX-41 on real Postgres: an out-of-loop event is discarded exactly once, and re-entry consumes instead',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(WAKE_SCHEMA_V16);
+      await c.query(`ALTER TABLE project_event ADD COLUMN disposition text`);
+      await c.query(`INSERT INTO project VALUES ('legacy','OPEN',false), ('settled','DONE',true)`);
+      await c.query(`INSERT INTO project_runtime (project_id, run_state) VALUES ('legacy','PLANNING'), ('settled','SETTLED')`);
+      // §5.3 N1 produces these: it filters on task.project_id being non-null, nothing else.
+      await c.query(`INSERT INTO project_event (project_id, kind, dedupe_key, occurred_at)
+                     VALUES ('legacy','task.updated','task.updated:t1',$1), ('settled','session.ended','session.ended:s1',$1)`, [at(0)]);
+
+      // The shared fixture also seeds an in-loop `p1` with no wake and no blockers, which branch
+      // (iii) rightly calls silent idling. This test is about the other two rows, so it reads the
+      // backstop's answer for them and leaves that one alone.
+      const backstop = async (now: number): Promise<string[]> =>
+        (await c.query<{ id: string }>(w4Sql('v16'), [at(now)])).rows
+          .map((r) => r.id).filter((id) => id === 'legacy' || id === 'settled');
+      const unowned = async (): Promise<string[]> => (await c.query<{ project_id: string }>(`
+        SELECT e.project_id FROM project_event e WHERE e.consumed_at IS NULL
+           AND e.project_id NOT IN (SELECT id FROM project WHERE status = 'OPEN' AND coordinator_enabled)
+         ORDER BY e.project_id`)).rows.map((r) => r.project_id);
+
+      // PC-CX-41 must reproduce: six minutes later, no backstop branch sees either row, and I6
+      // forbids reconciling them — so nothing at all is responsible for them.
+      assert.deepEqual(await backstop(6 * 60_000), [], 'W4 only scans in-loop projects, by design');
+      assert.deepEqual(await unowned(), ['legacy', 'settled'], 'and both rows are unconsumed with no owner');
+
+      // §5.5 EV3: one statement, and it is the consumer that runs it — no lease, no action row.
+      const discarded = (await c.query<{ id: string }>(EV3_DISCARD, [at(1_000)])).rows;
+      assert.equal(discarded.length, 2, 'both out-of-loop rows get a terminal disposition');
+      assert.deepEqual(await unowned(), [], 'and nothing is left unowned');
+      assert.deepEqual((await c.query<{ disposition: string }>(
+        `SELECT DISTINCT disposition FROM project_event WHERE consumed_at IS NOT NULL`)).rows,
+      [{ disposition: 'DISCARDED_OUT_OF_LOOP' }], 'EV2: the disposition is recorded, not implied');
+
+      // EV4: replaying it affects zero rows. The condition is on the row, not on a bookkeeping flag.
+      assert.equal((await c.query(EV3_DISCARD, [at(2_000)])).rowCount, 0, 'a replayed discard is a no-op');
+      // …and the same cause recurring inserts a fresh row, because the partial unique index only
+      // constrains unconsumed rows. It is judged again, at the moment it is taken.
+      await c.query(`INSERT INTO project_event (project_id, kind, dedupe_key, occurred_at)
+                     VALUES ('legacy','task.updated','task.updated:t1',$1)`, [at(3_000)]);
+      assert.equal((await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM project_event WHERE dedupe_key = 'task.updated:t1'`)).rows[0].n, '2');
+
+      // EV1: re-entry. The user enables the coordinator (G3) — the queued row is now in the loop,
+      // so the discard does not select it and a reconcile will consume it instead.
+      await c.query(`UPDATE project SET coordinator_enabled = true WHERE id = 'legacy'`);
+      assert.equal((await c.query(EV3_DISCARD, [at(4_000)])).rowCount, 0,
+        'an event queued while out of the loop is consumed after re-entry, not discarded');
+      assert.deepEqual(await backstop(6 * 60_000 + 4_000), ['legacy'],
+        'and it is back under the branch that owns a late in-loop event');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-42 on real Postgres: the snapshot guard admits only the frozen result',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(ACTION_SCHEMA_V17);
+      await c.query(D15_V17);
+      await c.query(`DROP TRIGGER IF EXISTS session_execution_snapshot_guard ON session;
+                     CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
+                       FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard()`);
+      const insertWith = async (overrides: Record<string, string>): Promise<string> => {
+        await seedSnapshotFixture(c);
+        const values: Record<string, string> = {
+          agent_id: `'a1'`, workspace_id: `'w1'`, assigned_runner_id: `'r1'`, provider: `'claude'`,
+          provider_builtin: 'true', required_capabilities: `ARRAY['linux']`, ...overrides,
+        };
+        try {
+          await c.query(`
+            INSERT INTO session (id, task_id, project_action_id, dispatch_origin, status,
+                                 agent_id, workspace_id, assigned_runner_id, provider, provider_builtin, required_capabilities)
+            VALUES ('s1','t1','act1','COORDINATOR','PENDING',
+                    ${values.agent_id}, ${values.workspace_id}, ${values.assigned_runner_id},
+                    ${values.provider}, ${values.provider_builtin}, ${values.required_capabilities})`);
+          return '';
+        } catch (error) {
+          return (error as Error).message;
+        }
+      };
+
+      // EC6-a/EC6-b: the placeholder's create-frozen columns must *be* the frozen context, so a
+      // passing digest comparison cannot be followed by a different insert.
+      assert.equal(await insertWith({}), '', 'the frozen result inserts');
+      // Every create-frozen component, one at a time. This is the half D14 does not prove: it
+      // re-resolves the nine identities, it does not check what was written into the row.
+      for (const [column, drift] of Object.entries({
+        agent_id: `'a2'`, workspace_id: `'w2'`, assigned_runner_id: `'r2'`, provider: `'codex'`,
+        provider_builtin: 'false', required_capabilities: `ARRAY['linux','docker']`,
+      })) {
+        const failure = await insertWith({ [column]: drift });
+        assert.match(failure, /EXECUTION_SNAPSHOT_MISMATCH/, `${column}: a drifted create-frozen column must not commit`);
+      }
+      // `requiredCapabilities` is the one the review used, and it is not one of EC2-a's nine
+      // identities — so this is the case where the authorization digest is *right* and the result
+      // is still wrong. That is the whole of PC-CX-42, on a real server.
+      assert.match(await insertWith({ required_capabilities: `ARRAY['linux','docker']` }), /EXECUTION_SNAPSHOT_MISMATCH/);
+
+      // Reverse control — drop the guard, and the same INSERT commits a session whose result is
+      // not the one the decision froze, while every one of EC2-a's identities still matches.
+      await c.query(`DROP TRIGGER session_execution_snapshot_guard ON session`);
+      assert.equal(await insertWith({ required_capabilities: `ARRAY['linux','docker']` }), '',
+        'PC-CX-42 must reproduce: without D15 the drifted result commits');
+      const committed = (await c.query<{ caps: string[]; frozen: string }>(`
+        SELECT s.required_capabilities AS caps, a.execution_context->>'requiredCapabilities' AS frozen
+          FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE s.id = 's1'`)).rows[0];
+      assert.deepEqual(committed.caps, ['linux', 'docker']);
+      assert.equal(committed.frozen, '["linux"]', 'and the row now disagrees with the context it was dispatched from');
+    } finally {
+      await c.end();
+    }
+  });

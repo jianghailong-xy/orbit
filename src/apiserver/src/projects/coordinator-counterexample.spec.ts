@@ -2643,7 +2643,12 @@ function moveTaskProject(a: Attribution, to: string, claimed: boolean, version: 
   return { committed: true, after: { ...a, taskProjectId: to } };
 }
 
-/** §7.7 D11: the six attribution columns of an APPLIED action are frozen; two more are not. */
+/**
+ * §7.7 D11 as v1.4 wrote it: a per-column denylist over the six attribution columns. Kept in this
+ * shape because `PC-CX-21` is what it models — and because it is also the defect `PC-CX-37` found
+ * three revisions later, when v1.5 added three columns to the same table and this list did not
+ * grow. The current rule is an allowlist (`d11Refuses` in the round-seven block below).
+ */
 const D11_FROZEN = ['actionType', 'actionStatus', 'actionSubjectId', 'actionProjectId', 'actionToken', 'idempotencyKey'] as const;
 const D11_WRITABLE = ['resultSessionId', 'detail'] as const;
 function rewriteAppliedAction(applied: boolean, columnName: string, version: Version14): boolean {
@@ -3165,10 +3170,10 @@ test('PC-CX-27 no superseded normative sentence survives in the normative body',
   for (const phrase of phrases) {
     for (const [i, line] of demarked.entries()) {
       if (!line.includes(phrase)) continue;
-      assert.match(line, /v1\.[1-6]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
+      assert.match(line, /v1\.[1-7]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
     }
   }
-  for (const n of ['19', '20', '21', '22', '23', '24']) {
+  for (const n of ['19', '20', '21', '22', '23', '24', '25']) {
     assert.match(section(PCC, n).split('\n').slice(0, 4).join('\n'), /本节是非规范的/, `§${n} is not marked non-normative`);
   }
 });
@@ -4507,7 +4512,7 @@ test('PC-CX-34 I17 is stated with a tense, and the current-state query is not on
   // The document states both halves, deletes the current-state equivalence, and says what the
   // state it used to forbid actually is.
   const invariants = section(PCC, '4.3');
-  for (const rule of ['**I17-A（快照与占位一致，恒成立', '**I17-B（授权在提交那一刻成立，点态', '**I17-c（那条被删掉的当前态查询是什么']) {
+  for (const rule of ['**I17-A（create 冻结列与占位一致，恒成立', '**I17-B（授权在提交那一刻成立，点态', '**I17-c（那条被删掉的当前态查询是什么']) {
     assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
   }
   assert.doesNotMatch(invariants.split('\n').filter((l) => !/v1\.[1-6]|PC-CX-\d\d/.test(l)).join('\n'),
@@ -4617,7 +4622,8 @@ test('PC-CX-35 the wake is one candidate table and one deterministic choice', ()
   // The clauses.
   const timing = section(PCC, '10.4');
   assert.match(timing, /\*\*W5（一个候选表、一个确定的选择/, '§10.4 does not freeze the arbitration');
-  assert.match(timing, /`nextWakeAt = max\(chosen\.at, now \+ 5s\)`/, 'W5 does not state which of the floor and the deadline wins');
+  assert.match(timing, /`nextWakeAt = max\(chosen\.at, evaluation\.epoch \+ 5s\)`/,
+    'W5 does not state which of the floor and the deadline wins');
   assert.match(timing, /wakeCandidates/, 'the candidate table is not written down anywhere a human can read it');
   assert.match(section(PCC, '7.6'), /nextWakeAt ≤ windowEndsAt \+ 5s/, 'TR2-d still states the bound that has no solution');
   assert.match(section(PCC, '4.3'), /next_wake_at <= next_attempt_at \+ 5s/, 'I18-C still states v1.5\'s bound');
@@ -4716,7 +4722,7 @@ test('PC-CX-36 a committed event that reconcile has not seen yet has a shape and
 
   // The clauses.
   const invariants = section(PCC, '4.3');
-  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I18-note（为什么事件生产者不原子写 runtime wake', '**I19（待消费事件的投递不变量']) {
+  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I18-note（为什么事件生产者不原子写 runtime wake', '**I19（待消费事件的责任域']) {
     assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
   }
   const options = tables(invariants).find((t) => bare(t[0][0]) === '选项');
@@ -4817,5 +4823,502 @@ test('§24 names a test that exists for every finding, and points at clauses tha
   for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
     const m = /§(\d+(?:\.\d+)?)/.exec(clause);
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§24 points at §${m[1]}, which does not exist`);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Round seven (`PC-CX-37..42`, §25). Two of the six are the same lesson in a new place: a closed
+// set that had to be maintained by hand (D11's denylist), and a cross-document reference read at
+// the title rather than at the row (I17-A vs PAC §6's "frozen at" column). The other four are an
+// ordering that stopped at its second key, the last free-running clock, an invariant quantified
+// wider than its own responsibility, and one digest asked to answer two different questions.
+// ---------------------------------------------------------------------------------------------
+
+type Version17 = 'v16' | 'v17';
+
+/** Stable serialization for the round-seven models: object keys sorted, array order kept. */
+function canonical17(value: unknown): string {
+  return JSON.stringify(value, (_key, v) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)))
+      : v);
+}
+
+/** The columns `project_action` has after v1.5 added three and v1.7 added a fourth (§2.4). */
+const ACTION_COLUMNS = [
+  'id', 'idempotency_key', 'project_id', 'type', 'status', 'subject_type', 'subject_id',
+  'fencing_token', 'result_session_id', 'detail',
+  'execution_context', 'execution_context_digest', 'reason_code',   // v1.5
+  'execution_result_digest',                                        // v1.7
+];
+/** v1.4's D11 compared exactly these, by name, and nothing else. */
+const V14_DENYLIST = ['status', 'type', 'subject_type', 'subject_id', 'project_id', 'fencing_token', 'idempotency_key'];
+const D11_ALLOWLIST = ['result_session_id', 'detail'];
+
+/** Does D11 refuse an UPDATE that changes exactly `column` on an APPLIED row? */
+function d11Refuses(column: string, version: Version17): boolean {
+  if (version === 'v16') return V14_DENYLIST.includes(column);
+  return !D11_ALLOWLIST.includes(column);                              // allowlist: everything else is frozen
+}
+
+test('PC-CX-37 the applied action row is frozen by an allowlist, not by a list someone must remember to grow', () => {
+  // The published counterexample: an APPLIED dispatch whose frozen provider is `claude` and whose
+  // session was created from it, then a plain UPDATE that rewrites the frozen context to `codex`
+  // and moves the rate-limit window anchor by rewriting `reason_code`.
+  const drifted = ['execution_context', 'execution_context_digest', 'reason_code'];
+  for (const column of drifted) {
+    assert.equal(d11Refuses(column, 'v16'), false,
+      `${column}: v1.4's denylist did not compare a column v1.5 added — that is the P0`);
+    assert.equal(d11Refuses(column, 'v17'), true, `${column}: the allowlist has to freeze it`);
+  }
+  // The consequence the review published: a committed state that violates I17-A, and a window
+  // anchor that has moved. Both are computed here rather than asserted as prose.
+  const sessionProvider = 'claude';
+  const frozenProviderAfter = (version: Version17) => (d11Refuses('execution_context', version) ? 'claude' : 'codex');
+  const reasonCodeAfter = (version: Version17) => (d11Refuses('reason_code', version) ? 'MANUAL' : 'REPLAN');
+  assert.deepEqual(
+    { provider: frozenProviderAfter('v16'), reason: reasonCodeAfter('v16'), i17aViolations: frozenProviderAfter('v16') === sessionProvider ? 0 : 1 },
+    { provider: 'codex', reason: 'REPLAN', i17aViolations: 1 },
+    'v1.6 admits the review’s exact committed observation',
+  );
+  assert.deepEqual(
+    { provider: frozenProviderAfter('v17'), reason: reasonCodeAfter('v17'), i17aViolations: 0 },
+    { provider: 'claude', reason: 'MANUAL', i17aViolations: 0 },
+    'v1.7 refuses it, so the frozen row still is what the decision froze',
+  );
+
+  // The shape, not this round's three columns: a column added tomorrow is frozen by default.
+  const tomorrow = 'some_column_v1_8_will_add';
+  assert.equal(d11Refuses(tomorrow, 'v16'), false, 'a denylist cannot know about a column that does not exist yet');
+  assert.equal(d11Refuses(tomorrow, 'v17'), true, 'an allowlist can');
+  // And the two writable ones stay writable, or §8.3’s normal path blocks itself.
+  for (const column of D11_ALLOWLIST) assert.equal(d11Refuses(column, 'v17'), false, `${column} must stay writable`);
+  assert.equal(ACTION_COLUMNS.filter((c) => d11Refuses(c, 'v17')).length, ACTION_COLUMNS.length - D11_ALLOWLIST.length);
+
+  // The clauses.
+  const seven = section(PCC, '7.7');
+  const d11 = seven.slice(seven.indexOf('#### D11 '), seven.indexOf('#### D12 '));
+  assert.match(d11, /to_jsonb\(NEW\) - writable/, 'D11 no longer compares the whole row');
+  assert.ok(d11.includes('**D11-d（'), 'D11 does not argue allowlist over denylist');
+  assert.ok(d11.includes('**D11-e（'), 'D11 does not state a schema-driven testable form');
+  assert.match(section(PCC, '12.1'), /information_schema\.columns/, 'G5 still enumerates a fixed column count');
+  assert.match(section(PCC, '15'), /\*\*F39\*\*/, '§15 has no fault row for a rewritten frozen action');
+});
+
+/** PAC §6's table, as two columns: the column name and the moment it freezes. */
+const PAC_FREEZE_POINTS: { column: string; frozenAt: 'create' | 'first-claim' }[] = [
+  { column: 'agentId', frozenAt: 'create' },
+  { column: 'workspaceId', frozenAt: 'create' },
+  { column: 'assignedRunnerId', frozenAt: 'create' },
+  { column: 'provider', frozenAt: 'create' },
+  { column: 'requiredCapabilities', frozenAt: 'create' },
+  { column: 'permissionMode', frozenAt: 'create' },
+  { column: 'model', frozenAt: 'first-claim' },
+  { column: 'effort', frozenAt: 'first-claim' },
+];
+
+interface Placeholder17 {
+  model: string | null;
+  effort: string | null;
+  pinGeneration: number;
+  retiredPins: { from: string; to: string }[];
+  claimResolution: string | null;
+}
+
+/** §4.3 I17-A: only the create-frozen columns, compared against the action row. */
+function i17aHolds(frozenProvider: string, sessionProvider: string): boolean {
+  return frozenProvider === sessionProvider;
+}
+
+/** §4.3 I17-A2, phase-indexed by `execution_pin_generation`. */
+function i17a2Holds(s: Placeholder17, frozenModel: string | null): boolean {
+  if (s.pinGeneration === 0) return s.model === null && s.effort === null;
+  if (s.pinGeneration === 1) return frozenModel === null ? s.claimResolution !== null : s.model === frozenModel;
+  return s.retiredPins.length === s.pinGeneration - 1;
+}
+
+/** v1.6's I17-A, which also compared `model`. */
+function i17aV16Holds(s: Placeholder17, frozenModel: string | null): boolean {
+  return s.model === frozenModel;
+}
+
+test('PC-CX-38 the frozen snapshot is compared per PAC freeze point, with a phase and a generation', () => {
+  const frozenModel = 'model-v1';
+  // The review's three-step sequence. Every step is legal: PAC §6 defers model to first claim (S1)
+  // and keeps the one `retiredPin` rewrite.
+  const pending: Placeholder17 = { model: null, effort: null, pinGeneration: 0, retiredPins: [], claimResolution: null };
+  const claimed: Placeholder17 = { model: 'model-v1', effort: 'high', pinGeneration: 1, retiredPins: [], claimResolution: 'model-v1' };
+  const retired: Placeholder17 = {
+    model: 'model-v2', effort: 'high', pinGeneration: 2,
+    retiredPins: [{ from: 'model-v1', to: 'model-v2' }], claimResolution: 'model-v1',
+  };
+
+  // v1.6: the standing statement is false at step 1 and step 3, with nobody doing anything wrong.
+  assert.deepEqual(
+    [pending, claimed, retired].map((s) => i17aV16Holds(s, frozenModel)),
+    [false, true, false],
+    'v1.6 I17-A is false on two of the three states of a normal lifecycle',
+  );
+  // v1.7: the create-frozen equality holds throughout, and each phase has its own standing rule.
+  assert.deepEqual([pending, claimed, retired].map(() => i17aHolds('claude', 'claude')), [true, true, true]);
+  assert.deepEqual([pending, claimed, retired].map((s) => i17a2Holds(s, frozenModel)), [true, true, true]);
+
+  // Both directions of the generation, which is what makes the audit a check rather than a habit.
+  assert.equal(i17a2Holds({ ...retired, retiredPins: [] }, frozenModel), false, 'a generation with no record is a defect');
+  assert.equal(i17a2Holds({ ...claimed, retiredPins: [{ from: 'a', to: 'b' }] }, frozenModel), true,
+    'generation 1 says nothing about retiredPins; the record check starts at 2');
+  assert.equal(i17a2Holds({ ...retired, pinGeneration: 3 }, frozenModel), false, 'a record short of the generation is a defect');
+  assert.equal(i17a2Holds({ ...pending, model: 'model-v1' }, frozenModel), false, 'materialising before a claim is a defect');
+  // The deferred case: PAC §7.2 priority 3 leaves model null for the claim to materialise.
+  assert.equal(i17a2Holds({ ...claimed, model: 'runtime-default', claimResolution: 'runtime-default' }, null), true);
+  assert.equal(i17a2Holds({ ...claimed, model: 'runtime-default', claimResolution: null }, null), false,
+    'a claim that materialises a runtime default has to record what it took');
+
+  // The clauses, checked against PAC's own table rather than against a copy of it.
+  const invariants = section(PCC, '4.3');
+  const standing = invariants.slice(invariants.indexOf('**I17-A（'), invariants.indexOf('**I17-A2（'));
+  for (const { column, frozenAt } of PAC_FREEZE_POINTS) {
+    const snake = column.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+    if (frozenAt === 'first-claim') {
+      assert.ok(!standing.includes(snake) && !standing.includes(`\`${column}\``),
+        `I17-A must not compare ${column}: PAC §6 freezes it at first claim`);
+    }
+  }
+  assert.ok(invariants.includes('**I17-A2（claim 冻结列的阶段与代次'), '§4.3 does not state the phase-indexed half');
+  assert.ok(section(PCC, '7.7').includes('#### D15 '), '§7.7 does not give the generation a closed mutator protocol');
+  assert.match(section(PCC, '15'), /\*\*F40\*\*/, '§15 has no fault row for the three-phase lifecycle');
+});
+
+interface Candidate17 {
+  at: number;
+  source: number;
+  subjectType: 'BLOCKER' | 'PROJECT' | 'TASK' | 'TURN_WINDOW';
+  subjectId: string;
+  reason: string;
+}
+
+/** §10.4 W5 step 2, at both versions. v1.6 stopped after `source`. */
+function chooseWake17(candidates: Candidate17[], epoch: number, version: Version17): {
+  at: number; reason: string; candidates: Candidate17[];
+} {
+  const ordered = [...candidates].sort((a, b) => {
+    if (a.at !== b.at) return a.at - b.at;
+    if (a.source !== b.source) return a.source - b.source;
+    if (version === 'v16') return 0;                                   // not a total order
+    if (a.subjectType !== b.subjectType) return a.subjectType < b.subjectType ? -1 : 1;
+    return a.subjectId < b.subjectId ? -1 : a.subjectId > b.subjectId ? 1 : 0;
+  });
+  const chosen = ordered[0];
+  return { at: Math.max(chosen.at, epoch + W3_FLOOR_MS), reason: chosen.reason, candidates: ordered };
+}
+
+test('PC-CX-39 two candidates from one source are decided by a persistent total order', () => {
+  // The review's counterexample: two open blockers, both item 1, both due at 60s.
+  const tied: Candidate17[] = [
+    { at: 60_000, source: 1, subjectType: 'BLOCKER', subjectId: 'b1', reason: 'provider blocker b1' },
+    { at: 60_000, source: 1, subjectType: 'BLOCKER', subjectId: 'b2', reason: 'runner blocker b2' },
+  ];
+  const forwardV16 = chooseWake17(tied, 30_000, 'v16');
+  const reverseV16 = chooseWake17([...tied].reverse(), 30_000, 'v16');
+  assert.equal(forwardV16.at, reverseV16.at, 'the timestamp happened to be unique even in v1.6');
+  assert.notEqual(forwardV16.reason, reverseV16.reason, 'but the reason depended on the enumeration order');
+
+  // v1.7: every permutation of every source gives one answer, and the whole audit row matches too.
+  const sources: { source: number; subjectType: Candidate17['subjectType']; ids: string[] }[] = [
+    { source: 1, subjectType: 'BLOCKER', ids: ['b2', 'b1', 'b3'] },
+    { source: 2, subjectType: 'BLOCKER', ids: ['b9', 'b0'] },
+    { source: 3, subjectType: 'TASK', ids: ['t3', 't1', 't2'] },
+    { source: 4, subjectType: 'TASK', ids: ['t9', 't8'] },
+    { source: 7, subjectType: 'TURN_WINDOW', ids: ['MANUAL', 'FUTURE_REASON'] },
+  ];
+  for (const { source, subjectType, ids } of sources) {
+    const table = ids.map((id) => ({ at: 60_000, source, subjectType, subjectId: id, reason: `wake for ${id}` }));
+    const expected = chooseWake17(table, 30_000, 'v17');
+    for (const perm of permutations(table)) {
+      const got = chooseWake17(perm, 30_000, 'v17');
+      assert.equal(got.at, expected.at, `source ${source}: nextWakeAt must not depend on order`);
+      assert.equal(got.reason, expected.reason, `source ${source}: nextWakeReason must not depend on order`);
+      assert.deepEqual(got.candidates, expected.candidates, `source ${source}: wakeCandidates must not depend on order`);
+    }
+    assert.equal(expected.reason, `wake for ${[...ids].sort()[0]}`, `source ${source}: the byte-order minimum wins`);
+  }
+
+  // The fourth key is compared as bytes, not under a collation: `_` sorts before letters in C and
+  // after them in many ICU locales, so the two orders disagree on exactly this pair.
+  const collationSensitive: Candidate17[] = [
+    { at: 60_000, source: 3, subjectType: 'TASK', subjectId: 'a_b', reason: 'a_b' },
+    { at: 60_000, source: 3, subjectType: 'TASK', subjectId: 'aab', reason: 'aab' },
+  ];
+  assert.equal(chooseWake17(collationSensitive, 0, 'v17').reason, 'a_b', 'byte order puts `_` (0x5f) before `a` (0x61)');
+  const icuLike = [...collationSensitive].sort((a, b) =>
+    a.subjectId.replace(/_/g, '') < b.subjectId.replace(/_/g, '') ? -1 : 1);         // a naive locale-ish rule
+  assert.notEqual(icuLike[0].reason, 'a_b', 'a collation that ignores punctuation would choose the other one');
+
+  const timing = section(PCC, '10.4');
+  assert.match(timing, /\(at, source, subjectType, subjectId\)/, 'W5 does not state the four-key order');
+  assert.ok(timing.includes('**W5-2a（'), 'W5 does not prove the order is total');
+  assert.match(timing, /COLLATE "C"/, 'W5 does not pin the comparison to bytes');
+});
+
+test('PC-CX-40 one declared input yields one wake, because the floor reads the frozen clock', () => {
+  // The review's counterexample: one serialized decisionInput, two wall clocks, two wakes.
+  const declared = { world: { candidateAt: 60_000 }, evaluation: { epoch: 58 }, signals: [] as unknown[] };
+  const hash = sha256(canonical17(declared));
+  const candidate: Candidate17[] = [{ at: 60_000, source: 7, subjectType: 'TURN_WINDOW', subjectId: 'MANUAL', reason: 'manual trigger rate-limited' }];
+
+  // v1.6: the floor read `now()`, which is not in the hash.
+  const v16 = [58_000, 59_000, 62_000].map((wallNow) => Math.max(60_000, wallNow + W3_FLOOR_MS));
+  assert.deepEqual(v16, [63_000, 64_000, 67_000], 'one hash, three legal answers');
+  assert.equal(new Set(v16).size, 3, 'S3 asks for one, and gets three');
+
+  // v1.7: the floor reads `evaluation.epoch`, which is in the hash. The wall clock cannot change it.
+  const v17 = [0, 1, 4].map(() => chooseWake17(candidate, declared.evaluation.epoch * 1_000, 'v17').at);
+  assert.equal(new Set(v17).size, 1, 'the same declared input must produce exactly one wake');
+  assert.equal(v17[0], 63_000, 'and it is the one the frozen epoch determines');
+  assert.equal(sha256(canonical17(declared)), hash, 'the input did not change while we were looking at it');
+
+  // Two inputs whose epochs differ hash differently, so S3 never quantifies over them together —
+  // that is the half of S5 that keeps "the wake may move with time" from contradicting S3.
+  const later = { ...declared, evaluation: { epoch: 59 } };
+  assert.notEqual(sha256(canonical17(later)), hash, 'a different epoch is a different declared input');
+  assert.equal(chooseWake17(candidate, 59_000, 'v17').at, 64_000, 'and it may legitimately give a different wake');
+
+  const timing = section(PCC, '10.4');
+  assert.match(timing, /max\(chosen\.at, evaluation\.epoch \+ 5s\)/, 'W5 still floors against the wall clock');
+  assert.match(section(PCC, '6.1'), /`nextWakeAt` \*\*是\*\*决策的一部分/, 'S5 still exempts nextWakeAt');
+  // The exemptions are named and closed: nothing else in the normative body computes a wake from now().
+  const normative = PCC.slice(0, PCC.indexOf('\n## 19. '));
+  const stale = normative.split('\n').map((l) => bare(l))
+    .filter((l) => /nextWakeAt = now \+/.test(l) && !/R2|v1\.[1-7]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative rule still computes a wake from the wall clock');
+  assert.match(timing, /本条之外允许写 `next_wake_at` 的地方（封闭/, 'W5 does not close the set of other writers');
+});
+
+interface Project41 { status: 'OPEN' | 'DONE' | 'CANCELLED'; enabled: boolean; runState: string }
+type Branch41 = 'in-loop' | 'backstop' | 'out-of-loop' | 'NONE';
+
+/** §4.3 I19 at both versions, over one committed unconsumed event. */
+function ownerOf41(p: Project41, ageMinutes: number, version: Version17): Branch41 {
+  const inLoop = p.status === 'OPEN' && p.enabled && p.runState !== 'SETTLED';
+  if (inLoop && ageMinutes < 5) return 'in-loop';
+  if (inLoop) return 'backstop';                                        // W4 (iv)
+  return version === 'v17' ? 'out-of-loop' : 'NONE';                    // §5.5 EV3, or nobody
+}
+
+test('PC-CX-41 every unconsumed event lands in exactly one of three owned branches', () => {
+  // The review's two minimal states, and then the whole grid rather than those two.
+  const legacy: Project41 = { status: 'OPEN', enabled: false, runState: 'PLANNING' };
+  const settled: Project41 = { status: 'DONE', enabled: true, runState: 'SETTLED' };
+  assert.equal(ownerOf41(legacy, 0, 'v16'), 'NONE', 'I6 forbids consuming it and W4 does not select it');
+  assert.equal(ownerOf41(settled, 0, 'v16'), 'NONE', 'a settled project is excluded by both §10.3 and W4');
+  assert.equal(ownerOf41(legacy, 0, 'v17'), 'out-of-loop');
+  assert.equal(ownerOf41(settled, 0, 'v17'), 'out-of-loop');
+
+  const grid: Project41[] = [];
+  for (const status of ['OPEN', 'DONE', 'CANCELLED'] as const) {
+    for (const enabled of [true, false]) {
+      for (const runState of ['PLANNING', 'EXECUTING', 'BLOCKED', 'AWAITING_HUMAN', 'SETTLED']) {
+        grid.push({ status, enabled, runState });
+      }
+    }
+  }
+  for (const p of grid) {
+    for (const age of [0, 6]) {
+      const branch = ownerOf41(p, age, 'v17');
+      assert.notEqual(branch, 'NONE', `${JSON.stringify(p)} age=${age}min has no owner`);
+      // Exactly one: the three predicates are a partition of the project row, not three chances.
+      const branches = (['in-loop', 'backstop', 'out-of-loop'] as Branch41[]).filter((b) => b === branch);
+      assert.equal(branches.length, 1, `${JSON.stringify(p)} age=${age}min matches more than one branch`);
+    }
+  }
+  assert.ok(grid.some((p) => ownerOf41(p, 0, 'v16') === 'NONE'), 'v1.6 leaves part of the grid unowned');
+  assert.equal(grid.every((p) => ownerOf41(p, 0, 'v17') !== 'NONE'), true, 'v1.7 does not');
+
+  // EV1: the disposition is decided when the event is taken, so re-entry consumes rather than
+  // discards — nothing is lost by discarding, because the event never carried the fact (E1).
+  const reEntered: Project41 = { status: 'OPEN', enabled: true, runState: 'PLANNING' };
+  assert.equal(ownerOf41(reEntered, 0, 'v17'), 'in-loop', 'an event queued while out of the loop is consumed after re-entry');
+  // EV4: the discard is one conditional UPDATE, so replaying it affects nothing.
+  let consumedAt: number | null = null;
+  const discard = (): number => (consumedAt === null ? ((consumedAt = 1), 1) : 0);
+  assert.equal(discard(), 1);
+  assert.equal(discard(), 0, 'a replayed discard must affect zero rows');
+
+  const disposition = section(PCC, '5.5');
+  for (const rule of ['**EV1（', '**EV2（', '**EV3（', '**EV4（', '**EV5（', '**EV6（']) {
+    assert.ok(disposition.includes(rule), `§5.5 does not state ${rule}）`);
+  }
+  assert.match(section(PCC, '4.3'), /没有第四支/, 'I19 is not a closed partition');
+  assert.match(section(PCC, '10.2'), /\*\*W4-b（/, 'W4 does not say where the out-of-loop rows go');
+  assert.match(section(PCC, '15'), /\*\*F41\*\*/, '§15 has no fault row for an out-of-loop event');
+});
+
+/** EC2-a: the nine identities. EC2-b: everything PAC freezes into the session, plus the resolution. */
+interface Resolution17 {
+  agentId: string; projectMemberId: string; taskId: string; taskAssigneeAgentId: string;
+  providerSlug: string; model: string | null; workspaceId: string; runnerId: string; coordinatorWorkspaceId: string;
+  effort: string; requiredCapabilities: string[]; permissionMode: string; providerBuiltin: boolean;
+}
+const EC2A_COMPONENTS = ['agentId', 'projectMemberId', 'taskId', 'taskAssigneeAgentId', 'providerSlug', 'model',
+  'workspaceId', 'runnerId', 'coordinatorWorkspaceId'] as const;
+
+const authorizationDigest = (r: Resolution17): string =>
+  sha256(canonical17(EC2A_COMPONENTS.map((k) => r[k])));
+const resultDigest = (r: Resolution17, omit: keyof Resolution17 | null = null): string =>
+  sha256(canonical17(Object.fromEntries(Object.entries(r).filter(([k]) => k !== omit).sort())));
+
+test('PC-CX-42 the authorization digest and the result digest are two questions, compared separately', () => {
+  const atDecision: Resolution17 = {
+    agentId: 'a1', projectMemberId: 'm1', taskId: 't1', taskAssigneeAgentId: 'a1', providerSlug: 'claude',
+    model: 'opus', workspaceId: 'w1', runnerId: 'r1', coordinatorWorkspaceId: 'cw1',
+    effort: 'high', requiredCapabilities: ['linux'], permissionMode: 'default', providerBuiltin: true,
+  };
+  // The review's interleaving: nothing in the nine identities moved, but PAC freezes both of these
+  // into the session, so the dispatch that would commit is not the dispatch that was decided.
+  const atCommit: Resolution17 = { ...atDecision, effort: 'low', requiredCapabilities: ['linux', 'docker'] };
+
+  assert.equal(authorizationDigest(atCommit), authorizationDigest(atDecision), 'EC2-a is unchanged — nothing was revoked');
+  assert.notEqual(resultDigest(atCommit), resultDigest(atDecision), 'EC2-b is not — the session would be different');
+
+  // v1.6 compared one digest, so the commit gate accepted it. v1.7 compares both, and the refusal
+  // is a different code with a different owner: no blocker, a NOOP, and a re-decision next time.
+  const gate = (version: Version17): { admitted: boolean; refusalCode: string | null; opensBlocker: boolean } => {
+    if (authorizationDigest(atCommit) !== authorizationDigest(atDecision)) {
+      return { admitted: false, refusalCode: 'EXECUTION_CONTEXT_REVOKED', opensBlocker: true };
+    }
+    if (version === 'v17' && resultDigest(atCommit) !== resultDigest(atDecision)) {
+      return { admitted: false, refusalCode: 'EXECUTION_RESULT_CHANGED', opensBlocker: false };
+    }
+    return { admitted: true, refusalCode: null, opensBlocker: false };
+  };
+  assert.deepEqual(gate('v16'), { admitted: true, refusalCode: null, opensBlocker: false },
+    'v1.6 admits a session whose effort and capabilities are not the ones that were decided');
+  assert.deepEqual(gate('v17'), { admitted: false, refusalCode: 'EXECUTION_RESULT_CHANGED', opensBlocker: false },
+    'v1.7 refuses it, names it, and does not ask a human to do anything');
+
+  // Coverage, the S10-c way, per component: for each thing PAC freezes into the session, build a
+  // pair that differs *only* in it. EC2-b must separate them, and dropping that component from the
+  // digest must bring them back together — a component nothing can distinguish does not belong.
+  const drifts: { component: keyof Resolution17; changed: Resolution17 }[] = [
+    { component: 'effort', changed: { ...atDecision, effort: 'low' } },
+    { component: 'requiredCapabilities', changed: { ...atDecision, requiredCapabilities: ['linux', 'docker'] } },
+    { component: 'permissionMode', changed: { ...atDecision, permissionMode: 'acceptEdits' } },
+    { component: 'providerBuiltin', changed: { ...atDecision, providerBuiltin: false } },
+  ];
+  for (const { component, changed } of drifts) {
+    assert.equal(authorizationDigest(changed), authorizationDigest(atDecision),
+      `${String(component)} is not one of EC2-a's nine identities, so it must not move the authorization digest`);
+    assert.notEqual(resultDigest(changed), resultDigest(atDecision),
+      `EC2-b does not cover ${String(component)}, which PAC freezes into the session`);
+    assert.equal(resultDigest(changed, component), resultDigest(atDecision, component),
+      `dropping ${String(component)} from EC2-b brings the defect back`);
+  }
+  // …and a genuine revocation still comes out as a revocation, not as a result change.
+  const revoked: Resolution17 = { ...atDecision, runnerId: 'r2' };
+  assert.notEqual(authorizationDigest(revoked), authorizationDigest(atDecision), 'a different runner is a revocation');
+
+  // EC6: what is written into the session is the frozen context, so a passing comparison cannot be
+  // followed by a different insert. The database proves the equality (D15) without re-resolving.
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('**EC2-a（'), '§7.4 does not state the authorization digest');
+  assert.ok(dispatch.includes('**EC2-b（'), '§7.4 does not state the result digest');
+  assert.ok(dispatch.includes('**EC6（'), '§7.4 does not say where the placeholder columns come from');
+  assert.match(dispatch, /EXECUTION_RESULT_CHANGED/, 'EC4 has no code for a result that changed without a revocation');
+  assert.ok(section(PCC, '7.7').includes('**D14-g（'), 'D14 does not say which digest it proves');
+  assert.match(section(PCC, '15'), /\*\*F42\*\*/, '§15 has no fault row for a drifted result');
+});
+
+test('mutation check: every fence added for PC-CX-37..42 is load-bearing', () => {
+  // Same discipline as the five mutation checks above: remove exactly one thing v1.7 added and the
+  // published counterexample has to come back.
+  const frozenModel = 'model-v1';
+  const pending: Placeholder17 = { model: null, effort: null, pinGeneration: 0, retiredPins: [], claimResolution: null };
+  const retired: Placeholder17 = {
+    model: 'model-v2', effort: 'high', pinGeneration: 2,
+    retiredPins: [{ from: 'model-v1', to: 'model-v2' }], claimResolution: 'model-v1',
+  };
+  const tied: Candidate17[] = [
+    { at: 60_000, source: 1, subjectType: 'BLOCKER', subjectId: 'b1', reason: 'provider blocker b1' },
+    { at: 60_000, source: 1, subjectType: 'BLOCKER', subjectId: 'b2', reason: 'runner blocker b2' },
+  ];
+  const base: Resolution17 = {
+    agentId: 'a1', projectMemberId: 'm1', taskId: 't1', taskAssigneeAgentId: 'a1', providerSlug: 'claude',
+    model: 'opus', workspaceId: 'w1', runnerId: 'r1', coordinatorWorkspaceId: 'cw1',
+    effort: 'high', requiredCapabilities: ['linux'], permissionMode: 'default', providerBuiltin: true,
+  };
+  const drifted: Resolution17 = { ...base, effort: 'low', requiredCapabilities: ['linux', 'docker'] };
+
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-37',
+      fence: 'D11 compares the whole row minus an allowlist (§7.7 D11-b/D11-d)',
+      defectReappears: () => ['execution_context', 'execution_context_digest', 'reason_code']
+        .every((c) => !d11Refuses(c, 'v16')),
+    },
+    {
+      finding: 'PC-CX-38',
+      fence: 'I17-A compares only create-frozen columns; I17-A2 carries the phases (§4.3)',
+      defectReappears: () => !i17aV16Holds(pending, frozenModel) && !i17aV16Holds(retired, frozenModel),
+    },
+    {
+      finding: 'PC-CX-39',
+      fence: 'the third and fourth ordering keys (§10.4 W5 step 2)',
+      defectReappears: () => chooseWake17(tied, 30_000, 'v16').reason !== chooseWake17([...tied].reverse(), 30_000, 'v16').reason,
+    },
+    {
+      finding: 'PC-CX-40',
+      fence: 'the floor reads evaluation.epoch (§10.4 W5 step 3, §6.1 S5)',
+      defectReappears: () => new Set([58_000, 59_000].map((wall) => Math.max(60_000, wall + W3_FLOOR_MS))).size === 2,
+    },
+    {
+      finding: 'PC-CX-41',
+      fence: 'I19-c and §5.5 EV3, the terminal disposition for out-of-loop events',
+      defectReappears: () => ownerOf41({ status: 'OPEN', enabled: false, runState: 'PLANNING' }, 0, 'v16') === 'NONE'
+        && ownerOf41({ status: 'DONE', enabled: true, runState: 'SETTLED' }, 0, 'v16') === 'NONE',
+    },
+    {
+      finding: 'PC-CX-42',
+      fence: 'EC2-b compared alongside EC2-a at the commit gate (§7.4 EC3)',
+      defectReappears: () => authorizationDigest(drifted) === authorizationDigest(base)
+        && resultDigest(drifted) !== resultDigest(base),
+    },
+  ];
+
+  assert.equal(mutants.length, 6, 'unit 02 raised six findings against v1.6');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  assert.equal(ACTION_COLUMNS.filter((c) => !d11Refuses(c, 'v17')).join(','), D11_ALLOWLIST.join(','));
+  assert.equal([pending, retired].every((s) => i17a2Holds(s, frozenModel)), true);
+  assert.equal(chooseWake17(tied, 30_000, 'v17').reason, chooseWake17([...tied].reverse(), 30_000, 'v17').reason);
+  assert.equal(new Set([0, 1, 4].map(() => chooseWake17(tied, 58_000, 'v17').at)).size, 1);
+  assert.equal(ownerOf41({ status: 'DONE', enabled: true, runState: 'SETTLED' }, 0, 'v17'), 'out-of-loop');
+  assert.notEqual(resultDigest(drifted), resultDigest(base));
+});
+
+test('§25 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§24 have, for the seventh round. Three of these six are claims about what a
+  // real server does — a whole-row trigger comparison, a per-row mutator protocol, and an ordering
+  // that must not depend on a collation — so the Postgres file is checked by name as well.
+  const rows = tables(section(PCC, '25'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-37', 'PC-CX-38', 'PC-CX-39', 'PC-CX-40', 'PC-CX-41', 'PC-CX-42']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§25 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '25').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 6, '§25 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§25 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '25').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§25 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§25 points at §${m[1]}, which does not exist`);
   }
 });

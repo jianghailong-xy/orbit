@@ -34,7 +34,8 @@ const COUNTEREXAMPLES = readFileSync(path.join(REPO, 'src/apiserver/src/projects
 const REVIEW_V13 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.3.md'), 'utf8');
 const REVIEW_V14 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.4.md'), 'utf8');
 const REVIEW_V15 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.5.md'), 'utf8');
-/** §1–§18: the normative body. §19–§24 are revision logs and are explicitly non-normative (§0 RL1). */
+const REVIEW_V16 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.6.md'), 'utf8');
+/** §1–§18: the normative body. §19–§25 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
  * The §7.2 turn-reason table. §7.2 holds three tables (the mechanical/semantic split, the reasons,
@@ -828,7 +829,7 @@ test('the locking resolver is VOLATILE everywhere the contract creates it', () =
 test('the execution context is stated with a tense, and the wake with an arbitration', () => {
   // PC-CX-34 and PC-CX-35: the third instance of the tense mistake, and the first arithmetic one.
   const invariants = section(PCC, '4.3');
-  assert.ok(invariants.includes('**I17-A（快照与占位一致，恒成立'), '§4.3 does not state the standing half of I17');
+  assert.ok(invariants.includes('**I17-A（create 冻结列与占位一致，恒成立'), '§4.3 does not state the standing half of I17');
   assert.ok(invariants.includes('**I17-B（授权在提交那一刻成立，点态'), '§4.3 does not state the commit-time half of I17');
   assert.ok(invariants.includes('**I17-c（那条被删掉的当前态查询是什么'), '§4.3 does not say what the deleted query described');
   assert.match(section(PCC, '15'), /I17-A 仍恒成立/, 'F35 was not restated for the split');
@@ -848,7 +849,7 @@ test('a committed event has a shape before reconcile has seen it, and something 
   // shapes have to be closed, the choice not to lock the producer has to be argued, and the promise
   // that a queued row is picked up has to be a predicate rather than a hope about the consumer.
   const invariants = section(PCC, '4.3');
-  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I19（待消费事件的投递不变量']) {
+  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I19（待消费事件的责任域']) {
     assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
   }
   assert.match(invariants, /没有第四种形状/, 'the three shapes are not stated as a closed set');
@@ -863,4 +864,149 @@ test('a committed event has a shape before reconcile has seen it, and something 
   assert.match(section(PCC, '10.4'), /\*\*N-null 的时态/, 'N-null was not given the tense the gap requires');
   assert.match(section(PCC, '15'), /\*\*F37\*\*/, '§15 has no fault row for the asynchronous gap');
   assert.match(section(PCC, '15'), /\*\*F38\*\*/, '§15 has no fault row for the last five seconds of a window');
+});
+
+test('§25 answers every finding unit 02 raised against v1.6, and names a test that exists', () => {
+  // Round seven, read exactly the way the first six are: as evidence. Its findings are numbered
+  // from 37, and the report refers back to the earlier ones, so the new ones are the ones above 36.
+  const cited = new Set(Array.from(REVIEW_V16.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 36).sort();
+  assert.deepEqual(raised, ['37', '38', '39', '40', '41', '42'], 'unit 02 raised six findings against v1.6');
+
+  const rows = tables(section(PCC, '25'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§25 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22', '23', '24'].flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `25.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§25.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the seven reviews are read, never edited', () => {
+  // Same pin as the six-review version above, extended to round seven. One P0 and five P1s, and a
+  // FAIL verdict: those are the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V16, /FAIL/, 'the seventh review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V16.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 36).length,
+    6,
+  );
+  // The review's own §6 evidence has to still be there: a revision that deleted the reproduction
+  // would leave §25's reverse controls pointing at nothing.
+  for (const evidence of ['reason_code=REPLAN', 'I17-A mismatch count=1', 'model-v2', '63s/64s']) {
+    assert.ok(REVIEW_V16.includes(evidence), `the seventh review no longer contains its ${evidence} evidence`);
+  }
+});
+
+test('the applied action row is frozen by construction, not by a list', () => {
+  // PC-CX-37, the P0 of round seven. v1.4 wrote D11 as a per-column denylist; v1.5 added three
+  // columns to the same table and nobody went back, so I17-A's frozen context and TR2-a's window
+  // anchor were both rewritable by a plain UPDATE. The fix has to be a shape, not three more lines.
+  const seven = section(PCC, '7.7');
+  const d11 = seven.slice(seven.indexOf('#### D11 '), seven.indexOf('#### D12 '));
+  assert.match(d11, /to_jsonb\(NEW\) - writable\) IS DISTINCT FROM \(to_jsonb\(OLD\) - writable\)/,
+    'D11 must compare the whole row minus a writable allowlist');
+  assert.match(d11, /writable text\[\] := ARRAY\['result_session_id', 'detail'\]/, 'the allowlist has to be in the function');
+  for (const column of ['execution_context', 'execution_context_digest', 'execution_result_digest', 'reason_code']) {
+    assert.ok(d11.includes(column), `D11 no longer explains that ${column} is one of the columns it freezes`);
+  }
+  // The v1.4 shape may not survive anywhere in the normative body, in any of its enumerated forms.
+  const stale = NORMATIVE.split('\n').map((l) => bare(l))
+    .filter((l) => /NEW\.(type|subject_type|subject_id|project_id|fencing_token|idempotency_key) IS DISTINCT FROM OLD\./.test(l)
+      && !/v1\.[1-7]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative line still enumerates D11 column by column');
+  // And the migration check has to be schema-driven for the same reason the trigger is.
+  assert.match(section(PCC, '12.1'), /information_schema\.columns/, 'G5 does not drive the mutation from the schema');
+  assert.match(d11, /information_schema\.columns/, 'D11-e does not drive the mutation from the schema');
+});
+
+test('the frozen snapshot is compared per PAC freeze point, with a phase and a generation', () => {
+  // PC-CX-38: I17-A quoted PAC §6's table heading rather than its "frozen at" column, so the two
+  // rows that freeze at first claim made a standing statement false on the normal path — twice.
+  const invariants = section(PCC, '4.3');
+  assert.ok(invariants.includes('**I17-A2（claim 冻结列的阶段与代次'), '§4.3 does not state the phase-indexed half of I17');
+  assert.ok(invariants.includes('**I17-d（'), '§4.3 does not record why v1.6 wrote model into I17-A');
+  const i17 = invariants.slice(invariants.indexOf('**I17（'), invariants.indexOf('- **I18（'));
+  const standing = i17.slice(i17.indexOf('**I17-A（'), i17.indexOf('**I17-A2（'));
+  // PAC freezes model/effort at first claim, so the standing equality may not name them.
+  for (const claimFrozen of ['`model`', '`effort`']) {
+    assert.ok(!standing.includes(claimFrozen), `I17-A still compares ${claimFrozen}, which PAC §6 freezes at first claim`);
+  }
+  for (const createFrozen of ['agent_id', 'workspace_id', 'assigned_runner_id', 'provider', 'required_capabilities']) {
+    assert.ok(standing.includes(createFrozen), `I17-A does not compare the create-frozen column ${createFrozen}`);
+  }
+  assert.match(PAC, /`model` \| \*\*首次 claim\*\*/, 'PAC still freezes model at first claim');
+  assert.match(PAC, /模型被 runtime 彻底下架（`retiredPin`）时改写一次/, 'PAC still permits the one post-claim rewrite');
+  // The generation is a persistent column with a closed mutator protocol, not a convention.
+  assert.match(section(PCC, '2.4'), /session\.executionPinGeneration/, '§2.4 does not add the generation column');
+  assert.ok(section(PCC, '7.7').includes('#### D15 '), '§7.7 does not state the snapshot mutator protocol');
+  assert.match(section(PCC, '7.7'), /EXECUTION_PIN_GENERATION/, 'D15 does not refuse a rewrite that skips the generation');
+});
+
+test('the wake is a total order over persistent keys, read from the frozen clock', () => {
+  // PC-CX-39 and PC-CX-40: an ordering that stopped at its second key, and the last free-running
+  // clock, hidden inside a sentence that said it did not participate in decisions.
+  const timing = section(PCC, '10.4');
+  assert.match(timing, /\(at, source, subjectType, subjectId\)/, 'W5 does not state a four-key order');
+  assert.ok(timing.includes('**W5-2a（'), 'W5 does not prove its order is total');
+  assert.ok(timing.includes('**W5-2b（'), 'W5 does not say why the extra keys must be persistent');
+  assert.match(timing, /COLLATE "C"/, 'W5 does not pin the comparison to bytes rather than a collation');
+  assert.match(timing, /nextWakeAt = max\(chosen\.at, evaluation\.epoch \+ 5s\)/, 'W5 still floors against the wall clock');
+  assert.match(timing, /永远不小于 `evaluation\.epoch \+ 5s`/, 'W3 still floors against the wall clock');
+  // The candidate identity table has to cover every source, or "one subject, one candidate" is not
+  // a property anything can check.
+  const identity = tables(timing).find((t) => t[0].some((h) => bare(h) === 'subjectId'));
+  assert.ok(identity, 'W5 does not state the candidate identity table');
+  assert.equal(identity.length - 1, 7, 'the candidate identity table must cover all seven sources');
+  // No normative rule outside W5's two named exceptions may compute a wake from now().
+  const stale = NORMATIVE.split('\n').map((l) => bare(l))
+    .filter((l) => /nextWakeAt = now \+|next_wake_at = now\(\) \+/.test(l) && !/R2|v1\.[1-7]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative rule still computes a wake from the wall clock');
+  assert.match(section(PCC, '6.1'), /`nextWakeAt` \*\*是\*\*决策的一部分/, 'S5 still exempts nextWakeAt from the one-clock rule');
+});
+
+test('an out-of-loop event has an owner, and the two digests answer two questions', () => {
+  // PC-CX-41 and PC-CX-42: an invariant quantified wider than its own responsibility, and one
+  // digest asked to answer both "is this still authorized" and "is this still the same result".
+  const invariants = section(PCC, '4.3');
+  for (const branch of ['**I19-a（在环', '**I19-b（迟到', '**I19-c（出环']) {
+    assert.ok(invariants.includes(branch), `§4.3 I19 does not state ${branch}）`);
+  }
+  assert.match(invariants, /没有第四支/, 'I19 is not stated as a closed partition');
+  const disposition = section(PCC, '5.5');
+  for (const rule of ['**EV1（', '**EV2（', '**EV3（', '**EV4（', '**EV5（', '**EV6（']) {
+    assert.ok(disposition.includes(rule), `§5.5 does not state ${rule}）`);
+  }
+  assert.match(disposition, /DISCARDED_OUT_OF_LOOP/, '§5.5 does not name the terminal disposition');
+  assert.match(disposition, /consumed_at IS NULL/, 'the discard is not idempotent by construction');
+  assert.match(section(PCC, '10.2'), /\*\*W4-b（/, 'W4 does not say where the out-of-loop rows went');
+
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('**EC2-a（'), '§7.4 does not state the authorization digest');
+  assert.ok(dispatch.includes('**EC2-b（'), '§7.4 does not state the result digest');
+  assert.ok(dispatch.includes('**EC6（'), '§7.4 does not say where the placeholder\'s frozen columns come from');
+  const options = tables(dispatch).find((t) => bare(t[0][0]) === '选项');
+  assert.ok(options && options.length - 1 === 2, 'EC2-c must argue both options, not just assert one');
+  assert.match(dispatch, /EXECUTION_RESULT_CHANGED/, 'EC4 has no code for a result that changed without a revocation');
+  assert.ok(section(PCC, '7.7').includes('**D14-g（'), 'D14 does not say which digest it proves');
+  assert.match(section(PCC, '15'), /\*\*F41\*\*/, '§15 has no fault row for an out-of-loop event');
+  assert.match(section(PCC, '15'), /\*\*F42\*\*/, '§15 has no fault row for a result that drifted');
 });
