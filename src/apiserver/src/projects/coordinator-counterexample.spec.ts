@@ -5423,7 +5423,9 @@ test('PC-CX-44 the create-frozen set is the whole PAC table, proved at insert an
   const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
   for (const component of createFrozen) {
     assert.ok(d15.includes(`NEW.${snake(component)}`), `D15 does not compare or freeze ${component}`);
-    assert.ok(d16.includes(`NEW.${snake(component)}`), `D16 does not re-prove ${component} at the commit point`);
+    // v1.10 (PC-CX-51): D16 re-reads its own row by the stable key at the commit point, so the
+    // comparison is against `s.<column>` — the final version — not the queued NEW tuple.
+    assert.ok(d16.includes(`s.${snake(component)}`), `D16 does not re-prove ${component} at the commit point`);
   }
   // The two points, and what each of them buys.
   assert.match(d16, /DEFERRABLE INITIALLY DEFERRED/, 'D16 does not read the final state of the transaction');
@@ -6058,5 +6060,302 @@ test('§27 names a test that exists for every finding, and points at clauses tha
   for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
     const m = /§(\d+(?:\.\d+)?)/.exec(clause);
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§27 points at §${m[1]}, which does not exist`);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Round ten (`PC-CX-50..52`, §28). Rounds one through nine asked *when* a hard gate runs, *who*
+// decides its scope, whether the closed set it compares is closed, and what it has proved once it
+// returns. This one asks the question underneath all of those: **what is it holding when it
+// judges?** D16's action side read the column D11 leaves writable to decide whether it applies at
+// all; every deferred row constraint compared the tuple its statement queued with rather than the
+// row about to be committed; D17 recomputed a digest of an object nobody had counted the keys of.
+// All three are one sentence: **a hard gate's own input has to be proved too.**
+// ---------------------------------------------------------------------------------------------
+
+type Version110 = 'v19' | 'v110';
+
+/** §7.7 D11-b's two writable columns, and what a transaction may do to them. */
+type ActionLedgerRow = { status: string; resultSessionId: string | null; claim: object | null; retiredPins: object[] };
+
+/**
+ * §7.7 D18, modelled: `result_session_id` is published once, `claimResolution` is written once, and
+ * `retiredPins[]` only grows with its prefix intact. v1.9 had no such object at all, so every
+ * transition below was legal.
+ */
+function mutatorAdmits(version: Version110, before: ActionLedgerRow, after: ActionLedgerRow): boolean {
+  if (version === 'v19') return true;                                     // reverse control: no D18
+  if (before.resultSessionId !== null && after.resultSessionId !== before.resultSessionId) return false;
+  if (before.claim !== null && JSON.stringify(after.claim) !== JSON.stringify(before.claim)) return false;
+  if (after.retiredPins.length < before.retiredPins.length) return false;
+  return JSON.stringify(after.retiredPins.slice(0, before.retiredPins.length))
+    === JSON.stringify(before.retiredPins);
+}
+
+/**
+ * §7.7 D16's action side, modelled: v1.9 asked "is the link null?" to decide whether it applied;
+ * v1.10 asks "is this an applied dispatch?" and then requires the link to be there and symmetric.
+ */
+function actionSideAdmits(version: Version110, row: ActionLedgerRow, sessionPointsBack: boolean): boolean {
+  if (version === 'v19') return row.resultSessionId === null || sessionPointsBack;
+  if (row.status !== 'APPLIED') return row.resultSessionId === null;
+  return row.resultSessionId !== null && sessionPointsBack;
+}
+
+/**
+ * §7.7 D9-f, modelled. A deferred row trigger keeps the `(OLD, NEW)` its statement produced; the
+ * transaction may write the same row again afterwards. v1.9 judged `queued`, v1.10 re-reads `final`
+ * by the stable key. `legal` is the proposition both versions evaluate — unchanged between them.
+ */
+function deferredVerdict<T>(version: Version110, queued: T, final: T, legal: (row: T) => boolean): boolean {
+  return legal(version === 'v19' ? queued : final);
+}
+
+/** §7.4 EC2-b2: the result half's eleven keys with their JSON types. */
+const RESULT_SHAPE: Record<string, string> = {
+  agentId: 'string', workspaceId: 'string', assignedRunnerId: 'string', provider: 'string',
+  providerBuiltin: 'boolean', requiredCapabilities: 'array', permissionMode: 'string',
+  snapshotFrozenAt: 'string', resolution: 'object', model: 'string', effort: 'string',
+};
+const NONEMPTY = ['agentId', 'workspaceId', 'assignedRunnerId', 'provider', 'permissionMode',
+  'snapshotFrozenAt', 'model', 'effort'];
+
+function jsonType(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  return typeof value === 'object' ? 'object' : typeof value;
+}
+
+/**
+ * §7.7 D17's ⓪ `coordinator_execution_result_shape`, modelled. v1.9's whole test was
+ * `ctx.model IS NULL OR ctx.effort IS NULL`, which is why '' and four missing keys both passed.
+ */
+function resultShapeAdmits(version: Version110, ctx: Record<string, unknown>): boolean {
+  const half = { ...ctx };
+  delete half.authorization;
+  if (version === 'v19') return half.model !== undefined && half.model !== null
+    && half.effort !== undefined && half.effort !== null;
+  const keys = new Set([...Object.keys(half), ...Object.keys(RESULT_SHAPE)]);
+  for (const key of keys) if (jsonType(half[key]) !== RESULT_SHAPE[key]) return false;
+  if (NONEMPTY.some((key) => half[key] === '')) return false;
+  if (!ISO_UTC.test(String(half.snapshotFrozenAt))) return false;
+  if ((half.requiredCapabilities as unknown[]).some((v) => typeof v !== 'string' || v === '')) return false;
+  return JSON.stringify(Object.keys(half.resolution as object).sort())
+    === JSON.stringify(['who', 'with', 'where'].sort());
+}
+
+const COMPLETE_HALF: Record<string, unknown> = {
+  agentId: 'a1', workspaceId: 'w1', assignedRunnerId: 'r1', provider: 'claude', providerBuiltin: true,
+  requiredCapabilities: ['linux'], permissionMode: 'read-only', snapshotFrozenAt: '2026-08-19T00:00:00.000Z',
+  resolution: { who: {}, with: {}, where: {} }, model: 'model-v1', effort: 'high',
+};
+
+test('PC-CX-50 an applied dispatch and its session point at each other, and the ledger only grows', () => {
+  // The review's two transactions. Both write only `project_action`, and both were legal under
+  // v1.9 because D11 leaves the two columns open and D16's action side read one of them to decide
+  // whether it applied at all.
+  const published: ActionLedgerRow = {
+    status: 'APPLIED', resultSessionId: 's1', claim: { generation: 1 }, retiredPins: [],
+  };
+  const detached: ActionLedgerRow = { ...published, resultSessionId: null };
+  const emptied: ActionLedgerRow = { ...detached, claim: {} };
+
+  assert.equal(mutatorAdmits('v19', published, detached), true, 'reverse control: v1.9 has no mutator at all');
+  assert.equal(mutatorAdmits('v19', detached, emptied), true, 'reverse control: and nothing owns the ledger');
+  assert.equal(mutatorAdmits('v110', published, detached), false, 'D18 must refuse a detach');
+  assert.equal(mutatorAdmits('v110', published, { ...published, resultSessionId: 's2' }), false,
+    'D18 must refuse a repoint');
+  assert.equal(mutatorAdmits('v110', published, { ...published, claim: {} }), false,
+    'D18 must refuse a rewritten claimResolution');
+
+  // The publish itself, and every legal write after it, must still pass.
+  const unpublished: ActionLedgerRow = { status: 'CLAIMED', resultSessionId: null, claim: null, retiredPins: [] };
+  assert.equal(mutatorAdmits('v110', unpublished, published), true, 'the publishing UPDATE must still commit');
+  assert.equal(mutatorAdmits('v110', published, { ...published, retiredPins: [{ generation: 2 }] }), true,
+    'appending a retiredPin must still commit');
+  assert.equal(mutatorAdmits('v110', { ...published, retiredPins: [{ generation: 2 }] },
+    { ...published, retiredPins: [{ generation: 2 }, { generation: 3 }] }), true,
+    'appending a second retiredPin must still commit');
+  assert.equal(mutatorAdmits('v110', { ...published, retiredPins: [{ generation: 2 }] },
+    { ...published, retiredPins: [{ generation: 9 }] }), false,
+    'rewriting a recorded retiredPin must be refused');
+  assert.equal(mutatorAdmits('v110', { ...published, retiredPins: [{ generation: 2 }] },
+    { ...published, retiredPins: [] }), false, 'truncating the ledger must be refused');
+
+  // The commit point is the second object: a gate whose scope is decided by the row it protects is
+  // a gate that row can switch off (D16-g). Note v1.9 *admits* the detached row — that is the bug.
+  assert.equal(actionSideAdmits('v19', detached, true), true,
+    'reverse control: v1.9 stops looking as soon as the writable link is null');
+  assert.equal(actionSideAdmits('v110', detached, true), false, 'v1.10 must refuse an applied dispatch with no link');
+  assert.equal(actionSideAdmits('v110', published, false), false, 'and one the session no longer points back at');
+  assert.equal(actionSideAdmits('v110', published, true), true, 'while a symmetric pair still commits');
+  assert.equal(actionSideAdmits('v110', unpublished, false), true, 'an unpublished dispatch still has nothing to say');
+});
+
+test('PC-CX-51 every deferred row constraint judges the final row of the transaction, not the tuple it queued with', () => {
+  // One transaction, three statements: a heartbeat, the ledger write, then the pin. The heartbeat
+  // queues a Session event whose tuple is still at generation 0, and v1.9 folded *that* against the
+  // final ledger. The proposition never changed — only which row version it was applied to.
+  type Row = { generation: number; hasClaim: boolean };
+  const legal = (row: Row): boolean => (row.generation === 0 && !row.hasClaim)
+    || (row.generation === 1 && row.hasClaim);
+  const queued: Row = { generation: 0, hasClaim: true };    // heartbeat's tuple + the final ledger
+  const final: Row = { generation: 1, hasClaim: true };     // what COMMIT is about to store
+
+  assert.equal(deferredVerdict('v19', queued, final, legal), false,
+    'reverse control: v1.9 rejects a legal final state because an earlier event queued an older tuple');
+  assert.equal(deferredVerdict('v110', queued, final, legal), true,
+    'v1.10 must commit any legal final state, whatever order it was written in');
+
+  // The two properties that follow, and that a plain re-read buys outright.
+  const events: Row[] = [{ generation: 0, hasClaim: true }, { generation: 1, hasClaim: true }];
+  assert.deepEqual(events.map((e) => deferredVerdict('v110', e, final, legal)), [true, true],
+    'repeated events for one row are an idempotent re-validation of the same final state');
+  const illegal: Row = { generation: 2, hasClaim: true };
+  assert.deepEqual(events.map((e) => deferredVerdict('v110', e, illegal, legal)), [false, false],
+    'an illegal final state is still refused, and refused identically by every queued event');
+
+  // …and the reason this is worse than a dirty commit: retrying the same key fails the same way.
+  const retry = (): boolean => deferredVerdict('v19', queued, final, legal);
+  assert.deepEqual([retry(), retry(), retry()], [false, false, false],
+    'reverse control: the v1.9 refusal is deterministic, so idempotent retry cannot recover from it');
+
+  // Each deferred constraint states the rule; §7.7 D9-f states it once for all of them.
+  const seven = section(PCC, '7.7');
+  for (const [name, from, to, reread] of [
+    ['D9', '#### D9 ', '#### D10 ', 'FROM session WHERE id = NEW.id'],
+    ['D10', '#### D10 ', '#### D11 ', 'FROM task WHERE id = NEW.id'],
+    ['D14', '#### D14 ', '#### D15 ', 'FROM session WHERE id = NEW.id'],
+    ['D16', '#### D16 ', '#### D8 ', 'FROM session WHERE id = NEW.id'],
+    ['D16 action side', '#### D16 ', '#### D8 ', 'FROM project_action WHERE id = NEW.id'],
+    ['D17', '#### D17 ', '#### D18 ', 'FROM project_action WHERE id = NEW.id'],
+  ] as [string, string, string, string][]) {
+    const body = seven.slice(seven.indexOf(from), seven.indexOf(to));
+    assert.ok(body.includes(reread), `${name} still judges the tuple its statement queued with`);
+  }
+  assert.ok(seven.includes('**D9-f（'), '§7.7 never states the re-read as one rule for all five');
+  assert.ok(seven.includes('**D10-d（'), 'D10 does not say why its transition predicate is different');
+});
+
+test('PC-CX-52 the result half of the execution context has a closed key-and-type shape', () => {
+  // The review's two contexts. Both carry two digests the database computed itself, so both are
+  // *correct* digests — of an object the contract says may not exist.
+  const empty = { ...COMPLETE_HALF, model: '', effort: '' };
+  const incomplete = { ...COMPLETE_HALF };
+  for (const key of ['requiredCapabilities', 'permissionMode', 'resolution', 'snapshotFrozenAt']) {
+    delete (incomplete as Record<string, unknown>)[key];
+  }
+  assert.equal(resultShapeAdmits('v19', empty), true, 'reverse control: v1.9 mistakes an empty string for a conclusion');
+  assert.equal(resultShapeAdmits('v19', incomplete), true, 'reverse control: v1.9 never counts the keys');
+  assert.equal(resultShapeAdmits('v110', empty), false, 'v1.10 must refuse an empty conclusion');
+  assert.equal(resultShapeAdmits('v110', incomplete), false, 'v1.10 must refuse an incomplete result half');
+  assert.equal(resultShapeAdmits('v110', COMPLETE_HALF), true, 'and must still admit a complete one');
+
+  // Missing, extra, wrong type, empty: four spellings of one judgement (EC2-b2).
+  for (const key of Object.keys(RESULT_SHAPE)) {
+    const dropped = { ...COMPLETE_HALF };
+    delete dropped[key];
+    assert.equal(resultShapeAdmits('v110', dropped), false, `a result half missing ${key} must be refused`);
+  }
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, surprise: 1 }), false, 'an extra key must be refused');
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, providerBuiltin: 'true' }), false,
+    'a boolean written as a string must be refused');
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, model: null }), false, 'a JSON null must be refused');
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, requiredCapabilities: [''] }), false,
+    'an empty capability must be refused');
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, snapshotFrozenAt: 'yesterday' }), false,
+    'a snapshotFrozenAt that is not ISO-8601 UTC must be refused');
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, resolution: { v: 1 } }), false,
+    'a resolution that is not PAC 7.5 who/with/where must be refused');
+  // …and the deferral sentinel is a conclusion, not an absence (EC6-c row 1).
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, model: DEFERRED }), true,
+    'DEFERRED_TO_CLAIM is a legal conclusion');
+
+  // The authorization half is untouched: EC2-d's split is still "minus one key" (D17-b / §27.4).
+  assert.equal(resultShapeAdmits('v110', { ...COMPLETE_HALF, authorization: { anything: true } }), true,
+    'the authorization half is judged by EC2-a, not by this shape');
+
+  // The clauses that make the shape a contract rather than a copy that drifts.
+  const dispatch = section(PCC, '7.4');
+  const ec2b2 = dispatch.slice(dispatch.indexOf('- **EC2-b2（'), dispatch.indexOf('- **EC2-c（'));
+  for (const key of Object.keys(RESULT_SHAPE)) {
+    assert.ok(ec2b2.includes(`\`${key}\``), `EC2-b2 does not name ${key}`);
+  }
+  assert.match(ec2b2, /PAC §6 的表与 PAC §7\.5 的结构反推/, 'EC2-b2 does not say where the table comes from');
+  const seven = section(PCC, '7.7');
+  const d17 = seven.slice(seven.indexOf('#### D17 '), seven.indexOf('#### D18 '));
+  assert.match(d17, /CREATE OR REPLACE FUNCTION coordinator_execution_result_shape/, 'the shape has no object');
+  assert.equal((seven.match(/coordinator_execution_result_shape\(/g) ?? []).length, 5,
+    'one definition and four call points — D15 at insert, D16 on both sides, D17 itself');
+  assert.ok(d17.includes('**D17-f（'), 'D17 does not say why a correct digest is not a complete input');
+  assert.ok(d17.includes('**D17-g（'), 'D17 does not write down how deep the shape goes');
+});
+
+test('mutation check: every fence added for PC-CX-50..52 is load-bearing', () => {
+  // Same discipline as the eight mutation checks above: remove exactly one thing v1.10 added and
+  // the published counterexample has to come back.
+  const published: ActionLedgerRow = {
+    status: 'APPLIED', resultSessionId: 's1', claim: { generation: 1 }, retiredPins: [],
+  };
+  const detached: ActionLedgerRow = { ...published, resultSessionId: null };
+  const incomplete = { ...COMPLETE_HALF };
+  for (const key of ['requiredCapabilities', 'permissionMode', 'resolution', 'snapshotFrozenAt']) {
+    delete (incomplete as Record<string, unknown>)[key];
+  }
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-50',
+      fence: 'the closed monotonic mutator and the bidirectional link (§7.7 D18 / D16-g)',
+      defectReappears: () => mutatorAdmits('v19', published, detached) && actionSideAdmits('v19', detached, true),
+    },
+    {
+      finding: 'PC-CX-51',
+      fence: 'the stable-key re-read at the commit point (§7.7 D9-f)',
+      defectReappears: () => !deferredVerdict('v19', { generation: 0, hasClaim: true }, { generation: 1, hasClaim: true },
+        (row) => (row.generation === 0 && !row.hasClaim) || (row.generation === 1 && row.hasClaim)),
+    },
+    {
+      finding: 'PC-CX-52',
+      fence: 'the closed key-and-type shape of the result half (§7.4 EC2-b2 / §7.7 D17 ⓪)',
+      defectReappears: () => resultShapeAdmits('v19', incomplete),
+    },
+  ];
+  assert.equal(mutants.length, 3, 'unit 02 raised three findings against v1.9');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable, while the legal paths still commit.
+  assert.equal(mutatorAdmits('v110', published, detached), false);
+  assert.equal(actionSideAdmits('v110', detached, true), false);
+  assert.equal(resultShapeAdmits('v110', incomplete), false);
+  assert.equal(mutatorAdmits('v110', { status: 'CLAIMED', resultSessionId: null, claim: null, retiredPins: [] },
+    published), true);
+  assert.equal(resultShapeAdmits('v110', COMPLETE_HALF), true);
+});
+
+test('§28 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§27 have, for the tenth round. All three are claims about what a real
+  // server does — a frozen link, a re-read row and a counted key set — so the Postgres file is
+  // checked by name as well.
+  const rows = tables(section(PCC, '28'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-50', 'PC-CX-51', 'PC-CX-52']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§28 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '28').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 3, '§28 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§28 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '28').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§28 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§28 points at §${m[1]}, which does not exist`);
   }
 });

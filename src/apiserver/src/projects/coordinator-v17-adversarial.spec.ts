@@ -86,7 +86,9 @@ test('PC-CX-44: D15 and D16 now cover every PAC create-frozen column, at insert 
   assert.deepEqual(stillMissing, [], 'the database guard still does not compare or freeze these PAC columns');
   // …and the same list is proved again on the committed state, which v1.7 had nobody doing.
   for (const column of ['permission_mode', 'resolution', 'snapshot_frozen_at']) {
-    assert.ok(D16.includes(`NEW.${column}`), `D16 does not re-prove ${column} at the commit point`);
+    // v1.10 (PC-CX-51): the commit-point comparison is against `s.<column>` — the row re-read by its
+    // stable key — because a deferred row trigger still holds the tuple its statement queued with.
+    assert.ok(D16.includes(`s.${column}`), `D16 does not re-prove ${column} at the commit point`);
   }
   assert.match(D16, /EXECUTION_RESULT_MISMATCH/, 'D16 has no typed refusal for a drifted result');
   assert.match(D16, /DEFERRABLE INITIALLY DEFERRED/, 'D16 does not read the final state of the transaction');
@@ -105,7 +107,10 @@ test('PC-CX-44: D15 and D16 now cover every PAC create-frozen column, at insert 
 test('PC-CX-45: the Session guards now read OLD as well as NEW, so nothing can self-exempt', () => {
   const d9 = between(CONTRACT, '#### D9 ', '#### D10 ');
   const d14 = between(CONTRACT, '#### D14 ', '#### D15 ');
-  const OLD_NEW = /\(OLD\.task_id IS NULL OR OLD\.dispatch_origin <> 'COORDINATOR'\)\s*\n?\s*AND \(NEW\.task_id IS NULL OR NEW\.dispatch_origin <> 'COORDINATOR'\)/;
+  // v1.10 (PC-CX-51): D9 and D14 are deferred, so their NEW half now reads the row they re-read by
+  // its stable key (`s`); D15 is BEFORE and still reads NEW. Either spelling is the same rule —
+  // what the review demanded, and what this still asserts, is that OLD is read at all.
+  const OLD_NEW = /\(OLD\.task_id IS NULL OR OLD\.dispatch_origin <> 'COORDINATOR'\)\s*\n?\s*AND \((NEW|s)\.task_id IS NULL OR \1\.dispatch_origin <> 'COORDINATOR'\)/;
   for (const [name, section] of [['D9', d9], ['D14', d14], ['D15', D15]] as const) {
     assert.match(section, OLD_NEW, `${name} still decides its scope from NEW alone`);
   }

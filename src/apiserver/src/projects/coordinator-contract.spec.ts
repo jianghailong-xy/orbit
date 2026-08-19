@@ -37,6 +37,7 @@ const REVIEW_V15 = readFileSync(path.join(REPO, 'docs/project-coordinator-contra
 const REVIEW_V16 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.6.md'), 'utf8');
 const REVIEW_V17 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.7.md'), 'utf8');
 const REVIEW_V18 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.8.md'), 'utf8');
+const REVIEW_V19 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.9.md'), 'utf8');
 /** §1–§18: the normative body. §19–§26 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
@@ -1111,7 +1112,9 @@ test('the create-frozen set is PAC §6’s whole table, and the pin ledger has a
   const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
   for (const component of createFrozen) {
     assert.ok(d15.includes(`NEW.${snake(component)}`), `D15 does not compare or freeze ${component}`);
-    assert.ok(d16.includes(`NEW.${snake(component)}`), `D16 does not re-prove ${component} at the commit point`);
+    // v1.10 (PC-CX-51): D16 re-reads its own row by the stable key at the commit point, so the
+    // comparison is against `s.<column>` — the final version — not the queued NEW tuple.
+    assert.ok(d16.includes(`s.${snake(component)}`), `D16 does not re-prove ${component} at the commit point`);
   }
   assert.match(section(PCC, '7.4'), /\*\*EC6-d（`snapshotFrozenAt` 的唯一来源/, 'snapshotFrozenAt has no single source');
   assert.ok(d15.includes('**D15-g（'), 'D15 does not say why a BEFORE trigger is not the whole answer');
@@ -1254,4 +1257,140 @@ test('both digests are recomputed from an authoritative input the database can r
   assert.match(section(PCC, '26.5'), /v1\.9 已取代/, '§26.5 does not say which revision replaced it');
   assert.match(section(PCC, '15'), /\*\*F48\*\*/, '§15 has no fault row for a forged digest');
   assert.match(section(PCC, '12.1'), /project_action_execution_digest_check/, 'G5 does not verify the digest gate');
+});
+
+// ---------------------------------------------------------------------------------------------
+// v1.10 — `PC-CX-50..52`
+// ---------------------------------------------------------------------------------------------
+
+test('§28 answers every finding unit 02 raised against v1.9, and names a test that exists', () => {
+  // Round ten, read exactly the way the first nine are: as evidence. Its findings are numbered
+  // from 50, and the report refers back to the earlier ones, so the new ones are the ones above 49.
+  const cited = new Set(Array.from(REVIEW_V19.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 49).sort();
+  assert.deepEqual(raised, ['50', '51', '52'], 'unit 02 raised three findings against v1.9');
+
+  const rows = tables(section(PCC, '28'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§28 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22', '23', '24', '25', '26', '27']
+    .flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `28.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§28.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the ten reviews are read, never edited', () => {
+  // Same pin as the nine-review version above, extended to round ten. Three P1s and a FAIL verdict:
+  // those are the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V19, /FAIL/, 'the tenth review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V19.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 49).length,
+    3,
+  );
+  // The review's own §6 evidence has to still be there: a revision that deleted the reproduction
+  // would leave §28's reverse controls pointing at nothing.
+  for (const evidence of ['result_session_id', 'claimResolution', 'EXECUTION_PIN_LEDGER', 'DEFERRABLE']) {
+    assert.ok(REVIEW_V19.includes(evidence), `the tenth review no longer contains its ${evidence} evidence`);
+  }
+});
+
+test('the two writable columns have a mutator, and the applied link is judged from both sides', () => {
+  // PC-CX-50. D11 answered "which columns are still writable"; nothing answered "how they may
+  // move" — and D16's action side read one of them to decide whether it applied at all.
+  const seven = section(PCC, '7.7');
+  const d11 = seven.slice(seven.indexOf('#### D11 '), seven.indexOf('#### D12 '));
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  const d18 = seven.slice(seven.indexOf('#### D18 '), seven.indexOf('#### D7 '));
+  assert.ok(d18.length > 0, '§7.7 has no D18');
+  assert.match(d18, /CREATE OR REPLACE FUNCTION project_action_result_ledger_mutator/, 'D18 has no object');
+  assert.match(d18, /BEFORE UPDATE ON project_action/, 'D18 is not statement-level');
+  assert.match(d18, /ACTION_RESULT_LINK_FROZEN/, 'a detached result link has no typed refusal');
+  for (const clause of ['**D18-a（', '**D18-b（', '**D18-c（', '**D18-d（', '**D18-e（', '**D18-f（']) {
+    assert.ok(d18.includes(clause), `D18 does not state ${clause}）`);
+  }
+  // D11-b may no longer promise that the two writable columns enter no predicate.
+  const alive = d11.split('\n').filter((line) => !/v1\.\d|PC-CX-\d\d/.test(line));
+  assert.equal(alive.some((line) => line.includes('两者都不进任何硬门的谓词')), false,
+    'D11-b still promises, without provenance, that the writable columns enter no hard gate');
+  assert.ok(d16.includes('**D16-g（'), 'D16 does not argue why the link itself is the judgement');
+  assert.doesNotMatch(d16.slice(d16.indexOf('```sql'), d16.lastIndexOf('```')),
+    /NEW\.result_session_id IS NULL THEN RETURN NULL/, 'the action side still self-disables on a null link');
+  assert.match(section(PCC, '4.3'), /result_session_id` \*\*为 NULL\*\*/, 'I17-A3 still states only the symmetric half');
+  assert.match(section(PCC, '15'), /\*\*F50\*\*/, '§15 has no fault row for a one-sided result link');
+  assert.match(section(PCC, '12.1'), /project_action_result_ledger_mutator/, 'G5 does not verify the new mutator');
+});
+
+test('every deferred row constraint re-reads its own row before judging it', () => {
+  // PC-CX-51. DEFERRABLE defers *when* the check runs, not *which* tuple it holds; the rule has to
+  // be stated once for all five, or the next one added will get it wrong again.
+  const seven = section(PCC, '7.7');
+  const deferred: [string, string, string, string][] = [
+    ['D9', '#### D9 ', '#### D10 ', 'FROM session WHERE id = NEW.id'],
+    ['D10', '#### D10 ', '#### D11 ', 'FROM task WHERE id = NEW.id'],
+    ['D14', '#### D14 ', '#### D15 ', 'FROM session WHERE id = NEW.id'],
+    ['D16', '#### D16 ', '#### D8 ', 'FROM session WHERE id = NEW.id'],
+    ['D17', '#### D17 ', '#### D18 ', 'FROM project_action WHERE id = NEW.id'],
+  ];
+  for (const [name, from, to, reread] of deferred) {
+    const body = seven.slice(seven.indexOf(from), seven.indexOf(to));
+    assert.ok(body.includes(reread), `${name} still judges the tuple its statement queued with`);
+  }
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.ok(d16.includes('FROM project_action WHERE id = NEW.id'), 'D16 action side does not re-read its row');
+  assert.ok(seven.includes('**D9-f（'), '§7.7 never states the re-read as one rule for all five');
+  assert.ok(seven.includes('**D10-d（'), 'D10 does not say why its transition predicate is different');
+  // The promise D16-a made must still be there — it is what the fix is measured against.
+  assert.match(d16, /判据都落在 `COMMIT` 那一刻的最终状态上/, 'D16-a no longer promises order independence');
+  assert.match(section(PCC, '15'), /\*\*F51\*\*/, '§15 has no fault row for a legal order that must commit');
+});
+
+test("EC2-b's result half is closed by a key-and-type table, not by prose", () => {
+  // PC-CX-52. "恰好三部分，封闭" had been a sentence since v1.7 with no object counting the keys,
+  // while D17 tested the two conclusions for SQL NULL only.
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('- **EC2-b2（'), '§7.4 does not close the result half');
+  const ec2b2 = dispatch.slice(dispatch.indexOf('- **EC2-b2（'), dispatch.indexOf('- **EC2-c（'));
+  for (const key of ['agentId', 'workspaceId', 'assignedRunnerId', 'provider', 'providerBuiltin',
+    'requiredCapabilities', 'permissionMode', 'snapshotFrozenAt', 'resolution', 'model', 'effort']) {
+    assert.ok(ec2b2.includes(`\`${key}\``), `EC2-b2 does not name ${key}`);
+  }
+  // …and EC2-b's own part ① must now list snapshotFrozenAt, which it had dropped since v1.7.
+  const ec2b = dispatch.slice(dispatch.indexOf('- **EC2-b（'), dispatch.indexOf('- **EC2-b2（'));
+  assert.match(ec2b, /snapshotFrozenAt/, "EC2-b's create-frozen list is still missing a PAC §6 row");
+
+  const seven = section(PCC, '7.7');
+  const d17 = seven.slice(seven.indexOf('#### D17 '), seven.indexOf('#### D18 '));
+  assert.match(d17, /CREATE OR REPLACE FUNCTION coordinator_execution_result_shape/, 'the shape has no object');
+  assert.match(d17, /LANGUAGE plpgsql IMMUTABLE/, 'the shape function is not declared immutable');
+  assert.match(d17, /EXECUTION_RESULT_SHAPE/, 'an incomplete result half has no typed refusal');
+  assert.doesNotMatch(d17.split('\n').filter((line) => !/v1\.\d|PC-CX-\d\d/.test(line)).join('\n'),
+    /IF ctx->>'model' IS NULL OR ctx->>'effort' IS NULL THEN/, 'D17 still tests only for SQL NULL');
+  for (const clause of ['**D17-f（', '**D17-g（']) {
+    assert.ok(d17.includes(clause), `D17 does not state ${clause}）`);
+  }
+  assert.ok(seven.includes('**D15-h（'), 'D15 does not say why it proves the shape before the equalities');
+  assert.ok(seven.includes('**D16-h（'), 'D16 does not say why it proves the shape from both sides');
+  assert.match(section(PCC, '7.4'), /空字符串/, 'EC6-c does not name the empty string as a non-conclusion');
+  assert.match(section(PCC, '15'), /\*\*F52\*\*/, '§15 has no fault row for an incomplete result half');
+  assert.match(section(PCC, '12.1'), /coordinator_execution_result_shape/, 'G5 does not verify the shape function');
 });

@@ -2920,7 +2920,7 @@ const SCHEMA_V18 = isolated18(V18_TABLES);
 const V18_FROZEN_AT = '2026-08-19T00:00:00.000Z';
 const V18_CONTEXT = `'{"agentId":"a1","workspaceId":"w1","assignedRunnerId":"r1","provider":"claude",` +
   `"providerBuiltin":true,"requiredCapabilities":["linux"],"permissionMode":"read-only",` +
-  `"resolution":{"v":1,"who":{"source":"task"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
+  `"resolution":{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
   `"model":"model-v1","effort":"high"}'::jsonb`;
 
 const CLAIM_ACTION = (id: string, key: string): string => `
@@ -2935,7 +2935,7 @@ const MATCHING_SESSION = (id: string, action: string): string => `
     assigned_runner_id,provider,provider_builtin,required_capabilities,permission_mode,resolution,
     snapshot_frozen_at)
   VALUES ('${id}','t1','${action}','COORDINATOR','PENDING','a1','w1','r1','claude',true,ARRAY['linux'],
-    'read-only','{"v":1,"who":{"source":"task"}}'::jsonb,'${V18_FROZEN_AT}'::timestamptz)`;
+    'read-only','{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}}'::jsonb,'${V18_FROZEN_AT}'::timestamptz)`;
 
 /** Install v1.8's objects. `only` narrows the install so one gate can be shown to carry its half. */
 async function installV18(c: Client, only: ('d11' | 'd15' | 'd16')[] = ['d11', 'd15', 'd16']): Promise<void> {
@@ -3065,7 +3065,7 @@ test('PC-CX-44 on real Postgres: the whole PAC create-frozen set is proved at in
           id: `'s1'`, task_id: `'t1'`, project_action_id: `'act1'`, dispatch_origin: `'COORDINATOR'`,
           status: `'PENDING'`, agent_id: `'a1'`, workspace_id: `'w1'`, assigned_runner_id: `'r1'`,
           provider: `'claude'`, provider_builtin: 'true', required_capabilities: `ARRAY['linux']`,
-          permission_mode: `'read-only'`, resolution: `'{"v":1,"who":{"source":"task"}}'::jsonb`,
+          permission_mode: `'read-only'`, resolution: `'{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}}'::jsonb`,
           snapshot_frozen_at: `'${V18_FROZEN_AT}'::timestamptz`, ...over,
         };
         return `INSERT INTO session (${Object.keys(base).join(',')}) VALUES (${Object.values(base).join(',')})`;
@@ -3421,7 +3421,11 @@ const D16_V19 = `
   $fn$ LANGUAGE plpgsql;
 `;
 
-/** §7.7 D17: the canonicalisation, the digest, and the commit-time recomputation of both columns. */
+/**
+ * §7.7 D17: the canonicalisation, the digest, and the commit-time recomputation of both columns.
+ * v1.10 re-reads the final row by its stable key (D9-f) and proves EC2-b's closed shape (EC2-b2)
+ * instead of v1.9's `ctx->>'model' IS NULL OR ctx->>'effort' IS NULL`.
+ */
 const D17_V19 = `
   CREATE OR REPLACE FUNCTION coordinator_canonical_json(value jsonb) RETURNS text AS $fn$
   DECLARE parts text[] := ARRAY[]::text[]; k text; item jsonb;
@@ -3446,6 +3450,204 @@ const D17_V19 = `
     SELECT encode(sha256(convert_to(coordinator_canonical_json(value), 'UTF8')), 'hex');
   $fn$ LANGUAGE sql IMMUTABLE;
 
+  CREATE OR REPLACE FUNCTION project_action_execution_digest_check() RETURNS trigger AS $fn$
+  DECLARE a project_action%ROWTYPE; ctx jsonb; auth jsonb;
+          components constant text[] := ARRAY['resolvedAgentId','projectMemberId','taskId','taskAssigneeAgentId',
+            'providerSlug','model','workspaceId','runnerId','coordinatorWorkspaceId'];
+  BEGIN
+    SELECT * INTO a FROM project_action WHERE id = NEW.id;
+    IF NOT FOUND OR a.type <> 'DISPATCH_TASK' OR a.execution_context IS NULL THEN RETURN NULL; END IF;
+    ctx  := a.execution_context;
+    auth := ctx -> 'authorization';
+    IF auth IS NULL OR jsonb_typeof(auth) <> 'object'
+       OR (SELECT array_agg(t.k ORDER BY t.k COLLATE "C") FROM jsonb_object_keys(auth) AS t(k))
+          IS DISTINCT FROM ARRAY(SELECT c FROM unnest(components) c ORDER BY c COLLATE "C") THEN
+      RAISE EXCEPTION 'EXECUTION_DIGEST_MISMATCH: action % does not carry EC2-a''s nine authorization components', a.id;
+    END IF;
+    PERFORM coordinator_execution_result_shape(a.id, ctx);
+    IF a.execution_context_digest IS DISTINCT FROM coordinator_execution_digest(auth) THEN
+      RAISE EXCEPTION 'EXECUTION_DIGEST_MISMATCH: action % stores an execution_context_digest that is not the digest of its authorization half',
+        a.id;
+    END IF;
+    IF a.execution_result_digest IS DISTINCT FROM coordinator_execution_digest(ctx - 'authorization') THEN
+      RAISE EXCEPTION 'EXECUTION_DIGEST_MISMATCH: action % stores an execution_result_digest that is not the digest of its result half',
+        a.id;
+    END IF;
+    IF auth->>'resolvedAgentId' IS DISTINCT FROM ctx->>'agentId'
+       OR auth->>'workspaceId'  IS DISTINCT FROM ctx->>'workspaceId'
+       OR auth->>'runnerId'     IS DISTINCT FROM ctx->>'assignedRunnerId'
+       OR auth->>'providerSlug' IS DISTINCT FROM ctx->>'provider'
+       OR auth->>'model'        IS DISTINCT FROM ctx->>'model'
+       OR (a.subject_type = 'TASK' AND auth->>'taskId' IS DISTINCT FROM a.subject_id) THEN
+      RAISE EXCEPTION 'EXECUTION_DIGEST_MISMATCH: action % authorization and result halves describe two different dispatches',
+        a.id;
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/** §7.7 D17 ⓪ as v1.10 specifies it: EC2-b's result half is a closed key-and-type table (EC2-b2). */
+const RESULT_SHAPE_V110 = `
+  CREATE OR REPLACE FUNCTION coordinator_execution_result_shape(subject text, ctx jsonb) RETURNS jsonb AS $fn$
+  DECLARE iso constant text := '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$';
+          shape constant jsonb := jsonb_build_object(
+            'agentId','string', 'workspaceId','string', 'assignedRunnerId','string',
+            'provider','string', 'providerBuiltin','boolean', 'requiredCapabilities','array',
+            'permissionMode','string', 'snapshotFrozenAt','string', 'resolution','object',
+            'model','string', 'effort','string');
+          result jsonb; offending text; component text;
+  BEGIN
+    IF ctx IS NULL OR jsonb_typeof(ctx) <> 'object' THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % carries no execution context object', subject;
+    END IF;
+    result := ctx - 'authorization';
+    SELECT string_agg(t.k, ',' ORDER BY t.k COLLATE "C") INTO offending
+      FROM (SELECT jsonb_object_keys(result) AS k UNION SELECT jsonb_object_keys(shape)) t
+     WHERE jsonb_typeof(result -> t.k) IS DISTINCT FROM (shape ->> t.k);
+    IF offending IS NOT NULL THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % result half is not EC2-b''s closed eleven-key shape (offending: %)',
+        subject, offending;
+    END IF;
+    FOREACH component IN ARRAY ARRAY['agentId','workspaceId','assignedRunnerId','provider',
+                                     'permissionMode','snapshotFrozenAt','model','effort'] LOOP
+      IF result ->> component = '' THEN
+        RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % freezes an empty % — an empty string is not a conclusion',
+          subject, component;
+      END IF;
+    END LOOP;
+    IF result ->> 'snapshotFrozenAt' !~ iso THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % freezes no ISO-8601 UTC snapshotFrozenAt', subject;
+    END IF;
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements(result -> 'requiredCapabilities') AS t(v)
+                WHERE jsonb_typeof(t.v) <> 'string' OR (t.v #>> '{}') = '') THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % freezes a requiredCapabilities that is not a list of nonempty strings',
+        subject;
+    END IF;
+    IF (SELECT array_agg(t.k ORDER BY t.k COLLATE "C") FROM jsonb_object_keys(result -> 'resolution') AS t(k))
+       IS DISTINCT FROM ARRAY['where','who','with'] THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % resolution is not PAC 7.5''s who/with/where', subject;
+    END IF;
+    RETURN result;
+  END;
+  $fn$ LANGUAGE plpgsql IMMUTABLE;
+`;
+
+/** §7.7 D15 as v1.10 specifies it: v1.8's body, plus EC2-b2 proved before the nine equalities. */
+const D15_V110 = D15_V18.replace(
+  `      SELECT a.execution_context INTO ctx FROM project_action a WHERE a.id = NEW.project_action_id;\n`,
+  `      SELECT a.execution_context INTO ctx FROM project_action a WHERE a.id = NEW.project_action_id;\n` +
+  `      PERFORM coordinator_execution_result_shape(NEW.id, ctx);\n`);
+
+/** §7.7 D16 as v1.10 specifies it: stable-key re-read (D9-f), the bidirectional link (D16-g), EC2-b2. */
+const D16_V110 = `
+  CREATE OR REPLACE FUNCTION session_execution_result_check() RETURNS trigger AS $fn$
+  DECLARE s session%ROWTYPE; ctx jsonb; action_status text; linked text; ledger jsonb; claim jsonb; pin jsonb;
+  BEGIN
+    SELECT * INTO s FROM session WHERE id = NEW.id;
+    IF NOT FOUND THEN RETURN NULL; END IF;
+    IF s.task_id IS NULL OR s.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+    SELECT a.execution_context, a.status, a.result_session_id,
+           COALESCE(a.detail -> 'retiredPins', '[]'::jsonb), a.detail -> 'claimResolution'
+      INTO ctx, action_status, linked, ledger, claim
+      FROM project_action a WHERE a.id = s.project_action_id;
+    IF ctx IS NULL OR action_status <> 'APPLIED' THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_MISMATCH: session % is not the frozen result of action %',
+        s.id, s.project_action_id;
+    END IF;
+    IF linked IS DISTINCT FROM s.id THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_LINK: session % points at action % while that action points at %',
+        s.id, s.project_action_id, COALESCE(linked, 'NULL');
+    END IF;
+    PERFORM coordinator_execution_result_shape(s.id, ctx);
+    IF s.agent_id              IS DISTINCT FROM ctx->>'agentId'
+       OR s.workspace_id       IS DISTINCT FROM ctx->>'workspaceId'
+       OR s.assigned_runner_id IS DISTINCT FROM ctx->>'assignedRunnerId'
+       OR s.provider           IS DISTINCT FROM ctx->>'provider'
+       OR s.provider_builtin   IS DISTINCT FROM (ctx->>'providerBuiltin')::boolean
+       OR to_jsonb(s.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities'
+       OR s.permission_mode    IS DISTINCT FROM ctx->>'permissionMode'
+       OR s.resolution         IS DISTINCT FROM ctx->'resolution'
+       OR s.snapshot_frozen_at IS DISTINCT FROM (ctx->>'snapshotFrozenAt')::timestamptz THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_MISMATCH: session % is not the frozen result of action %',
+        s.id, s.project_action_id;
+    END IF;
+    pin := coordinator_pin_ledger_fold(s.id, ctx, claim, ledger, s.execution_pin_generation);
+    IF s.execution_pin_generation = 0 THEN
+      IF s.model IS NOT NULL OR s.effort IS NOT NULL THEN
+        RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation 0 but already carries a pin', s.id;
+      END IF;
+    ELSIF s.model IS DISTINCT FROM pin->>'model' OR s.effort IS DISTINCT FROM pin->>'effort' THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % runs %/% while action % records %/%',
+        s.id, COALESCE(s.model,'NULL'), COALESCE(s.effort,'NULL'), s.project_action_id,
+        COALESCE(pin->>'model','NULL'), COALESCE(pin->>'effort','NULL');
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE FUNCTION project_action_pin_ledger_check() RETURNS trigger AS $fn$
+  DECLARE a project_action%ROWTYPE; s session%ROWTYPE; pin jsonb;
+  BEGIN
+    SELECT * INTO a FROM project_action WHERE id = NEW.id;
+    IF NOT FOUND OR a.type <> 'DISPATCH_TASK' THEN RETURN NULL; END IF;
+    IF a.status <> 'APPLIED' AND a.result_session_id IS NULL THEN RETURN NULL; END IF;
+    IF a.status <> 'APPLIED' OR a.result_session_id IS NULL THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_LINK: dispatch % is % and its result session is %',
+        a.id, a.status, COALESCE(a.result_session_id, 'NULL');
+    END IF;
+    SELECT * INTO s FROM session WHERE id = a.result_session_id;
+    IF NOT FOUND OR s.dispatch_origin <> 'COORDINATOR' OR s.project_action_id IS DISTINCT FROM a.id THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_LINK: applied dispatch % and session % do not point at each other',
+        a.id, a.result_session_id;
+    END IF;
+    PERFORM coordinator_execution_result_shape(a.id, a.execution_context);
+    pin := coordinator_pin_ledger_fold(a.id, a.execution_context, a.detail -> 'claimResolution',
+             COALESCE(a.detail -> 'retiredPins', '[]'::jsonb), s.execution_pin_generation);
+    IF s.execution_pin_generation > 0 AND (s.model IS DISTINCT FROM pin->>'model'
+                                           OR s.effort IS DISTINCT FROM pin->>'effort') THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % records %/% while session % runs %/%',
+        a.id, COALESCE(pin->>'model','NULL'), COALESCE(pin->>'effort','NULL'), a.result_session_id,
+        COALESCE(s.model,'NULL'), COALESCE(s.effort,'NULL');
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/** §7.7 D18 as v1.10 specifies it: the two writable columns each move in exactly one direction. */
+const D18_V110 = `
+  CREATE OR REPLACE FUNCTION project_action_result_ledger_mutator() RETURNS trigger AS $fn$
+  DECLARE old_ledger jsonb := COALESCE(OLD.detail -> 'retiredPins', '[]'::jsonb);
+          new_ledger jsonb := COALESCE(NEW.detail -> 'retiredPins', '[]'::jsonb);
+          kept jsonb;
+  BEGIN
+    IF NEW.type <> 'DISPATCH_TASK' THEN RETURN NEW; END IF;
+    IF OLD.result_session_id IS NOT NULL
+       AND NEW.result_session_id IS DISTINCT FROM OLD.result_session_id THEN
+      RAISE EXCEPTION 'ACTION_RESULT_LINK_FROZEN: action % cannot detach or repoint its result session (% -> %)',
+        OLD.id, OLD.result_session_id, COALESCE(NEW.result_session_id, 'NULL');
+    END IF;
+    IF OLD.detail ? 'claimResolution'
+       AND NEW.detail -> 'claimResolution' IS DISTINCT FROM OLD.detail -> 'claimResolution' THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % rewrites a claimResolution that is already recorded', OLD.id;
+    END IF;
+    SELECT jsonb_agg(t.v ORDER BY t.i) INTO kept
+      FROM jsonb_array_elements(new_ledger) WITH ORDINALITY AS t(v, i)
+     WHERE t.i <= jsonb_array_length(old_ledger);
+    IF jsonb_typeof(new_ledger) <> 'array'
+       OR jsonb_array_length(new_ledger) < jsonb_array_length(old_ledger)
+       OR (jsonb_array_length(old_ledger) > 0 AND kept IS DISTINCT FROM old_ledger) THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % rewrites or truncates a retired pin that is already recorded (% -> %)',
+        OLD.id, jsonb_array_length(old_ledger), jsonb_typeof(new_ledger);
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/** §7.7 D17 as v1.9 specified it: the queued NEW tuple, and `IS NULL` as the whole conclusion test. */
+const D17_CHECK_V19 = `
   CREATE OR REPLACE FUNCTION project_action_execution_digest_check() RETURNS trigger AS $fn$
   DECLARE ctx jsonb; auth jsonb;
           components constant text[] := ARRAY['resolvedAgentId','projectMemberId','taskId','taskAssigneeAgentId',
@@ -3490,7 +3692,7 @@ const V19_AUTH = `'{"resolvedAgentId":"a1","projectMemberId":"m1","taskId":"t1",
   `"providerSlug":"claude","model":%MODEL%,"workspaceId":"w1","runnerId":"r1","coordinatorWorkspaceId":null}'::jsonb`;
 const V19_RESULT = `'{"agentId":"a1","workspaceId":"w1","assignedRunnerId":"r1","provider":"claude",` +
   `"providerBuiltin":true,"requiredCapabilities":["linux"],"permissionMode":"read-only",` +
-  `"resolution":{"v":1,"who":{"source":"task"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
+  `"resolution":{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
   `"model":%MODEL%,"effort":%EFFORT%}'::jsonb`;
 
 /** The frozen context for one dispatch. `model`/`effort` are the EC2-b part ② conclusion (EC6-c). */
@@ -3515,24 +3717,44 @@ function claimAction19(id: string, key: string, options: {
       ${ctx},${contextDigest},${resultDigest},'MANUAL',NULL)`;
 }
 
-/** Install v1.9's objects. `ledger: 'v18'` and `digest: false` are the two reverse controls. */
-async function installV19(c: Client, options: { ledger?: 'v18' | 'v19'; digest?: boolean } = {}): Promise<void> {
-  const { ledger = 'v19', digest = true } = options;
+/**
+ * Install the current (v1.10) objects. Each option swaps in the shape a review reproduced, so every
+ * fix stays falsifiable: `ledger: 'v18'` is v1.8's cardinality-only D16 (PC-CX-47/49), `digest: false`
+ * drops D17 (PC-CX-48), `ledger: 'v19'` is v1.9's D16 — the one that reads its queued NEW tuple and
+ * early-exits on a null link (PC-CX-50/51) — and `mutator: false` drops D18 (PC-CX-50).
+ */
+async function installV19(c: Client, options: {
+  ledger?: 'v18' | 'v19' | 'v110'; digest?: boolean; mutator?: boolean;
+} = {}): Promise<void> {
+  const { ledger = 'v110', digest = true, mutator = ledger === 'v110' } = options;
   await c.query(SCHEMA_V19);
+  await c.query(RESULT_SHAPE_V110);            // D17's ⓪, called from D15, D16 and D17 alike
   await c.query(D17_V19);                      // the digest functions are fixture plumbing as well
+  if (ledger !== 'v110') await c.query(D17_CHECK_V19);   // reverse control: v1.9's D17 body
   await c.query(D11_V18);
   await c.query(`CREATE TRIGGER project_action_applied_immutable_guard BEFORE UPDATE ON project_action
                    FOR EACH ROW EXECUTE FUNCTION project_action_applied_immutable_guard()`);
-  await c.query(D15_V18);
+  await c.query(ledger === 'v110' ? D15_V110 : D15_V18);
   await c.query(`CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
                    FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard()`);
-  await c.query(ledger === 'v19' ? PIN_FOLD_V19 + D16_V19 : D16_V18);
+  if (mutator) {
+    await c.query(D18_V110);
+    await c.query(`CREATE TRIGGER project_action_result_ledger_mutator BEFORE UPDATE ON project_action
+                     FOR EACH ROW EXECUTE FUNCTION project_action_result_ledger_mutator()`);
+  }
+  if (ledger === 'v18') await c.query(D16_V18);
+  else await c.query(PIN_FOLD_V19 + (ledger === 'v110' ? D16_V110 : D16_V19));
   await c.query(`CREATE CONSTRAINT TRIGGER session_execution_result_check
                    AFTER INSERT OR UPDATE ON session DEFERRABLE INITIALLY DEFERRED
                    FOR EACH ROW EXECUTE FUNCTION session_execution_result_check()`);
-  await c.query(`CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check
-                   AFTER INSERT OR UPDATE OF detail, result_session_id ON project_action
-                   DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION project_action_pin_ledger_check()`);
+  // v1.10 (PC-CX-50): no `UPDATE OF` column list — a publish that only writes `status` must fire it.
+  await c.query(ledger === 'v110'
+    ? `CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check
+         AFTER INSERT OR UPDATE ON project_action
+         DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION project_action_pin_ledger_check()`
+    : `CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check
+         AFTER INSERT OR UPDATE OF detail, result_session_id ON project_action
+         DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION project_action_pin_ledger_check()`);
   if (digest) {
     await c.query(`CREATE CONSTRAINT TRIGGER project_action_execution_digest_check
                      AFTER INSERT OR UPDATE ON project_action DEFERRABLE INITIALLY DEFERRED
@@ -3684,11 +3906,14 @@ test('PC-CX-48 on real Postgres: a forged digest cannot be committed, and canoni
           { ctx: `(${ctx} #- '{authorization,runnerId}')` }],
         ['two halves describing two different dispatches',
           { ctx: `jsonb_set(${ctx}, '{authorization,resolvedAgentId}', '"a2"')` }],
-        ['a context that freezes no model conclusion', { ctx: `(${ctx} - 'model')` }],
       ];
       for (const [label, options] of forgeries) {
         assert.match(await publish(options), /EXECUTION_DIGEST_MISMATCH/, `${label} must be refused`);
       }
+      // v1.10 (PC-CX-52): "freezes no model conclusion" moved from D17's ad-hoc null test to EC2-b2's
+      // closed shape, so it is now refused earlier and by name — a missing key, not a missing digest.
+      assert.match(await publish({ ctx: `(${ctx} - 'model')` }), /EXECUTION_RESULT_SHAPE/,
+        'a context that freezes no model conclusion must be refused');
 
       // Reverse control — v1.9 without D17. The review's exact row commits, and I17-A's digest
       // half (the query §12.1 G5 ⑫ asks the migration to run) returns it.
@@ -3720,36 +3945,46 @@ test('PC-CX-49 on real Postgres: an empty ledger record is refused and a legal r
       });
       const CLAIM = `UPDATE project_action SET detail = detail || ${claimRecord(
         part('model-v1', 'model-v1', 'FROZEN_CONTEXT'), part('high', 'high', 'FROZEN_CONTEXT'))} WHERE id='act1'`;
+      // v1.10 (PC-CX-50): the ledger is append-only (D18), so a counterexample has to be *appended*
+      // rather than written over the record a previous transaction already committed.
+      const append = (record: string): string =>
+        `UPDATE project_action SET detail = jsonb_set(detail, '{retiredPins}',
+           COALESCE(detail->'retiredPins','[]'::jsonb) || jsonb_build_array(${record})) WHERE id='act1'`;
       const retire = (over: Record<string, string> = {}): string => {
         const fields: Record<string, string> = {
           generation: '2', component: `'model'`, from: `'model-v1'`, to: `'model-v2'`,
           at: `'${RETIRE_AT_19}'`, reason: `'RUNTIME_RETIRED'`, ...over,
         };
         const pairs = Object.entries(fields).map(([k, v]) => `'${k}', ${v}`).join(', ');
-        return `UPDATE project_action SET detail = detail || jsonb_build_object('retiredPins',
-          jsonb_build_array(jsonb_build_object(${pairs}))) WHERE id='act1'`;
+        return append(`jsonb_build_object(${pairs})`);
       };
       const observed = async () => (await c.query<{ generation: string; retired: string; model: string | null }>(`
         SELECT s.execution_pin_generation::text AS generation, s.model,
                COALESCE(jsonb_array_length(a.detail->'retiredPins'),0)::text AS retired
           FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE s.id='s1'`)).rows[0];
 
-      await installV19(c);
-      assert.equal(await dispatch(), '');
-      assert.equal(await txn(c, async () => {
+      const firstClaim = async (): Promise<string> => txn(c, async () => {
         await c.query(CLAIM);
         await c.query(`UPDATE session SET model='model-v1', effort='high', execution_pin_generation=1 WHERE id='s1'`);
-      }), '', 'a first claim that records itself must commit');
-      // Both statement orders still commit — that is what "deferred" buys (D16-a).
-      assert.equal(await txn(c, async () => {
+      });
+      /** One transaction: the session takes the new pin, and the action appends the record. */
+      const retiredPin = async (sql: string): Promise<string> => txn(c, async () => {
         await c.query(`UPDATE session SET model='model-v2', execution_pin_generation=2 WHERE id='s1'`);
-        await c.query(retire());
-      }), '', 'a retiredPin that records itself must commit (session written first)');
+        await c.query(sql);
+      });
+
+      await installV19(c);
+      assert.equal(await dispatch(), '');
+      assert.equal(await firstClaim(), '', 'a first claim that records itself must commit');
+      // Both statement orders still commit — that is what "deferred" buys (D16-a).
+      assert.equal(await retiredPin(retire()), '',
+        'a retiredPin that records itself must commit (session written first)');
       assert.deepEqual(await observed(), { generation: '2', retired: '1', model: 'model-v2' });
 
-      // The review's witness plus every shape that says nothing.
+      // The review's witness plus every shape that says nothing. Each one starts from the same
+      // committed generation-1 state and appends exactly one record, so only that record differs.
       const refusals: [string, string][] = [
-        ['an empty retiredPin record', `UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins}','[{}]') WHERE id='act1'`],
+        ['an empty retiredPin record', append(`'{}'::jsonb`)],
         ['a record missing its reason', retire({ reason: 'NULL' })],
         ['a record whose reason is not the one PAC §6 reserves', retire({ reason: `'BECAUSE_I_SAID_SO'` })],
         ['a record for a component PAC §6 does not freeze at first claim', retire({ component: `'provider'` })],
@@ -3757,22 +3992,18 @@ test('PC-CX-49 on real Postgres: an empty ledger record is refused and a legal r
         ['a generation that does not match the position', retire({ generation: '5' })],
         ['a moment that runs backwards', retire({ at: `'${V18_FROZEN_AT}'` })],
         ['a rewrite that rewrites nothing', retire({ to: `'model-v1'` })],
+        ['a record carrying an extra key',
+          append(`jsonb_build_object('generation',2,'component','model','from','model-v1','to','model-v2',
+            'at','${RETIRE_AT_19}','reason','RUNTIME_RETIRED','note','why not')`)],
+        ['a chain that folds elsewhere than the session pin', retire({ to: `'model-v9'` })],
       ];
       for (const [label, sql] of refusals) {
-        // Each starts from the same committed generation-2 state, so only the record differs.
-        assert.match(await txn(c, async () => { await c.query(sql); }), /EXECUTION_PIN_LEDGER/,
-          `${label} must be refused`);
+        assert.equal(await dispatch(), '');
+        assert.equal(await firstClaim(), '');
+        assert.match(await retiredPin(sql), /EXECUTION_PIN_LEDGER/, `${label} must be refused`);
+        assert.deepEqual(await observed(), { generation: '1', retired: '0', model: 'model-v1' },
+          `${label} left something behind`);
       }
-      assert.deepEqual(await observed(), { generation: '2', retired: '1', model: 'model-v2' },
-        'and none of them left anything behind');
-      // A record carrying an extra key is refused from the action side as well.
-      assert.match(await txn(c, async () => {
-        await c.query(`UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins,0,note}','"why not"') WHERE id='act1'`);
-      }), /EXECUTION_PIN_LEDGER/, 'an extra key must be refused');
-      // …and so is a chain that no longer folds to what the session is running.
-      assert.match(await txn(c, async () => {
-        await c.query(`UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins,0,to}','"model-v9"') WHERE id='act1'`);
-      }), /EXECUTION_PIN_LEDGER/, 'a ledger that folds elsewhere than the session pin must be refused');
 
       // Reverse control — v1.8's two cardinality functions. The review's exact state commits.
       await installV19(c, { ledger: 'v18' });
@@ -3786,6 +4017,253 @@ test('PC-CX-49 on real Postgres: an empty ledger record is refused and a legal r
         await c.query(`UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins}','[{}]') WHERE id='act1'`);
       }), '', 'PC-CX-49 must reproduce: v1.8 commits a ledger of empty objects');
       assert.deepEqual(await observed(), { generation: '2', retired: '1', model: 'model-v2' });
+    } finally {
+      await c.end();
+    }
+  });
+
+// ---------------------------------------------------------------------------------------------
+// v1.10 — `PC-CX-50..52` (§28). Round ten asked what a hard gate is *holding* when it judges:
+// the column it reads to decide whether it applies, the row version it was queued with, and the
+// object whose digest it recomputed.
+// ---------------------------------------------------------------------------------------------
+
+/** The two ledger writes of a legal first claim, as SQL. */
+const FIRST_CLAIM_RECORD = claimRecord(
+  part('model-v1', 'model-v1', 'FROZEN_CONTEXT'), part('high', 'high', 'FROZEN_CONTEXT'));
+
+test('PC-CX-50 on real Postgres: the result link is published once and the ledger only grows',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const ctx = context19();
+      const dispatch = async (): Promise<string> => txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(claimAction19('act1', 'k1', { ctx }));
+        await c.query(MATCHING_SESSION('s1', 'act1'));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+      const claim = async (): Promise<string> => txn(c, async () => {
+        await c.query(`UPDATE project_action SET detail = detail || ${FIRST_CLAIM_RECORD} WHERE id='act1'`);
+        await c.query(`UPDATE session SET model='model-v1', effort='high', execution_pin_generation=1 WHERE id='s1'`);
+      });
+      const one = async (sql: string): Promise<string> => txn(c, async () => { await c.query(sql); });
+      const link = async () => (await c.query<{
+        action_result: string | null; session_action: string; generation: string; claim: string | null;
+      }>(`
+        SELECT a.result_session_id AS action_result, s.project_action_id AS session_action,
+               s.execution_pin_generation::text AS generation, (a.detail->'claimResolution')::text AS claim
+          FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE s.id='s1'`)).rows[0];
+
+      await installV19(c);
+      assert.equal(await dispatch(), '', 'the normal path must still commit');
+      assert.equal(await claim(), '', 'a legal first claim must still commit');
+
+      // The review's two transactions, verbatim. D18 refuses each on the statement itself (D18-f).
+      assert.match(await one(`UPDATE project_action SET result_session_id=NULL WHERE id='act1'`),
+        /ACTION_RESULT_LINK_FROZEN/, 'PC-CX-50: a published result link cannot be detached');
+      assert.match(await one(`UPDATE project_action SET result_session_id='s2' WHERE id='act1'`),
+        /ACTION_RESULT_LINK_FROZEN/, 'PC-CX-50: a published result link cannot be repointed');
+      assert.match(await one(`UPDATE project_action SET detail='{"claimResolution":{}}'::jsonb WHERE id='act1'`),
+        /EXECUTION_PIN_LEDGER/, 'PC-CX-50: a recorded claimResolution cannot be rewritten');
+      assert.match(await one(`UPDATE project_action SET detail = detail - 'claimResolution' WHERE id='act1'`),
+        /EXECUTION_PIN_LEDGER/, 'a recorded claimResolution cannot be dropped');
+      // …and everything the ledger does not own stays freely writable (D18-c).
+      assert.equal(await one(`UPDATE project_action SET detail = detail || '{"display":{"note":"ready"}}'::jsonb WHERE id='act1'`),
+        '', 'a display write must still commit');
+      assert.deepEqual(await link(), {
+        action_result: 's1', session_action: 'act1', generation: '1', claim: (await link()).claim,
+      }, 'the committed link is unchanged and still symmetric');
+
+      // The retiredPins half of the same rule: append-only, prefix verbatim (D18 ③).
+      assert.equal(await txn(c, async () => {
+        await c.query(`UPDATE session SET model='model-v2', execution_pin_generation=2 WHERE id='s1'`);
+        await c.query(`UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins}',
+          jsonb_build_array(jsonb_build_object('generation',2,'component','model','from','model-v1',
+            'to','model-v2','at','${RETIRE_AT_19}','reason','RUNTIME_RETIRED'))) WHERE id='act1'`);
+      }), '', 'a legal retiredPin must commit');
+      for (const [label, sql] of [
+        ['truncated to empty', `UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins}','[]') WHERE id='act1'`],
+        ['rewritten in place', `UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins,0,at}','"2026-08-19T00:03:00.000Z"') WHERE id='act1'`],
+        ['replaced by an empty record', `UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins}','[{}]') WHERE id='act1'`],
+        ['dropped', `UPDATE project_action SET detail = detail - 'retiredPins' WHERE id='act1'`],
+      ] as [string, string][]) {
+        assert.match(await one(sql), /EXECUTION_PIN_LEDGER/, `a ledger ${label} must be refused`);
+      }
+
+      // Two objects, two chances: without D18 the same detach reaches the commit point, and D16-g
+      // refuses it there — a typed refusal from either side, exactly like D15-g / D16-d.
+      await installV19(c, { mutator: false });
+      assert.equal(await dispatch(), '');
+      assert.equal(await claim(), '');
+      assert.match(await one(`UPDATE project_action SET result_session_id=NULL WHERE id='act1'`),
+        /EXECUTION_RESULT_LINK/, 'without D18 the commit point still refuses a one-sided detach');
+      assert.match(await one(`UPDATE project_action SET detail='{"claimResolution":{}}'::jsonb WHERE id='act1'`),
+        /EXECUTION_PIN_LEDGER/, 'and the ledger rewrite is still judged, because the gate did not disable itself');
+
+      // Reverse control — v1.9: D18 absent and the action side early-exits on a null link. The
+      // review's exact committed state comes back, field for field.
+      await installV19(c, { ledger: 'v19' });
+      assert.equal(await dispatch(), '');
+      assert.equal(await claim(), '');
+      assert.equal(await one(`UPDATE project_action SET result_session_id=NULL WHERE id='act1'`), '',
+        'PC-CX-50 must reproduce: v1.9 lets a writable column close the gate that reads it');
+      assert.equal(await one(`UPDATE project_action SET detail='{"claimResolution":{}}'::jsonb WHERE id='act1'`), '',
+        'PC-CX-50 must reproduce: after the detach nothing judges the ledger');
+      assert.deepEqual(await link(),
+        { action_result: null, session_action: 'act1', generation: '1', claim: '{}' });
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-51 on real Postgres: any legal statement order inside one transaction commits',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const ctx = context19();
+      const dispatch = async (): Promise<string> => txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(claimAction19('act1', 'k1', { ctx }));
+        await c.query(MATCHING_SESSION('s1', 'act1'));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+      // The three writes a first claim needs, plus the two extra writes D11-b and D16-c allow.
+      const HEARTBEAT = `UPDATE session SET status='RUNNING' WHERE id='s1'`;
+      const DISPLAY = `UPDATE project_action SET detail = detail || '{"display":{"note":"ready"}}'::jsonb WHERE id='act1'`;
+      const RECORD = `UPDATE project_action SET detail = detail || ${FIRST_CLAIM_RECORD} WHERE id='act1'`;
+      const pin = (generation: number): string =>
+        `UPDATE session SET model='model-v1', effort='high', execution_pin_generation=${generation} WHERE id='s1'`;
+      const state = async () => (await c.query<{ status: string; generation: string; model: string | null }>(`
+        SELECT s.status, s.execution_pin_generation::text AS generation, s.model FROM session s WHERE s.id='s1'`)).rows[0];
+
+      await installV19(c);
+      // Every legal interleaving of the extra write, the record and the pin. All six commit.
+      const orders: [string, string[]][] = [
+        ['heartbeat first', [HEARTBEAT, RECORD, pin(1)]],
+        ['heartbeat between', [RECORD, HEARTBEAT, pin(1)]],
+        ['heartbeat last', [RECORD, pin(1), HEARTBEAT]],
+        ['display first', [DISPLAY, RECORD, pin(1)]],
+        ['display between', [RECORD, DISPLAY, pin(1)]],
+        ['pin before record', [HEARTBEAT, pin(1), RECORD]],
+      ];
+      for (const [label, statements] of orders) {
+        assert.equal(await dispatch(), '');
+        assert.equal(await txn(c, async () => {
+          for (const sql of statements) await c.query(sql);
+        }), '', `${label}: a legal final state must commit whatever order it was written in`);
+        assert.equal((await state()).model, 'model-v1', `${label}: and the pin is the one the action froze`);
+      }
+
+      // An illegal final state is still refused — in every one of those orders, and it rolls back.
+      for (const [label, statements] of orders) {
+        assert.equal(await dispatch(), '');
+        const written = statements.map((sql) => (sql === pin(1) ? pin(2) : sql));
+        assert.match(await txn(c, async () => {
+          for (const sql of written) await c.query(sql);
+        }), /EXECUTION_PIN_GENERATION|EXECUTION_PIN_LEDGER/,
+          `${label}: generation 2 with no retiredPin must still be refused`);
+        assert.deepEqual(await state(), { status: 'PENDING', generation: '0', model: null },
+          `${label}: and the transaction rolled back whole`);
+      }
+
+      // Reverse control — v1.9's D16, which judges the tuple each event was queued with. The two
+      // paths the review published fail deterministically, and the proposed final state is legal.
+      await installV19(c, { ledger: 'v19' });
+      for (const [label, statements] of [
+        ['heartbeat first', [HEARTBEAT, RECORD, pin(1)]],
+        ['display first', [DISPLAY, RECORD, pin(1)]],
+      ] as [string, string[]][]) {
+        assert.equal(await dispatch(), '');
+        assert.match(await txn(c, async () => {
+          for (const sql of statements) await c.query(sql);
+        }), /EXECUTION_PIN_LEDGER/, `PC-CX-51 must reproduce: v1.9 rejects the ${label} order`);
+        assert.deepEqual(await state(), { status: 'PENDING', generation: '0', model: null });
+      }
+      const folded = (await c.query<{ pin: { model: string; effort: string } }>(`
+        SELECT coordinator_pin_ledger_fold('final-state', ${ctx}, ${FIRST_CLAIM_RECORD}->'claimResolution',
+          '[]'::jsonb, 1) AS pin`)).rows[0].pin;
+      assert.deepEqual(folded, { model: 'model-v1', effort: 'high' },
+        'the state v1.9 refused to commit is internally valid — that is what makes it a defect');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-52 on real Postgres: an incomplete or empty result half is refused at the commit point',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      // The session is built from the frozen context itself (EC6-a), so a missing key becomes a
+      // SQL NULL column and the review's `IS DISTINCT FROM` equality holds on both sides.
+      const dispatch = async (ctx: string): Promise<string> => txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(claimAction19('act1', 'k1', { ctx }));
+        await c.query(`
+          INSERT INTO session (id,task_id,project_action_id,dispatch_origin,status,agent_id,workspace_id,
+            assigned_runner_id,provider,provider_builtin,required_capabilities,permission_mode,resolution,
+            snapshot_frozen_at)
+          SELECT 's1','t1','act1','COORDINATOR','PENDING', execution_context->>'agentId',
+            execution_context->>'workspaceId', execution_context->>'assignedRunnerId',
+            execution_context->>'provider', (execution_context->>'providerBuiltin')::boolean,
+            -- The fixture must survive a malformed context long enough for the gate to refuse it,
+            -- so a non-array here becomes a SQL NULL column rather than a raw extraction error.
+            CASE WHEN jsonb_typeof(execution_context->'requiredCapabilities') = 'array'
+                 THEN ARRAY(SELECT jsonb_array_elements_text(execution_context->'requiredCapabilities')) END,
+            execution_context->>'permissionMode', execution_context->'resolution',
+            (execution_context->>'snapshotFrozenAt')::timestamptz
+            FROM project_action WHERE id='act1'`);
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+
+      await installV19(c);
+      assert.equal(await dispatch(context19()), '', 'the complete eleven-key result half must commit');
+
+      const refusals: [string, string][] = [
+        ['an empty model conclusion', context19('""')],
+        ['an empty effort conclusion', context19('"model-v1"', '""')],
+        ['a missing requiredCapabilities', `(${context19()} - 'requiredCapabilities')`],
+        ['a missing permissionMode', `(${context19()} - 'permissionMode')`],
+        ['a missing resolution', `(${context19()} - 'resolution')`],
+        ['a missing snapshotFrozenAt', `(${context19()} - 'snapshotFrozenAt')`],
+        ['all four missing at once',
+          `(${context19()} - 'requiredCapabilities' - 'permissionMode' - 'resolution' - 'snapshotFrozenAt')`],
+        ['a providerBuiltin that is a string', `jsonb_set(${context19()}, '{providerBuiltin}', '"true"')`],
+        ['a requiredCapabilities that is not an array', `jsonb_set(${context19()}, '{requiredCapabilities}', '"linux"')`],
+        ['a capability that is not a nonempty string', `jsonb_set(${context19()}, '{requiredCapabilities}', '[""]')`],
+        ['a key EC2-b does not have', `(${context19()} || '{"surprise":1}'::jsonb)`],
+        ['a snapshotFrozenAt that is not ISO-8601 UTC', `jsonb_set(${context19()}, '{snapshotFrozenAt}', '"yesterday"')`],
+        ['a resolution that is not PAC 7.5 who/with/where', `jsonb_set(${context19()}, '{resolution}', '{"v":1}')`],
+        ['a model that is JSON null', `jsonb_set(${context19()}, '{model}', 'null')`],
+      ];
+      // Each refused dispatch rolls back whole, so the previous committed dispatch is what stays.
+      const committed = async (): Promise<string | null> => (await c.query<{ model: string | null }>(
+        `SELECT execution_context->>'model' AS model FROM project_action WHERE id='act1'`)).rows[0]?.model ?? null;
+      for (const [label, ctx] of refusals) {
+        // Every digest below is computed by the database from the (incomplete) object itself, so it
+        // is *correct*. That is the whole finding: a correct digest of an incomplete input.
+        assert.match(await dispatch(ctx), /EXECUTION_RESULT_SHAPE/, `${label} must be refused`);
+        assert.equal(await committed(), 'model-v1', `${label} was not rolled back whole`);
+      }
+      // The deferred sentinel is a conclusion, not an absence (EC6-c row 1).
+      assert.equal(await dispatch(context19('"DEFERRED_TO_CLAIM"')), '',
+        'DEFERRED_TO_CLAIM is a legal conclusion and must still commit');
+
+      // Reverse control — v1.9: D17 tested `IS NULL` and nothing counted the keys. Both of the
+      // review's states commit, and the second one carries two correct digests.
+      await installV19(c, { ledger: 'v19' });
+      assert.equal(await dispatch(context19('""', '""')), '',
+        'PC-CX-52 must reproduce: v1.9 mistakes an empty string for a concrete conclusion');
+      const missing = ['requiredCapabilities', 'permissionMode', 'resolution', 'snapshotFrozenAt'];
+      assert.equal(await dispatch(
+        `(${context19()} - 'requiredCapabilities' - 'permissionMode' - 'resolution' - 'snapshotFrozenAt')`), '',
+        'PC-CX-52 must reproduce: v1.9 accepts an incomplete result half');
+      const shape = (await c.query<{ missing: string[]; capabilities: string[] | null; permission: string | null }>(`
+        SELECT ARRAY(SELECT k FROM unnest(ARRAY['requiredCapabilities','permissionMode','resolution','snapshotFrozenAt']) k
+                     WHERE NOT (a.execution_context ? k)) AS missing,
+               s.required_capabilities AS capabilities, s.permission_mode AS permission
+          FROM project_action a JOIN session s ON s.project_action_id = a.id WHERE a.id='act1'`)).rows[0];
+      assert.deepEqual(shape, { missing, capabilities: null, permission: null });
     } finally {
       await c.end();
     }
