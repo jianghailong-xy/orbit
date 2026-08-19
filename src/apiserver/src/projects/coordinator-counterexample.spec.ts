@@ -6607,3 +6607,220 @@ test('§29 names a test that exists for every finding, and points at clauses tha
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§29 points at §${m[1]}, which does not exist`);
   }
 });
+
+// -------------------------------------------------------------------------------------------------
+// v1.12 — `PC-CX-56..57`
+// -------------------------------------------------------------------------------------------------
+
+/** v1.11 or v1.12 of the two rules round twelve moved. */
+type Version112 = 'v111' | 'v112';
+
+/**
+ * §2.4's on-delete table plus §7.7 D20, modelled. Three frozen rules — the `project` cascade, the
+ * action → Session RESTRICT and the Session → action RESTRICT — closed every one of the three
+ * delete orders, while D19-c promised in the same document that "the granularity of physical
+ * removal is the Project" (`PC-CX-56`). RESTRICT is never deferrable in PostgreSQL, so the only
+ * order that could have worked — Project first, placeholders after — failed on its first statement.
+ */
+type PurgeOutcome = 'committed' | 'refused-23503' | 'refused-typed' | 'orphaned';
+function purgeProject(version: Version112, options: {
+  linked: boolean; declared?: boolean; purgesPlaceholders?: boolean; lineageFk?: boolean;
+}): PurgeOutcome {
+  const { linked, declared = false, purgesPlaceholders = declared, lineageFk = true } = options;
+  if (!linked) return 'committed';                     // the cascade takes the ledger; nothing refers to it
+  if (!lineageFk) return 'orphaned';                   // the review's own reverse control
+  if (version === 'v111') return 'refused-23503';      // immediate RESTRICT refuses the cascade itself
+  if (!declared) return 'refused-typed';               // D20 ②: a bare DELETE that would strand a placeholder
+  // D20 ③: the check is deferred, so the ledger and its placeholders go in either order — but the
+  // deferred foreign key still runs at COMMIT, which is what makes "no orphan" a proof rather than
+  // a promise. A transaction that forges the fence and leaves the placeholders behind fails there.
+  return purgesPlaceholders ? 'committed' : 'refused-23503';
+}
+
+test('PC-CX-56 the Project purge protocol is a single committable transaction', () => {
+  // The finding is the absence of a legal path, so the assertion that closes it is a positive.
+  assert.equal(purgeProject('v112', { linked: true, declared: true }), 'committed',
+    'a linked Project must have one purge transaction that actually commits — that is the whole finding');
+  assert.equal(purgeProject('v112', { linked: false }), 'committed',
+    'and an empty Project must keep committing on a bare DELETE, or §2.4 cascade means nothing');
+  assert.equal(purgeProject('v112', { linked: true }), 'refused-typed',
+    'a bare DELETE that would strand a placeholder is refused with this contract own code');
+  assert.equal(purgeProject('v112', { linked: true, declared: true, purgesPlaceholders: false }),
+    'refused-23503',
+    'a forged fence that leaves the placeholders behind still fails at COMMIT — the proof is structural');
+
+  // Reverse control: v1.11's two immediate RESTRICTs, and the orphan the review got by dropping one.
+  assert.equal(purgeProject('v111', { linked: true, declared: true }), 'refused-23503',
+    'PC-CX-56 must reproduce: under v1.11 the Project-first order fails on its first statement');
+  assert.equal(purgeProject('v111', { linked: true, lineageFk: false }), 'orphaned',
+    'and dropping the Session half is not an answer: it leaves the lineage I17-A3 forbids');
+
+  // The document side. §2.4's second on-delete row is the one word that changed, and the reason it
+  // had to change is a property of PostgreSQL, not a preference.
+  const infra = section(PCC, '2.4');
+  assert.match(infra, /`session\.projectActionId → project_action\.id` \| \*\*NO ACTION\*\*/,
+    '§2.4 still freezes the lineage half as an immediate RESTRICT');
+  assert.match(infra, /DEFERRABLE INITIALLY IMMEDIATE/, '§2.4 does not say the constraint is deferrable at all');
+  assert.match(infra, /`project_action\.result_session_id → session\.id` \| \*\*RESTRICT\*\*/,
+    'the action → Session half must stay immediate: the purge never needs it deferred');
+  assert.match(infra, /project_purge_fence/, '§2.4 does not register the typed half');
+  assert.match(infra, /coordinator_purge_project/, '§2.4 does not register the one public entry point');
+
+  const seven = section(PCC, '7.7');
+  assert.ok(seven.includes('#### D20 '), '§7.7 has no D20');
+  const d20 = seven.slice(seven.indexOf('#### D20 '), seven.indexOf('#### D7 '));
+  assert.match(d20, /ON DELETE NO ACTION ON UPDATE NO ACTION\n  DEFERRABLE INITIALLY IMMEDIATE/,
+    'D20 does not state the constraint it depends on');
+  assert.match(d20, /SET CONSTRAINTS session_project_action_fk DEFERRED/,
+    'D20 never actually defers the check, so the Project-first order still fails on its first statement');
+  assert.match(d20, /PROJECT_PURGE_UNDECLARED/, 'a refused bare DELETE has no typed code');
+  assert.match(d20, /owner=SYSTEM, recovery=EVENT/, 'the typed refusal names no owner or recovery');
+  assert.match(d20, /FOR UPDATE/, 'D20 has no answer for two concurrent purges');
+  for (const clause of ['**D20-a（', '**D20-b（', '**D20-c（', '**D20-d（', '**D20-e（', '**D20-f（',
+    '**D20-g（', '**D20-h（']) {
+    assert.ok(d20.includes(clause), `D20 does not state ${clause}）`);
+  }
+  // GE1 is the rule the cascade has to coexist with, and v1.12 is where the exception is written.
+  assert.match(section(PCC, '8.2'), /唯一的例外是 §2\.4 那条 `project` 级联/,
+    '§8.2 GE1 still forbids the cascade it has always been paired with');
+  assert.match(section(PCC, '8.2'), /整份消失.*与.*逐条删除.*是两件事/,
+    'GE1 does not distinguish a whole ledger leaving with its Project from deleting rows one by one');
+  // D19 is unchanged except for the recovery it points at, and I17-A3 gains its fourth constructor.
+  const d19 = seven.slice(seven.indexOf('#### D19 '), seven.indexOf('#### D20 '));
+  assert.match(d19, /coordinator_purge_project\(\)/, 'D19 recovery still points at a delete that cannot commit');
+  assert.doesNotMatch(d19, /那之后这条 Session 就是一条普通 Session，照常可删/,
+    'D19-c still claims the unreachable transition as if it were executable');
+  const invariants = section(PCC, '4.3');
+  const i17a3 = invariants.slice(invariants.indexOf('- **I17-A3（'), invariants.indexOf('- **I17-d（'));
+  assert.match(i17a3, /D20/, 'I17-A3 does not name the object that carries it when the ledger leaves');
+  assert.match(section(PCC, '15'), /\*\*F56\*\*/, '§15 has no fault row for a Project purge');
+  assert.match(section(PCC, '12.1'), /coordinator_purge_project/, 'G5 does not verify the purge protocol');
+  assert.match(section(PCC, '12.1'), /condeferrable/,
+    'G5 does not check the one column that tells an immediate RESTRICT from a deferrable NO ACTION');
+});
+
+/**
+ * §7.7 D18 ⓪ and D18-h, modelled. v1.11's compatibility branch was right about *why* (a statement
+ * that did not touch an already-malformed ledger must not be bricked by it) and wrong about *how
+ * far*: it was written as `RETURN NEW`, which sits ahead of ① and ②, so an unrelated sibling key's
+ * top-level type decided whether a published link could be detached and whether an already-recorded
+ * claimResolution could be rewritten (`PC-CX-57`).
+ */
+type MutatorOutcome = 'commit' | 'EXECUTION_PIN_LEDGER' | 'ACTION_RESULT_LINK_FROZEN';
+function ledgerMutator112(version: Version112, row: {
+  oldLedger: unknown; newLedger: unknown; hadClaim: boolean; rewritesClaim: boolean;
+  hadLink: boolean; movesLink: boolean;
+}): MutatorOutcome {
+  const isArray = (value: unknown): boolean => value === undefined || Array.isArray(value);
+  const untouched = !isArray(row.newLedger)
+    && JSON.stringify(row.oldLedger) === JSON.stringify(row.newLedger);
+  if (!isArray(row.newLedger)) {
+    if (!untouched) return 'EXECUTION_PIN_LEDGER';
+    // v1.11 returned here, out of the whole function; v1.12 only records that ③ is unrunnable.
+    if (version === 'v111') return 'commit';
+  }
+  if (row.hadLink && row.movesLink) return 'ACTION_RESULT_LINK_FROZEN';      // ①
+  if (row.hadClaim && row.rewritesClaim) return 'EXECUTION_PIN_LEDGER';      // ②
+  return 'commit';                                                          // ③ is the only skip
+}
+
+test("PC-CX-57 the malformed-ledger compatibility path skips only the ledger's own check", () => {
+  const legacy = { oldLedger: {}, newLedger: {}, hadClaim: true, rewritesClaim: false,
+    hadLink: true, movesLink: false };
+
+  // The two gates that have nothing to do with retiredPins run on a malformed row exactly as they
+  // run on a legal one. That equality *is* the finding: v1.11 made them depend on a sibling key.
+  assert.equal(ledgerMutator112('v112', { ...legacy, rewritesClaim: true }), 'EXECUTION_PIN_LEDGER',
+    'a recorded claimResolution must stay immutable while retiredPins is still malformed');
+  assert.equal(ledgerMutator112('v112', { ...legacy, movesLink: true }), 'ACTION_RESULT_LINK_FROZEN',
+    'and a published result link must stay frozen while retiredPins is still malformed');
+  assert.equal(ledgerMutator112('v112', { ...legacy, oldLedger: [], newLedger: [], rewritesClaim: true }),
+    'EXECUTION_PIN_LEDGER', 'the legal-ledger row must give the identical answer — one rule, not two');
+
+  // …and D18-g's two outlets are untouched, which is what the compatibility branch is *for*.
+  assert.equal(ledgerMutator112('v112', legacy), 'commit',
+    'a statement that touches neither the ledger nor the two frozen columns — CLAIMED → REFUSED — must commit');
+  assert.equal(ledgerMutator112('v112', { ...legacy, newLedger: [] }), 'commit',
+    'and the prescribed repair must still commit');
+  assert.equal(ledgerMutator112('v112', { ...legacy, hadClaim: false, rewritesClaim: true }), 'commit',
+    'writing a first claimResolution is not a rewrite: ② freezes the second write, not the first');
+  assert.equal(ledgerMutator112('v112', { ...legacy, newLedger: 'still-bad' }), 'EXECUTION_PIN_LEDGER',
+    'swapping one malformed value for another is still not a repair');
+
+  // Reverse control: v1.11's `RETURN NEW`, and the two rewrites it admitted.
+  assert.equal(ledgerMutator112('v111', { ...legacy, rewritesClaim: true }), 'commit',
+    'PC-CX-57 must reproduce: an unchanged malformed retiredPins disabled claim immutability');
+  assert.equal(ledgerMutator112('v111', { ...legacy, movesLink: true }), 'commit',
+    'and it disabled the result-link freeze in the same breath');
+  assert.equal(ledgerMutator112('v111', { ...legacy, oldLedger: [], newLedger: [], rewritesClaim: true }),
+    'EXECUTION_PIN_LEDGER', 'which is how the same rewrite had two answers under v1.11');
+
+  // The document side: the branch records a flag, and the two gates are ahead of the one skip.
+  const seven = section(PCC, '7.7');
+  const d18 = seven.slice(seven.indexOf('#### D18 '), seven.indexOf('#### D19 '));
+  const compat = d18.indexOf("IF TG_OP = 'UPDATE' AND new_ledger = COALESCE(OLD.detail -> 'retiredPins'");
+  const flag = d18.indexOf('ledger_untouched := true;', compat);
+  const linkFreeze = d18.indexOf('IF OLD.result_session_id IS NOT NULL');
+  const claimFreeze = d18.indexOf("IF OLD.detail ? 'claimResolution'");
+  const skip = d18.indexOf('IF ledger_untouched THEN RETURN NEW; END IF;');
+  assert.ok(compat >= 0 && flag > compat, 'D18 ⓪ still returns out of the whole function');
+  assert.ok(linkFreeze > flag && claimFreeze > flag,
+    'the two unrelated gates are not downstream of the compatibility branch');
+  assert.ok(skip > linkFreeze && skip > claimFreeze,
+    'the skip must land after ① and ② — that position is the entire fix');
+  assert.ok(skip < d18.indexOf('FROM jsonb_array_elements(new_ledger)'),
+    'and before the array expansion it exists to avoid');
+  assert.ok(d18.includes('**D18-h（'), 'D18 does not argue why the compatibility branch is one check wide');
+  assert.match(section(PCC, '15'), /\*\*F57\*\*/, '§15 has no fault row for the legacy-ledger bypass');
+  assert.match(section(PCC, '12.1'), /ACTION_RESULT_LINK_FROZEN/,
+    'G5 does not verify that the link freeze survives a malformed ledger');
+});
+
+test('mutation check: every fence added for PC-CX-56..57 is load-bearing', () => {
+  const legacy = { oldLedger: {}, newLedger: {}, hadClaim: true, rewritesClaim: true,
+    hadLink: true, movesLink: false };
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-56',
+      fence: 'the deferrable lineage constraint and the declared purge (§2.4 · §7.7 D20)',
+      // The defect is the absence of a legal path, so it reappears when the declared purge — the
+      // only order that can work — still fails, and the one way through leaves the orphan.
+      defectReappears: () => purgeProject('v111', { linked: true, declared: true }) === 'refused-23503'
+        && purgeProject('v111', { linked: true, lineageFk: false }) === 'orphaned',
+    },
+    {
+      finding: 'PC-CX-57',
+      fence: 'the ledger_untouched flag in place of ⓪ RETURN NEW (§7.7 D18 ⓪ / D18-h)',
+      defectReappears: () => ledgerMutator112('v111', legacy) === 'commit'
+        && ledgerMutator112('v111', { ...legacy, rewritesClaim: false, movesLink: true }) === 'commit',
+    },
+  ];
+  for (const mutant of mutants) {
+    assert.equal(mutant.defectReappears(), true,
+      `${mutant.finding}: removing ${mutant.fence} does not bring the published counterexample back, so it is not what closed it`);
+  }
+});
+
+test('§30 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§29 have, for the twelfth round.
+  const rows = tables(section(PCC, '30'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-56', 'PC-CX-57']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`) || self.includes(`test("${name}"`),
+      `§30 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '30').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 2, '§30 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§30 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '30').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§30 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§30 points at §${m[1]}, which does not exist`);
+  }
+});

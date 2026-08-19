@@ -3628,6 +3628,28 @@ const D18_V111 = `
 `;
 
 /**
+ * §7.7 D18 as v1.12 specifies it (PC-CX-57). Three lines move, and they are the whole finding: the
+ * legacy-ledger outlet records a flag instead of returning out of the function, so ① (the published
+ * result link) and ② (the recorded first claim) run on a malformed row exactly as they run on a
+ * legal one, and the only thing skipped is ③ — the array expansion that cannot run on a non-array.
+ */
+const D18_V112 = D18_V111
+  .replace('          old_ledger jsonb; kept jsonb;',
+    '          old_ledger jsonb; kept jsonb; ledger_untouched boolean := false;')
+  .replace(`        RETURN NEW;
+      END IF;
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % writes a retiredPins of jsonb type % — the ledger is an array (owner=SYSTEM; recovery: write an array, or drop the key)',
+        NEW.id, jsonb_typeof(new_ledger);`,
+  `        ledger_untouched := true;
+      ELSE
+        RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % writes a retiredPins of jsonb type % — the ledger is an array (owner=SYSTEM; recovery: write an array, or drop the key)',
+          NEW.id, jsonb_typeof(new_ledger);
+      END IF;`)
+  .replace(`    old_ledger := COALESCE(OLD.detail -> 'retiredPins', '[]'::jsonb);`,
+    `    IF ledger_untouched THEN RETURN NEW; END IF;
+    old_ledger := COALESCE(OLD.detail -> 'retiredPins', '[]'::jsonb);`);
+
+/**
  * §7.7 D19 as v1.11 specifies it (PC-CX-54). Two objects for one sentence, the same split D18-d and
  * D16-d already use: the foreign key makes an orphan unwritable for any binary, and the BEFORE
  * DELETE trigger turns the refusal into this contract's own code with an owner and a recovery.
@@ -3848,11 +3870,14 @@ function claimAction19(id: string, key: string, options: {
 async function installV19(c: Client, options: {
   ledger?: 'v18' | 'v19' | 'v110'; digest?: boolean; mutator?: boolean;
   shape?: 'v110' | 'v111'; mutatorEvents?: 'update' | 'insert-update'; sessionDelete?: boolean;
+  ledgerOutlet?: 'v111' | 'v112';
 } = {}): Promise<void> {
-  const { ledger = 'v110', digest = true, mutator = ledger === 'v110',
+  const { ledger = 'v110', digest = true, mutator = ledger === 'v110', ledgerOutlet = 'v112',
     // v1.11 defaults (PC-CX-53/54/55). Each stays switchable so every fix keeps a reverse control:
     // `shape: 'v110'` is the exact-key resolution predicate PAC 7.5 has no legal intersection with,
     // `mutatorEvents: 'update'` is D18 without an INSERT event, `sessionDelete: false` drops D19.
+    // v1.12 (PC-CX-57): `ledgerOutlet: 'v111'` is the ⓪ exception written as `RETURN NEW`, which
+    // leaves the whole mutator and takes ① and ② with it.
     shape = 'v111', mutatorEvents = 'insert-update', sessionDelete = true } = options;
   await c.query(SCHEMA_V19);
   await c.query(shape === 'v111' ? RESULT_SHAPE_V111 : RESULT_SHAPE_V110);  // D17's ⓪, called from D15, D16 and D17 alike
@@ -3865,7 +3890,9 @@ async function installV19(c: Client, options: {
   await c.query(`CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
                    FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard()`);
   if (mutator) {
-    await c.query(mutatorEvents === 'insert-update' ? D18_V111 : D18_V110);
+    await c.query(mutatorEvents === 'insert-update'
+      ? (ledgerOutlet === 'v112' ? D18_V112 : D18_V111)
+      : D18_V110);
     await c.query(`CREATE TRIGGER project_action_result_ledger_mutator
                      BEFORE ${mutatorEvents === 'insert-update' ? 'INSERT OR UPDATE' : 'UPDATE'} ON project_action
                      FOR EACH ROW EXECUTE FUNCTION project_action_result_ledger_mutator()`);
@@ -4659,6 +4686,350 @@ test('PC-CX-55 on real Postgres: a malformed ledger is refused at insert and a l
       }
       assert.deepEqual(await row('stuck'), { status: 'CLAIMED', detail: '{"retiredPins": {}}' },
         'and it leaves the review exact committed observation: a permanent key stuck in CLAIMED');
+    } finally {
+      await c.end();
+    }
+  });
+
+// -------------------------------------------------------------------------------------------------
+// v1.12 — `PC-CX-56..57`. Round twelve asked one question of both: is what this gate closes the
+// thing it was meant to close? One closed every delete order and left a promised operation with no
+// transaction at all (56); one closed two unrelated gates on its way past the ledger (57).
+// -------------------------------------------------------------------------------------------------
+
+/**
+ * §2.4's on-delete table plus §7.7 D20. `installV19` builds the ledger and the placeholder; this
+ * adds the Project the ledger cascades from, the lineage constraint in whichever version is under
+ * test, and D20's two objects. `lineage: 'v111'` is the immediate RESTRICT §2.4 froze in v1.11 —
+ * the one that refuses the Project cascade itself; `lineage: 'none'` is the review's own reverse
+ * control, where the Project deletes and the placeholder is left pointing at nothing.
+ */
+async function installPurge112(c: Client, options: { lineage?: 'v112' | 'v111' | 'none' } = {}): Promise<void> {
+  const { lineage = 'v112' } = options;
+  await c.query(`
+    CREATE TABLE project (id text PRIMARY KEY);
+    INSERT INTO project VALUES ('p1'), ('p-empty'), ('p-ledger');
+    ALTER TABLE project_action
+      ADD CONSTRAINT project_action_project_fk FOREIGN KEY (project_id)
+      REFERENCES project(id) ON DELETE CASCADE;
+    CREATE INDEX project_action_project_idx ON project_action(project_id);
+    ALTER TABLE session DROP CONSTRAINT session_project_action_id_fkey;
+  `);
+  // v1.12: RESTRICT can never be deferred in PostgreSQL, so the lineage half becomes a deferrable
+  // NO ACTION. INITIALLY IMMEDIATE keeps every statement outside a declared purge behaving as before.
+  if (lineage !== 'none') {
+    await c.query(`
+      ALTER TABLE session
+        ADD CONSTRAINT session_project_action_fk
+        FOREIGN KEY (project_action_id) REFERENCES project_action(id)
+        ${lineage === 'v112'
+    ? 'ON DELETE NO ACTION ON UPDATE NO ACTION\n        DEFERRABLE INITIALLY IMMEDIATE'
+    : 'ON DELETE RESTRICT ON UPDATE RESTRICT'};
+    `);
+  }
+  if (lineage !== 'v112') return;              // D20's two objects are what v1.12 adds; before it, neither exists
+  await c.query(`
+    CREATE OR REPLACE FUNCTION project_purge_fence() RETURNS trigger AS $fn$
+    DECLARE stranded bigint;
+    BEGIN
+      IF current_setting('coordinator.purging_project', true) IS NOT DISTINCT FROM OLD.id THEN
+        RETURN OLD;
+      END IF;
+      SELECT count(*) INTO stranded
+        FROM session s JOIN project_action a ON a.id = s.project_action_id
+       WHERE a.project_id = OLD.id;
+      IF stranded > 0 THEN
+        RAISE EXCEPTION 'PROJECT_PURGE_UNDECLARED: project % still owns % coordinator placeholder session(s) whose lineage points into its action ledger (owner=SYSTEM, recovery=EVENT: call coordinator_purge_project(%) — it is the only public purge, and it removes the project, its ledger and those placeholders in one transaction)',
+          OLD.id, stranded, quote_literal(OLD.id);
+      END IF;
+      RETURN OLD;
+    END;
+    $fn$ LANGUAGE plpgsql;
+
+    CREATE TRIGGER project_purge_fence
+      BEFORE DELETE ON project
+      FOR EACH ROW EXECUTE FUNCTION project_purge_fence();
+
+    CREATE OR REPLACE FUNCTION coordinator_purge_project(p_project_id text,
+      OUT purged_actions bigint, OUT purged_sessions bigint) AS $fn$
+    DECLARE doomed text[];
+    BEGIN
+      purged_actions := 0; purged_sessions := 0;
+      PERFORM 1 FROM project WHERE id = p_project_id FOR UPDATE;
+      IF NOT FOUND THEN RETURN; END IF;
+      PERFORM set_config('coordinator.purging_project', p_project_id, true);
+      SET CONSTRAINTS session_project_action_fk DEFERRED;
+      SELECT COALESCE(array_agg(DISTINCT s.id), '{}'::text[]) INTO doomed
+        FROM session s JOIN project_action a
+          ON a.id = s.project_action_id OR a.result_session_id = s.id
+       WHERE a.project_id = p_project_id;
+      SELECT count(*) INTO purged_actions FROM project_action WHERE project_id = p_project_id;
+      DELETE FROM project WHERE id = p_project_id;
+      DELETE FROM session WHERE id = ANY(doomed);
+      GET DIAGNOSTICS purged_sessions = ROW_COUNT;
+    END;
+    $fn$ LANGUAGE plpgsql;
+  `);
+}
+
+/** One legal dispatch on `p1`, plus a ledger-only Project no placeholder ever referred to. */
+async function seedPurgeFixture(c: Client): Promise<string> {
+  return txn(c, async () => {
+    await c.query(claimAction19('act1', 'k1'));
+    await c.query(MATCHING_SESSION('s1', 'act1'));
+    await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+    await c.query(claimAction19('act-ledger', 'k-ledger')
+      .replace(`'p1','DISPATCH_TASK'`, `'p-ledger','DISPATCH_TASK'`));
+  });
+}
+
+const PURGE_CENSUS = `
+  SELECT (SELECT count(*)::text FROM project) AS projects,
+         (SELECT count(*)::text FROM project_action) AS actions,
+         (SELECT count(*)::text FROM session) AS sessions`;
+
+/** §4.3 I17-A3's lineage half as a query: no session may point at an action row that is gone. */
+const PURGE_ORPHANS = `
+  SELECT count(*)::text AS n FROM session s
+   WHERE s.project_action_id IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM project_action a WHERE a.id = s.project_action_id)`;
+
+test('PC-CX-56 on real Postgres: a linked Project purges in one transaction and leaves no orphan',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const one = async (sql: string): Promise<string> => txn(c, async () => { await c.query(sql); });
+      const census = async () => (await c.query<{ projects: string; actions: string; sessions: string }>(
+        PURGE_CENSUS)).rows[0];
+      const orphans = async (): Promise<string> =>
+        (await c.query<{ n: string }>(PURGE_ORPHANS)).rows[0].n;
+
+      await installV19(c);
+      await installPurge112(c);
+      assert.equal(await seedPurgeFixture(c), '', 'the ordinary dispatch must commit first');
+
+      // A bare DELETE that would strand the placeholder is refused on *that statement*, with this
+      // contract's own code, an owner and a recovery that names the one entry point.
+      const bare = await one(`DELETE FROM project WHERE id='p1'`);
+      assert.match(bare, /PROJECT_PURGE_UNDECLARED/, 'a bare DELETE that strands a placeholder must be refused');
+      assert.match(bare, /owner=SYSTEM, recovery=EVENT/, 'the refusal must name an owner and a recovery');
+      assert.match(bare, /coordinator_purge_project/, 'and the recovery must name the one public entry point');
+      assert.deepEqual(await census(), { projects: '3', actions: '2', sessions: '1' }, 'and nothing moved');
+
+      // D19 is untouched: the Session half still refuses on its own while its action row is alive.
+      assert.match(await one(`DELETE FROM session WHERE id='s1'`), /SESSION_RESULT_LINK_REFERENCED/,
+        'D19 must keep refusing a Session-first purge — that half of the contract does not change');
+
+      // The two degenerate Projects still delete on a bare statement: an empty one, and one whose
+      // ledger no placeholder ever referred to. Their committed result equals the function's, which
+      // is what keeps the public semantics single (D20-f).
+      assert.equal(await one(`DELETE FROM project WHERE id='p-empty'`), '', 'an empty Project must still delete');
+      assert.equal(await one(`DELETE FROM project WHERE id='p-ledger'`), '',
+        'and a Project whose ledger nothing points at must still delete, cascade and all');
+      assert.deepEqual(await census(), { projects: '1', actions: '1', sessions: '1' },
+        'the cascade took the ledger-only action with its Project');
+
+      // A transaction that forges the fence but leaves the placeholder behind fails at COMMIT: the
+      // structural half is unconditional, so "no orphan" is a proof and not a promise (D20-d).
+      const forged = await txn(c, async () => {
+        await c.query(`SELECT set_config('coordinator.purging_project','p1',true)`);
+        await c.query(`SET CONSTRAINTS session_project_action_fk DEFERRED`);
+        await c.query(`DELETE FROM project WHERE id='p1'`);
+      });
+      assert.match(forged, /session_project_action_fk/, 'a forged fence must still be caught by the constraint');
+      assert.deepEqual(await census(), { projects: '1', actions: '1', sessions: '1' }, 'and it rolls back whole');
+
+      // The positive that closes the finding: one transaction, and the invariant checked inside it.
+      let counts: { purged_actions: string; purged_sessions: string } | undefined;
+      let insideOrphans = 'unread';
+      assert.equal(await txn(c, async () => {
+        counts = (await c.query<{ purged_actions: string; purged_sessions: string }>(
+          `SELECT * FROM coordinator_purge_project('p1')`)).rows[0];
+        insideOrphans = (await c.query<{ n: string }>(PURGE_ORPHANS)).rows[0].n;
+      }), '', 'the declared purge of a linked Project must commit');
+      assert.deepEqual(counts, { purged_actions: '1', purged_sessions: '1' },
+        'it must report the ledger and the placeholder it actually removed');
+      assert.equal(insideOrphans, '0', 'and I17-A3 must hold inside the same transaction, before COMMIT');
+      assert.deepEqual(await census(), { projects: '0', actions: '0', sessions: '0' },
+        'the Project, its whole ledger and its placeholder are gone — and none of them row by row');
+      assert.equal(await orphans(), '0', 'and the committed state carries no orphan lineage');
+
+      // Reverse control — v1.11's immediate RESTRICT: the same call fails on its first statement,
+      // and the review's committed observation is that nothing was removed at all.
+      await installV19(c);
+      await installPurge112(c, { lineage: 'v111' });
+      assert.equal(await seedPurgeFixture(c), '');
+      const restricted = await one(`DELETE FROM project WHERE id='p1'`);
+      assert.match(restricted, /session_project_action_fk/,
+        'PC-CX-56 must reproduce: under v1.11 the Project cascade is refused by the lineage RESTRICT');
+      assert.doesNotMatch(restricted, /PROJECT_PURGE_UNDECLARED/,
+        'and v1.11 had no typed refusal to give: the caller gets a bare 23503');
+      assert.deepEqual(await census(), { projects: '3', actions: '2', sessions: '1' },
+        'and it leaves the review exact committed observation: the Project and all three rows still there');
+
+      // Reverse control — dropping the lineage half, the other thing the review tried. The Project
+      // deletes, and the placeholder is left pointing at an action row that no longer exists.
+      await installV19(c);
+      await installPurge112(c, { lineage: 'none' });
+      assert.equal(await seedPurgeFixture(c), '');
+      assert.equal(await one(`DELETE FROM project WHERE id='p1'`), '',
+        'PC-CX-56 must reproduce: with no lineage constraint the bare DELETE commits');
+      assert.deepEqual((await c.query(`
+        SELECT s.project_action_id,
+               EXISTS (SELECT 1 FROM project_action a WHERE a.id = s.project_action_id) AS action_exists
+          FROM session s WHERE s.id='s1'`)).rows[0],
+      { project_action_id: 'act1', action_exists: false },
+      'and it leaves the orphan lineage I17-A3 and D15 forbid');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('D20 concurrency control: a second purge of the same Project is a clean idempotent no-op',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const first = await connect();
+    const second = await connect();
+    try {
+      await installV19(first);
+      await installPurge112(first);
+      assert.equal(await seedPurgeFixture(first), '');
+      await second.query(`SET search_path TO ${V19_SCHEMA}`);
+
+      // Both bare deletes are refused in the BEFORE trigger, before either takes the row lock, so
+      // neither blocks the other and both get the typed answer.
+      for (const c of [first, second]) {
+        assert.match(await txn(c, async () => { await c.query(`DELETE FROM project WHERE id='p1'`); }),
+          /PROJECT_PURGE_UNDECLARED/, 'a concurrent bare DELETE is refused with the same typed code');
+      }
+
+      await first.query('BEGIN');
+      const won = (await first.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`)).rows[0];
+      await second.query('BEGIN');
+      const queued = second.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`);
+      // D20-e: the second purge parks on the Project row lock rather than racing past it.
+      assert.equal(await Promise.race([queued.then(() => 'ran'),
+        new Promise<string>((resolve) => setTimeout(() => resolve('parked'), 250))]), 'parked',
+      'the second purge must queue on the Project row lock');
+      await first.query('COMMIT');
+
+      assert.deepEqual(won, { purged_actions: '1', purged_sessions: '1' }, 'the first purge removes the ledger');
+      assert.deepEqual((await queued).rows[0], { purged_actions: '0', purged_sessions: '0' },
+        'and the second wakes, finds the row gone, and returns a clean no-op rather than an error');
+      await second.query('COMMIT');
+      assert.deepEqual((await first.query<{ projects: string; actions: string; sessions: string }>(
+        PURGE_CENSUS)).rows[0], { projects: '2', actions: '1', sessions: '0' },
+      'and the two Projects nobody purged keep their rows');
+      assert.equal((await first.query<{ n: string }>(PURGE_ORPHANS)).rows[0].n, '0',
+        'no orphan survives the concurrent pair either');
+    } finally {
+      await first.query('ROLLBACK').catch(() => undefined);
+      await second.query('ROLLBACK').catch(() => undefined);
+      await Promise.all([first.end(), second.end()]);
+    }
+  });
+
+test('PC-CX-57 on real Postgres: a legacy malformed ledger still cannot rewrite a claim or a link',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const one = async (sql: string): Promise<string> => txn(c, async () => { await c.query(sql); });
+      const detail = async (): Promise<string> => (await c.query<{ detail: string }>(
+        `SELECT detail::text AS detail FROM project_action WHERE id='legacy'`)).rows[0].detail;
+      const link = async (): Promise<string | null> => (await c.query<{ l: string | null }>(
+        `SELECT result_session_id AS l FROM project_action WHERE id='legacy'`)).rows[0].l;
+      /**
+       * The mixed-version state D18-e ④ has to survive. The row is dispatched normally first, then
+       * the malformed ledger is written with the two objects that watch it dropped — that is what
+       * "an older binary already committed this" means, and it is the only way an APPLIED row can
+       * carry a value the commit-point fold would never admit.
+       */
+      const seedLegacy = async (ledgerDetail: string, publish: boolean): Promise<string> => {
+        const dispatched = await txn(c, async () => {
+          await c.query(`TRUNCATE session, project_action`);
+          await c.query(claimAction19('legacy', 'k-legacy'));
+          if (publish) {
+            await c.query(MATCHING_SESSION('s1', 'legacy'));
+            await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='legacy'`);
+          }
+        });
+        if (dispatched !== '') return dispatched;
+        // A second transaction writes the value no current object would admit — the two that watch
+        // the ledger are dropped for exactly one statement, then put straight back.
+        return txn(c, async () => {
+          await c.query(`DROP TRIGGER project_action_result_ledger_mutator ON project_action`);
+          await c.query(`DROP TRIGGER project_action_pin_ledger_check ON project_action`);
+          await c.query(`UPDATE project_action SET detail = '${ledgerDetail}'::jsonb WHERE id='legacy'`);
+          await c.query(`CREATE TRIGGER project_action_result_ledger_mutator
+                           BEFORE INSERT OR UPDATE ON project_action
+                           FOR EACH ROW EXECUTE FUNCTION project_action_result_ledger_mutator()`);
+          await c.query(`CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check
+                           AFTER INSERT OR UPDATE ON project_action DEFERRABLE INITIALLY DEFERRED
+                           FOR EACH ROW EXECUTE FUNCTION project_action_pin_ledger_check()`);
+        });
+      };
+      const rewriteClaim = `UPDATE project_action
+                              SET detail = jsonb_set(detail, '{claimResolution}', '{"new":2}'::jsonb)
+                            WHERE id='legacy'`;
+
+      await installV19(c);
+
+      // ② on a malformed row: the recorded first claim is immutable, exactly as on a legal one.
+      assert.equal(await seedLegacy('{"retiredPins":{},"claimResolution":{"old":1}}', false), '',
+        'the legacy row an older binary left behind must be reproducible');
+      assert.match(await one(rewriteClaim), /EXECUTION_PIN_LEDGER.*rewrites a claimResolution/,
+        'PC-CX-57: an unchanged malformed retiredPins must not disable claimResolution immutability');
+      assert.match(await detail(), /"old": 1/, 'and the audit is still the one that was recorded');
+
+      // The same statement on a legal ledger gives the identical answer — one rule, not two.
+      assert.equal(await seedLegacy('{"retiredPins":[],"claimResolution":{"old":1}}', false), '');
+      assert.match(await one(rewriteClaim), /EXECUTION_PIN_LEDGER.*rewrites a claimResolution/,
+        'the legal-ledger row must answer identically, or the rule depends on an unrelated key');
+
+      // ① on a malformed row: a published result link can be neither detached nor repointed.
+      assert.equal(await seedLegacy('{"retiredPins":{}}', true), '');
+      assert.match(await one(`UPDATE project_action SET result_session_id=NULL WHERE id='legacy'`),
+        /ACTION_RESULT_LINK_FROZEN/, 'PC-CX-57: the published link must stay frozen through a malformed ledger');
+      await c.query(`INSERT INTO session (id,dispatch_origin,status) VALUES ('s2','USER','RUNNING')`);
+      assert.match(await one(`UPDATE project_action SET result_session_id='s2' WHERE id='legacy'`),
+        /ACTION_RESULT_LINK_FROZEN/, 'and repointing it is the same statement with the same answer');
+      assert.equal(await link(), 's1', 'the link is still the one that was published');
+
+      // D18-g's two outlets are untouched, and a *first* claim is not a rewrite (D18-h).
+      assert.equal(await seedLegacy('{"retiredPins":{},"display":{"note":"old"}}', false), '');
+      assert.equal(await one(`UPDATE project_action SET status='REFUSED', refusal_code='PROVIDER_UNAVAILABLE'
+                              WHERE id='legacy'`), '',
+      'the normal terminal transition must still commit — that is what the compatibility branch is for');
+      assert.equal(await one(`UPDATE project_action
+                                SET detail = detail || '{"claimResolution":{"first":1}}'::jsonb
+                              WHERE id='legacy'`), '',
+      'writing a first claimResolution is not a rewrite: ② freezes the second write, not the first');
+      assert.equal(await one(`UPDATE project_action SET detail = detail - 'retiredPins' WHERE id='legacy'`), '',
+        'and the prescribed repair must still commit');
+      assert.match(await detail(), /"first": 1/, 'the first claim that was written is still there');
+      assert.match(await one(`UPDATE project_action SET detail = detail || '{"retiredPins":"still-bad"}'::jsonb
+                              WHERE id='legacy'`), /EXECUTION_PIN_LEDGER/,
+      'swapping one malformed value for another is still not a repair');
+
+      // Reverse control — v1.11's ⓪ returned out of the whole function, so both gates were off.
+      // The review's witness is this row exactly: a terminal action, no link, a malformed ledger.
+      await installV19(c, { ledgerOutlet: 'v111' });
+      assert.equal(await seedLegacy('{"retiredPins":{},"claimResolution":{"old":1}}', false), '');
+      assert.equal(await one(rewriteClaim), '',
+        'PC-CX-57 must reproduce: v1.11 lets an unrelated malformed sibling key admit the rewrite');
+      assert.match(await detail(), /"new": 2/,
+        'and it leaves the review exact committed observation: the immutable claim audit was rewritten');
+
+      // The same early return took ① with it. What is left is only the commit-point object, which
+      // is precisely the split D18-d says is not optional: a caller gets no statement-level answer.
+      assert.equal(await seedLegacy('{"retiredPins":{}}', true), '');
+      const detached = await one(`UPDATE project_action SET result_session_id=NULL WHERE id='legacy'`);
+      assert.doesNotMatch(detached, /ACTION_RESULT_LINK_FROZEN/,
+        'PC-CX-57 must reproduce: the same early return also switched off the statement-level link freeze');
+      assert.match(detached, /EXECUTION_RESULT_LINK/,
+        'only D16 at the commit point is left standing, and it names a different failure');
+      assert.equal(await link(), 's1', 'so the detach dies at COMMIT rather than on its own statement');
     } finally {
       await c.end();
     }
