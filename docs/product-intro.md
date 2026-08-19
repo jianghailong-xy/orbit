@@ -25,10 +25,11 @@ the machines you've connected and starts working. You go to a meeting.
 production cluster. You read the exact command on the approval card, tap **Allow**, and
 optionally tell it not to ask again for that kind of command. It keeps going.
 
-**11:05 — you read what happened.** Three tasks are done. Each one worked in its own copy of
-the repo, so none of them stepped on the others. You open the diff, skim the file tree, and
-merge two of them from the UI. The third took a wrong turn, so you open its session and just
-*talk to it*: "you changed the wrong helper — revert that and fix the caller instead." It
+**11:05 — you read what happened.** Three tasks are done. You enabled worktree isolation for
+their workspaces, so each one worked in its own copy of the repo without stepping on the others.
+You open the diff, skim the file tree, and merge two of them from the UI. The third took a wrong turn,
+so you open its session and just *talk to it*: "you changed the wrong helper — revert that and fix
+the caller instead." It
 picks up mid-conversation, remembering everything from before.
 
 **16:30 — you close the laptop.** The agents keep running on your machines. When one of them
@@ -77,11 +78,10 @@ your account, visible on the same board you're looking at.)
 
 ### Spread the work across a fleet
 
-Agents don't have to share a machine, and often shouldn't. Connect as many as you like and
-give each one labels — `gpu`, `prod-access`, `mac` — then route work to machines that can
-actually do it: this task needs the box with cluster access, that one can run anywhere. Cap
-how many sessions each machine takes at once. Add a laptop for the afternoon and remove it
-later; the queue just redistributes.
+Agents don't have to share a machine, and often shouldn't. Connect as many runners as you like,
+bind workspaces to the machines with the right tools and access, and assign tasks to those
+workspaces. Cap how many sessions each machine takes at once. Add a laptop for the afternoon
+or move a workspace to another runner as your capacity changes.
 
 The upshot: a plan on one side, a pool of machines on the other, and Orbit keeping the two
 matched up while you're not watching.
@@ -96,10 +96,10 @@ you're tired of seeing it. Nothing blocks in silence waiting for a human who isn
 
 ### Run several agents on one repo without the mess
 
-Every session gets its own private copy of the repository. Five agents can work at once and
-none of them overwrite another's edits. When you're happy, review the diff full-screen and
-merge to main without leaving the app; when you're not, throw the session away and nothing
-else is affected.
+Enable worktree isolation for a workspace and every session gets its own private copy of the
+repository. Five agents can then work at once without overwriting one another's edits. When
+you're happy, review the diff full-screen and merge without leaving the app. Isolation is off
+by default; without it, concurrent sessions share the configured directory and can collide.
 
 ### Let agents reach your actual systems
 
@@ -122,9 +122,9 @@ show the same sessions, live.
 
 ### See what it's costing
 
-Every session reports what it spent in tokens and dollars, rolled up per workspace and per user
-on a dashboard. (These are the engine's own numbers — treat your provider's bill as the
-final word.)
+When an engine exposes usage, its sessions report tokens and cost, rolled up per workspace and
+per user on a dashboard. These are the engine's own numbers; treat your provider's bill as the
+final word.
 
 ---
 
@@ -143,8 +143,8 @@ The interesting part of a tool like this is what happens on a bad day.
 - **The agent runs out of context.** On a long project this is inevitable. It matters less
   than usual, because the plan is in the task graph rather than in that conversation — a
   fresh session reads the tasks, the dependencies and the comment history and carries on.
-- **The agent goes off the rails.** Interrupt it, tell it what it got wrong, or discard the
-  session — its copy of the repo goes with it.
+- **The agent goes off the rails.** Interrupt it or tell it what it got wrong. If worktree
+  isolation is enabled, you can discard the session without changing the shared checkout.
 
 ---
 

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md
+    about: Follow the private reporting instructions. Do not publish vulnerability details in an issue.
+  - name: Documentation and support
+    url: https://github.com/jianghailong-xy/orbit/blob/main/SUPPORT.md
+    about: Check the documentation and learn what diagnostic information to include.

@@ -1,306 +1,130 @@
-# 🛰 Orbit
+<p align="center">
+  <img src="brand/orbit-lockup.svg" alt="Orbit" width="208">
+</p>
 
-An **AI-agent platform** for running **Claude Code, Codex, Kimi, and OpenCode** against your own
-infrastructure. Orbit gives you **interactive, multi-turn agent sessions** *and* a **task queue** — but the agents
-don't run on the server. Instead, users register their own machines as **runners** (à la
-GitHub Actions self-hosted runners), and the selected coding runtime runs *there*, where the ops tooling and
-credentials already live (`tea-cli`, HDFS clients, kubectl, …).
+<p align="center"><strong>Agent Mission Control</strong></p>
 
+<p align="center">
+  Run coding agents on your own machines. Keep the plan, history, and controls in one self-hosted place.
+</p>
+
+<p align="center">
+  <a href="https://github.com/jianghailong-xy/orbit/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/jianghailong-xy/orbit?include_prereleases&sort=semver"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-3370ff"></a>
+  <a href="https://github.com/jianghailong-xy/orbit/actions/workflows/client.yml"><img alt="Native client CI" src="https://github.com/jianghailong-xy/orbit/actions/workflows/client.yml/badge.svg"></a>
+</p>
+
+<p align="center">
+  <a href="docs/product-intro.md">Product tour</a> ·
+  <a href="docs/self-hosting.md">Self-hosting</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+Orbit is a self-hosted control plane for **Claude Code, Codex, Kimi, and OpenCode**. It combines live,
+multi-turn agent sessions with a durable task queue and dependency graph. The agents execute on machines
+you register as runners, close to the repositories, credentials, internal tools, and networks they need.
+
+The control plane never needs inbound access to a runner. Runners poll outward for work and stream the
+transcript, approvals, status, and usage back to Orbit. For repositories that need concurrent edits, you can
+enable a separate git worktree for every session on an agent.
+
+## Why Orbit
+
+| Need | What Orbit provides |
+| --- | --- |
+| Work that outlives a chat | Durable tasks, task lists, dependencies, comments, and resumable sessions |
+| Parallel agents without checkout collisions | Optional per-session git worktree isolation |
+| Access to private infrastructure | Self-hosted runners that use the tools and credentials already on your machines |
+| Human control over risky actions | Live allow/deny approval cards and scoped permission modes |
+| More than one agent runtime | Claude Code, Codex, Kimi, and OpenCode, plus bring-your-own model providers |
+| Control away from a terminal | Responsive web UI, a native macOS app, and an iPhone/iPad client |
+
+Orbit is especially useful for teams running coding agents against internal infrastructure, and for projects
+where the plan must survive context limits, agent restarts, and machine reboots. Read [A day with
+Orbit](docs/product-intro.md) for the longer product story.
+
+## How it works
+
+```text
+Web / macOS / iOS ──REST + SSE──▶ Control plane + Postgres ◀──outbound poll── Runner
+   chat · tasks · approvals         queue · history · usage                    local agent runtime
+                                                                               optional worktree
 ```
-React UI ──REST/SSE──▶ Control plane (NestJS + Postgres) ◀──outbound poll── Runner @ your machine
-  chat · approvals        sessions · tasks · queue · runs                    local coding runtime
-                          approvals · cost/token rollups                     in a git worktree
-```
 
-A **session** is a supervised runtime conversation on a runner, kept resumable across turns:
-you chat with it live (SSE), approve supported tool calls in-flight, and it runs in an **isolated git
-worktree** so concurrent sessions never clobber each other's files. A **task** is a queued
-unit of work (optionally with dependencies and a task-list) that spawns such a session on a
-runner.
+- **Control plane** — NestJS, Prisma, and PostgreSQL own users, workspaces, sessions, tasks, approvals,
+  runners, attachments, and usage.
+- **Runner** — a small static Go CLI registers a machine, claims work, drives the selected agent runtime,
+  and manages optional worktree isolation and recovery.
+- **Clients** — Vite/React on the web and shared SwiftUI clients for macOS and iOS.
+- **Gateway** — nginx serves the web app and `/api` from one origin in the Docker Compose deployment.
 
-- **Control plane** (`src/apiserver`) — NestJS + Prisma + PostgreSQL. Owns users, workspaces,
-  sessions + conversation turns, tasks (the queue) with task-lists and dependency DAGs,
-  runs, runners, tool-approvals, attachments, and cost/usage aggregation. It never holds an
-  engine *login* — a runtime's own OAuth/session credentials stay on the runner. The one
-  secret it does store is a **configured model provider's** API key (BYOK), encrypted at rest
-  with AES-256-GCM under `PROVIDER_SECRET_KEY` and injected into the engine process at spawn.
-- **Runner** (`src/runner-go`) — a small static Go CLI (~6 MB, no runtime needed).
-  `orbit register` enrolls a machine via browser approval; `orbit run` long-polls for
-  assigned work and drives the workspace's selected local runtime (Claude Code, Codex, Kimi, or
-  OpenCode), feeding user turns over an inbox long-poll while preserving the runtime conversation.
-  Streams normalized events + token/cost back to the control plane, runs each session in its own
-  **git worktree**, drains gracefully on restart, and checks for control-plane updates at
-  startup and periodically while running; a live update stops new claims and drains sessions
-  before replacing the process. It also keeps the installed engine CLIs up to date on a daily
-  auto-update pass.
-- **Web** (`src/web`) — Vite + React + Ant Design. Grouped task lists, workspace CRUD, a live
-  **chat console** (SSE) with in-flight **tool-approval** cards, image/file attachments,
-  runner enrollment, a Skills browser, a cost dashboard, ⌘K cross-session search, dark mode,
-  and a mobile-responsive layout.
-- **Native clients** (`src/macos`, `src/ios`) — a SwiftUI console for macOS (Developer-ID DMG,
-  Sparkle auto-update, menu-bar extra, actionable notifications, local-runner control) and for
-  iPhone/iPad (TestFlight, APNs push + icon badge). Both are built on **OrbitKit**, a UI-free,
-  Linux-testable Swift core holding all protocol logic; the iOS target reuses the macOS SwiftUI
-  sources in place. See [`src/macos/OrbitKit/README.md`](src/macos/OrbitKit/README.md) and
-  [`src/ios/README.md`](src/ios/README.md).
-- **Shared** (`src/shared`) — enums, normalized run-event types, control-plane event envelopes,
-  provider presets, and runner-API DTOs.
-- **Gateway** (`gateway/`) — an nginx reverse proxy serving the web UI and `/api` from one
-  origin; the full stack runs under Docker Compose.
+See the [architecture overview](docs/architecture.md) for trust boundaries, protocols, and component details.
 
-The connection is **outbound-only** (runner → server): NAT-friendly, and the server never
-needs to reach into a user's machine.
+## Quick start
 
-## Architecture decisions
+### Self-host with Docker Compose
 
-Highlights:
-
-- **Why runners, not server-side execution** — the example tasks are *ops* against the
-  user's own infrastructure; the agent's tools must run with the user's credentials, on the
-  user's network. Runners put Claude Code exactly there.
-- **Interactive sessions (Route B)** — a conversation is one long-lived `claude` process fed
-  by `--input-format stream-json` on stdin. User turns are durably queued
-  (`ConversationTurn`) and delivered over a per-run **inbox long-poll**; the assistant/tool
-  transcript streams back over the existing event → SSE path. No WebSocket (the gateway
-  strips `Upgrade`). A killed runner reattaches via the server-generated session UUID and
-  `claude --resume`. See [`docs/interactive-claude-runner-design.md`](docs/interactive-claude-runner-design.md).
-- **Worktree isolation** — each session runs in its own `git worktree`, so concurrent sessions
-  on one repo don't trample each other's edits; the tree is reclaimed when the session ends.
-- **Queue** — the `Task` table *is* the queue. Runners claim work atomically with
-  `SELECT … FOR UPDATE SKIP LOCKED`; a long-poll waits on an enqueue signal. A heartbeat
-  **reaper** force-fails the sessions of a runner that goes silent.
-- **Permissions** — all six Claude Code permission modes are exposed
-  (`default` / `acceptEdits` / `plan` / `auto` / `dontAsk` / `bypassPermissions`), paired
-  with a scoped `allowedTools` allowlist (e.g. `Bash(tea-cli *)`). Tool calls that need a
-  human decision surface as **live approval cards** in the UI (allow / deny, with optional
-  remember-rules) rather than blocking unattended. OpenCode maps the same modes to guarded
-  non-interactive rules; its provider login remains a manual `opencode auth login` step.
-- **Realtime control plane** — one **per-user SSE stream** (`GET /api/events`) carries session
-  lifecycle / status / approval / background-task signals and replaces the clients' list
-  polling, while the per-session transcript stream (`GET /api/sessions/:id/events`) keeps its
-  `sinceSeq` replay for token-level rendering. See
-  [`docs/realtime-control-plane-stream.md`](docs/realtime-control-plane-stream.md).
-- **Bring-your-own model providers** — beyond an engine's own login, an admin (or a user, for a
-  personal row) can connect an API-compatible vendor from a preset catalogue; the session then
-  borrows the matching runtime CLI with that key injected. See `src/shared/src/providerPresets.ts`.
-- **Cost/usage from the source** — runners report the engine's own per-turn cost/token usage
-  where it exposes it (e.g. Claude Code's `total_cost_usd` / `usage`); the control plane
-  aggregates these (see caveat below).
-
-## Prerequisites
-
-- Node.js ≥ 20 (uses global `fetch`)
-- Docker (for local Postgres) — or any reachable PostgreSQL 16
-- On each runner machine: the runtime selected by its workspaces — **Claude Code**, **Codex**,
-  **Kimi**, or **OpenCode** — installed and authenticated. Use Claude's `/login` (or
-  `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`), `codex login`, `kimi login`, or
-  `opencode auth login`, respectively. Credentials stay on the runner machine; `orbit doctor`
-  reports missing engines/auth and the registration flow can install missing engines with consent.
-  Sign-in can also be driven from the UI: Claude uses a hosted callback, while `codex` and `kimi`
-  are device flows (on a remote machine `codex login` needs `--device-auth`).
-
-## Quickstart (development)
+Requirements: Docker with Compose and a machine that can build the images.
 
 ```bash
-# 1. install
+git clone https://github.com/jianghailong-xy/orbit.git
+cd orbit
+cp .env.example .env
+
+# Set JWT_SECRET and PROVIDER_SECRET_KEY in .env. Generate each independently with:
+openssl rand -base64 32
+
+docker compose up -d --build
+```
+
+Open <http://localhost:2086>. The first visitor creates the initial administrator account. Create a
+workspace, then use **Add a runner** in the UI to connect a machine with at least one supported agent runtime
+installed and authenticated.
+
+The Compose gateway is HTTP-only. Before exposing Orbit to a network, follow the [self-hosting and production
+hardening guide](docs/self-hosting.md), including TLS and off-host backups.
+
+### Develop locally
+
+Requirements: Node.js 20+, Docker or PostgreSQL 16, and Go 1.23+ when working on the runner.
+
+```bash
 npm install
-
-# 2. database
-cp .env.example .env                 # set JWT_SECRET; adjust the rest if needed
-npm run db:up                        # docker compose: postgres on :5432
+cp .env.example .env
+npm run db:up
 npm run prisma:generate
-npm run prisma:migrate -w @orbit/apiserver   # or `prisma migrate deploy` in prod
-
-# 3. control plane  (http://localhost:3000)
+npm run prisma:migrate -w @orbit/apiserver
 npm run dev:apiserver
+```
 
-# 4. web UI         (http://localhost:5173, proxies /api → :3000)
+In another terminal:
+
+```bash
 npm run dev:web
 ```
 
-There's no self-service signup. On a fresh deployment, the web UI sends the first visitor to
-a one-time `/setup` screen that creates the first account (which becomes ADMIN); provision
-any further users from the admin **Users** page. Then log in, open the UI, create a workspace,
-and follow the in-app guide to register a runner machine.
+The API runs on <http://localhost:3000> and Vite on <http://localhost:5173>. See the [development
+guide](docs/development.md) for tests, repository layout, and native-client setup.
 
-### Deploy the full stack (Docker Compose)
+## Project status
 
-For a real deployment, build and run everything (Postgres + apiserver + web + an nginx
-gateway) behind one origin:
+Orbit is under active development and should currently be treated as **pre-1.0**. Core functionality is in
+place: distributed runners, interactive sessions, task graphs, approvals, worktree isolation, multi-runtime
+support, web and native clients, runner recovery, backups, and usage reporting.
 
-```bash
-export JWT_SECRET="$(openssl rand -base64 32)"    # required
-docker compose up -d --build                       # gateway listens on :2086
-```
+Before relying on Orbit for critical production work, review the [security policy](SECURITY.md), deployment
+hardening guidance, backup runbook, and release notes. Recurring schedules and inbound task sources are not
+yet built.
 
-The apiserver applies pending Prisma migrations on boot, and the web UI + `/api` are served
-from the same origin (`http://localhost:2086`). To upgrade a running deployment later,
-rebuild and recreate only the services that changed — the `upgrade` skill automates this.
+## Community
 
-Postgres comes up with continuous WAL archiving on, and a `pgbackup` sidecar takes a daily
-base backup into `./data/pg-archive` — together enough to restore the database to any moment,
-including just before a bad write. Copy that directory off the host (it shares a disk with the
-database) and keep [docs/postgres-backup-restore.md](docs/postgres-backup-restore.md) handy;
-it is the restore runbook.
-
-### Run a runner (on the machine that should execute tasks)
-
-On a machine with the runtime(s) your workspaces will use installed and authenticated (see
-Prerequisites). Replace `orbit.example.com` with your deployment's origin (baked in at build time
-via `PUBLIC_ORIGIN`; the UI's **Add a runner** page prints these commands pre-filled for you):
-
-```bash
-# install the static `orbit` binary (no Node needed) and register this machine —
-# the script hands off to `orbit register`, which opens your browser to approve and
-# auto-installs + starts a background service (systemd / launchd)
-curl -fsSL https://orbit.example.com/install.sh | bash
-
-# register options go after `-s --`:
-curl -fsSL https://orbit.example.com/install.sh | bash -s -- --labels sg,hdfs --max-concurrent 2
-
-# ...or run it in the foreground instead of installing a service:
-curl -fsSL https://orbit.example.com/install.sh | bash -s -- --foreground --labels sg,hdfs
-
-# ...or install the binary only (also the default with no terminal, e.g. in CI):
-curl -fsSL https://orbit.example.com/install.sh | ORBIT_NO_REGISTER=1 bash
-```
-
-The binaries are built with `npm run build:runner` (Go) and served at `/dl`; the runner
-self-updates from there at startup and periodically thereafter. Create a task in the UI,
-queue it, and watch the live stream — or start an interactive session and chat with the
-agent directly.
-
-The registered binary also exposes the agent-safe Task/TaskList surface for shell
-automation and, for orchestration-enabled workspaces, the MCP-equivalent Session surface.
-Results are pretty-printed by default; pass `--json` for compact JSON:
-
-```bash
-orbit capabilities --json
-orbit task list --status OPEN --json
-orbit task create --title "Check deployment" --description "Verify health and logs" --json
-orbit task update <task-id> --status DONE --json
-orbit task delete <task-id> --json
-orbit task-list create --title "Release" --json
-orbit session create --prompt "Review the change" --agent-name reviewer --json  # --agent-name: pre-rename CLI flag for a workspace
-orbit session get <session-id> --json
-orbit session send <session-id> --message "Please add a regression test" --json
-orbit session complete <session-id> --json
-```
-
-Each Claude/Codex/Kimi/OpenCode session receives a short discovery instruction pointing at the
-resolved absolute binary path and `capabilities --json`. Claude receives approval-free
-rules for Task/TaskList and, only when enabled for that workspace, Session action prefixes;
-Codex, Kimi and OpenCode receive the same context without replacing provider/project defaults.
-Native Orbit MCP tools remain the preferred path when available.
-
-Inside an Orbit task session, task commands may omit the task id and use
-`ORBIT_TASK_ID`. Session commands always require an explicit target id. Spawning a session,
-the lifecycle verbs (`interrupt`, `merge`, `end`, `complete`) and the owner-wide `search`
-additionally require a live caller
-session whose current workspace has `enableOrchestration`; the runner receives a signed,
-session-bound credential and every request is re-authorized by the control plane.
-Credential support is negotiated explicitly, so an older runner safely disables orchestration
-instead of exposing tools whose calls can only fail. The proof lives in a private per-session
-file, is read afresh for every operation, and is reissued and retried once when the control plane
-reports it missing or invalid. Proofs expire after 15 minutes and use an independent signing
-domain: by default the key is derived from `JWT_SECRET`, or deployments may set
-`RUNNER_ORCHESTRATION_JWT_SECRET` for independent rotation. The proof is never included in
-`orbit capabilities` output. Every call also rechecks the live session assignment and Agent
-setting, so ending, cancelling, deleting, reassigning, or disabling orchestration revokes access
-immediately rather than waiting for the 15-minute expiry. Missing, expired, or key-rotation-invalid
-proofs trigger one refresh and one retry; authorization-state denials do not. The runner machine's
-OS account remains the local trust boundary; sibling processes running as that account are not
-isolated from each other. Agent management remains MCP-only. Existing runners migrate their
-credential storage to private permissions on the next runner restart; the CLI refuses to use a
-legacy world-readable config until that migration has happened.
-Task CLI mutations are attributed to the runner owner, so agents should prefer native
-Orbit MCP tools when agent/session attribution matters.
-
-A process with **no** `ORBIT_SESSION_ID` at all — a launchd/cron bridge that belongs to no
-session and outlives every session, so it can hold no session-bound proof — is treated as
-headless and gets `session get`, `session list` and `session send` on the runner credential
-alone, scoped by the control plane to the sessions that runner hosts. That is what the runner
-already has for those sessions, and nothing more: sessions on other machines stay invisible, and
-spawning, the lifecycle verbs and the owner-wide search stay session-gated. `orbit session get`
-reports `status`, `numTurns` and `lastTurnAt`, which is how a poller decides whether a
-long-lived session finished the turn it was given. `orbit capabilities --json` shrinks to match
-whatever the calling context actually allows, so it can be read as the source of truth:
-
-```bash
-# in a launchd job, with no ORBIT_* session variables in the environment
-orbit capabilities --json                                    # lists the headless subset
-orbit session list --status AWAITING_INPUT --json            # only this runner's sessions
-orbit session get <session-id> --json                        # status · numTurns · lastTurnAt
-echo "$event" | orbit session send <session-id> --message-file - --json
-```
-
-Starting a session headlessly takes more than the machine credential. The runner token sits in
-plaintext in `~/.orbit/config.json` and authenticates every claim, so promoting it to "may spawn
-any workspace with any prompt" would make one leaked file equal arbitrary execution. `orbit token
-mint` instead issues a **service token**: a signed credential that enumerates its scopes
-(`session:get`, `session:list`, `session:send`, `session:create` — the destructive verbs are not
-in the vocabulary at all), is pinned to a single workspace whenever it may create, expires on its
-own, and is revoked individually without re-registering the machine. Minting takes the runner
-credential, so a service token can never mint another; the token is a JWT whose `jti` is its row
-id, so the database stores no secret and revocation takes effect on the next request rather than
-at expiry. Put it in the job's environment as `ORBIT_SERVICE_TOKEN` and `orbit session` uses it
-in place of the runner credential, with `orbit capabilities --json` reporting the grant it holds:
-
-```bash
-orbit token mint --scope session:create,session:get --agent-id <agent-id> \
-                 --ttl 24h --label "feishu bridge"      # printed once, never stored
-orbit token list --json                                 # scope · pin · expiry · last use
-orbit token revoke <token-id>                           # effective immediately
-
-# in the launchd job, with ORBIT_SERVICE_TOKEN set from the mint above
-orbit session create --prompt "$event" --json           # starts the pinned workspace, on this runner
-```
-
-## Cost & tokens
-
-Runners report runtime cost/token usage when the engine exposes it; Orbit aggregates these for
-the dashboard. **These are client-side reports** — reconcile them against the underlying model
-provider's billing records for authoritative charges.
-
-## Project layout
-
-```
-src/
-  shared/     enums · normalized run events · control events · provider presets · DTOs
-  apiserver/  NestJS control plane + Prisma schema/migrations
-  runner-go/  `orbit` CLI (Go): register · run loop · interactive session · worktree
-  web/        Vite + React + Ant Design UI
-  macos/      OrbitKit (UI-free Swift core, Linux-testable) + OrbitApp (SwiftUI shell)
-  ios/        XcodeGen spec + iOS entry; reuses OrbitApp's SwiftUI sources in place
-gateway/      nginx reverse proxy (web + /api on one origin)
-docs/         design records (interactive sessions, session lifecycle, realtime control
-              plane, badge sync, quota retry, session search, native clients)
-```
-
-## Useful scripts (root)
-
-| Script | What |
-|---|---|
-| `npm run build` | Build all JS packages (shared → apiserver → web) |
-| `npm run build:runner` | Build the static `orbit` Go binaries (→ `dist-bin/`, served at `/dl`) |
-| `npm run db:up` / `db:down` | Start/stop local Postgres |
-| `npm run prisma:migrate` | Create/apply a dev migration |
-| `npm run dev:apiserver` | Run the control plane (watch) |
-| `npm run dev:web` | Run the web UI (watch) |
-
-## Status
-
-Shipped: distributed runners, **interactive multi-turn sessions** with live tool-approvals,
-task CRUD + queue + execution, **task-lists and dependency DAGs**, per-session **git-worktree
-isolation** with commit/merge from the UI, graceful runner drain + a heartbeat reaper,
-image/file attachments, a Skills browser, cost/token rollups, a dark / mobile-responsive UI,
-a **user-level realtime control-plane stream**, **cross-session ⌘K search**, **configurable
-model providers** (BYOK), an MCP surface for session/task/workspace orchestration, and **native
-macOS + iOS clients** with APNs push.
-
-Not yet: cron / recurring schedules and external task sources (e.g. Feishu/Lark) — designed
-for, but not built.
+- Read the [documentation index](docs/README.md) or [support guide](SUPPORT.md).
+- Report bugs and request features with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues).
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request.
+- Project decisions and maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md).
+- Security issues must follow [SECURITY.md](SECURITY.md), not a public issue.
 
 ## License
 
-MIT
+Orbit is available under the [MIT License](LICENSE).
