@@ -1711,3 +1711,863 @@ test('§20 names a test that exists for every finding, and points at clauses tha
     assert.ok(self.includes(`test('${name}'`), `§20 names "${name}", which is not a test in this file`);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-15 · how many times a signal arrived is not a fact about the world
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** One blocker row, with the two columns v1.3 demotes to display kept separate from the rest. */
+interface Row15 {
+  kind: string;
+  owner: Owner;
+  recovery: Recovery;
+  requiredAction: string;
+  dedupeKey: string;
+  lifecycleGeneration: number;
+  conditionVersion: string;
+  firstSeenAt: number;
+  escalatedAt: number | null;
+  notifications: number;
+  // display only (§11.5 BL7)
+  occurrences: number;
+  lastSeenAt: number;
+}
+
+/** §11.3 — one delivery of one signal: a new row, or `occurrences += 1` on the row that exists. */
+function deliver15(row: Row15 | null, signal: { kind: string; subjectId: string; conditionVersion: string }, now: number, owner: Owner, recovery: Recovery): Row15 {
+  if (row) return { ...row, occurrences: row.occurrences + 1, lastSeenAt: now, conditionVersion: signal.conditionVersion };
+  return {
+    kind: signal.kind,
+    owner,
+    recovery,
+    requiredAction: `deal with ${signal.kind}`,
+    dedupeKey: `${signal.kind}:PROVIDER:${signal.subjectId}`,
+    lifecycleGeneration: 1,
+    conditionVersion: signal.conditionVersion,
+    firstSeenAt: now,
+    escalatedAt: null,
+    notifications: 0,
+    occurrences: 1,
+    lastSeenAt: now,
+  };
+}
+
+/** §11.5 ES3 + ES4. `'lifetimeOrCount'` is v1.2's rule, kept so the control can run it. */
+function escalateIfDue(row: Row15, now: number, policy: 'lifetime' | 'lifetimeOrCount'): Row15 {
+  if (row.escalatedAt !== null) return row; // at most once, at most one notification
+  const due = now - row.firstSeenAt > ESCALATION_AFTER || (policy === 'lifetimeOrCount' && row.occurrences > 10);
+  return due ? { ...row, owner: 'USER', escalatedAt: now, notifications: row.notifications + 1 } : row;
+}
+
+/** Everything a person or the control loop can see. `occurrences`/`lastSeenAt` are deliberately out. */
+function observable15(row: Row15): unknown {
+  const { occurrences: _o, lastSeenAt: _l, ...rest } = row;
+  return {
+    ...rest,
+    runState: runStateOf({
+      projectStatus: 'OPEN',
+      blockers: [blocker({ kind: row.kind, owner: row.owner, recovery: row.recovery, escalatedAt: row.escalatedAt })],
+      acceptanceInFlight: false,
+      liveSessions: 0,
+      openVerification: 0,
+    }),
+  };
+}
+
+/** N deliveries of one unchanging condition, all inside one instant — nothing about the world moves. */
+function deliverN(n: number, policy: 'lifetime' | 'lifetimeOrCount'): Row15 {
+  const signal = { kind: 'PROVIDER_UNAVAILABLE', subjectId: 'provider-1', conditionVersion: 'provider-1:unavailable' };
+  let row: Row15 | null = null;
+  for (let i = 0; i < n; i++) {
+    row = deliver15(row, signal, 0, 'SYSTEM', 'EVENT');
+    row = escalateIfDue(row, 0, policy);
+  }
+  return row!;
+}
+
+test('PC-CX-15 delivery count changes nothing a person or the control loop can see', () => {
+  // I14 / ES5. The world is one fact — a provider that is down — and the only thing that varies
+  // between these runs is how many times somebody told us about it.
+  const once = observable15(deliverN(1, 'lifetime'));
+  for (const n of [2, 11, 50]) {
+    assert.deepEqual(observable15(deliverN(n, 'lifetime')), once, `${n} deliveries must look exactly like one`);
+  }
+  // …and the two columns that are *allowed* to move do move, so this is not passing by accident.
+  assert.equal(deliverN(11, 'lifetime').occurrences, 11);
+  assert.equal(deliverN(11, 'lifetime').escalatedAt, null, 'no lifetime has elapsed, so nothing escalates');
+
+  // The clock, on the other hand, is a fact: one delivery and half an hour is an escalation.
+  const aged = escalateIfDue(deliverN(1, 'lifetime'), ESCALATION_AFTER + 1, 'lifetime');
+  assert.equal(aged.owner, 'USER', 'ES4: lifetime is the only trigger');
+  assert.equal(aged.notifications, 1, 'and it notifies exactly once');
+  assert.equal(escalateIfDue(aged, 10 * ESCALATION_AFTER, 'lifetime').notifications, 1, 'ES3: at most once, ever');
+
+  // Negative control: v1.2's `occurrences > 10`. Same world, eleventh delivery, different owner,
+  // different run state, one notification nobody asked for — the review's exact reproduction.
+  const v12 = observable15(deliverN(11, 'lifetimeOrCount')) as { owner: Owner; runState: string };
+  assert.equal(v12.owner, 'USER');
+  assert.equal(v12.runState, 'AWAITING_HUMAN');
+  assert.equal(deliverN(11, 'lifetimeOrCount').notifications, 1);
+  assert.notDeepEqual(v12, once, 'PC-CX-15 must reproduce under the rule v1.3 removed');
+
+  // And the document: any line that still names a count threshold or the three-step ladder has to
+  // be marked as the version it belonged to. A rule and a note about a deleted rule read the same
+  // to a reader who is skimming, and that is how §9.4 kept contradicting ES3 for two rounds.
+  for (const sec of ['9.4', '11.5']) {
+    for (const line of section(PCC, sec).split('\n')) {
+      if (/occurrences\s*>/.test(line) || /SYSTEM\s*→\s*COORDINATOR\s*→\s*USER/.test(line)) {
+        assert.match(line, /v1\.[012]|旧文|残文|已删除/, `§${sec} states a superseded escalation rule as if it were current:\n${line}`);
+      }
+    }
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-16 · a blocker that comes back is a new episode, not the same one
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Episode {
+  dedupeKey: string;
+  lifecycleGeneration: number;
+  resolvedAt: number | null;
+}
+
+interface Ledger16 {
+  actions: string[];
+  blockers: Episode[];
+}
+
+/** §11.3 BE1 — `MAX(lifecycle_generation) + 1` over *history*, which is why clearing keeps the row. */
+function raiseBlocker(l: Ledger16, kind: string, subjectId: string, keyed: 'generation' | 'v12'): { key: string; created: boolean } {
+  const dedupeKey = `${kind}:TASK:${subjectId}`;
+  const open = l.blockers.find((b) => b.dedupeKey === dedupeKey && b.resolvedAt === null);
+  const generation = open ? open.lifecycleGeneration : Math.max(0, ...l.blockers.filter((b) => b.dedupeKey === dedupeKey).map((b) => b.lifecycleGeneration)) + 1;
+  const key = keyed === 'generation' ? `pc:v1:p1:blocker:${kind}:${subjectId}:${generation}` : `pc:v1:p1:blocker:${kind}:${subjectId}`;
+  if (l.actions.includes(key)) return { key, created: false }; // §8.5 C2 — skip the side effect
+  l.actions.push(key);
+  if (!open) l.blockers.push({ dedupeKey, lifecycleGeneration: generation, resolvedAt: null });
+  return { key, created: true };
+}
+
+function clearBlocker(l: Ledger16, kind: string, subjectId: string, now: number): void {
+  const open = l.blockers.find((b) => b.dedupeKey === `${kind}:TASK:${subjectId}` && b.resolvedAt === null);
+  if (open) open.resolvedAt = now; // §11.4 — resolved, never deleted
+}
+
+/** open → N repeated deliveries → clear → the same cause happens again. */
+function episodeCycle(kind: string, keyed: 'generation' | 'v12', repeats = 5): { l: Ledger16; reopened: { key: string; created: boolean } } {
+  const l: Ledger16 = { actions: [], blockers: [] };
+  for (let i = 0; i < repeats; i++) raiseBlocker(l, kind, 'X', keyed);
+  clearBlocker(l, kind, 'X', 1_000);
+  return { l, reopened: raiseBlocker(l, kind, 'X', keyed) };
+}
+
+test('PC-CX-16 a blocker that comes back gets a new lifecycle generation', () => {
+  for (const row of kindTable()) {
+    const { l, reopened } = episodeCycle(row.kind, 'generation');
+    assert.equal(l.actions.length, 2, `${row.kind}: one action per episode, not per delivery`);
+    assert.equal(reopened.created, true, `${row.kind}: the second failure must actually open a blocker`);
+    assert.deepEqual(
+      l.blockers.map((b) => b.lifecycleGeneration),
+      [1, 2],
+      `${row.kind}: generations are monotonic and the resolved row is still there (BE1)`,
+    );
+    const open = l.blockers.filter((b) => b.resolvedAt === null);
+    assert.equal(open.length, 1, `${row.kind}: still at most one open row (§11.3 partial index)`);
+    assert.match(reopened.key, /:2$/, `${row.kind}: the key carries the episode (BE3)`);
+
+    // Negative control: v1.2's key. The reappearance hits the historical action, C2 skips the
+    // insert, and the project carries a live fault with no blocker at all.
+    const v12 = episodeCycle(row.kind, 'v12');
+    assert.equal(v12.reopened.created, false, `${row.kind}: PC-CX-16 must reproduce`);
+    assert.equal(v12.l.blockers.filter((b) => b.resolvedAt === null).length, 0, `${row.kind}: no open blocker after the fault returns`);
+  }
+});
+
+test('PC-CX-16 repeats inside one episode still collapse onto one key', () => {
+  // The fix must not undo AC8: within a single open episode, the tenth delivery is still the same
+  // action as the first. Only the transition through `resolved` opens a new one.
+  const l: Ledger16 = { actions: [], blockers: [] };
+  const first = raiseBlocker(l, 'MERGE_CONFLICT', 'X', 'generation');
+  for (let i = 0; i < 9; i++) {
+    const again = raiseBlocker(l, 'MERGE_CONFLICT', 'X', 'generation');
+    assert.equal(again.key, first.key, 'same episode, same key');
+    assert.equal(again.created, false, 'and no second side effect');
+  }
+  assert.equal(l.actions.length, 1);
+  assert.equal(l.blockers.length, 1);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-17 · a fact that can return to an old value cannot be an action's identity
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Verifier {
+  verdictRevision: number;
+}
+
+interface World17 {
+  actions: string[];
+  targetStatus: 'DONE' | 'OPEN';
+  defects: number;
+  downstreamBlocked: boolean;
+}
+
+/** §13.2 — the three mechanical consequences, behind whichever key the contract version uses. */
+function applyVerdict(w: World17, verifier: string, v: Verifier, verdict: 'PASS' | 'FAIL', epoch: 'verdictRevision' | 'verdictValue'): { key: string; applied: boolean } {
+  if (epoch === 'verdictRevision') v.verdictRevision += 1; // V7 — in the transaction that writes the verdict
+  const key = `pc:v1:p1:verdict:${verifier}:${epoch === 'verdictRevision' ? v.verdictRevision : verdict}`;
+  if (w.actions.includes(key)) return { key, applied: false }; // §8.5 C2
+  w.actions.push(key);
+  if (verdict === 'FAIL') {
+    w.targetStatus = 'OPEN';
+    w.defects += 1;
+    w.downstreamBlocked = true;
+  } else {
+    w.downstreamBlocked = false;
+  }
+  return { key, applied: true };
+}
+
+/** FAIL → a person fixes it, everything re-runs → FAIL again. V4 says this is a supported story. */
+function verdictCycle(epoch: 'verdictRevision' | 'verdictValue'): World17 {
+  const w: World17 = { actions: [], targetStatus: 'DONE', defects: 0, downstreamBlocked: false };
+  const v: Verifier = { verdictRevision: 0 };
+  applyVerdict(w, 'V', v, 'FAIL', epoch);
+  w.targetStatus = 'DONE'; // the defect is fixed and the target re-runs to completion
+  w.downstreamBlocked = false;
+  applyVerdict(w, 'V', v, 'FAIL', epoch); // …and the verifier still says no
+  return w;
+}
+
+/** §13.1 AG5 — the parent is recomputed from the children, with a CAS instead of a permanent key. */
+function aggregate(parentStatus: string, childrenDigest: string, recomputed: string, ledger: string[], keyed: boolean): string {
+  if (keyed) {
+    const key = `pc:v1:p1:aggregate:P:${childrenDigest}`;
+    if (ledger.includes(key)) return parentStatus; // C2 skips the side effect
+    ledger.push(key);
+    return recomputed;
+  }
+  return parentStatus === recomputed ? parentStatus : recomputed; // CAS: converge, always
+}
+
+test('PC-CX-17 a fact that returns to an old value still gets a new action identity', () => {
+  // ── verdict ──────────────────────────────────────────────────────────────
+  const fixed = verdictCycle('verdictRevision');
+  assert.deepEqual(fixed.actions, ['pc:v1:p1:verdict:V:1', 'pc:v1:p1:verdict:V:2'], 'V7: a second run is a second revision');
+  assert.equal(fixed.targetStatus, 'OPEN', 'the second FAIL must send the task back again');
+  assert.equal(fixed.defects, 2, 'and file the defect it found this time');
+  assert.equal(fixed.downstreamBlocked, true, 'and block downstream again');
+
+  const v12v = verdictCycle('verdictValue');
+  assert.deepEqual(v12v.actions, ['pc:v1:p1:verdict:V:FAIL'], 'PC-CX-17: the second FAIL hits the first one’s key');
+  assert.equal(v12v.targetStatus, 'DONE', 'so a task a verifier just failed stays DONE');
+  assert.equal(v12v.defects, 1);
+  assert.equal(v12v.downstreamBlocked, false, 'and everything downstream of it is free to run');
+
+  // ── aggregate: children A → B → A (AG3 says this happens) ────────────────
+  const cas: string[] = [];
+  let parent = 'OPEN';
+  parent = aggregate(parent, 'A', 'DONE', cas, false);
+  assert.equal(parent, 'DONE');
+  parent = aggregate(parent, 'B', 'OPEN', cas, false);
+  assert.equal(parent, 'OPEN', 'a child reopened, so the parent follows (AG3)');
+  parent = aggregate(parent, 'A', 'DONE', cas, false);
+  assert.equal(parent, 'DONE', 'and when the children finish again, so does the parent');
+  assert.equal(cas.length, 0, 'AG5: a pure recomputation takes no ledger row, so there is no key to collide');
+
+  const keyed: string[] = [];
+  let v12p = 'OPEN';
+  v12p = aggregate(v12p, 'A', 'DONE', keyed, true);
+  v12p = aggregate(v12p, 'B', 'OPEN', keyed, true);
+  v12p = aggregate(v12p, 'A', 'DONE', keyed, true);
+  assert.equal(v12p, 'OPEN', 'PC-CX-17: the third aggregate hits the first one’s digest and the parent is stuck');
+
+  // ── acceptance: the epoch has to come from somewhere ─────────────────────
+  // §13.4 AE11 names a column; the test that it is a real source is that two reconciles of one
+  // snapshot agree, and that a genuinely new run does not.
+  const runtime = { acceptanceAttempt: 3 };
+  const snapshot = runtime.acceptanceAttempt;
+  const keyA = `pc:v1:p1:acceptance:${snapshot}`;
+  const keyReplay = `pc:v1:p1:acceptance:${snapshot}`;
+  runtime.acceptanceAttempt += 1; // DA2 shape: advanced by the successful insert
+  const keyNext = `pc:v1:p1:acceptance:${runtime.acceptanceAttempt}`;
+  assert.equal(keyReplay, keyA, 'a replayed snapshot computes the same acceptance key');
+  assert.notEqual(keyNext, keyA, 'a genuinely new acceptance run does not');
+
+  // Negative control for the *undefined* epoch: with no authoritative field, two equally plausible
+  // derivations of "attempt" disagree on the same snapshot — which is what "no source" means.
+  const byEventCount = `pc:v1:p1:acceptance:${17}`;
+  const byActionCount = `pc:v1:p1:acceptance:${2}`;
+  assert.notEqual(byEventCount, byActionCount, 'PC-CX-17: `<attempt>` with no defined source is not a key');
+  assert.match(section(PCC, '13.4'), /acceptance_attempt/, 'AE11 must name the column the key comes from');
+});
+
+test('PC-CX-17 §8.2 GE1 gives every permanent key an epoch that is a persisted column', () => {
+  // The generalisation, asserted against the document rather than the three findings: read GE1's
+  // table and hold every row to the discipline, so a seventh action added later cannot be keyed on
+  // a digest by accident.
+  const rows = tables(section(PCC, '8.2'))[0];
+  const actions = column(rows, '动作').map(bare);
+  const sources = column(rows, '代次来源').map(bare);
+  const wheres = column(rows, '落库位置').map(bare);
+  assert.ok(actions.length >= 9, 'GE1 must cover the whole action set, not the three that were broken');
+
+  const keyedActions = tableRows(section(PCC, '7.3'))
+    .slice(1)
+    .map((cells) => ({ type: bare(cells[0]), key: bare(cells[2]) }))
+    .filter((r) => /^[A-Z_]+$/.test(r.type) && r.key.startsWith('pc:v1:'));
+  for (const action of keyedActions) {
+    const at = actions.indexOf(action.type);
+    assert.ok(at >= 0, `${action.type} has a permanent key but GE1 does not say where its epoch comes from`);
+    const answer = `${sources[at]} → ${wheres[at]}`;
+    // Three shapes are allowed, and nothing else: a persisted column (`table.column`), a row whose
+    // identity is itself one-shot (a blocker id is cleared once; an approval inherits the key of
+    // the action it gates), or the documented GE4 exception.
+    const persisted =
+      /\w+\.\w+/.test(answer) ||
+      /coordinator_generation/.test(answer) ||
+      /行 id|被审批动作|继承/.test(answer);
+    assert.ok(persisted, `${action.type}: "${answer}" is not a persisted, monotonic source (GE1/GE2)`);
+  }
+  assert.equal(sources[actions.indexOf('AGGREGATE_PARENT')].includes('无键'), true, 'AG5: aggregate keeps no key at all');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-18 · the closed set has to be derived from the digest, not hand-written
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Facts18 {
+  projectId: string;
+  acceptanceCriteria: string;
+  taskSet: [string, string][];
+  verdicts: [string, string, string][]; // (verifierTaskId, verifiesTaskId, verdict)
+  mergeEvidence: [string, string, number][]; // (requirementId, contentHash, refGeneration)
+}
+
+function digest18(f: Facts18): string {
+  return sha256(
+    JSON.stringify({
+      v: 1,
+      projectId: f.projectId,
+      criteriaRevision: sha256(f.acceptanceCriteria),
+      taskSet: [...f.taskSet].sort(),
+      verdicts: [...f.verdicts].sort(),
+      mergeEvidence: [...f.mergeEvidence].sort(),
+    }),
+  );
+}
+
+/** The write paths §13.4 AE6 enumerates, keyed by the projection each one moves. */
+const MUTATORS_18 = {
+  'task.created': 'taskSet',
+  'task.status_changed': 'taskSet',
+  'task.completion_policy': 'taskSet',
+  'task.project_id.move_in': 'taskSet',
+  'task.project_id.move_out': 'taskSet',
+  'task.verifies_task_id': 'verdicts',
+  verdict: 'verdicts',
+  criteria: 'criteriaRevision',
+  merge_evidence: 'mergeEvidence',
+} as const;
+type Mutator18 = keyof typeof MUTATORS_18;
+
+/** v1.2's hand-written table — the three it was missing are exactly the three findings. */
+const V12_GATED: Mutator18[] = ['task.created', 'task.status_changed', 'task.completion_policy', 'verdict', 'criteria', 'merge_evidence'];
+
+interface Project18 {
+  id: string;
+  status: 'OPEN' | 'DONE' | 'CANCELLED';
+  facts: Facts18;
+  evidence: { allPass: boolean; digest: string }[];
+  reopened: boolean;
+}
+
+function project18(id = 'p1'): Project18 {
+  const facts: Facts18 = {
+    projectId: id,
+    acceptanceCriteria: 'every unit merged to feat/project',
+    taskSet: [['t1', 'DONE'], ['t2', 'DONE']],
+    verdicts: [['v1', 't1', 'PASS']],
+    mergeEvidence: [['r1', 'content-hash-a', 1]],
+  };
+  return { id, status: 'OPEN', facts, evidence: [{ allPass: true, digest: digest18(facts) }], reopened: false };
+}
+
+function apply18(p: Project18, m: Mutator18): void {
+  const f = p.facts;
+  switch (m) {
+    case 'task.created':
+      p.facts = { ...f, taskSet: [...f.taskSet, ['t9', 'OPEN']] };
+      break;
+    case 'task.status_changed':
+      p.facts = { ...f, taskSet: f.taskSet.map(([id, s]) => (id === 't1' ? [id, 'OPEN'] : [id, s]) as [string, string]) };
+      break;
+    case 'task.completion_policy':
+      p.facts = { ...f, taskSet: [...f.taskSet, ['t1#policy', 'ALL_CHILDREN_DONE']] };
+      break;
+    case 'task.project_id.move_in':
+      p.facts = { ...f, taskSet: [...f.taskSet, ['moved', 'OPEN']] };
+      break;
+    case 'task.project_id.move_out':
+      p.facts = { ...f, taskSet: f.taskSet.filter(([id]) => id !== 't2') };
+      break;
+    case 'task.verifies_task_id':
+      p.facts = { ...f, verdicts: [['v1', 't2', 'PASS']] };
+      break;
+    case 'verdict':
+      p.facts = { ...f, verdicts: [['v1', 't1', 'FAIL']] };
+      break;
+    case 'criteria':
+      p.facts = { ...f, acceptanceCriteria: f.acceptanceCriteria + ' and deployed' };
+      break;
+    case 'merge_evidence':
+      p.facts = { ...f, mergeEvidence: [['r1', 'content-hash-b', 2]] };
+      break;
+  }
+}
+
+function i10Holds18(p: Project18): boolean {
+  if (p.status !== 'DONE') return true;
+  const fresh = digest18(p.facts);
+  return p.evidence.some((e) => e.allPass && e.digest === fresh);
+}
+
+/** One ordering of "a fact write" against "the DONE gate", under a given gated set (AE6). */
+function doneRace18(order: 'FACT_FIRST' | 'DONE_FIRST', m: Mutator18, gated: readonly Mutator18[]): Project18 {
+  const p = project18();
+  const takesTheGate = gated.includes(m);
+  if (order === 'FACT_FIRST') {
+    apply18(p, m);
+    const seen = takesTheGate ? p.facts : project18().facts; // ungated writes are invisible to the gate
+    const fresh = digest18(seen);
+    if (p.evidence.some((e) => e.allPass && e.digest === fresh)) p.status = 'DONE';
+    return p;
+  }
+  p.status = 'DONE';
+  apply18(p, m);
+  if (takesTheGate && p.status === 'DONE') {
+    p.status = 'OPEN'; // AE8
+    p.reopened = true;
+  }
+  return p;
+}
+
+test('PC-CX-18 the acceptance-fact write set is derived from the digest, not hand-written', () => {
+  // The set is only closed if it can be *derived*. AE6's rows name the projection each write moves,
+  // so the projections named there must be exactly the fields of the digest — no more, no fewer.
+  const ae6 = tables(section(PCC, '13.4'))[0];
+  const projections = new Set(column(ae6, '投影').map(bare));
+  assert.deepEqual([...projections].sort(), ['criteriaRevision', 'mergeEvidence', 'taskSet', 'verdicts'], 'AE6 and AE1 disagree about what the digest is made of');
+  assert.deepEqual([...new Set(Object.values(MUTATORS_18))].sort(), [...projections].sort(), 'the model and AE6 disagree');
+
+  // …and the three write paths v1.2 was missing have to be named, in words a reader can find.
+  const paths = column(ae6, '写路径（穷举）').join(' ');
+  assert.match(paths, /task\.project_id/, 'AE6 must list the cross-project move (§12.3 D3 always had it)');
+  assert.match(paths, /verifies_task_id/, 'AE6 must list the verification relink');
+  assert.match(paths, /refGeneration|contentHash/, 'AE6 must list the merge-evidence write, including the ref generation');
+
+  // Every derived mutator, both orders, I10 on the committed state.
+  const all = Object.keys(MUTATORS_18) as Mutator18[];
+  for (const m of all) {
+    const factFirst = doneRace18('FACT_FIRST', m, all);
+    assert.equal(factFirst.status, 'OPEN', `${m}: DONE must be refused while the facts have moved`);
+    assert.ok(i10Holds18(factFirst), m);
+
+    const doneFirst = doneRace18('DONE_FIRST', m, all);
+    assert.equal(doneFirst.reopened, true, `${m}: AE8 must reopen atomically`);
+    assert.ok(i10Holds18(doneFirst), m);
+  }
+
+  // Negative control: v1.2's six rows. The three it left out each produce a committed
+  // `DONE` + mismatched evidence — the state I10 says cannot exist. (On a real server one of the
+  // six orderings is incidentally saved by the foreign key on `task.project_id`; that is measured
+  // and explained in `coordinator-linearization.pg.spec.ts`, and it is not a gate — see AE10.4.)
+  const missing = all.filter((m) => !V12_GATED.includes(m));
+  assert.deepEqual(missing.sort(), ['task.project_id.move_in', 'task.project_id.move_out', 'task.verifies_task_id'], 'the model must reproduce exactly the gap the review found');
+  for (const m of missing) {
+    for (const order of ['FACT_FIRST', 'DONE_FIRST'] as const) {
+      const v12 = doneRace18(order, m, V12_GATED);
+      assert.equal(v12.status, 'DONE', `${order}/${m}`);
+      assert.equal(i10Holds18(v12), false, `PC-CX-18 must reproduce with the hand-written set (${order}/${m})`);
+    }
+  }
+});
+
+test('PC-CX-18 a cross-project move reopens both projects and takes both locks in id order', () => {
+  // AE10. The move changes the taskSet of two projects, so both of them are "the project" for the
+  // purposes of AE6/AE8, and both have to be locked — in an order that is the same in both
+  // directions, or the fix for PC-CX-18 becomes a new instance of PC-CX-19.
+  function move(fromId: string, toId: string): { locks: string[]; reopened: string[] } {
+    const from = project18(fromId);
+    const to = project18(toId);
+    from.status = 'DONE';
+    to.status = 'DONE';
+    const locks = [fromId, toId].sort(); // LO2 — by id, ascending, in both directions
+    apply18(from, 'task.project_id.move_out');
+    apply18(to, 'task.project_id.move_in');
+    const reopened: string[] = [];
+    for (const p of [from, to]) {
+      if (p.status === 'DONE' && !i10Holds18(p)) {
+        p.status = 'OPEN';
+        reopened.push(p.id);
+      }
+    }
+    return { locks, reopened };
+  }
+  const forward = move('p-a', 'p-b');
+  const backward = move('p-b', 'p-a');
+  assert.deepEqual(forward.locks, backward.locks, 'LO2: both directions must take the two project rows in the same order');
+  assert.deepEqual(forward.reopened.sort(), ['p-a', 'p-b'], 'both projects lose their DONE, because both taskSets moved');
+  assert.deepEqual(backward.reopened.sort(), ['p-a', 'p-b']);
+});
+
+test('PC-CX-18 the git side is stated as detection, not as a lock', () => {
+  // AE9-d. Nothing here can test a `git push`; what it can test is that the contract does not
+  // claim to have locked one. The honest sentence is the deliverable.
+  const ae9 = section(PCC, '13.4');
+  assert.match(ae9, /refGeneration/, 'the digest must be able to represent that the ref moved');
+  assert.match(ae9, /有界延迟的检测|不是互斥/, 'AE9 must say plainly what it does not guarantee');
+
+  // …and the mechanism it does define has to converge: a ref that moves is a new generation, which
+  // is a different digest, which is AE8.
+  const p = project18();
+  p.status = 'DONE';
+  apply18(p, 'merge_evidence');
+  assert.equal(i10Holds18(p), false, 'the moved ref makes the evidence stale…');
+  p.status = 'OPEN'; // AE9-c: the merge-evidence writer is an AE6 writer, so it goes through AE8
+  assert.ok(i10Holds18(p), '…and the reopen is what makes I10 true again');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-19 · one lock order, no upgrades, bounded retry
+// ─────────────────────────────────────────────────────────────────────────────
+
+type LockMode = 'SHARE' | 'NO_KEY_UPDATE' | 'UPDATE';
+interface Step {
+  row: string;
+  mode: LockMode;
+}
+
+/** Postgres' row-level lock conflict table, for the three modes this contract uses. */
+function conflict(a: LockMode, b: LockMode): boolean {
+  if (a === 'SHARE' && b === 'SHARE') return false;
+  return true; // SHARE×NO KEY UPDATE, NO KEY UPDATE×NO KEY UPDATE, and anything with UPDATE
+}
+
+/**
+ * Can these two transactions deadlock? Explores every interleaving: a step is enabled unless some
+ * lock the *other* transaction holds on that row conflicts with it (locks a transaction already
+ * holds never block itself), and locks are released at commit. Both blocked = deadlock.
+ */
+function deadlockPossible(a: Step[], b: Step[]): boolean {
+  const seen = new Set<string>();
+  const walk = (i: number, j: number, heldA: Step[], heldB: Step[]): boolean => {
+    if (i >= a.length && j >= b.length) return false;
+    const key = `${i}|${j}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    const enabled = (step: Step | undefined, otherHeld: Step[]): boolean =>
+      step === undefined ? false : !otherHeld.some((h) => h.row === step.row && conflict(step.mode, h.mode));
+    const aNext = i < a.length ? a[i] : undefined;
+    const bNext = j < b.length ? b[j] : undefined;
+    // A transaction that has run out of steps commits and releases everything.
+    if (aNext === undefined && heldA.length > 0) return walk(i, j, [], heldB);
+    if (bNext === undefined && heldB.length > 0) return walk(i, j, heldA, []);
+    const aOk = enabled(aNext, heldB);
+    const bOk = enabled(bNext, heldA);
+    if (!aOk && !bOk) return true; // both waiting on the other — 40P01
+    if (aOk && walk(i + 1, j, [...heldA, aNext!], heldB)) return true;
+    if (bOk && walk(i, j + 1, heldA, [...heldB, bNext!])) return true;
+    return false;
+  };
+  return walk(0, 0, [], []);
+}
+
+/** §13.4 AE6-a — the acceptance-fact writer, in both contract versions. */
+const factWriter = (v: 'v12' | 'v13'): Step[] =>
+  v === 'v12'
+    ? [{ row: 'project:p1', mode: 'SHARE' }, { row: 'project:p1', mode: 'UPDATE' }] // AE6 then AE8: an upgrade
+    : [{ row: 'project:p1', mode: 'NO_KEY_UPDATE' }, { row: 'project:p1', mode: 'UPDATE' }]; // LO3: take it once
+const doneGate: Step[] = [{ row: 'project:p1', mode: 'UPDATE' }];
+
+/** §8.6 LO1's order, read from the document rather than retyped. */
+function lockOrder(): string[] {
+  const line = section(PCC, '8.6').split('\n').find((l) => l.includes('→') && l.includes('project_runtime'))!;
+  return Array.from(line.matchAll(/`([a-z_]+)`/g), (m) => m[1]);
+}
+
+/** LO4 — retry a serialization failure a bounded number of times, then give it a name. */
+function withBoundedRetry(failures: number): { attempts: number; result: 'ok' | 'PROJECT_FACT_WRITE_CONTENDED' } {
+  let attempts = 0;
+  for (let n = 0; n < 4; n++) {
+    attempts += 1;
+    if (attempts > failures) return { attempts, result: 'ok' };
+  }
+  return { attempts, result: 'PROJECT_FACT_WRITE_CONTENDED' };
+}
+
+test('PC-CX-19 one lock order, no upgrades, and a bounded retry', () => {
+  // LO1: the frozen order, and the model's ranks, must be the same list.
+  assert.deepEqual(lockOrder(), ['project', 'project_runtime', 'task', 'session'], '§8.6 LO1 is the only lock order');
+
+  // LO3: two acceptance-fact writers, and a writer against the DONE gate — no interleaving deadlocks.
+  assert.equal(deadlockPossible(factWriter('v13'), factWriter('v13')), false, 'two fact writers must queue, not deadlock');
+  assert.equal(deadlockPossible(factWriter('v13'), doneGate), false, 'a fact writer against DONE must queue too');
+  assert.equal(deadlockPossible(factWriter('v13'), [{ row: 'project:p1', mode: 'NO_KEY_UPDATE' }, { row: 'task:X', mode: 'NO_KEY_UPDATE' }]), false, 'project → task is the same direction for everyone');
+
+  // Negative control: v1.2's SHARE-then-UPDATE. Both writers get the compatible share lock, then
+  // both wait for the other to release it — the 40P01 the review reproduced on a real server.
+  assert.equal(deadlockPossible(factWriter('v12'), factWriter('v12')), true, 'PC-CX-19 must reproduce under the upgrade');
+
+  // LO4: a contended write ends with a name, never with an unclassified failure.
+  assert.deepEqual(withBoundedRetry(0), { attempts: 1, result: 'ok' });
+  assert.deepEqual(withBoundedRetry(2), { attempts: 3, result: 'ok' }, 'transient contention is retried');
+  assert.deepEqual(withBoundedRetry(9), { attempts: 4, result: 'PROJECT_FACT_WRITE_CONTENDED' }, 'and bounded');
+
+  // F3 must no longer say the thing that could not be true while D6/AE6/AE7 all take locks.
+  const f3 = section(PCC, '8.1').split('\n').find((l) => l.startsWith('**F3'))!;
+  assert.match(f3, /v1\.3/, 'F3 is a behaviour change and has to be marked as one');
+  assert.match(section(PCC, '8.6'), /40P01/, 'the deadlock code needs a documented handling, not silence');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-20 · attribution proved on the committed state
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface Action20 {
+  id: string;
+  type: string;
+  status: 'CLAIMED' | 'APPLIED' | 'REFUSED' | 'SUPERSEDED';
+  subjectType: string;
+  subjectId: string;
+  projectId: string;
+  fencingToken: number;
+}
+
+interface Insert20 {
+  origin: DispatchOrigin;
+  taskId: string;
+  projectActionId: string | null;
+}
+
+/** §7.7 D6 (insert time) + D9 (commit time) + the CHECK, against one contract version. */
+function commitSession20(
+  actions: Action20[],
+  runtime: { projectId: string; fencingToken: number },
+  taskProjectId: string,
+  s: Insert20,
+  version: 'v12' | 'v13',
+  mutateBeforeCommit?: (a: Action20[]) => void,
+): { committed: boolean; refusal?: string } {
+  const find = (): Action20 | undefined => actions.find((a) => a.id === s.projectActionId);
+  // CHECK: only a coordinator-origin session may carry an action id (D9, v1.3).
+  if (version === 'v13' && s.origin !== 'COORDINATOR' && s.projectActionId !== null) {
+    return { committed: false, refusal: 'DISPATCH_ATTRIBUTION_VIOLATION' };
+  }
+  // BEFORE INSERT.
+  if (s.origin === 'COORDINATOR') {
+    if (version === 'v12') {
+      if (s.projectActionId === null) return { committed: false, refusal: 'DISPATCH_AUTHORITY_VIOLATION' };
+    } else {
+      const a = find();
+      const ok =
+        a !== undefined &&
+        a.type === 'DISPATCH_TASK' &&
+        (a.status === 'CLAIMED' || a.status === 'APPLIED') &&
+        a.subjectType === 'TASK' &&
+        a.subjectId === s.taskId &&
+        a.projectId === taskProjectId &&
+        a.fencingToken === runtime.fencingToken;
+      if (!ok) return { committed: false, refusal: 'DISPATCH_AUTHORITY_VIOLATION' };
+    }
+  }
+  // …anything the transaction does after the insert, which is the half a BEFORE trigger cannot see.
+  mutateBeforeCommit?.(actions);
+  // COMMIT: the deferred constraint (v1.3 only).
+  if (version === 'v13' && s.origin === 'COORDINATOR') {
+    const a = find();
+    const ok =
+      a !== undefined &&
+      a.type === 'DISPATCH_TASK' &&
+      a.status === 'APPLIED' &&
+      a.subjectType === 'TASK' &&
+      a.subjectId === s.taskId &&
+      a.projectId === taskProjectId &&
+      a.fencingToken === runtime.fencingToken;
+    if (!ok) return { committed: false, refusal: 'DISPATCH_ATTRIBUTION_VIOLATION' };
+  }
+  return { committed: true };
+}
+
+/** I11's first clause, evaluated over what is actually in the database afterwards. */
+function i11Holds(actions: Action20[], taskProjectId: string, runtimeToken: number, s: Insert20): boolean {
+  if (s.origin !== 'COORDINATOR') return s.projectActionId === null;
+  const a = actions.find((x) => x.id === s.projectActionId);
+  return (
+    a !== undefined &&
+    a.type === 'DISPATCH_TASK' &&
+    a.status === 'APPLIED' &&
+    a.subjectId === s.taskId &&
+    a.projectId === taskProjectId &&
+    a.fencingToken === runtimeToken
+  );
+}
+
+test('PC-CX-20 attribution is proved on the committed state, not at insert time', () => {
+  const runtime = { projectId: 'p1', fencingToken: 42 };
+  const good = (over: Partial<Action20> = {}): Action20 => ({
+    id: 'a1',
+    type: 'DISPATCH_TASK',
+    status: 'CLAIMED',
+    subjectType: 'TASK',
+    subjectId: 'X',
+    projectId: 'p1',
+    fencingToken: 42,
+    ...over,
+  });
+  const insert: Insert20 = { origin: 'COORDINATOR', taskId: 'X', projectActionId: 'a1' };
+  const applyIt = (as: Action20[]): void => {
+    as[0].status = 'APPLIED'; // §8.3's third statement
+  };
+
+  // The legitimate path: claimed at insert, applied before commit (D9-b's reason for deferring).
+  const ok = commitSession20([good()], runtime, 'p1', insert, 'v13', applyIt);
+  assert.deepEqual(ok, { committed: true });
+  assert.equal(i11Holds([good({ status: 'APPLIED' })], 'p1', 42, insert), true);
+
+  // Six refusals, one per column D9 reads.
+  const refusals: [string, Action20[], Insert20, ((a: Action20[]) => void) | undefined][] = [
+    ['wrong type', [good({ type: 'NOOP' })], insert, applyIt],
+    ['never applied', [good()], insert, undefined],
+    ['another task', [good({ subjectId: 'Y' })], insert, applyIt],
+    ['another project', [good({ projectId: 'p2' })], insert, applyIt],
+    ['stale fencing token', [good({ fencingToken: 41 })], insert, applyIt],
+    ['user origin carrying an action', [good()], { origin: 'USER', taskId: 'X', projectActionId: 'a1' }, applyIt],
+  ];
+  for (const [name, actions, ins, mutate] of refusals) {
+    const r = commitSession20(actions, runtime, 'p1', ins, 'v13', mutate);
+    assert.equal(r.committed, false, `${name}: must not reach a committed state`);
+    assert.match(r.refusal!, /VIOLATION/, name);
+  }
+
+  // A session the transaction spoils *after* the insert is the one a BEFORE trigger cannot catch,
+  // and the reason D9 exists at all.
+  const spoiled = commitSession20([good()], runtime, 'p1', insert, 'v13', (as) => {
+    as[0].status = 'SUPERSEDED';
+  });
+  assert.equal(spoiled.committed, false, 'D9 re-reads at commit, so a late rewrite is still refused');
+
+  // Negative control: v1.2's predicate was `project_action_id IS NOT NULL`. A NOOP that was never
+  // applied sails through, and the committed state violates I11 — the review's exact output.
+  const v12 = commitSession20([good({ type: 'NOOP' })], runtime, 'p1', insert, 'v12', undefined);
+  assert.deepEqual(v12, { committed: true }, 'PC-CX-20 must reproduce under the old predicate');
+  assert.equal(i11Holds([good({ type: 'NOOP' })], 'p1', 42, insert), false, 'i11Satisfied=false, as reported');
+  const v12user = commitSession20([good()], runtime, 'p1', { origin: 'USER', taskId: 'X', projectActionId: 'a1' }, 'v12', applyIt);
+  assert.deepEqual(v12user, { committed: true }, 'and USER origin could carry an action row too');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mutation check · every fence v1.3 adds has to be load-bearing
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Kept as a second, separate mutation test rather than six more rows in the v1.2 one: the rounds
+// have to stay independently checkable, so that a revision cannot close round three by quietly
+// dropping a fence from round two.
+test('mutation check: every fence added for PC-CX-15..20 is load-bearing', () => {
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-15',
+      fence: 'escalation triggered by lifetime alone (§11.5 ES4)',
+      defectReappears: () => {
+        const one = observable15(deliverN(1, 'lifetimeOrCount')) as { owner: Owner; runState: string };
+        const eleven = observable15(deliverN(11, 'lifetimeOrCount')) as { owner: Owner; runState: string };
+        return one.owner === 'SYSTEM' && one.runState === 'BLOCKED' && eleven.owner === 'USER' && eleven.runState === 'AWAITING_HUMAN';
+      },
+    },
+    {
+      finding: 'PC-CX-16',
+      fence: 'the blocker lifecycle generation (§11.3 BE1)',
+      defectReappears: () =>
+        kindTable().every((row) => {
+          const { l, reopened } = episodeCycle(row.kind, 'v12');
+          return !reopened.created && l.blockers.filter((b) => b.resolvedAt === null).length === 0;
+        }),
+    },
+    {
+      finding: 'PC-CX-17',
+      fence: 'monotonic verdict/acceptance revisions and the aggregate CAS (§8.2 GE1)',
+      defectReappears: () => {
+        const v = verdictCycle('verdictValue');
+        const ledger: string[] = [];
+        let parent = 'OPEN';
+        parent = aggregate(parent, 'A', 'DONE', ledger, true);
+        parent = aggregate(parent, 'B', 'OPEN', ledger, true);
+        parent = aggregate(parent, 'A', 'DONE', ledger, true);
+        return v.targetStatus === 'DONE' && v.defects === 1 && !v.downstreamBlocked && parent === 'OPEN';
+      },
+    },
+    {
+      finding: 'PC-CX-18',
+      fence: 'the derived acceptance-fact write set (§13.4 AE6-c)',
+      defectReappears: () =>
+        (Object.keys(MUTATORS_18) as Mutator18[])
+          .filter((m) => !V12_GATED.includes(m))
+          .every((m) => (['FACT_FIRST', 'DONE_FIRST'] as const).every((order) => !i10Holds18(doneRace18(order, m, V12_GATED)))),
+    },
+    {
+      finding: 'PC-CX-19',
+      fence: 'taking the updatable lock first instead of upgrading (§8.6 LO3)',
+      defectReappears: () => deadlockPossible(factWriter('v12'), factWriter('v12')),
+    },
+    {
+      finding: 'PC-CX-20',
+      fence: 'the deferred attribution constraint (§7.7 D9)',
+      defectReappears: () => {
+        const runtime = { projectId: 'p1', fencingToken: 42 };
+        const noop: Action20 = { id: 'a1', type: 'NOOP', status: 'CLAIMED', subjectType: 'TASK', subjectId: 'X', projectId: 'p1', fencingToken: 42 };
+        const s: Insert20 = { origin: 'COORDINATOR', taskId: 'X', projectActionId: 'a1' };
+        return commitSession20([noop], runtime, 'p1', s, 'v12').committed && !i11Holds([noop], 'p1', 42, s);
+      },
+    },
+  ];
+
+  assert.equal(mutants.length, 6, 'unit 02 raised six findings against v1.2');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  assert.deepEqual(observable15(deliverN(11, 'lifetime')), observable15(deliverN(1, 'lifetime')));
+  assert.equal(episodeCycle('MERGE_CONFLICT', 'generation').reopened.created, true);
+  assert.equal(verdictCycle('verdictRevision').targetStatus, 'OPEN');
+  assert.ok(i10Holds18(doneRace18('DONE_FIRST', 'task.project_id.move_in', Object.keys(MUTATORS_18) as Mutator18[])));
+  assert.equal(deadlockPossible(factWriter('v13'), factWriter('v13')), false);
+  assert.equal(
+    commitSession20(
+      [{ id: 'a1', type: 'NOOP', status: 'CLAIMED', subjectType: 'TASK', subjectId: 'X', projectId: 'p1', fencingToken: 42 }],
+      { projectId: 'p1', fencingToken: 42 },
+      'p1',
+      { origin: 'COORDINATOR', taskId: 'X', projectActionId: 'a1' },
+      'v13',
+    ).committed,
+    false,
+  );
+});
+
+test('§21 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20 has, for the third round. It also checks the real-Postgres file, because
+  // two of these six findings are claims about what the database does, and a model that asserts
+  // them is only asserting that whoever wrote it read the manual correctly (§21.5, §21.6).
+  const rows = tables(section(PCC, '21'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-15', 'PC-CX-16', 'PC-CX-17', 'PC-CX-18', 'PC-CX-19', 'PC-CX-20']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§21 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  for (const named of Array.from(section(PCC, '21').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1])) {
+    assert.ok(pg.includes(`test('${named}'`), `§21 names "${named}", which is not a test in the Postgres spec`);
+  }
+});

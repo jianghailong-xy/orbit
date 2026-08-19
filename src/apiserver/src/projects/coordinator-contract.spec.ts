@@ -28,6 +28,7 @@ const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md')
 const PAC = readFileSync(path.join(REPO, 'docs/project-agent-contract.md'), 'utf8');
 const REVIEW = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02.md'), 'utf8');
 const REVIEW_V11 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.1.md'), 'utf8');
+const REVIEW_V12 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.2.md'), 'utf8');
 const COUNTEREXAMPLES = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
 
 test('every cross-reference into the frozen Project/Agent contract resolves', () => {
@@ -254,15 +255,109 @@ test('§20 answers every finding unit 02 raised against v1.1, and names a test t
   }
 });
 
-test('the reviews are read, never edited: both are still the documents that were signed off', () => {
+test('§21 answers every finding unit 02 raised against v1.2, and names a test that exists', () => {
+  // Round three, read the same way as the first two. Its findings are numbered from 15, and the
+  // report refers back to the earlier ones, so the new ones are the ones above 14.
+  const cited = new Set(Array.from(REVIEW_V12.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 14).sort();
+  assert.deepEqual(raised, ['15', '16', '17', '18', '19', '20'], 'unit 02 raised six findings against v1.2');
+
+  const rows = tables(section(PCC, '21'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§21 does not answer exactly the findings raised');
+  const answeredEarlier = [...column(tables(section(PCC, '19'))[0], 'ID'), ...column(tables(section(PCC, '20'))[0], 'ID')].map(bare);
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `21.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§21.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('every permanent action key names a generation the contract can point at', () => {
+  // §8.2 GE1 is the generalisation of PC-CX-16/17: three keys were broken in the same way, so the
+  // rule has to hold for the whole action set rather than for the three that were found. What can
+  // be checked from the document is the correspondence — every keyed action appears in GE1's
+  // table, and the key template ends in the epoch GE1 says it does.
+  const keyed = tableRows(section(PCC, '7.3'))
+    .slice(1)
+    .map((cells) => ({ type: bare(cells[0]), key: bare(cells[2]) }))
+    .filter((r) => /^[A-Z_]+$/.test(r.type) && r.key.startsWith('pc:v1:'));
+  const ge1 = tables(section(PCC, '8.2'))[0];
+  const actions = column(ge1, '动作').map(bare);
+  assert.ok(actions.length >= keyed.length, 'GE1 must cover at least every action that has a key');
+  for (const action of keyed) {
+    assert.ok(actions.includes(action.type), `${action.type} has a permanent key but GE1 does not give it a generation`);
+  }
+  // …and the two actions GE1 exempts have to be exactly the two it says it exempts.
+  const noKey = tableRows(section(PCC, '7.3'))
+    .slice(1)
+    .map((cells) => ({ type: bare(cells[0]), key: bare(cells[2]) }))
+    .filter((r) => /^[A-Z_]+$/.test(r.type) && !r.key.startsWith('pc:v1:'));
+  assert.deepEqual(noKey.map((r) => r.type).sort(), ['AGGREGATE_PARENT', 'NOOP', 'SCHEDULE_WAKE'], 'the set of unkeyed actions changed');
+});
+
+test('one action, one key template — everywhere the normative text states one', () => {
+  // Unit 02's third review closed with a follow-up item this implements: a static check that a rule
+  // marked "closed" or "unique" has no surviving sentence from the version it replaced. §9.4 kept a
+  // deleted escalation ladder for two rounds and contradicted §11.5 the whole time; the same shape
+  // is available to any action key, since the key appears in a dozen places and only one of them is
+  // the table. So: outside the revision logs (§19–§21, which record what was true then), every
+  // `pc:v1:` template must be the one §7.3 freezes for that action.
+  const canonical = new Map<string, string>();
+  for (const cells of tableRows(section(PCC, '7.3')).slice(1)) {
+    const key = bare(cells[2]);
+    const m = /^pc:v1:<projectId>:([a-z-]+):(.*)$/.exec(key);
+    if (m) canonical.set(m[1], key);
+  }
+  assert.ok(canonical.size >= 6, '§7.3 no longer states key templates');
+
+  let body = PCC;
+  for (const log of ['19', '20', '21']) body = body.replace(section(PCC, log), '');
+  for (const [line, template] of body
+    .split('\n')
+    .flatMap((l) => Array.from(l.matchAll(/pc:v1:<p(?:rojectId)?>:[a-z-]+:[^`\s]+/g), (m) => [l, m[0]] as [string, string]))) {
+    const scope = /^pc:v1:<p(?:rojectId)?>:([a-z-]+):/.exec(template)![1];
+    const expected = canonical.get(scope);
+    assert.ok(expected, `${template} names an action scope §7.3 does not have`);
+    assert.equal(
+      template.replace('<p>', '<projectId>'),
+      expected,
+      `a superseded key template survives outside the revision logs:\n${line}`,
+    );
+  }
+});
+
+test('the reviews are read, never edited: all three are still the documents that were signed off', () => {
   // The hard constraint on both revision units was "do not edit the review to make the failure go
   // away". Nothing here can prove a file was not edited, but it can pin the two things a revision
   // would be tempted to soften: the verdicts, and the count of findings behind them.
   assert.match(REVIEW, /FAIL/, 'the first review found the contract wanting; that is a fact, not a draft');
   assert.match(REVIEW_V11, /FAIL/, 'so did the second');
+  assert.match(REVIEW_V12, /FAIL/, 'and the third');
   assert.equal(new Set(Array.from(REVIEW.matchAll(/PC-CX-(\d\d)/g), (m) => m[1])).size, 8);
   assert.equal(
     [...new Set(Array.from(REVIEW_V11.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 8).length,
+    6,
+  );
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V12.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 14).length,
     6,
   );
 });
@@ -273,8 +368,11 @@ test('the P0 findings are answered by a database constraint, not by application 
   // objects the database itself enforces, and §12.1 has to keep creating them.
   const objects = tables(section(PCC, '2.4'))[1];
   const names = column(objects, '对象').map(bare);
-  assert.deepEqual(names, ['session_task_execution_claim_idx', 'session_dispatch_authority_guard']);
-  assert.deepEqual(column(objects, '类型').map(bare), ['partial unique index', 'BEFORE INSERT trigger']);
+  // The two the P0s turn on are pinned by position, because a revision that reorders or replaces
+  // them is a revision that has changed what answers PC-CX-01/02. Later rounds append.
+  assert.deepEqual(names.slice(0, 2), ['session_task_execution_claim_idx', 'session_dispatch_authority_guard']);
+  assert.deepEqual(column(objects, '类型').map(bare).slice(0, 2), ['partial unique index', 'BEFORE INSERT trigger']);
+  assert.equal(new Set(names).size, names.length, 'two rows name the same database object');
 
   const migration = section(PCC, '12.1');
   for (const object of names) {
