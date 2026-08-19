@@ -35,6 +35,8 @@ import { bare, column, section, tableRows, tables } from './contract-doc';
 // asserting that its author read the manual correctly.
 const REPO = path.resolve(__dirname, '../../../..');
 const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
+/** PAC is read, never written: `PC-CX-44`'s create-frozen list is derived from its §6 table. */
+const PAC = readFileSync(path.join(REPO, 'docs/project-agent-contract.md'), 'utf8');
 
 const MINUTE = 60_000;
 const ESCALATION_AFTER = 30 * MINUTE; // §11.5
@@ -5320,5 +5322,298 @@ test('§25 names a test that exists for every finding, and points at clauses tha
   for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
     const m = /§(\d+(?:\.\d+)?)/.exec(clause);
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§25 points at §${m[1]}, which does not exist`);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round eight (`PC-CX-43..46`, §26). Three of the four are the same question asked in three
+// places: **after this gate runs, what write is still left, and who decides whether the gate
+// applies at all?** D11 stopped at `OLD.status = 'APPLIED'` and the statement that publishes the
+// row is the one before that; D9/D14/D15 asked `NEW` whether they applied, and `NEW` is written by
+// the same statement they are meant to judge; D15's create-frozen list was a hand copy of PAC §6's
+// table and had three fewer rows than the table. The fourth is a two-way proposition that was
+// written as a query and never as a constraint, so only one of its two directions had an object.
+// ---------------------------------------------------------------------------------------------
+
+type Version18 = 'v17' | 'v18';
+
+/** §7.7 D11: which columns an `UPDATE` may move, given the row's current status. */
+const D11_TERMINAL_ALLOWLIST = ['result_session_id', 'detail'];
+const D11_PUBLISH_ALLOWLIST = [...D11_TERMINAL_ALLOWLIST, 'status', 'refusal_code'];
+const TERMINAL_STATUSES = ['APPLIED', 'REFUSED', 'SUPERSEDED'];
+
+/** Does D11 admit an `UPDATE` that moves exactly `columns` on a row currently in `oldStatus`? */
+function d11Admits(version: Version18, oldStatus: string, columns: string[]): boolean {
+  if (version === 'v17') {
+    // v1.7's first statement: anything that is not already APPLIED is waved through whole.
+    if (oldStatus !== 'APPLIED') return true;
+    return columns.every((c) => D11_TERMINAL_ALLOWLIST.includes(c));
+  }
+  const allowlist = oldStatus === 'CLAIMED' ? D11_PUBLISH_ALLOWLIST : D11_TERMINAL_ALLOWLIST;
+  return columns.every((c) => allowlist.includes(c));
+}
+
+test('PC-CX-43 the publishing transition is inside the freeze, not outside it', () => {
+  // §8.3's frozen statement order puts the publish *after* every session-side gate has run:
+  // insert CLAIMED action → insert session (D6/D9/D14/D15 all fire here) → flip to APPLIED.
+  // So the flip is the last unguarded write in the transaction, and v1.7 guarded nothing there.
+  const publish = ['status', 'result_session_id'];
+  const forged = [...publish, 'execution_result_digest'];
+  assert.equal(d11Admits('v17', 'CLAIMED', forged), true,
+    'the P0: v1.7 admits a publish that also rewrites the frozen result digest');
+  assert.equal(d11Admits('v18', 'CLAIMED', forged), false, 'v1.8 has to refuse it');
+  assert.equal(d11Admits('v18', 'CLAIMED', publish), true,
+    'a clean publish must still commit, or §8.3 blocks its own normal path');
+
+  // Every frozen column, not just the one the review used to demonstrate it.
+  for (const column of ACTION_COLUMNS.filter((c) => !D11_PUBLISH_ALLOWLIST.includes(c))) {
+    assert.equal(d11Admits('v17', 'CLAIMED', [...publish, column]), true, `${column}: v1.7 lets the publish move it`);
+    assert.equal(d11Admits('v18', 'CLAIMED', [...publish, column]), false, `${column}: v1.8 must freeze it in the publish`);
+  }
+  // And a column added tomorrow is frozen by construction, in both branches.
+  const tomorrow = 'some_column_v1_9_will_add';
+  assert.equal(d11Admits('v18', 'CLAIMED', [...publish, tomorrow]), false, 'the publish allowlist is closed too');
+
+  // D11-a is now a property of the function, not a sentence: terminal states do not go back out.
+  for (const status of TERMINAL_STATUSES) {
+    assert.equal(d11Admits('v17', status, ['status']), status !== 'APPLIED',
+      `${status}: v1.7 only froze APPLIED, so the other two terminal states could be reopened`);
+    assert.equal(d11Admits('v18', status, ['status']), false, `${status} must be terminal`);
+  }
+
+  // The clauses.
+  const seven = section(PCC, '7.7');
+  const d11 = seven.slice(seven.indexOf('#### D11 '), seven.indexOf('#### D12 '));
+  assert.doesNotMatch(d11, /IF OLD\.status <> 'APPLIED' THEN RETURN NEW; END IF;/,
+    'D11 still waves the publishing statement through');
+  assert.match(d11, /ACTION_PUBLISH_IMMUTABLE/, 'the publish has no typed refusal of its own');
+  assert.match(d11, /ACTION_TRANSITION_ILLEGAL/, 'the transition target set is not closed');
+  assert.ok(d11.includes('**D11-f（'), 'D11 does not argue why the publish is inside the freeze');
+  assert.ok(d11.includes('**D11-g（'), 'D11 does not require the mutation sweep to run on the publish');
+  assert.match(section(PCC, '15'), /\*\*F43\*\*/, '§15 has no fault row for a forged publish');
+});
+
+/** PAC §6's create-frozen rows, read from PAC rather than from a list in this file. */
+function pacCreateFrozenColumns(): string[] {
+  const table = PAC.slice(PAC.indexOf('## 6. Execution Snapshot 冻结契约'), PAC.indexOf('**S1**'));
+  return table.split('\n')
+    .filter((line) => line.startsWith('|') && line.includes('Session **create**'))
+    // The `provider` / `providerBuiltin` row names two columns, so read every backticked name.
+    .flatMap((line) => Array.from(line.split('|')[1].matchAll(/`([A-Za-z]+)`/g), (m) => m[1]));
+}
+
+/** camelCase component of `execution_context` ⇒ the session column D15/D16 compare it against. */
+const snake = (name: string): string => name.replace(/[A-Z]/g, (ch) => `_${ch.toLowerCase()}`);
+
+test('PC-CX-44 the create-frozen set is the whole PAC table, proved at insert and at commit', () => {
+  // The list is derived, not written here — that is the whole point of the finding.
+  const createFrozen = pacCreateFrozenColumns();
+  for (const required of ['agentId', 'workspaceId', 'assignedRunnerId', 'provider', 'providerBuiltin',
+    'requiredCapabilities', 'resolution', 'permissionMode', 'snapshotFrozenAt']) {
+    assert.ok(createFrozen.includes(required), `PAC §6 no longer freezes ${required} at Session create`);
+  }
+  // v1.7's D15 compared six of them; the three it missed include the two EC2-b names.
+  const V17_COMPARED = ['agentId', 'workspaceId', 'assignedRunnerId', 'provider', 'providerBuiltin', 'requiredCapabilities'];
+  const missedByV17 = createFrozen.filter((c) => !V17_COMPARED.includes(c));
+  assert.deepEqual(missedByV17, ['resolution', 'permissionMode', 'snapshotFrozenAt'],
+    'the three rows v1.7 did not read are exactly the ones the review named');
+
+  const seven = section(PCC, '7.7');
+  const d15 = seven.slice(seven.indexOf('#### D15 '), seven.indexOf('#### D16 '));
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  for (const component of createFrozen) {
+    assert.ok(d15.includes(`NEW.${snake(component)}`), `D15 does not compare or freeze ${component}`);
+    assert.ok(d16.includes(`NEW.${snake(component)}`), `D16 does not re-prove ${component} at the commit point`);
+  }
+  // The two points, and what each of them buys.
+  assert.match(d16, /DEFERRABLE INITIALLY DEFERRED/, 'D16 does not read the final state of the transaction');
+  assert.match(d16, /action_status <> 'APPLIED'/, 'D16 does not require the action to have been published');
+  assert.match(d16, /EXECUTION_RESULT_MISMATCH/, 'D16 has no typed refusal');
+  assert.ok(d15.includes('**D15-g（'), 'D15 does not say why a BEFORE trigger is not the whole answer');
+  assert.ok(d16.includes('**D16-d（'), 'D16 does not state its division of labour with D14/D15');
+
+  // A model of the privilege escalation the review committed, under both comparison sets.
+  const frozen: Record<string, string> = { permissionMode: 'read-only', resolution: '{"who":"task"}' };
+  const written: Record<string, string> = { permissionMode: 'danger-full-access', resolution: '{"who":"forged"}' };
+  const admits = (compared: string[]): boolean =>
+    compared.every((c) => !(c in frozen) || frozen[c] === written[c]);
+  assert.equal(admits(V17_COMPARED), true, 'v1.7 admits a session that runs with more privilege than was frozen');
+  assert.equal(admits(createFrozen), false, 'the full set refuses it');
+  // snapshotFrozenAt got a single source, so the equality is even askable.
+  assert.match(section(PCC, '7.4'), /\*\*EC6-d（`snapshotFrozenAt` 的唯一来源/, 'snapshotFrozenAt has no defined source');
+  assert.match(section(PCC, '15'), /\*\*F44\*\*/, '§15 has no fault row for a drifted create-frozen column');
+});
+
+/** §7.7 D9/D14/D15/D16: does the gate apply to this UPDATE at all? */
+type Lineage = { taskId: string | null; origin: string; actionId: string | null };
+const COORDINATOR_CLAIM: Lineage = { taskId: 't1', origin: 'COORDINATOR', actionId: 'a1' };
+const SELF_EXEMPTED: Lineage = { taskId: null, origin: 'USER', actionId: null };
+const isPlaceholder = (row: Lineage): boolean => row.taskId !== null && row.origin === 'COORDINATOR';
+
+function gateApplies(version: Version18, oldRow: Lineage, newRow: Lineage): boolean {
+  return version === 'v17' ? isPlaceholder(newRow) : isPlaceholder(oldRow) || isPlaceholder(newRow);
+}
+
+/** §7.7 D5's partial unique index: which rows does it hold a claim for? */
+const holdsClaim = (row: Lineage, status: string, deleted: boolean): boolean =>
+  row.taskId !== null && !deleted && ['PENDING', 'RUNNING'].includes(status);
+
+test('PC-CX-45 a session cannot write itself out of the gates that hold its claim', () => {
+  // One UPDATE, three gates, and the index that is supposed to be the only linearization point.
+  assert.equal(gateApplies('v17', COORDINATOR_CLAIM, SELF_EXEMPTED), false,
+    'the P0: under v1.7 the row decides, with its own new values, that no gate applies to it');
+  assert.equal(gateApplies('v18', COORDINATOR_CLAIM, SELF_EXEMPTED), true, 'v1.8 must still judge it');
+  // Both directions: promoting a USER session into a COORDINATOR one is judged as well.
+  assert.equal(gateApplies('v18', SELF_EXEMPTED, COORDINATOR_CLAIM), true, 'the other direction too');
+  // And nothing that was never a placeholder is dragged in.
+  assert.equal(gateApplies('v18', SELF_EXEMPTED, SELF_EXEMPTED), false,
+    'plain USER/LEGACY sessions must stay byte-for-byte unaffected (D15-a)');
+
+  // The consequence the review published, computed rather than asserted as prose.
+  const afterUpdate = (version: Version18): Lineage => gateApplies(version, COORDINATOR_CLAIM, SELF_EXEMPTED)
+    ? COORDINATOR_CLAIM      // v1.8: the lineage freeze refuses the UPDATE, so the row is unchanged
+    : SELF_EXEMPTED;         // v1.7: it commits
+  const secondDispatchCommits = (version: Version18): boolean =>
+    !holdsClaim(afterUpdate(version), 'PENDING', false);
+  assert.deepEqual(
+    { v17: { claims: holdsClaim(afterUpdate('v17'), 'PENDING', false) ? 1 : 0, second: secondDispatchCommits('v17') },
+      v18: { claims: holdsClaim(afterUpdate('v18'), 'PENDING', false) ? 1 : 0, second: secondDispatchCommits('v18') } },
+    { v17: { claims: 0, second: true }, v18: { claims: 1, second: false } },
+    'v1.7 releases the claim and admits a second live execution; v1.8 holds it',
+  );
+  // The action is left pointing at a session that no longer points back — the review's third number.
+  const orphanedActions = (version: Version18): number => afterUpdate(version).actionId === null ? 1 : 0;
+  assert.deepEqual({ v17: orphanedActions('v17'), v18: orphanedActions('v18') }, { v17: 1, v18: 0 });
+
+  // The legal way out of the claim set is untouched: a status change, not a lineage rewrite.
+  assert.equal(holdsClaim(COORDINATOR_CLAIM, 'AWAITING_INPUT', false), false,
+    'D5 still treats AWAITING_INPUT as idle — that rule is not what this finding changes');
+
+  // The clauses.
+  const seven = section(PCC, '7.7');
+  const d15 = seven.slice(seven.indexOf('#### D15 '), seven.indexOf('#### D16 '));
+  const OLD_NEW = /\(OLD\.task_id IS NULL OR OLD\.dispatch_origin <> 'COORDINATOR'\)/;
+  for (const [name, from, to] of [['D9', '#### D9 ', '#### D10 '], ['D14', '#### D14 ', '#### D15 '],
+    ['D15', '#### D15 ', '#### D16 ']] as const) {
+    assert.match(seven.slice(seven.indexOf(from), seven.indexOf(to)), OLD_NEW,
+      `${name} still decides its scope from NEW alone`);
+  }
+  for (const column of ['task_id', 'dispatch_origin', 'project_action_id']) {
+    assert.match(d15, new RegExp(`NEW\\.${column}\\s+IS DISTINCT FROM OLD\\.${column}`),
+      `D15 does not freeze the lineage column ${column}`);
+  }
+  assert.ok(d15.includes('**D15-f（'), 'D15 does not argue why the lineage must be frozen');
+  assert.match(section(PCC, '4.3'), /\*\*I17-A3（lineage 恒成立/, '§4.3 has no standing invariant for the lineage');
+  assert.match(section(PCC, '15'), /\*\*F45\*\*/, '§15 has no fault row for a released claim');
+});
+
+/** §4.3 I17-A2 as a two-way relation between the session column and the action-side ledger. */
+type Ledger = { generation: number; claimResolution: boolean; retiredPins: number };
+function ledgerAgrees(version: Version18, l: Ledger): boolean {
+  if (version === 'v17') return true;   // v1.7's D15 never read `project_action.detail` at all
+  return l.generation === 0
+    ? !l.claimResolution && l.retiredPins === 0
+    : l.claimResolution && l.retiredPins === l.generation - 1;
+}
+
+test('PC-CX-46 the pin generation and the action ledger are one atomic two-way relation', () => {
+  // The review's sequence: create, first claim, retiredPin — and nobody ever writes the ledger.
+  const reviewed: Ledger = { generation: 2, claimResolution: false, retiredPins: 0 };
+  assert.equal(ledgerAgrees('v17', reviewed), true, 'the P1: v1.7 commits a generation that claims two rewrites and records none');
+  assert.equal(ledgerAgrees('v18', reviewed), false, 'v1.8 must refuse it');
+
+  // Both directions, and the legal path in between.
+  const cases: [Ledger, boolean, string][] = [
+    [{ generation: 0, claimResolution: false, retiredPins: 0 }, true, 'a fresh placeholder'],
+    [{ generation: 1, claimResolution: true, retiredPins: 0 }, true, 'a first claim that records itself'],
+    [{ generation: 2, claimResolution: true, retiredPins: 1 }, true, 'one retiredPin, one record'],
+    [{ generation: 5, claimResolution: true, retiredPins: 4 }, true, 'and it keeps holding as n grows'],
+    [{ generation: 1, claimResolution: false, retiredPins: 0 }, false, 'a claim with no record (缺账)'],
+    [{ generation: 2, claimResolution: true, retiredPins: 0 }, false, 'a generation ahead of the ledger (缺账)'],
+    [{ generation: 1, claimResolution: true, retiredPins: 1 }, false, 'a ledger ahead of the generation (多账)'],
+    [{ generation: 0, claimResolution: true, retiredPins: 0 }, false, 'a record for a claim never made (多账)'],
+    [{ generation: 3, claimResolution: true, retiredPins: 1 }, false, 'a generation that skipped a number (错代次)'],
+  ];
+  for (const [ledger, expected, label] of cases) {
+    assert.equal(ledgerAgrees('v18', ledger), expected, `${label}: v1.8 gets this wrong`);
+    if (!expected) assert.equal(ledgerAgrees('v17', ledger), true, `${label}: v1.7 must still admit it (reverse control)`);
+  }
+
+  // Two objects, because the two disagreements are written from two different tables.
+  const seven = section(PCC, '7.7');
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.match(d16, /CREATE CONSTRAINT TRIGGER session_execution_result_check/, 'the session side has no object');
+  assert.match(d16, /CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check/, 'the action side has no object');
+  const d16Sql = d16.slice(d16.indexOf('```sql'), d16.lastIndexOf('```'));
+  assert.equal((d16Sql.match(/^\s+DEFERRABLE INITIALLY DEFERRED$/gm) ?? []).length, 2,
+    'both directions must be deferred, or the statement order inside the transaction starts to matter');
+  assert.match(d16, /EXECUTION_PIN_LEDGER/, 'the ledger disagreement has no typed refusal');
+  assert.ok(d16.includes('**D16-a（'), 'D16 does not argue why one object is not enough');
+  assert.ok(d16.includes('**D16-b（'), 'D16 does not say that it makes I17-A2 hold by construction');
+  assert.match(section(PCC, '4.3'), /数据库可执行的形式/, 'I17-A2 is still only a query');
+  assert.match(section(PCC, '15'), /\*\*F46\*\*/, '§15 has no fault row for a disagreeing ledger');
+});
+
+test('mutation check: every fence added for PC-CX-43..46 is load-bearing', () => {
+  // Same discipline as the six mutation checks above: remove exactly one thing v1.8 added and the
+  // published counterexample has to come back.
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-43',
+      fence: 'D11 chooses its allowlist by OLD.status instead of returning early (§7.7 D11-f)',
+      defectReappears: () => d11Admits('v17', 'CLAIMED', ['status', 'result_session_id', 'execution_result_digest']),
+    },
+    {
+      finding: 'PC-CX-44',
+      fence: 'the create-frozen set is derived from PAC §6, at insert and at commit (§7.7 D15/D16)',
+      defectReappears: () => pacCreateFrozenColumns()
+        .filter((c) => !['agentId', 'workspaceId', 'assignedRunnerId', 'provider', 'providerBuiltin', 'requiredCapabilities'].includes(c))
+        .length > 0,
+    },
+    {
+      finding: 'PC-CX-45',
+      fence: 'the OLD ∨ NEW scope rule and the frozen lineage (§7.7 D15-a/D15-f)',
+      defectReappears: () => !gateApplies('v17', COORDINATOR_CLAIM, SELF_EXEMPTED),
+    },
+    {
+      finding: 'PC-CX-46',
+      fence: 'the two deferred ledger objects (§7.7 D16-a)',
+      defectReappears: () => ledgerAgrees('v17', { generation: 2, claimResolution: false, retiredPins: 0 }),
+    },
+  ];
+  assert.equal(mutants.length, 4, 'unit 02 raised four findings against v1.7');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  assert.equal(d11Admits('v18', 'CLAIMED', ['status', 'result_session_id', 'execution_result_digest']), false);
+  assert.equal(gateApplies('v18', COORDINATOR_CLAIM, SELF_EXEMPTED), true);
+  assert.equal(ledgerAgrees('v18', { generation: 2, claimResolution: false, retiredPins: 0 }), false);
+  assert.equal(ledgerAgrees('v18', { generation: 2, claimResolution: true, retiredPins: 1 }), true);
+});
+
+test('§26 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§25 have, for the eighth round. All four are claims about what a real
+  // server does — a transition allowlist, two equality gates and a two-way deferred constraint —
+  // so the Postgres file is checked by name as well.
+  const rows = tables(section(PCC, '26'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-43', 'PC-CX-44', 'PC-CX-45', 'PC-CX-46']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§26 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '26').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 4, '§26 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§26 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '26').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§26 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§26 points at §${m[1]}, which does not exist`);
   }
 });

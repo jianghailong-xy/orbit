@@ -1,4 +1,4 @@
-# Project Coordinator 控制环契约 v1.7
+# Project Coordinator 控制环契约 v1.8
 
 > **状态**：已冻结（frozen）。本文件是 `Project Coordinator 持续推进控制环` 的**单一权威契约**。
 > 03–23 阶段的每个实现与验证任务都必须与本文件一致；实现与本文件冲突时，先改本文件并说明理由，再改代码。
@@ -16,6 +16,8 @@
 > **v1.6 修订**：关闭 02 对 v1.5 的独立复审（[`project-coordinator-contract-review-02-v1.5.md`](./project-coordinator-contract-review-02-v1.5.md)）提出的 1 个 P0 与 4 个 P1 契约缺口 `PC-CX-32..36`。逐项闭环在 **§24**；规范条款落在 §4.3 · §6.1 · §7.4 · §7.6 · §7.7 · §10.2 · §10.4 · §12.1 · §14 · §15 · §18 · §22.8。v1.6 同样**不是措辞修订** —— 它把 D14 的解析函数从一个**在 PostgreSQL 上无法执行**的 `STABLE` 改成 `VOLATILE`（取锁的函数不允许是非 volatile，按字面建出来的对象每次调用都抛 `0A000`），并把"这条规范只能靠 `pg_proc.provolatile` 观测、只能靠调用真实 deferred trigger 验证"写成迁移验证的义务；它把 `decisionInput.world` 的采集面从**本文自己的五处判定**扩到**六处**，补上 §7.4 第 8 条读的那条 PAC 解析链（Agent 默认引擎/fallback/能力基线、`projectMemberId`、`workspace.enabled`、`task.workspaceId`、Provider 的 model 空间），因此"同 hash ⇒ 同机械决策"第一次对派发解析也成立；它把 I17 按时态拆成 **I17-A（快照 = 冻结上下文，恒成立）与 I17-B（提交时，点态）**，删掉那条在"控制环先提交、人随后撤权"这条**每一步都合法**的路径上必然为假的当前态查询；它把 `nextWakeAt` 的三句互不相干的话合成**一个候选表加一个确定的选择**（W5：最小值、并列按序号、`now + 5s` 是硬下限、整张候选表落审计），于是限频窗口最后 5 秒第一次有解；它把 I18 从两种形状改成**三种形状**并新增 I19 与 §10.2 W4 的第 (iv) 支，因此"事件已提交、reconcile 还没跑"这段**正常的**异步间隙不再是一条被违反的不变量，而是一条有确定投递责任的形状。>
 >
 > **v1.7 修订**：关闭 02 对 v1.6 的独立复审（[`project-coordinator-contract-review-02-v1.6.md`](./project-coordinator-contract-review-02-v1.6.md)）提出的 1 个 P0 与 5 个 P1 契约缺口 `PC-CX-37..42`。逐项闭环在 **§25**；规范条款落在 §2.4 · §4.3 · §5.5 · §6.1 · §7.4 · §7.6 · §7.7 · §8.6 · §10.2 · §10.4 · §12.1 · §14 · §15 · §18 · §22.8。v1.7 同样**不是措辞修订** —— 它把 §7.7 D11 从一张**逐列枚举的 denylist** 改成**闭集 allowlist**（`to_jsonb(NEW/OLD) - writable` 整行比较），于是 v1.5 加进 `project_action` 的三列不再是"可以被任何写端原地改写的冻结事实"，I17-A 与 TR2 的窗口锚点第一次真的被钉住；它把 I17-A 按 **PAC §6 的冻结时刻**拆成 I17-A（create 冻结列，恒成立）与 **I17-A2**（`model`/`effort` 按 `session.execution_pin_generation` 分三个阶段），因此"首次 claim materialize"与"`retiredPin` 改写一次"这两条 PAC 明确允许的合法动作不再让一条恒成立命题为假；它给 §10.4 W5 的候选补上 `(subjectType, subjectId)` 这**第三、四个持久排序键**，于是同一 source 同一时刻的两条候选第一次有唯一的 `nextWakeReason`；它把 W5 与 W3 的下限从 `now()` 换成 `evaluation.epoch`，于是 S3 说的"同 hash ⇒ 同 `nextWakeAt`"第一次成立；它把 I19 的量化域说全并新增 §5.5 —— 出环项目（disabled / `SETTLED`）队列里那条事件有了 owner、有了确定的终态处置、有了幂等与重入语义，而 I6 的"静默"逐字保留；它把 EC2 拆成 **EC2-a（授权摘要）与 EC2-b（结果摘要）**并在提交点各比各的，加上 EC6 与 §7.7 D15，于是"九个身份没变、但 Session 结果会不同"这条路第一次既有一个名字（`EXECUTION_RESULT_CHANGED`）又有一道数据库硬门。
+>
+> **v1.8 修订**：关闭 02 对 v1.7 的独立复审（[`project-coordinator-contract-review-02-v1.7.md`](./project-coordinator-contract-review-02-v1.7.md)）提出的 3 个 P0 与 1 个 P1 契约缺口 `PC-CX-43..46`。逐项闭环在 **§26**；规范条款落在 §0 RL1 · §4.3 · §7.4 · §7.7 · §12.1 · §15 · §18 · §22.8。v1.8 同样**不是措辞修订** —— 四项里有三项是**同一个错误的三个位置**：一条硬门只在"某一时刻之后"生效，而它之后还剩一次写（D11 放过了 §8.3 那条**把动作发布出去的** `CLAIMED → APPLIED` UPDATE）；一条硬门的**作用域**由它保护的那一行自己的 NEW 值决定（D9 / D14 / D15 因此可以被一条 `SET task_id = NULL, dispatch_origin = 'USER'` 关掉，D5 的唯一 claim 随之被释放而那次执行还在跑）；一份"封闭集合"的手工副本比它引用的那张 PAC 表少了三行（D15 的 create 冻结集漏掉 `permissionMode` / `resolution` / `snapshotFrozenAt`，前两项恰好都在 EC2-b 里，于是一条以 `danger-full-access` 跑着的 Session 可以对着一份冻结成 `read-only` 的决策）。第四项是一条**只被写成查询、没有被写成约束**的双向命题（代次与 `detail.retiredPins[]` 的一一对应）。v1.8 的答案是四处：**D11 按 `OLD.status` 分两个闭集 allowlist 并给 `CLAIMED` 一个封闭的 transition 目标集**、**D9 / D14 / D15 的作用域一律读 OLD ∨ NEW 并由 D15 冻住 lineage 三列**、**D15 的 create 冻结集按 PAC §6 的行数补齐并给 `snapshotFrozenAt` 一个唯一来源（EC6-d）**、以及**新增 D16：两条可延迟约束触发器，在 `COMMIT` 证明 Session 实际结果等于动作冻结结果，并把代次与账本钉成双向原子关系**。
 > **适用分支**：`feat/project`（`main` 里没有 `Project`）。
 > **代码基线**：`c088ee04 docs(project): freeze the Project/Agent domain contract`。
 > **前置契约**：[`docs/project-agent-contract.md`](./project-agent-contract.md)（下称 **PAC**）。本文**不重新定义** PAC 已冻结的任何术语、字段、解析链或错误码；凡引用一律写作 `PAC §n`。
@@ -30,7 +32,7 @@
 
 本文把它升级成一个**事件驱动、可恢复、可审计的控制环**，并且只用两件事换：一组执行基础设施表，和一小组落在 `project` / `task` 上的业务字段。**不新增任何业务实体**（§2.3）。
 
-**RL1（哪些部分是规范的，v1.4 冻结，v1.5 扩展到 §23，v1.6 扩展到 §24，v1.7 扩展到 §25，PC-CX-27）**：**§1–§18 是规范正文，§19–§25 是非规范的修订日志。** 修订日志记录每一轮审查提出了什么、当时的规则是什么形状、为什么改 —— 它们对实现**没有约束力**，与正文冲突时一律以正文为准。这条规则的作用是让"删掉被取代的旧规范句"成为一件可以机械检查的事：一句被取代的规范，要么被删，要么只能出现在 §19–§25 或反例测试里。02 的第四轮审查发现正文里同时留着 AG1 与 AG5（聚合有键 / 无键）、AE8 与 AE6-a（`FOR SHARE` / `FOR NO KEY UPDATE`）两对相反的规范，按哪一条实现都能引用"冻结"二字（`PC-CX-27`）。§22.8 因此额外维护一张**残句账**（它是规范的，且随每一轮修订一起长大 —— v1.5 加了六行，v1.6 又加了七行，v1.7 再加了十行），契约测试对正文逐条扫描它。
+**RL1（哪些部分是规范的，v1.4 冻结，v1.5 扩展到 §23，v1.6 扩展到 §24，v1.7 扩展到 §25，v1.8 扩展到 §26，PC-CX-27）**：**§1–§18 是规范正文，§19–§26 是非规范的修订日志。** 修订日志记录每一轮审查提出了什么、当时的规则是什么形状、为什么改 —— 它们对实现**没有约束力**，与正文冲突时一律以正文为准。这条规则的作用是让"删掉被取代的旧规范句"成为一件可以机械检查的事：一句被取代的规范，要么被删，要么只能出现在 §19–§26 或反例测试里。02 的第四轮审查发现正文里同时留着 AG1 与 AG5（聚合有键 / 无键）、AE8 与 AE6-a（`FOR SHARE` / `FOR NO KEY UPDATE`）两对相反的规范，按哪一条实现都能引用"冻结"二字（`PC-CX-27`）。§22.8 因此额外维护一张**残句账**（它是规范的，且随每一轮修订一起长大 —— v1.5 加了六行，v1.6 又加了七行，v1.7 再加了十行，v1.8 再加了三行），契约测试对正文逐条扫描它。
 
 ---
 
@@ -252,7 +254,7 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
   两句合起来给出的正是审查要的唯一语义：**cap 是一条准入上限，不是一条当前状态上限**（§9.6 CAP0）。推论是一个**有界且可见**的 over-cap 状态：`inFlight > max` 只能由一次人工调低产生，它不再准入任何新占位，随在飞 Session 结束单调收敛，并且在 `decisionInput`、审计行与控制面上都看得见（CAP4）。**这是一次行为变更**：v1.4 的"任何顺序下已提交的占位数 ≤ max"被删除，买到的是"人调低 cap 永远不被拒绝、在飞的活永远不被杀"，让出的是那句更强、但只要人有权调低 cap 就不可能为真的话。
 - **I17（执行上下文在提交点复核，v1.5 新增，v1.6 按时态拆成两句，PC-CX-29 / PC-CX-34）**：v1.5 把这一条写成一句，并给了它一个"等价的可查询形式" —— **不存在**一条 COORDINATOR 占位，其 `agent_id` 指向一个 `enabled = false` 的 Agent（或非团队成员、或不可用的 Provider / Workspace / Runner）。那句话是一条**当前状态**不变量，而 AU1-a 第二行、F35 与 PAC §6 的快照冻结**同时**明确：控制环先合法提交，人随后撤权，撤权照常生效且**在飞 Session 一条不动**。于是在一条**没有任何参与者做错事**的路径上，那个查询必然返回非零行（`PC-CX-34`）。这与 `PC-CX-21` 的 I11、`PC-CX-28` 的 I16 是**同一个错误的第三个实例**：把一条只在某个时刻成立的性质写成了恒成立。v1.6 按同一手法拆成两句：
 
-  - **I17-A（create 冻结列与占位一致，恒成立，可对生产快照直接查，v1.7 按 PAC §6 的冻结时刻收窄，PC-CX-38）**：**不存在**一条 `dispatch_origin = 'COORDINATOR'` 的占位 Session，其 **create 冻结列**（PAC §6 表里冻结时刻为 "Session create" 的那几行：`agent_id` / `provider` / `provider_builtin` / `workspace_id` / `assigned_runner_id` / `required_capabilities`）与它 `project_action_id` 指向的那条 `status = 'APPLIED'` 的 `DISPATCH_TASK` 行上的 `execution_context` 对应分量不一致；也不存在一条这样的占位，其动作行缺失、非 `APPLIED`、或 `execution_context_digest` / `execution_result_digest` 与 `execution_context` 重算出来的两个摘要不等（§7.4 EC2-a / EC2-b）。**这一句只读不可回退的东西** —— 这几列在 create 之后只读（PAC §6），`APPLIED` 动作行由 §7.7 D11 钉成不可改写 —— 因此它在任何已提交状态上都成立，且**与人此后改了什么无关**。它由 §7.7 D15 在插入时按等式构造，因此**对任何版本的二进制成立**。
+  - **I17-A（create 冻结列与占位一致，恒成立，可对生产快照直接查，v1.7 按 PAC §6 的冻结时刻收窄，v1.8 按 PAC §6 的行数补全，PC-CX-38 / PC-CX-44）**：**不存在**一条 `dispatch_origin = 'COORDINATOR'` 的占位 Session，其 **create 冻结列**（PAC §6 表里冻结时刻为 "Session create" 的**每一行**：`agent_id` / `provider` / `provider_builtin` / `workspace_id` / `assigned_runner_id` / `required_capabilities` / `permission_mode` / `resolution` / `snapshot_frozen_at` —— v1.7 只写了前六行，漏掉的三行里 `permission_mode` 与 `resolution` 恰好都在 EC2-b 里，于是一条以 `danger-full-access` 跑着的 Session 可以对着一份冻结成 `read-only` 的决策，`PC-CX-44`）与它 `project_action_id` 指向的那条 `status = 'APPLIED'` 的 `DISPATCH_TASK` 行上的 `execution_context` 对应分量不一致；也不存在一条这样的占位，其动作行缺失、非 `APPLIED`、或 `execution_context_digest` / `execution_result_digest` 与 `execution_context` 重算出来的两个摘要不等（§7.4 EC2-a / EC2-b）。**这一句只读不可回退的东西** —— 这几列在 create 之后只读（PAC §6），`APPLIED` 动作行由 §7.7 D11 钉成不可改写 —— 因此它在任何已提交状态上都成立，且**与人此后改了什么无关**。它由 §7.7 D15 在插入时按等式构造、由 §7.7 D16 在 `COMMIT` 对最终状态再证明一次，因此**对任何版本的二进制成立**。
   - **I17-A2（claim 冻结列的阶段与代次，恒成立，v1.7 新增，PC-CX-38）**：`model` 与 `effort` 的冻结时刻**不是** create，而是 **首次 claim**（PAC §6 `model`/`effort` 行 + S1，这是刻意保留的既有实现），且 PAC 保留了一个合法例外：模型被 runtime 彻底下架（`retiredPin`）时改写一次。因此关于这两列的恒成立命题必须**带阶段**，而阶段必须是一个**持久、单调、可查询**的列 —— `session.execution_pin_generation`（`BigInt NOT NULL DEFAULT 0`，§2.4，与 §8.2 GE1 的代次是同一条纪律）：
 
     | 代次 | 阶段 | 恒成立的话 |
@@ -261,7 +263,8 @@ v1.1 的修订是**换掉状态的定义方式**，而不是给转移表补一�
     | `1` | 首次 claim 已 materialize | 冻结上下文里该分量**非空**时，Session 上的值与它逐字相同；冻结值为空时（PAC §7.2 优先级 3 把 model 留给 claim 时的 runtime 默认），claim 把实际取到的值写进动作行的 `detail.claimResolution`（`detail` 是 D11-b 的两个可写列之一） |
     | `n ≥ 2` | 发生过 `n − 1` 次 `retiredPin` 改写 | 该 Session 上恰好有 `n − 1` 条 `detail.retiredPins[]` 记录，每条含被换掉的值、换成的值与时刻 |
 
-    **两个方向都要查**：代次说了几次，记录就必须有几条；有记录而代次没动，或代次动了而没有记录，都是缺陷。代次只增不减（§7.7 D15），因此这一条一旦为真就永远为真。
+    **两个方向都要查**：代次说了几次，记录就必须有几条；有记录而代次没动，或代次动了而没有记录，都是缺陷。代次只增不减（§7.7 D15），因此这一条一旦为真就永远为真。**v1.8（PC-CX-46）：这句话现在有一个数据库可执行的形式。** v1.7 把它写成了一条只能被查询的话 —— D15 的 SQL 从未读过 `project_action.detail`，而 `detail` 又是 D11-b 放开的可写列，于是真实 PostgreSQL 接受 `execution_pin_generation = 2` 而 `retiredPins` 为 0 条的已提交状态：代次声称发生过一次替换，审计账本声称零次，**没有任何幂等身份能判定哪一侧权威**。§7.7 D16 把两个方向各配一条可延迟约束触发器（Session 侧一条、动作侧一条），因此代次与账本此后是同一次提交里的**双向原子关系**，与写它的是哪个版本的二进制无关。
+  - **I17-A3（lineage 恒成立，v1.8 新增，PC-CX-45）**：一条 `dispatch_origin = 'COORDINATOR'` 且 `task_id` 非空的 Session，其 `task_id` / `dispatch_origin` / `project_action_id` 三列在 create 之后**再也不变**。这一条不是"又一列只读"，它是上面每一条硬门的**前提**：D5 用 `task_id` 做索引谓词，D6 / D9 / D14 / D15 / D16 用 `task_id` + `dispatch_origin` 定作用域，I11 与 I17-A 用 `project_action_id` 做连接。三列可写 ⇒ 一条 UPDATE 就能把这一行写出所有硬门的量化域，同时释放 D5 的唯一 claim 而那次执行还在跑（`PC-CX-45`）。**等价的可查询形式**：不存在一条 `status = 'APPLIED'` 的 `DISPATCH_TASK` 行，其 `result_session_id` 指向的 Session 不再反向指着它 —— 即 `a.result_session_id = s.id ∧ s.project_action_id ≠ a.id` 恒为空集。它由 §7.7 D15 的 `UPDATE` 分支冻结构造。
   - **I17-d（v1.6 为什么把 `model` 写进了 I17-A，v1.7 记下来，PC-CX-38）**：v1.6 把 I17 按时态拆成 I17-A / I17-B 时，照抄了 PAC §6 的**表头**（"Execution Snapshot 冻结契约"）而没有读它的**冻结时刻那一列** —— `model` / `effort` 两行写的是"首次 claim"，不是"Session create"。于是 I17-A 在**正常生命周期的第一个已提交状态上**就为假：`INSERT` 出来的 PENDING 占位 `model IS NULL`，而动作行上冻结的是 `model-v1`；`retiredPin` 之后又为假第二次（`PC-CX-38`）。**这不是时态错误的第四次，是它的对偶**：`PC-CX-21` / `PC-CX-28` / `PC-CX-34` 都是"把点态写成了恒成立"，这一条是"把**多个**冻结时刻写成了**一个**"。教训因此也不同：**一条跨文档的恒等式，必须逐字段核对被引用那份契约的冻结时刻，而不是核对它的表名。**
   - **I17-B（授权在提交那一刻成立，点态）**：一条 COORDINATOR 占位被提交的**那一刻**，其提交事务在 §8.6 LO1 的锁序上重解析出的 PAC 执行上下文，与动作行上冻结的 `execution_context_digest` **逐字相同**（§7.4 EC1–EC3）。它由 §7.7 D14 的可延迟约束触发器在 `COMMIT` 执行，因此**对任何版本的二进制成立**，**且只在那一刻被要求**；服务层的 EC3 只是让拒绝在应用层就有一个类型化的名字，不是这条的依据。它的审计形式是历史点态的：`project_action` 上的 `execution_context` / `execution_context_digest` 与 `project_decision` 记下了那一刻读到了什么（§9.6 AU2 的同一条纪律）。
   - **I17-c（那条被删掉的当前态查询是什么）**：`enabled = false ∧ 一条指向它的 live Session` 是一个**合法**的已提交状态，不是违约。它的正确读法是 §9.6 CAP4 的 over-cap：一个**有界、可见、会自己排空**的残留 —— 那条 Session 跑完就没有了，而撤权之后**没有任何新的**占位能被提交（I17-B + D14）。因此它既不开 blocker，也不产生任何清理动作；§9.3 第 4 条那一类"杀掉在飞 Session"的破坏性动作**永不代劳**，PAC §6 的快照冻结也逐字要求"软删 Agent 不影响在飞 Session"。**要观测它**：`decisionInput.world.team[].enabled` 与 `sessions[]` 已经同时在输入里，控制面按 AC10 展示"这条运行用的 Agent 已被停用，等它结束"。
@@ -752,6 +755,7 @@ SELECT … FROM runner         WHERE id = ANY(:candidate_runner_ids) ORDER BY id
 - **EC6-a（create 冻结列由 `execution_context` 构造，不由第二次解析构造）**：插入占位 Session 时，PAC §6 里冻结时刻为 **Session create** 的每一列（`agentId` / `workspaceId` / `assignedRunnerId` / `provider` / `providerBuiltin` / `requiredCapabilities` / `permissionMode`）与 `resolution` 一律**取自动作行上的 `execution_context`**，不得由插入处再解析一次。EC3 那一次重解析的用途是**判定**（相等就用冻结的那份、不等就 REFUSE），它的输出**不进** Session。这让 §4.3 I17-A 由构造成立，而不是靠两处代码碰巧算出同一个值。
 - **EC6-b（数据库也证明一次）**：§7.7 D15 在插入时逐列比较占位的 create 冻结列与动作行 `execution_context` 的对应分量，不等即拒。它**不重算解析链**（那是 D14 的事，也是 D14-c 那笔账），只做一次等式比较，因此对**任何版本的二进制**都成立且几乎不花钱。
 - **EC6-c（claim 冻结列怎么记）**：`model` / `effort` 按 PAC §6 在**首次 claim** 才 materialize，因此它们在 create 时**不写**。EC2-b 的第二部分记的是**解析结论**：冻结上下文里解析出了具体值时记该值，PAC §7.2 优先级 3 把 model 留给 claim 时的 runtime 默认时记 `DEFERRED_TO_CLAIM`。首次 claim 把实际取到的值写进动作行的 `detail.claimResolution`（`detail` 是 D11-b 的可写列之一），并把 `session.execution_pin_generation` 置 1；此后的合法 `retiredPin` 改写各自 +1 并追加一条 `detail.retiredPins[]`。**这一整套的恒成立形式是 §4.3 I17-A2，它的数据库侧 mutator 协议是 §7.7 D15。**
+- **EC6-d（`snapshotFrozenAt` 的唯一来源，v1.8 新增，PC-CX-44）**：PAC §6 那张表的最后一行是 `snapshotFrozenAt`，它一旦非 null，上面每一列都进入只读 —— 因此它是**冻结那一刻**的时间戳，不是**写入那一刻**的。它由 §7.4 第 8 条解析出执行上下文时算出并写进 `execution_context.snapshotFrozenAt`，Session create 时与其余 create 冻结列一样**逐字复制**（EC6-a），此后只读。写成插入处的 `now()` 会让同一份冻结上下文在两次插入里得到两个值，`permissionMode` / `resolution` 那两列的等式因此永远缺一角，而“这一份结果是不是那一次决策冻结的”就再也不是一条可判定的话。**一列既然被声明为冻结，它就必须有一个唯一的来源，否则“冻结”只是一个形容词。**
 
 **A5（v1.4 新增，PC-CX-26）**：第 6、7 两条与第 4 条是**同一种东西** —— 都是读快照得出的乐观前置。第 4 条的真正互斥在 §7.7 D5（数据库唯一索引），第 6、7 条的真正互斥在 §9.6 的 project 行锁。**把任何一条快照读当成门就是 `PC-CX-01` 的形状**，只是对象从"另一个进程"换成了"另一个人"。
 
@@ -897,7 +901,15 @@ D6 是 `BEFORE INSERT`，它只能看见**那一刻**的事实 —— 与 `PC-CX
 CREATE OR REPLACE FUNCTION session_dispatch_attribution_check() RETURNS trigger AS $$
 DECLARE ok boolean;
 BEGIN
-  IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+  -- v1.8（PC-CX-45）：作用域读 OLD **和** NEW。v1.3–v1.7 只读 NEW，于是一条 UPDATE 只要把
+  -- NEW 写成 `task_id = NULL, dispatch_origin = 'USER'` 就能让本条对**它自己**不适用 —— 一条
+  -- 已经归属出去的 COORDINATOR 占位因此可以一句话解除归属。只有两侧都不是 COORDINATOR 占位才放过。
+  IF TG_OP = 'UPDATE' THEN
+    IF (OLD.task_id IS NULL OR OLD.dispatch_origin <> 'COORDINATOR')
+       AND (NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR') THEN RETURN NULL; END IF;
+  ELSIF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN
+    RETURN NULL;
+  END IF;
   SELECT EXISTS (
     SELECT 1
       FROM project_action a
@@ -975,24 +987,39 @@ CREATE CONSTRAINT TRIGGER task_claimed_project_move_guard
 
 **D10-c（它不阻止什么）**：不影响没有占位的 Task 移动（AE10 逐字不变）、不影响 `parentTaskId` 改父、不影响 `verifiesTaskId` 改指 —— 后两者不进 D9 的谓词。
 
-#### D11 · `APPLIED` 动作行终态不可改写（v1.4 新增，v1.7 改成闭集 allowlist，PC-CX-21 / PC-CX-37）
+#### D11 · 动作行的状态转移与终态不可改写（v1.4 新增，v1.7 闭集 allowlist，v1.8 把发布语句也纳入，PC-CX-21 / PC-CX-37 / PC-CX-43）
 
 I11-A 读 `project_action` 的 `type` / `status` / `subject_type` / `subject_id` / `project_id` / `fencing_token`；I17-A 与 §7.4 EC3 读它的 `execution_context` / `execution_context_digest` / `execution_result_digest`；§7.6 TR2-a 读它的 `reason_code`。D9 在提交时验过一次，但它同样只声明在 `session` 上：**此后任何一次 `UPDATE project_action` 都不会让它重跑**。一条 `APPLIED` 的派发动作被改成 `SUPERSEDED`、或者 `subject_id` 被改掉，归属就断了；冻结的执行上下文被改掉，I17-A 的零行查询就返回非零；`reason_code` 被改掉，一个 60 秒限频窗口就被移到了别处 —— 而没有任何东西会发现。
 
 ```sql
 CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $$
-DECLARE writable text[] := ARRAY['result_session_id', 'detail'];   -- 闭集 allowlist，见 D11-b / D11-d
+DECLARE writable text[] := ARRAY['result_session_id', 'detail'];   -- 终态之后的闭集，见 D11-b / D11-d
+        code     text   := 'ACTION_APPLIED_IMMUTABLE';
         changed  text;
 BEGIN
-  IF OLD.status <> 'APPLIED' THEN RETURN NEW; END IF;          -- CLAIMED → APPLIED/REFUSED/SUPERSEDED 照常
-  -- v1.7（PC-CX-37）：比较**整行**，只放过 allowlist 里的两列。这不是一张要跟着 schema 手工
+  -- v1.8（PC-CX-43）：作用域由 OLD.status 决定，而 `CLAIMED` 不再是"整行放行"。
+  -- v1.7（PC-CX-43）的第一句是 `IF OLD.status <> 'APPLIED' THEN RETURN NEW`，于是 §8.3 那条
+  -- **真正把动作发布出去**的 `CLAIMED → APPLIED` UPDATE 恰好落在全量放行窗口里：它可以在同一条
+  -- 语句里改写身份、归属、冻结上下文、两个摘要与 reason code，而 D9/D14/D15 都已经跑完了。
+  IF OLD.status = 'CLAIMED' THEN
+    -- 封闭 transition allowlist：`CLAIMED` 只能停在原地或走向三个终态之一（D11-a）。
+    IF NEW.status IS NULL OR NEW.status NOT IN ('CLAIMED', 'APPLIED', 'REFUSED', 'SUPERSEDED') THEN
+      RAISE EXCEPTION 'ACTION_TRANSITION_ILLEGAL: action % cannot go CLAIMED -> %',
+        OLD.id, COALESCE(NEW.status, 'NULL');
+    END IF;
+    writable := writable || ARRAY['status', 'refusal_code'];    -- 发布语句的闭集，见 D11-f
+    code     := 'ACTION_PUBLISH_IMMUTABLE';
+  ELSIF OLD.status NOT IN ('APPLIED', 'REFUSED', 'SUPERSEDED') THEN
+    RAISE EXCEPTION 'ACTION_TRANSITION_ILLEGAL: action % has an unrecognised status %', OLD.id, OLD.status;
+  END IF;
+  -- v1.7（PC-CX-37）：比较**整行**，只放过 allowlist 里的列。这不是一张要跟着 schema 手工
   -- 长大的清单 —— `to_jsonb(NEW/OLD)` 覆盖这张表**当时的全部列**，因此后来加的列默认是冻结的。
   IF (to_jsonb(NEW) - writable) IS DISTINCT FROM (to_jsonb(OLD) - writable) THEN
     SELECT string_agg(e.key, ',' ORDER BY e.key) INTO changed
       FROM jsonb_each(to_jsonb(NEW) - writable) e
      WHERE e.value IS DISTINCT FROM ((to_jsonb(OLD) - writable) -> e.key);
-    RAISE EXCEPTION 'ACTION_APPLIED_IMMUTABLE: action % is APPLIED; identity, attribution, frozen execution context and reason code are frozen (changed: %)',
-      OLD.id, changed;
+    RAISE EXCEPTION '%: action % is %; identity, attribution, frozen execution context, both digests and the reason code are frozen (changed: %)',
+      code, OLD.id, OLD.status, changed;
   END IF;
   RETURN NEW;                                                   -- result_session_id / detail 仍可补写
 END;
@@ -1003,11 +1030,15 @@ CREATE TRIGGER project_action_applied_immutable_guard
   FOR EACH ROW EXECUTE FUNCTION project_action_applied_immutable_guard();
 ```
 
-**D11-a**：`APPLIED` 是**终态**。`status` 的合法转移此后恰好是 `CLAIMED → {APPLIED, REFUSED, SUPERSEDED}` 三条，且三个终态都不再出去 —— 这与 §8.2 GE1"历史行永不删除"是同一条纪律的另一半：**历史不但不能被删，也不能被改**。
+**D11-a（v1.8 由函数体自己表达，PC-CX-43）**：`APPLIED` 是**终态**。`status` 的合法转移恰好是 `CLAIMED → {APPLIED, REFUSED, SUPERSEDED}` 三条，且三个终态都不再出去 —— 这与 §8.2 GE1"历史行永不删除"是同一条纪律的另一半：**历史不但不能被删，也不能被改**。v1.4–v1.7 只把这句话写在正文里：函数的第一句放过任何 `OLD.status <> 'APPLIED'` 的行，因此 `REFUSED → CLAIMED` 这种"出去"的转移在数据库里同样没人拦。v1.8 起 `status` 本身就在终态那张 allowlist 之外，转移目标又由上面那个封闭集合判定，**三个终态不再出去因此成了一条由构造成立的话**。
 
 **D11-b（可写集是一个闭集，v1.7 改述，PC-CX-37）**：`APPLIED` 之后仍然可写的**恰好**是 `result_session_id` 与 `detail` 两列 —— 前者由 §8.3 的语句顺序在插完 Session 之后回填，后者由 §7.4 EC6-c 的首次 claim 记录与展示补写；两者都不进任何硬门的谓词（I11-A、I17-A、I17-A2、EC3、EC6、TR2-a 一列都不读它们）。**这一句现在由函数体自己表达**：allowlist 写在 `writable` 里，其余一律冻结。
 
 **D11-c（它冻的每一列都是别处一条硬门的谓词，v1.7 新增，PC-CX-37）**：被冻结的不只是 v1.4 那六列。`execution_context` 与 `execution_context_digest` 是 §4.3 I17-A、§7.4 EC3 与 §7.7 D14 比对的那一份 —— 改掉它就可以让一条已提交的占位"对上"一个它从来没被授权过的上下文；`execution_result_digest` 是 §7.4 EC2-b 的结果摘要；`reason_code` 是 §7.6 TR2-a 的**窗口锚点**，改掉它就可以把一个 60 秒限频窗口移到另一个 `reasonCode` 上、或者让它整个消失。**这四样都是 v1.5 / v1.7 加进这张表的列，而 v1.4 的 denylist 不认识它们。**
+
+**D11-f（发布语句自己也在冻结范围里，v1.8 新增，PC-CX-43）**：`CLAIMED` 行上仍然可写的**恰好**是 `status` / `refusal_code` 与终态那两列，一共四列。这四列是 §8.3 冻结的语句顺序在第 4 步真正要写的东西（`status = 'APPLIED' | 'SUPERSEDED'`、`result_session_id = …`，被拒时再加一个 `refusal_code`），**其余每一列都必须与第 1 步插进来的那一行逐字相同**。理由是一条时序：§8.3 先插 `CLAIMED` 动作、再插 Session、最后才把动作置 `APPLIED`；D9 / D14 / D15 都声明在 `session` 上，它们在第 2 步就已经跑完了。因此第 4 步那条 UPDATE 是**所有硬门都已经放行之后**的最后一次写机会 —— v1.7 把它整条放过，等于把 `execution_context` / 两个摘要 / `reason_code` / 归属六列一起交给了它。**最小事务只有三句**：插 `CLAIMED`（`execution_result_digest = 'result-ok'`）→ 插一条与冻结上下文完全匹配、因此 D15 放行的 Session → `UPDATE … SET status='APPLIED', execution_result_digest='forged-after-session-insert'`，提交成功。**这与 `PC-CX-09` / `PC-CX-20` 是同一个教训的第三次**：一条只在某个时刻被检查的性质，必须问"在它之后还剩哪一次写"；差别只在这次剩下的那一次写**就是把行发布出去的那一条**。
+
+**D11-g（可测形式，v1.8 新增，PC-CX-43）**：D11-e 的 schema 驱动逐列 mutation 必须跑**两遍**：一遍在已 `APPLIED` 的 OLD 行上（v1.7 的那一遍），一遍在 §8.3 的**发布 UPDATE 本身**上 —— 即先插 `CLAIMED`、插 Session，再逐列尝试"改这一列 + 置 `APPLIED`"，断言 `status` / `refusal_code` / `result_session_id` / `detail` 之外**每一列**都被 `ACTION_PUBLISH_IMMUTABLE` 拒绝，而干净的发布 UPDATE 照常提交。还要断言 `CLAIMED → 'PENDING'` 之类不在闭集里的目标得到 `ACTION_TRANSITION_ILLEGAL`，以及 `REFUSED → CLAIMED` 被拒。**反向对照**：把 v1.7 的 `IF OLD.status <> 'APPLIED' THEN RETURN NEW` 那一版原样建回来，同一个三句事务提交成功，`execution_result_digest` 观察为 `forged-after-session-insert` —— 与复审报告 §6 `PC-CX-43` 的那一行输出逐字对应。
 
 **D11-d（为什么是 allowlist 而不是 denylist，v1.7 冻结，PC-CX-37）**：v1.4 把"不可改写"写成一张**逐列枚举的 denylist**。v1.5 给同一张表加了三列（§2.4），没有人回头改这个函数；于是一条普通 `UPDATE` 可以把一条已 `APPLIED` 的派发动作的冻结上下文改成另一个 provider，同时把 `reason_code` 改掉 —— 事务照常提交，I17-A 的零行查询返回 1 行，TR2 的窗口锚点被移走（`PC-CX-37`，P0）。这与 `PC-CX-27` / `PC-CX-30` / `PC-CX-33` 是**同一个教训的第四次**：**一个封闭集合必须由构造保证封闭，不能靠下一个人记得回来加一行。** allowlist 把默认值反过来 —— 新列默认冻结，要放开必须**显式**写进 `writable`，而写进去的那一刻就必须回答"它进不进任何谓词"。
 
@@ -1047,7 +1078,14 @@ D9 证明"这条占位归哪一次派发动作"，它**不问那次派发现在�
 CREATE OR REPLACE FUNCTION session_execution_context_guard() RETURNS trigger AS $$
 DECLARE frozen text; observed text; revoked text;
 BEGIN
-  IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+  -- v1.8（PC-CX-45）：与 D9 / D15 同一条作用域规则 —— 读 OLD 和 NEW，不让被保护的那一行
+  -- 把自己写出保护范围。
+  IF TG_OP = 'UPDATE' THEN
+    IF (OLD.task_id IS NULL OR OLD.dispatch_origin <> 'COORDINATOR')
+       AND (NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR') THEN RETURN NULL; END IF;
+  ELSIF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN
+    RETURN NULL;
+  END IF;
 
   SELECT a.execution_context_digest INTO frozen
     FROM project_action a WHERE a.id = NEW.project_action_id;
@@ -1110,32 +1148,37 @@ CONTEXT: SQL statement "SELECT enabled FROM authority WHERE id='a1' FOR SHARE"
 
 **D14-d（可测形式）**：真实 Postgres 上建 EC1 的八张表（或它们的最小投影），跑两个提交顺序 × 八个 `revokedInput`：`USER_FIRST`（人先撤权 ⇒ 控制环的插入在 `COMMIT` 被拒、`EXECUTION_CONTEXT_REVOKED: <input>`、占位数不变）、`COORDINATOR_FIRST`（控制环先取锁、插入并提交 ⇒ 人的撤权随后生效，占位合法存在且 I17 在提交那一刻为真）。**反向对照**：把触发器去掉（或把 `FOR SHARE` 换成普通读），`USER_FIRST` 立刻提交出"Agent `enabled = false` + 一条解析到它的新 Session" —— 与 v1.4 复审报告 §6 `PC-CX-29` 的那一行输出逐字对应。
 
-**D14-g（它证明的是哪一个摘要，v1.7 划清边界，PC-CX-42）**：D14 比的是 **EC2-a**（授权摘要），因为那九个分量是它能在 SQL 里如实算出来的全部（D14-c）。它**不**比 EC2-b（结果摘要）—— 那需要把 PAC §7.5 的整份 `resolution` 在数据库里规范序列化一遍，D14-c 那笔"解析链改一次这里跟着改一次"的账会翻倍。结果那一半由 **D15** 保证，而 D15 用的是一次**等式比较**而不是一次重解析：占位的 create 冻结列必须等于动作行 `execution_context` 的对应分量（EC6-a/b）。两者合起来给出 §12.4 那一格要的东西：**跳过服务层的任何写端既不能提交一个已被撤权的上下文（D14），也不能提交一份与冻结决策不同的结果（D15）**，而两条硬门里只有一条需要复制解析链。
+**D14-g（它证明的是哪一个摘要，v1.7 划清边界，PC-CX-42）**：D14 比的是 **EC2-a**（授权摘要），因为那九个分量是它能在 SQL 里如实算出来的全部（D14-c）。它**不**比 EC2-b（结果摘要）—— 那需要把 PAC §7.5 的整份 `resolution` 在数据库里规范序列化一遍，D14-c 那笔"解析链改一次这里跟着改一次"的账会翻倍。结果那一半由 **D15 与 D16** 保证，而它们用的是一次**等式比较**而不是一次重解析：占位的 create 冻结列必须等于动作行 `execution_context` 的对应分量（EC6-a/b），D15 在每一条语句上验、D16 在 `COMMIT` 再验一次最终状态（D15-g / D16-d）。三者合起来给出 §12.4 那一格要的东西：**跳过服务层的任何写端既不能提交一个已被撤权的上下文（D14），也不能提交一份与冻结决策不同的结果（D15 / D16）**，而三条硬门里只有一条需要复制解析链。
 
-#### D15 · 占位快照的 mutator 协议（v1.7 新增，PC-CX-38 / PC-CX-42）
+#### D15 · 占位快照的 mutator 协议（v1.7 新增，v1.8 补全冻结集并冻住 lineage，PC-CX-38 / PC-CX-42 / PC-CX-44 / PC-CX-45）
 
 D14 证明"提交那一刻这次派发还成立"，D11 证明"动作行此后不可改写"。**中间还差一条**：Session 自己那几列是谁写的、写完之后谁还能改。§4.3 I17-A 与 I17-A2 读的正是这几列，而 v1.6 之前**没有任何数据库对象**读过它们 —— 服务层写对了它们才对，这与 `PC-CX-20` / `PC-CX-25` 已经交过两次学费的形状完全相同：**一条硬门读到的每一行，都必须有一个封闭的 mutator 协议**（D9-e）。
 
 ```sql
--- 三件事，一个对象：插入时按 EC6-a 证明 create 冻结列真的来自冻结上下文；create 之后冻住它们；
--- claim 冻结列（model/effort）只允许按 §4.3 I17-A2 的代次一次一次地前进。
+-- 四件事，一个对象：插入时按 EC6-a 证明 create 冻结列真的来自冻结上下文；create 之后冻住它们；
+-- 冻住 lineage（task_id / dispatch_origin / project_action_id）因此这条硬门的作用域不能被它保护的
+-- 那一行自己关掉；claim 冻结列（model/effort）只允许按 §4.3 I17-A2 的代次一次一次地前进。
 CREATE OR REPLACE FUNCTION session_execution_snapshot_guard() RETURNS trigger AS $$
 DECLARE ctx jsonb;
 BEGIN
-  IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NEW; END IF;
-
   IF TG_OP = 'INSERT' THEN
+    IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NEW; END IF;
     SELECT a.execution_context INTO ctx
       FROM project_action a WHERE a.id = NEW.project_action_id;
     -- EC6-a：create 冻结列必须**逐字等于**冻结上下文的对应分量。这不是一次重解析（那是 D14），
     -- 只是一次等式比较，因此它对任何版本的二进制成立、也不需要 PAC 的解析链。
+    -- v1.8（PC-CX-44）：清单是 PAC §6 表里冻结时刻为 "Session create" 的**每一行**，v1.7 漏了
+    -- 最后三行，而 `permissionMode` 与 `resolution` 恰好都在 EC2-b 里（EC2-b 第 ① ③ 部分）。
     IF ctx IS NULL
        OR NEW.agent_id            IS DISTINCT FROM ctx->>'agentId'
        OR NEW.workspace_id        IS DISTINCT FROM ctx->>'workspaceId'
        OR NEW.assigned_runner_id  IS DISTINCT FROM ctx->>'assignedRunnerId'
        OR NEW.provider            IS DISTINCT FROM ctx->>'provider'
        OR NEW.provider_builtin    IS DISTINCT FROM (ctx->>'providerBuiltin')::boolean
-       OR to_jsonb(NEW.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities' THEN
+       OR to_jsonb(NEW.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities'
+       OR NEW.permission_mode     IS DISTINCT FROM ctx->>'permissionMode'
+       OR NEW.resolution          IS DISTINCT FROM ctx->'resolution'
+       OR NEW.snapshot_frozen_at  IS DISTINCT FROM (ctx->>'snapshotFrozenAt')::timestamptz THEN
       RAISE EXCEPTION 'EXECUTION_SNAPSHOT_MISMATCH: session % does not carry the frozen execution context of action %',
         NEW.id, NEW.project_action_id;
     END IF;
@@ -1146,15 +1189,25 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- UPDATE：create 冻结列一律不可改（PAC §6 "只读"的可执行形式）。
-  IF NEW.agent_id           IS DISTINCT FROM OLD.agent_id
+  -- v1.8（PC-CX-45）：UPDATE 的作用域读 OLD **和** NEW。v1.7 只读 NEW，于是一条
+  -- `SET task_id = NULL, dispatch_origin = 'USER', project_action_id = NULL` 会在第一句就被放过。
+  IF (OLD.task_id IS NULL OR OLD.dispatch_origin <> 'COORDINATOR')
+     AND (NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR') THEN RETURN NEW; END IF;
+
+  -- UPDATE：lineage 与 create 冻结列一律不可改（PAC §6 "只读" 与 D15-f 的可执行形式）。
+  IF NEW.task_id            IS DISTINCT FROM OLD.task_id
+     OR NEW.dispatch_origin IS DISTINCT FROM OLD.dispatch_origin
+     OR NEW.project_action_id IS DISTINCT FROM OLD.project_action_id
+     OR NEW.agent_id        IS DISTINCT FROM OLD.agent_id
      OR NEW.workspace_id    IS DISTINCT FROM OLD.workspace_id
      OR NEW.assigned_runner_id IS DISTINCT FROM OLD.assigned_runner_id
      OR NEW.provider        IS DISTINCT FROM OLD.provider
      OR NEW.provider_builtin IS DISTINCT FROM OLD.provider_builtin
      OR NEW.required_capabilities IS DISTINCT FROM OLD.required_capabilities
-     OR NEW.project_action_id IS DISTINCT FROM OLD.project_action_id THEN
-    RAISE EXCEPTION 'EXECUTION_SNAPSHOT_FROZEN: session % cannot rewrite a create-frozen column', OLD.id;
+     OR NEW.permission_mode IS DISTINCT FROM OLD.permission_mode
+     OR NEW.resolution      IS DISTINCT FROM OLD.resolution
+     OR NEW.snapshot_frozen_at IS DISTINCT FROM OLD.snapshot_frozen_at THEN
+    RAISE EXCEPTION 'EXECUTION_SNAPSHOT_FROZEN: session % cannot rewrite a create-frozen or lineage column', OLD.id;
   END IF;
   -- claim 冻结列：改一次，代次就必须恰好 +1；代次不得回退，也不得空转。
   IF NEW.model IS DISTINCT FROM OLD.model OR NEW.effort IS DISTINCT FROM OLD.effort THEN
@@ -1173,7 +1226,7 @@ CREATE TRIGGER session_execution_snapshot_guard
   FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard();
 ```
 
-**D15-a（它只管 COORDINATOR 占位）**：第一行就放过 `USER` / `LEGACY_SWEEP` 与没有 `task_id` 的 Session —— 它们没有冻结上下文可比，既有路径**逐字节不变**（与 D6 的同一条纪律）。
+**D15-a（它只管 COORDINATOR 占位，v1.8 改述作用域，PC-CX-45）**：`USER` / `LEGACY_SWEEP` 与没有 `task_id` 的 Session 照常放过 —— 它们没有冻结上下文可比，既有路径**逐字节不变**（与 D6 的同一条纪律）。但"是不是 COORDINATOR 占位"这个判断在 `UPDATE` 上**必须同时读 OLD 与 NEW**：v1.7 的第一句只读 NEW，而它读的那几列正是这条 Session 自己可以在同一句里改掉的那几列。**一条按 NEW 决定作用域的硬门，等于把开关交给了被它管的那一行。**
 
 **D15-b（为什么是 `BEFORE`，不是可延迟约束触发器）**：它比较的两样东西**都在本事务里已经写完**（动作行在 §8.3 的第一步插入，Session 在第二步插入），因此不需要等到 `COMMIT`；而 `BEFORE INSERT` 让错误发生在**那一条语句**上，调用方能把它映射成一个有类型的失败。D14 必须可延迟是因为它要读**别的事务**可能正在改的行（D14-e），D15 不读那些行。
 
@@ -1181,7 +1234,108 @@ CREATE TRIGGER session_execution_snapshot_guard
 
 **D15-d（它不阻止什么）**：不影响 `status` / `end_reason` / 心跳列 / `result` 等任何**不在** PAC §6 冻结表里的列（那些列每一次 turn 都在写）；不影响 resume / reclaim（PAC §6 S2 本来就禁止它们重新推导快照列）；不影响 `retiredPin` 本身 —— 它照常改一次 `model`，只是必须同时把代次 +1 并留下记录，**这正是它与一次静默改写的全部区别**。
 
+**D15-f（lineage 为什么必须冻，v1.8 新增，PC-CX-45）**：`task_id` / `dispatch_origin` / `project_action_id` 三列同时是**三处谓词的输入**：D5 partial unique index 的谓词列（`task_id`）、D6 / D9 / D14 / D15 的作用域列（`task_id` + `dispatch_origin`）、以及 I11 与 I17-A 的连接列（`project_action_id`）。v1.7 只冻了第三列。于是**一条 UPDATE 就够**：把一条已合法提交、仍在 `PENDING` 的 COORDINATOR 占位改成 `task_id = NULL, dispatch_origin = 'USER', project_action_id = NULL`，D9 / D14 / D15 按 NEW 全部退出、`session_action_only_for_coordinator_chk` 也成立、D5 的索引因为 `task_id IS NULL` 不再覆盖这一行 —— **claim 被释放，而那次执行还在跑**。随后同一个 Task 的第二条 live Session 合法提交：真实 PostgreSQL 上观察为 `{live_rows: 2, task_claims: 1, orphaned_actions: 1}`，第一条动作仍是 `APPLIED` 且 `result_session_id = s1`，而 s1 已经不再反向指向它。**D5 是一条索引，它只能看见谓词列现在的值**；谁把行写出索引覆盖集、那次执行是不是还活着，它一概不知道。v1.8 的答案与 D10 逐字同型：**给被读的那几列一个封闭的 mutator 协议**，最小且足够的协议是在 COORDINATOR 占位上冻结它们。释放 claim 因此只剩契约本来就定义的那一条路 —— 改 `status`（跑完、失败、取消，或按 §11.2 停在 `AWAITING_INPUT`），而那条路上 Session 与它的动作行始终互相指着。
+
+**D15-g（它与提交点的分工，v1.8 新增，PC-CX-44）**：本条是 `BEFORE`，它证明的是**每一条语句**都不越界。它证明不了"**提交时**这条 Session 的结果仍然等于动作冻结的结果" —— 那要求读本事务的最终状态，而 `BEFORE` 触发器在语句中途执行（D15-b）。两件事都要有，理由与 EC3 / D14 的分工逐字相同：`BEFORE` 让错误落在**那一条语句**上、可以映射成一个有类型的失败，提交点让**任何语句顺序**下的最终状态都被验一次。提交点那一半是 **D16**。
+
 **D15-e（可测形式）**：真实 Postgres 上跑**三阶段**加四个反例：`INSERT` 一条 create 冻结列等于冻结上下文、`model/effort` 为 NULL、代次为 0 的占位（过）；首次 claim 写 `model` 并把代次置 1（过），断言 I17-A2 的第 1 行；一次 `retiredPin` 写新 `model` 并把代次置 2（过），断言第 3 行。反例：create 冻结列与冻结上下文差一个分量（拒，`EXECUTION_SNAPSHOT_MISMATCH`）、create 时就带 `model`（拒）、`UPDATE` 改 `provider`（拒，`EXECUTION_SNAPSHOT_FROZEN`）、改 `model` 而不动代次（拒，`EXECUTION_PIN_GENERATION`）。**反向对照**：把本触发器去掉，同一份 `INSERT` 把一条 provider 与冻结上下文不同的占位提交进去，I17-A 的零行查询立刻返回 1 行 —— 与复审报告 §6 `PC-CX-38` / `PC-CX-42` 描述的两个合法结果逐字对应。
+
+#### D16 · 结果与 pin 账本的提交时证明（v1.8 新增，PC-CX-44 / PC-CX-46）
+
+D15 是 `BEFORE`，它管每一条语句；D14 是可延迟的，但它按 D14-g 只比 **EC2-a**。**还差两件事，而且都只能在提交点问**：
+
+1. **提交时** Session 的实际结果是否仍然等于动作行冻结的那一份（EC2-b 的第 ① ③ 部分）。D15 在 `INSERT` 那一条语句上证明过一次，可那之后本事务还能再写 —— §8.3 的第 4 步就是一条 `UPDATE project_action`，它现在由 D11-f 冻住，但"Session 与动作行的哪一侧被改"不该由**列举写端**来回答，该由**最终状态**来回答。
+2. `session.execution_pin_generation` 与动作行 `detail` 上那本账（`claimResolution` + `retiredPins[]`）是否**双向**一一对应（§4.3 I17-A2）。这两样分别落在两张表上：代次归 D15 管，`detail` 是 D11-b 放开的两列之一。**任何一条只看单侧的规则都证明不了"代次说了几次、记录就有几条"** —— v1.7 的 D15 SQL 从未读过 `detail`，真实 PostgreSQL 因此接受 `generation = 2` 而 `retiredPins` 为 0 的已提交状态。
+
+```sql
+-- ① Session 侧。DEFERRABLE INITIALLY DEFERRED ⇒ 在 COMMIT 那一刻执行，读到的是本事务的最终状态。
+CREATE OR REPLACE FUNCTION session_execution_result_check() RETURNS trigger AS $$
+DECLARE ctx jsonb; action_status text; ledger jsonb; claim jsonb;
+BEGIN
+  IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+  SELECT a.execution_context, a.status,
+         COALESCE(a.detail -> 'retiredPins', '[]'::jsonb), a.detail -> 'claimResolution'
+    INTO ctx, action_status, ledger, claim
+    FROM project_action a WHERE a.id = NEW.project_action_id;
+
+  -- EC2-b 的第 ① ③ 部分，逐列相等。与 D15 的 INSERT 分支是**同一张清单**（EC6-a），
+  -- 差别只在这一次读的是提交时的最终行。
+  IF ctx IS NULL OR action_status <> 'APPLIED'
+     OR NEW.agent_id            IS DISTINCT FROM ctx->>'agentId'
+     OR NEW.workspace_id        IS DISTINCT FROM ctx->>'workspaceId'
+     OR NEW.assigned_runner_id  IS DISTINCT FROM ctx->>'assignedRunnerId'
+     OR NEW.provider            IS DISTINCT FROM ctx->>'provider'
+     OR NEW.provider_builtin    IS DISTINCT FROM (ctx->>'providerBuiltin')::boolean
+     OR to_jsonb(NEW.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities'
+     OR NEW.permission_mode     IS DISTINCT FROM ctx->>'permissionMode'
+     OR NEW.resolution          IS DISTINCT FROM ctx->'resolution'
+     OR NEW.snapshot_frozen_at  IS DISTINCT FROM (ctx->>'snapshotFrozenAt')::timestamptz THEN
+    RAISE EXCEPTION 'EXECUTION_RESULT_MISMATCH: session % is not the frozen result of action %',
+      NEW.id, NEW.project_action_id;
+  END IF;
+
+  -- I17-A2 的两个方向，同一个提交点。
+  IF NEW.execution_pin_generation = 0 THEN
+    IF NEW.model IS NOT NULL OR NEW.effort IS NOT NULL
+       OR claim IS NOT NULL OR jsonb_array_length(ledger) <> 0 THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation 0 but a claim is already recorded', NEW.id;
+    END IF;
+  ELSIF claim IS NULL THEN
+    RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation % but action % records no first claim',
+      NEW.id, NEW.execution_pin_generation, NEW.project_action_id;
+  ELSIF jsonb_array_length(ledger) <> NEW.execution_pin_generation - 1 THEN
+    RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation % but action % records % retired pins',
+      NEW.id, NEW.execution_pin_generation, NEW.project_action_id, jsonb_array_length(ledger);
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 没有 `UPDATE OF <列表>`：一张手写的列清单正是 `PC-CX-37` 的形状，而这条要证明的恰好是
+-- "最终状态对不对"，不是"谁动了哪一列"。见 D16-c。
+CREATE CONSTRAINT TRIGGER session_execution_result_check
+  AFTER INSERT OR UPDATE ON session
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION session_execution_result_check();
+
+-- ② 动作侧。`detail` 是 D11-b 放开的可写列，因此账本的另一端也必须有一条同样的提交时证明 ——
+--    否则"追加了记录而代次没动"这一半没有任何数据库对象在看。
+CREATE OR REPLACE FUNCTION project_action_pin_ledger_check() RETURNS trigger AS $$
+DECLARE generation bigint; ledger jsonb; claim jsonb;
+BEGIN
+  IF NEW.type <> 'DISPATCH_TASK' OR NEW.result_session_id IS NULL THEN RETURN NULL; END IF;
+  SELECT s.execution_pin_generation INTO generation
+    FROM session s WHERE s.id = NEW.result_session_id AND s.dispatch_origin = 'COORDINATOR';
+  IF generation IS NULL THEN RETURN NULL; END IF;      -- 没有 COORDINATOR 占位：本条无话可说
+  ledger := COALESCE(NEW.detail -> 'retiredPins', '[]'::jsonb);
+  claim  := NEW.detail -> 'claimResolution';
+  IF generation = 0 THEN
+    IF claim IS NOT NULL OR jsonb_array_length(ledger) <> 0 THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % records a claim session % has not made', NEW.id, NEW.result_session_id;
+    END IF;
+  ELSIF claim IS NULL OR jsonb_array_length(ledger) <> generation - 1 THEN
+    RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % records % retired pins for generation %',
+      NEW.id, jsonb_array_length(ledger), generation;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check
+  AFTER INSERT OR UPDATE OF detail, result_session_id ON project_action
+  DEFERRABLE INITIALLY DEFERRED
+  FOR EACH ROW EXECUTE FUNCTION project_action_pin_ledger_check();
+```
+
+**D16-a（两个方向为什么必须是两个对象）**：一次 `retiredPin` 是**两张表上的两条 `UPDATE`**。只装 Session 侧那一条，一次"只追加记录、不动代次"的写入不会让它执行（Session 那一行根本没被改），账本因此可以单方面长大；只装动作侧那一条，一次"只推进代次、不写记录"的写入同样不会让它执行。**两条都必须在，而且都必须可延迟** —— 可延迟让两条 `UPDATE` 的**先后顺序不再重要**：无论先写哪一张表，判据都落在 `COMMIT` 那一刻的最终状态上。这正是 §8.3 的语句顺序与 D9 之间已经用过一次的手法（D9-b）。
+
+**D16-b（它让 I17-A2 由构造成立）**：I17-A2 的三个阶段此后**两个方向都被数据库钉住**：代次 0 ⇒ 两列为 NULL 且账本为空；代次 1 ⇒ 有 `claimResolution`、`retiredPins` 恰好 0 条；代次 `n ≥ 2` ⇒ 有 `claimResolution`、`retiredPins` 恰好 `n − 1` 条。合法路径一条不挡：首次 claim 在同一事务里写 `detail.claimResolution` 并把代次置 1，`retiredPin` 在同一事务里追加一条 `retiredPins[]` 并把代次 +1，两者都提交。缺账、多账、错代次都在 `COMMIT` 被 `EXECUTION_PIN_LEDGER` 拒绝。
+
+**D16-c（为什么 Session 侧不带 `UPDATE OF` 列清单，代价写下来）**：`session` 的 `status` / 心跳列每一次 turn 都在写，因此这条触发器会在**每一次** COORDINATOR 占位的更新上多做一次按主键的查找与一次等式比较。这笔钱是**故意花的**：一张手写的 `UPDATE OF` 列清单必须在 PAC §6 每加一行时被记得改一次，而那正是 `PC-CX-37` / `PC-CX-44` 连着两轮的形状 —— 一张封闭集合的手工副本与它保护的那张表分头长大。**默认全覆盖、只在函数体第一句按 lineage 早退**，把"漏一列"从一个静默缺陷变成一次不可能。如果将来这条在生产上成为热点，退路是给 `session` 加一个由数据库维护的派生列做早退谓词，而**不是**回到手写列清单。
+
+**D16-d（它与 D14 / D15 的分工，三条合起来才是 §12.4 那一格）**：D14 在提交点比 **EC2-a**（授权，需要重解析）；D16 在提交点比 **EC2-b 的结果列**（等式，不需要解析链）；D15 在每一条语句上让越界**立刻**失败并有类型。**跳过服务层的任何写端因此既不能提交一个已被撤权的上下文，也不能提交一份与冻结决策不同的结果，还不能把代次与账本写岔。**
+
+**D16-e（可测形式）**：真实 Postgres 上，正例整条链必须提交：插 `CLAIMED` 动作 → 插与冻结上下文九个分量全等的 Session → 发布为 `APPLIED` → `COMMIT`；随后首次 claim（写 `detail.claimResolution` + 代次 1）与一次 `retiredPin`（追加 `retiredPins[0]` + 代次 2）各自提交。反例逐个断言 `COMMIT` 被拒：`permission_mode` 与冻结上下文不同（`EXECUTION_RESULT_MISMATCH`）、`resolution` 与冻结上下文不同、`snapshot_frozen_at` 与冻结上下文不同、动作停在 `CLAIMED` 没发布、代次 1 而没有 `claimResolution`（缺账）、代次 2 而 `retiredPins` 为 0（缺账）、代次 1 而 `retiredPins` 已有 1 条（多账）、代次跳到 3 而只有 1 条记录（错代次）、以及只写 `detail` 不动代次（动作侧那一条）。**反向对照**：把两条约束触发器都去掉，同一份写入把 `{session_permission: 'danger-full-access', frozen_permission: 'read-only', resolution_equal: false}` 与 `{execution_pin_generation: 2, retired_count: 0}` 两个状态提交进去 —— 与复审报告 §6 `PC-CX-44` / `PC-CX-46` 的那两行输出逐字对应。
 
 #### D8 · 派发权投影由数据库维护（v1.2 新增，v1.4 重写，PC-CX-09 / PC-CX-25）
 
@@ -1932,7 +2086,7 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 - **G2**：迁移**不回填任何 blocker、不产生任何事件、不安排任何唤醒**。迁移完成的那一刻，控制环对存量项目**完全静默**。
 - **G3**：用户为一个既有 Project 打开 `coordinatorEnabled` 时，服务层必须**同时**要求一个显式的 `automationPolicy`（不给默认），并在同一事务里产生一条 `user.policy_changed` 事件把它接进环里。"沿用安全默认"= 不动它；"明确选择策略" = 打开时必须选。
 - **G4**：迁移必须在**空库**和**生产快照**上各跑一次、`migrate diff` 对新增列为空。验证手法照 PAC M3：一次性 throwaway postgres 跑 `prisma migrate deploy` + `migrate diff`，`grep` 自己新增的列名，而不是看 drift 总数。
-- **G5（v1.1 新增，v1.2 扩充）**：步骤 3b / 6 / 6b 三件事**都不是 Prisma schema 能表达的**（partial unique index 的谓词、plpgsql 触发器、数据收敛），因此它们是迁移文件里的裸 SQL。**既有教训：裸 SQL 躲得过编译期检查** —— `prisma migrate diff` 也不会告诉你触发器没了。因此 04 单元的迁移验证必须**显式**查这三样东西存在（`pg_indexes` / `pg_trigger` / 收敛后每个 task 的占位 Session 计数 ≤ 1），而不是只看 `migrate diff` 为空。**v1.2 再加一条**：还要显式断言触发器函数体里含 `FOR SHARE`（`pg_get_functiondef` 上 grep），因为一个少了两个词的触发器与一个正确的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是那个 P0。**v1.3 再加三条**：断言 `session_dispatch_attribution_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（`pg_trigger.tgdeferrable AND tginitdeferred`；一个立即执行的同名触发器会让 §8.3 的语句顺序无法提交，症状是所有派发失败）、断言 CHECK 约束存在（`pg_constraint`）、断言 `project_blocker_episode_idx` 覆盖的是全部行而不是 open 行（`pg_indexes.indexdef` 里**没有** `WHERE`）。三样都是裸 SQL 的产物，`migrate diff` 一样看不见。**v1.4 再加四条**：断言 `task_dispatch_authority_projection` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，翻转与并发的任务写入就不再互斥，`PC-CX-25` 的第三种形状立刻回来，而 `pg_trigger` 里看不出差别，同 v1.2 那一条）、断言 `task_claimed_project_move_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**、断言 `project_action_applied_immutable_guard` 存在，以及**直接跑一次 §7.7 D13 的漂移查询并断言返回 0 行**（这一条比前三条都强：它不问对象在不在，它问结果对不对）。**v1.5 再加三条**：断言 `session_execution_context_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（立即执行的同名触发器会在 §8.3 的语句顺序中途要求一个还没写完的动作行，症状是所有派发失败）、断言 `resolve_execution_context_locked` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，撤权与派发就不再互斥，`PC-CX-29` 立刻回来，而 `pg_proc` 里看不出差别 —— 与 v1.2 / v1.4 那两条是同一种检查），以及**跑一次 I17-A 并断言返回 0 行**（每一条 COORDINATOR 占位的冻结快照列都等于它那条 `APPLIED` 动作行上的 `execution_context` 分量）。**v1.6 把这条的第三项换掉并再加三条（PC-CX-32 / PC-CX-34）**：v1.5 这里写的是"跑一次 I17 的可查询形式并断言返回 0 行（不存在解析到已禁用 Agent … 的 COORDINATOR 占位）"，**那个查询在一条每一步都合法的路径上必然非零**（人在合法派发之后撤权），因此它是一条会把正常状态判成迁移失败的断言，v1.6 换成上面的 I17-A；新加的三条是：断言 `pg_proc.provolatile = 'v'`（`resolve_execution_context_locked` 与 `session_execution_context_guard` 两个函数各一次，§7.7 D14-f —— 漏写 `VOLATILE` 的迁移函数体逐字相同、`FOR SHARE` 也照样 grep 得到，差别只在这一列，而按 `STABLE` 建出来的对象每次调用都抛 `0A000`）、**真的插一条 `dispatch_origin = 'COORDINATOR'` 的 Session 并 `COMMIT`**（正例提交成功、把 EC1 任一行撤销后得到 `EXECUTION_CONTEXT_REVOKED: <input>`；`CREATE FUNCTION` 成功不代表它能被调用，这正是 `PC-CX-32` 逃过 v1.5 全部检查的方式）、以及断言迁移建出来的 `project_event (next_attempt_at) WHERE consumed_at IS NULL` 索引存在（§10.2 W4 第 (iv) 支与 §5.4 的重投都扫它）。**v1.7 再加四条（PC-CX-37 / PC-CX-38 / PC-CX-42）**：① 对 `project_action_applied_immutable_guard` 跑一次**由 schema 驱动**的逐列 mutation —— 从 `information_schema.columns` 读出这张表的全部列，逐列改写一条 `APPLIED` 行，断言 `result_session_id` / `detail` 之外**每一列**都被 `ACTION_APPLIED_IMMUTABLE` 拒绝（**不是**断言某个固定的列数：v1.4 写死"六列"正是 `PC-CX-37` 的形状，一张 denylist 与它保护的表分头长大，而 `pg_get_functiondef` 上看不出差别）；② 断言 `session_execution_snapshot_guard` 存在，并**真的跑一遍 §7.7 D15-e 的三阶段**（create ⇒ `model IS NULL ∧ execution_pin_generation = 0`、首次 claim ⇒ 代次 1、`retiredPin` ⇒ 代次 2）与它的四个反例；③ **跑一次 I17-A 与 I17-A2 并各断言返回 0 行**（v1.5/v1.6 只有 I17-A，而它当时把 PAC 的 claim 冻结列也算了进去，因此在任何一条还没被 claim 的 PENDING 占位上必然非零 —— 那条断言会把正常状态判成迁移失败）；④ 断言 `project_event.disposition` 的存量回填完成（`consumed_at IS NOT NULL AND disposition IS NULL` 返回 0 行，§5.5 EV2）。
+- **G5（v1.1 新增，v1.2 扩充）**：步骤 3b / 6 / 6b 三件事**都不是 Prisma schema 能表达的**（partial unique index 的谓词、plpgsql 触发器、数据收敛），因此它们是迁移文件里的裸 SQL。**既有教训：裸 SQL 躲得过编译期检查** —— `prisma migrate diff` 也不会告诉你触发器没了。因此 04 单元的迁移验证必须**显式**查这三样东西存在（`pg_indexes` / `pg_trigger` / 收敛后每个 task 的占位 Session 计数 ≤ 1），而不是只看 `migrate diff` 为空。**v1.2 再加一条**：还要显式断言触发器函数体里含 `FOR SHARE`（`pg_get_functiondef` 上 grep），因为一个少了两个词的触发器与一个正确的触发器在 `pg_trigger` 里长得一模一样，而它们的差别正好是那个 P0。**v1.3 再加三条**：断言 `session_dispatch_attribution_check` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（`pg_trigger.tgdeferrable AND tginitdeferred`；一个立即执行的同名触发器会让 §8.3 的语句顺序无法提交，症状是所有派发失败）、断言 CHECK 约束存在（`pg_constraint`）、断言 `project_blocker_episode_idx` 覆盖的是全部行而不是 open 行（`pg_indexes.indexdef` 里**没有** `WHERE`）。三样都是裸 SQL 的产物，`migrate diff` 一样看不见。**v1.4 再加四条**：断言 `task_dispatch_authority_projection` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，翻转与并发的任务写入就不再互斥，`PC-CX-25` 的第三种形状立刻回来，而 `pg_trigger` 里看不出差别，同 v1.2 那一条）、断言 `task_claimed_project_move_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**、断言 `project_action_applied_immutable_guard` 存在，以及**直接跑一次 §7.7 D13 的漂移查询并断言返回 0 行**（这一条比前三条都强：它不问对象在不在，它问结果对不对）。**v1.5 再加三条**：断言 `session_execution_context_guard` 存在**且是 `DEFERRABLE INITIALLY DEFERRED` 的**（立即执行的同名触发器会在 §8.3 的语句顺序中途要求一个还没写完的动作行，症状是所有派发失败）、断言 `resolve_execution_context_locked` 存在**且函数体里含 `FOR SHARE`**（少了这两个词，撤权与派发就不再互斥，`PC-CX-29` 立刻回来，而 `pg_proc` 里看不出差别 —— 与 v1.2 / v1.4 那两条是同一种检查），以及**跑一次 I17-A 并断言返回 0 行**（每一条 COORDINATOR 占位的冻结快照列都等于它那条 `APPLIED` 动作行上的 `execution_context` 分量）。**v1.6 把这条的第三项换掉并再加三条（PC-CX-32 / PC-CX-34）**：v1.5 这里写的是"跑一次 I17 的可查询形式并断言返回 0 行（不存在解析到已禁用 Agent … 的 COORDINATOR 占位）"，**那个查询在一条每一步都合法的路径上必然非零**（人在合法派发之后撤权），因此它是一条会把正常状态判成迁移失败的断言，v1.6 换成上面的 I17-A；新加的三条是：断言 `pg_proc.provolatile = 'v'`（`resolve_execution_context_locked` 与 `session_execution_context_guard` 两个函数各一次，§7.7 D14-f —— 漏写 `VOLATILE` 的迁移函数体逐字相同、`FOR SHARE` 也照样 grep 得到，差别只在这一列，而按 `STABLE` 建出来的对象每次调用都抛 `0A000`）、**真的插一条 `dispatch_origin = 'COORDINATOR'` 的 Session 并 `COMMIT`**（正例提交成功、把 EC1 任一行撤销后得到 `EXECUTION_CONTEXT_REVOKED: <input>`；`CREATE FUNCTION` 成功不代表它能被调用，这正是 `PC-CX-32` 逃过 v1.5 全部检查的方式）、以及断言迁移建出来的 `project_event (next_attempt_at) WHERE consumed_at IS NULL` 索引存在（§10.2 W4 第 (iv) 支与 §5.4 的重投都扫它）。**v1.7 再加四条（PC-CX-37 / PC-CX-38 / PC-CX-42）**：① 对 `project_action_applied_immutable_guard` 跑一次**由 schema 驱动**的逐列 mutation —— 从 `information_schema.columns` 读出这张表的全部列，逐列改写一条 `APPLIED` 行，断言 `result_session_id` / `detail` 之外**每一列**都被 `ACTION_APPLIED_IMMUTABLE` 拒绝（**不是**断言某个固定的列数：v1.4 写死"六列"正是 `PC-CX-37` 的形状，一张 denylist 与它保护的表分头长大，而 `pg_get_functiondef` 上看不出差别）；② 断言 `session_execution_snapshot_guard` 存在，并**真的跑一遍 §7.7 D15-e 的三阶段**（create ⇒ `model IS NULL ∧ execution_pin_generation = 0`、首次 claim ⇒ 代次 1、`retiredPin` ⇒ 代次 2）与它的四个反例；③ **跑一次 I17-A 与 I17-A2 并各断言返回 0 行**（v1.5/v1.6 只有 I17-A，而它当时把 PAC 的 claim 冻结列也算了进去，因此在任何一条还没被 claim 的 PENDING 占位上必然非零 —— 那条断言会把正常状态判成迁移失败）；④ 断言 `project_event.disposition` 的存量回填完成（`consumed_at IS NOT NULL AND disposition IS NULL` 返回 0 行，§5.5 EV2）。**v1.8 再加四条（PC-CX-43 / PC-CX-44 / PC-CX-45 / PC-CX-46）**：⑤ 把第 ① 条那次 schema 驱动的逐列 mutation **再跑一遍在发布语句上** —— 插 `CLAIMED` 动作、插 Session，再逐列尝试"改这一列 + 置 `APPLIED`"，断言四列可写之外每一列都被 `ACTION_PUBLISH_IMMUTABLE` 拒绝，并断言干净的 `CLAIMED → APPLIED` / `CLAIMED → SUPERSEDED` 照常提交（只测已 `APPLIED` 的 OLD 行不够：那正是 `PC-CX-43` 逃过 v1.7 全部检查的方式）；⑥ 从 **PAC §6 的表**生成 create 冻结列清单，断言 D15 的 `INSERT` 分支与 D16 的等式**逐行覆盖**它（不是断言一个固定的列数），并真的插一条 `permission_mode` 与冻结上下文不同的 Session，断言得到 `EXECUTION_SNAPSHOT_MISMATCH`；⑦ 对 **D5 partial unique index 的每一个谓词列**做 UPDATE mutation，断言一条已有 live claim 的 COORDINATOR 占位不能被写出索引覆盖集（`EXECUTION_SNAPSHOT_FROZEN`），随后同一 Task 的第二条 live Session 仍然只能拿到唯一冲突；⑧ 断言 `session_execution_result_check` 与 `project_action_pin_ledger_check` 两个约束触发器存在**且都是 `DEFERRABLE INITIALLY DEFERRED` 的**，并真的跑一遍 D16-e 的正例与九个反例。
 
 ### 12.2 没有 Project 的 Task（约 11 万行）
 
@@ -1966,7 +2120,7 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
 | 组合 | 期望行为 |
 |---|---|
-| **新旧 apiserver 并存（滚动升级）** | 旧实例不认识 `project_event`，不消费；新实例正常消费。**新实例之间**由 fencing token 串行化（§8.1）；**新旧之间** fencing token 完全无效（旧实例根本不取租约），因此由 §7.7 的 D5 唯一索引（至多一条占位 Session）+ D6 触发器（`COORDINATOR` 权任务拒绝无派发权的插入）保证，两者都在数据库里执行，与二进制版本无关。D7 的两阶段部署使正常升级路径下连触发器都不会命中。**v1 在这一格里把"旧实例不消费事件"当成了"旧实例不会派发"，这两件事不相干** —— 旧实例的三条 legacy sweep 照样在跑（`PC-CX-02`）。**v1.2 又留下了这一格的第二个假前提**：D6 忠实执行 `task.dispatch_authority`，而那一列当时由**新服务层**维护，于是旧写端移动 Task 或结束占位都能留下 stale `LEGACY` 并被旧 sweep 合法放行（`PC-CX-25`，P0）。v1.4 起这一列由 §7.7 D8-a 的触发器维护、由 D13 的漂移查询可验，**这一格才第一次真的"与二进制版本无关"**。19/22 单元必须构造"**旧二进制的裸 SQL** 写 `task.project_id` + 新 Coordinator + 同一个 Task"的场景，而不只是旧 sweep 的 INSERT，也不是两个新实例 |
+| **新旧 apiserver 并存（滚动升级）** | 旧实例不认识 `project_event`，不消费；新实例正常消费。**新实例之间**由 fencing token 串行化（§8.1）；**新旧之间** fencing token 完全无效（旧实例根本不取租约），因此由 §7.7 的 D5 唯一索引（至多一条占位 Session）+ D6 触发器（`COORDINATOR` 权任务拒绝无派发权的插入）保证，两者都在数据库里执行，与二进制版本无关。D7 的两阶段部署使正常升级路径下连触发器都不会命中。**v1 在这一格里把"旧实例不消费事件"当成了"旧实例不会派发"，这两件事不相干** —— 旧实例的三条 legacy sweep 照样在跑（`PC-CX-02`）。**v1.2 又留下了这一格的第二个假前提**：D6 忠实执行 `task.dispatch_authority`，而那一列当时由**新服务层**维护，于是旧写端移动 Task 或结束占位都能留下 stale `LEGACY` 并被旧 sweep 合法放行（`PC-CX-25`，P0）。v1.4 起这一列由 §7.7 D8-a 的触发器维护、由 D13 的漂移查询可验，**这一格才第一次真的"与二进制版本无关"**。19/22 单元必须构造"**旧二进制的裸 SQL** 写 `task.project_id` + 新 Coordinator + 同一个 Task"的场景，而不只是旧 sweep 的 INSERT，也不是两个新实例。**v1.8 把这一格的第三个假前提也补掉了（`PC-CX-43..46`）**：D5 + D6 管的只是"谁派、派几条"，而"派出去的那一条与被冻结的那次决策是不是同一份"另有三条硬门 —— D11（动作行的状态转移与终态，含 §8.3 的发布语句本身）、D15（每一条语句上的 create 冻结集与 lineage）、D16（`COMMIT` 时的结果等式与 pin 账本）。v1.7 之前这三条各留了一个口子，因此任何写端（含旧二进制、裸 SQL）都能提交一份与冻结决策不同的结果、或把一条 live 占位写出 D5 的索引覆盖集。**六条对象合起来，这一格才对"动作与 Session 的冻结"也成立**（D16-d） |
 | **新 apiserver × 旧 runner** | 控制环不改 runner 契约。runner 侧无改动 ⇒ 无需 bump 版本；**若后续单元真的改了 runner，必须 bump 版本并重建 web 镜像**（PAC §11.5，既有部署纪律） |
 | **旧 web / iOS / macOS × 新 apiserver** | 所有既有接口形状不变，新字段以**可选字段**追加。旧端看不到 Coordinator 状态，但 Project/Task/Session 的读写完全照常。Swift 端对新增可选字段的解码必须实测过 —— 既有教训：wire 变更而原生端没跟，只会静默漏改 |
 | **新 web × 旧数据** | 无 `project_runtime` 行（理论上不该出现，迁移已回填）时展示"未启用"空态，不报错 |
@@ -2155,15 +2309,17 @@ acceptanceDigest = sha256(canonical({
 | **AC6** | 验证失败可原生退回、建缺陷子任务、阻断下游；不靠提示词 | §13.2 | **业务**（既有 `verifiesTaskId` 的语义扩展，**无新实体**） | 16 · 18 | 16 `+`FAIL 三件事都发生 · 16 `-`重复 verdict 不重复退回（V2）· 16 `-`下游未修复前不可派发（V3）· 18 属性测试固定 seed 可复现 |
 | **AC7** | 父 Task/阶段的聚合完成策略，无需人工维护汇总节点 | §13.1 | **业务**（`task.completionPolicy`；阶段= 父 Task，**不新增实体**，§2.3） | 15 · 18 | 15 `+`ALL_CHILDREN_DONE / VERIFICATION_PASSED · 15 `+`多层子树自底向上 · 15 `-`子任务重开时父任务回退（AG3）· 15 `-`空父节点不自动完成（AG4）· 15 `+`并发完成幂等 |
 | **AC8** | 六类情形都有结构化 blocker 与去重升级；不得静默 fallback | §11 全节 · §9.3 · §7.2 TF4 | **基础设施**（`project_blocker`）+ **复用**（kind 直接沿用 PAC §12 错误码） | 17 · 18 | 17 `+`每类 blocker 五字段齐全 · 17 `-`同因重复事件不新建行（§11.3 partial unique）· 17 `+`条件消失自动解除并重算（BL3）· 17 `-`未知失败 fail closed（BL2）· 17 `-`升级至多通知一次 · 17 `+`clear 后同因复发获得新 turn 而不是 no-progress（TF4）· 17 `+`两条同刻同 source 的 blocker 候选由 `(subjectType, subjectId)` 唯一裁决（W5 第 2 条，v1.7）|
-| **AC9** | 崩溃/Session 结束/Runner 离线/接管/混合版本后能恢复，不丢任务、不重复启动、不越权 | §8.1 · §8.4 · §12.4 · §7.7 D8–D15（含 D14-f · D14-g · D11 的闭集 allowlist）· I7 · I17-A/I17-A2/I17-B | **基础设施**（fencing token、`project_action`、投影触发器） | 19 · 22 | 19 `-`旧 fencing token 提交影响 0 行 · 19 `+`两实例并发只有一个提交 · 19 `+`合法派发之后推进 token，I11-A 仍成立（PG）· 19 `-`在飞 Task 跨 Project 移动被拒（PG）· 19 `-`执行上下文被撤销后的占位在 `COMMIT` 被数据库拒绝，与二进制版本无关（D14，PG）· 19 `-`任何写端改写 `APPLIED` 行的冻结上下文 / `reason_code` 都被拒，逐列 mutation 由 schema 驱动（D11，PG，v1.7）· 19 `+`占位的 create 冻结列由 `execution_context` 构造并被数据库证明，`model`/`effort` 的三阶段代次两个方向都成立（D15 · I17-A/I17-A2，PG，v1.7）· 19 `+`Coordinator Session 死后轮换继续推进 · 22 端到端故障注入矩阵（§15） |
+| **AC9** | 崩溃/Session 结束/Runner 离线/接管/混合版本后能恢复，不丢任务、不重复启动、不越权 | §8.1 · §8.4 · §12.4 · §7.7 D8–D16（含 D14-f · D14-g · D11 的两个闭集 allowlist · D15-f · D16-d）· I7 · I17-A/I17-A2/I17-A3/I17-B | **基础设施**（fencing token、`project_action`、投影触发器） | 19 · 22 | 19 `-`旧 fencing token 提交影响 0 行 · 19 `+`两实例并发只有一个提交 · 19 `+`合法派发之后推进 token，I11-A 仍成立（PG）· 19 `-`在飞 Task 跨 Project 移动被拒（PG）· 19 `-`执行上下文被撤销后的占位在 `COMMIT` 被数据库拒绝，与二进制版本无关（D14，PG）· 19 `-`任何写端改写 `APPLIED` 行的冻结上下文 / `reason_code` 都被拒，逐列 mutation 由 schema 驱动（D11，PG，v1.7）· 19 `+`占位的 create 冻结列由 `execution_context` 构造并被数据库证明，`model`/`effort` 的三阶段代次两个方向都成立（D15 · I17-A/I17-A2，PG，v1.7）· 19 `-`§8.3 的发布 UPDATE 逐列 mutation 全拒、`CLAIMED` 的转移目标是闭集、终态不再出去（D11-f/D11-g，PG，v1.8）· 19 `-`任何写端都不能把一条 live COORDINATOR 占位写出 D5 的索引覆盖集，第二条占位仍然只拿到唯一冲突（D15-f · I17-A3，PG，v1.8）· 19 `+`提交点证明 Session 实际结果 = 动作冻结结果、代次与 `detail` 账本双向一致，缺账/多账/错代次全拒（D16，PG，v1.8）· 19 `+`Coordinator Session 死后轮换继续推进 · 22 端到端故障注入矩阵（§15） |
 | **AC10** | Web/API/CLI 展示当前状态、最近决策、下一动作、阻塞、下次唤醒、验收证据；有可独立运行的测试 | §6.2 · §11.1 · §13.4 | **基础设施**（读接口） | 20 · 21 | 20 API/CLI/MCP parity + 鉴权 + 全 Base62 · 20 `-`陈旧/越权写入被拒 · 21 组件测试覆盖 loading/error/empty + 三策略 + 审批 + blocker + 离线 Runner + legacy Project · 21 `-`界面不得暗示 silent fallback |
-| **AC11** | 既有 Project 默认兼容、不被意外开启自动推进；迁移后须显式选策略或沿用安全默认 | §12.1 · §12.2 · §12.3 · §7.7 D8-a · D13 | **业务**（策略字段）+ **基础设施**（迁移、投影触发器） | 03 · 04 · 22 | 04 `M`迁移后存量 `coordinator_enabled = false` / `MANUAL`（G1 两条都测）· 04 `M`迁移不产生事件/唤醒（G2）· 04 `M`空库+生产快照 `migrate diff` 为空（G4）· 04 `M`D13 漂移查询返回 0 行（G5）· 06 `+`无 Project 的 Task 派发逐字段不变（§12.2）· 14 `-`legacy sweep 不碰 `COORDINATOR` 权任务（D1）· 04 `M`I17-A 与 I17-A2 各返回 0 行、`disposition` 回填完成、D11 的逐列 mutation 全拒（G5 v1.7）· 22 `-`旧二进制的裸 SQL 移动 Task 后投影仍不陈旧（PG） |
+| **AC11** | 既有 Project 默认兼容、不被意外开启自动推进；迁移后须显式选策略或沿用安全默认 | §12.1 · §12.2 · §12.3 · §7.7 D8-a · D13 | **业务**（策略字段）+ **基础设施**（迁移、投影触发器） | 03 · 04 · 22 | 04 `M`迁移后存量 `coordinator_enabled = false` / `MANUAL`（G1 两条都测）· 04 `M`迁移不产生事件/唤醒（G2）· 04 `M`空库+生产快照 `migrate diff` 为空（G4）· 04 `M`D13 漂移查询返回 0 行（G5）· 06 `+`无 Project 的 Task 派发逐字段不变（§12.2）· 14 `-`legacy sweep 不碰 `COORDINATOR` 权任务（D1）· 04 `M`I17-A 与 I17-A2 各返回 0 行、`disposition` 回填完成、D11 的逐列 mutation 全拒（G5 v1.7）· 04 `M`发布语句的逐列 mutation 全拒、create 冻结集由 PAC §6 生成、D5 谓词列不可被 UPDATE 移出、两条提交点约束触发器存在且可延迟（G5 v1.8）· 22 `-`旧二进制的裸 SQL 移动 Task 后投影仍不陈旧（PG） |
 | **AC12** | 全部任务完成后执行项目级验收并核对合并状态，全 PASS 才可标 DONE | §13.4 · §9.2 最后一行 | **业务**（`project.status` 的写入门）+ **基础设施**（验收记录） | 23 | 23 `-`任一 FAIL 时标 DONE 被服务端拒绝（硬门，第 5 条）· 23 `+`全 PASS 后可标 DONE · 23 `+`合并核对按内容而非 `--contains`（第 6 条）· 23 `-`控制环任何策略下都不能自己标 DONE |
 
 **总计**：业务字段 **5 个**（§2.2），新业务实体 **0 个**（§2.3），新基础设施表 **5 张** + 新列 **8 个**（§2.4）。
 v1.1 相对 v1 只多了一列（`session.dispatch_origin`）与两个数据库约束对象（一个 partial unique index、一个 trigger，§2.4）。**新业务实体仍然是 0 个** —— 关闭两个 P0 靠的是把互斥挪进数据库，不是靠新概念。
 v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的列（`project_blocker.lifecycle_generation`、`project_runtime.acceptance_attempt`）与三个数据库约束对象（一个可延迟约束触发器、一个 CHECK、一个唯一索引，§2.4）。**新业务实体仍然是 0 个** —— 关闭这六项靠的是给已有的账本装上单调代次、给已有的锁排一个全序、让已有的触发器读它声称保证的那几列。
 v1.4 相对 v1.3 多一列（`project.config_revision`）与三组数据库对象（一个可延迟约束触发器 D10、一个 `BEFORE UPDATE` 触发器 D11、一组投影触发器 D12/D8-a，§2.4），并**删掉**了一处服务层义务（§12.3 D3 的三个写入点）。**新业务实体仍然是 0 个** —— 关闭这七项靠的是把不变量的时态说清楚、把决策输入说全、给同时为真的原因排一个全序、把一个投影交给数据库自己算，以及让人工与控制环共用一把本来就存在的行锁。
+**v1.8 相对 v1.7 一列都没加**：新增的只有一个数据库对象里的两条可延迟约束触发器（`session_execution_result_check` 与 `project_action_pin_ledger_check`，D16），其余三项都是**改写已有对象的判据**：D11 按 `OLD.status` 分两个闭集 allowlist、D9/D14/D15 的作用域读 OLD ∨ NEW、D15 的 create 冻结集按 PAC §6 的行数补齐并把 lineage 三列纳入冻结。**新业务实体仍然是 0 个** —— 关闭这四项靠的是问清楚"这条硬门之后还剩哪一次写、它的作用域由谁决定、它比对的那个封闭集合是不是真的封闭"，以及把一条自称双向的命题在两端各配一个对象。
+
 **v1.7 相对 v1.6 一个业务字段都没加**：新增的是一列 `session.execution_pin_generation`（§4.3 I17-A2 的阶段与代次）、两列已有基础设施表自己的列（`project_action.execution_result_digest`、`project_event.disposition`）与一个数据库对象（`session_execution_snapshot_guard`，D15），外加把 D11 从 denylist 改成 allowlist。**新业务实体仍然是 0 个** —— 关闭这六项靠的是把一个封闭集合改成由构造封闭、把一条跨文档恒等式按被引用契约的冻结时刻拆成阶段与代次、给同时为真的唤醒候选补上持久的第三第四键、把最后一个游离的时钟收进 `evaluation.epoch`、把一条不变量的量化域说全并给出环的事件一条终态处置，以及把"还授不授权"与"结果一不一样"分成两个摘要各比各的。
 
 v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`session` 上的列都没加**：新增的三列全在 `project_action` 这张已有的基础设施表上（`execution_context` / `execution_context_digest` / `reason_code`，§2.4 的"新表自己的列"），外加一个可延迟约束触发器与它读的只读函数（D14）。**新业务实体仍然是 0 个** —— 关闭这四项靠的是把 cap 的不变量按时态拆开（准入 / 提交时）、把 PAC 执行上下文的读集冻结下来并在提交点重解析、把决策实际读的动作历史投影进输入，以及把一次被限频的显式请求变成一条持久、有确定唤醒时刻的 pending 记录。
@@ -2224,6 +2380,10 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | **F40** | 一条 COORDINATOR 占位走完它的正常生命周期：create（PENDING）→ 首次 claim materialize `model`/`effort` → 模型被 runtime 下架，`retiredPin` 改写一次 | 三个阶段各有一个恒成立的判据（I17-A2）：代次 0 ⇒ 两列为 NULL；代次 1 ⇒ 与冻结值相同（冻结值为空时记 `DEFERRED_TO_CLAIM` 并把实际值写进 `detail.claimResolution`）；代次 2 ⇒ 恰好一条 `detail.retiredPins[]`。**create 冻结列全程不变**（I17-A） | 无需动作。`retiredPin` 是 PAC §6 保留的合法改写，它**必须**同时把代次 +1 并留记录，这就是它与一次静默改写的全部区别 | §4.3 I17-A · I17-A2 · §7.7 D15 · PAC §6 |
 | **F41** | 一条未消费的事件，其 Project 已经出环（从没启用 / 被关掉 `coordinatorEnabled` / `status ≠ OPEN` / `run_state = SETTLED`） | 事件被**丢弃**而不是被 reconcile 消费：`consumed_at` 非空、`disposition = 'DISCARDED_OUT_OF_LOOP'`；**不取租约、不产生任何动作 / blocker / 唤醒 / 通知 / WARN**，`project_runtime` 一列不动 | 无需人工动作。项目重新在环（G3 启用 / §13.4 AE8 原子重开）之后到达的事件按 EV1 在**被取到的那一刻**重新判定，得到的是消费而不是丢弃 | §5.5 EV1–EV6 · §4.3 I6 · I19-c |
 | **F42** | 决策之后、提交之前，`agent.default_effort` / `agent.required_capabilities` / `task.required_capabilities` 被改，而 EC2-a 的九个身份**一个都没变** | 该动作 `REFUSED(EXECUTION_RESULT_CHANGED)`、`detail.changedComponents[]` 按名称字母序、**无 Session**；**不开 blocker**，一条写明 `execution_result_changed` 的 `NOOP`；`dispatch_attempt` 已前进 | 无需人工动作：那次写入本身产生事件，下一次 reconcile 按新事实算出新的执行上下文与**新的键**重派 | §7.4 EC2-b · EC2-c · EC3 · EC4 · EC5-a · §7.7 D15 |
+| **F43** | 任何写端在 §8.3 的**发布语句**里（`CLAIMED → APPLIED/REFUSED/SUPERSEDED`）顺手改写身份、归属、`execution_context`、两个摘要或 `reason_code` | 整条 UPDATE 被拒，`ACTION_PUBLISH_IMMUTABLE`（错误消息含被改的列名）；发布语句只剩 `status` / `refusal_code` / `result_session_id` / `detail` 四列可写，干净的发布照常提交；`CLAIMED → 闭集之外`与`终态 → 任何状态`得到 `ACTION_TRANSITION_ILLEGAL` | 无需动作。要补写的东西必须在插 `CLAIMED` 那一步就写对 —— 那一步之后所有硬门都已放行 | §7.7 D11 · D11-f · D11-g |
+| **F44** | 一条 COORDINATOR 占位的 `permission_mode` / `resolution` / `snapshot_frozen_at` 与它动作行冻结的那一份不同（插入时写歪，或事务中途改歪） | 插入时被 `EXECUTION_SNAPSHOT_MISMATCH` 拒（D15），事务中途改则被 `EXECUTION_SNAPSHOT_FROZEN` 拒；无论语句顺序如何，`COMMIT` 还会由 D16 以 `EXECUTION_RESULT_MISMATCH` 再拒一次，并同时要求动作行已 `APPLIED` | 无需动作：三列都从 `execution_context` 逐字复制（EC6-a / EC6-d），写不出第二份 | §7.7 D15 · D16 · §7.4 EC2-b · EC6-a · EC6-d · PAC §6 |
+| **F45** | 一条已合法提交、仍在 `PENDING`/`RUNNING` 的 COORDINATOR 占位，被一条 UPDATE 改成 `task_id = NULL, dispatch_origin = 'USER', project_action_id = NULL` | 改写被拒，`EXECUTION_SNAPSHOT_FROZEN`（D15 的 lineage 分支，作用域读 OLD 因此改不掉）；D5 的唯一 claim 不被释放，同一 Task 的第二条 live Session 照常在索引上冲突并按 §7.7 D5 表得到确定结果 | 无需动作。释放 claim 只剩改 `status` 一条路（跑完 / 失败 / 取消 / 停在 `AWAITING_INPUT`），那条路上 Session 与动作行始终互指 | §7.7 D15-a · D15-f · D9 · D14 · D5 · §4.3 I17-A3 |
+| **F46** | `session.execution_pin_generation` 与动作行 `detail` 上的 `claimResolution` / `retiredPins[]` 对不上：缺账、多账、或代次跳号 | `COMMIT` 被 `EXECUTION_PIN_LEDGER` 拒，两个方向各有一条可延迟约束触发器（Session 侧、动作侧），因此先写哪一张表都一样；合法的首次 claim 与 `retiredPin` 照常提交 | 无需动作：代次 +1 与账本追加必须在同一事务里，这就是它与一次静默改写的全部区别 | §7.7 D16 · D16-a · D16-b · §4.3 I17-A2 |
 
 **F-note**：F21/F22 是**唯一**两条"停下来等人"的兜底。它们存在的意义是让"控制环遇到了它不认识的东西"成为一个**看得见的状态**，而不是一次静默的 catch。
 
@@ -2295,6 +2455,7 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | 01E | 修订 `PC-CX-28..31` | §23 全表 | 同上；真实 Postgres 覆盖 cap 降低与派发的两个提交顺序、执行上下文撤权的提交时门、限频窗口内的显式请求持久化（§23.1 / §23.2 / §23.4） |
 | 01F | 修订 `PC-CX-32..36` | §24 全表 | 同上；真实 Postgres 覆盖 `pg_proc.provolatile` 与真实 deferred trigger 的调用、I17-A/I17-B 的八个撤权 × 两个提交顺序、窗口末端的 wake 代数、事件提交到 reconcile 的间隙（§24.1 / §24.3 / §24.4 / §24.5） |
 | 01G | 修订 `PC-CX-37..42` | §25 全表 | 同上；真实 Postgres 覆盖 D11 的 schema 驱动逐列 mutation、D15 的三阶段与四反例、W5 的全序与冻结时钟、出环事件的终态处置（§25.1 / §25.2 / §25.3 / §25.4 / §25.5 / §25.6） |
+| 01H | 修订 `PC-CX-43..46` | §26 全表 | 同上；真实 Postgres 覆盖发布语句的逐列 mutation、PAC §6 全量 create 冻结集在插入与提交两点的等式、D5 谓词列的 lineage 冻结与第二条 live Session、pin 账本的双向可延迟证明（§26.1 / §26.2 / §26.3 / §26.4） |
 | 03 | Coordinator 身份、默认 Workspace、策略持久化 | §2.2 · §7.5 · §12.1 | `*.spec.ts`（`node --test`） |
 | 04 | 独立验证身份、策略迁移与 Base62 | §12.1 G1–G4 · §6.1 S2 | 同上 |
 | 05 | 事件信封、事务 outbox、投递 | §5.2 · §5.4 | 同上 |
@@ -3042,6 +3203,9 @@ cap 那一半同理：两个入口在同一把锁之后各数一次占位（CAP1
 | `不消费事件、不 reconcile` | §4.3 I6（不 reconcile / 不产生动作）· §5.5 EV3（出环的行按终态处置丢弃） | `PC-CX-41` |
 | `又不被 backstop 看见。这一条与 I5 的分工` | §4.3 I19-a · I19-b · I19-c（三支封闭，第三支是出环的终态处置） | `PC-CX-41` |
 | `必须与动作行上冻结的那一份逐字相同` | §7.4 EC2-a · EC2-b · EC3 的两行判据表（两个摘要各比各的） | `PC-CX-42` |
+| `IF OLD.status <> 'APPLIED' THEN RETURN NEW` | §7.7 D11（v1.8：`CLAIMED` 走发布 allowlist，终态走终态 allowlist，没有整行放行的分支） | `PC-CX-43` |
+| `IS DISTINCT FROM ctx->'requiredCapabilities' THEN` | §7.7 D15（v1.8：create 冻结集续到 `permission_mode` / `resolution` / `snapshot_frozen_at`，`requiredCapabilities` 不再是最后一行） | `PC-CX-44` |
+| `cannot rewrite a create-frozen column'` | §7.7 D15（v1.8：同一条也冻 lineage，消息是 `create-frozen or lineage column`） | `PC-CX-45` |
 
 **登记规则（冻结）**：一次修订如果**取代**了一条规范（而不只是补充），必须在本表加一行；如果只是新增，不加。**v1.5 按这条规则加了六行**（`PC-CX-28` 两行、`PC-CX-29` 一行、`PC-CX-30` 一行、`PC-CX-31` 两行）；`PC-CX-29` 的另外那些新增条款（EC1–EC5、D14）**不入表**，因为它们没有取代任何一句话，只是补上了第 8 条一直缺的那道门。判据是一句话：**如果有人照旧句子实现，会不会得到一个已经被审查记过号的缺陷？** 会，就必须登记。**v1.6 按这条规则加了七行**（`PC-CX-32` 一行、`PC-CX-33` 一行、`PC-CX-34` 两行、`PC-CX-35` 两行、`PC-CX-36` 一行）；`PC-CX-36` 新增的 I18-B / I19 / W4 第 (iv) 支**不入表**，因为它们补的是一段一直没被写下来的形状，没有取代任何一句话。 **v1.7 按这条规则加了十行**（`PC-CX-37` 两行、`PC-CX-38` 一行、`PC-CX-39` 两行、`PC-CX-40` 两行、`PC-CX-41` 两行、`PC-CX-42` 一行）；v1.7 新增的 D15、EC2-b、EC5-a、EC6、§5.5 EV1–EV6、I17-A2、W5 第 6/7 条与 W4-b **不入表**，因为它们补的是一直缺的一道门或一段一直没被写下来的形状，没有取代任何一句话。**v1.7 的十行每一行登记的都是一句在 §1–§18 里真的写过、而现在已经不在的话**，不是复审报告里的概括 —— 一条永远匹配不上的行永远不会失败，那正是 v1.6 在自己的账上发现并修掉的毛病。
 
@@ -3441,3 +3605,102 @@ v1.7 的答案在六处：**一个由构造封闭的 D11**（allowlist + schema 
 - **没有给事件生产者加锁，也没有给 N1 加过滤**（§5.5 EV5），理由与 I18-note 的两行表同源。
 - **没有把 EC2-b 也交给数据库算**（D14-g）。D14 仍然只比授权摘要，结果那一半由 D15 的**等式比较**保证 —— 买到的是同样的混合版本保证，付出的是"占位的 create 冻结列必须逐字来自冻结上下文"这条更强的构造约束（EC6-a）。如果将来有人要让 D14 也算结果摘要，D14-c 那笔账会翻倍，必须重新评估。
 - **`decisionInput` 没有因为本轮多出任何字段**。`execution_pin_generation` / `disposition` / `execution_result_digest` 三列都不被任何一条**决策规则**读（它们分别是不变量、队列处置与提交门的谓词），因此按 §6.1 S8 的双向断言，它们**不该**进 `world` —— 加进去会让 S8 的"每个字段都必须有至少一条规则读它"那一半为假。
+
+---
+
+## 26. `PC-CX-43..46` 修订闭环（v1.8）
+
+> **本节是非规范的（non-normative）修订日志**（§0 RL1，v1.4 冻结、v1.8 扩到本节）。它记录 v1.8 当时的事实与当时的推理，**不是现行规范**；任何一句与 §1–§18 冲突时一律以 §1–§18 为准。历史形状只允许出现在这里和反例测试里（`PC-CX-27`）。
+
+02 对 v1.7 的独立复审（[`project-coordinator-contract-review-02-v1.7.md`](./project-coordinator-contract-review-02-v1.7.md)）判 **FAIL / BLOCKED**，给出 3 个 P0 与 1 个 P1。本节是**逐项关闭的索引**，格式与 §19–§25 相同。**八份审查文档都不因本次修订而改动** —— 它们记录的是 v1 到 v1.7 的事实，那些事实没有变；变的是契约。
+
+四项里有一条贯穿的线，而且它是**本文已经交过三次学费的那条**：`PC-CX-09` / `PC-CX-20` 教的是"插入时成立不是已提交状态上成立"，`PC-CX-21` / `PC-CX-28` / `PC-CX-34` 教的是"点态不是恒成立"。这一轮的三个 P0 是同一句话的第三种写法：**一条硬门必须回答"在我之后还剩哪一次写、我的作用域由谁决定"**。
+
+- `PC-CX-43`：D11 之后还剩一次写，而且**那一次写就是把动作发布出去的那一条**。§8.3 的语句顺序是"插 `CLAIMED` → 插 Session → 置 `APPLIED`"，D9 / D14 / D15 全部声明在 `session` 上、第 2 步就跑完了，而 D11 的第一句是 `IF OLD.status <> 'APPLIED' THEN RETURN NEW` —— 第 3 步因此是**所有硬门都已放行之后**的一次整行自由写。
+- `PC-CX-45`：作用域由**被保护的那一行自己的 NEW 值**决定。D9 / D14 / D15 都以 `NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR'` 提前返回，而这两列本身没有任何 mutator 协议。一条 UPDATE 同时把它们写空，三条硬门一起退出，D5 的 partial unique index 也因为谓词列变了而不再覆盖这一行。
+- `PC-CX-44`：一份"封闭集合"的手工副本，比它引用的那张表少了三行。这是 `PC-CX-27` / `PC-CX-30` / `PC-CX-33` / `PC-CX-37` 之后的**第五次**，而且这一次的两侧（PAC §6 的表、D15 的 SQL）之间连一条机械检查都没有 —— 少的那三行里有两行进 EC2-b，因此少的不是"审计字段"，是**权限**。
+
+第四项 `PC-CX-46` 的形状不同：它不是"漏了一次写"，是**一条双向命题只被写成查询、没有被写成约束**。I17-A2 逐字要求"两个方向都要查"，而 D15 的 SQL 从未读过 `project_action.detail`，`detail` 又恰好是 D11-b 放开的可写列。**一条自己说要双向查的规则，如果只有一侧有对象在看，它就只是一句话。**
+
+v1.8 的答案在四处：**一个按 `OLD.status` 分档、并给 `CLAIMED` 一个封闭 transition 目标集的 D11**（发布语句只剩四列可写）、**一条对 D9 / D14 / D15 一致的 OLD ∨ NEW 作用域规则加 D15 冻住的 lineage 三列**（D5 的 claim 因此只能靠改 `status` 释放）、**一张按 PAC §6 行数补齐的 create 冻结集加 `snapshotFrozenAt` 的唯一来源**（EC6-d）、以及**新增的 D16**：两条可延迟约束触发器，一条在 `COMMIT` 证明 Session 实际结果等于动作冻结结果，一条把代次与账本钉成双向原子关系。
+
+| ID | 级别 | 规范条款 | 权威状态 | 动作键 | 恢复路径 | 可执行断言 |
+|---|---|---|---|---|---|---|
+| `PC-CX-43` | **P0** | §7.7 D11 · D11-a · D11-f · D11-g · §12.1 G5 · §15 F43 · §22.8 | 动作行的可写集由 `OLD.status` 分两档：`CLAIMED` 只剩 `status` / `refusal_code` / `result_session_id` / `detail` 四列（且 `status` 的目标必须落在 `{CLAIMED, APPLIED, REFUSED, SUPERSEDED}` 这个闭集里），三个终态只剩 `result_session_id` / `detail`。**§8.3 的发布语句因此也在冻结范围里**，两个摘要与 `reason_code` 第一次真的不可能在发布那一刻被改 | 不变（可写集不进任何键或摘要） | 无需恢复：改写在数据库层被 `ACTION_PUBLISH_IMMUTABLE` / `ACTION_TRANSITION_ILLEGAL` 拒绝，错误消息带被改的列名；要写对必须在插 `CLAIMED` 那一步就写对 | `PC-CX-43 the publishing transition is inside the freeze, not outside it` |
+| `PC-CX-44` | **P0** | §4.3 I17-A · §7.4 EC2-b · EC6-a · EC6-d · §7.7 D15 · D15-g · D16 · D16-d · §12.1 G5 · §15 F44 · §22.8 | create 冻结集是 PAC §6 表里冻结时刻为 "Session create" 的**每一行**，含 `permission_mode` / `resolution` / `snapshot_frozen_at`；`snapshotFrozenAt` 的唯一来源是 `execution_context`（EC6-d）。**插入点（D15）与提交点（D16）用同一张清单各证明一次**，因此"Session 实际结果 = 动作冻结结果"在任何语句顺序下都成立 | 不变；一份结果只对应一个动作键 | 无需恢复：三列一律从冻结上下文逐字复制，写不出第二份；写歪得到 `EXECUTION_SNAPSHOT_MISMATCH`（语句）或 `EXECUTION_RESULT_MISMATCH`（提交） | `PC-CX-44 the create-frozen set is the whole PAC table, proved at insert and at commit` |
+| `PC-CX-45` | **P0** | §4.3 I17-A3 · §7.7 D5 · D9 · D14 · D15-a · D15-f · §12.1 G5 · §15 F45 · §22.8 | 所有 Session 硬门的作用域在 `UPDATE` 上读 **OLD ∨ NEW**：只有两侧都不是 COORDINATOR 占位才提前返回。COORDINATOR 占位的 `task_id` / `dispatch_origin` / `project_action_id` 是 create 冻结列（I17-A3），因此 D5 的唯一 claim **只能靠改 `status` 释放**，不可能被写出索引覆盖集 | 不变；两个动作键此后不可能对应两条同时 live 的物理执行 | 无需恢复：自我豁免的那条 UPDATE 被 `EXECUTION_SNAPSHOT_FROZEN` 拒绝，第二条 live Session 照常在 D5 索引上得到 §7.7 D5 表里那三个确定结果之一 | `PC-CX-45 a session cannot write itself out of the gates that hold its claim` |
+| `PC-CX-46` | P1 | §4.3 I17-A2 · §7.7 D15 · D16 · D16-a · D16-b · §7.4 EC6-c · §15 F46 · §22.8 | `session.execution_pin_generation` 与动作行 `detail` 上的 `claimResolution` / `retiredPins[]` 是一条**双向原子关系**，由两条可延迟约束触发器（Session 侧、动作侧）在 `COMMIT` 各证明一个方向：代次 0 ⇒ 账本为空；代次 `n ≥ 1` ⇒ 有 `claimResolution` 且恰好 `n − 1` 条 `retiredPins[]` | 不变（代次与账本都不进动作键） | 无需恢复：合法的首次 claim 与 `retiredPin` 照常提交，它们只需与账本写在同一事务里；缺账、多账、错代次都得到 `EXECUTION_PIN_LEDGER` | `PC-CX-46 the pin generation and the action ledger are one atomic two-way relation` |
+
+新增的模型断言在 [`coordinator-counterexample.spec.ts`](../src/apiserver/src/projects/coordinator-counterexample.spec.ts)，新增的真实 PostgreSQL 断言在 [`coordinator-linearization.pg.spec.ts`](../src/apiserver/src/projects/coordinator-linearization.pg.spec.ts)；02 在 v1.7 轮次留下的 [`coordinator-v17-adversarial.spec.ts`](../src/apiserver/src/projects/coordinator-v17-adversarial.spec.ts) 按 §25 对 v1.6 那份 spec 的同一条纪律**从"证明缺陷存在"翻转成"旧形状被拒绝/得到唯一合法结果"**，并把 v1.7 的失败形状原样保留为每条断言里的**反向对照**。
+
+### 26.1 `PC-CX-43` 发布动作的那条 UPDATE 在冻结之外
+
+**最小交错序列**（一个事务，三条语句）：插一条 `status = 'CLAIMED'` 的 `DISPATCH_TASK`，`execution_result_digest = 'result-ok'`；插一条与它的 `execution_context` 完全匹配、因此 D15 放行的 COORDINATOR 占位；再 `UPDATE project_action SET status = 'APPLIED', result_session_id = 's1', execution_result_digest = 'forged-after-session-insert'`。**事务提交成功**：观察为 `{status: 'APPLIED', execution_result_digest: 'forged-after-session-insert'}`，D9 的可延迟归属检查同时通过（它读的六列一列没动）。I17-A 于是有了一条已提交的反例，而**没有任何一条硬门执行失败** —— 它们都执行了，只是都在这条 UPDATE 之前。
+
+**Postgres MVCC 与锁语义**：与并发无关，一个事务、一条语句就够。`BEFORE UPDATE` 触发器每一次 `UPDATE` 都执行，v1.7 的函数也确实执行了 —— 它的第一句主动放行。这一行写下来是因为格式要求逐项回答同样的六个问题，而"这一项不涉及并发"本身就是答案的一部分：**一个执行了但主动放行的硬门，和一个不存在的硬门，在数据库里是同一个东西**（与 `PC-CX-37` 那句"看错了列"是同一句话的两种写法）。
+
+**为什么 v1.7 的绿色套件没抓到**：D11-e 逐字写的是"对**一条 `APPLIED` 行**逐列尝试改写"，研发 fixture 就照这句话建了一条 `APPLIED` 行。**测试与函数是同一句话的两份副本**：函数说"OLD 是 APPLIED 才管"，测试就只造 OLD 是 APPLIED 的行，于是那个被放行的窗口在两边都不存在。这与 `PC-CX-37` 的假阴性同型，差别在这一次漏掉的不是一列，是**一个状态**。
+
+**权威状态**：§7.7 D11 的函数体按 `OLD.status` 分两档 —— `CLAIMED` 用 `writable || ARRAY['status','refusal_code']` 并先判 transition 目标落在闭集里，终态用 `writable`，没有整行放行的分支；不认识的 `OLD.status` 得到 `ACTION_TRANSITION_ILLEGAL`。D11-a 改述成"由构造成立"，新增 D11-f（发布语句的闭集与那条三句事务）与 D11-g（逐列 mutation 要跑两遍，以及 v1.7 的反向对照）。§12.1 G5 第 ⑤ 条、§15 F43 跟着改。
+
+**动作键**：不变。发布语句的四个可写列一列都不进 `idempotency_key`、两个摘要或任何硬门的谓词。
+
+**恢复路径**：无需恢复。越界的发布语句在数据库层就被拒，错误消息带被改的列名；`CLAIMED` 那一步写错的东西必须在那一步修好，因为那之后所有硬门都已经放行 —— 这正是本条要买的东西。
+
+**可执行断言**：`PC-CX-43 the publishing transition is inside the freeze, not outside it`（模型）+ `PC-CX-43 on real Postgres: the publishing UPDATE is frozen column by column`（真实 PostgreSQL，含 v1.7 反向对照）。
+
+### 26.2 `PC-CX-44` 一张手写的冻结集比 PAC 的表少三行
+
+**最小交错序列**（一个事务）：动作行的 `execution_context` 写 `permissionMode = 'read-only'` 与一份合法 `resolution`；Session 的其余六列与冻结上下文完全相同，但写 `permission_mode = 'danger-full-access'` 与一份伪造的 `resolution`；动作照常置 `APPLIED`；`COMMIT`。**提交成功**：观察为 `{session_permission: 'danger-full-access', frozen_permission: 'read-only', resolution_equal: false}`。同一个动作键、同一份 `execution_result_digest` 对应两份权限结果，而 §8 / §11 的恢复判据读的是**动作那一份**。
+
+**Postgres MVCC 与锁语义**：同样与并发无关。D15 的 `INSERT` 分支执行了，它比较的六列全部相等 —— 少的那三列它根本没读。可延迟与否也不改变结论：v1.7 在提交点**没有任何对象**比较结果那一半（D14-g 明确 D14 不比 EC2-b）。
+
+**为什么 v1.7 的绿色套件没抓到**：D15-e 与研发 fixture 建的 `session` 表**只有六个快照列**。PAC §6 的表是另一份文档里的一张 Markdown 表，两边之间没有任何机械关系 —— 与 `PC-CX-33` / `PC-CX-38`"引用另一份契约要引用它的行、不是它的标题"是同一句话，这一次是"要引用它的**行数**"。
+
+**权威状态**：§4.3 I17-A 的 create 冻结列补齐到 PAC §6 的九行；§7.4 新增 EC6-d 给 `snapshotFrozenAt` 一个唯一来源（冻结那一刻，随 `execution_context` 逐字复制，不是插入处的 `now()`）；§7.7 D15 的 `INSERT` 与 `UPDATE` 两支都补上这三列，新增 D15-g 划清"每条语句"与"提交点"的分工；**新增 D16**，用一条可延迟约束触发器在 `COMMIT` 用同一张清单再证明一次，并同时要求动作行已 `APPLIED`。§12.1 G5 第 ⑥ 条、§15 F44 跟着改。
+
+**动作键**：不变。一份结果仍然只对应一个动作键 —— 本条要修的正是"同一个键对应两份结果"。
+
+**恢复路径**：无需恢复。三列一律从 `execution_context` 逐字复制（EC6-a / EC6-d），因此写不出第二份；写歪在语句上得到 `EXECUTION_SNAPSHOT_MISMATCH`、在提交点得到 `EXECUTION_RESULT_MISMATCH`，两者都是有类型的拒绝，不是 500。
+
+**可执行断言**：`PC-CX-44 the create-frozen set is the whole PAC table, proved at insert and at commit`（模型，清单由 PAC §6 的表反推）+ `PC-CX-44 on real Postgres: the whole PAC create-frozen set is proved at insert and at commit`（真实 PostgreSQL，含 v1.7 反向对照）。
+
+### 26.3 `PC-CX-45` 一条 UPDATE 让三条硬门一起退出并释放唯一 claim
+
+**最小交错序列**（三个事务）：① 合法提交 Task `t1` 的 live COORDINATOR 占位 `s1`（动作 `a1` 为 `APPLIED`、`result_session_id = 's1'`）；② 一条单独的 `UPDATE session SET task_id = NULL, dispatch_origin = 'USER', project_action_id = NULL, provider = 'codex', permission_mode = 'danger-full-access' WHERE id = 's1'` —— D9 / D14 / D15 按 NEW 全部提前返回，`session_action_only_for_coordinator_chk` 因为 `project_action_id` 也为 NULL 而成立，提交成功；③ 同一个 Task 合法提交第二条 live Session `s2`。**最终状态**：`{live_rows: 2, task_claims: 1, orphaned_actions: 1}`，`a1` 仍是 `APPLIED` 且 `result_session_id = 's1'`，而 `s1` 已经不再反向指向 `a1`。
+
+**Postgres MVCC 与锁语义**：这一项**确实**涉及索引语义，但不涉及竞争。`session_task_execution_claim_idx` 是一条 partial unique index，第 ② 步把 `task_id` 写成 NULL 之后这一行不再落在索引谓词里，**索引条目被删除** —— 因此第 ③ 步的插入不会阻塞、也不会冲突，它拿到的是一把空的锁。索引能看见的只有谓词列**现在的值**；"这一行为什么离开覆盖集""它代表的那次执行是不是还活着"都不在它的可见范围内。
+
+**为什么 v1.7 的绿色套件没抓到**：D5 的研发测试逐字覆盖了"两个事务并发插入同一个 `task_id`"，**没有一条覆盖"已经在索引里的那一行被 UPDATE 出去"**。D9 / D14 / D15 的测试则一律用 `INSERT` 触发，而 `INSERT` 上 OLD 不存在，NEW-only 的作用域谓词在那里是**对的** —— 缺陷只在 `UPDATE` 上可见，而三条硬门的 mutation 测试都只改它们各自声明的那几列，没有一条去改**决定作用域的那两列**。
+
+**权威状态**：§7.7 D9 / D14 / D15 的作用域在 `UPDATE` 上一律读 **OLD ∨ NEW**（只有两侧都不是 COORDINATOR 占位才返回）；D15 的 `UPDATE` 分支把 `task_id` / `dispatch_origin` / `project_action_id` 三列纳入冻结集，新增 D15-a 改述与 D15-f 说明这三列各是哪三处谓词的输入；§4.3 新增 I17-A3 与它的零行查询形式。§12.1 G5 第 ⑦ 条、§15 F45 跟着改。
+
+**动作键**：不变。本条修的是"两个各自唯一的动作键对应两条同时 live 的物理执行"，键本身从来没有重复。
+
+**恢复路径**：无需恢复。自我豁免的那条 UPDATE 被 `EXECUTION_SNAPSHOT_FROZEN` 拒绝；释放 claim 只剩改 `status` 一条路（跑完 / 失败 / 取消 / 按 §11.2 停在 `AWAITING_INPUT`），第二条 live Session 照常在 D5 索引上得到 §7.7 D5 那张表里三个确定结果之一。
+
+**可执行断言**：`PC-CX-45 a session cannot write itself out of the gates that hold its claim`（模型）+ `PC-CX-45 on real Postgres: the D5 predicate columns cannot be rewritten out of the index`（真实 PostgreSQL，含 v1.7 反向对照）。
+
+### 26.4 `PC-CX-46` 一条双向命题只有一侧有对象在看
+
+**最小交错序列**（正常生命周期，无并发）：create 得到 `execution_pin_generation = 0`；首次 claim 写 `model = 'model-v1'` 并置代次 1；一次 `retiredPin` 写 `model = 'model-v2'` 并置代次 2；**全程不写动作行的 `detail`**。**两次 UPDATE 都提交**：观察为 `{execution_pin_generation: '2', retired_count: '0'}` —— 代次声称发生过一次替换，审计账本声称零次，而 I17-A2 逐字要求这两个数字一一对应。
+
+**Postgres MVCC 与锁语义**：两条 `UPDATE` 落在**两张表**上，因此单靠任何一张表上的 `BEFORE` 触发器都判不了 —— 它看不见另一张表在本事务里的最终状态，也不能要求两条语句的先后顺序。这正是本条必须用**可延迟**约束触发器的理由，与 D9-b 逐字同型：可延迟让判据落在 `COMMIT` 那一刻的最终状态上，于是"先写 Session 还是先写 detail"不再影响结论。并发的 `retiredPin` 与 claim 由代次那条 `+1` 规则（D15）串起来：两个事务都想把代次从 1 推到 2 时，后提交的那个读到的 OLD 已经是 2，`NEW <> OLD + 1` 直接被拒。
+
+**为什么 v1.7 的绿色套件没抓到**：D15-e 的第三阶段**先手写了一条 `UPDATE project_action SET detail = '{"retiredPins":[…]}'`，再改 Session**。测试因此演了一遍正确行为，但被测对象从头到尾没有读过 `detail` —— **测试证明的是"按正确顺序做事会得到正确结果"，不是"做错会被拒绝"**。这是本轮四项里唯一一个"绿色套件演示了合法路径而没有反例"的形状，也是 D16-e 把九个反例逐条写下来的原因。
+
+**权威状态**：§7.7 **新增 D16**，两条可延迟约束触发器分管两个方向 —— Session 侧（`session_execution_result_check`）在代次变化时要求动作行的账本长度恰好是 `generation − 1` 且首次 claim 有 `claimResolution`，动作侧（`project_action_pin_ledger_check`）在 `detail` 被改时要求它与 Session 的当前代次一致；D16-a 说明为什么必须是两个对象、D16-b 说明它让 I17-A2 由构造成立、D16-c 写下不带 `UPDATE OF` 列清单的代价与理由。§4.3 I17-A2 加上"这句话现在有一个数据库可执行的形式"。§12.1 G5 第 ⑧ 条、§15 F46 跟着改。
+
+**动作键**：不变。代次落在 Session 上、账本落在 `detail` 上，两者都不进 `idempotency_key`，也不进两个摘要（`detail` 是 D11-b 的可写列，正因为它不进任何谓词）。
+
+**恢复路径**：无需恢复。首次 claim 与 `retiredPin` 都是 PAC §6 允许的合法动作，它们只需要与账本写在同一个事务里；缺账、多账、错代次在 `COMMIT` 得到 `EXECUTION_PIN_LEDGER`，是有类型、可重试的拒绝。
+
+**可执行断言**：`PC-CX-46 the pin generation and the action ledger are one atomic two-way relation`（模型）+ `PC-CX-46 on real Postgres: the pin ledger is proved in both directions at commit`（真实 PostgreSQL，含 v1.7 反向对照）。
+
+### 26.5 本次修订**没有**做的事
+
+- **没有把 EC2-b 的摘要计算交给数据库**（D14-g 逐字保留）。D16 比的是**结果列本身**，不是 `execution_result_digest` 这个标签 —— 比列不需要在 SQL 里复制一遍规范序列化，比标签需要。代价是：一条 `execution_result_digest` 与它自己的 `execution_context` 对不上的动作行，仍然只由 I17-A 的审计查询发现，而不是被拒绝。**这是有意的取舍**：那个标签不进任何硬门的谓词，而**进谓词的每一列现在都在插入点与提交点各被证明了一次**；要让数据库也算这个摘要，就得把 PAC §7.5 的 `resolution` 规范序列化搬进 SQL，D14-c 那笔账会翻倍。将来若审计侧真的需要，退路是把两个摘要改成由数据库派生的列，而不是再加一条比较。
+- **没有禁止 COORDINATOR 占位离开 D5 的占位集合**。`AWAITING_INPUT` / `INTERRUPTED` 本来就在占位集合之外（§7.7 D5 的注释逐字不变），那是既有 resume 路径的形状。v1.8 只禁止**在不改 `status` 的前提下**把行写出索引覆盖集。
+- **没有给 `session` 的 `status` 加转移表**。`PC-CX-45` 的修法是冻结 lineage，不是给 Session 状态机再加一层 —— 后者会与 PAC §6 / §11 已经冻结的既有生命周期正面冲突，而本条要的性质（claim 不能被静默释放）冻结 lineage 就已经够了。
+- **`detail` 仍然是 D11-b 的可写列**。D16 约束的是它的**内容与代次一致**，不是它不可写；`claimResolution` 与展示用的补写照常（EC6-c）。
+- **02 在 v1.7 轮留下的 `coordinator-v17-adversarial.spec.ts` 被翻转，不是被删**。理由与 §22.9 / §23.5 / §24.6 / §25.7 逐字相同：一条"缺陷存在"的断言在缺陷被修好的那一刻必然变红。翻转后每条断言**同时保留 v1.7 的形状作为反向对照**。

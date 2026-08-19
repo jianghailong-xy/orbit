@@ -109,7 +109,9 @@ test('PC-CX-21 closed: D10 closes the rows D9 reads', () => {
   // claim is live, and §13.4 AE10 3b says so where the move is defined.
   assert.match(NORMATIVE, /#### D10 · 占位期间 Task 不得跨 Project 移动/, 'the mutator protocol for task.project_id must exist');
   assert.match(NORMATIVE, /TASK_CLAIMED_PROJECT_MOVE/, 'and it must fail with a typed, visible error');
-  assert.match(NORMATIVE, /#### D11 · `APPLIED` 动作行终态不可改写/, 'the other rows D9 reads need one too');
+  // v1.8 renamed the unit when it pulled the CLAIMED → terminal publish inside the freeze
+  // (PC-CX-43); what this round asserts is that the protocol exists, not what it is called.
+  assert.match(NORMATIVE, /#### D11 · 动作行的状态转移与终态不可改写/, 'the other rows D9 reads need one too');
 });
 
 test('PC-CX-22 closed: the frozen decision input carries the inputs its own decisions read', () => {

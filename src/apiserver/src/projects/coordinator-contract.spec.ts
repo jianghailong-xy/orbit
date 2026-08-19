@@ -35,7 +35,8 @@ const REVIEW_V13 = readFileSync(path.join(REPO, 'docs/project-coordinator-contra
 const REVIEW_V14 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.4.md'), 'utf8');
 const REVIEW_V15 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.5.md'), 'utf8');
 const REVIEW_V16 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.6.md'), 'utf8');
-/** §1–§18: the normative body. §19–§25 are revision logs and are explicitly non-normative (§0 RL1). */
+const REVIEW_V17 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.7.md'), 'utf8');
+/** §1–§18: the normative body. §19–§26 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
  * The §7.2 turn-reason table. §7.2 holds three tables (the mechanical/semantic split, the reasons,
@@ -505,7 +506,7 @@ test('I11 is stated with a tense: one standing half, one commit-time half', () =
   // into "proved at insert" — the lesson PC-CX-09 and PC-CX-20 already charged twice for.
   const dispatch = section(PCC, '7.7');
   assert.match(dispatch, /#### D10 · 占位期间 Task 不得跨 Project 移动/, 'task.project_id has no mutator protocol');
-  assert.match(dispatch, /#### D11 · `APPLIED` 动作行终态不可改写/, 'project_action has no mutator protocol');
+  assert.match(dispatch, /#### D11 · 动作行的状态转移与终态不可改写/, 'project_action has no mutator protocol');
   assert.match(dispatch, /\*\*D9-e/, 'D9 does not say which of its predicates is commit-time only');
 });
 
@@ -1009,4 +1010,125 @@ test('an out-of-loop event has an owner, and the two digests answer two question
   assert.ok(section(PCC, '7.7').includes('**D14-g（'), 'D14 does not say which digest it proves');
   assert.match(section(PCC, '15'), /\*\*F41\*\*/, '§15 has no fault row for an out-of-loop event');
   assert.match(section(PCC, '15'), /\*\*F42\*\*/, '§15 has no fault row for a result that drifted');
+});
+
+test('§26 answers every finding unit 02 raised against v1.7, and names a test that exists', () => {
+  // Round eight, read exactly the way the first seven are: as evidence. Its findings are numbered
+  // from 43, and the report refers back to the earlier ones, so the new ones are the ones above 42.
+  const cited = new Set(Array.from(REVIEW_V17.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 42).sort();
+  assert.deepEqual(raised, ['43', '44', '45', '46'], 'unit 02 raised four findings against v1.7');
+
+  const rows = tables(section(PCC, '26'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§26 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22', '23', '24', '25']
+    .flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `26.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§26.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the eight reviews are read, never edited', () => {
+  // Same pin as the seven-review version above, extended to round eight. Three P0s and one P1, and
+  // a FAIL verdict: those are the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V17, /FAIL/, 'the eighth review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V17.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 42).length,
+    4,
+  );
+  // The review's own §6 evidence has to still be there: a revision that deleted the reproduction
+  // would leave §26's reverse controls pointing at nothing.
+  for (const evidence of ['forged-after-session-insert', 'danger-full-access', 'live_rows:2', 'retired_count']) {
+    assert.ok(REVIEW_V17.includes(evidence), `the eighth review no longer contains its ${evidence} evidence`);
+  }
+});
+
+test('the publishing statement is inside the freeze, and the lineage cannot be rewritten', () => {
+  // PC-CX-43 and PC-CX-45, the two P0s that are the same question in two places: what write is
+  // still left after this gate, and who decides whether the gate applies at all.
+  const seven = section(PCC, '7.7');
+  const d11 = seven.slice(seven.indexOf('#### D11 '), seven.indexOf('#### D12 '));
+  assert.match(d11, /writable := writable \|\| ARRAY\['status', 'refusal_code'\]/,
+    'D11 does not give the publishing statement its own closed allowlist');
+  assert.match(d11, /ACTION_TRANSITION_ILLEGAL/, 'D11 does not close the set of transition targets');
+  for (const clause of ['**D11-f（', '**D11-g（']) {
+    assert.ok(d11.includes(clause), `D11 does not state ${clause}）`);
+  }
+  // v1.7's blanket early return may not survive anywhere in the normative body without provenance.
+  const stale = NORMATIVE.split('\n').map((l) => bare(l))
+    .filter((l) => /IF OLD\.status <> 'APPLIED' THEN RETURN NEW/.test(l) && !/v1\.[1-7]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative line still waves the publishing statement through');
+
+  // Every session-side gate reads OLD as well as NEW, and the lineage is frozen.
+  const OLD_NEW = /\(OLD\.task_id IS NULL OR OLD\.dispatch_origin <> 'COORDINATOR'\)/;
+  for (const [name, from, to] of [['D9', '#### D9 ', '#### D10 '], ['D14', '#### D14 ', '#### D15 '],
+    ['D15', '#### D15 ', '#### D16 ']] as const) {
+    assert.match(seven.slice(seven.indexOf(from), seven.indexOf(to)), OLD_NEW,
+      `${name} still decides its scope from NEW alone`);
+  }
+  const d15 = seven.slice(seven.indexOf('#### D15 '), seven.indexOf('#### D16 '));
+  for (const col of ['task_id', 'dispatch_origin', 'project_action_id']) {
+    assert.match(d15, new RegExp(`NEW\\.${col}\\s+IS DISTINCT FROM OLD\\.${col}`),
+      `D15 does not freeze the lineage column ${col}`);
+  }
+  assert.ok(d15.includes('**D15-f（'), 'D15 does not argue why the lineage must be frozen');
+  assert.match(section(PCC, '4.3'), /\*\*I17-A3（lineage 恒成立/, '§4.3 has no standing invariant for the lineage');
+  assert.match(section(PCC, '15'), /\*\*F43\*\*/, '§15 has no fault row for a forged publish');
+  assert.match(section(PCC, '15'), /\*\*F45\*\*/, '§15 has no fault row for a released claim');
+});
+
+test('the create-frozen set is PAC §6’s whole table, and the pin ledger has an object on each side', () => {
+  // PC-CX-44 and PC-CX-46. The first is the fifth instance of "a closed set copied by hand"; the
+  // second is a two-way proposition that had been written only as a query.
+  const createFrozen = PAC.slice(PAC.indexOf('## 6. Execution Snapshot 冻结契约'), PAC.indexOf('**S1**'))
+    .split('\n').filter((line) => line.startsWith('|') && line.includes('Session **create**'))
+    .flatMap((line) => Array.from(line.split('|')[1].matchAll(/`([A-Za-z]+)`/g), (m) => m[1]));
+  assert.ok(createFrozen.length >= 9, 'PAC §6 no longer freezes nine columns at Session create');
+  const snake = (name: string): string => name.replace(/[A-Z]/g, (ch) => `_${ch.toLowerCase()}`);
+  const seven = section(PCC, '7.7');
+  const d15 = seven.slice(seven.indexOf('#### D15 '), seven.indexOf('#### D16 '));
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  for (const component of createFrozen) {
+    assert.ok(d15.includes(`NEW.${snake(component)}`), `D15 does not compare or freeze ${component}`);
+    assert.ok(d16.includes(`NEW.${snake(component)}`), `D16 does not re-prove ${component} at the commit point`);
+  }
+  assert.match(section(PCC, '7.4'), /\*\*EC6-d（`snapshotFrozenAt` 的唯一来源/, 'snapshotFrozenAt has no single source');
+  assert.ok(d15.includes('**D15-g（'), 'D15 does not say why a BEFORE trigger is not the whole answer');
+
+  // Both directions of the ledger, both deferred, both with a typed refusal.
+  assert.match(d16, /CREATE CONSTRAINT TRIGGER session_execution_result_check/, 'the session side has no object');
+  assert.match(d16, /CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check/, 'the action side has no object');
+  const d16Sql = d16.slice(d16.indexOf('```sql'), d16.lastIndexOf('```'));
+  assert.equal((d16Sql.match(/^\s+DEFERRABLE INITIALLY DEFERRED$/gm) ?? []).length, 2,
+    'both directions must be deferred, or the statement order inside the transaction starts to matter');
+  assert.match(d16, /EXECUTION_PIN_LEDGER/, 'the ledger disagreement has no typed refusal');
+  assert.match(d16, /EXECUTION_RESULT_MISMATCH/, 'the drifted result has no typed refusal');
+  for (const clause of ['**D16-a（', '**D16-b（', '**D16-c（', '**D16-d（', '**D16-e（']) {
+    assert.ok(d16.includes(clause), `D16 does not state ${clause}）`);
+  }
+  assert.match(section(PCC, '4.3'), /数据库可执行的形式/, 'I17-A2 is still only a query');
+  assert.match(section(PCC, '15'), /\*\*F44\*\*/, '§15 has no fault row for a drifted create-frozen column');
+  assert.match(section(PCC, '15'), /\*\*F46\*\*/, '§15 has no fault row for a disagreeing ledger');
+  // The migration verification has to grow with the objects it verifies (§12.1 G5).
+  assert.match(section(PCC, '12.1'), /session_execution_result_check/, 'G5 does not verify the new commit-point objects');
 });

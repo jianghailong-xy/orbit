@@ -2705,3 +2705,558 @@ test('PC-CX-42 on real Postgres: the snapshot guard admits only the frozen resul
       await c.end();
     }
   });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round eight (`PC-CX-43..46`, §26). Three questions a hard gate has to answer on a real server:
+// after it runs, what write is still left in the transaction (D11 and the publishing UPDATE);
+// who decides whether it applies (D9/D14/D15 and `NEW`); and is the closed set it compares against
+// really the closed set the other contract froze (D15 and PAC §6's table). Plus one two-way
+// proposition that needed an object on each side (D16 and the pin ledger).
+// ---------------------------------------------------------------------------------------------
+
+const V18_SCHEMA = 'pcc_v18';
+
+function isolated18(body: string): string {
+  return `
+    DROP SCHEMA IF EXISTS ${V18_SCHEMA} CASCADE;
+    CREATE SCHEMA ${V18_SCHEMA};
+    SET search_path TO ${V18_SCHEMA};
+    ${body}
+  `;
+}
+
+/** §7.7 D11 as v1.8 specifies it: two closed allowlists, chosen by `OLD.status`. */
+const D11_V18 = `
+  CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $fn$
+  DECLARE writable text[] := ARRAY['result_session_id', 'detail'];
+          code     text   := 'ACTION_APPLIED_IMMUTABLE';
+          changed  text;
+  BEGIN
+    IF OLD.status = 'CLAIMED' THEN
+      IF NEW.status IS NULL OR NEW.status NOT IN ('CLAIMED','APPLIED','REFUSED','SUPERSEDED') THEN
+        RAISE EXCEPTION 'ACTION_TRANSITION_ILLEGAL: action % cannot go CLAIMED -> %',
+          OLD.id, COALESCE(NEW.status, 'NULL');
+      END IF;
+      writable := writable || ARRAY['status', 'refusal_code'];
+      code     := 'ACTION_PUBLISH_IMMUTABLE';
+    ELSIF OLD.status NOT IN ('APPLIED','REFUSED','SUPERSEDED') THEN
+      RAISE EXCEPTION 'ACTION_TRANSITION_ILLEGAL: action % has an unrecognised status %', OLD.id, OLD.status;
+    END IF;
+    IF (to_jsonb(NEW) - writable) IS DISTINCT FROM (to_jsonb(OLD) - writable) THEN
+      SELECT string_agg(e.key, ',' ORDER BY e.key) INTO changed
+        FROM jsonb_each(to_jsonb(NEW) - writable) e
+       WHERE e.value IS DISTINCT FROM ((to_jsonb(OLD) - writable) -> e.key);
+      RAISE EXCEPTION '%: action % is %; frozen (changed: %)', code, OLD.id, OLD.status, changed;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/** §7.7 D15 as v1.8 specifies it: OLD-aware scope, PAC §6's whole create-frozen set, frozen lineage. */
+const D15_V18 = `
+  CREATE OR REPLACE FUNCTION session_execution_snapshot_guard() RETURNS trigger AS $fn$
+  DECLARE ctx jsonb;
+  BEGIN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NEW; END IF;
+      SELECT a.execution_context INTO ctx FROM project_action a WHERE a.id = NEW.project_action_id;
+      IF ctx IS NULL
+         OR NEW.agent_id           IS DISTINCT FROM ctx->>'agentId'
+         OR NEW.workspace_id       IS DISTINCT FROM ctx->>'workspaceId'
+         OR NEW.assigned_runner_id IS DISTINCT FROM ctx->>'assignedRunnerId'
+         OR NEW.provider           IS DISTINCT FROM ctx->>'provider'
+         OR NEW.provider_builtin   IS DISTINCT FROM (ctx->>'providerBuiltin')::boolean
+         OR to_jsonb(NEW.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities'
+         OR NEW.permission_mode    IS DISTINCT FROM ctx->>'permissionMode'
+         OR NEW.resolution         IS DISTINCT FROM ctx->'resolution'
+         OR NEW.snapshot_frozen_at IS DISTINCT FROM (ctx->>'snapshotFrozenAt')::timestamptz THEN
+        RAISE EXCEPTION 'EXECUTION_SNAPSHOT_MISMATCH: session % does not carry the frozen execution context of action %',
+          NEW.id, NEW.project_action_id;
+      END IF;
+      IF NEW.model IS NOT NULL OR NEW.effort IS NOT NULL OR NEW.execution_pin_generation <> 0 THEN
+        RAISE EXCEPTION 'EXECUTION_SNAPSHOT_MISMATCH: session % materializes claim-frozen columns at create', NEW.id;
+      END IF;
+      RETURN NEW;
+    END IF;
+    IF (OLD.task_id IS NULL OR OLD.dispatch_origin <> 'COORDINATOR')
+       AND (NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR') THEN RETURN NEW; END IF;
+    IF NEW.task_id            IS DISTINCT FROM OLD.task_id
+       OR NEW.dispatch_origin IS DISTINCT FROM OLD.dispatch_origin
+       OR NEW.project_action_id IS DISTINCT FROM OLD.project_action_id
+       OR NEW.agent_id        IS DISTINCT FROM OLD.agent_id
+       OR NEW.workspace_id    IS DISTINCT FROM OLD.workspace_id
+       OR NEW.assigned_runner_id IS DISTINCT FROM OLD.assigned_runner_id
+       OR NEW.provider        IS DISTINCT FROM OLD.provider
+       OR NEW.provider_builtin IS DISTINCT FROM OLD.provider_builtin
+       OR NEW.required_capabilities IS DISTINCT FROM OLD.required_capabilities
+       OR NEW.permission_mode IS DISTINCT FROM OLD.permission_mode
+       OR NEW.resolution      IS DISTINCT FROM OLD.resolution
+       OR NEW.snapshot_frozen_at IS DISTINCT FROM OLD.snapshot_frozen_at THEN
+      RAISE EXCEPTION 'EXECUTION_SNAPSHOT_FROZEN: session % cannot rewrite a create-frozen or lineage column', OLD.id;
+    END IF;
+    IF NEW.model IS DISTINCT FROM OLD.model OR NEW.effort IS DISTINCT FROM OLD.effort THEN
+      IF NEW.execution_pin_generation <> OLD.execution_pin_generation + 1 THEN
+        RAISE EXCEPTION 'EXECUTION_PIN_GENERATION: session % rewrote model/effort without advancing the generation', OLD.id;
+      END IF;
+    ELSIF NEW.execution_pin_generation IS DISTINCT FROM OLD.execution_pin_generation THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_GENERATION: session % advanced the generation without rewriting anything', OLD.id;
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/** §7.7 D16: the commit point, in both directions. */
+const D16_V18 = `
+  CREATE OR REPLACE FUNCTION session_execution_result_check() RETURNS trigger AS $fn$
+  DECLARE ctx jsonb; action_status text; ledger jsonb; claim jsonb;
+  BEGIN
+    IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NULL; END IF;
+    SELECT a.execution_context, a.status,
+           COALESCE(a.detail -> 'retiredPins', '[]'::jsonb), a.detail -> 'claimResolution'
+      INTO ctx, action_status, ledger, claim
+      FROM project_action a WHERE a.id = NEW.project_action_id;
+    IF ctx IS NULL OR action_status <> 'APPLIED'
+       OR NEW.agent_id           IS DISTINCT FROM ctx->>'agentId'
+       OR NEW.workspace_id       IS DISTINCT FROM ctx->>'workspaceId'
+       OR NEW.assigned_runner_id IS DISTINCT FROM ctx->>'assignedRunnerId'
+       OR NEW.provider           IS DISTINCT FROM ctx->>'provider'
+       OR NEW.provider_builtin   IS DISTINCT FROM (ctx->>'providerBuiltin')::boolean
+       OR to_jsonb(NEW.required_capabilities) IS DISTINCT FROM ctx->'requiredCapabilities'
+       OR NEW.permission_mode    IS DISTINCT FROM ctx->>'permissionMode'
+       OR NEW.resolution         IS DISTINCT FROM ctx->'resolution'
+       OR NEW.snapshot_frozen_at IS DISTINCT FROM (ctx->>'snapshotFrozenAt')::timestamptz THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_MISMATCH: session % is not the frozen result of action %',
+        NEW.id, NEW.project_action_id;
+    END IF;
+    IF NEW.execution_pin_generation = 0 THEN
+      IF NEW.model IS NOT NULL OR NEW.effort IS NOT NULL
+         OR claim IS NOT NULL OR jsonb_array_length(ledger) <> 0 THEN
+        RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation 0 but a claim is already recorded', NEW.id;
+      END IF;
+    ELSIF claim IS NULL THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation % but action % records no first claim',
+        NEW.id, NEW.execution_pin_generation, NEW.project_action_id;
+    ELSIF jsonb_array_length(ledger) <> NEW.execution_pin_generation - 1 THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: session % is at generation % but action % records % retired pins',
+        NEW.id, NEW.execution_pin_generation, NEW.project_action_id, jsonb_array_length(ledger);
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+
+  CREATE OR REPLACE FUNCTION project_action_pin_ledger_check() RETURNS trigger AS $fn$
+  DECLARE generation bigint; ledger jsonb; claim jsonb;
+  BEGIN
+    IF NEW.type <> 'DISPATCH_TASK' OR NEW.result_session_id IS NULL THEN RETURN NULL; END IF;
+    SELECT s.execution_pin_generation INTO generation
+      FROM session s WHERE s.id = NEW.result_session_id AND s.dispatch_origin = 'COORDINATOR';
+    IF generation IS NULL THEN RETURN NULL; END IF;
+    ledger := COALESCE(NEW.detail -> 'retiredPins', '[]'::jsonb);
+    claim  := NEW.detail -> 'claimResolution';
+    IF generation = 0 THEN
+      IF claim IS NOT NULL OR jsonb_array_length(ledger) <> 0 THEN
+        RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % records a claim session % has not made', NEW.id, NEW.result_session_id;
+      END IF;
+    ELSIF claim IS NULL OR jsonb_array_length(ledger) <> generation - 1 THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % records % retired pins for generation %',
+        NEW.id, jsonb_array_length(ledger), generation;
+    END IF;
+    RETURN NULL;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+const SCHEMA_V18 = isolated18(`
+  CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL);
+  CREATE TABLE project_action (
+    id                       text PRIMARY KEY,
+    idempotency_key          text UNIQUE NOT NULL,
+    project_id               text NOT NULL,
+    type                     text NOT NULL,
+    status                   text NOT NULL,
+    subject_type             text NOT NULL,
+    subject_id               text NOT NULL,
+    fencing_token            bigint NOT NULL,
+    result_session_id        text,
+    detail                   jsonb,
+    execution_context        jsonb,
+    execution_context_digest text,
+    execution_result_digest  text,
+    reason_code              text,
+    refusal_code             text
+  );
+  CREATE TABLE session (
+    id                       text PRIMARY KEY,
+    task_id                  text REFERENCES task(id),
+    project_action_id        text UNIQUE REFERENCES project_action(id),
+    dispatch_origin          text NOT NULL,
+    status                   text NOT NULL,
+    deleted_at               timestamptz,
+    agent_id                 text,
+    workspace_id             text,
+    assigned_runner_id       text,
+    provider                 text,
+    provider_builtin         boolean,
+    required_capabilities    text[],
+    permission_mode          text,
+    resolution               jsonb,
+    snapshot_frozen_at       timestamptz,
+    model                    text,
+    effort                   text,
+    execution_pin_generation bigint NOT NULL DEFAULT 0,
+    CONSTRAINT session_action_only_for_coordinator_chk
+      CHECK (dispatch_origin = 'COORDINATOR' OR project_action_id IS NULL)
+  );
+  CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
+    WHERE task_id IS NOT NULL AND deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+  INSERT INTO task VALUES ('t1','p1');
+`);
+
+const V18_FROZEN_AT = '2026-08-19T00:00:00.000Z';
+const V18_CONTEXT = `'{"agentId":"a1","workspaceId":"w1","assignedRunnerId":"r1","provider":"claude",` +
+  `"providerBuiltin":true,"requiredCapabilities":["linux"],"permissionMode":"read-only",` +
+  `"resolution":{"v":1,"who":{"source":"task"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
+  `"model":"model-v1","effort":"high"}'::jsonb`;
+
+const CLAIM_ACTION = (id: string, key: string): string => `
+  INSERT INTO project_action (id,idempotency_key,project_id,type,status,subject_type,subject_id,
+    fencing_token,result_session_id,detail,execution_context,execution_context_digest,
+    execution_result_digest,reason_code,refusal_code)
+  VALUES ('${id}','${key}','p1','DISPATCH_TASK','CLAIMED','TASK','t1',1,NULL,'{}'::jsonb,
+    ${V18_CONTEXT},'digest-a','digest-b','MANUAL',NULL)`;
+
+const MATCHING_SESSION = (id: string, action: string): string => `
+  INSERT INTO session (id,task_id,project_action_id,dispatch_origin,status,agent_id,workspace_id,
+    assigned_runner_id,provider,provider_builtin,required_capabilities,permission_mode,resolution,
+    snapshot_frozen_at)
+  VALUES ('${id}','t1','${action}','COORDINATOR','PENDING','a1','w1','r1','claude',true,ARRAY['linux'],
+    'read-only','{"v":1,"who":{"source":"task"}}'::jsonb,'${V18_FROZEN_AT}'::timestamptz)`;
+
+/** Install v1.8's objects. `only` narrows the install so one gate can be shown to carry its half. */
+async function installV18(c: Client, only: ('d11' | 'd15' | 'd16')[] = ['d11', 'd15', 'd16']): Promise<void> {
+  await c.query(SCHEMA_V18);
+  if (only.includes('d11')) {
+    await c.query(D11_V18);
+    await c.query(`CREATE TRIGGER project_action_applied_immutable_guard BEFORE UPDATE ON project_action
+                     FOR EACH ROW EXECUTE FUNCTION project_action_applied_immutable_guard()`);
+  }
+  if (only.includes('d15')) {
+    await c.query(D15_V18);
+    await c.query(`CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
+                     FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard()`);
+  }
+  if (only.includes('d16')) {
+    await c.query(D16_V18);
+    await c.query(`CREATE CONSTRAINT TRIGGER session_execution_result_check
+                     AFTER INSERT OR UPDATE ON session DEFERRABLE INITIALLY DEFERRED
+                     FOR EACH ROW EXECUTE FUNCTION session_execution_result_check()`);
+    await c.query(`CREATE CONSTRAINT TRIGGER project_action_pin_ledger_check
+                     AFTER INSERT OR UPDATE OF detail, result_session_id ON project_action
+                     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION project_action_pin_ledger_check()`);
+  }
+}
+
+/** Run `body` in one transaction; return the refusal message, or `''` if it committed. */
+async function txn(c: Client, body: () => Promise<void>): Promise<string> {
+  await c.query('BEGIN');
+  try {
+    await body();
+    await c.query('COMMIT');
+    return '';
+  } catch (error) {
+    await c.query('ROLLBACK');
+    return (error as Error).message;
+  }
+}
+
+test('PC-CX-43 on real Postgres: the publishing UPDATE is frozen column by column',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await installV18(c, ['d11', 'd15']);
+      const publish = async (extra = ''): Promise<string> => txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(CLAIM_ACTION('act1', 'k1'));
+        await c.query(MATCHING_SESSION('s1', 'act1'));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1'${extra} WHERE id='act1'`);
+      });
+
+      // §8.3's normal path, unchanged. If this ever fails the fix has blocked the contract.
+      assert.equal(await publish(), '', 'a clean CLAIMED → APPLIED publish must commit');
+      assert.equal(await txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(CLAIM_ACTION('act2', 'k2'));
+        await c.query(`UPDATE project_action SET status='SUPERSEDED', refusal_code='TASK_ALREADY_RUNNING' WHERE id='act2'`);
+      }), '', 'CLAIMED → SUPERSEDED with a refusal code must commit');
+
+      // The review's transaction: the same publish, plus one forged frozen column.
+      assert.match(await publish(`, execution_result_digest='forged-after-session-insert'`),
+        /ACTION_PUBLISH_IMMUTABLE.*execution_result_digest/s,
+        'the publishing statement must not be able to rewrite the frozen result digest');
+
+      // Schema-driven, so a column added tomorrow is covered without anyone editing this file.
+      const columns = (await c.query<{ column_name: string }>(`
+        SELECT column_name FROM information_schema.columns
+         WHERE table_schema = '${V18_SCHEMA}' AND table_name = 'project_action'
+         ORDER BY ordinal_position`)).rows.map((r) => r.column_name)
+        // `id` names the row; `status` is the publish itself and its target set is asserted below.
+        .filter((col) => col !== 'id' && col !== 'status' && col !== 'result_session_id');
+      const mutation = (col: string): string => col === 'fencing_token' ? '999'
+        : (col === 'execution_context' || col === 'detail') ? `'{"provider":"codex"}'::jsonb`
+          : `'mutated-${col}'`;
+      const moved: string[] = [];
+      for (const col of columns) {
+        const failure = await publish(`, ${col} = ${mutation(col)}`);
+        if (failure === '') moved.push(col);
+        else assert.match(failure, /ACTION_PUBLISH_IMMUTABLE/, `${col}: refused, but not by D11`);
+      }
+      assert.deepEqual(moved, ['detail', 'refusal_code'],
+        'besides status and result_session_id, only detail and refusal_code may move in the publish');
+
+      // The transition target set is closed in both directions.
+      assert.match(await txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(CLAIM_ACTION('act3', 'k3'));
+        await c.query(`UPDATE project_action SET status='PENDING' WHERE id='act3'`);
+      }), /ACTION_TRANSITION_ILLEGAL/, 'CLAIMED may only reach the three terminal states');
+      assert.match(await txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(CLAIM_ACTION('act4', 'k4'));
+        await c.query(`UPDATE project_action SET status='REFUSED', refusal_code='WHO_DISABLED' WHERE id='act4'`);
+        await c.query(`UPDATE project_action SET status='CLAIMED' WHERE id='act4'`);
+      }), /ACTION_APPLIED_IMMUTABLE/, 'a terminal state may not go back out — D11-a, by construction');
+
+      // Reverse control — v1.7's first statement, rebuilt verbatim. The forged publish commits.
+      await c.query(`
+        CREATE OR REPLACE FUNCTION project_action_applied_immutable_guard() RETURNS trigger AS $fn$
+        DECLARE writable text[] := ARRAY['result_session_id', 'detail'];
+        BEGIN
+          IF OLD.status <> 'APPLIED' THEN RETURN NEW; END IF;
+          IF (to_jsonb(NEW) - writable) IS DISTINCT FROM (to_jsonb(OLD) - writable) THEN
+            RAISE EXCEPTION 'ACTION_APPLIED_IMMUTABLE';
+          END IF;
+          RETURN NEW;
+        END;
+        $fn$ LANGUAGE plpgsql;`);
+      assert.equal(await publish(`, execution_result_digest='forged-after-session-insert'`), '',
+        'PC-CX-43 must reproduce: v1.7 lets the publish forge the frozen result digest');
+      assert.deepEqual((await c.query<{ status: string; execution_result_digest: string }>(
+        `SELECT status, execution_result_digest FROM project_action WHERE id='act1'`)).rows[0],
+        { status: 'APPLIED', execution_result_digest: 'forged-after-session-insert' },
+        'and it leaves the review’s exact committed observation');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-44 on real Postgres: the whole PAC create-frozen set is proved at insert and at commit',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await installV18(c);
+      // One INSERT, built from PAC §6's create-frozen columns so a single override is a one-liner.
+      const overrideInsert = (over: Record<string, string>): string => {
+        const base: Record<string, string> = {
+          id: `'s1'`, task_id: `'t1'`, project_action_id: `'act1'`, dispatch_origin: `'COORDINATOR'`,
+          status: `'PENDING'`, agent_id: `'a1'`, workspace_id: `'w1'`, assigned_runner_id: `'r1'`,
+          provider: `'claude'`, provider_builtin: 'true', required_capabilities: `ARRAY['linux']`,
+          permission_mode: `'read-only'`, resolution: `'{"v":1,"who":{"source":"task"}}'::jsonb`,
+          snapshot_frozen_at: `'${V18_FROZEN_AT}'::timestamptz`, ...over,
+        };
+        return `INSERT INTO session (${Object.keys(base).join(',')}) VALUES (${Object.values(base).join(',')})`;
+      };
+      const dispatch = async (over: Record<string, string> = {}): Promise<string> => txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(CLAIM_ACTION('act1', 'k1'));
+        await c.query(overrideInsert(over));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+
+      assert.equal(await dispatch(), '', 'a placeholder equal to its frozen context must commit');
+
+      // The three rows v1.7's D15 did not read, one at a time.
+      for (const [column, value] of [
+        ['permission_mode', `'danger-full-access'`],
+        ['resolution', `'{"v":1,"who":{"source":"forged"}}'::jsonb`],
+        ['snapshot_frozen_at', `'2026-08-19T09:00:00.000Z'::timestamptz`],
+      ] as const) {
+        assert.match(await dispatch({ [column]: value }), /EXECUTION_SNAPSHOT_MISMATCH/,
+          `${column} is create-frozen by PAC §6 and D15 must compare it at insert`);
+      }
+      // …and they are frozen after create too.
+      assert.equal(await dispatch(), '');
+      for (const [column, value] of [
+        ['permission_mode', `'danger-full-access'`],
+        ['resolution', `'{"forged":true}'::jsonb`],
+        ['snapshot_frozen_at', 'now()'],
+      ] as const) {
+        assert.match(await txn(c, async () => {
+          await c.query(`UPDATE session SET ${column} = ${value} WHERE id='s1'`);
+        }), /EXECUTION_SNAPSHOT_FROZEN/, `${column} must be read-only after create`);
+      }
+
+      // The commit point carries its own half: D15 is a BEFORE trigger, so it cannot see that the
+      // action never got published. Install D16 alone to show which object refuses that.
+      await installV18(c, ['d16']);
+      assert.match(await txn(c, async () => {
+        await c.query(CLAIM_ACTION('act1', 'k1'));
+        await c.query(MATCHING_SESSION('s1', 'act1'));
+      }), /EXECUTION_RESULT_MISMATCH/, 'D16 must refuse a placeholder whose action never became APPLIED');
+      assert.match(await txn(c, async () => {
+        await c.query(CLAIM_ACTION('act1', 'k1'));
+        await c.query(overrideInsert({ permission_mode: `'danger-full-access'` }));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      }), /EXECUTION_RESULT_MISMATCH/, 'D16 must compare the result on the committed state, without D15');
+
+      // Reverse control — v1.7's six-column list, with neither of the two later gates. The review's
+      // privilege escalation commits: the session runs with more permission than was ever frozen.
+      await installV18(c, []);
+      assert.equal(await txn(c, async () => {
+        await c.query(CLAIM_ACTION('act1', 'k1'));
+        await c.query(overrideInsert({ permission_mode: `'danger-full-access'`, resolution: `'{"who":"forged"}'::jsonb` }));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      }), '', 'PC-CX-44 must reproduce when the three columns are not compared');
+      assert.deepEqual((await c.query<{ session_permission: string; frozen_permission: string; resolution_equal: boolean }>(`
+        SELECT s.permission_mode AS session_permission,
+               a.execution_context->>'permissionMode' AS frozen_permission,
+               s.resolution = a.execution_context->'resolution' AS resolution_equal
+          FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE s.id='s1'`)).rows[0],
+        { session_permission: 'danger-full-access', frozen_permission: 'read-only', resolution_equal: false },
+        'and it leaves the review’s exact committed observation');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-45 on real Postgres: the D5 predicate columns cannot be rewritten out of the index',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const dispatch = async (action: string, key: string, session: string): Promise<string> => txn(c, async () => {
+        await c.query(CLAIM_ACTION(action, key).replace(/'act1'/, `'${action}'`));
+        await c.query(MATCHING_SESSION(session, action));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='${session}' WHERE id='${action}'`);
+      });
+      const selfExempt = `UPDATE session SET task_id=NULL, dispatch_origin='USER', project_action_id=NULL WHERE id='s1'`;
+      const state = async () => (await c.query<{ claims: string; live: string; orphans: string }>(`
+        SELECT count(*) FILTER (WHERE task_id='t1' AND deleted_at IS NULL
+                                  AND status IN ('PENDING','RUNNING'))::text AS claims,
+               count(*) FILTER (WHERE status IN ('PENDING','RUNNING'))::text AS live,
+               (SELECT count(*)::text FROM project_action a
+                 WHERE a.result_session_id IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM session x WHERE x.project_action_id = a.id)) AS orphans
+          FROM session`)).rows[0];
+
+      await installV18(c);
+      assert.equal(await dispatch('act1', 'k1', 's1'), '');
+      // Every predicate column of the D5 index, one at a time — that is what D15-f asks for.
+      assert.match(await txn(c, async () => { await c.query(selfExempt); }), /EXECUTION_SNAPSHOT_FROZEN/);
+      for (const set of ['task_id=NULL', `dispatch_origin='USER'`, `deleted_at=now()`]) {
+        const failure = await txn(c, async () => { await c.query(`UPDATE session SET ${set} WHERE id='s1'`); });
+        if (set.startsWith('deleted_at')) {
+          // `deleted_at` is not in PAC §6's snapshot, so D15 does not freeze it. What must hold is
+          // that the row cannot end up both soft-deleted and still claiming — the index sees it.
+          assert.equal(failure, '', 'a soft delete is not a snapshot rewrite');
+          await c.query(`UPDATE session SET deleted_at=NULL WHERE id='s1'`);
+        } else {
+          assert.match(failure, /EXECUTION_SNAPSHOT_FROZEN|session_action_only_for_coordinator_chk/,
+            `${set} must not be writable on a live COORDINATOR placeholder`);
+        }
+      }
+      assert.match(await dispatch('act2', 'k2', 's2'), /session_task_execution_claim_idx/,
+        'the second dispatch must meet the claim, not a free index');
+      assert.deepEqual(await state(), { claims: '1', live: '1', orphans: '0' });
+
+      // The contract's own way out of the claim set still works, and then the claim is free.
+      assert.equal(await txn(c, async () => {
+        await c.query(`UPDATE session SET status='COMPLETED' WHERE id='s1'`);
+      }), '', 'a status change must still release the claim');
+      assert.equal(await dispatch('act2', 'k2', 's2'), '', 'and the next dispatch then commits');
+
+      // Reverse control — v1.7's NEW-only scope on all three gates, and no lineage freeze.
+      await installV18(c, ['d11']);
+      await c.query(`
+        CREATE OR REPLACE FUNCTION session_execution_snapshot_guard() RETURNS trigger AS $fn$
+        BEGIN
+          IF NEW.task_id IS NULL OR NEW.dispatch_origin <> 'COORDINATOR' THEN RETURN NEW; END IF;
+          RETURN NEW;
+        END;
+        $fn$ LANGUAGE plpgsql;
+        CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
+          FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard();`);
+      assert.equal(await dispatch('act1', 'k1', 's1'), '');
+      assert.equal(await txn(c, async () => { await c.query(selfExempt); }), '',
+        'PC-CX-45 must reproduce: a NEW-only scope lets the row leave every gate');
+      assert.equal(await dispatch('act2', 'k2', 's2'), '', 'and the released claim admits a second live execution');
+      assert.deepEqual(await state(), { claims: '1', live: '2', orphans: '1' },
+        'the review’s exact committed observation: two live rows, one claim, one orphaned action');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-46 on real Postgres: the pin ledger is proved in both directions at commit',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const dispatch = async (): Promise<string> => txn(c, async () => {
+        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        await c.query(CLAIM_ACTION('act1', 'k1'));
+        await c.query(MATCHING_SESSION('s1', 'act1'));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+      const observed = async () => (await c.query<{ execution_pin_generation: string; retired_count: string }>(`
+        SELECT s.execution_pin_generation::text,
+               COALESCE(jsonb_array_length(a.detail->'retiredPins'),0)::text AS retired_count
+          FROM session s JOIN project_action a ON a.id = s.project_action_id WHERE s.id='s1'`)).rows[0];
+      const CLAIM = `UPDATE project_action SET detail = detail || jsonb_build_object('claimResolution','model-v1') WHERE id='act1'`;
+      const RETIRE = `UPDATE project_action SET detail = detail || jsonb_build_object('retiredPins',
+        jsonb_build_array(jsonb_build_object('from','model-v1','to','model-v2','at','${V18_FROZEN_AT}'))) WHERE id='act1'`;
+
+      await installV18(c);
+      assert.equal(await dispatch(), '');
+
+      // The legal path, in both statement orders — that is what "deferred" buys.
+      assert.equal(await txn(c, async () => {
+        await c.query(CLAIM);
+        await c.query(`UPDATE session SET model='model-v1', effort='high', execution_pin_generation=1 WHERE id='s1'`);
+      }), '', 'a first claim that records itself must commit (ledger written first)');
+      assert.equal(await txn(c, async () => {
+        await c.query(`UPDATE session SET model='model-v2', execution_pin_generation=2 WHERE id='s1'`);
+        await c.query(RETIRE);
+      }), '', 'a retiredPin that records itself must commit (session written first)');
+      assert.deepEqual(await observed(), { execution_pin_generation: '2', retired_count: '1' });
+
+      // Every disagreement, from whichever side it is written.
+      const refusals: [string, string][] = [
+        ['generation ahead of the ledger',
+          `UPDATE session SET model='model-v3', execution_pin_generation=3 WHERE id='s1'`],
+        ['ledger ahead of the generation',
+          `UPDATE project_action SET detail = jsonb_set(detail,'{retiredPins}', (detail->'retiredPins') ||
+             jsonb_build_array(jsonb_build_object('from','model-v2','to','model-v3'))) WHERE id='act1'`],
+      ];
+      for (const [label, sql] of refusals) {
+        assert.match(await txn(c, async () => { await c.query(sql); }), /EXECUTION_PIN_LEDGER/, `${label} must be refused`);
+      }
+      assert.equal(await dispatch(), '');
+      assert.match(await txn(c, async () => {
+        await c.query(`UPDATE session SET model='model-v1', effort='high', execution_pin_generation=1 WHERE id='s1'`);
+      }), /EXECUTION_PIN_LEDGER.*no first claim/s, 'a claim with no record must be refused');
+      assert.match(await txn(c, async () => { await c.query(CLAIM); }), /EXECUTION_PIN_LEDGER/,
+        'a record for a claim the session has not made must be refused');
+      assert.deepEqual(await observed(), { execution_pin_generation: '0', retired_count: '0' },
+        'and nothing partial is left behind');
+
+      // Reverse control — v1.8's D15 without D16. The generation advances, the ledger stays empty.
+      await installV18(c, ['d11', 'd15']);
+      assert.equal(await dispatch(), '');
+      await c.query(`UPDATE session SET model='model-v1', effort='high', execution_pin_generation=1 WHERE id='s1'`);
+      await c.query(`UPDATE session SET model='model-v2', execution_pin_generation=2 WHERE id='s1'`);
+      assert.deepEqual(await observed(), { execution_pin_generation: '2', retired_count: '0' },
+        'PC-CX-46 must reproduce: without the two ledger objects, generation 2 records nothing');
+    } finally {
+      await c.end();
+    }
+  });
