@@ -12,6 +12,7 @@ function makeService(status: RunStatus, executableAfterDelete: number) {
   };
   const statusWrites: RunStatus[] = [];
   let inboxWakes = 0;
+  let queueChanges = 0;
   const tx = {
     $queryRaw: async () => [{ id: session.id }],
     session: {
@@ -30,12 +31,16 @@ function makeService(status: RunStatus, executableAfterDelete: number) {
     session: { findFirst: async () => ({ ...session }) },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
-  const realtime = { notifyInbox: () => inboxWakes++ } as never;
+  const realtime = {
+    notifyInbox: () => inboxWakes++,
+    publishQueuedTurnsChanged: () => queueChanges++,
+  } as never;
   return {
     service: new SessionsService(prisma, {} as never, realtime),
     session,
     statusWrites,
     inboxWakes: () => inboxWakes,
+    queueChanges: () => queueChanges,
   };
 }
 
@@ -50,6 +55,7 @@ test('withdrawing the last pre-claim turn restores PENDING to AWAITING_INPUT', a
 
   assert.deepEqual(h.statusWrites, [RunStatus.AWAITING_INPUT]);
   assert.equal(h.inboxWakes(), 1);
+  assert.equal(h.queueChanges(), 1, 'other clients are nudged to remove the withdrawn turn');
 });
 
 test('withdrawing the claim-handoff turn is rejected so the runner permit cannot leak', async () => {

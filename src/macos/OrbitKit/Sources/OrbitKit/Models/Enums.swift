@@ -204,6 +204,9 @@ public enum RunEventType: String, Codable, Sendable {
     case interrupt
     case approvalRequest = "approval_request"
     case approvalResolved = "approval_resolved"
+    /// A queued turn was added or withdrawn on another client. Live-only nudge; the focused
+    /// console re-fetches GET /sessions/:id/turns, the durable source of truth.
+    case queuedTurnsChanged = "queued_turns_changed"
     case backgroundTask = "background_task"
     case backgroundOutput = "background_output"
     /// The server refusing to replay this connection's gap: the cursor is further behind than
@@ -223,7 +226,8 @@ public enum RunEventType: String, Codable, Sendable {
     /// deltas are broadcast-only, and approvals/background-output/resync ride seq 0.
     public var isDurable: Bool {
         switch self {
-        case .textDelta, .thinkingDelta, .approvalRequest, .approvalResolved, .backgroundOutput, .resync:
+        case .textDelta, .thinkingDelta, .approvalRequest, .approvalResolved, .queuedTurnsChanged,
+             .backgroundOutput, .resync:
             return false
         default:
             return true

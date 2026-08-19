@@ -535,6 +535,71 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.queued.count, 1)
     }
 
+    /// A queued message created on web has no `user` event yet. The native client's REST seed must
+    /// materialize it as the same cancellable queued bubble it would have created optimistically.
+    func testReconcileQueuedTurnsRestoresCrossClientQueue() {
+        var r = TranscriptReducer()
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(
+                turnId: "t-web", kind: "message", content: "continue the project",
+                attachments: [.init(id: "att-1", mimeType: "image/png")]
+            ),
+        ], knownBefore: [])
+
+        XCTAssertEqual(r.state.queued.count, 1)
+        XCTAssertEqual(r.state.queued[0].text, "continue the project")
+        XCTAssertEqual(r.state.queued[0].turnId, "t-web")
+        XCTAssertEqual(r.state.queued[0].attachments.first?.mime, "image/png")
+        XCTAssertTrue(r.state.queued[0].pending)
+        XCTAssertTrue(r.state.queued[0].queued)
+    }
+
+    /// If the opening REST fetch crosses the local POST, adopt the optimistic bubble instead of
+    /// appending a duplicate. A later authoritative snapshot also removes a turn withdrawn on web.
+    func testReconcileQueuedTurnsDedupesOptimisticAndDropsRemoteWithdrawal() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c-local", text: "same message", queued: true)
+        let optimisticID = r.state.queued[0].id
+
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t-local", content: "same message"),
+        ], knownBefore: [])
+        XCTAssertEqual(r.state.queued.count, 1, "REST/POST race must not duplicate the bubble")
+        XCTAssertEqual(r.state.queued[0].id, optimisticID, "stable local row identity is retained")
+        XCTAssertEqual(r.state.queued[0].turnId, "t-local")
+
+        r.reconcileQueuedTurns([], knownBefore: ["t-local"])
+        XCTAssertTrue(r.state.queued.isEmpty, "a turn withdrawn on another client is removed")
+    }
+
+    /// A REST response that began before a local POST committed cannot disprove that untagged send,
+    /// nor a server-backed row added after the fetch began. Both survive until a newer snapshot.
+    func testReconcileQueuedTurnsPreservesRowsThatRacedSnapshot() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c-race", text: "still posting", queued: true)
+        r.addOptimisticUser(clientTurnId: "c-newer", text: "already posted", queued: true)
+        r.setOptimisticTurnId(clientTurnId: "c-newer", turnId: "t-newer")
+
+        r.reconcileQueuedTurns([], knownBefore: [])
+
+        XCTAssertEqual(r.state.queued.map(\.text), ["still posting", "already posted"])
+    }
+
+    /// A queue snapshot can be taken just before the runner leases its row but arrive just after
+    /// the durable `user` event. It must not resurrect a stale queued copy below the transcript.
+    func testReconcileQueuedTurnsDoesNotResurrectAlreadyDeliveredTurn() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 8, type: .user, turnId: "t-leased",
+                         payload: .object(["text": .string("now running")])))
+
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t-leased", content: "now running"),
+        ], knownBefore: [])
+
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(r.state.items.count, 1)
+    }
+
     /// A send that failed for good (retries exhausted) takes its optimistic bubble back down, from
     /// wherever it sits — a queued send waits in `state.queued`, an idle one is already in `items` —
     /// so a message that never reached the server doesn't read as delivered. The composer gets the

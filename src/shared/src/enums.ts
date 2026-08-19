@@ -288,6 +288,10 @@ export enum RunEventType {
   // Approval row, not a RunEvent — so they never collide with the runner's seq).
   APPROVAL_REQUEST = 'approval_request', // a tool call is awaiting a human allow/deny
   APPROVAL_RESOLVED = 'approval_resolved', // a pending approval was decided
+  // A queued turn was added or withdrawn on another client. Live-only nudge: the durable source
+  // of truth is GET /sessions/:id/turns, which focused clients re-fetch on receipt. Keeping the
+  // payload empty avoids maintaining a second queued-turn wire shape on the event stream.
+  QUEUED_TURNS_CHANGED = 'queued_turns_changed',
   // "Your cursor is too far behind to catch up in place — drop your cached window and re-seed
   // from a tail page." Synthesized by the SSE endpoint alone (never persisted, never published
   // to the hub) when a resuming client's gap exceeds SSE_GAP_CAP. Like the approval nudges it

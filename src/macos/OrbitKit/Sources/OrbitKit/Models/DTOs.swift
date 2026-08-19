@@ -476,6 +476,34 @@ public struct TurnAccepted: Codable, Sendable {
     public let status: String?
 }
 
+/// One still-PENDING user turn from GET /sessions/:id/turns. These rows have not entered the
+/// transcript event stream yet; clients render them as the cancellable queued tail and reconcile
+/// them again whenever `queued_turns_changed` arrives.
+public struct QueuedTurnInfo: Codable, Equatable, Sendable {
+    public struct Attachment: Codable, Equatable, Sendable {
+        public let id: String
+        public let mimeType: String
+        public init(id: String, mimeType: String) {
+            self.id = id
+            self.mimeType = mimeType
+        }
+    }
+
+    public let turnId: String
+    public let kind: String?
+    public let content: String
+    /// Optional for rolling compatibility with a server that predates attachment refs on this list.
+    public let attachments: [Attachment]?
+
+    public init(turnId: String, kind: String? = nil, content: String,
+                attachments: [Attachment]? = nil) {
+        self.turnId = turnId
+        self.kind = kind
+        self.content = content
+        self.attachments = attachments
+    }
+}
+
 /// POST /sessions — create a session with an initial prompt.
 public struct CreateSessionRequest: Codable, Sendable {
     public let prompt: String

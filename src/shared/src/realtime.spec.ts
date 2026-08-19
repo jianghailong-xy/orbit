@@ -22,6 +22,7 @@ describe('control-plane protocol', () => {
       RunEventType.TURN_END,
       RunEventType.APPROVAL_REQUEST,
       RunEventType.BACKGROUND_TASK,
+      RunEventType.QUEUED_TURNS_CHANGED,
     ]) {
       expect(isLifecycleType(t)).toBe(false);
     }

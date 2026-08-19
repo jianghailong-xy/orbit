@@ -2075,6 +2075,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     let es: EventSource | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
+    // Queue refreshes can overlap when another client quickly adds/withdraws turns. Only the most
+    // recently requested snapshot may paint, or a slower stale response can resurrect a cancelled
+    // row. Queued turns have no transcript event until leased, so this REST list is authoritative.
+    let queuedRefreshGeneration = 0;
+    const refreshQueued = (): void => {
+      const generation = ++queuedRefreshGeneration;
+      listQueuedTurns(selectedId)
+        .then((rows) => {
+          if (closed || generation !== queuedRefreshGeneration) return;
+          setQueued(rows.map((r) => ({ ...r, shell: r.kind === 'shell' })));
+        })
+        .catch(() => undefined);
+    };
     // Set when a `final` event arrives: the connection is dropped (don't hold an idle
     // stream to a finished session) but NOT permanently — unlike `closed`, a paused
     // stream can be re-opened in place when the session resumes (see resumeStreamRef).
@@ -2181,6 +2194,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           void reseed();
           return;
         }
+        // A still-PENDING turn is not in the transcript stream until the runner leases it.
+        // Re-fetch the durable queue when another web/native client adds or withdraws one.
+        if (ev.type === 'queued_turns_changed') {
+          refreshQueued();
+          return;
+        }
         if (typeof ev.seq === 'number' && ev.seq !== Number.MAX_SAFE_INTEGER) {
           lastSeq = Math.max(lastSeq, ev.seq);
         }
@@ -2270,8 +2289,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         else if (ev.type === 'user') {
           setIdle(false);
           // The runner just picked up this turn — it's now in the transcript, so drop
-          // it from the local queue (no-op if it wasn't ours / already cleared).
+          // it from the local queue (no-op if it wasn't ours / already cleared). Re-fetch too:
+          // an older queue request may have snapshotted this row just before the lease and could
+          // otherwise arrive afterwards and resurrect it; the generation fence drops that reply.
           if (ev.turnId) setQueued((q) => q.filter((x) => x.turnId !== ev.turnId));
+          refreshQueued();
         }
       };
       es.onerror = () => {
@@ -2390,9 +2412,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // Same for queued messages: a still-PENDING turn emits no event until the runner
       // picks it up, so switching away and back (or a refresh/deep-link) would lose the
       // visible queue — restore it from the DB, the source of truth.
-      listQueuedTurns(selectedId)
-        .then((rows) => setQueued(rows.map((r) => ({ ...r, shell: r.kind === 'shell' }))))
-        .catch(() => undefined);
+      refreshQueued();
       // The complete background-shell list (all launches, output recovered from Read polls) —
       // the loaded event window only holds the most recent launches, so without this the tray
       // under-counts a long session. Merged with the live-derived overlay in the tray. Throttled

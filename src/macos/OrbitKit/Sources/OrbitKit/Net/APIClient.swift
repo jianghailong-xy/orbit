@@ -184,6 +184,12 @@ public final class APIClient: @unchecked Sendable {
         try await post("sessions/\(sessionID)/turns", body: req)
     }
 
+    /// Still-PENDING user turns, oldest first. Unlike leased turns these have no transcript event,
+    /// so opening/reconnecting a console fetches this durable queue explicitly.
+    public func queuedTurns(sessionID: String) async throws -> [QueuedTurnInfo] {
+        try await get("sessions/\(sessionID)/turns")
+    }
+
     public func interrupt(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
     }

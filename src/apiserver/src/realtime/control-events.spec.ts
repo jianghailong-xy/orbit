@@ -58,6 +58,7 @@ test('controlTypeFor drops transcript/data-plane events', () => {
     RunEventType.USER,
     RunEventType.RESULT,
     RunEventType.BACKGROUND_OUTPUT,
+    RunEventType.QUEUED_TURNS_CHANGED,
   ]) {
     assert.equal(controlTypeFor(t), null, `${t} should be dropped`);
   }

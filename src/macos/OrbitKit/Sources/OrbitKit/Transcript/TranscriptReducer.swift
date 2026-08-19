@@ -131,6 +131,8 @@ public struct TranscriptReducer: Sendable, Codable {
         case .error:          appendError(ev)
         case .approvalRequest:  upsertApproval(ev)
         case .approvalResolved: resolveApproval(ev)
+        // A REST re-fetch order handled by ConsoleModel, not transcript content.
+        case .queuedTurnsChanged: break
         case .backgroundTask:   upsertBackground(ev)
         case .backgroundOutput: applyBackgroundOutput(ev)
         case .status, .result:  applyStatus(ev)
@@ -276,6 +278,68 @@ public struct TranscriptReducer: Sendable, Codable {
     /// reconcile, since it's gone by then). Web parity: `setQueued(q ⇒ q.filter(…))`.
     public mutating func removeQueued(id: String) {
         state.queued.removeAll { $0.id == id }
+    }
+
+    /// Reconcile the visible queued tail against GET /sessions/:id/turns. That endpoint is the
+    /// durable truth because a PENDING turn has no `user` event until the runner leases it.
+    ///
+    /// `knownBefore` contains only server-backed turn ids captured before the fetch. A listed row
+    /// is updated/deduplicated in server order; a previously-known row now absent was withdrawn on
+    /// another client and is removed. Optimistic bubbles without a turn id, plus bubbles created
+    /// while the request was in flight, survive a stale snapshot. When the POST and GET cross, an
+    /// untagged optimistic bubble is adopted by matching its content + attachment ids.
+    public mutating func reconcileQueuedTurns(_ turns: [QueuedTurnInfo], knownBefore: Set<String>) {
+        let previous = state.queued
+        let deliveredTurnIDs = Set(state.items.compactMap { item -> String? in
+            guard case .user(let bubble) = item else { return nil }
+            return bubble.turnId
+        })
+        var consumed = Set<Int>()
+        var reconciled: [UserBubble] = []
+
+        // The REST query may have read a row just before the runner leased it, then arrive after
+        // that turn's durable `user` event. Never resurrect such a stale row below the transcript.
+        for turn in turns where !deliveredTurnIDs.contains(turn.turnId) {
+            let incomingAttachments = turn.attachments?.map {
+                TurnAttachment(id: $0.id, mime: $0.mimeType)
+            }
+            let incomingAttachmentIDs = incomingAttachments?.map(\.id)
+            let exact = previous.indices.first {
+                !consumed.contains($0) && previous[$0].turnId == turn.turnId
+            }
+            let optimistic = previous.indices.first {
+                guard !consumed.contains($0), previous[$0].turnId == nil,
+                      previous[$0].pending, previous[$0].text == turn.content else { return false }
+                return incomingAttachmentIDs == nil || previous[$0].attachments.map(\.id) == incomingAttachmentIDs
+            }
+
+            if let i = exact ?? optimistic {
+                consumed.insert(i)
+                var bubble = previous[i]
+                bubble.text = turn.content
+                if let incomingAttachments { bubble.attachments = incomingAttachments }
+                bubble.turnId = turn.turnId
+                bubble.pending = true
+                bubble.queued = true
+                bubble.undelivered = false
+                reconciled.append(bubble)
+            } else {
+                reconciled.append(UserBubble(id: "server-\(turn.turnId)", text: turn.content,
+                                             attachments: incomingAttachments ?? [], turnId: turn.turnId,
+                                             pending: true, queued: true))
+            }
+        }
+
+        // Preserve local work the REST snapshot cannot safely disprove: an untagged optimistic send,
+        // or a server-backed bubble that arrived after this particular fetch began. Everything that
+        // was already known to the server and is now absent has been cancelled/leased elsewhere.
+        for i in previous.indices where !consumed.contains(i) {
+            let bubble = previous[i]
+            if let turnId = bubble.turnId,
+               knownBefore.contains(turnId) || deliveredTurnIDs.contains(turnId) { continue }
+            reconciled.append(bubble)
+        }
+        state.queued = reconciled
     }
 
     // MARK: - assistant / thinking streaming

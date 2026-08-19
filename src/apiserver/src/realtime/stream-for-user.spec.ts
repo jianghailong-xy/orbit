@@ -380,6 +380,22 @@ test('publishSessionUpdated surfaces as session.updated with the current summary
   assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
 });
 
+test('queued-turn changes reach the focused transcript stream but not the control stream', async () => {
+  const svc = svcWith({ sessA: rowA }, 0);
+  const transcript: Array<{ type: string }> = [];
+  const control: ControlEvent[] = [];
+  const runSub = svc.streamForRun('sessA').subscribe((e) => transcript.push(e));
+  const controlSub = svc.streamForUser('userA').subscribe((e) => control.push(e));
+
+  svc.publishQueuedTurnsChanged('sessA');
+  await delay(20);
+  runSub.unsubscribe();
+  controlSub.unsubscribe();
+
+  assert.deepEqual(transcript.map((e) => e.type), ['queued_turns_changed']);
+  assert.deepEqual(control, []);
+});
+
 test('lifecycle signals never enter a per-session transcript stream', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const transcript: unknown[] = [];

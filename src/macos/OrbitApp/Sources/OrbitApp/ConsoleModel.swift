@@ -337,6 +337,10 @@ final class ConsoleModel {
         // AskUserQuestion awaiting an answer) surfaces. Decoupled from the stream; cancels with run().
         let approvalsSeed = Task { [weak self] in await self?.refreshApprovals() }
         defer { approvalsSeed.cancel() }
+        // Still-PENDING turns likewise have no replayable `user` event until the runner leases them.
+        // Fetch the durable queue so a follow-up sent from web is visible when this console opens.
+        let queuedTurnsSeed = Task { [weak self] in await self?.refreshQueuedTurns() }
+        defer { queuedTurnsSeed.cancel() }
 
         // Kick a reconnect the moment the network path is restored. This both cuts a pending backoff
         // wait short AND tears down a read left stalled on a silently-dropped socket — the server
@@ -378,6 +382,7 @@ final class ConsoleModel {
             // the common path there. Kicked concurrently so it doesn't delay the reconnect.
             if isReconnect {
                 Task { [weak self] in await self?.refreshApprovals() }
+                Task { [weak self] in await self?.refreshQueuedTurns() }
                 // Re-seed the tray too: a background shell launched or finished while this socket was
                 // suspended emits no replayable event (its background_output tail is broadcast-only), so
                 // the authoritative server list is how those changes surface after a reconnect.
@@ -399,6 +404,14 @@ final class ConsoleModel {
                             // session list that kept advancing (it comes from the list query, not
                             // this stream).
                             if ev.type == .resync { return .resync }
+                            // A queued turn is durable in conversation_turn but intentionally absent
+                            // from run_event until leased. The nudge carries no duplicate payload;
+                            // reconcile the authoritative REST list without delaying this stream.
+                            if ev.type == .queuedTurnsChanged {
+                                Task { [weak self] in await self?.refreshQueuedTurns() }
+                                reconnectPolicy.noteHealthy()
+                                continue
+                            }
                             foldQueuedBackIntoComposer(before: ev)   // salvage queued text before an interrupt drops it
                             reducer.apply(ev)
                             scheduleStatePublish()
@@ -1548,6 +1561,22 @@ final class ConsoleModel {
             PendingApproval(id: $0.id, kind: Approvals.kind(toolName: $0.toolName),
                             toolName: $0.toolName, input: $0.input)
         }, knownBefore: knownBefore)
+        publishStateNow()
+    }
+
+    /// Fetch and reconcile the server's still-PENDING user turns. The generation fence makes a
+    /// burst of add/withdraw nudges monotonic: an older, slower response cannot repaint a turn a
+    /// newer response already observed as cancelled or leased. `knownBefore` deliberately contains
+    /// only turn ids learned from the server; an untagged local POST still in flight survives a
+    /// snapshot that raced just ahead of its commit.
+    private var queuedTurnsFetchGeneration = 0
+    private func refreshQueuedTurns() async {
+        queuedTurnsFetchGeneration &+= 1
+        let generation = queuedTurnsFetchGeneration
+        let knownBefore = Set(reducer.state.queued.compactMap(\.turnId))
+        guard let turns = try? await api.queuedTurns(sessionID: sessionID),
+              generation == queuedTurnsFetchGeneration else { return }
+        reducer.reconcileQueuedTurns(turns, knownBefore: knownBefore)
         publishStateNow()
     }
 

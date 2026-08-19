@@ -381,6 +381,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** A still-PENDING user turn was added or withdrawn. Queued turns have no durable transcript
+   * event until the runner leases them, so focused clients need this live-only nudge to re-fetch
+   * GET /sessions/:id/turns and keep a queue created on another device visible. */
+  publishQueuedTurnsChanged(sessionId: string): void {
+    this.publish(sessionId, {
+      seq: 0,
+      type: RunEventType.QUEUED_TURNS_CHANGED,
+      ts: new Date().toISOString(),
+      payload: {},
+    });
+  }
+
   /**
    * Publish an event that belongs to a USER rather than to one session — the owner's task lists,
    * session tags, and configured providers, none of which have a session to hang off.

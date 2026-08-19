@@ -2927,6 +2927,9 @@ export class SessionsService {
     });
     if (queued.wakeQueue) this.queue.notifySessionQueued();
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
+    // No transcript event exists until the runner leases this turn. Tell every focused client to
+    // refresh the durable queue now, so a message queued on web appears on iOS (and vice versa).
+    this.realtime.publishQueuedTurnsChanged(id);
     return { turnId: queued.turn.id, seq: queued.turn.seq };
   }
 
@@ -2969,6 +2972,7 @@ export class SessionsService {
       await this.insertTurnLocked(tx, id, { kind: 'interrupt', clientTurnId: randomUUID() });
     });
     this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
     return { ok: true };
   }
 
@@ -3064,6 +3068,7 @@ export class SessionsService {
       }
     });
     this.realtime.notifyInbox(id);
+    this.realtime.publishQueuedTurnsChanged(id);
     return { ok: true };
   }
 

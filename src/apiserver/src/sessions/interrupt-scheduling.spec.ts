@@ -30,7 +30,10 @@ function makeService(executableAfterDelete: number) {
     session: { findFirst: async () => ({ ...session }) },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
-  const realtime = { notifyInbox: () => inboxWakes++ } as never;
+  const realtime = {
+    notifyInbox: () => inboxWakes++,
+    publishQueuedTurnsChanged: () => undefined,
+  } as never;
   return {
     service: new SessionsService(prisma, {} as never, realtime),
     session,

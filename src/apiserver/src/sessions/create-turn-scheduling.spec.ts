@@ -26,6 +26,7 @@ function makeService(
   const updateWrites: Array<{ data: Record<string, unknown> }> = [];
   let queueWakes = 0;
   let inboxWakes = 0;
+  let queueChanges = 0;
   let attachmentValidations = 0;
   const turn = {
     id: '33333333-3333-4333-8333-333333333333',
@@ -65,13 +66,17 @@ function makeService(
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
   const queue = { notifySessionQueued: () => queueWakes++ } as never;
-  const realtime = { notifyInbox: () => inboxWakes++ } as never;
+  const realtime = {
+    notifyInbox: () => inboxWakes++,
+    publishQueuedTurnsChanged: () => queueChanges++,
+  } as never;
   return {
     service: new SessionsService(prisma, queue, realtime),
     session,
     statusWrites,
     updateWrites,
     wakes: () => ({ queue: queueWakes, inbox: inboxWakes }),
+    queueChanges: () => queueChanges,
     attachmentValidations: () => attachmentValidations,
   };
 }
@@ -87,6 +92,7 @@ test('a turn sent to AWAITING_INPUT is atomically queued for a new slot', async 
   assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2 });
   assert.deepEqual(h.statusWrites, [RunStatus.PENDING]);
   assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
+  assert.equal(h.queueChanges(), 1, 'focused clients are nudged to refresh the durable queue');
 });
 
 test('a turn sent while RUNNING stays behind the slot already being used', async () => {

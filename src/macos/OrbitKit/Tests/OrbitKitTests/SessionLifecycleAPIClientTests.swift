@@ -111,6 +111,23 @@ final class SessionLifecycleAPIClientTests: XCTestCase {
         XCTAssertEqual(recorder.methods, ["PATCH"])
     }
 
+    func testQueuedTurnsUsesDurableQueueEndpointAndDecodesAttachments() async throws {
+        let recorder = RequestPathRecorder()
+        SessionLifecycleURLProtocol.handler = { request in
+            recorder.append(request)
+            return (200, Data(#"[{"turnId":"turn-1","kind":"message","content":"from web","attachments":[{"id":"att-1","mimeType":"image/png"}]}]"#.utf8))
+        }
+
+        let turns = try await client().queuedTurns(sessionID: "session-1")
+
+        XCTAssertEqual(recorder.paths, ["/api/sessions/session-1/turns"])
+        XCTAssertEqual(recorder.methods, ["GET"])
+        XCTAssertEqual(turns.first?.turnId, "turn-1")
+        XCTAssertEqual(turns.first?.content, "from web")
+        XCTAssertEqual(turns.first?.attachments?.first?.id, "att-1")
+        XCTAssertEqual(turns.first?.attachments?.first?.mimeType, "image/png")
+    }
+
     func testCompletedListFallsBackWhenOldServerTreatsUnknownViewAsOpen() async throws {
         let recorder = RequestPathRecorder()
         SessionLifecycleURLProtocol.handler = { request in
