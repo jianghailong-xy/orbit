@@ -14,6 +14,12 @@ describe('TasksSidePanel nav', () => {
     expect(topBlock).toMatch(/\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects'\s*,?\s*\}/);
   });
 
+  it('keeps Projects first in the fixed navigation', () => {
+    const topBlock = source.match(/const TOP = \[([\s\S]*?)\n\];/)?.[1] ?? '';
+    const keys = [...topBlock.matchAll(/key:\s*'([^']+)'/g)].map((match) => match[1]);
+    expect(keys).toEqual(['projects', 'runners', 'providers']);
+  });
+
   it('renders TOP-derived items in both the collapsed rail and the expanded nav', () => {
     // The rail maps TOP directly; the expanded section maps navItems, which starts from TOP —
     // so a TOP entry reaches both surfaces without either render site needing its own list.

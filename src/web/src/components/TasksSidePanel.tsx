@@ -38,15 +38,15 @@ import {
 import { useThemeMode, type ThemeMode } from '../lib/theme';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 
-// Feishu-style top navigation. Each entry routes to "/<key>": "Runners" opens the runners
+// Feishu-style top navigation. Each entry routes to "/<key>": "Projects" opens the projects
 // page (Admin is appended for admins below). The workspaces themselves live in the "Workspaces"
 // group further down.
 const TOP = [
+  { key: 'projects', icon: <ProjectOutlined />, label: 'Projects' },
   { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
   { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
-  { key: 'projects', icon: <ProjectOutlined />, label: 'Projects' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
