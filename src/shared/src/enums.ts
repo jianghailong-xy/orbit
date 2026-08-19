@@ -368,6 +368,30 @@ export enum ProjectStatus {
   CANCELLED = 'CANCELLED',
 }
 
+/**
+ * How far a project's coordinator may act on its own.
+ *
+ * MANUAL is not "off": the loop still works out what the next step would be and records it, it
+ * just turns every step that would change something into a request for approval — so "I paused
+ * automation" and "it is broken" stay distinguishable. Off is `coordinatorEnabled`, a separate
+ * field, so that pausing cannot overwrite the level chosen to come back to.
+ *
+ * The stored default for an EXISTING project is MANUAL and a newly created one is written
+ * GUARDED_AUTO explicitly — two different values on purpose.
+ */
+export enum ProjectAutomationPolicy {
+  MANUAL = 'MANUAL',
+  GUARDED_AUTO = 'GUARDED_AUTO',
+  AUTO = 'AUTO',
+}
+
+/** What an agent is to a project's team: the identity that decides what the project does next,
+ *  or one that identity may hand work to. */
+export enum ProjectRole {
+  COORDINATOR = 'COORDINATOR',
+  MEMBER = 'MEMBER',
+}
+
 /** Who/what authored a Task (polymorphic creator). */
 export enum CreatorType {
   USER = 'USER',

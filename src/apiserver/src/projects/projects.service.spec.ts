@@ -21,7 +21,8 @@ test('create files the project against the caller and stores blank prose as null
     project: {
       create: async (args: any) => {
         created = args.data;
-        return { id: PROJECT_ID, ...args.data };
+        // The two rows every project response is folded from, in the shape the include asks for.
+        return { id: PROJECT_ID, ...args.data, members: [], runtime: { coordinatorGeneration: 0n } };
       },
     },
   });
@@ -57,7 +58,13 @@ test('a new project starts OPEN without the caller saying so', async () => {
     project: {
       create: async (args: any) => {
         created = args.data;
-        return { id: PROJECT_ID, status: 'OPEN', ...args.data };
+        return {
+          id: PROJECT_ID,
+          status: 'OPEN',
+          ...args.data,
+          members: [],
+          runtime: { coordinatorGeneration: 0n },
+        };
       },
     },
   });
@@ -85,8 +92,13 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
   assert.deepEqual(queries[0].where, { ownerId: OWNER_ID });
   assert.deepEqual(queries[0].orderBy, { createdAt: 'desc' });
   // Counted, not embedded: `GET /task-lists/:id` embeds its tasks and had to grow an escape
-  // hatch when one list reached 27k of them.
-  assert.deepEqual(queries[0].include, { _count: { select: { tasks: true } } });
+  // hatch when one list reached 27k of them. The two coordination rows are bounded the same way —
+  // at most one apiece, joined by their own key — and are folded into two fields on the way out.
+  assert.deepEqual(queries[0].include, {
+    _count: { select: { tasks: true } },
+    members: { where: { role: 'COORDINATOR' }, select: { agentId: true } },
+    runtime: { select: { coordinatorGeneration: true } },
+  });
   assert.deepEqual(queries[1].where, { ownerId: OWNER_ID, status: 'DONE' });
 });
 
@@ -94,7 +106,13 @@ test('the detail read reports progress without loading the project’s tasks', a
   let groupByArgs: any;
   const service = serviceWith({
     project: {
-      findFirst: async () => ({ id: PROJECT_ID, title: 'Ship it', _count: { tasks: 3 } }),
+      findFirst: async () => ({
+        id: PROJECT_ID,
+        title: 'Ship it',
+        _count: { tasks: 3 },
+        members: [],
+        runtime: { coordinatorGeneration: 0n },
+      }),
     },
     task: {
       groupBy: async (args: any) => {
@@ -134,15 +152,24 @@ test('someone else’s project is a 404, not an empty project', async () => {
 
 test('an update writes only the fields it was sent, and null clears one', async () => {
   const writes: any[] = [];
-  const service = serviceWith({
+  const prisma: any = {
     project: {
-      findFirst: async () => ({ id: PROJECT_ID }),
+      findFirst: async () => ({ id: PROJECT_ID, coordinatorEnabled: false }),
       update: async (args: any) => {
         writes.push(args.data);
-        return { id: PROJECT_ID, ...args.data };
+        return {
+          id: PROJECT_ID,
+          ...args.data,
+          members: [],
+          runtime: { coordinatorGeneration: 0n },
+        };
       },
     },
-  });
+    // The project row's lock and the write are one transaction (see ProjectsService.update).
+    $queryRaw: async () => [{ id: PROJECT_ID }],
+  };
+  prisma.$transaction = async (fn: any) => fn(prisma);
+  const service = serviceWith(prisma);
 
   // Settling a project must not blank the goal that says what it was for.
   await service.update(OWNER_ID, PROJECT_ID, { status: ProjectStatus.DONE } as never);

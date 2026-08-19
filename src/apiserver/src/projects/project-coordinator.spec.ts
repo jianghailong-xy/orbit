@@ -15,6 +15,18 @@ const SESSION_THEIRS = 'session-theirs';
 const WORKSPACE_TASKS = 'workspace-tasks';
 const WORKSPACE_OTHER = 'workspace-other';
 
+/**
+ * The swap that binds a coordinator and the count of how many times this project's coordinator has
+ * been REPLACED are one transaction, so a prisma stub that cannot open one is not a stub of this
+ * service. This wraps a plain stub into a transactional one: the callback runs against the same
+ * object, which is what makes a rotation count observable per call.
+ */
+function transactional(stub: Record<string, unknown>): never {
+  const prisma: any = { projectRuntime: { upsert: async () => ({}) }, ...stub };
+  prisma.$transaction = async (fn: any) => fn(prisma);
+  return prisma as never;
+}
+
 interface Bound {
   /** The session the project currently points at, if any, and whether it is in Trash. */
   session?: { id: string; deletedAt: Date | null } | null;
@@ -68,6 +80,9 @@ function makeService(bound: Bound = {}) {
   const created: any[][] = [];
   const written: Record<string, unknown>[] = [];
   const swaps: any[] = [];
+  /** Every write to the runtime row's rotation count, in order. A replacement writes one; a first
+   *  binding and a lost swap write none. */
+  const rotations: any[] = [];
   const ended: string[] = [];
   const removed: string[] = [];
 
@@ -134,6 +149,16 @@ function makeService(bound: Bound = {}) {
         return alive && where.ownerId === OWNER_ID ? { id: where.id } : null;
       },
     },
+    // The swap and the rotation count are one transaction, so the stub runs the callback with
+    // itself as the client — which is also what makes "did the count happen at all" observable
+    // per call rather than per test.
+    $transaction: async (fn: any) => fn(prisma),
+    projectRuntime: {
+      upsert: async (args: any) => {
+        rotations.push(args);
+        return { projectId: PROJECT_ID };
+      },
+    },
   } as never;
 
   const sessions = {
@@ -164,6 +189,7 @@ function makeService(bound: Bound = {}) {
     created,
     written,
     swaps,
+    rotations,
     ended,
     removed,
     state,
@@ -247,6 +273,76 @@ test('a trashed coordinator is replaced', async () => {
   assert.deepEqual(f.written, [
     { coordinatorSessionId: SESSION_NEW, coordinatorWorkspaceId: WORKSPACE_TASKS },
   ]);
+});
+
+// ── What a replacement counts, and what it leaves alone ───────────────────────────────────────
+//
+// A coordinator SESSION is a run of the coordination, not the identity doing it: replacing one
+// leaves the coordinating agent untouched and the replaced conversation intact. What advances is
+// a count of replacements, which is how "this project has always been coordinated here" and "its
+// conversation has been reopened four times" stay distinguishable — and it is what later keys are
+// derived from, so it may never go back or be skipped.
+
+test('replacing a coordinator counts one rotation, in the same transaction as the swap', async () => {
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
+  });
+
+  await f.open();
+
+  assert.equal(f.rotations.length, 1);
+  assert.deepEqual(f.rotations[0].where, { projectId: PROJECT_ID });
+  // Incremented, never read and written back: two replacements must not land on one number.
+  assert.deepEqual(f.rotations[0].update, { coordinatorGeneration: { increment: 1 } });
+  // A project whose runtime row predates it has rotated exactly once by the time it is created.
+  assert.equal(f.rotations[0].create.coordinatorGeneration, 1n);
+});
+
+test('the replaced conversation is left exactly where the user put it', async () => {
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
+  });
+
+  await f.open();
+
+  // Rotation replaces the pointer, not the history: the previous session keeps its transcript and
+  // its place in Trash, and is neither ended nor removed by the project moving on.
+  assert.deepEqual(f.ended, []);
+  assert.deepEqual(f.removed, []);
+});
+
+test('a first coordinator is not a rotation of anything', async () => {
+  const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
+
+  await f.open();
+
+  // Generation 0 is "the coordinator this project has always had" — which is also what the
+  // migration wrote for every project that already existed.
+  assert.deepEqual(f.rotations, []);
+});
+
+test('a swap that lost the race counts nothing', async () => {
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
+    raceWinner: SESSION_THEIRS,
+  });
+
+  await f.open();
+
+  // The rotation the winner performed is the winner's to count. Counting it here as well would
+  // advance the generation twice for one replacement.
+  assert.deepEqual(f.rotations, []);
+});
+
+test('reopening a live coordinator counts nothing either', async () => {
+  const f = makeService({ session: { id: SESSION_BOUND, deletedAt: null } });
+
+  await f.open();
+
+  assert.deepEqual(f.rotations, []);
 });
 
 test('the swap that replaces a trashed coordinator is conditioned on the trashed id', async () => {
@@ -638,7 +734,7 @@ test('the binding is written only after the session exists', async () => {
   // Otherwise a failed create leaves the project pointing at a session that was never made, and
   // every later visit resolves a dangling id instead of opening a working coordinator.
   const order: string[] = [];
-  const prisma = {
+  const prisma: any = {
     project: {
       findFirst: async () => ({
         id: PROJECT_ID,
@@ -652,7 +748,11 @@ test('the binding is written only after the session exists', async () => {
         return { count: 1 };
       },
     },
-  } as never;
+    projectRuntime: {
+      upsert: async () => assert.fail('a first binding rotates nothing'),
+    },
+  };
+  prisma.$transaction = async (fn: any) => fn(prisma);
   const sessions = {
     create: async () => {
       order.push('create');
@@ -660,7 +760,11 @@ test('the binding is written only after the session exists', async () => {
     },
   } as never;
 
-  await new ProjectsService(prisma, sessions).coordinator(OWNER_ID, PROJECT_ID, WORKSPACE_TASKS);
+  await new ProjectsService(prisma as never, sessions).coordinator(
+    OWNER_ID,
+    PROJECT_ID,
+    WORKSPACE_TASKS,
+  );
 
   assert.deepEqual(order, ['create', 'bind']);
 });
@@ -834,7 +938,7 @@ test('the title and the prompt are stable across calls', async () => {
 });
 
 test('a long project title is cut to a title, not passed through whole', async () => {
-  const prisma = {
+  const prisma = transactional({
     project: {
       findFirst: async () => ({
         id: PROJECT_ID,
@@ -845,7 +949,7 @@ test('a long project title is cut to a title, not passed through whole', async (
       }),
       updateMany: async () => ({ count: 1 }),
     },
-  } as never;
+  });
   const created: any[] = [];
   const sessions = {
     create: async (_owner: string, dto: any) => {
@@ -917,7 +1021,7 @@ function concurrentFixture() {
   const bothCreated = barrier(2, 'sessions.create');
   let minted = 0;
 
-  const prisma = {
+  const prisma = transactional({
     project: {
       findFirst: async () => {
         // Snapshot at read time, like a real read: the value returned is the one that was there
@@ -958,7 +1062,7 @@ function concurrentFixture() {
     },
     task: { groupBy: async () => [] },
     workspace: { findFirst: async ({ where }: any) => ({ id: where.id }) },
-  } as never;
+  });
 
   const sessions = {
     create: async () => {

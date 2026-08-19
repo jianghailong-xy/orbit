@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
 import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
@@ -87,6 +97,31 @@ export class RunnerProjectsController {
     @Param('id', PublicIdPipe) id: string,
     @Body() dto: UpdateProjectDto,
   ) {
+    RunnerProjectsController.refuseGovernance(dto);
     return this.projects.update(runner.ownerId, id, dto);
+  }
+
+  /**
+   * The five fields this door does not carry: what the coordinator is allowed to do, and who the
+   * coordinator IS.
+   *
+   * Everything else on this DTO is a statement about the work, which an agent may make. These are
+   * statements about the agent's own authority — how far it may act, how much it may spend, and
+   * which identity gets to decide — and an agent that could write them would be granting itself
+   * whatever it was refused. Those stay with the account owner, through the door a person signs in
+   * to.
+   *
+   * Refused rather than dropped. A silently ignored field reads to the caller as a write that
+   * happened, and the caller here is a model that will go on to act as though it did.
+   */
+  private static refuseGovernance(dto: UpdateProjectDto): void {
+    const named = [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId' as const].filter(
+      (field) => dto[field] !== undefined,
+    );
+    if (named.length === 0) return;
+    throw new ForbiddenException(
+      `${named.join(', ')} ${named.length === 1 ? 'is' : 'are'} the account owner’s to set, not ` +
+        'this session’s — change it from the Orbit web app or the user API',
+    );
   }
 }

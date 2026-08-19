@@ -1,8 +1,19 @@
-import { IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { ProjectStatus } from '@orbit/shared';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from 'class-validator';
+import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
+const PROJECT_AUTOMATION_POLICIES = Object.values(ProjectAutomationPolicy);
 
 /**
  * Bounds on a project's prose fields.
@@ -15,6 +26,18 @@ const PROJECT_STATUSES = Object.values(ProjectStatus);
 export const MAX_PROJECT_INSTRUCTIONS_CHARS = 10_000;
 export const MAX_PROJECT_GOAL_CHARS = 4_000;
 export const MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS = 4_000;
+
+/**
+ * Bounds on the two budgets.
+ *
+ * Both are the owner's own numbers, so the bounds are generous rather than opinionated — they are
+ * here to catch the value nobody meant (a pasted timestamp, an extra zero) at the edit that made
+ * it, instead of letting it be stored as a limit that never limits anything. A cap of one is the
+ * lowest that still admits work; zero would spell "run nothing", which is what
+ * `coordinatorEnabled: false` and MANUAL already spell, with a state a reader can tell apart.
+ */
+export const MAX_PROJECT_CONCURRENT_TASKS = 100;
+export const MAX_PROJECT_SESSION_BUDGET_PER_DAY = 10_000;
 
 export class CreateProjectDto {
   @IsString()
@@ -50,6 +73,34 @@ export class UpdateProjectDto {
    *  a filing state — moving a project out of somebody's way is a separate concern that must not
    *  be spelled by overwriting what happened to the work. */
   @IsOptional() @IsIn(PROJECT_STATUSES) status?: ProjectStatus;
+
+  // ── What the project's coordinator is allowed to do ────────────────────────────────────────
+  // The four fields below are the authorization set: they are the only fields whose value decides
+  // whether an action the coordinator wants to take may happen. Writing any of them bumps
+  // `configRevision` by one (see ProjectsService.update), which is what makes a revoke that races
+  // an action readable afterwards. Everything else on this DTO is prose or filing.
+
+  /** Whether the coordinator may act at all. Turning it ON requires `automationPolicy` in the same
+   *  request: "carry on with the safe default" is spelled by not sending this at all, so switching
+   *  a project into automation is a choice someone made rather than one it inherited. */
+  @IsOptional() @IsBoolean() coordinatorEnabled?: boolean;
+  /** How far it may go when it runs: MANUAL, GUARDED_AUTO or AUTO. */
+  @IsOptional() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
+  /** How many of this project's tasks may be in flight at once. An admission limit: lowering it
+   *  never stops anything already running. */
+  @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
+  /** How many sessions the coordinator itself may start in a rolling 24h. `null` clears the limit;
+   *  sessions a person starts are never counted by it. */
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_PROJECT_SESSION_BUDGET_PER_DAY)
+  sessionBudgetPerDay?: number | null;
+
+  /** Which agent coordinates this project — the identity that outlives every coordinator SESSION.
+   *  `null` removes it. Not part of the authorization set above: it says WHO decides, not what a
+   *  decider is permitted to do, and the two are revoked and audited separately. */
+  @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
 }
 
 export class OpenProjectCoordinatorDto {

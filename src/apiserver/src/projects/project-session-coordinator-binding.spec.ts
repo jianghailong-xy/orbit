@@ -107,7 +107,10 @@ function makeService(rows: SessionRow[] = [LIVE], insertFails?: Error) {
         // that raises, and `creates` here is the statement rather than the row.
         creates.push(data);
         if (insertFails) throw insertFails;
-        return { id: PROJECT_ID, ...data };
+        // Plus the two rows every project response is folded from, in the shape the include asks
+        // for (the nested writes above are what CREATES them; this is what reading them back
+        // looks like).
+        return { id: PROJECT_ID, ...data, members: [], runtime: { coordinatorGeneration: 0n } };
       },
       // A binding applied by a follow-up write would leave a window in which the project exists
       // pointing at no conversation, so reaching for either of these is a failure, not an
@@ -193,13 +196,20 @@ test('both halves of the binding are part of the insert, not a second write', as
 
   await f.inSession({ title: 'Crawl' });
 
+  // `members` and `runtime` are nested writes of the SAME statement, and they are here for the
+  // same reason the two columns are: the coordinating identity and the project's runtime row must
+  // never be a follow-up write that can fail on its own and leave a project half-bound.
   assert.deepEqual(Object.keys(f.creates[0]).sort(), [
     'acceptanceCriteria',
+    'automationPolicy',
+    'coordinatorEnabled',
     'coordinatorSessionId',
     'coordinatorWorkspaceId',
     'goal',
     'instructions',
+    'members',
     'ownerId',
+    'runtime',
     'title',
   ]);
 });

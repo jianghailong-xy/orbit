@@ -6,7 +6,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProjectStatus, TaskStatus } from '@prisma/client';
+import {
+  Prisma,
+  ProjectAutomationPolicy,
+  ProjectRole,
+  ProjectStatus,
+  TaskStatus,
+} from '@prisma/client';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -72,6 +78,49 @@ const PROJECT_TASK_TREE_SELECT = {
 } satisfies Prisma.TaskSelect;
 
 /**
+ * What every project response says about its coordination, and the two rows it is read from.
+ *
+ * `coordinatorAgentId` lives on a `project_member` row rather than on a column of `project`,
+ * because the coordinator is one role of a team and the same fact in two places is the one that
+ * drifts. Clients are handed the fact, not the row: the team itself is not this phase's API, and a
+ * `members` array in every project payload would be one.
+ */
+const COORDINATION_INCLUDE = {
+  members: { where: { role: ProjectRole.COORDINATOR }, select: { agentId: true } },
+  runtime: { select: { coordinatorGeneration: true } },
+} satisfies Prisma.ProjectInclude;
+
+type WithCoordination = {
+  members: Array<{ agentId: string }>;
+  runtime: { coordinatorGeneration: bigint } | null;
+};
+
+/**
+ * Fold those two rows into the two fields a client reads, and drop the rows.
+ *
+ * `coordinatorGeneration` is how many times the coordinator SESSION has been replaced, which is
+ * the one thing that distinguishes "this project has always been coordinated here" from "its
+ * conversation has been reopened four times" — the identity (`coordinatorAgentId`) is unchanged by
+ * every one of those.
+ */
+function withCoordination<T extends WithCoordination>(
+  project: T,
+): Omit<T, keyof WithCoordination> & {
+  coordinatorAgentId: string | null;
+  coordinatorGeneration: bigint;
+} {
+  const { members, runtime, ...rest } = project;
+  return {
+    ...rest,
+    coordinatorAgentId: members[0]?.agentId ?? null,
+    // A project whose runtime row is somehow missing reads as generation 0 rather than as an
+    // error: the row is created with the project and backfilled by the migration, so its absence
+    // can only mean "nothing has rotated", and a 500 on a read would be the wrong way to say that.
+    coordinatorGeneration: runtime?.coordinatorGeneration ?? 0n,
+  };
+}
+
+/**
  * Projects: what a body of work is trying to achieve, and how anyone would know it got there.
  *
  * Nothing here dispatches, cancels, holds or releases a TASK, and that is a property to preserve
@@ -87,6 +136,31 @@ const PROJECT_TASK_TREE_SELECT = {
 @Injectable()
 export class ProjectsService {
   private readonly logger = new Logger(ProjectsService.name);
+
+  /**
+   * The fields that decide whether an action the coordinator wants to take may happen — and the
+   * complete list of them, which is the property that matters.
+   *
+   * Two things read it, and they must not disagree: writing any of them bumps `configRevision`
+   * (so a revoke that races an action is a comparison rather than an archaeology), and the runner
+   * door refuses all of them (an agent does not widen its own authority). A field that can change
+   * what the coordinator is allowed to do and is not in here is a hole in both.
+   *
+   * `coordinatorAgentId` is deliberately NOT one: it says WHO decides, not what a decider may do.
+   */
+  static readonly AUTHORIZATION_FIELDS = [
+    'coordinatorEnabled',
+    'automationPolicy',
+    'maxConcurrentTasks',
+    'sessionBudgetPerDay',
+  ] as const;
+
+  /** One wording for every reason an agent id is not one this project may coordinate with —
+   *  unknown, another owner's, or deleted. Distinguishing them would answer "does this id exist"
+   *  for ids the caller has no business knowing about. */
+  private static readonly NO_SUCH_AGENT =
+    'no such agent to coordinate this project — coordinatorAgentId must name an agent of this ' +
+    'account that has not been deleted';
 
   /**
    * One wording for "the session you said you are in is not one I will make a coordinator of",
@@ -161,13 +235,26 @@ export class ProjectsService {
     try {
       // `await` inside the `try`, not a returned promise: a returned one rejects in the caller,
       // where the catch below cannot see it.
-      return await this.prisma.project.create({
+      const project = await this.prisma.project.create({
         data: {
           title: dto.title,
           ownerId,
           goal: ProjectsService.blankToNull(dto.goal),
           acceptanceCriteria: ProjectsService.blankToNull(dto.acceptanceCriteria),
           instructions: ProjectsService.blankToNull(dto.instructions),
+          // The defaults for a NEW project, written here rather than left to the column defaults —
+          // and they are different values. The columns default to `false` / MANUAL because that is
+          // what every project that existed before this feature has to keep; a project created
+          // now is one somebody is recording in order to have it coordinated, so it starts
+          // coordinated, at the guarded level. Doing it the other way round (new-project values as
+          // the column defaults, old rows rewritten by the migration) turns every project created
+          // between the migration and this code into an automatic one, and rewrites exactly the
+          // rows nobody asked about.
+          coordinatorEnabled: true,
+          automationPolicy: ProjectAutomationPolicy.GUARDED_AUTO,
+          // The control loop's row, created with the project so that "has a runtime row" is never
+          // a question a later reader has to answer with a fallback.
+          runtime: { create: {} },
           // Both columns in the SAME insert as the project itself, which is the whole of
           // "bound atomically": one statement, so there is no instant in which the project exists
           // pointing at no conversation, and no failure in which the row lands and the binding
@@ -176,14 +263,26 @@ export class ProjectsService {
             ? {
                 coordinatorSessionId: coordinator.sessionId,
                 coordinatorWorkspaceId: coordinator.workspaceId,
+                // And the identity behind that conversation, in the same insert. The agent running
+                // the session that recorded this project is the agent coordinating it — the same
+                // fact the two columns above state about the CONVERSATION, stated about WHO. It is
+                // what survives every later rotation of that conversation, so a project planned in
+                // a session does not lose its coordinator the first time the session is replaced.
+                members: {
+                  create: { agentId: coordinator.workspaceId, role: ProjectRole.COORDINATOR },
+                },
               }
             : {}),
         },
+        include: COORDINATION_INCLUDE,
       });
+      return withCoordination(project);
     } catch (e) {
       // One insert, and exactly one unique index it can violate — `coordinator_session_id`, and
-      // only when a coordinator was seeded (`id` is a server-generated uuid v7). So P2002 here
-      // means one thing, and it is a 409 rather than the 500 an unhandled Prisma error becomes:
+      // only when a coordinator was seeded (`id` is a server-generated uuid v7). The rows nested
+      // above add none: both are keyed by the project id this insert is generating, so nothing
+      // else can already hold them. So P2002 here means one thing, and it is a 409 rather than the
+      // 500 an unhandled Prisma error becomes:
       // "a session coordinates at most one project" is a rule the caller can act on.
       //
       // There is nothing half-written to clean up. A rejected INSERT writes no row, so the project
@@ -298,11 +397,14 @@ export class ProjectsService {
    * starting from the count is the same decision made once instead of twice.
    */
   async list(ownerId: string, status?: ProjectStatus) {
-    return this.prisma.project.findMany({
+    const projects = await this.prisma.project.findMany({
       where: { ownerId, ...(status ? { status } : {}) },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { tasks: true } } },
+      include: { _count: { select: { tasks: true } }, ...COORDINATION_INCLUDE },
     });
+    // Bounded by the page, not by the project: at most one coordinator row and one runtime row
+    // apiece, both joined by their own primary/unique key.
+    return projects.map(withCoordination);
   }
 
   /**
@@ -313,7 +415,7 @@ export class ProjectsService {
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
       where: { id, ownerId },
-      include: { _count: { select: { tasks: true } } },
+      include: { _count: { select: { tasks: true } }, ...COORDINATION_INCLUDE },
     });
     if (!project) throw new NotFoundException('project not found');
     const byStatus = await this.prisma.task.groupBy({
@@ -322,7 +424,7 @@ export class ProjectsService {
       _count: { _all: true },
     });
     return {
-      ...project,
+      ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
     };
   }
@@ -558,9 +660,30 @@ export class ProjectsService {
     // cannot currently narrow anything — it is here because this is a WRITE, and a write that
     // carries its own tenant scope stays correct if the read above is ever moved, cached or
     // refactored into something that does not.
-    const claimed = await this.prisma.project.updateMany({
-      where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
-      data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
+    //
+    // The swap and the rotation count are ONE transaction. A replacement that landed without its
+    // count, or a count without its replacement, would each make the same generation describe two
+    // different conversations — and a generation is what later keys are derived from, so two runs
+    // would look like one. Nothing else in this transaction can fail on its own: both statements
+    // are on rows this project owns.
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const swapped = await tx.project.updateMany({
+        where: { id, ownerId, coordinatorSessionId: project.coordinatorSessionId },
+        data: { coordinatorSessionId: session.id, coordinatorWorkspaceId: runIn },
+      });
+      // Only a REPLACEMENT counts. Binding a first coordinator to a project that had none is not a
+      // rotation of anything — generation 0 is "the coordinator this project has always had",
+      // which is also what the migration wrote for every project that already existed.
+      if (swapped.count > 0 && project.coordinatorSessionId) {
+        await tx.projectRuntime.upsert({
+          where: { projectId: id },
+          // A project whose runtime row is missing can only be one created before that row existed;
+          // it has just rotated once, so that is what it is created saying.
+          create: { projectId: id, coordinatorGeneration: 1n },
+          update: { coordinatorGeneration: { increment: 1 } },
+        });
+      }
+      return swapped;
     });
     if (claimed.count === 0) {
       // We lost. Discard the session this call made BEFORE deciding anything else, so that every
@@ -726,7 +849,26 @@ export class ProjectsService {
    *  about the project's tasks, which keep running or not running exactly as before — this phase
    *  adds no rule that a DONE project finishes its work, or that unfinished work reopens it. */
   async update(ownerId: string, id: string, dto: UpdateProjectDto) {
-    await this.assertOwned(ownerId, id);
+    const current = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { id: true, coordinatorEnabled: true },
+    });
+    if (!current) throw new NotFoundException('project not found');
+
+    // Checked here so an incomplete request costs nothing, and checked AGAIN under the row lock
+    // below, which is the one that decides: what a project was when this read ran is not what it
+    // is when the write commits.
+    ProjectsService.assertLevelNamedWhenTurningOn(current.coordinatorEnabled, dto);
+
+    const agentId =
+      dto.coordinatorAgentId === undefined || dto.coordinatorAgentId === null
+        ? (dto.coordinatorAgentId as null | undefined)
+        : await this.resolveAgent(ownerId, dto.coordinatorAgentId);
+
+    const authorizationWrites = ProjectsService.AUTHORIZATION_FIELDS.filter(
+      (field) => dto[field] !== undefined,
+    );
+
     const data: Prisma.ProjectUpdateInput = {
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
@@ -737,8 +879,128 @@ export class ProjectsService {
       ...(dto.instructions !== undefined
         ? { instructions: ProjectsService.blankToNull(dto.instructions) }
         : {}),
+      ...(dto.coordinatorEnabled !== undefined
+        ? { coordinatorEnabled: dto.coordinatorEnabled }
+        : {}),
+      ...(dto.automationPolicy !== undefined ? { automationPolicy: dto.automationPolicy } : {}),
+      ...(dto.maxConcurrentTasks !== undefined
+        ? { maxConcurrentTasks: dto.maxConcurrentTasks }
+        : {}),
+      ...(dto.sessionBudgetPerDay !== undefined
+        ? { sessionBudgetPerDay: dto.sessionBudgetPerDay }
+        : {}),
+      // One bump per write of the authorization set, however many of its fields the write carried:
+      // a revision is a version of that set, not a count of columns. `increment` rather than a
+      // read-then-write, so two writes cannot land on the same number.
+      ...(authorizationWrites.length > 0 ? { configRevision: { increment: 1 } } : {}),
     };
-    return this.prisma.project.update({ where: { id }, data });
+
+    try {
+      const project = await this.prisma.$transaction(async (tx) => {
+        // The project row first, and this is the lock a coordinator has to take before committing
+        // anything the fields above authorize. Taking it here is what makes "the user revoked it"
+        // and "the coordinator acted on what it read" two orderings rather than an interleaving:
+        // whichever commits first, the other sees it. It also fixes the order of the two writes
+        // below (project before its team row), which is the order every path takes.
+        const [locked] = await tx.$queryRaw<Array<{ coordinator_enabled: boolean }>>`
+          SELECT "coordinator_enabled" FROM "project"
+          WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+          FOR NO KEY UPDATE`;
+        if (!locked) throw new NotFoundException('project not found');
+        // The value the lock produced, not the one read before it: a concurrent write that turned
+        // this project off is exactly the case the check has to see.
+        ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
+        if (agentId !== undefined) await ProjectsService.writeCoordinatorAgent(tx, id, agentId);
+        return tx.project.update({ where: { id }, data, include: COORDINATION_INCLUDE });
+      });
+      return withCoordination(project);
+    } catch (e) {
+      // The partial unique index behind "one coordinator per project", reached only by a second
+      // writer that got between the read and the write above. Reported as the rule it is rather
+      // than as a 500 — the caller can re-read and decide.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new ConflictException(
+          'this project already has a coordinator agent — re-read it and set the one you meant',
+        );
+      }
+      // A foreign key that no longer resolves: the agent was deleted between the check and the
+      // write. Same answer as naming a deleted one outright.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
+        throw new BadRequestException(ProjectsService.NO_SUCH_AGENT);
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Switching automation ON is the one write that may not inherit a value.
+   *
+   * "Carry on with whatever is safe" is already spelled by not sending the field at all, so a
+   * request that turns a project into an automatic one without saying how far it may go is one
+   * whose author has not decided yet — and the level they would have been given by default is
+   * something they would then have to discover from its behaviour. Changing an already-enabled
+   * project's other fields is untouched by this: it has a level, and its owner is looking at it.
+   * Turning it off never needs one either — "stop" is unambiguous.
+   */
+  private static assertLevelNamedWhenTurningOn(
+    enabledNow: boolean,
+    dto: UpdateProjectDto,
+  ): void {
+    if (dto.coordinatorEnabled !== true || enabledNow || dto.automationPolicy !== undefined) return;
+    throw new BadRequestException(
+      'turning on this project’s coordinator requires an explicit automationPolicy ' +
+        `(${Object.values(ProjectAutomationPolicy).join(', ')}) in the same request — ` +
+        'leaving it out would pick a level of automation on your behalf',
+    );
+  }
+
+  /**
+   * The workspace behind a `coordinatorAgentId`, or a 400 naming what is wrong with it.
+   *
+   * An Agent is a `workspace` row today (MCP `agent_list`, `orbit agent` and `task.assigneeId` all
+   * mean this table), so this is the same ownership-and-liveness check every other agent-shaped id
+   * gets. Checked here rather than left to the foreign key because the foreign key cannot tell a
+   * cross-tenant id from a deleted one, and both have to be refused with something the caller can
+   * act on.
+   */
+  private async resolveAgent(ownerId: string, agentId: string): Promise<string> {
+    const agent = await this.prisma.workspace.findFirst({
+      where: { id: agentId, ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!agent) throw new BadRequestException(ProjectsService.NO_SUCH_AGENT);
+    return agent.id;
+  }
+
+  /**
+   * Set, replace or remove the project's coordinator — one row, whichever of the three it is.
+   *
+   * Replacing edits the existing row rather than deleting and re-inserting: the membership is the
+   * identity, and a delete/insert pair would make a coordinator briefly absent inside the
+   * transaction for no reason. Naming the agent that is already coordinating is a no-op, so a
+   * client that replays its own request writes nothing.
+   */
+  private static async writeCoordinatorAgent(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    agentId: string | null,
+  ): Promise<void> {
+    const current = await tx.projectMember.findFirst({
+      where: { projectId, role: ProjectRole.COORDINATOR },
+      select: { id: true, agentId: true },
+    });
+    if (agentId === null) {
+      if (current) await tx.projectMember.delete({ where: { id: current.id } });
+      return;
+    }
+    if (current?.agentId === agentId) return;
+    if (current) {
+      await tx.projectMember.update({ where: { id: current.id }, data: { agentId } });
+      return;
+    }
+    await tx.projectMember.create({
+      data: { projectId, agentId, role: ProjectRole.COORDINATOR },
+    });
   }
 
   /**

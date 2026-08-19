@@ -100,6 +100,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'turnId',
   'approvalId',
   'assigneeId',
+  // The project's coordinator, and any agent on its team. An Agent is a `workspace` row today, so
+  // these name the same kind of thing `workspaceId` does — but under the name the coordinator API
+  // uses, and a name that is only ever encoded on the way out and never decoded on the way in is
+  // how a base62 string reaches a `::uuid` cast.
+  'agentId',
+  'coordinatorAgentId',
   'creatorId',
   'authorId',
   'createdById',

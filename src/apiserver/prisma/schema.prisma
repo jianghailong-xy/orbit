@@ -68,6 +68,33 @@ enum ProjectStatus {
   @@map("project_status")
 }
 
+/// How far a project's coordinator may act on its own — the user's authorization level, not a
+/// switch for the control loop (that is `Project.coordinatorEnabled`).
+///
+/// MANUAL still reconciles, still records what the next step would be and still raises blockers;
+/// it just turns every step that would change something into a request for approval. So "I turned
+/// automation off" and "it is broken" stay distinguishable on the control plane, which is the
+/// whole reason this is a level rather than a second off switch.
+///
+/// The COLUMN default is MANUAL and the default for a NEWLY CREATED project is GUARDED_AUTO;
+/// those are two different values on purpose (see `Project.automationPolicy`).
+enum ProjectAutomationPolicy {
+  MANUAL
+  GUARDED_AUTO
+  AUTO
+
+  @@map("project_automation_policy")
+}
+
+/// What an agent is to a project it is on the team of. COORDINATOR is the identity that decides
+/// what this project does next; MEMBER is an agent the coordinator may hand work to.
+enum ProjectRole {
+  COORDINATOR
+  MEMBER
+
+  @@map("project_role")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -471,6 +498,9 @@ model Workspace {
   assignedTasks Task[] // tasks assigned to run in this workspace
   foremanFor    TaskList[] @relation("TaskListForeman") // lists whose coordination runs here
   coordinatorForProjects Project[] @relation("ProjectCoordinatorWorkspace") // projects coordinated here
+  // Teams this workspace is on as an agent — the coordinator of a project is one of these rows
+  // (see ProjectMember, which explains why an agent is a workspace today).
+  projectMemberships     ProjectMember[] @relation("ProjectMemberAgent")
   // Service tokens pinned to this workspace (see ServiceToken).
   serviceTokens ServiceToken[]
   // What this workspace always allows without asking again (see WorkspacePermissionRule).
@@ -1112,10 +1142,48 @@ model Project {
   coordinatorWorkspaceId String?    @map("coordinator_workspace_id") @db.Uuid
   coordinatorWorkspace   Workspace? @relation("ProjectCoordinatorWorkspace", fields: [coordinatorWorkspaceId], references: [id], onDelete: SetNull)
 
+  /// Whether this project's coordinator may act at all. The off switch, kept separate from
+  /// `automationPolicy` because "stop for now" and "how far may it go when it runs" are two
+  /// decisions a user changes independently — one column would let a pause overwrite the level
+  /// they chose, and they would have to remember it to get back.
+  ///
+  /// FALSE at the database, which is what makes the migration safe: every project that existed
+  /// before this column stays exactly as silent as it was. A project created AFTER it is written
+  /// `true` explicitly by the service, so the two populations differ by a decision rather than by
+  /// when they happened to be created.
+  coordinatorEnabled  Boolean                 @default(false) @map("coordinator_enabled")
+  /// How far it may go when it does run (see ProjectAutomationPolicy).
+  ///
+  /// The column default is MANUAL and `ProjectsService.create` writes GUARDED_AUTO explicitly.
+  /// Doing it the other way around — defaulting the column to GUARDED_AUTO and updating the old
+  /// rows in the migration — leaves a window between the migration and the new code in which every
+  /// project created lands automatic, and the rows it would have to rewrite are the ones whose
+  /// owners never asked for any of this.
+  automationPolicy    ProjectAutomationPolicy @default(MANUAL) @map("automation_policy")
+  /// How many of this project's tasks may be in flight at once — the user's own number, and an
+  /// ADMISSION limit rather than a statement about the present: lowering it is always allowed,
+  /// never cancels anything already running, and applies to the next start. (Killing sessions to
+  /// satisfy a lowered cap would be the destructive thing a cap is not for.)
+  maxConcurrentTasks  Int                     @default(3) @map("max_concurrent_tasks")
+  /// How many sessions the coordinator itself may start in a rolling 24h. NULL = no limit.
+  /// Sessions a person starts are not counted by it and are never refused because of it.
+  sessionBudgetPerDay Int?                    @map("session_budget_per_day")
+  /// Bumped by exactly one on every write to the four fields above — the authorization set.
+  ///
+  /// Not a lock and not a compare-and-set: mutual exclusion between a person changing these and a
+  /// coordinator acting on what it read comes from the row lock both take. This column is what
+  /// makes such a race READABLE afterwards — a decision records the revision it read and the
+  /// revision it committed under, so "was this authorized when it happened" is a comparison rather
+  /// than an archaeology. BigInt for the same reason every monotonic counter here is: it is only
+  /// ever allowed to go up.
+  configRevision      BigInt                  @default(0) @map("config_revision")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tasks Task[]
+  tasks   Task[]
+  members ProjectMember[]
+  runtime ProjectRuntime?
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -1124,6 +1192,73 @@ model Project {
   // `@unique` already is one.)
   @@index([coordinatorWorkspaceId])
   @@map("project")
+}
+
+/// One agent's membership of one project's team, and the only place a project's COORDINATOR is
+/// recorded.
+///
+/// Deliberately a row here rather than a `coordinator_agent_id` column on `project`: a coordinator
+/// is one role of a team, and the same fact stored in two shapes is the one that drifts. "At most
+/// one coordinator per project" is a partial unique index in the migration
+/// (`project_member_coordinator_idx`, `WHERE role = 'COORDINATOR'`) rather than a service check,
+/// so a second one is refused by the database whichever process, version or raw statement tries it.
+///
+/// `agentId` names a `workspace` row, which is what an Agent IS on the wire today — MCP
+/// `agent_list` / `agent_create`, `orbit agent`, and `task.assigneeId` all mean this table. The
+/// domain contract's target state splits identity out of `workspace` into its own `agent` table;
+/// when that lands, this column re-points at the mirror row of the same workspace, which is
+/// exactly the mapping that migration already has to build. Recording the coordinator against a
+/// workspace-shaped agent now is what makes the identity stable across coordinator SESSIONS, which
+/// is the thing this table exists for.
+///
+/// Restrict on the agent, Cascade on the project: deleting a project takes its team with it (a
+/// team of a project that no longer exists means nothing), while an agent some project coordinates
+/// with cannot be deleted out from under it — that would silently disband the team rather than ask.
+model ProjectMember {
+  id        String      @id @default(uuid(7)) @db.Uuid
+  projectId String      @map("project_id") @db.Uuid
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentId   String      @map("agent_id") @db.Uuid
+  agent     Workspace   @relation("ProjectMemberAgent", fields: [agentId], references: [id], onDelete: Restrict)
+  role      ProjectRole
+  addedAt   DateTime    @default(now()) @map("added_at")
+
+  // One membership per agent per project; a role change edits the row rather than adding a second.
+  @@unique([projectId, agentId])
+  // "Which projects is this agent on the team of" — and the lookup the Restrict above performs on
+  // every attempt to delete an agent. Referencing columns are never indexed automatically.
+  @@index([agentId])
+  @@map("project_member")
+}
+
+/// The control loop's own row for a project: state that belongs to running the project rather than
+/// to the project itself.
+///
+/// Separate from `project` for two reasons that both matter. Layering: `project.status`
+/// (OPEN/DONE/CANCELLED) is what happened to the WORK, and a column named like a run state sitting
+/// next to it invites code that confuses the two. Write amplification: this row is where the loop's
+/// hot fields will live, and `project` is read by every list, task page and stream.
+///
+/// This phase creates it for `coordinatorGeneration` alone; the reconcile lease, run state and next
+/// wake are added by the units that implement them, additively, on this same row.
+model ProjectRuntime {
+  /// The primary key IS the project id: exactly one runtime row per project, stated by the schema
+  /// instead of by a unique index over a surrogate key nothing would ever reference.
+  projectId             String   @id @map("project_id") @db.Uuid
+  project               Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// How many times this project's coordinator SESSION has been replaced. It counts rotations, not
+  /// identity: the coordinator AGENT is unchanged by any of them (that is `ProjectMember`), and a
+  /// rotation replaces the conversation while leaving the previous one intact and readable.
+  ///
+  /// Monotonic and never reused, because keys derived from it have to stay unique for the life of
+  /// the project — a counter that can go back is a counter that can make two different runs look
+  /// like the same one.
+  coordinatorGeneration BigInt   @default(0) @map("coordinator_generation")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("project_runtime")
 }
 
 model TaskList {
