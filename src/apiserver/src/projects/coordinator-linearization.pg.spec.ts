@@ -2920,7 +2920,7 @@ const SCHEMA_V18 = isolated18(V18_TABLES);
 const V18_FROZEN_AT = '2026-08-19T00:00:00.000Z';
 const V18_CONTEXT = `'{"agentId":"a1","workspaceId":"w1","assignedRunnerId":"r1","provider":"claude",` +
   `"providerBuiltin":true,"requiredCapabilities":["linux"],"permissionMode":"read-only",` +
-  `"resolution":{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
+  `"resolution":{"v":1,"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
   `"model":"model-v1","effort":"high"}'::jsonb`;
 
 const CLAIM_ACTION = (id: string, key: string): string => `
@@ -2935,7 +2935,7 @@ const MATCHING_SESSION = (id: string, action: string): string => `
     assigned_runner_id,provider,provider_builtin,required_capabilities,permission_mode,resolution,
     snapshot_frozen_at)
   VALUES ('${id}','t1','${action}','COORDINATOR','PENDING','a1','w1','r1','claude',true,ARRAY['linux'],
-    'read-only','{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}}'::jsonb,'${V18_FROZEN_AT}'::timestamptz)`;
+    'read-only','{"v":1,"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}}'::jsonb,'${V18_FROZEN_AT}'::timestamptz)`;
 
 /** Install v1.8's objects. `only` narrows the install so one gate can be shown to carry its half. */
 async function installV18(c: Client, only: ('d11' | 'd15' | 'd16')[] = ['d11', 'd15', 'd16']): Promise<void> {
@@ -3065,7 +3065,7 @@ test('PC-CX-44 on real Postgres: the whole PAC create-frozen set is proved at in
           id: `'s1'`, task_id: `'t1'`, project_action_id: `'act1'`, dispatch_origin: `'COORDINATOR'`,
           status: `'PENDING'`, agent_id: `'a1'`, workspace_id: `'w1'`, assigned_runner_id: `'r1'`,
           provider: `'claude'`, provider_builtin: 'true', required_capabilities: `ARRAY['linux']`,
-          permission_mode: `'read-only'`, resolution: `'{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}}'::jsonb`,
+          permission_mode: `'read-only'`, resolution: `'{"v":1,"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}}'::jsonb`,
           snapshot_frozen_at: `'${V18_FROZEN_AT}'::timestamptz`, ...over,
         };
         return `INSERT INTO session (${Object.keys(base).join(',')}) VALUES (${Object.values(base).join(',')})`;
@@ -3533,6 +3533,128 @@ const RESULT_SHAPE_V110 = `
   $fn$ LANGUAGE plpgsql IMMUTABLE;
 `;
 
+/**
+ * §7.7 D17 ⓪ as v1.11 specifies it (PC-CX-53). The eleven-key table is v1.10's; what changed is the
+ * `resolution` row: v1.10 compared it against `ARRAY['where','who','with']`, and PAC §7.5's structure
+ * starts with `v` — a key the same PAC section says "must be written". A conforming resolution was
+ * therefore refused and a versionless one passed, which is why this is the only round whose closing
+ * criterion is a *positive* dispatch rather than a refusal (EC2-b3 · D17-e).
+ */
+const V111_RESOLUTION_PREDICATE = `    SELECT string_agg(t.k, ',' ORDER BY t.k COLLATE "C") INTO offending
+      FROM (SELECT jsonb_object_keys(result -> 'resolution') AS k
+             UNION SELECT jsonb_object_keys(resolution_shape)) t
+     WHERE jsonb_typeof(result -> 'resolution' -> t.k) IS DISTINCT FROM (resolution_shape ->> t.k);
+    IF offending IS NOT NULL THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % resolution is not PAC 7.5''s closed v/who/with/where (offending: %)',
+        subject, offending;
+    END IF;
+    version := result #>> '{resolution,v}';
+    IF version !~ '^\\d+$' OR version::numeric < 1 THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % freezes a PAC 7.5 resolution version of % — not a positive integer',
+        subject, version;
+    END IF;
+`;
+
+const RESULT_SHAPE_V111 = RESULT_SHAPE_V110
+  // A string replacement would read the `$'` inside `'^\\d+$'` as a substitution pattern, so both
+  // replacements are functions. That is the same footgun in JavaScript that 22023 is in plpgsql.
+  .replace(
+    `    IF (SELECT array_agg(t.k ORDER BY t.k COLLATE "C") FROM jsonb_object_keys(result -> 'resolution') AS t(k))
+       IS DISTINCT FROM ARRAY['where','who','with'] THEN
+      RAISE EXCEPTION 'EXECUTION_RESULT_SHAPE: % resolution is not PAC 7.5''s who/with/where', subject;
+    END IF;
+`,
+    () => V111_RESOLUTION_PREDICATE)
+  .replace(
+    `          result jsonb; offending text; component text;`,
+    () => `          resolution_shape constant jsonb := jsonb_build_object(
+            'v','number', 'who','object', 'with','object', 'where','object');
+          result jsonb; offending text; component text; version text;`);
+
+/** §7.7 D16 ⓪ as v1.11 specifies it: the ledger's top-level type is proved before it is folded. */
+const PIN_FOLD_V111 = PIN_FOLD_V19.replace(
+  `    ledger := COALESCE(ledger, '[]'::jsonb);
+`,
+  `    ledger := COALESCE(ledger, '[]'::jsonb);
+    IF jsonb_typeof(ledger) <> 'array' THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: % carries a retiredPins of jsonb type % — the ledger is an array',
+        subject, jsonb_typeof(ledger);
+    END IF;
+`);
+
+/**
+ * §7.7 D18 as v1.11 specifies it (PC-CX-55). Two things move, and both are one line: the type test
+ * runs *before* any `jsonb_array_*` (v1.10 ran `jsonb_array_elements` first, and Postgres raises a
+ * native 22023 on an object, so the test below it was unreachable), and the trigger observes INSERT
+ * as well (v1.10 observed UPDATE only, so a malformed initial ledger had no object watching it).
+ * `OLD` is only read after `TG_OP = 'UPDATE'`: on INSERT it is unassigned and reading it raises.
+ */
+const D18_V111 = `
+  CREATE OR REPLACE FUNCTION project_action_result_ledger_mutator() RETURNS trigger AS $fn$
+  DECLARE new_ledger jsonb := COALESCE(NEW.detail -> 'retiredPins', '[]'::jsonb);
+          old_ledger jsonb; kept jsonb;
+  BEGIN
+    IF NEW.type <> 'DISPATCH_TASK' THEN RETURN NEW; END IF;
+    IF jsonb_typeof(new_ledger) <> 'array' THEN
+      IF TG_OP = 'UPDATE' AND new_ledger = COALESCE(OLD.detail -> 'retiredPins', '[]'::jsonb) THEN
+        RETURN NEW;
+      END IF;
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % writes a retiredPins of jsonb type % — the ledger is an array (owner=SYSTEM; recovery: write an array, or drop the key)',
+        NEW.id, jsonb_typeof(new_ledger);
+    END IF;
+    IF TG_OP = 'INSERT' THEN RETURN NEW; END IF;
+    IF OLD.result_session_id IS NOT NULL
+       AND NEW.result_session_id IS DISTINCT FROM OLD.result_session_id THEN
+      RAISE EXCEPTION 'ACTION_RESULT_LINK_FROZEN: action % cannot detach or repoint its result session (% -> %)',
+        NEW.id, OLD.result_session_id, COALESCE(NEW.result_session_id, 'NULL');
+    END IF;
+    IF OLD.detail ? 'claimResolution'
+       AND NEW.detail -> 'claimResolution' IS DISTINCT FROM OLD.detail -> 'claimResolution' THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % rewrites a claimResolution that is already recorded', NEW.id;
+    END IF;
+    old_ledger := COALESCE(OLD.detail -> 'retiredPins', '[]'::jsonb);
+    IF jsonb_typeof(old_ledger) <> 'array' THEN RETURN NEW; END IF;
+    SELECT jsonb_agg(t.v ORDER BY t.i) INTO kept
+      FROM jsonb_array_elements(new_ledger) WITH ORDINALITY AS t(v, i)
+     WHERE t.i <= jsonb_array_length(old_ledger);
+    IF jsonb_array_length(new_ledger) < jsonb_array_length(old_ledger)
+       OR (jsonb_array_length(old_ledger) > 0 AND kept IS DISTINCT FROM old_ledger) THEN
+      RAISE EXCEPTION 'EXECUTION_PIN_LEDGER: action % rewrites or truncates a retired pin that is already recorded (% -> %)',
+        NEW.id, jsonb_array_length(old_ledger), jsonb_array_length(new_ledger);
+    END IF;
+    RETURN NEW;
+  END;
+  $fn$ LANGUAGE plpgsql;
+`;
+
+/**
+ * §7.7 D19 as v1.11 specifies it (PC-CX-54). Two objects for one sentence, the same split D18-d and
+ * D16-d already use: the foreign key makes an orphan unwritable for any binary, and the BEFORE
+ * DELETE trigger turns the refusal into this contract's own code with an owner and a recovery.
+ */
+const D19_V111 = `
+  ALTER TABLE project_action
+    ADD CONSTRAINT project_action_result_session_fk
+    FOREIGN KEY (result_session_id) REFERENCES session(id) ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+  CREATE OR REPLACE FUNCTION session_result_link_delete_guard() RETURNS trigger AS $fn$
+  DECLARE referring text; referring_status text;
+  BEGIN
+    SELECT a.id, a.status INTO referring, referring_status
+      FROM project_action a WHERE a.result_session_id = OLD.id ORDER BY a.id LIMIT 1;
+    IF FOUND THEN
+      RAISE EXCEPTION 'SESSION_RESULT_LINK_REFERENCED: session % is the published result of % action % and cannot be purged (owner=USER, recovery=HUMAN: soft-delete it, or delete the project so §2.4 takes the ledger with it)',
+        OLD.id, referring_status, referring;
+    END IF;
+    RETURN OLD;
+  END;
+  $fn$ LANGUAGE plpgsql;
+
+  CREATE TRIGGER session_result_link_delete_guard
+    BEFORE DELETE ON session
+    FOR EACH ROW EXECUTE FUNCTION session_result_link_delete_guard();
+`;
+
 /** §7.7 D15 as v1.10 specifies it: v1.8's body, plus EC2-b2 proved before the nine equalities. */
 const D15_V110 = D15_V18.replace(
   `      SELECT a.execution_context INTO ctx FROM project_action a WHERE a.id = NEW.project_action_id;\n`,
@@ -3692,7 +3814,7 @@ const V19_AUTH = `'{"resolvedAgentId":"a1","projectMemberId":"m1","taskId":"t1",
   `"providerSlug":"claude","model":%MODEL%,"workspaceId":"w1","runnerId":"r1","coordinatorWorkspaceId":null}'::jsonb`;
 const V19_RESULT = `'{"agentId":"a1","workspaceId":"w1","assignedRunnerId":"r1","provider":"claude",` +
   `"providerBuiltin":true,"requiredCapabilities":["linux"],"permissionMode":"read-only",` +
-  `"resolution":{"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
+  `"resolution":{"v":1,"who":{"source":"task"},"with":{"source":"agent"},"where":{"source":"workspace"}},"snapshotFrozenAt":"${V18_FROZEN_AT}",` +
   `"model":%MODEL%,"effort":%EFFORT%}'::jsonb`;
 
 /** The frozen context for one dispatch. `model`/`effort` are the EC2-b part ② conclusion (EC6-c). */
@@ -3725,10 +3847,15 @@ function claimAction19(id: string, key: string, options: {
  */
 async function installV19(c: Client, options: {
   ledger?: 'v18' | 'v19' | 'v110'; digest?: boolean; mutator?: boolean;
+  shape?: 'v110' | 'v111'; mutatorEvents?: 'update' | 'insert-update'; sessionDelete?: boolean;
 } = {}): Promise<void> {
-  const { ledger = 'v110', digest = true, mutator = ledger === 'v110' } = options;
+  const { ledger = 'v110', digest = true, mutator = ledger === 'v110',
+    // v1.11 defaults (PC-CX-53/54/55). Each stays switchable so every fix keeps a reverse control:
+    // `shape: 'v110'` is the exact-key resolution predicate PAC 7.5 has no legal intersection with,
+    // `mutatorEvents: 'update'` is D18 without an INSERT event, `sessionDelete: false` drops D19.
+    shape = 'v111', mutatorEvents = 'insert-update', sessionDelete = true } = options;
   await c.query(SCHEMA_V19);
-  await c.query(RESULT_SHAPE_V110);            // D17's ⓪, called from D15, D16 and D17 alike
+  await c.query(shape === 'v111' ? RESULT_SHAPE_V111 : RESULT_SHAPE_V110);  // D17's ⓪, called from D15, D16 and D17 alike
   await c.query(D17_V19);                      // the digest functions are fixture plumbing as well
   if (ledger !== 'v110') await c.query(D17_CHECK_V19);   // reverse control: v1.9's D17 body
   await c.query(D11_V18);
@@ -3738,12 +3865,13 @@ async function installV19(c: Client, options: {
   await c.query(`CREATE TRIGGER session_execution_snapshot_guard BEFORE INSERT OR UPDATE ON session
                    FOR EACH ROW EXECUTE FUNCTION session_execution_snapshot_guard()`);
   if (mutator) {
-    await c.query(D18_V110);
-    await c.query(`CREATE TRIGGER project_action_result_ledger_mutator BEFORE UPDATE ON project_action
+    await c.query(mutatorEvents === 'insert-update' ? D18_V111 : D18_V110);
+    await c.query(`CREATE TRIGGER project_action_result_ledger_mutator
+                     BEFORE ${mutatorEvents === 'insert-update' ? 'INSERT OR UPDATE' : 'UPDATE'} ON project_action
                      FOR EACH ROW EXECUTE FUNCTION project_action_result_ledger_mutator()`);
   }
   if (ledger === 'v18') await c.query(D16_V18);
-  else await c.query(PIN_FOLD_V19 + (ledger === 'v110' ? D16_V110 : D16_V19));
+  else await c.query((ledger === 'v110' ? PIN_FOLD_V111 : PIN_FOLD_V19) + (ledger === 'v110' ? D16_V110 : D16_V19));
   await c.query(`CREATE CONSTRAINT TRIGGER session_execution_result_check
                    AFTER INSERT OR UPDATE ON session DEFERRABLE INITIALLY DEFERRED
                    FOR EACH ROW EXECUTE FUNCTION session_execution_result_check()`);
@@ -3760,6 +3888,9 @@ async function installV19(c: Client, options: {
                      AFTER INSERT OR UPDATE ON project_action DEFERRABLE INITIALLY DEFERRED
                      FOR EACH ROW EXECUTE FUNCTION project_action_execution_digest_check()`);
   }
+  // v1.11 (PC-CX-54): the third verb. Everything above observes INSERT and UPDATE only, and
+  // "the session it points at is missing" is only reachable through DELETE.
+  if (sessionDelete) await c.query(D19_V111);
 }
 
 const CLAIM_AT_19 = '2026-08-19T00:01:00.000Z';
@@ -3779,7 +3910,9 @@ test('PC-CX-47 on real Postgres: the first claim is bound to the frozen conclusi
     const c = await connect();
     try {
       const dispatch = async (ctx: string): Promise<string> => txn(c, async () => {
-        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        // v1.11 (PC-CX-54): the result link is a real FK now, so a fixture reset cannot delete the two
+        // tables in sequence. TRUNCATE takes both at once and fires no row triggers.
+        await c.query(`TRUNCATE session, project_action`);
         await c.query(claimAction19('act1', 'k1', { ctx }));
         await c.query(MATCHING_SESSION('s1', 'act1'));
         await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
@@ -3880,19 +4013,25 @@ test('PC-CX-48 on real Postgres: a forged digest cannot be committed, and canoni
       // §12.1 G5 ⑩/⑪: the volatility and the deferral are the observable form of both rules.
       const volatility = await c.query<{ proname: string; provolatile: string }>(`
         SELECT proname, provolatile FROM pg_proc
-         WHERE proname IN ('coordinator_canonical_json','coordinator_execution_digest') ORDER BY proname`);
+         WHERE pronamespace = to_regnamespace(current_schema())
+           AND proname IN ('coordinator_canonical_json','coordinator_execution_digest') ORDER BY proname`);
       assert.deepEqual(volatility.rows, [
         { proname: 'coordinator_canonical_json', provolatile: 'i' },
         { proname: 'coordinator_execution_digest', provolatile: 'i' },
       ], 'both canonicalisation functions must be IMMUTABLE');
       const deferred = await c.query<{ tgdeferrable: boolean; tginitdeferred: boolean }>(`
-        SELECT tgdeferrable, tginitdeferred FROM pg_trigger WHERE tgname = 'project_action_execution_digest_check'`);
+        SELECT t.tgdeferrable, t.tginitdeferred FROM pg_trigger t
+          JOIN pg_class c ON c.oid = t.tgrelid
+         WHERE t.tgname = 'project_action_execution_digest_check'
+           AND c.relnamespace = to_regnamespace(current_schema())`);
       assert.deepEqual(deferred.rows, [{ tgdeferrable: true, tginitdeferred: true }],
         'D17 must run at the commit point, not in the middle of the statement');
 
       const ctx = context19();
       const publish = async (options: Parameters<typeof claimAction19>[2]): Promise<string> => txn(c, async () => {
-        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        // v1.11 (PC-CX-54): the result link is a real FK now, so a fixture reset cannot delete the two
+        // tables in sequence. TRUNCATE takes both at once and fires no row triggers.
+        await c.query(`TRUNCATE session, project_action`);
         await c.query(claimAction19('act1', 'k1', { ctx, ...options }));
         await c.query(MATCHING_SESSION('s1', 'act1'));
         await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
@@ -3938,7 +4077,9 @@ test('PC-CX-49 on real Postgres: an empty ledger record is refused and a legal r
     try {
       const ctx = context19();
       const dispatch = async (): Promise<string> => txn(c, async () => {
-        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        // v1.11 (PC-CX-54): the result link is a real FK now, so a fixture reset cannot delete the two
+        // tables in sequence. TRUNCATE takes both at once and fires no row triggers.
+        await c.query(`TRUNCATE session, project_action`);
         await c.query(claimAction19('act1', 'k1', { ctx }));
         await c.query(MATCHING_SESSION('s1', 'act1'));
         await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
@@ -4038,7 +4179,9 @@ test('PC-CX-50 on real Postgres: the result link is published once and the ledge
     try {
       const ctx = context19();
       const dispatch = async (): Promise<string> => txn(c, async () => {
-        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        // v1.11 (PC-CX-54): the result link is a real FK now, so a fixture reset cannot delete the two
+        // tables in sequence. TRUNCATE takes both at once and fires no row triggers.
+        await c.query(`TRUNCATE session, project_action`);
         await c.query(claimAction19('act1', 'k1', { ctx }));
         await c.query(MATCHING_SESSION('s1', 'act1'));
         await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
@@ -4123,7 +4266,9 @@ test('PC-CX-51 on real Postgres: any legal statement order inside one transactio
     try {
       const ctx = context19();
       const dispatch = async (): Promise<string> => txn(c, async () => {
-        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        // v1.11 (PC-CX-54): the result link is a real FK now, so a fixture reset cannot delete the two
+        // tables in sequence. TRUNCATE takes both at once and fires no row triggers.
+        await c.query(`TRUNCATE session, project_action`);
         await c.query(claimAction19('act1', 'k1', { ctx }));
         await c.query(MATCHING_SESSION('s1', 'act1'));
         await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
@@ -4197,7 +4342,9 @@ test('PC-CX-52 on real Postgres: an incomplete or empty result half is refused a
       // The session is built from the frozen context itself (EC6-a), so a missing key becomes a
       // SQL NULL column and the review's `IS DISTINCT FROM` equality holds on both sides.
       const dispatch = async (ctx: string): Promise<string> => txn(c, async () => {
-        await c.query(`DELETE FROM session; DELETE FROM project_action`);
+        // v1.11 (PC-CX-54): the result link is a real FK now, so a fixture reset cannot delete the two
+        // tables in sequence. TRUNCATE takes both at once and fires no row triggers.
+        await c.query(`TRUNCATE session, project_action`);
         await c.query(claimAction19('act1', 'k1', { ctx }));
         await c.query(`
           INSERT INTO session (id,task_id,project_action_id,dispatch_origin,status,agent_id,workspace_id,
@@ -4264,6 +4411,254 @@ test('PC-CX-52 on real Postgres: an incomplete or empty result half is refused a
                s.required_capabilities AS capabilities, s.permission_mode AS permission
           FROM project_action a JOIN session s ON s.project_action_id = a.id WHERE a.id='act1'`)).rows[0];
       assert.deepEqual(shape, { missing, capabilities: null, permission: null });
+    } finally {
+      await c.end();
+    }
+  });
+
+// -------------------------------------------------------------------------------------------------
+// v1.11 — `PC-CX-53..55`. Round eleven asked one question of all three: is this gate in the right
+// place? A frame drawn one key too small (53), a gate missing a verb (54), and a type test written
+// after the exception that makes it unreachable (55).
+// -------------------------------------------------------------------------------------------------
+
+/** PAC §7.5's resolution, as SQL. `v` is the key PAC says must be written; v1.10 refused it. */
+function pacResolution(version = `'1'::jsonb`, extra = ''): string {
+  return `jsonb_build_object('who', jsonb_build_object('agentId','a1','source','task-assignee'),
+    'with', jsonb_build_object('provider','claude','model','model-v1','effort',null,'source','task-pin'),
+    'where', jsonb_build_object('workspaceId','w1','runnerId','r1','source','task-pin',
+      'required', jsonb_build_array('linux'), 'candidatesConsidered', 1))
+    ${version === '' ? '' : `|| jsonb_build_object('v', ${version})`}${extra}`;
+}
+
+/** The v1.9 context with its `resolution` replaced, so only that one key differs between cases. */
+function contextWithResolution(resolution: string): string {
+  return `jsonb_set(${context19()}, '{resolution}', ${resolution})`;
+}
+
+test('PC-CX-53 on real Postgres: a PAC 7.5 resolution with its mandatory v dispatches and commits',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      // The whole finding is that no positive path existed, so the assertion that closes it is a
+      // dispatch that *commits* — the §8.3 three statements, end to end, on a real server.
+      const dispatch = async (ctx: string): Promise<string> => txn(c, async () => {
+        await c.query(`TRUNCATE session, project_action`);
+        await c.query(claimAction19('act1', 'k1', { ctx }));
+        await c.query(`
+          INSERT INTO session (id,task_id,project_action_id,dispatch_origin,status,agent_id,workspace_id,
+            assigned_runner_id,provider,provider_builtin,required_capabilities,permission_mode,resolution,
+            snapshot_frozen_at)
+          SELECT 's1','t1','act1','COORDINATOR','PENDING', execution_context->>'agentId',
+            execution_context->>'workspaceId', execution_context->>'assignedRunnerId',
+            execution_context->>'provider', (execution_context->>'providerBuiltin')::boolean,
+            ARRAY(SELECT jsonb_array_elements_text(execution_context->'requiredCapabilities')),
+            execution_context->>'permissionMode', execution_context->'resolution',
+            (execution_context->>'snapshotFrozenAt')::timestamptz
+            FROM project_action WHERE id='act1'`);
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+      const committed = async () => (await c.query<{
+        status: string; link: string | null; version: string | null; keys: string[];
+      }>(`
+        SELECT a.status, a.result_session_id AS link,
+               a.execution_context #>> '{resolution,v}' AS version,
+               ARRAY(SELECT k FROM jsonb_object_keys(s.resolution) k ORDER BY k) AS keys
+          FROM project_action a JOIN session s ON s.id = a.result_session_id WHERE a.id='act1'`)).rows[0];
+
+      await installV19(c);
+      assert.equal(await dispatch(contextWithResolution(pacResolution())), '',
+        'a dispatch whose resolution is PAC 7.5 verbatim — v included — must commit');
+      assert.deepEqual(await committed(),
+        { status: 'APPLIED', link: 's1', version: '1', keys: ['v', 'where', 'who', 'with'] },
+        'the committed session carries PAC 7.5 four top-level keys, byte for byte from the frozen context');
+
+      // An unknown version is a version (PAC 7.5: readers must tolerate one), so it commits too.
+      assert.equal(await dispatch(contextWithResolution(pacResolution(`'7'::jsonb`))), '',
+        'PAC 7.5 requires readers to tolerate an unknown version, so the gate must not pin v = 1');
+
+      const refusals: [string, string][] = [
+        ['a versionless resolution', pacResolution('')],
+        ['a v that is a string', pacResolution(`'"1"'::jsonb`)],
+        ['a v of zero', pacResolution(`'0'::jsonb`)],
+        ['a v that is not an integer', pacResolution(`'1.5'::jsonb`)],
+        ['a top-level key PAC 7.5 does not have', pacResolution(`'1'::jsonb`, ` || '{"extra":true}'::jsonb`)],
+        ['a who that is not an object', `jsonb_set(${pacResolution()}, '{who}', '"a1"')`],
+      ];
+      for (const [label, resolution] of refusals) {
+        assert.match(await dispatch(contextWithResolution(resolution)), /EXECUTION_RESULT_SHAPE/,
+          `${label} must be refused by EC2-b3`);
+      }
+      // Every refusal rolled back whole, so the last committed dispatch is still the v = 7 one.
+      assert.equal((await committed()).version, '7', 'a refused dispatch must roll back whole');
+
+      // Reverse control — v1.10's exact-key predicate. The conforming resolution is refused and the
+      // versionless one passes: the review's two lines, in that order.
+      await installV19(c, { shape: 'v110' });
+      assert.match(await dispatch(contextWithResolution(pacResolution())),
+        /EXECUTION_RESULT_SHAPE.*resolution is not PAC 7\.5's who\/with\/where/,
+        'PC-CX-53 must reproduce: v1.10 refuses every PAC-conforming resolution');
+      assert.equal(await dispatch(contextWithResolution(pacResolution(''))), '',
+        'PC-CX-53 must reproduce: deleting the key PAC requires is the only way through v1.10');
+      assert.equal((await committed()).version, null,
+        'and the state v1.10 admits is the one PAC forbids: a resolution with no version at all');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-54 on real Postgres: a published result session survives soft delete and refuses purge',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const dispatch = async (): Promise<string> => txn(c, async () => {
+        await c.query(`TRUNCATE session, project_action`);
+        await c.query(claimAction19('act1', 'k1'));
+        await c.query(MATCHING_SESSION('s1', 'act1'));
+        await c.query(`UPDATE project_action SET status='APPLIED', result_session_id='s1' WHERE id='act1'`);
+      });
+      const one = async (sql: string): Promise<string> => txn(c, async () => { await c.query(sql); });
+      const orphan = async () => (await c.query<{
+        status: string; result_session_id: string | null; session_exists: boolean;
+      }>(`
+        SELECT a.status, a.result_session_id,
+               EXISTS (SELECT 1 FROM session s WHERE s.id = a.result_session_id) AS session_exists
+          FROM project_action a WHERE a.id='act1'`)).rows[0];
+
+      await installV19(c);
+      assert.equal(await dispatch(), '', 'the ordinary dispatch must commit first');
+
+      // Soft delete is what "the user deleted it" means, and it is an UPDATE: the row stays, so
+      // every gate keeps its object. D16 runs on it and passes (D19-b).
+      assert.equal(await one(`UPDATE session SET deleted_at=clock_timestamp() WHERE id='s1'`), '',
+        'the supported trash step must still commit');
+      assert.equal(await one(`UPDATE session SET status='RUNNING' WHERE id='s1'`), '',
+        'and a heartbeat after the soft delete must still commit — nothing was switched off');
+
+      // The purge is the verb nothing observed in v1.10.
+      assert.match(await one(`DELETE FROM session WHERE id='s1'`), /SESSION_RESULT_LINK_REFERENCED/,
+        'PC-CX-54: purging a published result session must be refused with this contract own code');
+      assert.deepEqual(await orphan(),
+        { status: 'APPLIED', result_session_id: 's1', session_exists: true },
+        'the invariant I17-A3 states holds on the committed state');
+
+      // Two objects, two chances (D19 ① / ②): without the trigger the foreign key still refuses,
+      // it just does it with Postgres own 23503 rather than an owner and a recovery.
+      await c.query(`DROP TRIGGER session_result_link_delete_guard ON session`);
+      const structural = await one(`DELETE FROM session WHERE id='s1'`);
+      assert.match(structural, /project_action_result_session_fk/,
+        'the foreign key must hold on its own, for any binary');
+      assert.doesNotMatch(structural, /SESSION_RESULT_LINK_REFERENCED/,
+        'and that half is deliberately untyped — it is why the trigger exists as well');
+
+      // Nothing else is touched: a session no action row points at is deleted normally. That is
+      // the Coordinator Session rotation path §7.5 depends on (D19-b, D19-d).
+      await installV19(c);
+      assert.equal(await one(`INSERT INTO session (id,dispatch_origin,status) VALUES ('coord1','USER','RUNNING')`), '');
+      assert.equal(await one(`DELETE FROM session WHERE id='coord1'`), '',
+        'a session no action row points at — a Coordinator Session — must still be deletable');
+
+      // Reverse control — v1.10: neither object exists, and the review's committed orphan is back.
+      await installV19(c, { sessionDelete: false });
+      assert.equal(await dispatch(), '');
+      assert.equal(await one(`UPDATE session SET deleted_at=clock_timestamp() WHERE id='s1'`), '');
+      assert.equal(await one(`DELETE FROM session WHERE id='s1'`), '',
+        'PC-CX-54 must reproduce: no v1.10 object observes DELETE');
+      assert.deepEqual(await orphan(),
+        { status: 'APPLIED', result_session_id: 's1', session_exists: false },
+        'and it leaves the review exact committed observation: an APPLIED action pointing at nothing');
+    } finally {
+      await c.end();
+    }
+  });
+
+test('PC-CX-55 on real Postgres: a malformed ledger is refused at insert and a legacy one can still be repaired',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      const one = async (sql: string): Promise<string> => txn(c, async () => { await c.query(sql); });
+      const insertClaimed = (id: string, detail: string): string =>
+        claimAction19(id, `key-${id}`).replace(`,'{}'::jsonb,\n`, () => `,'${detail}'::jsonb,\n`);
+      const row = async (id: string) => (await c.query<{ status: string; detail: string }>(
+        `SELECT status, detail::text AS detail FROM project_action WHERE id='${id}'`)).rows[0];
+
+      await installV19(c);
+      await one(`TRUNCATE session, project_action`);
+
+      // A ledger that is an empty array is a ledger; that path must stay open.
+      assert.equal(await one(insertClaimed('healthy', '{"retiredPins":[]}')), '',
+        'an empty-array ledger must insert normally');
+
+      // …and every non-array top-level value is refused on the INSERT statement itself, with this
+      // contract code rather than Postgres 22023.
+      for (const malformed of ['{"retiredPins":{}}', '{"retiredPins":"[]"}', '{"retiredPins":3}',
+        '{"retiredPins":null}']) {
+        const refusal = await one(insertClaimed('bad', malformed));
+        assert.match(refusal, /EXECUTION_PIN_LEDGER/, `${malformed} must be refused at insert`);
+        assert.doesNotMatch(refusal, /cannot get array length|cannot extract elements/,
+          'the refusal must be the typed one, not the native JSON error');
+        assert.equal(await row('bad'), undefined, `${malformed} must not have committed`);
+      }
+
+      // The legacy half: a row an older binary already committed. Drop the mutator, write it, put
+      // the mutator back — that is exactly the mixed-version state D18-e ④ has to survive.
+      await c.query(`DROP TRIGGER project_action_result_ledger_mutator ON project_action`);
+      assert.equal(await one(insertClaimed('legacy', '{"retiredPins":{},"display":{"note":"old"}}')), '');
+      await c.query(`CREATE TRIGGER project_action_result_ledger_mutator
+                       BEFORE INSERT OR UPDATE ON project_action
+                       FOR EACH ROW EXECUTE FUNCTION project_action_result_ledger_mutator()`);
+      assert.deepEqual((await c.query<{ id: string; ledger_type: string }>(`
+        SELECT id, jsonb_typeof(detail->'retiredPins') AS ledger_type FROM project_action
+         WHERE detail ? 'retiredPins' AND jsonb_typeof(detail->'retiredPins') <> 'array'`)).rows,
+      [{ id: 'legacy', ledger_type: 'object' }], 'D18-e ④ must find exactly the legacy row');
+
+      // Outlet one: a statement that does not touch the ledger. This is the transition the review
+      // found bricked — CLAIMED → REFUSED, with nothing to do with retiredPins at all.
+      assert.equal(await one(`UPDATE project_action SET status='REFUSED', refusal_code='PROVIDER_UNAVAILABLE'
+                                WHERE id='legacy'`), '',
+      'a normal terminal transition must commit even while the legacy value is still there');
+      assert.equal((await row('legacy')).status, 'REFUSED');
+
+      // Outlet two: the explicit repair D18-e ④-a prescribes — the evidence is moved, not dropped.
+      assert.equal(await one(`UPDATE project_action
+                                SET detail = (detail - 'retiredPins')
+                                           || jsonb_build_object('malformedRetiredPins', detail->'retiredPins')
+                              WHERE id='legacy'`), '', 'the prescribed repair must commit');
+      assert.equal(await one(`UPDATE project_action SET detail = detail || '{"retiredPins":[]}'::jsonb
+                              WHERE id='legacy'`), '', 'and so must writing a legal empty ledger');
+      assert.equal((await c.query<{ n: string }>(`SELECT count(*)::text AS n FROM project_action
+        WHERE detail ? 'retiredPins' AND jsonb_typeof(detail->'retiredPins') <> 'array'`)).rows[0].n, '0',
+      'after the repair the audit returns zero rows');
+
+      // What is *not* an outlet: swapping one malformed value for another.
+      assert.match(await one(`UPDATE project_action SET detail = detail || '{"retiredPins":"still-bad"}'::jsonb
+                              WHERE id='legacy'`), /EXECUTION_PIN_LEDGER/,
+      'replacing a malformed ledger with another malformed value is not a repair');
+
+      // The commit point carries the same sentence (D16 ⓪), so a malformed value cannot reach APPLIED.
+      assert.match((await txn(c, async () => {
+        await c.query(`SELECT coordinator_pin_ledger_fold('probe', ${context19()},
+          '{"generation":1}'::jsonb, '{}'::jsonb, 1)`);
+      })), /EXECUTION_PIN_LEDGER/, 'the fold must type-check before it folds');
+
+      // Reverse control — v1.10: no INSERT event, and the type test sits behind the array call.
+      await installV19(c, { mutatorEvents: 'update' });
+      await one(`TRUNCATE session, project_action`);
+      assert.equal(await one(insertClaimed('stuck', '{"retiredPins":{}}')), '',
+        'PC-CX-55 must reproduce: v1.10 has no INSERT event, so the malformed ledger commits');
+      for (const [label, sql] of [
+        ['the normal terminal transition',
+          `UPDATE project_action SET status='REFUSED', refusal_code='PROVIDER_UNAVAILABLE' WHERE id='stuck'`],
+        ['every attempt to repair it', `UPDATE project_action SET detail='{}'::jsonb WHERE id='stuck'`],
+      ] as [string, string][]) {
+        const native = await one(sql);
+        assert.match(native, /cannot get array length of a non-array|cannot extract elements from an object/,
+          `PC-CX-55 must reproduce: ${label} raises Postgres own JSON error`);
+        assert.doesNotMatch(native, /EXECUTION_PIN_LEDGER/,
+          'and it is not the typed contract refusal callers were promised');
+      }
+      assert.deepEqual(await row('stuck'), { status: 'CLAIMED', detail: '{"retiredPins": {}}' },
+        'and it leaves the review exact committed observation: a permanent key stuck in CLAIMED');
     } finally {
       await c.end();
     }

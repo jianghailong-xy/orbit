@@ -38,6 +38,7 @@ const REVIEW_V16 = readFileSync(path.join(REPO, 'docs/project-coordinator-contra
 const REVIEW_V17 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.7.md'), 'utf8');
 const REVIEW_V18 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.8.md'), 'utf8');
 const REVIEW_V19 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.9.md'), 'utf8');
+const REVIEW_V110 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.10.md'), 'utf8');
 /** §1–§18: the normative body. §19–§26 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
@@ -1323,7 +1324,10 @@ test('the two writable columns have a mutator, and the applied link is judged fr
   const d18 = seven.slice(seven.indexOf('#### D18 '), seven.indexOf('#### D7 '));
   assert.ok(d18.length > 0, '§7.7 has no D18');
   assert.match(d18, /CREATE OR REPLACE FUNCTION project_action_result_ledger_mutator/, 'D18 has no object');
-  assert.match(d18, /BEFORE UPDATE ON project_action/, 'D18 is not statement-level');
+  // v1.11 (PC-CX-55): still statement-level, and the event surface now covers the insert that
+  // writes the ledger in the first place — a rule that only watches UPDATE cannot own how the
+  // value it protects came to exist.
+  assert.match(d18, /BEFORE INSERT OR UPDATE ON project_action/, 'D18 is not statement-level on both write verbs');
   assert.match(d18, /ACTION_RESULT_LINK_FROZEN/, 'a detached result link has no typed refusal');
   for (const clause of ['**D18-a（', '**D18-b（', '**D18-c（', '**D18-d（', '**D18-e（', '**D18-f（']) {
     assert.ok(d18.includes(clause), `D18 does not state ${clause}）`);
@@ -1393,4 +1397,129 @@ test("EC2-b's result half is closed by a key-and-type table, not by prose", () =
   assert.match(section(PCC, '7.4'), /空字符串/, 'EC6-c does not name the empty string as a non-conclusion');
   assert.match(section(PCC, '15'), /\*\*F52\*\*/, '§15 has no fault row for an incomplete result half');
   assert.match(section(PCC, '12.1'), /coordinator_execution_result_shape/, 'G5 does not verify the shape function');
+});
+
+// ---------------------------------------------------------------------------------------------
+// v1.11 — `PC-CX-53..55`
+// ---------------------------------------------------------------------------------------------
+
+test('§29 answers every finding unit 02 raised against v1.10, and names a test that exists', () => {
+  const cited = new Set(Array.from(REVIEW_V110.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 52).sort();
+  assert.deepEqual(raised, ['53', '54', '55'], 'unit 02 raised three findings against v1.10');
+
+  const rows = tables(section(PCC, '29'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§29 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22', '23', '24', '25', '26', '27', '28']
+    .flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    // The name carries an apostrophe in one row, so accept either quote style.
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`) || COUNTEREXAMPLES.includes(`test("${testName}"`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `29.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§29.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the eleven reviews are read, never edited', () => {
+  // Same pin as the ten-review version above, extended to round eleven. One P0, two P1s and a FAIL
+  // verdict: those are the things a revision would be tempted to soften.
+  assert.match(REVIEW_V110, /FAIL/, 'the eleventh review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V110.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 52).length,
+    3,
+  );
+  assert.match(REVIEW_V110, /\*\*P0\*\*/, 'the eleventh review no longer records that one finding was a P0');
+  // Its §6 evidence has to still be there: a revision that deleted the reproduction would leave
+  // §29's reverse controls pointing at nothing.
+  for (const evidence of ["ARRAY['where','who','with']", 'session_exists', '22023', 'retiredPins']) {
+    assert.ok(REVIEW_V110.includes(evidence), `the eleventh review no longer contains its ${evidence} evidence`);
+  }
+});
+
+test("the frozen resolution is closed by PAC 7.5's own top-level structure, version key included", () => {
+  // PC-CX-53. EC2-b said "the whole of PAC §7.5's resolution" and the executable form compared the
+  // key set against three of its four keys — so the conforming input was the refused one.
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('- **EC2-b3（'), '§7.4 does not close the resolution row');
+  const ec2b3 = dispatch.slice(dispatch.indexOf('- **EC2-b3（'), dispatch.indexOf('- **EC2-c（'));
+  for (const key of ['v', 'who', 'with', 'where']) {
+    assert.ok(ec2b3.includes(`\`${key}\``), `EC2-b3 does not name ${key}`);
+  }
+  const seven = section(PCC, '7.7');
+  const d17 = seven.slice(seven.indexOf('#### D17 '), seven.indexOf('#### D18 '));
+  assert.match(d17, /'v','number', 'who','object', 'with','object', 'where','object'/,
+    'the shape function does not carry PAC 7.5 four top-level keys as a key-and-type table');
+  assert.match(d17, /not a positive integer/, 'the version key has no value constraint');
+  // The v1.10 predicate may only survive with provenance — it is a history, not a rule.
+  const alive = d17.split('\n').filter((line) => !/v1\.\d|PC-CX-\d\d/.test(line));
+  assert.equal(alive.some((line) => line.includes("ARRAY['where','who','with']")), false,
+    'the exact-key predicate is still alive in D17 without provenance');
+  assert.ok(d17.includes('**D17-g（'), 'D17 does not write down how deep the shape goes');
+  assert.match(d17, /四个顶层 key/, 'D17-g still draws the boundary one key short of PAC 7.5');
+  // PAC itself is untouched: closing this by softening the referenced contract is the wrong fix.
+  assert.match(PAC, /`v` 必须写/, 'PAC §7.5 no longer requires the version discriminator');
+  assert.match(section(PCC, '15'), /\*\*F53\*\*/, '§15 has no fault row for the ordinary PAC-conforming dispatch');
+  assert.match(section(PCC, '12.1'), /含 PAC §7\.5 完整 `resolution`/, 'G5 does not run the positive dispatch');
+});
+
+test('the third verb has a gate, and the Session rotation it must not break still stands', () => {
+  // PC-CX-54. Three objects, two verbs, and the sentence had three.
+  const seven = section(PCC, '7.7');
+  assert.ok(seven.includes('#### D19 '), '§7.7 has no D19');
+  const d19 = seven.slice(seven.indexOf('#### D19 '), seven.indexOf('#### D7 '));
+  assert.match(d19, /FOREIGN KEY \(result_session_id\) REFERENCES session\(id\) ON DELETE RESTRICT/,
+    'the result link is still not a real foreign key');
+  assert.match(d19, /BEFORE DELETE ON session/, 'nothing observes DELETE on session');
+  assert.match(d19, /SESSION_RESULT_LINK_REFERENCED/, 'a refused purge has no typed code');
+  for (const clause of ['**D19-a（', '**D19-b（', '**D19-c（', '**D19-d（', '**D19-e（', '**D19-f（']) {
+    assert.ok(d19.includes(clause), `D19 does not state ${clause}）`);
+  }
+  const infra = section(PCC, '2.4');
+  assert.match(infra, /project_action_result_session_fk/, '§2.4 does not freeze the action → Session foreign key');
+  assert.match(infra, /RESTRICT/, '§2.4 does not state the on-delete behaviour the review found absent');
+  const invariants = section(PCC, '4.3');
+  const i17a3 = invariants.slice(invariants.indexOf('- **I17-A3（'), invariants.indexOf('- **I17-d（'));
+  assert.match(i17a3, /D19/, 'I17-A3 does not name the object that carries its third verb');
+  // …and the lifecycle the fix had to stay compatible with is unchanged, word for word.
+  assert.match(section(PCC, '7.5'), /被用户删除（`coordinatorSessionId` 被 SetNull）/,
+    'the rotation trigger the fix had to stay compatible with is gone');
+  assert.match(section(PCC, '15'), /\*\*F54\*\*/, '§15 has no fault row for a purged result session');
+  assert.match(section(PCC, '12.1'), /session_result_link_delete_guard/, 'G5 does not verify the delete guard');
+});
+
+test('the pin ledger proves its type before any array function, on both write verbs', () => {
+  // PC-CX-55. A type test written after the call that raises is a type test that never runs.
+  const seven = section(PCC, '7.7');
+  const d18 = seven.slice(seven.indexOf('#### D18 '), seven.indexOf('#### D19 '));
+  assert.ok(d18.indexOf("IF jsonb_typeof(new_ledger) <> 'array'") < d18.indexOf('FROM jsonb_array_elements(new_ledger)'),
+    'D18 still expands the ledger before it proves the ledger is one');
+  assert.match(d18, /BEFORE INSERT OR UPDATE ON project_action/, 'D18 is not statement-level on both write verbs');
+  assert.ok(d18.includes('**D18-g（'), 'D18 does not argue why the order and the event surface are the rule');
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.ok(d16.indexOf("IF jsonb_typeof(ledger) <> 'array'") < d16.indexOf('jsonb_array_length(ledger)'),
+    'the commit-point fold still measures the ledger before it proves it is one');
+  // Existing data: an audit, an isolation and a repair, with the undecidable half handed to a person.
+  assert.match(d18, /必须对存量跑\*\*四条\*\*查询/, 'D18-e still promises three existing-data queries');
+  assert.match(d18, /malformedRetiredPins/, 'D18-e has no isolation step for the existing malformed rows');
+  assert.match(d18, /USER \/ HUMAN/, 'D18-e ④-b does not hand the undecidable rows to a person');
+  assert.match(section(PCC, '15'), /\*\*F55\*\*/, '§15 has no fault row for a malformed initial ledger');
+  assert.match(section(PCC, '12.1'), /pg_get_triggerdef/, 'G5 does not verify the widened trigger event surface');
 });

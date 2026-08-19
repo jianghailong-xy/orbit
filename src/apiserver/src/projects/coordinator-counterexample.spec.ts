@@ -6359,3 +6359,251 @@ test('§28 names a test that exists for every finding, and points at clauses tha
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§28 points at §${m[1]}, which does not exist`);
   }
 });
+
+// -------------------------------------------------------------------------------------------------
+// v1.11 — `PC-CX-53..55`
+// -------------------------------------------------------------------------------------------------
+
+/** v1.10 or v1.11 of the three predicates round eleven moved. */
+type Version111 = 'v110' | 'v111';
+
+/**
+ * §7.4 EC2-b3 / §7.7 D17 ⓪, the `resolution` row alone. v1.10 compared the key set against
+ * `['where','who','with']`; PAC §7.5's structure has four top-level keys and the same section says
+ * `v` must be written, so the two had no legal intersection at all (`PC-CX-53`).
+ */
+const RESOLUTION_SHAPE: Record<string, string> = {
+  v: 'number', who: 'object', with: 'object', where: 'object',
+};
+function resolutionAdmits(version: Version111, resolution: Record<string, unknown>): boolean {
+  const keys = Object.keys(resolution).sort();
+  if (version === 'v110') return JSON.stringify(keys) === JSON.stringify(['where', 'who', 'with']);
+  for (const key of new Set([...keys, ...Object.keys(RESOLUTION_SHAPE)])) {
+    if (jsonType(resolution[key]) !== RESOLUTION_SHAPE[key]) return false;
+  }
+  // A version, not *this* version: PAC §7.5 requires readers to tolerate an unknown one.
+  return Number.isInteger(resolution.v) && (resolution.v as number) >= 1;
+}
+
+/** PAC §7.5 verbatim, as a dispatch produces it. */
+const PAC_RESOLUTION: Record<string, unknown> = {
+  v: 1,
+  who: { agentId: 'a1', source: 'task-assignee' },
+  with: { provider: 'claude', model: 'model-v1', effort: null, source: 'task-pin' },
+  where: { workspaceId: 'w1', runnerId: 'r1', source: 'task-pin', required: ['linux'], candidatesConsidered: 1 },
+};
+
+test("PC-CX-53 the frozen resolution is PAC 7.5's closed v/who/with/where", () => {
+  // This is the one finding whose closing assertion is a *positive*: the defect was not that a bad
+  // input got through, it was that the good one could not. So the first line is the legal path.
+  assert.equal(resolutionAdmits('v111', PAC_RESOLUTION), true,
+    'a resolution that is PAC 7.5 verbatim must be admitted — that is the whole finding');
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, v: 7 }), true,
+    'PAC 7.5 requires readers to tolerate an unknown version, so the gate may not pin v = 1');
+
+  // Missing, extra, wrong type, wrong value: four spellings of one judgement, same as EC2-b2.
+  const versionless = { ...PAC_RESOLUTION };
+  delete versionless.v;
+  assert.equal(resolutionAdmits('v111', versionless), false, 'PAC 7.5 says `v` must be written');
+  for (const key of Object.keys(RESOLUTION_SHAPE)) {
+    const dropped = { ...PAC_RESOLUTION };
+    delete dropped[key];
+    assert.equal(resolutionAdmits('v111', dropped), false, `a resolution missing ${key} must be refused`);
+  }
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, extra: 1 }), false,
+    'a top-level key PAC 7.5 does not have must be refused');
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, v: '1' }), false, 'a version written as a string');
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, v: 0 }), false, 'a version of zero');
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, v: 1.5 }), false, 'a version that is not an integer');
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, who: 'a1' }), false, 'a chain that is not an object');
+  // …and it stops at the top level: the inside of the three chains is D17-g's declared boundary.
+  assert.equal(resolutionAdmits('v111', { ...PAC_RESOLUTION, who: {} }), true,
+    'the shape does not reach inside who/with/where — that boundary is declared, not forgotten');
+
+  // Reverse control — v1.10: both answers inverted, which is exactly what made it a P0.
+  assert.equal(resolutionAdmits('v110', PAC_RESOLUTION), false,
+    'reverse control: v1.10 refuses every PAC-conforming resolution');
+  assert.equal(resolutionAdmits('v110', versionless), true,
+    'reverse control: deleting the key PAC requires is the only way through v1.10');
+
+  // The clauses that make this a contract rather than a constant someone happened to type.
+  const dispatch = section(PCC, '7.4');
+  assert.ok(dispatch.includes('- **EC2-b3（'), '§7.4 does not close the resolution row');
+  const ec2b3 = dispatch.slice(dispatch.indexOf('- **EC2-b3（'), dispatch.indexOf('- **EC2-c（'));
+  for (const key of Object.keys(RESOLUTION_SHAPE)) {
+    assert.ok(ec2b3.includes(`\`${key}\``), `EC2-b3 does not name ${key}`);
+  }
+  assert.match(ec2b3, /由 PAC §7\.5 反推/, 'EC2-b3 does not say where its table comes from');
+  const seven = section(PCC, '7.7');
+  const d17 = seven.slice(seven.indexOf('#### D17 '), seven.indexOf('#### D18 '));
+  assert.doesNotMatch(d17, /ARRAY\['where','who','with'\]\s*THEN/, 'the shape still uses the exact-key predicate');
+  assert.match(d17, /'v','number'/, 'the shape does not state the version key with its type');
+  // PAC is the referenced contract, and it may not be softened to make this one fit.
+  assert.match(PAC, /`v` 必须写/, 'PAC §7.5 no longer requires the version discriminator');
+});
+
+/**
+ * §7.7 D19, modelled. v1.10 had three objects and all of them watched INSERT and UPDATE; the half
+ * of I17-A3 that says "the session it points at is missing" is only reachable through DELETE.
+ */
+function purgeAdmits(version: Version111, referencedByAction: boolean): boolean {
+  if (version === 'v110') return true;
+  return !referencedByAction;
+}
+
+test('PC-CX-54 a published result session cannot be purged out from under its action', () => {
+  assert.equal(purgeAdmits('v111', true), false, 'a session an action row points at may not be physically deleted');
+  assert.equal(purgeAdmits('v111', false), true,
+    'and one nothing points at — a Coordinator Session — must still be deletable, or §7.5 rotation breaks');
+  assert.equal(purgeAdmits('v110', true), true, 'reverse control: v1.10 lets the purge commit');
+
+  // Soft delete is the product-level "the user deleted it", and it is an UPDATE: the row stays, so
+  // every gate keeps its object. Nothing in the fix may touch it (D19-b).
+  const invariants = section(PCC, '4.3');
+  const i17a3 = invariants.slice(invariants.indexOf('- **I17-A3（'), invariants.indexOf('- **I17-d（'));
+  assert.match(i17a3, /DELETE/, 'I17-A3 still says nothing about the verb that made it false');
+  assert.match(i17a3, /D19/, 'I17-A3 does not name the object that now carries it');
+
+  const seven = section(PCC, '7.7');
+  assert.ok(seven.includes('#### D19 '), '§7.7 has no D19');
+  const d19 = seven.slice(seven.indexOf('#### D19 '), seven.indexOf('#### D7 '));
+  assert.match(d19, /ON DELETE RESTRICT/, 'the result link is still not a real foreign key');
+  assert.match(d19, /BEFORE DELETE ON session/, 'nothing observes DELETE on session');
+  assert.match(d19, /SESSION_RESULT_LINK_REFERENCED/, 'a refused purge has no typed code');
+  assert.match(d19, /owner=USER, recovery=HUMAN/, 'the typed refusal names no owner or recovery');
+  for (const clause of ['**D19-a（', '**D19-b（', '**D19-c（', '**D19-d（', '**D19-e（', '**D19-f（']) {
+    assert.ok(d19.includes(clause), `D19 does not state ${clause}）`);
+  }
+  // §2.4 is where the review said the on-delete behaviour was simply absent.
+  const infra = section(PCC, '2.4');
+  assert.match(infra, /project_action_result_session_fk/, '§2.4 does not freeze the action → Session foreign key');
+  assert.match(infra, /session_result_link_delete_guard/, '§2.4 does not register the typed half');
+  assert.match(infra, /coordinator_session_id/, '§2.4 does not say why the decision audit keeps no foreign key');
+  // …and the rotation triggers §7.5 depends on are untouched.
+  assert.match(section(PCC, '7.5'), /被用户删除（`coordinatorSessionId` 被 SetNull）/,
+    'the rotation trigger the fix had to stay compatible with is gone');
+  assert.match(section(PCC, '15'), /\*\*F54\*\*/, '§15 has no fault row for a purged result session');
+  assert.match(section(PCC, '12.1'), /session_result_link_delete_guard/, 'G5 does not verify the delete guard');
+});
+
+/**
+ * §7.7 D18 ⓪ and §7.7 D16's fold, modelled together — they carry the same sentence. v1.10 ran the
+ * array expansion first, and Postgres raises 22023 on a non-array, so the type test below it was
+ * unreachable; the trigger also observed UPDATE only, so the value arrived unwatched (`PC-CX-55`).
+ */
+type LedgerOutcome = 'commit' | 'EXECUTION_PIN_LEDGER' | 'native-22023';
+function ledgerMutator(version: Version111, op: 'INSERT' | 'UPDATE',
+  oldLedger: unknown, newLedger: unknown): LedgerOutcome {
+  // `undefined` is the key being absent (COALESCE gives '[]'); JSON `null` is a value, and
+  // `jsonb_typeof` calls it 'null' — the database refuses it, so the model must too.
+  const isArray = (value: unknown): boolean => value === undefined || Array.isArray(value);
+  if (version === 'v110') {
+    if (op === 'INSERT') return 'commit';                       // no INSERT event at all
+    if (!isArray(oldLedger) || !isArray(newLedger)) return 'native-22023';
+    return 'commit';
+  }
+  if (!isArray(newLedger)) {
+    // The one outlet: this statement did not touch an already-malformed value (D18-g).
+    if (op === 'UPDATE' && !isArray(oldLedger) && JSON.stringify(newLedger) === JSON.stringify(oldLedger)) {
+      return 'commit';
+    }
+    return 'EXECUTION_PIN_LEDGER';
+  }
+  return 'commit';                                              // append-only is judged after this
+}
+
+test('PC-CX-55 the pin ledger is type-checked before it is folded, at insert and at update', () => {
+  // The insert is where the malformed value entered, and where v1.10 had no object at all.
+  for (const malformed of [{}, 'x', 3, null]) {
+    assert.equal(ledgerMutator('v111', 'INSERT', undefined, malformed), 'EXECUTION_PIN_LEDGER',
+      `a ledger written as ${JSON.stringify(malformed)} must be refused on the INSERT statement`);
+    assert.equal(ledgerMutator('v110', 'INSERT', undefined, malformed), 'commit',
+      'reverse control: v1.10 observes UPDATE only, so the malformed initial ledger commits');
+  }
+  assert.equal(ledgerMutator('v111', 'INSERT', undefined, []), 'commit',
+    'an empty array is a ledger and must still insert');
+
+  // The legacy row, and the two outlets D18-g freezes.
+  assert.equal(ledgerMutator('v111', 'UPDATE', {}, {}), 'commit',
+    'a statement that does not touch an already-malformed ledger — CLAIMED → REFUSED — must commit');
+  assert.equal(ledgerMutator('v111', 'UPDATE', {}, []), 'commit', 'and the prescribed repair must commit');
+  assert.equal(ledgerMutator('v111', 'UPDATE', {}, undefined), 'commit', 'as must dropping the key entirely');
+  assert.equal(ledgerMutator('v111', 'UPDATE', {}, 'still-bad'), 'EXECUTION_PIN_LEDGER',
+    'swapping one malformed value for another is not a repair');
+
+  // Reverse control: under v1.10 both of those are the review's stuck transitions, and neither is
+  // even a typed refusal — they are Postgres own JSON error.
+  assert.equal(ledgerMutator('v110', 'UPDATE', {}, {}), 'native-22023',
+    'reverse control: v1.10 bricks the normal terminal transition');
+  assert.equal(ledgerMutator('v110', 'UPDATE', {}, []), 'native-22023',
+    'reverse control: and it bricks the repair as well, so the permanent key has no way out');
+
+  // The document side: order and event surface, in both objects that call an array function.
+  const seven = section(PCC, '7.7');
+  const d18 = seven.slice(seven.indexOf('#### D18 '), seven.indexOf('#### D19 '));
+  assert.ok(d18.indexOf("IF jsonb_typeof(new_ledger) <> 'array'") < d18.indexOf('FROM jsonb_array_elements(new_ledger)'),
+    'D18 still expands the ledger before it proves the ledger is one');
+  assert.match(d18, /BEFORE INSERT OR UPDATE ON project_action/, 'D18 still observes UPDATE only');
+  assert.ok(d18.includes('**D18-g（'), 'D18 does not argue why the order and the event surface are the rule');
+  const d16 = seven.slice(seven.indexOf('#### D16 '), seven.indexOf('#### D8 '));
+  assert.ok(d16.indexOf("IF jsonb_typeof(ledger) <> 'array'") < d16.indexOf('jsonb_array_length(ledger)'),
+    'the commit-point fold still measures the ledger before it proves it is one');
+  // The stale audit count is registered, and the new one has an isolation and a repair path.
+  assert.match(d18, /必须对存量跑\*\*四条\*\*查询/, 'D18-e still promises three existing-data queries');
+  assert.match(d18, /malformedRetiredPins/, 'D18-e has no isolation step for the existing malformed rows');
+  assert.match(d18, /USER \/ HUMAN/, 'D18-e ④-b does not hand the undecidable rows to a person');
+  assert.match(section(PCC, '15'), /\*\*F55\*\*/, '§15 has no fault row for a malformed initial ledger');
+});
+
+test('mutation check: every fence added for PC-CX-53..55 is load-bearing', () => {
+  const versionless = { ...PAC_RESOLUTION };
+  delete versionless.v;
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-53',
+      fence: "the resolution key-and-type table (§7.4 EC2-b3 / §7.7 D17 ⓪)",
+      // The defect is the absence of a legal path, so it reappears when the conforming resolution
+      // is refused *and* the one PAC forbids is the only one admitted.
+      defectReappears: () => !resolutionAdmits('v110', PAC_RESOLUTION) && resolutionAdmits('v110', versionless),
+    },
+    {
+      finding: 'PC-CX-54',
+      fence: 'the delete guard and the ON DELETE RESTRICT foreign key (§7.7 D19)',
+      defectReappears: () => purgeAdmits('v110', true),
+    },
+    {
+      finding: 'PC-CX-55',
+      fence: 'the ledger type gate ahead of every array function, on INSERT too (§7.7 D18 ⓪ / D18-g)',
+      defectReappears: () => ledgerMutator('v110', 'INSERT', undefined, {}) === 'commit'
+        && ledgerMutator('v110', 'UPDATE', {}, {}) === 'native-22023',
+    },
+  ];
+  for (const mutant of mutants) {
+    assert.equal(mutant.defectReappears(), true,
+      `${mutant.finding}: removing ${mutant.fence} does not bring the published counterexample back, so it is not what closed it`);
+  }
+});
+
+test('§29 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§28 have, for the eleventh round.
+  const rows = tables(section(PCC, '29'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-53', 'PC-CX-54', 'PC-CX-55']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`) || self.includes(`test("${name}"`),
+      `§29 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '29').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 3, '§29 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§29 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '29').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§29 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§29 points at §${m[1]}, which does not exist`);
+  }
+});

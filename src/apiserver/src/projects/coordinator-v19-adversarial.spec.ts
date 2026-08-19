@@ -74,7 +74,9 @@ test('PC-CX-50: the two D11-writable columns can no longer close the gate that r
     'D18 lets a recorded first claim be rewritten');
   assert.match(D18_SQL, /rewrites or truncates a retired pin that is already recorded/,
     'D18 lets the retiredPins ledger shrink or be rewritten in place');
-  assert.match(D18_SQL, /BEFORE UPDATE ON project_action/, 'D18 is not a statement-level mutator');
+  // v1.11 (PC-CX-55) widened the same trigger to INSERT; what this line pins is that D18 is still
+  // a BEFORE trigger on project_action, which is what PC-CX-50's closure rests on.
+  assert.match(D18_SQL, /BEFORE INSERT OR UPDATE ON project_action/, 'D18 is not a statement-level mutator');
 
   // Closed (2/3): the action side no longer early-exits on the column it is supposed to protect.
   assert.doesNotMatch(D16_SQL, /NEW\.result_session_id IS NULL THEN RETURN NULL/,
@@ -343,7 +345,9 @@ function context(options: { model?: string; effort?: string; omit?: string[]; ex
   const ctx: { [key: string]: Json } = {
     agentId: 'a1', workspaceId: 'w1', assignedRunnerId: 'r1', provider: 'claude', providerBuiltin: true,
     requiredCapabilities: ['linux'], permissionMode: 'read-only',
-    resolution: { who: { source: 'task' }, with: { source: 'agent' }, where: { source: 'workspace' } },
+    // v1.11 (PC-CX-53): PAC §7.5 says `v` must be written, and the authoritative shape function
+    // now says so too — a versionless fixture would be testing a resolution PAC forbids.
+    resolution: { v: 1, who: { source: 'task' }, with: { source: 'agent' }, where: { source: 'workspace' } },
     snapshotFrozenAt: FROZEN_AT,
     model, effort: options.effort ?? 'high',
     authorization: {
