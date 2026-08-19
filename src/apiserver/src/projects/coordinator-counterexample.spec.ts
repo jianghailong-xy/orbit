@@ -20,11 +20,19 @@ import { bare, column, section, tableRows, tables } from './contract-doc';
 // same interleaving under v1's rule and asserts the defect reappears — a counter-example test that
 // cannot fail against the old design is not testing anything.
 //
+// v1.2 (`PC-CX-09..14`, §20) adds the second round, and it has one shape: v1.1 kept checking things
+// *at one moment* and treating the answer as an invariant. A trigger read the authority at INSERT
+// time, an acceptance record was computed at one snapshot, a blocker's owner was fixed at creation,
+// a dispatch key was derived from a counter a human can reset. Each of those can be changed by
+// another transaction afterwards, and none of them had anything tying "then" to "now". So the
+// second round of the model adds what the contract added: two conflicting row locks, a monotonic
+// epoch, and a rule that keeps delivery counts out of semantic digests.
+//
 // What this is NOT: units 03–23 have not been written, so none of these primitives exist in
-// Postgres yet. §19.9 records the boundary — `dispatch-linearization.spec.ts` (two real
-// transactions with a barrier) and `mixed-version-dispatch.spec.ts` (a real rolling upgrade) are
-// still owed by units 09/13/19/22. What changed is that the contract now names *which* primitive
-// those tests must exercise, which is what made them writable.
+// Postgres yet. §19.9 / §20.7 record the boundary. One item did move: `PC-CX-09` now also has a
+// test that runs on a **real** Postgres (`coordinator-linearization.pg.spec.ts`), because its whole
+// claim is about MVCC and row-lock conflict semantics, and a model that asserts those is only
+// asserting that its author read the manual correctly.
 const REPO = path.resolve(__dirname, '../../../..');
 const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
 
@@ -785,7 +793,8 @@ function turnDecision(d: Db, now: number, generation: number, reasonCode: string
 }
 
 test('PC-CX-07 rate limiting and idempotency are separate, and a no-progress turn becomes a blocker', () => {
-  const conflictFacts = { kind: 'MERGE_CONFLICT', subject: 'X', occurrences: 1 };
+  // v1.2 (TF1): what moves the digest is the *condition*, never how many times it was delivered.
+  const conflictFacts = { kind: 'MERGE_CONFLICT', subject: 'X', conditionVersion: 'files:a.ts' };
   const d = db();
 
   // t=0 — a merge conflict opens a turn.
@@ -806,7 +815,7 @@ test('PC-CX-07 rate limiting and idempotency are separate, and a no-progress tur
   assert.equal((stalled as { blocker: string }).blocker, 'COORDINATOR_NO_PROGRESS');
 
   // t=61s, facts changed — a different digest, so a fresh turn, with no counter anywhere.
-  const moved = turnDecision(d, 61_000, 0, 'BLOCKER_DECISION', { ...conflictFacts, occurrences: 2 });
+  const moved = turnDecision(d, 61_000, 0, 'BLOCKER_DECISION', { ...conflictFacts, conditionVersion: 'files:a.ts,b.ts' });
   assert.equal(moved.decision, 'OPEN');
   assert.notEqual((moved as { key: string }).key, (first as { key: string }).key);
 
@@ -816,14 +825,14 @@ test('PC-CX-07 rate limiting and idempotency are separate, and a no-progress tur
 
 test('PC-CX-07 the no-progress blocker clears itself when the facts move', () => {
   // BL3: clearing is driven by recomputing the condition, so the blocker cannot outlive its reason.
-  const facts = { kind: 'MERGE_CONFLICT', subject: 'X', occurrences: 1 };
+  const facts = { kind: 'MERGE_CONFLICT', subject: 'X', conditionVersion: 'files:a.ts' };
   const digest = sha256(`BLOCKER_DECISION|${JSON.stringify(facts)}`);
   const b = blocker({ kind: 'COORDINATOR_NO_PROGRESS', owner: 'USER', recovery: 'HUMAN', dedupeKey: `COORDINATOR_NO_PROGRESS:${digest}` });
 
   const stillStuck = sha256(`BLOCKER_DECISION|${JSON.stringify(facts)}`);
   assert.equal(b.dedupeKey.endsWith(stillStuck), true, 'unchanged facts keep the blocker open');
 
-  const moved = sha256(`BLOCKER_DECISION|${JSON.stringify({ ...facts, occurrences: 2 })}`);
+  const moved = sha256(`BLOCKER_DECISION|${JSON.stringify({ ...facts, conditionVersion: 'files:a.ts,b.ts' })}`);
   assert.equal(b.dedupeKey.endsWith(moved), false, 'changed facts no longer match, so the blocker clears');
 });
 
@@ -944,4 +953,761 @@ test('the blocker kinds the model uses are the ones §11.2 freezes, with the own
   }
   assert.equal(new Set(recoveries).size <= 3, true, 'recovery is a three-valued axis');
   for (const r of recoveries) assert.match(r, /^(TIME|EVENT|HUMAN)$/);
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// v1.2 · `PC-CX-09..14` (§20)
+// ═════════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-09 · an authority flip and a session insert, linearized on one row lock
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The model here is deliberately about *Postgres*, not about the control loop: the whole finding is
+// that a plain `SELECT` inside the trigger reads a snapshot, so a not-yet-committed authority flip
+// is invisible to it. Four facts drive everything below, and each is a documented Postgres rule
+// (§20.1 states them, and `coordinator-linearization.pg.spec.ts` checks them against a real server):
+//
+//   1. a plain SELECT sees the last *committed* version, never an uncommitted one;
+//   2. a plain UPDATE of a non-key column takes FOR NO KEY UPDATE on that row — for every binary;
+//   3. FOR SHARE conflicts with FOR NO KEY UPDATE, while the FK's FOR KEY SHARE does not;
+//   4. in READ COMMITTED, a blocked FOR SHARE re-reads the newest version once it is granted.
+//
+// Take away (3) and the trigger is reading a value that is already stale by the time it decides.
+
+interface AuthorityRace {
+  authority: DispatchAuthority;
+  occupying: Session[];
+  insertRefused: boolean;
+  flipSkipped: boolean;
+}
+
+/** §7.7 D6 + D8, with the `FOR SHARE` in the trigger switchable. Off = v1.1. */
+function authorityRace(order: 'FLIP_FIRST' | 'INSERT_FIRST', fences: { triggerForShare: boolean }): AuthorityRace {
+  const pg = {
+    committedAuthority: 'LEGACY' as DispatchAuthority,
+    committedSessions: [] as Session[],
+    flipRowLock: false,
+    insertShareLock: false,
+    flipPending: null as DispatchAuthority | null,
+    flipSkipped: false,
+    staged: null as Session | null,
+    insertRefused: false,
+  };
+  const legacyRow: Session = {
+    id: 's-legacy',
+    taskId: 'X',
+    status: 'PENDING',
+    deletedAt: null,
+    origin: 'LEGACY_SWEEP',
+    projectActionId: null,
+  };
+  const commitFlip = (): void => {
+    if (pg.flipPending !== null) pg.committedAuthority = pg.flipPending;
+    pg.flipPending = null;
+    pg.flipRowLock = false;
+  };
+  const commitInsert = (): void => {
+    if (pg.staged) pg.committedSessions.push(pg.staged);
+    pg.staged = null;
+    pg.insertShareLock = false;
+  };
+  /** The trigger body. Returns the authority it decided on. */
+  const guardRead = (): DispatchAuthority => {
+    if (fences.triggerForShare) {
+      pg.insertShareLock = true;
+      // (3)+(4): blocked by the flip's FOR NO KEY UPDATE, then re-reads the newest row version.
+      if (pg.flipRowLock) commitFlip();
+    }
+    return pg.committedAuthority; // (1): an uncommitted flip is simply not visible without the lock
+  };
+  /** D8-a: lock, *then* read claims in a fresh statement, *then* write. */
+  const flipLockScanWrite = (): void => {
+    if (fences.triggerForShare && pg.insertShareLock) commitInsert(); // (3): the flip waits its turn
+    pg.flipRowLock = true;
+    const occupied = pg.committedSessions.some((s) => s.deletedAt === null && OCCUPYING.includes(s.status));
+    if (occupied) pg.flipSkipped = true; // D8-b: a claimed task keeps its current authority
+    else pg.flipPending = 'COORDINATOR';
+  };
+
+  if (order === 'FLIP_FIRST') {
+    flipLockScanWrite();
+    // ── barrier: the flip has written and not committed ──
+    if (guardRead() === 'COORDINATOR') pg.insertRefused = true;
+    else pg.staged = legacyRow;
+    commitFlip();
+    commitInsert();
+  } else {
+    if (guardRead() === 'COORDINATOR') pg.insertRefused = true;
+    else pg.staged = legacyRow;
+    // ── barrier: the insert has written and not committed ──
+    flipLockScanWrite();
+    commitFlip();
+    commitInsert();
+  }
+  return {
+    authority: pg.committedAuthority,
+    occupying: pg.committedSessions.filter((s) => s.deletedAt === null && OCCUPYING.includes(s.status)),
+    insertRefused: pg.insertRefused,
+    flipSkipped: pg.flipSkipped,
+  };
+}
+
+/** I12 — the D6 predicate, evaluated on a *committed* state rather than at INSERT time. */
+function i12Holds(authority: DispatchAuthority, occupying: Session[]): boolean {
+  return occupying.every((s) =>
+    authority === 'COORDINATOR' ? s.origin !== 'LEGACY_SWEEP' : s.origin !== 'COORDINATOR',
+  );
+}
+
+test('PC-CX-09 an authority flip and a session insert cannot both win', () => {
+  const flipFirst = authorityRace('FLIP_FIRST', { triggerForShare: true });
+  assert.ok(i12Holds(flipFirst.authority, flipFirst.occupying), 'I12 must hold after both commit');
+  assert.equal(flipFirst.authority, 'COORDINATOR');
+  assert.equal(flipFirst.occupying.length, 0, 'the old binary never gets its session in');
+  assert.equal(flipFirst.insertRefused, true, 'and it finds out — a visible failure, not a silent one');
+
+  const insertFirst = authorityRace('INSERT_FIRST', { triggerForShare: true });
+  assert.ok(i12Holds(insertFirst.authority, insertFirst.occupying), 'I12 must hold in this order too');
+  assert.equal(insertFirst.authority, 'LEGACY', 'D8-b: a claimed task keeps the authority it had');
+  assert.equal(insertFirst.flipSkipped, true, 'the flip sees the claim because it locked first');
+  assert.deepEqual(insertFirst.occupying.map((s) => s.origin), ['LEGACY_SWEEP'], 'that session was legal when it was made');
+
+  // Negative control: remove exactly the two words `FOR SHARE` from the trigger and the P0 is back,
+  // in *both* commit orders — which is why the fix cannot be "be careful about ordering".
+  for (const order of ['FLIP_FIRST', 'INSERT_FIRST'] as const) {
+    const v11 = authorityRace(order, { triggerForShare: false });
+    assert.equal(v11.authority, 'COORDINATOR');
+    assert.deepEqual(v11.occupying.map((s) => s.origin), ['LEGACY_SWEEP'], order);
+    assert.equal(i12Holds(v11.authority, v11.occupying), false, `${order}: PC-CX-09 must reproduce without FOR SHARE`);
+  }
+});
+
+test('PC-CX-09 the deferred flip is finished by the transaction that releases the claim', () => {
+  // D8-b leaves a task behind on purpose, so the contract owes an account of who picks it up.
+  // §12.3 D3's third write point is that account: the same transaction that ends the session.
+  const after = authorityRace('INSERT_FIRST', { triggerForShare: true });
+  assert.equal(after.authority, 'LEGACY');
+
+  const released = after.occupying.map((s) => ({ ...s, status: 'SUCCEEDED' as RunStatus }));
+  const stillOccupying = released.filter((s) => OCCUPYING.includes(s.status));
+  assert.equal(stillOccupying.length, 0, 'the claim is gone');
+  const authority: DispatchAuthority = stillOccupying.length === 0 ? 'COORDINATOR' : 'LEGACY';
+  assert.equal(authority, 'COORDINATOR', 'and the projection is completed in that same transaction');
+  assert.ok(i12Holds(authority, stillOccupying), 'no window: the release and the flip commit together');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-10 · delivery counts are not facts
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ConditionBlocker {
+  kind: string;
+  subjectId: string;
+  conditionVersion: string;
+  occurrences: number;
+}
+
+/** §7.2 TF1/TF2 — `turnFacts` for `BLOCKER_DECISION`. `withOccurrences` = v1.1. */
+function blockerTurnFacts(bs: ConditionBlocker[], withOccurrences: boolean): unknown {
+  return [...bs]
+    .sort((a, b) => `${a.kind}${a.subjectId}`.localeCompare(`${b.kind}${b.subjectId}`))
+    .map((b) => (withOccurrences ? [b.kind, b.subjectId, b.occurrences] : [b.kind, b.subjectId, b.conditionVersion]));
+}
+
+/** §11.3 — a repeat of the same cause bumps the counter and recomputes the condition. */
+function deliver(open: ConditionBlocker[], signal: Omit<ConditionBlocker, 'occurrences'>): ConditionBlocker[] {
+  const existing = open.find((b) => b.kind === signal.kind && b.subjectId === signal.subjectId);
+  if (!existing) return [...open, { ...signal, occurrences: 1 }];
+  existing.occurrences += 1;
+  existing.conditionVersion = signal.conditionVersion; // recomputed from the facts, not accumulated
+  return open;
+}
+
+test('PC-CX-10 repeated delivery of one condition never changes the turn key', () => {
+  const signal = { kind: 'MERGE_CONFLICT', subjectId: 'X', conditionVersion: 'files:a.ts|branch:main' };
+
+  for (const n of [1, 2, 5, 50]) {
+    let open: ConditionBlocker[] = [];
+    for (let i = 0; i < n; i++) open = deliver(open, signal);
+    assert.equal(open.length, 1, 'dedupe keeps one row');
+    assert.equal(open[0].occurrences, n, 'the counter still counts — it just does not decide anything');
+    assert.equal(
+      sha256(`BLOCKER_DECISION|${JSON.stringify(blockerTurnFacts(open, false))}`),
+      sha256(`BLOCKER_DECISION|${JSON.stringify(blockerTurnFacts([{ ...signal, occurrences: 1 }], false))}`),
+      `${n} deliveries of one condition must produce the digest of one delivery`,
+    );
+  }
+
+  // …and the whole point of that: the second look is a no-progress stall, not a fresh turn.
+  const d = db();
+  const open = deliver(deliver([], signal), signal);
+  const facts = blockerTurnFacts(open, false);
+  const first = turnDecision(d, 0, 0, 'BLOCKER_DECISION', facts);
+  assert.equal(first.decision, 'OPEN');
+  d.actions.push({ key: (first as { key: string }).key, type: 'OPEN_COORDINATOR_TURN', status: 'APPLIED', createdAt: 0, reasonCode: 'BLOCKER_DECISION', endedAt: 10_000 });
+  const second = turnDecision(d, 61_000, 0, 'BLOCKER_DECISION', blockerTurnFacts(deliver(open, signal), false));
+  assert.equal(second.decision, 'NO_PROGRESS', 'the sixth delivery of an unresolved conflict is not progress');
+
+  // Negative control: v1.1 put `occurrences` in `turnFacts`, so every repeat minted a new key and,
+  // once past TR2's 60s floor, a new turn — forever, at whatever rate the signal repeats.
+  const v11 = db();
+  let v11open: ConditionBlocker[] = deliver([], signal);
+  const t0 = turnDecision(v11, 0, 0, 'BLOCKER_DECISION', blockerTurnFacts(v11open, true));
+  assert.equal(t0.decision, 'OPEN');
+  v11.actions.push({ key: (t0 as { key: string }).key, type: 'OPEN_COORDINATOR_TURN', status: 'APPLIED', createdAt: 0, reasonCode: 'BLOCKER_DECISION', endedAt: 10_000 });
+  v11open = deliver(v11open, signal);
+  const t1 = turnDecision(v11, 61_000, 0, 'BLOCKER_DECISION', blockerTurnFacts(v11open, true));
+  assert.equal(t1.decision, 'OPEN', 'PC-CX-10 must reproduce when occurrences is a fact');
+  assert.notEqual((t1 as { key: string }).key, (t0 as { key: string }).key);
+});
+
+test('PC-CX-10 no turnFacts column names anything that moves on its own', () => {
+  // TF1 is a deny-list, so it can be checked by reading the frozen table rather than by trusting
+  // that whoever writes the next `reasonCode` remembers the rule.
+  const triggerTable = tables(section(PCC, '7.2')).find((t) => t[0].some((h) => h.includes('reasonCode')))!;
+  const facts = column(triggerTable, 'turnFacts（进入 reasonDigest 的快照投影，§7.3）');
+  assert.ok(facts.length >= 5, 'the trigger table is a closed set of reasonCodes');
+  for (const cell of facts) {
+    for (const banned of ['occurrences', 'attempts', 'lastSeenAt', 'last_seen_at', 'firstSeenAt', 'first_seen_at', 'escalatedAt', 'escalated_at', 'snapshotAt', 'now()']) {
+      assert.ok(!cell.includes(banned), `turnFacts must not contain ${banned} (TF1): ${cell}`);
+    }
+  }
+  assert.ok(facts.some((c) => c.includes('conditionVersion')), 'the blocker row must bind the condition, not the count');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-11 · a dispatch epoch that only ever goes forward
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EpochTask {
+  dispatchAttempt: number;
+  failureCount: number;
+}
+
+type DispatchResult = { key: string; created: boolean; status: 'APPLIED' | 'ALREADY_APPLIED' };
+
+/** §8.2 DA1–DA3. `epoch: 'failureCount'` is v1.1. */
+function dispatch(d: Db, taskId: string, task: EpochTask, epoch: 'dispatchAttempt' | 'failureCount'): DispatchResult {
+  const key = `pc:v1:${d.projectId}:dispatch:${taskId}:${epoch === 'dispatchAttempt' ? task.dispatchAttempt : task.failureCount}`;
+  if (d.actions.some((a) => a.key === key)) return { key, created: false, status: 'ALREADY_APPLIED' }; // §8.5 C2
+  d.actions.push({ key, type: 'DISPATCH_TASK', status: 'APPLIED', createdAt: 0 });
+  d.sessions.push({ id: `s${d.sessions.length}`, taskId, status: 'PENDING', deletedAt: null, origin: 'COORDINATOR', projectActionId: key });
+  task.dispatchAttempt += 1; // DA2 — only on a successful ledger insert, in the same transaction
+  return { key, created: true, status: 'APPLIED' };
+}
+
+/** Dispatch, fail to the threshold, let a human clear the failure count, dispatch again. */
+function failureCycle(epoch: 'dispatchAttempt' | 'failureCount'): { keys: string[]; sessions: number; afterReset: DispatchResult } {
+  const d = db();
+  const task: EpochTask = { dispatchAttempt: 0, failureCount: 0 };
+  const keys: string[] = [];
+  for (let i = 0; i < MAX_AUTO_RUN_FAILURES; i++) {
+    keys.push(dispatch(d, 'X', task, epoch).key);
+    task.failureCount += 1; // the session failed
+    d.sessions = d.sessions.map((s) => ({ ...s, status: 'FAILED' as RunStatus }));
+  }
+  // §9.5 Q3 last row: TEST_FAILED, automatic dispatch stops until a person deals with it.
+  assert.equal(failurePolicy({ failureCount: task.failureCount, backoffExpired: true, attributable: true }).blocker, 'TEST_FAILED');
+  task.failureCount = 0; // §19.6 — the human recovery path, which is allowed to touch *this* counter
+  const afterReset = dispatch(d, 'X', task, epoch);
+  return { keys, sessions: d.sessions.length, afterReset };
+}
+
+test('PC-CX-11 a human reset never reuses a dispatch key', () => {
+  const fixed = failureCycle('dispatchAttempt');
+  assert.deepEqual(fixed.keys, ['pc:v1:p1:dispatch:X:0', 'pc:v1:p1:dispatch:X:1', 'pc:v1:p1:dispatch:X:2']);
+  assert.equal(fixed.afterReset.status, 'APPLIED', 'a genuinely new attempt gets a key that never existed');
+  assert.equal(fixed.afterReset.key, 'pc:v1:p1:dispatch:X:3');
+  assert.equal(fixed.afterReset.created, true, 'and therefore an actual session');
+  assert.equal(fixed.sessions, MAX_AUTO_RUN_FAILURES + 1);
+
+  // Negative control: v1.1's epoch was `failureCount`, and §19.6 tells the human to zero it. The
+  // fourth dispatch then recomputes a key that is already APPLIED, §8.5 reads that as "already
+  // done", and the task is unrunnable forever — with no blocker, no error and no missing audit row.
+  const v11 = failureCycle('failureCount');
+  assert.deepEqual(v11.keys, ['pc:v1:p1:dispatch:X:0', 'pc:v1:p1:dispatch:X:1', 'pc:v1:p1:dispatch:X:2']);
+  assert.equal(v11.afterReset.key, 'pc:v1:p1:dispatch:X:0', 'PC-CX-11: the reset walks back onto a used key');
+  assert.equal(v11.afterReset.status, 'ALREADY_APPLIED');
+  assert.equal(v11.afterReset.created, false, 'no session — silently, forever');
+  assert.equal(v11.sessions, MAX_AUTO_RUN_FAILURES);
+});
+
+test('PC-CX-11 idempotency survives the new epoch: one snapshot is still one dispatch', () => {
+  // Making the epoch monotonic must not make duplicate reconciles dispatch twice — DA2's rule is
+  // that the key comes from the *snapshot* and the increment happens on the successful insert.
+  const d = db();
+  const task: EpochTask = { dispatchAttempt: 0, failureCount: 0 };
+  const snapshot = { ...task }; // two reconciles that read the same snapshot
+  const first = dispatch(d, 'X', task, 'dispatchAttempt');
+  const replay = dispatch(d, 'X', { ...snapshot, dispatchAttempt: snapshot.dispatchAttempt }, 'dispatchAttempt');
+  assert.equal(first.status, 'APPLIED');
+  assert.equal(replay.status, 'ALREADY_APPLIED', 'a replayed snapshot computes the same key');
+  assert.equal(replay.key, first.key);
+  assert.equal(d.sessions.length, 1, 'exactly one session');
+});
+
+test('PC-CX-11 the backoff window has exactly one authoritative run state', () => {
+  // §9.5 Q4. v1.1's §19 summary said EXECUTING; the guards say PLANNING for the minimal case, and
+  // both cannot be the contract. The rule is that the summary is not a source — runStateOf is.
+  const base = { projectStatus: 'OPEN' as const, blockers: [], acceptanceInFlight: false, openVerification: 0 };
+  assert.equal(runStateOf({ ...base, liveSessions: 0 }), 'PLANNING', 'one backing-off task, nothing else in flight');
+  assert.equal(nextWakeOf(0, [], { runState: 'PLANNING', backoffUntil: 5 * MINUTE }), 5 * MINUTE, 'the wake is the retry (Q2)');
+  assert.equal(runStateOf({ ...base, liveSessions: 1 }), 'EXECUTING', 'EXECUTING only when something really is in flight');
+  const threshold = blocker({ kind: 'TEST_FAILED', owner: 'USER', recovery: 'HUMAN' });
+  assert.equal(runStateOf({ ...base, blockers: [threshold], liveSessions: 0 }), 'AWAITING_HUMAN');
+
+  // And the document now says the same thing in the same three rows.
+  const q4 = tables(section(PCC, '9.5')).at(-1)!;
+  const states = column(q4, 'runStateOf').map((c) => /^[A-Z_]+/.exec(bare(c))?.[0]);
+  assert.deepEqual(states, ['PLANNING', 'EXECUTING', 'AWAITING_HUMAN'], 'Q4 and the guards must give the same three answers');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-12 · three axes, three questions
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface KindRow {
+  kind: string;
+  defaultOwner: Owner;
+  recovery: Recovery;
+  opensTurn: boolean;
+}
+
+function kindTable(): KindRow[] {
+  const rows = tableRows(section(PCC, '11.2'));
+  const kinds = column(rows, 'kind').map(bare);
+  const owners = column(rows, '默认 owner').map(bare) as Owner[];
+  const recoveries = column(rows, 'recovery').map(bare) as Recovery[];
+  const opens = column(rows, 'opensTurn').map(bare);
+  return kinds.map((kind, i) => ({ kind, defaultOwner: owners[i], recovery: recoveries[i], opensTurn: opens[i] === '✔' }));
+}
+
+/** The kinds §7.2 lists on the `BLOCKER_DECISION` row — read from the document, not retyped. */
+function turnTriggerKinds(): string[] {
+  const trigger = tableRows(section(PCC, '7.2')).find((cells) => bare(cells[0]) === 'BLOCKER_DECISION')!;
+  return (/\{([^}]+)\}/.exec(trigger[1])?.[1] ?? '').split(',').map((k) => k.trim()).filter(Boolean);
+}
+
+interface LiveBlocker extends Blocker {
+  notifications: number;
+}
+
+function live(row: KindRow, now = 0): LiveBlocker {
+  return {
+    ...blocker({ kind: row.kind, owner: row.defaultOwner, recovery: row.recovery, firstSeenAt: now }),
+    notifications: 0,
+  };
+}
+
+/** §11.5 ES1 + ES3 — one step, always to USER, and it touches nothing but the owner. */
+function escalate(b: LiveBlocker, now: number): LiveBlocker {
+  if (b.escalatedAt !== null) return b; // at most once, and at most one notification
+  return { ...b, owner: 'USER', escalatedAt: now, notifications: b.notifications + 1 };
+}
+
+/** v1.1's ladder, kept only so the negative control can run the rule it replaced. */
+function escalateV11(b: LiveBlocker, now: number): LiveBlocker {
+  const next: Owner = b.owner === 'SYSTEM' ? 'COORDINATOR' : 'USER';
+  return { ...b, owner: next, escalatedAt: now, notifications: b.notifications + 1 };
+}
+
+/** §7.2 `BLOCKER_DECISION` including BL6 — the kind list *and* "not escalated yet". */
+function opensTurnNow(b: LiveBlocker, triggers: string[]): boolean {
+  return triggers.includes(b.kind) && b.escalatedAt === null;
+}
+
+test('PC-CX-12 escalation changes the owner and nothing else', () => {
+  const table = kindTable();
+  const triggers = turnTriggerKinds();
+  assert.equal(table.length, 18, '§11.2 freezes eighteen kinds');
+
+  for (const row of table) {
+    // BL4, stated on the constant column: opensTurn is a function of kind, and it agrees with the
+    // kind's *default* owner. Neither of those two things is a row that escalation can rewrite.
+    assert.equal(row.opensTurn, row.defaultOwner === 'COORDINATOR', `BL4 on ${row.kind}`);
+    assert.equal(row.opensTurn, triggers.includes(row.kind), `§7.2 and §11.2 disagree about ${row.kind}`);
+
+    const fresh = live(row);
+    const after = escalate(fresh, ESCALATION_AFTER);
+
+    assert.equal(after.owner, 'USER', 'ES3: escalation goes to a person, in one step, for every kind');
+    assert.equal(after.recovery, fresh.recovery, `ES1: ${row.kind} keeps its recovery axis`);
+    assert.equal(after.kind, fresh.kind, 'escalation never rewrites the kind…');
+    assert.equal(row.opensTurn, table.find((r) => r.kind === after.kind)!.opensTurn, '…so opensTurn cannot move');
+
+    // The state axis: after escalation the project is waiting on a person, by guard 2.
+    const state = runStateOf({ projectStatus: 'OPEN', blockers: [after], acceptanceInFlight: false, liveSessions: 1, openVerification: 0 });
+    assert.equal(state, 'AWAITING_HUMAN', `${row.kind} after escalation`);
+
+    // BL6: handing it to a person is also handing it *off* the coordinator.
+    assert.equal(opensTurnNow(after, triggers), false, `${row.kind} must stop opening turns once escalated`);
+    assert.equal(opensTurnNow(fresh, triggers), row.opensTurn, `${row.kind} before escalation`);
+
+    // At most one notification, no matter how many times the threshold is crossed.
+    assert.equal(escalate(escalate(after, 2 * ESCALATION_AFTER), 3 * ESCALATION_AFTER).notifications, 1, row.kind);
+
+    // …and a recovery that time or the world can still finish keeps its clock (ES1 + N-mask).
+    if (after.recovery !== 'HUMAN') {
+      const withCheck = { ...after, nextCheckAt: 6 * 60 * MINUTE };
+      assert.equal(nextWakeOf(ESCALATION_AFTER, [withCheck], { runState: 'AWAITING_HUMAN' }), 6 * 60 * MINUTE, row.kind);
+    }
+  }
+});
+
+test('PC-CX-12 the v1.1 rules produce both of the reviewed anomalies', () => {
+  // Negative control, run exactly as v1.1 stated it: `opensTurn ⟺ current owner`, a three-step
+  // ladder, and no BL6. Both published counter-examples come straight back.
+  const table = kindTable();
+  const triggers = turnTriggerKinds();
+  const opensTurnByOwner = (b: LiveBlocker): boolean => b.owner === 'COORDINATOR';
+
+  // (a) SYSTEM → COORDINATOR: owner says the coordinator owns it, the kind list says it must not
+  // open a turn. The iff v1.1 froze is simply false on this row.
+  const provider = escalateV11(live(table.find((r) => r.kind === 'PROVIDER_UNAVAILABLE')!), ESCALATION_AFTER);
+  assert.equal(provider.owner, 'COORDINATOR');
+  assert.equal(opensTurnByOwner(provider), true);
+  assert.equal(triggers.includes(provider.kind), false, 'PC-CX-12 (a): owner and kind disagree');
+
+  // (b) COORDINATOR → USER: the project is AWAITING_HUMAN and, without BL6, still opening turns.
+  const conflict = escalateV11(live(table.find((r) => r.kind === 'MERGE_CONFLICT')!), ESCALATION_AFTER);
+  assert.equal(conflict.owner, 'USER');
+  assert.equal(
+    runStateOf({ projectStatus: 'OPEN', blockers: [conflict], acceptanceInFlight: false, liveSessions: 0, openVerification: 0 }),
+    'AWAITING_HUMAN',
+  );
+  assert.equal(triggers.includes(conflict.kind) && conflict.escalatedAt !== null, true, 'PC-CX-12 (b): waiting on a person while still waking the coordinator');
+  assert.equal(opensTurnNow(conflict, triggers), false, 'BL6 is what stops it');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-13 · one gate for DONE and for every write that moves an acceptance fact
+// ─────────────────────────────────────────────────────────────────────────────
+
+type FactWrite = 'task.created' | 'task.status_changed' | 'task.completion_policy' | 'verdict' | 'criteria' | 'merge_evidence' | 'task.title';
+
+/** §13.4 AE6 — the closed set. `task.title` is deliberately outside it. */
+const ACCEPTANCE_FACT_WRITES: FactWrite[] = ['task.created', 'task.status_changed', 'task.completion_policy', 'verdict', 'criteria', 'merge_evidence'];
+
+interface Project13 {
+  status: 'OPEN' | 'DONE' | 'CANCELLED';
+  facts: AcceptanceFacts;
+  evidence: { allPass: boolean; digest: string }[];
+  reopened: boolean;
+  title: string;
+}
+
+function applyFact(p: Project13, write: FactWrite): void {
+  switch (write) {
+    case 'task.created':
+      p.facts = { ...p.facts, taskSet: [...p.facts.taskSet, ['t9', 'OPEN']] };
+      break;
+    case 'task.status_changed':
+      p.facts = { ...p.facts, taskSet: p.facts.taskSet.map(([id, s]) => (id === 't1' ? [id, 'OPEN'] : [id, s]) as [string, string]) };
+      break;
+    case 'task.completion_policy':
+      p.facts = { ...p.facts, taskSet: [...p.facts.taskSet, ['t1#policy', 'ALL_CHILDREN_DONE']] };
+      break;
+    case 'verdict':
+      p.facts = { ...p.facts, verdicts: [['v1', 'FAIL']] };
+      break;
+    case 'criteria':
+      p.facts = { ...p.facts, acceptanceCriteria: p.facts.acceptanceCriteria + ' and deployed' };
+      break;
+    case 'merge_evidence':
+      p.facts = { ...p.facts, mergeEvidence: [['r1', 'content-hash-b']] };
+      break;
+    case 'task.title':
+      p.title = 'renamed';
+      break;
+  }
+}
+
+interface Gate13 {
+  /** §13.4 AE6/AE7's shared project row lock. Off = v1.1's "REPEATABLE READ, or lock the rows you read". */
+  projectRowLock: boolean;
+}
+
+/** Runs the two transactions in one order and returns the committed state. */
+function doneRace(order: 'FACT_FIRST' | 'DONE_FIRST', write: FactWrite, gate: Gate13): { project: Project13; done: DoneResult } {
+  const h1: AcceptanceFacts = {
+    projectId: 'p1',
+    acceptanceCriteria: 'every unit merged to feat/project',
+    taskSet: [['t1', 'DONE'], ['t2', 'DONE']],
+    verdicts: [['v1', 'PASS']],
+    mergeEvidence: [['r1', 'content-hash-a']],
+  };
+  const p: Project13 = { status: 'OPEN', facts: h1, evidence: [{ allPass: true, digest: acceptanceDigest(h1) }], reopened: false, title: 't' };
+  const gated = gate.projectRowLock && ACCEPTANCE_FACT_WRITES.includes(write);
+
+  if (order === 'FACT_FIRST') {
+    applyFact(p, write);
+    // With the lock, DONE waits and then recomputes against a *fresh* statement snapshot, so it
+    // sees this write. Without it, DONE is still holding the snapshot it took before the write.
+    const seen = gated ? p.facts : h1;
+    const done = writeDone(p.evidence, seen);
+    if (done.ok) p.status = 'DONE';
+    return { project: p, done };
+  }
+
+  const done = writeDone(p.evidence, p.facts);
+  if (done.ok) p.status = 'DONE';
+  // The fact write now has the lock. AE8: it must not leave DONE standing on facts that moved.
+  applyFact(p, write);
+  if (gated && p.status === 'DONE') {
+    p.status = 'OPEN';
+    p.reopened = true;
+  }
+  return { project: p, done };
+}
+
+/** I10, as a predicate a reviewer could run against production. */
+function i10Holds(p: Project13): boolean {
+  if (p.status !== 'DONE') return true;
+  const fresh = acceptanceDigest(p.facts);
+  return p.evidence.some((e) => e.allPass && e.digest === fresh);
+}
+
+test('PC-CX-13 DONE and every acceptance-fact write share one gate', () => {
+  for (const write of ACCEPTANCE_FACT_WRITES) {
+    const factFirst = doneRace('FACT_FIRST', write, { projectRowLock: true });
+    assert.deepEqual(factFirst.done, { ok: false, code: 'ACCEPTANCE_EVIDENCE_STALE' }, `${write} first`);
+    assert.equal(factFirst.project.status, 'OPEN', `${write}: the project must stay open`);
+    assert.ok(i10Holds(factFirst.project), write);
+
+    const doneFirst = doneRace('DONE_FIRST', write, { projectRowLock: true });
+    assert.deepEqual(doneFirst.done, { ok: true }, `${write}: DONE was correct when it committed`);
+    assert.equal(doneFirst.project.reopened, true, `${write}: AE8 must reopen atomically`);
+    assert.equal(doneFirst.project.status, 'OPEN');
+    assert.ok(i10Holds(doneFirst.project), write);
+  }
+
+  // A write outside AE6's closed set changes no acceptance fact, so it takes no gate and reopens
+  // nothing — renaming a task must not undo a finished project.
+  const rename = doneRace('DONE_FIRST', 'task.title', { projectRowLock: true });
+  assert.equal(rename.project.status, 'DONE');
+  assert.equal(rename.project.reopened, false);
+  assert.ok(i10Holds(rename.project));
+
+  // Negative control: without the shared lock the two transactions write different rows, so
+  // Postgres has no reason to order them — and guard 1 then pins the result as SETTLED forever.
+  for (const write of ACCEPTANCE_FACT_WRITES) {
+    for (const order of ['FACT_FIRST', 'DONE_FIRST'] as const) {
+      const v11 = doneRace(order, write, { projectRowLock: false });
+      assert.equal(v11.project.status, 'DONE', `${order}/${write}`);
+      assert.equal(i10Holds(v11.project), false, `PC-CX-13 must reproduce without the gate (${order}/${write})`);
+      assert.equal(
+        runStateOf({ projectStatus: v11.project.status, blockers: [], acceptanceInFlight: false, liveSessions: 0, openVerification: 0 }),
+        'SETTLED',
+        'and the task event cannot pull it back: guard 1 answers first',
+      );
+    }
+  }
+});
+
+test('PC-CX-13 a cancelled project is not reopened by a task change', () => {
+  // AE8 is about DONE, which is a claim about facts. CANCELLED is a decision about intent, and a
+  // task moving is not an argument against it.
+  const h1: AcceptanceFacts = { projectId: 'p1', acceptanceCriteria: 'c', taskSet: [['t1', 'DONE']], verdicts: [], mergeEvidence: [] };
+  const p: Project13 = { status: 'CANCELLED', facts: h1, evidence: [], reopened: false, title: 't' };
+  applyFact(p, 'task.status_changed');
+  assert.equal(p.status, 'CANCELLED');
+  assert.equal(p.reopened, false);
+  assert.ok(i10Holds(p), 'I10 says nothing about CANCELLED');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PC-CX-14 · a session a person started is evidence, not an anomaly
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface LiveView {
+  sessions: Session[];
+  appliedDispatchActions: { key: string; resultSessionId: string }[];
+  coordinatorTurnInFlight: boolean;
+  openBlockers: Blocker[];
+  nextWakeAt: number | null;
+}
+
+/** §4.1's EXECUTING invariant. `actionLinkedOnly` = v1.1. */
+function executingInvariantHolds(v: LiveView, actionLinkedOnly: boolean): boolean {
+  const occupying = v.sessions.filter((s) => s.deletedAt === null && OCCUPYING.includes(s.status));
+  if (occupying.length === 0) return false;
+  return occupying.every((s) => {
+    const linked = v.appliedDispatchActions.some((a) => a.resultSessionId === s.id);
+    if (actionLinkedOnly) return linked;
+    // I11: every claim is attributable — to a coordinator action, or to a person.
+    if (s.origin === 'COORDINATOR') return linked && s.projectActionId !== null;
+    if (s.origin === 'USER') return s.projectActionId === null;
+    return false; // LEGACY_SWEEP on a COORDINATOR-authority task is what D6 exists to refuse
+  });
+}
+
+/** §10.3 (a)–(d). `actionLinkedOnly` = v1.1's clause (a). */
+function livenessClauses(v: LiveView, actionLinkedOnly: boolean): { a: boolean; b: boolean; c: boolean; d: boolean } {
+  const live = v.sessions.filter((s) => s.deletedAt === null && OCCUPYING.includes(s.status));
+  const a = live.some((s) =>
+    v.appliedDispatchActions.some((x) => x.resultSessionId === s.id) || (!actionLinkedOnly && s.origin === 'USER'),
+  );
+  const c = v.openBlockers.length > 0 && v.openBlockers.every((b) => b.nextCheckAt !== null);
+  return { a, b: v.coordinatorTurnInFlight, c, d: v.nextWakeAt !== null };
+}
+
+const manualSession: Session = { id: 's-user', taskId: 'X', status: 'PENDING', deletedAt: null, origin: 'USER', projectActionId: null };
+
+test('PC-CX-14 a user-started session satisfies EXECUTING and liveness', () => {
+  // (1) A person starts the only task. Nothing else is happening anywhere in the project.
+  const manualOnly: LiveView = { sessions: [manualSession], appliedDispatchActions: [], coordinatorTurnInFlight: false, openBlockers: [], nextWakeAt: null };
+  assert.equal(
+    runStateOf({ projectStatus: 'OPEN', blockers: [], acceptanceInFlight: false, liveSessions: 1, openVerification: 0 }),
+    'EXECUTING',
+    'guard 5 counts any live session on a task of this project',
+  );
+  assert.equal(executingInvariantHolds(manualOnly, false), true, 'and the state table now agrees with the guard');
+  assert.equal(livenessClauses(manualOnly, false).a, true, '§10.3 (a): a person pressing start is progress');
+
+  // (2) The same person racing the control loop: D5 picks a winner, the loser is determinate, and
+  // whichever one survives satisfies (a).
+  for (const { sessions, outcomes } of raceTwo('USER', 'COORDINATOR', V11)) {
+    assert.equal(sessions, 1);
+    const winner = outcomes.find((o) => o.created !== null)!;
+    const view: LiveView = {
+      sessions: [winner.entry === 'USER' ? manualSession : { ...manualSession, id: 's-coord', origin: 'COORDINATOR', projectActionId: 'act-X-0' }],
+      appliedDispatchActions: winner.entry === 'COORDINATOR' ? [{ key: 'pc:v1:p1:dispatch:X:0', resultSessionId: 's-coord' }] : [],
+      coordinatorTurnInFlight: false,
+      openBlockers: [],
+      nextWakeAt: null,
+    };
+    assert.equal(executingInvariantHolds(view, false), true, `winner ${winner.entry}`);
+    assert.equal(livenessClauses(view, false).a, true, `winner ${winner.entry}`);
+  }
+
+  // (3) The manual session ends: EXECUTING drops out and the clock takes over, by §10.4 rule 6.
+  const ended: LiveView = { ...manualOnly, sessions: [{ ...manualSession, status: 'SUCCEEDED' }], nextWakeAt: MINUTE };
+  assert.equal(
+    runStateOf({ projectStatus: 'OPEN', blockers: [], acceptanceInFlight: false, liveSessions: 0, openVerification: 0 }),
+    'PLANNING',
+  );
+  assert.equal(executingInvariantHolds(ended, false), false, 'nothing is occupying the task any more');
+  const clauses = livenessClauses(ended, false);
+  assert.equal(clauses.a, false);
+  assert.equal(clauses.d, true, 'but (d) holds, so the project is still provably not stalled');
+
+  // Negative control: v1.1 required the live session to be a coordinator action's result, so a
+  // perfectly healthy project — a person is running its only task — failed the EXECUTING invariant
+  // *and* all four liveness clauses at once, which §10.3 calls a P0.
+  assert.equal(executingInvariantHolds(manualOnly, true), false, 'PC-CX-14 must reproduce under the old invariant');
+  const v11 = livenessClauses(manualOnly, true);
+  assert.deepEqual([v11.a, v11.b, v11.c, v11.d], [false, false, false, false], 'four clauses, none of them true');
+});
+
+test('PC-CX-14 an unattributable claim is still a violation', () => {
+  // Widening EXECUTING to admit a person must not widen it to admit anything at all: a
+  // LEGACY_SWEEP claim on a COORDINATOR-authority task is exactly what D6 refuses, and I11 says so.
+  const smuggled: LiveView = {
+    sessions: [{ ...manualSession, id: 's-legacy', origin: 'LEGACY_SWEEP' }],
+    appliedDispatchActions: [],
+    coordinatorTurnInFlight: false,
+    openBlockers: [],
+    nextWakeAt: null,
+  };
+  assert.equal(executingInvariantHolds(smuggled, false), false);
+  assert.equal(livenessClauses(smuggled, false).a, false, 'it is not evidence of anything legitimate');
+
+  // …and a COORDINATOR-origin session with no action row is equally unattributable.
+  const orphan: LiveView = { ...smuggled, sessions: [{ ...manualSession, id: 's-orphan', origin: 'COORDINATOR', projectActionId: null }] };
+  assert.equal(executingInvariantHolds(orphan, false), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mutation check · every fence v1.2 adds has to be load-bearing
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Each test above carries its own negative control, but a control is only worth something if
+// somebody notices when it stops controlling anything. This is that check, in one place: for each
+// finding, turn off exactly the one rule v1.2 added and assert the published defect comes back. A
+// rule whose removal changes nothing was never the fix — it was a paragraph.
+//
+// Read it the other way round and it is a mutation test over the contract itself: six mutants, and
+// the suite must kill every one of them.
+test('mutation check: every fence added for PC-CX-09..14 is load-bearing', () => {
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-09',
+      fence: "the trigger's SELECT … FOR SHARE (§7.7 D6)",
+      defectReappears: () =>
+        (['FLIP_FIRST', 'INSERT_FIRST'] as const).every((order) => {
+          const r = authorityRace(order, { triggerForShare: false });
+          return !i12Holds(r.authority, r.occupying);
+        }),
+    },
+    {
+      finding: 'PC-CX-10',
+      fence: 'occurrences excluded from turnFacts (§7.2 TF1)',
+      defectReappears: () => {
+        const signal = { kind: 'MERGE_CONFLICT', subjectId: 'X', conditionVersion: 'files:a.ts' };
+        let open = deliver([], signal);
+        const one = sha256(`BLOCKER_DECISION|${JSON.stringify(blockerTurnFacts(open, true))}`);
+        open = deliver(open, signal);
+        return one !== sha256(`BLOCKER_DECISION|${JSON.stringify(blockerTurnFacts(open, true))}`);
+      },
+    },
+    {
+      finding: 'PC-CX-11',
+      fence: 'a monotonic dispatch epoch (§8.2 DA1)',
+      defectReappears: () => failureCycle('failureCount').afterReset.created === false,
+    },
+    {
+      finding: 'PC-CX-12',
+      fence: 'opensTurn read from the kind, plus BL6 (§11.2)',
+      defectReappears: () => {
+        const table = kindTable();
+        const triggers = turnTriggerKinds();
+        const provider = escalateV11(live(table.find((r) => r.kind === 'PROVIDER_UNAVAILABLE')!), ESCALATION_AFTER);
+        const conflict = escalateV11(live(table.find((r) => r.kind === 'MERGE_CONFLICT')!), ESCALATION_AFTER);
+        const ownerSaysYesKindSaysNo = provider.owner === 'COORDINATOR' && !triggers.includes(provider.kind);
+        const waitingOnAPersonButStillOpeningTurns = conflict.owner === 'USER' && triggers.includes(conflict.kind);
+        return ownerSaysYesKindSaysNo && waitingOnAPersonButStillOpeningTurns;
+      },
+    },
+    {
+      finding: 'PC-CX-13',
+      fence: 'the shared project row lock (§13.4 AE6/AE7)',
+      defectReappears: () =>
+        ACCEPTANCE_FACT_WRITES.every((write) =>
+          (['FACT_FIRST', 'DONE_FIRST'] as const).every((order) => !i10Holds(doneRace(order, write, { projectRowLock: false }).project)),
+        ),
+    },
+    {
+      finding: 'PC-CX-14',
+      fence: 'EXECUTING and §10.3 (a) admitting USER origin',
+      defectReappears: () => {
+        const view: LiveView = { sessions: [manualSession], appliedDispatchActions: [], coordinatorTurnInFlight: false, openBlockers: [], nextWakeAt: null };
+        const c = livenessClauses(view, true);
+        return !executingInvariantHolds(view, true) && !c.a && !c.b && !c.c && !c.d;
+      },
+    },
+  ];
+
+  assert.equal(mutants.length, 6, 'unit 02 raised six findings against v1.1');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  const held = authorityRace('FLIP_FIRST', { triggerForShare: true });
+  assert.ok(i12Holds(held.authority, held.occupying));
+  assert.equal(failureCycle('dispatchAttempt').afterReset.created, true);
+  assert.ok(i10Holds(doneRace('DONE_FIRST', 'verdict', { projectRowLock: true }).project));
+});
+
+test('§20 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The mirror of the §19 check in `coordinator-contract.spec.ts`, kept here as well so that the
+  // model file cannot quietly rename a test out from under the document.
+  const rows = tables(section(PCC, '20'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-09', 'PC-CX-10', 'PC-CX-11', 'PC-CX-12', 'PC-CX-13', 'PC-CX-14']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§20 names "${name}", which is not a test in this file`);
+  }
 });

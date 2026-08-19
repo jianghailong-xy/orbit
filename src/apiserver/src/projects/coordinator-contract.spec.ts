@@ -19,11 +19,15 @@ import { bare, column, headingNumbers, section, tableRows, tables } from './cont
 // Since v1.1 it also holds the contract to unit 02's review: §19 has to answer every finding that
 // review raised, and the answers have to be wired to tests that exist. The counter-examples
 // themselves live in `coordinator-counterexample.spec.ts`; what is checked here is that the
-// document and those tests still refer to the same rules.
+// document and those tests still refer to the same rules. v1.2 does the same for the second review
+// and §20 — deliberately as a second, separate assertion rather than a loop over both, because the
+// two rounds must stay independently checkable: a revision that closes round two by quietly
+// dropping a round-one finding is exactly what these two tests exist to refuse.
 const REPO = path.resolve(__dirname, '../../../..');
 const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
 const PAC = readFileSync(path.join(REPO, 'docs/project-agent-contract.md'), 'utf8');
 const REVIEW = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02.md'), 'utf8');
+const REVIEW_V11 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.1.md'), 'utf8');
 const COUNTEREXAMPLES = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
 
 test('every cross-reference into the frozen Project/Agent contract resolves', () => {
@@ -211,6 +215,58 @@ test('§19 answers every finding unit 02 raised, and names a test that exists fo
   }
 });
 
+test('§20 answers every finding unit 02 raised against v1.1, and names a test that exists', () => {
+  // The second review is read the same way the first one is: as evidence. Its findings are
+  // numbered from 09, and it also refers back to `PC-CX-01..08`, so the new ones are the ones
+  // above 08 — and the old ones must still be answered where they always were, in §19.
+  const cited = new Set(Array.from(REVIEW_V11.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 8).sort();
+  assert.deepEqual(raised, ['09', '10', '11', '12', '13', '14'], 'unit 02 raised six findings against v1.1');
+
+  const rows = tables(section(PCC, '20'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§20 does not answer exactly the findings raised');
+  const answeredIn19 = column(tables(section(PCC, '19'))[0], 'ID').map(bare);
+  assert.equal(ids.some((id) => answeredIn19.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    // Every finding gets the same six answers worked through. The Postgres heading is the one v1.2
+    // adds: five of these six findings turned on what the database actually guarantees, and a
+    // revision that does not say which guarantee it is leaning on has not answered them.
+    const detail = section(PCC, `20.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§20.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the reviews are read, never edited: both are still the documents that were signed off', () => {
+  // The hard constraint on both revision units was "do not edit the review to make the failure go
+  // away". Nothing here can prove a file was not edited, but it can pin the two things a revision
+  // would be tempted to soften: the verdicts, and the count of findings behind them.
+  assert.match(REVIEW, /FAIL/, 'the first review found the contract wanting; that is a fact, not a draft');
+  assert.match(REVIEW_V11, /FAIL/, 'so did the second');
+  assert.equal(new Set(Array.from(REVIEW.matchAll(/PC-CX-(\d\d)/g), (m) => m[1])).size, 8);
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V11.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 8).length,
+    6,
+  );
+});
+
 test('the P0 findings are answered by a database constraint, not by application code', () => {
   // PC-CX-01 and PC-CX-02 are both "two entry points, one of which this binary does not control".
   // A fix that lives in a service is not a fix for either, so §2.4 has to keep listing the two
@@ -226,4 +282,10 @@ test('the P0 findings are answered by a database constraint, not by application 
   }
   // D5-c: the index cannot be created over rows that already violate it.
   assert.match(migration, /3b/, 'the migration must converge existing duplicate claims before adding the index');
+
+  // PC-CX-09 is the same trigger read one round later: it was there, it just read a snapshot. The
+  // two words that fix it are invisible in `pg_trigger`, in `migrate diff` and in any type check,
+  // so the only place they can be held is here and in the migration's own verification.
+  assert.match(section(PCC, '7.7'), /FOR SHARE/, 'the authority guard must take a lock that conflicts with the flip');
+  assert.match(migration, /FOR SHARE/, 'and the migration must be verified for it, not just for the trigger existing');
 });
