@@ -1382,12 +1382,18 @@ const EC_SCHEMA_V15 = isolated15(`
   );
   CREATE TABLE session (
     id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id), status text NOT NULL,
-    dispatch_origin text NOT NULL, project_action_id text REFERENCES project_action(id), agent_id text REFERENCES agent(id)
+    dispatch_origin text NOT NULL, project_action_id text REFERENCES project_action(id), agent_id text REFERENCES agent(id),
+    -- PAC §6's execution snapshot: written at create, read-only afterwards. §4.3 I17-A is a query
+    -- over these columns and the action row, which is why both sides have to be here.
+    provider text, model text, workspace_id text, assigned_runner_id text
   );
 
   -- D14-a. Reads exactly EC1's eight inputs, all FOR SHARE, in §8.6 LO1's order, and returns the
   -- resolved context (EC2's nine components, in EC1 row order), its digest, and — when the chain
   -- cannot resolve at all — the input that stopped it.
+  -- D14-f: a function that takes FOR SHARE must be VOLATILE. v1.5's fixture left the marker out
+  -- and PostgreSQL defaulted it to VOLATILE, so the suite was green against an object the contract
+  -- did not specify; the contract said STABLE, and that object raises 0A000 on every call.
   CREATE FUNCTION resolve_execution_context_locked(p_task text, p_agent text)
     RETURNS TABLE (digest text, ctx text[], revoked_input text) AS $fn$
   DECLARE t record; a record; m record; pv record; w record; r record; p record; c text[];
@@ -1411,7 +1417,7 @@ const EC_SCHEMA_V15 = isolated15(`
     c := ARRAY[p_agent, m.agent_id, t.id, t.assignee_agent_id, pv.slug, t.model, w.id, r.id, p.coordinator_workspace_id];
     RETURN QUERY SELECT md5(array_to_string(c, '|')), c, NULL::text;
   END;
-  $fn$ LANGUAGE plpgsql;
+  $fn$ LANGUAGE plpgsql VOLATILE;
 
   CREATE FUNCTION session_execution_context_guard() RETURNS trigger AS $fn$
   DECLARE frozen text; frozen_ctx text[]; observed text; observed_ctx text[]; revoked text;
@@ -1434,7 +1440,7 @@ const EC_SCHEMA_V15 = isolated15(`
     END IF;
     RETURN NULL;
   END;
-  $fn$ LANGUAGE plpgsql;
+  $fn$ LANGUAGE plpgsql VOLATILE;
 
   CREATE CONSTRAINT TRIGGER session_execution_context_guard
     AFTER INSERT OR UPDATE OF project_action_id, dispatch_origin, task_id, agent_id ON session
@@ -1666,6 +1672,460 @@ test('PC-CX-31 on real Postgres: a rate-limited manual trigger survives, and fir
       await c.query(`UPDATE project_event SET consumed_at = 10000 WHERE consumed_at IS NULL`); // "consume it anyway"
       assert.deepEqual(await pending(), [], 'PC-CX-31 reading A must reproduce: the request is gone');
       assert.equal(await reconcile(60_000), 'IDLE', 'and the boundary passes with nothing to run');
+    } finally {
+      await c.end();
+    }
+  });
+
+/**
+ * v1.6 — `PC-CX-32` and `PC-CX-34`, both about D14 and both only answerable by a server.
+ *
+ * `PC-CX-32` is the round's P0 and it is invisible in every check the contract had: the specified
+ * resolver promised `STABLE` and took `FOR SHARE`, PostgreSQL accepts the `CREATE` and refuses
+ * every *call*, and the function body — the thing §12.1 G5 greps — is byte-identical either way.
+ * So this builds both objects, reads `pg_proc.provolatile`, and calls the real deferred trigger.
+ *
+ * `PC-CX-34` is the same barrier `PC-CX-29` runs, read on the committed state afterwards: I17-A
+ * (snapshot columns = frozen context) has to hold in all sixteen cells, while v1.5's "equivalent
+ * current-state query" legitimately returns rows once a human revokes after a legal dispatch.
+ */
+const EC_CONTEXT_SQL = `SELECT digest, ctx FROM resolve_execution_context_locked('t1','a1')`;
+
+/** The columns PAC §6 freezes on the session, taken from EC2's component order (EC1 row order). */
+const INSERT_PLACEHOLDER = `
+  INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id, agent_id,
+                       provider, model, workspace_id, assigned_runner_id)
+  SELECT $1, 't1', 'PENDING', 'COORDINATOR', 'act-1',
+         execution_context[1], execution_context[5], execution_context[6], execution_context[7], execution_context[8]
+    FROM project_action WHERE id = 'act-1'`;
+
+/** §4.3 I17-A, as the zero-row query §12.1 G5 has to run after the migration. */
+const I17A_SQL = `
+  SELECT count(*)::text AS n
+    FROM session s
+    LEFT JOIN project_action a ON a.id = s.project_action_id
+   WHERE s.dispatch_origin = 'COORDINATOR' AND s.status IN ('PENDING','RUNNING')
+     AND (a.id IS NULL OR a.status <> 'APPLIED'
+          OR a.execution_context_digest IS DISTINCT FROM md5(array_to_string(a.execution_context, '|'))
+          OR s.agent_id           IS DISTINCT FROM a.execution_context[1]
+          OR s.provider           IS DISTINCT FROM a.execution_context[5]
+          OR s.model              IS DISTINCT FROM a.execution_context[6]
+          OR s.workspace_id       IS DISTINCT FROM a.execution_context[7]
+          OR s.assigned_runner_id IS DISTINCT FROM a.execution_context[8])`;
+
+/** v1.5's deleted "equivalent queryable form", verbatim enough to reproduce its `false|1|1`. */
+const I17_V15_CURRENT_STATE_SQL = `
+  SELECT count(*)::text AS n
+    FROM session s
+    JOIN task t ON t.id = s.task_id
+    LEFT JOIN agent ag ON ag.id = s.agent_id
+    LEFT JOIN project_member m ON m.project_id = 'p1' AND m.agent_id = s.agent_id
+    LEFT JOIN provider pv ON pv.slug = s.provider
+    LEFT JOIN workspace w ON w.id = s.workspace_id
+    LEFT JOIN runner r ON r.id = s.assigned_runner_id
+   WHERE s.dispatch_origin = 'COORDINATOR' AND s.status IN ('PENDING','RUNNING')
+     AND (ag.id IS NULL OR NOT ag.enabled OR ag.deleted_at IS NOT NULL
+          OR m.agent_id IS NULL
+          OR t.assignee_agent_id IS DISTINCT FROM s.agent_id
+          OR t.provider IS DISTINCT FROM s.provider
+          OR t.model IS DISTINCT FROM s.model
+          OR pv.slug IS NULL OR NOT pv.available
+          OR w.deleted_at IS NOT NULL
+          OR r.id IS NULL OR NOT r.online)`;
+
+async function ecReset(c: Client, frozenCtx: string[], frozen: string): Promise<void> {
+  await c.query(`DELETE FROM session; DELETE FROM project_action`);
+  await c.query(`UPDATE agent SET enabled = true, deleted_at = NULL`);
+  await c.query(`INSERT INTO project_member VALUES ('p1','a1') ON CONFLICT DO NOTHING`);
+  await c.query(`UPDATE provider SET available = true`);
+  await c.query(`UPDATE runner SET online = true`);
+  await c.query(`UPDATE workspace SET deleted_at = NULL`);
+  await c.query(`UPDATE task SET assignee_agent_id = 'a1', model = 'claude-opus-5', provider = 'claude'`);
+  await c.query(`UPDATE project SET coordinator_workspace_id = 'w-coord'`);
+  await c.query(`INSERT INTO project_action VALUES ('act-1','p1','DISPATCH_TASK','APPLIED',$1,$2)`, [frozenCtx, frozen]);
+}
+
+const countOf = async (c: Client, sql: string): Promise<number> =>
+  Number((await c.query<{ n: string }>(sql)).rows[0].n);
+
+test('PC-CX-32 on real Postgres: the D14 objects are VOLATILE, and the deferred trigger really runs',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const [setup, human, loop] = await Promise.all([connect(), connect(), connect()]);
+    try {
+      await setup.query(EC_SCHEMA_V15);
+      for (const c of [human, loop]) await c.query(`SET search_path TO ${V15_SCHEMA}`);
+
+      // 1. The metadata assertion. Both D14 functions take row locks, so both must be VOLATILE —
+      //    and this column is the *only* place the difference shows.
+      const volatility = (await setup.query<{ proname: string; provolatile: string }>(`
+        SELECT proname, provolatile FROM pg_proc
+         WHERE pronamespace = '${V15_SCHEMA}'::regnamespace
+           AND proname IN ('resolve_execution_context_locked','session_execution_context_guard')
+         ORDER BY proname`)).rows;
+      assert.deepEqual(volatility, [
+        { proname: 'resolve_execution_context_locked', provolatile: 'v' },
+        { proname: 'session_execution_context_guard', provolatile: 'v' },
+      ], 'D14-f: a function that takes FOR SHARE has to be VOLATILE, and the migration must assert it');
+
+      // 2. The trigger is the deferred constraint trigger D14 specifies, not an immediate one.
+      const trigger = (await setup.query<{ tgdeferrable: boolean; tginitdeferred: boolean; tgconstraint: string }>(`
+        SELECT tgdeferrable, tginitdeferred, tgconstraint::text FROM pg_trigger
+         WHERE tgname = 'session_execution_context_guard' AND NOT tgisinternal`)).rows[0];
+      assert.deepEqual({ d: trigger.tgdeferrable, i: trigger.tginitdeferred }, { d: true, i: true },
+        'an immediate trigger would read the action row before it is written');
+      assert.notEqual(trigger.tgconstraint, '0', 'it has to be a constraint trigger to be deferrable at all');
+
+      // 3. Calling it — which is the part `CREATE FUNCTION` succeeding does not prove. The function
+      //    resolves, and the constraint trigger it feeds admits a legal placeholder at COMMIT.
+      const resolved = (await setup.query<{ digest: string; ctx: string[] }>(EC_CONTEXT_SQL)).rows[0];
+      assert.ok(resolved.digest, 'the specified resolver has to be callable, not merely creatable');
+      await ecReset(setup, resolved.ctx, resolved.digest);
+      await loop.query('BEGIN');
+      await loop.query(INSERT_PLACEHOLDER, ['legal']);
+      await loop.query('COMMIT');
+      assert.equal(await countOf(setup, `SELECT count(*)::text AS n FROM session`), 1,
+        'the deferred guard must let an authorised dispatch commit');
+
+      // …and refuses a revoked one, through the same call path.
+      await ecReset(setup, resolved.ctx, resolved.digest);
+      await human.query(`UPDATE agent SET enabled = false WHERE id = 'a1'`);
+      let refusal: string | null = null;
+      await loop.query('BEGIN');
+      await loop.query(INSERT_PLACEHOLDER, ['stale']);
+      try { await loop.query('COMMIT'); } catch (e) {
+        refusal = /EXECUTION_CONTEXT_REVOKED: [A-Z_]+/.exec(String(e))?.[0] ?? `unexpected: ${String(e)}`;
+        await loop.query('ROLLBACK');
+      }
+      assert.equal(refusal, 'EXECUTION_CONTEXT_REVOKED: AGENT', 'the guard has to run at COMMIT, not merely exist');
+      await human.query(`UPDATE agent SET enabled = true WHERE id = 'a1'`);
+
+      // 4. The negative control: rebuild the resolver exactly as v1.5 specified it — `STABLE` — and
+      //    the same body stops working. First directly, then through the trigger, which is the path
+      //    that matters: every COORDINATOR dispatch would abort at COMMIT.
+      await setup.query(`
+        CREATE OR REPLACE FUNCTION resolve_execution_context_locked(p_task text, p_agent text)
+          RETURNS TABLE (digest text, ctx text[], revoked_input text) AS $fn$
+        DECLARE a record;
+        BEGIN
+          SELECT * INTO a FROM agent WHERE id = p_agent FOR SHARE;
+          RETURN QUERY SELECT md5(p_agent), ARRAY[p_agent], NULL::text;
+        END;
+        $fn$ LANGUAGE plpgsql STABLE;
+      `);
+      assert.equal((await setup.query<{ provolatile: string }>(
+        `SELECT provolatile FROM pg_proc WHERE proname = 'resolve_execution_context_locked'
+           AND pronamespace = '${V15_SCHEMA}'::regnamespace`)).rows[0].provolatile, 's',
+        'the negative control has to really be the volatility the contract used to specify');
+
+      let direct: { code?: string; message: string } | null = null;
+      try { await setup.query(EC_CONTEXT_SQL); } catch (e) {
+        const err = e as Error & { code?: string };
+        direct = { code: err.code, message: err.message };
+      }
+      assert.equal(direct?.code, '0A000', 'PC-CX-32 must reproduce: the specified object cannot take its locks');
+      assert.match(direct!.message, /SELECT FOR SHARE is not allowed in a non-volatile function/);
+
+      await ecReset(setup, resolved.ctx, resolved.digest);
+      let viaTrigger: string | undefined;
+      await loop.query('BEGIN');
+      await loop.query(INSERT_PLACEHOLDER, ['blocked']);
+      try { await loop.query('COMMIT'); } catch (e) {
+        viaTrigger = (e as Error & { code?: string }).code;
+        await loop.query('ROLLBACK');
+      }
+      assert.equal(viaTrigger, '0A000',
+        'and it fails on the real path: every COORDINATOR dispatch aborts at COMMIT, with a code EC4 does not list');
+      assert.equal(await countOf(setup, `SELECT count(*)::text AS n FROM session`), 0);
+    } finally {
+      await Promise.all([setup.end(), human.end(), loop.end()]);
+    }
+  });
+
+test('PC-CX-34 on real Postgres: I17-A holds on the committed state while the v1.5 current-state query legitimately does not',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const [setup, human, loop] = await Promise.all([connect(), connect(), connect()]);
+    try {
+      await setup.query(EC_SCHEMA_V15);
+      for (const c of [human, loop]) await c.query(`SET search_path TO ${V15_SCHEMA}`);
+      const resolved = (await setup.query<{ digest: string; ctx: string[] }>(EC_CONTEXT_SQL)).rows[0];
+
+      // Sixteen cells. USER_FIRST is PC-CX-29's half and is re-read here only for I17-A; the
+      // interesting half is COORDINATOR_FIRST, where every step is legal and the state v1.5 called
+      // impossible is the one the contract elsewhere requires.
+      const visibleToV15: string[] = [];
+      for (const { input, sql } of EC_REVOCATIONS) {
+        await ecReset(setup, resolved.ctx, resolved.digest);
+        await human.query(sql);
+        await loop.query('BEGIN');
+        await loop.query(INSERT_PLACEHOLDER, ['stale']);
+        try { await loop.query('COMMIT'); } catch { await loop.query('ROLLBACK'); }
+        assert.equal(await countOf(setup, I17A_SQL), 0, `${input}/USER_FIRST: I17-A holds — there is no placeholder at all`);
+        assert.equal(await countOf(setup, `SELECT count(*)::text AS n FROM session`), 0);
+
+        // COORDINATOR_FIRST: EC3 takes the shared locks before inserting, so the revocation queues
+        // behind it and takes effect afterwards — AU1-a row 2, F35, and PAC §6 all require this.
+        await ecReset(setup, resolved.ctx, resolved.digest);
+        await loop.query('BEGIN');
+        const atCommit = (await loop.query<{ digest: string }>(EC_CONTEXT_SQL)).rows[0].digest;
+        assert.equal(atCommit, resolved.digest, `${input}/COORDINATOR_FIRST: I17-B is what is required, and it held`);
+        await loop.query(INSERT_PLACEHOLDER, ['legal']);
+        await loop.query('COMMIT');
+        await human.query(sql);
+
+        assert.equal(await countOf(setup, `SELECT count(*)::text AS n FROM session`), 1,
+          `${input}/COORDINATOR_FIRST: the dispatch was authorised when it committed, so it stands`);
+        assert.equal(await countOf(setup, I17A_SQL), 0,
+          `${input}/COORDINATOR_FIRST: I17-A still holds — it reads only columns that stopped changing at commit`);
+        if (await countOf(setup, I17_V15_CURRENT_STATE_SQL) > 0) visibleToV15.push(input);
+      }
+
+      // The published output, reproduced: `enabled = false | live = 1 | i17_current_violations = 1`.
+      await ecReset(setup, resolved.ctx, resolved.digest);
+      await loop.query('BEGIN');
+      await loop.query(INSERT_PLACEHOLDER, ['legal']);
+      await loop.query('COMMIT');
+      await human.query(`UPDATE agent SET enabled = false WHERE id = 'a1'`);
+      const published = (await setup.query<{ enabled: boolean; live: string; violations: string }>(`
+        SELECT (SELECT enabled FROM agent WHERE id='a1') AS enabled,
+               (SELECT count(*)::text FROM session WHERE status IN ('PENDING','RUNNING')) AS live,
+               (${I17_V15_CURRENT_STATE_SQL}) AS violations`)).rows[0];
+      assert.deepEqual([published.enabled, Number(published.live), Number(published.violations)], [false, 1, 1],
+        'PC-CX-34 must reproduce on a real server: a legal order makes v1.5\'s current-state query non-zero');
+      assert.equal(await countOf(setup, I17A_SQL), 0, 'while I17-A — the one G5 now runs — stays at zero rows');
+
+      // Seven of EC1's eight inputs are visible to that query at all; the coordinator workspace is
+      // not an input to a DISPATCH placeholder, which is a second hole in the same sentence.
+      assert.deepEqual(visibleToV15, ['AGENT', 'MEMBERSHIP', 'TASK', 'PROVIDER', 'MODEL', 'WORKSPACE', 'RUNNER'],
+        'every revocation a dispatch resolves must reproduce the non-zero current-state query');
+
+      // I17-A can fail — it is a real assertion, not a tautology. Tamper with the frozen side (the
+      // action row is pinned by D11 in production; here we do by hand what D11 forbids) and it goes
+      // non-zero, which is what makes running it after a migration worth anything.
+      await setup.query(`UPDATE project_action SET execution_context = array_replace(execution_context, 'claude', 'codex') WHERE id = 'act-1'`);
+      assert.equal(await countOf(setup, I17A_SQL), 1, 'I17-A must catch a placeholder that disagrees with its own action row');
+    } finally {
+      await Promise.all([setup.end(), human.end(), loop.end()]);
+    }
+  });
+
+/**
+ * v1.6 — `PC-CX-35` and `PC-CX-36`: the wake, and the state of an event nobody has looked at yet.
+ *
+ * Neither is a concurrency claim, but both are claims about *queries* — "what does §10.4 compute
+ * from these rows" and "what does the §10.2 W4 predicate return for this project" — and a query is
+ * exactly the thing a model cannot check on its own behalf. Both fixtures are the real shapes:
+ * `project_event` behind §5.4's partial unique index, the window anchor as a `project_action` row,
+ * and the backstop predicate as the four-branch SQL §10.2 freezes.
+ */
+const WAKE_SCHEMA_V16 = isolated15(`
+  CREATE TABLE project (id text PRIMARY KEY, status text NOT NULL DEFAULT 'OPEN', coordinator_enabled boolean NOT NULL DEFAULT true);
+  CREATE TABLE project_runtime (project_id text PRIMARY KEY REFERENCES project(id), run_state text NOT NULL DEFAULT 'PLANNING',
+                                next_wake_at timestamptz, next_wake_reason text);
+  CREATE TABLE project_action (
+    idempotency_key text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id), type text NOT NULL,
+    status text NOT NULL, reason_code text, generation bigint NOT NULL, created_at timestamptz NOT NULL
+  );
+  CREATE TABLE project_event (
+    id bigserial PRIMARY KEY, project_id text NOT NULL REFERENCES project(id), kind text NOT NULL, dedupe_key text NOT NULL,
+    occurred_at timestamptz NOT NULL, attempts int NOT NULL DEFAULT 0, consumed_at timestamptz, next_attempt_at timestamptz
+  );
+  CREATE UNIQUE INDEX project_event_open_dedupe_idx ON project_event (project_id, dedupe_key) WHERE consumed_at IS NULL;
+  CREATE INDEX project_event_next_attempt_idx ON project_event (next_attempt_at) WHERE consumed_at IS NULL;
+  CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id), run_at timestamptz);
+  CREATE TABLE project_blocker (
+    id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id), recovery text NOT NULL,
+    resolved_at timestamptz, escalated_at timestamptz, next_check_at timestamptz
+  );
+  INSERT INTO project VALUES ('p1', 'OPEN', true);
+  INSERT INTO project_runtime (project_id) VALUES ('p1');
+`);
+
+/**
+ * §10.4 W5 as one query: build the candidate table, take the minimum with the item number as the
+ * tie-break, then apply W3's floor. `reason` is the chosen candidate's, not the floor's.
+ */
+const W5_SQL = `
+  WITH now_at AS (SELECT $1::timestamptz AS t),
+  candidates AS (
+      SELECT 3 AS source, b.next_check_at AS at, 'blocker recheck' AS reason
+        FROM project_blocker b, now_at
+       WHERE b.project_id = 'p1' AND b.resolved_at IS NULL AND b.recovery <> 'HUMAN' AND b.next_check_at > now_at.t
+    UNION ALL
+      SELECT 4, t.run_at, 'task runAt due'
+        FROM task t, now_at
+       WHERE t.project_id = 'p1' AND t.run_at > now_at.t
+    UNION ALL
+      SELECT 7, a.created_at + interval '60 seconds', 'manual trigger rate-limited'
+        FROM project_action a, now_at
+       WHERE a.project_id = 'p1' AND a.type = 'OPEN_COORDINATOR_TURN' AND a.status = 'APPLIED'
+         AND a.reason_code = 'MANUAL' AND a.generation = 0
+         AND a.created_at + interval '60 seconds' > now_at.t
+         AND EXISTS (SELECT 1 FROM project_event e
+                      WHERE e.project_id = 'p1' AND e.kind = 'user.manual_trigger' AND e.consumed_at IS NULL)
+  ),
+  chosen AS (SELECT * FROM candidates ORDER BY at, source LIMIT 1)
+  SELECT GREATEST(chosen.at, now_at.t + interval '5 seconds')::text AS next_wake_at,
+         chosen.reason AS next_wake_reason,
+         (GREATEST(chosen.at, now_at.t + interval '5 seconds') > chosen.at) AS floored,
+         (SELECT count(*)::text FROM candidates) AS candidate_count
+    FROM chosen, now_at`;
+
+const T0 = '2026-08-19T00:00:00.000Z';
+const at = (ms: number): string => new Date(Date.parse(T0) + ms).toISOString();
+
+test('PC-CX-35 on real Postgres: the window boundary and the floor are one deterministic timestamp',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(WAKE_SCHEMA_V16);
+      // t0: a MANUAL turn was opened and applied — TR2-a's anchor. A second request arrives inside
+      // the window and stays pending (TR2-b/c), so item 7 is applicable.
+      await c.query(`INSERT INTO project_action VALUES ('pc:v1:p1:turn:0:d1','p1','OPEN_COORDINATOR_TURN','APPLIED','MANUAL',0,$1)`, [at(0)]);
+      await c.query(`INSERT INTO project_event (project_id, kind, dedupe_key, occurred_at) VALUES ('p1','user.manual_trigger','manual:2',$1)`, [at(10_000)]);
+
+      const wake = async (now: number): Promise<{ next_wake_at: string; next_wake_reason: string; floored: boolean; candidate_count: string }> =>
+        (await c.query<{ next_wake_at: string; next_wake_reason: string; floored: boolean; candidate_count: string }>(W5_SQL, [at(now)])).rows[0];
+
+      // The review's parametrisation, on real timestamps: the last five seconds are the cells where
+      // v1.5's three sentences have no common solution.
+      for (const remaining of [0, 1, 2, 4, 5, 6, 59]) {
+        const now = 60_000 - remaining * 1_000;
+        if (remaining === 0) continue;                       // the window has expired; item 7 no longer applies
+        const w = await wake(now);
+        const chosen = Date.parse(w.next_wake_at);
+        const nextAttemptAt = Date.parse(at(60_000));
+        assert.ok(chosen >= Date.parse(at(now)) + 5_000, `remaining=${remaining}s: W3's floor holds`);
+        assert.ok(chosen <= nextAttemptAt + 5_000, `remaining=${remaining}s: I18-C's bound holds`);
+        assert.ok(chosen >= nextAttemptAt, `remaining=${remaining}s: the window has expired by the time it fires`);
+        assert.equal(w.next_wake_reason, 'manual trigger rate-limited', `remaining=${remaining}s: the reason names the candidate`);
+        assert.equal(w.floored, remaining < 5, `remaining=${remaining}s: the audit records whether the floor moved it`);
+      }
+
+      // v1.5's bound, run as a query over the same rows: `next_wake_at <= window boundary` and
+      // `>= now + 5s` have no common solution in the last five seconds. This is the arithmetic the
+      // review published, evaluated by the server rather than asserted in prose.
+      const unsatisfiable = (await c.query<{ n: string }>(`
+        SELECT count(*)::text AS n FROM generate_series(0, 4) AS remaining
+         WHERE $1::timestamptz - (remaining || ' seconds')::interval + interval '5 seconds' > $1::timestamptz`,
+        [at(60_000)])).rows[0];
+      assert.equal(Number(unsatisfiable.n), 5, 'five of the seven parametrised cells are inside the floor');
+
+      // A second, earlier candidate: §10.4 takes the minimum, and TR2-e's "point at the boundary"
+      // must not override it. The earlier wake re-evaluates the pending request anyway.
+      await c.query(`INSERT INTO task VALUES ('t1','p1',$1)`, [at(59_000)]);
+      const withRunAt = await wake(50_000);
+      assert.equal(Date.parse(withRunAt.next_wake_at), Date.parse(at(59_000)), 'the minimum wins');
+      assert.equal(withRunAt.next_wake_reason, 'task runAt due', 'and the reason is the candidate it woke for');
+      assert.equal(withRunAt.candidate_count, '2', 'both candidates go to the audit');
+
+      // A tie at the same instant is decided by §10.4's item numbers, and the answer does not depend
+      // on the order the rows come back in.
+      await c.query(`UPDATE task SET run_at = $1 WHERE id = 't1'`, [at(60_000)]);
+      const tie = await wake(30_000);
+      assert.equal(tie.next_wake_reason, 'task runAt due', 'item 4 beats item 7 at the same instant (W5 step 2)');
+      assert.equal(Date.parse(tie.next_wake_at), Date.parse(at(60_000)));
+      await c.query(`INSERT INTO project_blocker VALUES ('b1','p1','TIME',NULL,NULL,$1)`, [at(60_000)]);
+      const threeWay = await wake(30_000);
+      assert.equal(threeWay.next_wake_reason, 'blocker recheck', 'item 3 beats both, by the same total order');
+      assert.equal(threeWay.candidate_count, '3');
+
+      // Once the request is answered, item 7 stops applying — the candidate table is derived from
+      // rows, so "the pending request is gone" needs no separate bookkeeping.
+      await c.query(`UPDATE project_event SET consumed_at = $1 WHERE consumed_at IS NULL`, [at(31_000)]);
+      const answered = await wake(30_000);
+      assert.equal(answered.candidate_count, '2', 'a consumed request contributes no wake candidate');
+    } finally {
+      await c.end();
+    }
+  });
+
+/** §10.2 W4, all four branches, as the migration would create it. `version` picks v1.5 (three). */
+function w4Sql(version: 'v15' | 'v16'): string {
+  return `
+    SELECT p.id
+      FROM project p
+      JOIN project_runtime r ON r.project_id = p.id
+     WHERE p.status = 'OPEN' AND p.coordinator_enabled
+       AND r.run_state <> 'SETTLED'
+       AND (
+             (r.next_wake_at IS NOT NULL AND r.next_wake_at < $1::timestamptz - interval '5 minutes')
+          OR (r.next_wake_at IS NULL AND EXISTS (
+                SELECT 1 FROM project_blocker b
+                 WHERE b.project_id = p.id AND b.resolved_at IS NULL
+                   AND (b.recovery <> 'HUMAN' OR b.escalated_at IS NULL)))
+          OR (r.next_wake_at IS NULL AND NOT EXISTS (
+                SELECT 1 FROM project_blocker b
+                 WHERE b.project_id = p.id AND b.resolved_at IS NULL))
+          ${version === 'v16' ? `OR EXISTS (
+                SELECT 1 FROM project_event e
+                 WHERE e.project_id = p.id AND e.consumed_at IS NULL
+                   AND COALESCE(e.next_attempt_at, e.occurred_at) < $1::timestamptz - interval '5 minutes')` : ''}
+           )
+     ORDER BY r.next_wake_at NULLS FIRST
+     LIMIT 200`;
+}
+
+/** §4.3 I18, as the three-branch classification a production snapshot can be run through. */
+const I18_SHAPE_SQL = `
+  SELECT e.dedupe_key,
+         CASE
+           WHEN e.consumed_at IS NOT NULL THEN 'A'
+           WHEN e.next_attempt_at IS NULL AND e.attempts = 0 THEN 'B'
+           WHEN e.next_attempt_at IS NOT NULL AND r.next_wake_at IS NOT NULL
+                AND r.next_wake_at <= e.next_attempt_at + interval '5 seconds' THEN 'C'
+           ELSE 'NONE'
+         END AS shape
+    FROM project_event e JOIN project_runtime r ON r.project_id = e.project_id
+   WHERE e.kind = 'user.manual_trigger' ORDER BY e.dedupe_key`;
+
+test('PC-CX-36 on real Postgres: the backstop sees an event no consumer took',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    try {
+      await c.query(WAKE_SCHEMA_V16);
+      const hits = async (version: 'v15' | 'v16', now: number): Promise<string[]> =>
+        (await c.query<{ id: string }>(w4Sql(version), [at(now)])).rows.map((r) => r.id);
+      const shapes = async (): Promise<Record<string, string>> =>
+        Object.fromEntries((await c.query<{ dedupe_key: string; shape: string }>(I18_SHAPE_SQL)).rows
+          .map((r) => [r.dedupe_key, r.shape]));
+
+      // The project has stopped its clock legally: every open blocker is HUMAN and escalated, so
+      // §10.4 N-null permits `next_wake_at IS NULL` and §10.3 (c) keeps it visible.
+      await c.query(`INSERT INTO project_blocker VALUES ('b1','p1','HUMAN',NULL,$1,NULL)`, [at(0)]);
+      assert.deepEqual(await hits('v16', 60_000), [], 'a legally stopped clock is not a backstop hit');
+
+      // The user presses "run it now". The row is committed with the business transaction (§5.3 N4)
+      // and the consumer is asynchronous (§5.4) — this is every explicit request's first state.
+      await c.query(`INSERT INTO project_event (project_id, kind, dedupe_key, occurred_at) VALUES ('p1','user.manual_trigger','manual:1',$1)`, [at(0)]);
+      assert.deepEqual(await shapes(), { 'manual:1': 'B' }, 'I18-B: committed, not yet consumed, nothing attempted');
+      assert.deepEqual(await hits('v16', 60_000), [], 'inside the L cap the backstop stays quiet (PC-CX-05: a permanent alarm is no alarm)');
+
+      // The consumer dies. Five minutes later nothing in v1.5 points at this row: the three v1.5
+      // branches all read the clock, and this project legitimately has none.
+      assert.deepEqual(await hits('v15', 6 * 60_000), [],
+        'PC-CX-36 must reproduce: no v1.5 branch sees an event no consumer took');
+      assert.deepEqual(await hits('v16', 6 * 60_000), ['p1'], 'the (iv) branch does, and it logs a WARN');
+
+      // Rate-limited: the row is now shape C, and the wake is inside the floor slack W5 allows.
+      await c.query(`UPDATE project_event SET next_attempt_at = $1 WHERE dedupe_key = 'manual:1'`, [at(60_000)]);
+      await c.query(`UPDATE project_runtime SET next_wake_at = $1, next_wake_reason = 'manual trigger rate-limited' WHERE project_id = 'p1'`, [at(63_000)]);
+      assert.deepEqual(await shapes(), { 'manual:1': 'C' }, 'I18-C: the wake may be up to five seconds past the boundary (W5)');
+      assert.deepEqual(await hits('v16', 120_000), [], 'a scheduled retry that has not come due is not a hit');
+
+      // …and once the retry time is five minutes in the past, the (iv) branch catches that too —
+      // the same predicate covers "never taken" and "taken, rescheduled, then dropped".
+      assert.deepEqual(await hits('v16', 6 * 60_000 + 60_000), ['p1'], 'a missed retry is late in exactly the same sense');
+
+      // Answered: consumed, and nothing fires for it again.
+      await c.query(`UPDATE project_event SET consumed_at = $1, next_attempt_at = NULL WHERE dedupe_key = 'manual:1'`, [at(60_000)]);
+      await c.query(`UPDATE project_runtime SET next_wake_at = NULL, next_wake_reason = NULL WHERE project_id = 'p1'`);
+      assert.deepEqual(await shapes(), { 'manual:1': 'A' }, 'I18-A: answered');
+      assert.deepEqual(await hits('v16', 10 * 60_000), [], 'an answered request is not a backstop hit, however old it is');
+
+      // The fourth shape stays a defect: attempted, neither consumed nor rescheduled.
+      await c.query(`INSERT INTO project_event (project_id, kind, dedupe_key, occurred_at, attempts) VALUES ('p1','user.manual_trigger','manual:2',$1,3)`, [at(0)]);
+      assert.equal((await shapes())['manual:2'], 'NONE', 'attempted but neither consumed nor rescheduled must remain a defect');
+      assert.deepEqual(await hits('v16', 6 * 60_000), ['p1'], 'and the backstop sees it as well');
     } finally {
       await c.end();
     }

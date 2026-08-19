@@ -33,7 +33,8 @@ const COUNTEREXAMPLES = readFileSync(path.join(REPO, 'src/apiserver/src/projects
 
 const REVIEW_V13 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.3.md'), 'utf8');
 const REVIEW_V14 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.4.md'), 'utf8');
-/** §1–§18: the normative body. §19–§22 are revision logs and are explicitly non-normative (§0 RL1). */
+const REVIEW_V15 = readFileSync(path.join(REPO, 'docs/project-coordinator-contract-review-02-v1.5.md'), 'utf8');
+/** §1–§18: the normative body. §19–§24 are revision logs and are explicitly non-normative (§0 RL1). */
 const NORMATIVE = PCC.slice(0, PCC.indexOf('\n## 19. '));
 /**
  * The §7.2 turn-reason table. §7.2 holds three tables (the mechanical/semantic split, the reasons,
@@ -742,4 +743,124 @@ test('the decision input declares the action history, and a rate-limited request
   assert.match(section(PCC, '4.3'), /\*\*I18（显式请求不丢失/, 'nothing states that an explicit request cannot be lost');
   assert.match(section(PCC, '7.2'), /\*\*TF5/, 'the MANUAL turnFacts cell has no rule behind it');
   assert.match(section(PCC, '15'), /\*\*F36\*\*/, '§15 has no fault row for a rate-limited manual trigger');
+});
+
+test('§24 answers every finding unit 02 raised against v1.5, and names a test that exists', () => {
+  // Round six, read exactly the way the first five are: as evidence. Its findings are numbered from
+  // 32, and the report refers back to the earlier ones, so the new ones are the ones above 31.
+  const cited = new Set(Array.from(REVIEW_V15.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]));
+  const raised = [...cited].filter((n) => Number(n) > 31).sort();
+  assert.deepEqual(raised, ['32', '33', '34', '35', '36'], 'unit 02 raised five findings against v1.5');
+
+  const rows = tables(section(PCC, '24'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, raised.map((n) => `PC-CX-${n}`), '§24 does not answer exactly the findings raised');
+  const answeredEarlier = ['19', '20', '21', '22', '23'].flatMap((n) => column(tables(section(PCC, n))[0], 'ID').map(bare));
+  assert.equal(ids.some((id) => answeredEarlier.includes(id)), false, 'a finding must be answered in one place only');
+
+  const own = headingNumbers(PCC);
+  for (let i = 0; i < ids.length; i++) {
+    const row = rows[i + 1];
+    for (let c = 0; c < row.length; c++) {
+      assert.ok(row[c].trim().length > 0, `${ids[i]} leaves column ${rows[0][c]} empty`);
+    }
+    const clauses = Array.from(column(rows, '规范条款')[i].matchAll(/§(\d+(?:\.\d+)?)/g), (m) => m[1]);
+    assert.ok(clauses.length > 0, `${ids[i]} names no clause`);
+    for (const clause of clauses) assert.ok(own.has(clause), `${ids[i]} points at §${clause}, which does not exist`);
+
+    const testName = bare(column(rows, '可执行断言')[i]);
+    assert.ok(
+      COUNTEREXAMPLES.includes(`test('${testName}'`),
+      `${ids[i]} names "${testName}", which is not a test in coordinator-counterexample.spec.ts`,
+    );
+    const detail = section(PCC, `24.${i + 1}`);
+    for (const heading of ['最小交错序列', 'Postgres MVCC 与锁语义', '权威状态', '动作键', '恢复路径', '可执行断言']) {
+      assert.ok(detail.includes(`**${heading}**`), `§24.${i + 1} (${ids[i]}) does not state its ${heading}`);
+    }
+  }
+});
+
+test('the six reviews are read, never edited', () => {
+  // Same pin as the five-review version above, extended to round six. One P0 and four P1s, and a
+  // FAIL verdict: those are the two things a revision would be tempted to soften.
+  assert.match(REVIEW_V15, /FAIL/, 'the sixth review found the contract wanting; that is a fact, not a draft');
+  assert.equal(
+    [...new Set(Array.from(REVIEW_V15.matchAll(/PC-CX-(\d\d)/g), (m) => m[1]))].filter((n) => Number(n) > 31).length,
+    5,
+  );
+  // The review's own §6 evidence has to still be there: a revision that deleted the reproduction
+  // would leave §24's negative controls pointing at nothing.
+  for (const evidence of ['0A000', 'provolatile', 'false|1|1', 'consumed=NULL,nextAttempt=NULL']) {
+    assert.ok(REVIEW_V15.includes(evidence), `the sixth review no longer contains its ${evidence} evidence`);
+  }
+});
+
+test('the locking resolver is VOLATILE everywhere the contract creates it', () => {
+  // PC-CX-32: the one P0 of round six, and the only one whose whole claim is a database rule —
+  // `SELECT … FOR SHARE` is a write, so PostgreSQL refuses it inside a non-volatile function. The
+  // document has to say VOLATILE in all three places it describes the object, and the migration
+  // check has to be over `pg_proc.provolatile`, because that column is the only difference between
+  // a correct object and one that raises 0A000 on every call.
+  const d14 = section(PCC, '7.7');
+  assert.ok(d14.includes('**D14-f（`VOLATILE` 不是默认值'), '§7.7 does not state D14-f');
+  assert.match(d14, /它是一个 \*\*`VOLATILE`\*\* 的 plpgsql 函数/, 'D14-a still specifies a resolver that cannot take its locks');
+  assert.match(d14, /LANGUAGE plpgsql VOLATILE;/, 'the D14 SQL block still leaves the guard function\'s volatility to the default');
+  assert.match(d14, /0A000/, 'D14-f does not record what the specified object actually does');
+  assert.match(d14, /pg_proc\.provolatile/, 'D14-f does not say how the volatility is observed');
+
+  // The two options the review offered are argued, not silently picked — same discipline as CAP0.
+  const options = tables(d14).find((t) => bare(t[0][0]) === '选项');
+  assert.ok(options, 'D14-f must argue lock-and-compute versus split, not just assert one');
+  assert.equal(options.length - 1, 2, 'the review offered exactly two');
+
+  const migration = section(PCC, '12.1');
+  assert.match(migration, /\*\*`VOLATILE`\*\*、只读、按 §8\.6 LO1 的顺序 `FOR SHARE`/, 'step 6e still creates a STABLE resolver');
+  assert.match(migration, /`pg_proc\.provolatile = 'v'`/, 'G5 does not assert the volatility the migration must produce');
+  assert.match(migration, /真的插一条 `dispatch_origin = 'COORDINATOR'` 的 Session 并 `COMMIT`/,
+    'G5 still verifies that the objects exist rather than that they run');
+  // No live sentence may still promise a STABLE resolver. Read the body the way §22.8's ledger is
+  // read — with the markup stripped — so a phrase that straddles a code span cannot hide.
+  const stale = NORMATIVE.split('\n').map((l) => bare(l))
+    .filter((l) => l.includes('STABLE 的 SQL 函数') && !/v1\.[1-6]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative line still specifies a STABLE locking function');
+});
+
+test('the execution context is stated with a tense, and the wake with an arbitration', () => {
+  // PC-CX-34 and PC-CX-35: the third instance of the tense mistake, and the first arithmetic one.
+  const invariants = section(PCC, '4.3');
+  assert.ok(invariants.includes('**I17-A（快照与占位一致，恒成立'), '§4.3 does not state the standing half of I17');
+  assert.ok(invariants.includes('**I17-B（授权在提交那一刻成立，点态'), '§4.3 does not state the commit-time half of I17');
+  assert.ok(invariants.includes('**I17-c（那条被删掉的当前态查询是什么'), '§4.3 does not say what the deleted query described');
+  assert.match(section(PCC, '15'), /I17-A 仍恒成立/, 'F35 was not restated for the split');
+
+  const timing = section(PCC, '10.4');
+  assert.ok(timing.includes('**W5（一个候选表、一个确定的选择'), '§10.4 does not freeze the wake arbitration');
+  for (const part of ['候选表', 'source', 'wakeCandidates', 'flooredBy']) {
+    assert.ok(timing.includes(part), `W5 does not state ${part}`);
+  }
+  assert.match(timing, /W3 是硬下限/, 'W5 does not say which of the floor and the deadline wins');
+  assert.match(section(PCC, '7.6'), /\*\*TR2-d（唤醒与幂等，v1\.6 按 W5 改述/, 'TR2-d was not restated for W5');
+  assert.match(section(PCC, '7.6'), /\*\*TR2-e（用户可见状态，v1\.6 按 W5 改述/, 'TR2-e was not restated for W5');
+});
+
+test('a committed event has a shape before reconcile has seen it, and something owns it', () => {
+  // PC-CX-36: the invariant that never looked at the first state of the row it is about. The three
+  // shapes have to be closed, the choice not to lock the producer has to be argued, and the promise
+  // that a queued row is picked up has to be a predicate rather than a hope about the consumer.
+  const invariants = section(PCC, '4.3');
+  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I19（待消费事件的投递不变量']) {
+    assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
+  }
+  assert.match(invariants, /没有第四种形状/, 'the three shapes are not stated as a closed set');
+  const options = tables(invariants).find((t) => bare(t[0][0]) === '选项');
+  assert.ok(options && options.length - 1 === 2, 'I18-note must argue both options the review offered');
+
+  const backstop = section(PCC, '10.2');
+  assert.match(backstop, /\(iv\) 队列里躺着一条没人看的事件/, 'W4 has no branch for an event no consumer took');
+  assert.match(backstop, /COALESCE\(e\.next_attempt_at, e\.occurred_at\) < now\(\) - interval '5 minutes'/,
+    'the fourth branch does not use the "late" predicate the other three use');
+  assert.match(backstop, /四支的含义各自独立/, 'W4 still describes itself as three branches');
+  assert.match(section(PCC, '10.4'), /\*\*N-null 的时态/, 'N-null was not given the tense the gap requires');
+  assert.match(section(PCC, '15'), /\*\*F37\*\*/, '§15 has no fault row for the asynchronous gap');
+  assert.match(section(PCC, '15'), /\*\*F38\*\*/, '§15 has no fault row for the last five seconds of a window');
 });

@@ -3157,14 +3157,18 @@ test('PC-CX-27 no superseded normative sentence survives in the normative body',
   // grows with the revisions.
   const ledger = tables(section(PCC, '22.8'))[0];
   const phrases = column(ledger, '被取代的字样').map(bare);
-  assert.ok(phrases.length >= 12, '§22.8 registers no superseded sentences');
+  assert.ok(phrases.length >= 19, '§22.8 registers no superseded sentences');
+  // The ledger cells are read with `bare`, which strips ` and *; the body has to be read the same
+  // way or a phrase that spans a code span can never match, and a row that can never match is a row
+  // that never fails. v1.6 found that by writing rows whose phrases straddle `nextWakeAt`.
+  const demarked = normative.split('\n').map((l) => bare(l));
   for (const phrase of phrases) {
-    for (const [i, line] of normative.split('\n').entries()) {
+    for (const [i, line] of demarked.entries()) {
       if (!line.includes(phrase)) continue;
-      assert.match(line, /v1\.[1-5]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
+      assert.match(line, /v1\.[1-6]|PC-CX-\d\d/, `"${phrase}" is alive in the normative body at line ${i + 1}`);
     }
   }
-  for (const n of ['19', '20', '21', '22', '23']) {
+  for (const n of ['19', '20', '21', '22', '23', '24']) {
     assert.match(section(PCC, n).split('\n').slice(0, 4).join('\n'), /本节是非规范的/, `§${n} is not marked non-normative`);
   }
 });
@@ -4017,5 +4021,801 @@ test('§23 names a test that exists for every finding, and points at clauses tha
   for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
     const m = /§(\d+(?:\.\d+)?)/.exec(clause);
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§23 points at §${m[1]}, which does not exist`);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v1.6 — `PC-CX-32..36`, §24
+//
+// Round six has three shapes, and all three are "the lesson from last round was not pushed all the
+// way through". Tense, for the third time: v1.4 split I11, v1.5 split I16, and the same revision
+// that learned it wrote I17 as a current-state invariant (`PC-CX-34`). The harvest surface of a
+// closed list, for the third time: `PC-CX-27` was superseded prose, `PC-CX-30` was this document's
+// own read set, and `PC-CX-33` is the read set of the *other* document. And one that only a real
+// server can teach: the specified D14 resolver promised `STABLE` and took `FOR SHARE`, which
+// PostgreSQL refuses outright — the development fixture happened to omit the volatility marker and
+// therefore tested a different object (`PC-CX-32`). The remaining two are arithmetic: three clauses
+// with no solution in the last five seconds of a rate-limit window (`PC-CX-35`), and an invariant
+// that never looked at the first state of the very row it is about (`PC-CX-36`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Version16 = 'v15' | 'v16';
+
+/** PAC §7.5's frozen resolution, plus EC2's nine components. A dispatch produces one of these. */
+interface Resolution33 {
+  agentId: string;
+  projectMemberId: string;
+  taskId: string;
+  taskAssigneeAgentId: string;
+  provider: string;
+  model: string | null;
+  effort: string | null;
+  workspaceId: string;
+  runnerId: string;
+  coordinatorWorkspaceId: string;
+}
+
+/** The rows PAC §5 / §7.1–§7.4 actually read. Everything here is a persisted column. */
+interface Db33 {
+  agent: {
+    id: string; enabled: boolean; deletedAt: string | null;
+    defaultProvider: string | null; defaultModel: string | null; defaultEffort: string | null;
+    providerFallbacks: { provider: string; model?: string }[]; requiredCapabilities: string[];
+  };
+  member: { projectMemberId: string; agentId: string; role: string } | null;
+  task: {
+    id: string; assigneeAgentId: string; provider: string | null; model: string | null;
+    workspaceId: string | null; requiredCapabilities: string[]; status: string;
+  };
+  workspaces: {
+    workspaceId: string; enabled: boolean; deletedAt: string | null; isDefault: boolean;
+    position: number; runnerId: string | null; runnerStatus: string;
+    capabilities: string[]; capabilitiesReportedAt: string | null;
+  }[];
+  providers: { slug: string; available: boolean; models: string[] }[];
+  project: { coordinatorWorkspaceId: string };
+}
+
+function db33(): Db33 {
+  return {
+    agent: {
+      id: 'a1', enabled: true, deletedAt: null, defaultProvider: 'claude', defaultModel: 'claude-opus-5',
+      defaultEffort: 'high', providerFallbacks: [], requiredCapabilities: [],
+    },
+    member: { projectMemberId: 'm1', agentId: 'a1', role: 'MEMBER' },
+    task: { id: 't1', assigneeAgentId: 'a1', provider: null, model: null, workspaceId: null, requiredCapabilities: [], status: 'OPEN' },
+    workspaces: [{
+      workspaceId: 'w1', enabled: true, deletedAt: null, isDefault: true, position: 0, runnerId: 'r1',
+      runnerStatus: 'ONLINE', capabilities: ['linux'], capabilitiesReportedAt: '2026-08-19T00:00:00.000Z',
+    }],
+    providers: [
+      { slug: 'claude', available: true, models: ['claude-opus-5', 'claude-sonnet-5'] },
+      { slug: 'codex', available: true, models: ['gpt-5.6-sol'] },
+    ],
+    project: { coordinatorWorkspaceId: 'w-coord' },
+  };
+}
+
+const clone33 = (db: Db33): Db33 => JSON.parse(JSON.stringify(db)) as Db33;
+
+/**
+ * PAC §5 step 3–5, as far as this file needs it: WHO, then WITH (with §7.4's explicit fallback),
+ * then WHERE. Every branch below reads a column; S10's table is exactly the list of those columns.
+ */
+function resolveExecutionContext33(db: Db33): Resolution33 | { refuse: string } {
+  // WHO — PAC §7.1 (+ H1)
+  if (db.task.assigneeAgentId !== db.agent.id) return { refuse: 'WHO_UNRESOLVED' };
+  if (!db.agent.enabled || db.agent.deletedAt !== null) return { refuse: 'WHO_DISABLED' };
+  if (db.member === null) return { refuse: 'WHO_NOT_IN_TEAM' };
+
+  // WITH — PAC §7.2 priorities 1–3, then §7.4's ordered fallback chain
+  const wanted = db.task.provider ?? db.agent.defaultProvider ?? 'claude';
+  const wantedModel = db.task.model ?? (db.task.provider ? null : db.agent.defaultModel);
+  const usable = (slug: string, model: string | null): boolean => {
+    const p = db.providers.find((x) => x.slug === slug);
+    return p !== undefined && p.available && (model === null || p.models.includes(model));
+  };
+  let provider: string | null = usable(wanted, wantedModel) ? wanted : null;
+  let model = wantedModel;
+  if (provider === null) {
+    for (const hop of db.agent.providerFallbacks) {
+      const hopModel = hop.model ?? null;
+      if (usable(hop.provider, hopModel)) { provider = hop.provider; model = hopModel; break; }
+    }
+  }
+  if (provider === null) {
+    const p = db.providers.find((x) => x.slug === wanted);
+    return { refuse: p && p.available ? 'RUNTIME_REQUIREMENT_UNMET' : 'PROVIDER_UNAVAILABLE' };
+  }
+  const effort = db.agent.defaultEffort;
+
+  // WHERE — PAC §7.3's candidate set, requirement set and priorities 1–5
+  const candidates = db.workspaces
+    .filter((w) => w.deletedAt === null && w.enabled && w.runnerId !== null)
+    .sort((a, b) => a.position - b.position || a.workspaceId.localeCompare(b.workspaceId));
+  const required = [...new Set([...db.task.requiredCapabilities, ...db.agent.requiredCapabilities])];
+  const meets = (w: Db33['workspaces'][number]): boolean =>
+    w.runnerStatus === 'ONLINE' &&
+    (required.length === 0 || (w.capabilitiesReportedAt !== null && required.every((c) => w.capabilities.includes(c))));
+  const feasible = candidates.filter(meets);
+  let chosen: Db33['workspaces'][number] | undefined;
+  if (db.task.workspaceId !== null) {
+    const pinned = candidates.find((w) => w.workspaceId === db.task.workspaceId);
+    if (!pinned) return { refuse: 'NO_PROJECT_WORKSPACE' };
+    if (!meets(pinned)) return { refuse: 'RUNTIME_REQUIREMENT_UNMET' };
+    chosen = pinned;
+  } else if (candidates.length === 0) {
+    return { refuse: 'NO_PROJECT_WORKSPACE' };
+  } else if (feasible.length === 0) {
+    return { refuse: 'RUNTIME_REQUIREMENT_UNMET' };
+  } else {
+    chosen = feasible.find((w) => w.isDefault) ?? feasible[0];
+  }
+
+  return {
+    agentId: db.agent.id, projectMemberId: db.member.projectMemberId, taskId: db.task.id,
+    taskAssigneeAgentId: db.task.assigneeAgentId, provider, model, effort,
+    workspaceId: chosen.workspaceId, runnerId: chosen.runnerId!, coordinatorWorkspaceId: db.project.coordinatorWorkspaceId,
+  };
+}
+
+/** EC2: the digest摘 nine identities, not the whole resolution (S10-e says why effort is not in it). */
+function ec2Digest33(r: Resolution33 | { refuse: string }): string {
+  if ('refuse' in r) return `REFUSE:${r.refuse}`;
+  return sha256([r.agentId, r.projectMemberId, r.taskId, r.taskAssigneeAgentId, r.provider, r.model ?? '',
+    r.workspaceId, r.runnerId, r.coordinatorWorkspaceId].join('|'));
+}
+
+/** What a dispatch has to produce, in the sense S3 means it: the resolution PAC §6 freezes. */
+const requiredOutcome33 = (db: Db33): string => JSON.stringify(resolveExecutionContext33(db));
+
+/** The nine fields S10 adds to `world`, each with the PAC clause that reads it. */
+const S10_FIELDS = [
+  'team[].projectMemberId', 'team[].defaultProvider', 'team[].defaultModel', 'team[].defaultEffort',
+  'team[].providerFallbacks', 'team[].requiredCapabilities', 'workspaces[].enabled',
+  'tasks[].workspaceId', 'providers[].models',
+] as const;
+type S10Field = (typeof S10_FIELDS)[number];
+
+/**
+ * §6.1's declared `world`, as the two versions project it. `omit` drops one v1.6 field, which is
+ * S10-c's deletion mutation: a field nothing can distinguish without is a field that belongs here.
+ */
+function worldProjection33(db: Db33, version: Version16, omit?: S10Field): unknown {
+  const has = (f: S10Field): boolean => version === 'v16' && omit !== f;
+  return {
+    team: [{
+      agentId: db.agent.id, role: db.member?.role ?? null, enabled: db.agent.enabled, deletedAt: db.agent.deletedAt,
+      ...(has('team[].projectMemberId') ? { projectMemberId: db.member?.projectMemberId ?? null } : {}),
+      ...(has('team[].defaultProvider') ? { defaultProvider: db.agent.defaultProvider } : {}),
+      ...(has('team[].defaultModel') ? { defaultModel: db.agent.defaultModel } : {}),
+      ...(has('team[].defaultEffort') ? { defaultEffort: db.agent.defaultEffort } : {}),
+      ...(has('team[].providerFallbacks') ? { providerFallbacks: db.agent.providerFallbacks } : {}),
+      ...(has('team[].requiredCapabilities') ? { requiredCapabilities: db.agent.requiredCapabilities } : {}),
+    }],
+    tasks: [{
+      id: db.task.id, status: db.task.status, assigneeAgentId: db.task.assigneeAgentId,
+      provider: db.task.provider, model: db.task.model, requiredCapabilities: db.task.requiredCapabilities,
+      ...(has('tasks[].workspaceId') ? { workspaceId: db.task.workspaceId } : {}),
+    }],
+    workspaces: db.workspaces.map((w) => ({
+      workspaceId: w.workspaceId, isDefault: w.isDefault, position: w.position, runnerId: w.runnerId,
+      runnerStatus: w.runnerStatus, capabilities: w.capabilities, capabilitiesReportedAt: w.capabilitiesReportedAt,
+      deletedAt: w.deletedAt,
+      ...(has('workspaces[].enabled') ? { enabled: w.enabled } : {}),
+    })),
+    providers: db.providers.map((p) => ({
+      slug: p.slug, available: p.available,
+      ...(has('providers[].models') ? { models: p.models } : {}),
+    })),
+    project: { coordinatorWorkspaceId: db.project.coordinatorWorkspaceId },
+  };
+}
+
+const inputHash33 = (db: Db33, version: Version16, omit?: S10Field): string =>
+  sha256(JSON.stringify(worldProjection33(db, version, omit)));
+
+/** One pair per S10 field: two databases that differ only in that column, and require different runs. */
+const S10_MUTATIONS: { field: S10Field; left: () => Db33; right: () => Db33 }[] = [
+  {
+    field: 'team[].projectMemberId',
+    left: db33,
+    right: () => { const d = db33(); d.member!.projectMemberId = 'm2'; return d; },
+  },
+  {
+    // The review's counterexample A, as a single-column pair: no task pin, no Agent default model,
+    // so the only thing that decides the engine is `agent.default_provider`.
+    field: 'team[].defaultProvider',
+    left: () => { const d = db33(); d.agent.defaultModel = null; return d; },
+    right: () => { const d = db33(); d.agent.defaultModel = null; d.agent.defaultProvider = 'codex'; return d; },
+  },
+  {
+    field: 'team[].defaultModel',
+    left: db33,
+    right: () => { const d = db33(); d.agent.defaultModel = 'claude-sonnet-5'; return d; },
+  },
+  {
+    field: 'team[].defaultEffort',
+    left: db33,
+    right: () => { const d = db33(); d.agent.defaultEffort = 'low'; return d; },
+  },
+  {
+    field: 'team[].providerFallbacks',
+    left: () => { const d = db33(); d.providers[0].available = false; return d; },
+    right: () => {
+      const d = db33();
+      d.providers[0].available = false;
+      d.agent.providerFallbacks = [{ provider: 'codex', model: 'gpt-5.6-sol' }];
+      return d;
+    },
+  },
+  {
+    field: 'team[].requiredCapabilities',
+    left: db33,
+    right: () => { const d = db33(); d.agent.requiredCapabilities = ['macos']; return d; },
+  },
+  {
+    field: 'workspaces[].enabled',
+    left: db33,
+    right: () => { const d = db33(); d.workspaces[0].enabled = false; return d; },
+  },
+  {
+    field: 'tasks[].workspaceId',
+    left: () => {
+      const d = db33();
+      d.workspaces.push({ ...d.workspaces[0], workspaceId: 'w2', isDefault: false, position: 1 });
+      return d;
+    },
+    right: () => {
+      const d = db33();
+      d.workspaces.push({ ...d.workspaces[0], workspaceId: 'w2', isDefault: false, position: 1 });
+      d.task.workspaceId = 'w2';
+      return d;
+    },
+  },
+  {
+    field: 'providers[].models',
+    left: db33,
+    right: () => { const d = db33(); d.providers[0].models = ['claude-sonnet-5']; return d; },
+  },
+];
+
+/**
+ * D14-a as v1.5 specified it: `STABLE`, and every read takes `FOR SHARE`. PostgreSQL accepts the
+ * `CREATE`, then refuses every call with `0A000` — so the object exists and never works.
+ */
+const SPECIFIED_D14_RESOLVER = `
+  CREATE FUNCTION resolve_execution_context_locked(p_task text, p_agent text)
+    RETURNS TABLE (digest text, revoked_input text) STABLE LANGUAGE plpgsql AS $fn$
+  BEGIN
+    PERFORM enabled FROM agent WHERE id = p_agent FOR SHARE;
+    RETURN QUERY SELECT md5(p_task || p_agent), NULL::text;
+  END;
+  $fn$;`;
+
+/** PostgreSQL's default when a function declares no volatility is VOLATILE — that default is the
+ *  whole reason the v1.5 fixture was green: it built a different object from the specified one. */
+function provolatileOf(createSql: string): 'i' | 's' | 'v' {
+  if (/\bIMMUTABLE\b/.test(createSql)) return 'i';
+  if (/\bSTABLE\b/.test(createSql)) return 's';
+  return 'v';
+}
+
+test('PC-CX-32 the locking resolver is VOLATILE, and the volatility is the assertion', () => {
+  // This one cannot be modelled here and that is the finding: `SELECT … FOR SHARE` inside a
+  // non-volatile function is refused by the server, not by anything a JavaScript model can replay.
+  // What this file can do is hold the document to the three things that make the defect impossible
+  // to reproduce silently — the object is specified VOLATILE, the migration check is over
+  // `pg_proc.provolatile`, and the check is a *call* of the real deferred trigger rather than a
+  // grep of the function body. The behaviour itself is asserted in the Postgres spec, by name.
+  const d14 = section(PCC, '7.7');
+  assert.match(d14, /它是一个 \*\*`VOLATILE`\*\* 的 plpgsql 函数/, 'D14-a still specifies a resolver that cannot take its locks');
+  assert.ok(d14.includes('**D14-f（`VOLATILE` 不是默认值'), '§7.7 does not state D14-f');
+  assert.match(d14, /SELECT FOR SHARE is not allowed in a non-volatile function/, 'D14-f does not record what the server actually says');
+  assert.match(d14, /SQLSTATE: 0A000/, 'D14-f does not record the SQLSTATE the review reproduced');
+
+  // The four criteria D14-f freezes, each of them a thing the v1.5 suite did not do.
+  for (const criterion of ['pg_proc.provolatile', 'session_execution_context_guard', '必须调用真实的 deferred trigger', '反向对照必须留着']) {
+    assert.ok(d14.includes(criterion), `D14-f does not require "${criterion}"`);
+  }
+
+  // Why the v1.5 development fixture was green, stated as the fact it turns on: the two objects
+  // differ only in a marker, and v1.5's verification (grep the body for `FOR SHARE`, G5's v1.2
+  // rule) passes both. Only `pg_proc.provolatile` tells them apart.
+  const asBuilt = SPECIFIED_D14_RESOLVER.replace(' STABLE', '');
+  assert.equal(provolatileOf(SPECIFIED_D14_RESOLVER), 's', 'the specified object is STABLE');
+  assert.equal(provolatileOf(asBuilt), 'v', 'no marker means VOLATILE, which is what the fixture built');
+  assert.ok(/FOR SHARE/.test(SPECIFIED_D14_RESOLVER) && /FOR SHARE/.test(asBuilt), 'and the v1.5 grep passes both');
+  assert.equal(SPECIFIED_D14_RESOLVER.replace(' STABLE', ''), asBuilt, 'the bodies are otherwise identical');
+
+  // The fixture now writes the marker the contract specifies, so it exercises the specified object.
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const fixture = pg.slice(pg.indexOf('CREATE FUNCTION resolve_execution_context_locked'),
+    pg.indexOf('CREATE CONSTRAINT TRIGGER session_execution_context_guard'));
+  assert.ok(fixture.length > 0, 'the development fixture no longer builds D14');
+  assert.match(fixture, /LANGUAGE plpgsql VOLATILE/, 'the fixture still leaves the volatility to the default, which is how PC-CX-32 hid');
+  assert.equal((fixture.match(/LANGUAGE plpgsql VOLATILE/g) ?? []).length, 2,
+    'both D14 functions take locks, so both have to say VOLATILE');
+  assert.ok(pg.includes("test('PC-CX-32 on real Postgres: the D14 objects are VOLATILE, and the deferred trigger really runs'"),
+    'the behavioural half of PC-CX-32 has to run against a real server');
+
+  // The migration creates what the contract specifies, and G5 checks the metadata rather than the
+  // body — a function that raises 0A000 on every call is byte-identical in `pg_get_functiondef`.
+  const migration = section(PCC, '12.1');
+  assert.match(migration, /\*\*`VOLATILE`\*\*、只读、按 §8\.6 LO1 的顺序 `FOR SHARE`/, 'step 6e still creates a STABLE resolver');
+  assert.match(migration, /`pg_proc\.provolatile = 'v'`/, 'G5 does not assert the volatility');
+  assert.match(migration, /真的插一条 `dispatch_origin = 'COORDINATOR'` 的 Session 并 `COMMIT`/, 'G5 still only checks that the objects exist');
+
+  // And no live sentence promises the object that cannot run.
+  const stale = PCC.slice(0, PCC.indexOf('\n## 19. ')).split('\n').map((l) => bare(l))
+    .filter((l) => l.includes('STABLE 的 SQL 函数') && !/v1\.[1-6]|PC-CX-\d\d/.test(l));
+  assert.deepEqual(stale, [], 'a normative line still specifies a STABLE locking function');
+});
+
+test('PC-CX-33 the declared decision input carries the PAC resolver read set', () => {
+  // A — the WITH chain. Two databases whose v1.5 `world` is byte-identical; the only difference is
+  // the Agent default the task does not pin. PAC §7.2 priority 2 requires two different engines.
+  const claude = db33();
+  const codex = clone33(claude);
+  codex.agent.defaultProvider = 'codex';
+  codex.agent.defaultModel = 'gpt-5.6-sol';
+  assert.equal(inputHash33(claude, 'v15'), inputHash33(codex, 'v15'), 'A: the v1.5 projection cannot tell them apart');
+  assert.notEqual(requiredOutcome33(claude), requiredOutcome33(codex), 'A: …but PAC requires two different runs');
+  assert.notEqual(ec2Digest33(resolveExecutionContext33(claude)), ec2Digest33(resolveExecutionContext33(codex)),
+    'A: …and therefore two different execution-context digests');
+  assert.notEqual(inputHash33(claude, 'v16'), inputHash33(codex, 'v16'), 'A: v1.6 gives them different hashes');
+
+  // B — the WHERE chain. PAC §7.3's candidate predicate reads `workspace.enabled` verbatim, so the
+  // same declared input is a DISPATCH in one state and a typed REFUSE in the other.
+  const off = clone33(claude);
+  off.workspaces[0].enabled = false;
+  assert.equal(inputHash33(claude, 'v15'), inputHash33(off, 'v15'), 'B: the v1.5 projection cannot tell them apart');
+  assert.deepEqual(resolveExecutionContext33(off), { refuse: 'NO_PROJECT_WORKSPACE' }, 'B: one of them must not dispatch');
+  assert.notEqual(inputHash33(claude, 'v16'), inputHash33(off, 'v16'), 'B: v1.6 gives them different hashes');
+
+  // C — a digest component. `projectMemberId` is EC2's second field; without it in `world`, one
+  // declared input has two legal `executionContextDigest` values.
+  const member2 = clone33(claude);
+  member2.member!.projectMemberId = 'm2';
+  assert.equal(inputHash33(claude, 'v15'), inputHash33(member2, 'v15'));
+  assert.notEqual(ec2Digest33(resolveExecutionContext33(claude)), ec2Digest33(resolveExecutionContext33(member2)));
+  assert.notEqual(inputHash33(claude, 'v16'), inputHash33(member2, 'v16'));
+
+  // S10-c: every field the table adds is load-bearing, one deletion mutation each. Removing it
+  // collapses a pair the resolver has to distinguish; keeping it separates them.
+  for (const { field, left, right } of S10_MUTATIONS) {
+    const l = left();
+    const r = right();
+    assert.notEqual(requiredOutcome33(l), requiredOutcome33(r), `${field}: the pair must require different runs`);
+    assert.equal(inputHash33(l, 'v16', field), inputHash33(r, 'v16', field),
+      `${field}: deleting it must make two distinguishable states hash the same (S10-c)`);
+    assert.notEqual(inputHash33(l, 'v16'), inputHash33(r, 'v16'), `${field}: with it, the hashes differ`);
+  }
+  assert.equal(S10_MUTATIONS.length, S10_FIELDS.length, 'every field S10 adds needs its own mutation');
+});
+
+test('PC-CX-33 S8 harvests from the PAC resolution chain too, and §6.1 carries every column it reads', () => {
+  const input = section(PCC, '6.1');
+  assert.match(input, /\*\*S10（PAC 解析链的读集也是 `world` 的一部分/, '§6.1 does not state S10');
+  assert.match(input, /契约测试从这\*\*六\*\*处收集列名/, 'S8 still harvests from five places');
+  assert.match(input, /6\. \*\*§7\.4 第 8 条的 PAC 解析链\*\*/, 'S8\'s closed list has no sixth source');
+
+  // The mapping table is a surjection onto EC1's eight rows: a chain input with no `world` field is
+  // exactly the defect, and a `world` field with no PAC clause is the other half of S8.
+  const s10 = tables(input).find((t) => bare(t[0][0]) === 'EC1 #');
+  assert.ok(s10, 'S10 no longer maps EC1 to the world projection');
+  assert.deepEqual(column(s10, 'EC1 #').map(bare), ['1', '2', '3', '4', '5', '6', '7', '8'], 'S10 must cover all eight EC1 rows');
+  for (const clause of column(s10, 'PAC 条款').map(bare)) {
+    assert.match(clause, /PAC §\d|§7\.5/, `S10 row "${clause}" names no clause that reads it`);
+  }
+
+  // Every field the model mutates is really in the frozen projection, spelled the same way.
+  const world = input.slice(input.indexOf('  "world": {'), input.indexOf('\n  },\n\n  "evaluation":'));
+  for (const field of S10_FIELDS) {
+    const name = field.replace(/^.*\[\]\./, '');
+    assert.ok(world.includes(`"${name}"`), `§6.1's world projection does not carry ${field}`);
+  }
+  // …and EC1 points back, so the two read sets cannot drift apart silently.
+  assert.match(section(PCC, '7.4'), /这八行读到的每一列同时必须进 `decisionInput\.world`/, '§7.4 EC1 does not point at S10');
+});
+
+/**
+ * `PC-CX-34` — the same barrier as `ecRace`, read three ways instead of one. I17-A is over columns
+ * that stop changing at commit (PAC §6 freezes the session snapshot, §7.7 D11 pins the APPLIED
+ * action row); I17-B is the commit instant D14 proves; the third is v1.5's "equivalent queryable
+ * form", which asks about *now* and therefore answers differently after a legal revocation.
+ */
+interface Ec34Result {
+  committed: boolean;
+  /** I17-A: the placeholder's frozen snapshot columns still equal the frozen execution context. */
+  i17A: boolean;
+  /** I17-B: at the instant the placeholder committed, re-resolution equalled the frozen digest. */
+  i17BAtCommit: boolean;
+  /** v1.5's enumerated current-state query, as §12.1 G5 asked for it to be run: rows found now. */
+  v15LiteralViolations: number;
+  /** v1.5's other reading — "re-resolve now and compare" — over the same committed state. */
+  v15RestatedViolations: number;
+}
+
+function ec34Race(order: Order15, input: RevokedInput): Ec34Result {
+  const snapshot = ecWorld();
+  const frozenCtx = resolveExecutionContext(snapshot)!;
+  const frozen = ecDigest(frozenCtx)!;
+  let world = snapshot;
+  const human = (): void => { world = revoke(world, input); };
+
+  // EC3 + D14: the commit only happens if re-resolution under the lock still matches.
+  const coordinator = (): { committed: boolean; i17BAtCommit: boolean } => {
+    const observed = ecDigest(resolveExecutionContext(world));
+    return { committed: observed === frozen, i17BAtCommit: observed === frozen };
+  };
+
+  let outcome: { committed: boolean; i17BAtCommit: boolean };
+  if (order === 'USER_FIRST') { human(); outcome = coordinator(); } else { outcome = coordinator(); human(); }
+
+  // The session row, if one was committed. Its snapshot columns are frozen at create (PAC §6).
+  const session = outcome.committed ? { ...frozenCtx } : null;
+  const i17A = session === null || ecDigest(session) === frozen;
+
+  // v1.5's literal query enumerates seven of EC1's eight inputs (the coordinator workspace is only
+  // an input to ROTATE / OPEN_TURN, §7.4 EC1's note), and reads them at the *current* state.
+  const live = session !== null;
+  const literal = live && (
+    !world.agentEnabled || !world.memberOfProject || world.taskAssignee !== session!.taskAssigneeAgentId ||
+    world.taskProvider !== session!.providerSlug || world.taskModel !== session!.model ||
+    !world.providerAvailable || !world.workspaceLive || !world.runnerOnline);
+  const restated = live && ecDigest(resolveExecutionContext(world)) !== frozen;
+  return {
+    committed: outcome.committed,
+    i17A,
+    i17BAtCommit: outcome.i17BAtCommit,
+    v15LiteralViolations: literal ? 1 : 0,
+    v15RestatedViolations: restated ? 1 : 0,
+  };
+}
+
+test('PC-CX-34 I17 is stated with a tense, and the current-state query is not one of them', () => {
+  // Sixteen cells: eight revocations × two commit orders, all of them legal at every step.
+  for (const input of REVOKED_INPUTS) {
+    const userFirst = ec34Race('USER_FIRST', input);
+    assert.equal(userFirst.committed, false, `${input}/USER_FIRST: a revoked context must not produce a placeholder`);
+    assert.equal(userFirst.i17A, true, `${input}/USER_FIRST: I17-A holds vacuously — there is no placeholder`);
+    assert.equal(userFirst.v15LiteralViolations, 0, `${input}/USER_FIRST: and nothing to find in the current state either`);
+
+    const loopFirst = ec34Race('COORDINATOR_FIRST', input);
+    assert.equal(loopFirst.committed, true, `${input}/COORDINATOR_FIRST: committing while still authorised is legal (AU1-a row 2)`);
+    assert.equal(loopFirst.i17BAtCommit, true, `${input}/COORDINATOR_FIRST: I17-B is required at that instant, and it held`);
+    assert.equal(loopFirst.i17A, true, `${input}/COORDINATOR_FIRST: I17-A stays true afterwards — it reads only immutable columns`);
+    assert.equal(loopFirst.v15RestatedViolations, 1,
+      `${input}/COORDINATOR_FIRST: v1.5's current-state reading is violated by a sequence in which nobody did anything wrong`);
+  }
+
+  // The published output: `enabled = false | live = 1 | i17_current_violations = 1`. Seven of the
+  // eight inputs are visible to v1.5's enumerated query; the eighth (the coordinator workspace) is
+  // not an input to a DISPATCH placeholder at all, which is its own kind of hole in that query.
+  const visible = REVOKED_INPUTS.filter((i) => ec34Race('COORDINATOR_FIRST', i).v15LiteralViolations === 1);
+  assert.deepEqual([...visible], ['AGENT', 'MEMBERSHIP', 'TASK', 'PROVIDER', 'MODEL', 'WORKSPACE', 'RUNNER'],
+    'the review\'s false|1|1 must reproduce for every EC1 input a DISPATCH actually resolves');
+  assert.equal(ec34Race('COORDINATOR_FIRST', 'COORDINATOR_WORKSPACE').v15LiteralViolations, 0);
+
+  // I17-A is what a zero-row query may be run against, because both sides of it stop changing at
+  // commit. Negative control: tamper with either side and it goes non-zero.
+  const tampered = { ...resolveExecutionContext(ecWorld())!, providerSlug: 'codex' };
+  assert.notEqual(ecDigest(tampered), ecDigest(resolveExecutionContext(ecWorld())),
+    'I17-A must be able to fail: a placeholder whose snapshot disagrees with its action row is a defect');
+
+  // The document states both halves, deletes the current-state equivalence, and says what the
+  // state it used to forbid actually is.
+  const invariants = section(PCC, '4.3');
+  for (const rule of ['**I17-A（快照与占位一致，恒成立', '**I17-B（授权在提交那一刻成立，点态', '**I17-c（那条被删掉的当前态查询是什么']) {
+    assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
+  }
+  assert.doesNotMatch(invariants.split('\n').filter((l) => !/v1\.[1-6]|PC-CX-\d\d/.test(l)).join('\n'),
+    /等价的可查询形式：\*\*不存在\*\*一条 `dispatch_origin = 'COORDINATOR'` 的占位/,
+    'the superseded current-state equivalence is still stated as a requirement');
+  assert.match(section(PCC, '12.1'), /跑一次 I17-A 并断言返回 0 行/, '§12.1 G5 still runs the query that legitimately returns rows');
+  assert.match(section(PCC, '7.7'), /\*\*D14-b（它证明的正是 I17-B/, 'D14-b still claims to prove the current-state form');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `PC-CX-35` — §10.4's wake, as one candidate table and one deterministic choice (W5).
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface WakeCandidate {
+  /** The §10.4 item number, 1–7. It is the tie-break, and it is a total order (W5 step 2). */
+  source: number;
+  at: number;
+  reason: string;
+}
+
+const W3_FLOOR_MS = 5_000;
+
+/** W5: min by `at`, ties by `source`, then the floor. The reason is the chosen candidate's. */
+function chooseWake(candidates: WakeCandidate[], now: number, version: Version16):
+{ at: number | null; reason: string | null; flooredBy: string | null; candidates: WakeCandidate[] } {
+  if (candidates.length === 0) return { at: null, reason: null, flooredBy: null, candidates: [] };
+  const ordered = [...candidates].sort((a, b) => a.at - b.at || a.source - b.source);
+  const chosen = ordered[0];
+  if (version === 'v15') {
+    // v1.5 states three rules and no arbitration: the boundary must be pointed at exactly (TR2-e)
+    // *and* the minimum must win (§10.4) *and* the floor must hold (W3). This returns what an
+    // implementer reading TR2-d/TR2-e literally would produce.
+    const boundary = candidates.find((c) => c.source === 7);
+    const at = boundary ? boundary.at : chosen.at;
+    return { at, reason: boundary ? boundary.reason : chosen.reason, flooredBy: null, candidates: ordered };
+  }
+  const at = Math.max(chosen.at, now + W3_FLOOR_MS);
+  return { at, reason: chosen.reason, flooredBy: at > chosen.at ? 'W3' : null, candidates: ordered };
+}
+
+test('PC-CX-35 the wake is one candidate table and one deterministic choice', () => {
+  const windowEndsAt = 60_000;
+  // The review's parametrisation: how much of the window is left when the request is rate-limited.
+  for (const remaining of [0, 1, 2, 4, 5, 6, 59]) {
+    const now = windowEndsAt - remaining * 1_000;
+    const nextAttemptAt = windowEndsAt;                                  // TR2-b ③, unchanged
+    const wake = chooseWake([{ source: 7, at: windowEndsAt, reason: 'manual trigger rate-limited' }], now, 'v16');
+    assert.ok(wake.at !== null && wake.at >= now + W3_FLOOR_MS, `remaining=${remaining}s: W3's floor must hold`);
+    assert.ok(wake.at! <= nextAttemptAt + W3_FLOOR_MS, `remaining=${remaining}s: I18-C's bound must hold`);
+    assert.equal(nextAttemptAt, windowEndsAt, `remaining=${remaining}s: TR2-b still puts next_attempt_at on the boundary`);
+    assert.equal(wake.reason, 'manual trigger rate-limited', `remaining=${remaining}s: the reason names the candidate it woke for`);
+    assert.equal(wake.flooredBy, remaining < 5 ? 'W3' : null, `remaining=${remaining}s: the audit says when the floor moved it`);
+    // When the wake fires, the fact it was waiting for is due — the floor can only make it later.
+    assert.ok(wake.at! >= windowEndsAt, `remaining=${remaining}s: rateLimitExpired must be true when it fires`);
+
+    // v1.5's three sentences have no common solution in the last five seconds.
+    const v15 = chooseWake([{ source: 7, at: windowEndsAt, reason: 'manual trigger rate-limited' }], now, 'v15');
+    const satisfiesW3 = v15.at! >= now + W3_FLOOR_MS;
+    const satisfiesI18 = v15.at! <= nextAttemptAt;
+    assert.equal(satisfiesW3 && satisfiesI18, remaining >= 5,
+      `remaining=${remaining}s: v1.5's W3 and I18/TR2-d can only both hold outside the last five seconds`);
+  }
+
+  // The second counterexample: another applicable wake is earlier than the boundary. §10.4 says
+  // take the minimum, TR2-e said point at the boundary. W5 arbitrates, and the earlier wake still
+  // re-evaluates the pending request when it fires.
+  const earlier: WakeCandidate[] = [
+    { source: 4, at: 59_000, reason: 'task runAt due' },
+    { source: 7, at: 60_000, reason: 'manual trigger rate-limited' },
+  ];
+  const w16 = chooseWake(earlier, 50_000, 'v16');
+  assert.equal(w16.at, 59_000, 'the minimum wins');
+  assert.equal(w16.reason, 'task runAt due', 'and the reason is the one it woke for');
+  assert.equal(chooseWake(earlier, 50_000, 'v15').at, 60_000, 'v1.5 would have pointed at the boundary and skipped the earlier wake');
+  assert.equal(chooseWake([...earlier].reverse(), 50_000, 'v16').at, 59_000, 'and the answer does not depend on iteration order');
+  // Inside the floor the same table still gives one answer: later, but still the earlier candidate's
+  // reason — the wake says what it is for, not whether it was punctual (W5 step 3).
+  const floored = chooseWake(earlier, 58_000, 'v16');
+  assert.deepEqual([floored.at, floored.reason, floored.flooredBy], [63_000, 'task runAt due', 'W3']);
+
+  // Ties: two candidates at the same instant are decided by §10.4's item numbers, not by order.
+  for (const source of [1, 2, 3, 4, 5, 6]) {
+    const tied: WakeCandidate[] = [
+      { source, at: 60_000, reason: `item ${source}` },
+      { source: 7, at: 60_000, reason: 'manual trigger rate-limited' },
+    ];
+    const a = chooseWake(tied, 30_000, 'v16');
+    const b = chooseWake([...tied].reverse(), 30_000, 'v16');
+    assert.deepEqual([a.at, a.reason], [b.at, b.reason], `source ${source}: a tie must not depend on iteration order`);
+    assert.equal(a.reason, `item ${source}`, `source ${source}: the lower item number wins the tie (W5 step 2)`);
+  }
+
+  // Every pair of sources, both orders: one answer, and it is the earlier one.
+  for (let s = 1; s <= 6; s++) {
+    for (const [earlyAt, lateAt] of [[10_000, 20_000], [20_000, 10_000]]) {
+      const pair: WakeCandidate[] = [
+        { source: s, at: earlyAt, reason: `item ${s}` },
+        { source: 7, at: lateAt, reason: 'manual trigger rate-limited' },
+      ];
+      const chosen = chooseWake(pair, 0, 'v16');
+      assert.equal(chosen.at, Math.min(earlyAt, lateAt));
+      assert.equal(chosen.reason, earlyAt < lateAt ? `item ${s}` : 'manual trigger rate-limited');
+      assert.equal(chosen.candidates.length, 2, 'the whole candidate table goes to the audit, not just the winner');
+    }
+  }
+
+  // The clauses.
+  const timing = section(PCC, '10.4');
+  assert.match(timing, /\*\*W5（一个候选表、一个确定的选择/, '§10.4 does not freeze the arbitration');
+  assert.match(timing, /`nextWakeAt = max\(chosen\.at, now \+ 5s\)`/, 'W5 does not state which of the floor and the deadline wins');
+  assert.match(timing, /wakeCandidates/, 'the candidate table is not written down anywhere a human can read it');
+  assert.match(section(PCC, '7.6'), /nextWakeAt ≤ windowEndsAt \+ 5s/, 'TR2-d still states the bound that has no solution');
+  assert.match(section(PCC, '4.3'), /next_wake_at <= next_attempt_at \+ 5s/, 'I18-C still states v1.5\'s bound');
+  assert.match(section(PCC, '15'), /\*\*F38\*\*/, '§15 has no fault row for the last five seconds of a window');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `PC-CX-36` — the first state of a `user.manual_trigger` row, which I18 never looked at.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface EventRow36 {
+  kind: string;
+  occurredAt: number;
+  consumedAt: number | null;
+  nextAttemptAt: number | null;
+  attempts: number;
+}
+
+interface Project36 {
+  events: EventRow36[];
+  nextWakeAt: number | null;
+  openBlockers: { recovery: Recovery; escalated: boolean }[];
+  liveSession: boolean;
+  turnInFlight: boolean;
+}
+
+/** §4.3 I18, by version. v1.5 has two shapes; v1.6 has three, and names the fourth as a defect. */
+function i18Shape(e: EventRow36, p: Project36, version: Version16): 'A' | 'B' | 'C' | 'NONE' {
+  if (e.consumedAt !== null) return 'A';
+  if (e.nextAttemptAt !== null) {
+    const bound = version === 'v16' ? e.nextAttemptAt + W3_FLOOR_MS : e.nextAttemptAt;
+    return p.nextWakeAt !== null && p.nextWakeAt <= bound ? 'C' : 'NONE';
+  }
+  if (version === 'v16' && e.attempts === 0) return 'B';
+  return 'NONE';
+}
+
+/** §10.2 W4, all four branches, over one project. `L_MAX` is §10.4's hard cap. */
+const L_MAX = 5 * MINUTE;
+function backstopBranches36(p: Project36, now: number, version: Version16): string[] {
+  const hits: string[] = [];
+  if (p.nextWakeAt !== null && p.nextWakeAt < now - L_MAX) hits.push('i');
+  if (p.nextWakeAt === null && p.openBlockers.some((b) => b.recovery !== 'HUMAN' || !b.escalated)) hits.push('ii');
+  if (p.nextWakeAt === null && p.openBlockers.length === 0) hits.push('iii');
+  if (version === 'v16' && p.events.some((e) => e.consumedAt === null && (e.nextAttemptAt ?? e.occurredAt) < now - L_MAX)) {
+    hits.push('iv');
+  }
+  return hits;
+}
+
+/** §10.3's four liveness conditions, as far as this model needs them. */
+const liveness36 = (p: Project36): boolean =>
+  p.liveSession || p.turnInFlight || p.openBlockers.length > 0 || p.nextWakeAt !== null;
+
+test('PC-CX-36 a committed event that reconcile has not seen yet has a shape and an owner', () => {
+  // The state every explicit request passes through first: the user interface committed the row in
+  // the business transaction (§5.3 N4), and the consumer is asynchronous (§5.4).
+  const justCommitted: EventRow36 = { kind: 'user.manual_trigger', occurredAt: 0, consumedAt: null, nextAttemptAt: null, attempts: 0 };
+  const project: Project36 = { events: [justCommitted], nextWakeAt: null, openBlockers: [{ recovery: 'HUMAN', escalated: true }], liveSession: false, turnInFlight: false };
+
+  assert.equal(i18Shape(justCommitted, project, 'v15'), 'NONE',
+    'PC-CX-36 must reproduce: v1.5 claims every committed state has one of two shapes, and this one has neither');
+  assert.equal(i18Shape(justCommitted, project, 'v16'), 'B', 'v1.6 names it: awaiting first consumption');
+
+  // The three shapes are exhaustive over the row's life: pending → rate-limited → answered.
+  const rateLimited: EventRow36 = { ...justCommitted, nextAttemptAt: 60_000, attempts: 0 };
+  const answered: EventRow36 = { ...justCommitted, consumedAt: 60_000 };
+  const withWake: Project36 = { ...project, events: [rateLimited], nextWakeAt: 63_000 };
+  assert.equal(i18Shape(rateLimited, withWake, 'v16'), 'C', 'rate-limited, with a wake inside the floor slack');
+  assert.equal(i18Shape(rateLimited, withWake, 'v15'), 'NONE', 'v1.5\'s bound rejects the wake W3 forces in the last five seconds');
+  assert.equal(i18Shape(answered, { ...project, events: [answered] }, 'v16'), 'A', 'answered');
+
+  // The fourth shape is a defect in both versions, and it has to stay one: a row nobody consumed
+  // and nobody scheduled is exactly the silent-ignore this invariant exists to forbid.
+  const orphan: EventRow36 = { ...justCommitted, attempts: 3 };
+  assert.equal(i18Shape(orphan, { ...project, events: [orphan] }, 'v16'), 'NONE',
+    'attempted but neither consumed nor rescheduled must remain a defect');
+
+  // I19: the row is pending, the project has stopped its clock legally (N-null: every open blocker
+  // is HUMAN and escalated), and the consumer is dead. v1.5's W4 has no branch for this, so nothing
+  // in the database points at it; the (iv) branch is what makes I18-B's promise checkable.
+  assert.equal(liveness36(project), true, '§10.3 (c): the escalated blocker keeps the project visible');
+  assert.deepEqual(backstopBranches36(project, 6 * MINUTE, 'v15'), [],
+    'PC-CX-36 must reproduce: no branch of the v1.5 backstop sees an event no consumer took');
+  assert.deepEqual(backstopBranches36(project, 6 * MINUTE, 'v16'), ['iv'], 'the (iv) branch does');
+  assert.deepEqual(backstopBranches36(project, 60_000, 'v16'), [],
+    'and it is not a permanent alarm: inside the L cap it does not fire (PC-CX-05\'s lesson)');
+
+  // A consumed event never fires it, whatever else is wrong.
+  const settled: Project36 = { ...project, events: [answered], nextWakeAt: null };
+  assert.deepEqual(backstopBranches36(settled, 6 * MINUTE, 'v16'), [], 'an answered request is not a backstop hit');
+
+  // N-null keeps its exemption: the gap is legal, and it is the queue's business, not the clock's.
+  assert.equal(project.nextWakeAt, null, 'the runtime may legally have no wake while the row waits in the queue');
+  assert.equal(i18Shape(justCommitted, project, 'v16'), 'B', 'and that is a named shape, not a violation');
+
+  // The clauses.
+  const invariants = section(PCC, '4.3');
+  for (const rule of ['**I18-A（已回答', '**I18-B（待首次消费', '**I18-C（已看过、被限频', '**I18-note（为什么事件生产者不原子写 runtime wake', '**I19（待消费事件的投递不变量']) {
+    assert.ok(invariants.includes(rule), `§4.3 does not state ${rule}）`);
+  }
+  const options = tables(invariants).find((t) => bare(t[0][0]) === '选项');
+  assert.ok(options && options.length - 1 === 2, 'I18-note must argue both options the review offered, not silently pick one');
+  const wake = section(PCC, '10.2');
+  assert.match(wake, /-- \(iv\) 队列里躺着一条没人看的事件/, '§10.2 W4 has no fourth branch');
+  assert.match(wake, /\*\*W4-a（第 \(iv\) 支为什么在这里/, 'the fourth branch is not argued');
+  assert.match(section(PCC, '10.4'), /\*\*N-null 的时态（v1\.6 冻结/, 'N-null still reads as a claim about every committed state');
+  assert.match(section(PCC, '15'), /\*\*F37\*\*/, '§15 has no fault row for the asynchronous gap');
+});
+
+test('mutation check: every fence added for PC-CX-32..36 is load-bearing', () => {
+  // Same discipline as the four mutation checks above: a fence that can be removed without the
+  // defect coming back was never the fix. `PC-CX-32` is the one that cannot be modelled here — its
+  // whole claim is what a real server does with a volatility marker — so what is checked in this
+  // file is that the contract and the migration both name it, and the Postgres spec runs it.
+  const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
+    {
+      finding: 'PC-CX-32',
+      fence: 'asserting pg_proc.provolatile instead of grepping the body (§7.7 D14-f, §12.1 G5)',
+      defectReappears: () => {
+        // v1.5 verified D14 by grepping `pg_get_functiondef` for `FOR SHARE` (G5, v1.2's rule). The
+        // specified object and the object the fixture built differ *only* in a marker that grep
+        // cannot see, and the one the contract specified raises 0A000 on every call.
+        const specified = SPECIFIED_D14_RESOLVER;
+        const asBuilt = specified.replace(' STABLE', '');
+        return /FOR SHARE/.test(specified) && /FOR SHARE/.test(asBuilt) &&
+          provolatileOf(specified) === 's' && provolatileOf(asBuilt) === 'v';
+      },
+    },
+    {
+      finding: 'PC-CX-33',
+      fence: 'projecting the PAC resolver read set into the decision input (§6.1 S10)',
+      defectReappears: () => S10_MUTATIONS.every(({ field, left, right }) =>
+        inputHash33(left(), 'v15') === inputHash33(right(), 'v15') ||
+        inputHash33(left(), 'v16', field) === inputHash33(right(), 'v16', field)),
+    },
+    {
+      finding: 'PC-CX-34',
+      fence: 'splitting I17 into I17-A (standing) and I17-B (commit-time)',
+      defectReappears: () => REVOKED_INPUTS.every((i) => ec34Race('COORDINATOR_FIRST', i).v15RestatedViolations === 1),
+    },
+    {
+      finding: 'PC-CX-35',
+      fence: 'W5: the floor beats the deadline, and ties are decided by item number',
+      defectReappears: () => {
+        const boundary: WakeCandidate[] = [{ source: 7, at: 60_000, reason: 'manual trigger rate-limited' }];
+        const v15 = chooseWake(boundary, 58_000, 'v15');
+        return v15.at! < 58_000 + W3_FLOOR_MS;             // v1.5's answer violates W3, and there is no other
+      },
+    },
+    {
+      finding: 'PC-CX-36',
+      fence: 'I18-B plus the fourth backstop branch (§10.2 W4 (iv))',
+      defectReappears: () => {
+        const e: EventRow36 = { kind: 'user.manual_trigger', occurredAt: 0, consumedAt: null, nextAttemptAt: null, attempts: 0 };
+        const p: Project36 = { events: [e], nextWakeAt: null, openBlockers: [{ recovery: 'HUMAN', escalated: true }], liveSession: false, turnInFlight: false };
+        return i18Shape(e, p, 'v15') === 'NONE' && backstopBranches36(p, 6 * MINUTE, 'v15').length === 0;
+      },
+    },
+  ];
+
+  assert.equal(mutants.length, 5, 'unit 02 raised five findings against v1.5');
+  for (const m of mutants) {
+    assert.equal(m.defectReappears(), true, `${m.finding}: removing ${m.fence} must bring the defect back`);
+  }
+
+  // …and with every fence in place, none of them is reachable.
+  assert.equal(S10_MUTATIONS.every(({ left, right }) => inputHash33(left(), 'v16') !== inputHash33(right(), 'v16')), true);
+  assert.equal(REVOKED_INPUTS.every((i) => ec34Race('COORDINATOR_FIRST', i).i17A), true);
+  assert.equal(REVOKED_INPUTS.every((i) => ec34Race('USER_FIRST', i).committed), false);
+  assert.equal(chooseWake([{ source: 7, at: 60_000, reason: 'manual trigger rate-limited' }], 58_000, 'v16').at, 63_000);
+  const fixedEvent: EventRow36 = { kind: 'user.manual_trigger', occurredAt: 0, consumedAt: null, nextAttemptAt: null, attempts: 0 };
+  const fixedProject: Project36 = { events: [fixedEvent], nextWakeAt: null, openBlockers: [{ recovery: 'HUMAN', escalated: true }], liveSession: false, turnInFlight: false };
+  assert.equal(i18Shape(fixedEvent, fixedProject, 'v16'), 'B');
+  assert.deepEqual(backstopBranches36(fixedProject, 6 * MINUTE, 'v16'), ['iv']);
+});
+
+test('§24 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§23 have, for the sixth round. Two of these five are claims about what a
+  // real server does — a non-volatile function cannot take a row lock, and a deferred trigger only
+  // runs at COMMIT — so the Postgres file is checked by name as well.
+  const rows = tables(section(PCC, '24'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-32', 'PC-CX-33', 'PC-CX-34', 'PC-CX-35', 'PC-CX-36']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`), `§24 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '24').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 4, '§24 promises fewer real-Postgres assertions than the review asked for');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§24 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '24').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§24 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§24 points at §${m[1]}, which does not exist`);
   }
 });
