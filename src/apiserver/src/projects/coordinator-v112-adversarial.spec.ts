@@ -155,18 +155,24 @@ function errorMessage(error: unknown): string {
 
 const LEDGER_TABLES = `
     CREATE TABLE project (id text PRIMARY KEY);
+    -- v1.14 (PC-CX-62): D20 ⓪ is §4.3 I11-A's attribution closure, so the fixture carries the three
+    -- columns it reads. Every shape below states its own attribution; nothing else changed.
+    CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE);
     CREATE TABLE project_action (
       id text PRIMARY KEY,
       project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
       type text NOT NULL,
       status text NOT NULL,
       result_session_id text,
-      detail jsonb NOT NULL DEFAULT '{"retiredPins":[]}'::jsonb
+      detail jsonb NOT NULL DEFAULT '{"retiredPins":[]}'::jsonb,
+      subject_type text NOT NULL DEFAULT 'TASK',
+      subject_id text
     );
     CREATE TABLE session (
       id text PRIMARY KEY,
       dispatch_origin text NOT NULL,
-      project_action_id text UNIQUE
+      project_action_id text UNIQUE,
+      task_id text
     );
     CREATE INDEX project_action_result_session_idx ON project_action(result_session_id);
     CREATE INDEX project_action_project_idx ON project_action(project_id);
@@ -334,8 +340,9 @@ const UNDECIDABLE_SHAPES: { project: string; seed: string; reason: RegExp; kept:
   },
   {
     project: 'p-cross',
-    seed: `INSERT INTO project_action (id,project_id,type,status) VALUES ('a-cross','p-cross','DISPATCH_TASK','CLAIMED');
-           INSERT INTO session VALUES ('s-cross','COORDINATOR','a-cross');
+    seed: `INSERT INTO task VALUES ('t-cross','p-cross');
+           INSERT INTO project_action (id,project_id,type,status,subject_id) VALUES ('a-cross','p-cross','DISPATCH_TASK','CLAIMED','t-cross');
+           INSERT INTO session VALUES ('s-cross','COORDINATOR','a-cross','t-cross');
            UPDATE project_action SET status='APPLIED', result_session_id='s-cross' WHERE id='a-cross';
            INSERT INTO project VALUES ('p-other');
            INSERT INTO project_action (id,project_id,type,status,result_session_id)
@@ -369,12 +376,17 @@ test('PC-CX-60 on isolated Postgres: every undecidable link fails closed on both
         await client.query(`INSERT INTO project VALUES ('${shape.project}')`);
         await client.query(shape.seed);
       }
-      // Positive controls, so "it refuses everything" cannot pass this test.
+      // Positive controls, so "it refuses everything" cannot pass this test. v1.14 (PC-CX-62) moves
+      // `p-unpublished` across the line: I11-A only ever attributed a placeholder to an APPLIED
+      // dispatch, so an unpublished one is existing data to adjudicate, not a row to sweep.
       await client.query(`
         INSERT INTO project VALUES ('p-ok'), ('p-unpublished'), ('p-empty');
-        INSERT INTO project_action (id,project_id,type,status) VALUES
-          ('a-ok','p-ok','DISPATCH_TASK','CLAIMED'), ('a-unpublished','p-unpublished','DISPATCH_TASK','CLAIMED');
-        INSERT INTO session VALUES ('s-ok','COORDINATOR','a-ok'), ('s-unpublished','COORDINATOR','a-unpublished');
+        INSERT INTO task VALUES ('t-ok','p-ok'), ('t-unpublished','p-unpublished');
+        INSERT INTO project_action (id,project_id,type,status,subject_id) VALUES
+          ('a-ok','p-ok','DISPATCH_TASK','CLAIMED','t-ok'),
+          ('a-unpublished','p-unpublished','DISPATCH_TASK','CLAIMED','t-unpublished');
+        INSERT INTO session VALUES ('s-ok','COORDINATOR','a-ok','t-ok'),
+          ('s-unpublished','COORDINATOR','a-unpublished','t-unpublished');
         UPDATE project_action SET status='APPLIED', result_session_id='s-ok' WHERE id='a-ok';
       `);
 
@@ -405,8 +417,16 @@ test('PC-CX-60 on isolated Postgres: every undecidable link fails closed on both
 
       assert.deepEqual((await client.query(`SELECT * FROM coordinator_purge_project('p-ok')`)).rows[0],
         { purged_actions: '1', purged_sessions: '1' }, 'positive control: a well-formed linked Project must still purge');
-      assert.deepEqual((await client.query(`SELECT * FROM coordinator_purge_project('p-unpublished')`)).rows[0],
-        { purged_actions: '1', purged_sessions: '1' }, 'positive control: an unpublished placeholder is in scope too');
+      await assert.rejects(client.query(`SELECT * FROM coordinator_purge_project('p-unpublished')`),
+        (error: unknown) => {
+          assert.match(errorMessage(error), /PROJECT_PURGE_UNDECIDABLE/,
+            'v1.14 control: an unpublished dispatch is not an I11-A placeholder and must fail closed');
+          assert.match(errorMessage(error), /never reached APPLIED/, 'and the refusal must name why');
+          return true;
+        });
+      assert.equal((await client.query(
+        `SELECT count(*)::int AS n FROM session WHERE id='s-unpublished'`)).rows[0].n, 1,
+      'v1.14 control: and nothing was deleted (PC-CX-62)');
       await client.query(`DELETE FROM project WHERE id='p-empty'`);
 
       // Reverse control: v1.12's raw OR predicate, rebuilt from the current function.
@@ -460,9 +480,11 @@ test('PC-CX-61 on isolated Postgres: both commit orders have a typed winner',
     const seed = async (p: string): Promise<void> => {
       await observer.query(`
         INSERT INTO project VALUES ('${p}');
-        INSERT INTO project_action (id,project_id,type,status) VALUES
-          ('${p}-a-old','${p}','DISPATCH_TASK','CLAIMED'), ('${p}-a-late','${p}','DISPATCH_TASK','CLAIMED');
-        INSERT INTO session VALUES ('${p}-s-old','COORDINATOR','${p}-a-old');
+        INSERT INTO task VALUES ('${p}-t-old','${p}'), ('${p}-t-late','${p}');
+        INSERT INTO project_action (id,project_id,type,status,subject_id) VALUES
+          ('${p}-a-old','${p}','DISPATCH_TASK','CLAIMED','${p}-t-old'),
+          ('${p}-a-late','${p}','DISPATCH_TASK','CLAIMED','${p}-t-late');
+        INSERT INTO session VALUES ('${p}-s-old','COORDINATOR','${p}-a-old','${p}-t-old');
         UPDATE project_action SET status='APPLIED', result_session_id='${p}-s-old' WHERE id='${p}-a-old';
       `);
     };
@@ -479,7 +501,7 @@ test('PC-CX-61 on isolated Postgres: both commit orders have a typed winner',
       await settle();
       await publisher.query('BEGIN');
       let blocked = true;
-      const publish1 = publisher.query(`INSERT INTO session VALUES ('r1-s-late','COORDINATOR','r1-a-late')`)
+      const publish1 = publisher.query(`INSERT INTO session VALUES ('r1-s-late','COORDINATOR','r1-a-late','r1-t-late')`)
         .then(() => { blocked = false; return 'committed'; })
         .catch((error: unknown) => { blocked = false; return errorMessage(error).split('\n')[0]; });
       await settle();
@@ -500,7 +522,7 @@ test('PC-CX-61 on isolated Postgres: both commit orders have a typed winner',
       // ── publish-wins: the purge queues on ③-1 and the late placeholder is inside its snapshot.
       await seed('r2');
       await publisher.query('BEGIN');
-      await publisher.query(`INSERT INTO session VALUES ('r2-s-late','COORDINATOR','r2-a-late')`);
+      await publisher.query(`INSERT INTO session VALUES ('r2-s-late','COORDINATOR','r2-a-late','r2-t-late')`);
       await publisher.query(`UPDATE project_action SET status='APPLIED', result_session_id='r2-s-late' WHERE id='r2-a-late'`);
       await purger.query('BEGIN');
       const purge2 = purger.query<{ purged_actions: string; purged_sessions: string }>(
@@ -545,7 +567,7 @@ test('PC-CX-61 on isolated Postgres: both commit orders have a typed winner',
            FROM coordinator_purge_ledger_pairs('r4') WHERE in_scope`)).rows[0].doomed;
       assert.deepEqual(doomed, ['r4-s-old'], 'positive control: the late publication is not in the snapshot yet');
       await publisher.query('BEGIN');
-      await publisher.query(`INSERT INTO session VALUES ('r4-s-late','COORDINATOR','r4-a-late')`);
+      await publisher.query(`INSERT INTO session VALUES ('r4-s-late','COORDINATOR','r4-a-late','r4-t-late')`);
       await publisher.query(`UPDATE project_action SET status='APPLIED', result_session_id='r4-s-late' WHERE id='r4-a-late'`);
       await publisher.query('COMMIT');
       await purger.query(`DELETE FROM project WHERE id='r4'`);

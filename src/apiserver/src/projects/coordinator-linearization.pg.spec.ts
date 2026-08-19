@@ -5052,10 +5052,16 @@ test('PC-CX-57 on real Postgres: a legacy malformed ledger still cannot rewrite 
  */
 async function installPurge113(c: Client, options: {
   snapshot?: 'v113' | 'v112'; lockLedger?: boolean; publishFence?: boolean; base?: boolean;
+  scope?: 'v114' | 'v113';
 } = {}): Promise<void> {
-  const { snapshot = 'v113', lockLedger = true, publishFence = true, base = true } = options;
+  const { snapshot = 'v113', lockLedger = true, publishFence = true, base = true,
+    scope = 'v114' } = options;
   if (base) await installPurge112(c);
   // ⓪ D20-c's quantification domain, as one function. ② and ③ both read it and neither restates it.
+  // v1.14 (PC-CX-62): the predicate is §4.3 I11-A's attribution closure, column for column — an
+  // APPLIED dispatch, both directions of the link, the action's TASK subject being the Task this
+  // session runs, and that Task belonging to this same Project. `scope: 'v113'` restores the
+  // predicate the review found, so both of its witnesses stay reproducible.
   await c.query(`
     CREATE OR REPLACE FUNCTION coordinator_purge_ledger_pairs(p_project_id text)
     RETURNS TABLE (action_id text, session_id text, in_scope boolean, reason text)
@@ -5064,8 +5070,16 @@ async function installPurge113(c: Client, options: {
              COALESCE(s.dispatch_origin = 'COORDINATOR'
                   AND a.type = 'DISPATCH_TASK'
                   AND s.project_action_id IS NOT DISTINCT FROM a.id
-                  AND ((a.status =  'APPLIED' AND a.result_session_id IS NOT DISTINCT FROM s.id)
-                    OR (a.status <> 'APPLIED' AND a.result_session_id IS NULL))
+                  ${scope === 'v114'
+    ? `AND a.status = 'APPLIED'
+                  AND a.result_session_id IS NOT DISTINCT FROM s.id
+                  AND a.subject_type = 'TASK'
+                  AND s.task_id IS NOT NULL
+                  AND a.subject_id IS NOT DISTINCT FROM s.task_id
+                  AND EXISTS (SELECT 1 FROM task t
+                               WHERE t.id = s.task_id AND t.project_id = a.project_id)`
+    : `AND ((a.status =  'APPLIED' AND a.result_session_id IS NOT DISTINCT FROM s.id)
+                    OR (a.status <> 'APPLIED' AND a.result_session_id IS NULL))`}
                   AND NOT EXISTS (SELECT 1 FROM project_action o
                                    WHERE o.result_session_id = s.id
                                      AND o.project_id IS DISTINCT FROM p_project_id), false),
@@ -5073,10 +5087,22 @@ async function installPurge113(c: Client, options: {
                   WHEN a.type <> 'DISPATCH_TASK'          THEN 'the action is not a DISPATCH_TASK'
                   WHEN s.project_action_id IS DISTINCT FROM a.id
                                                           THEN 'the link is one-way: the session does not point back'
-                  WHEN a.status =  'APPLIED' AND a.result_session_id IS DISTINCT FROM s.id
-                                                          THEN 'the applied dispatch does not point at this session'
                   WHEN a.status <> 'APPLIED' AND a.result_session_id IS NOT NULL
                                                           THEN 'an unpublished dispatch already carries a result link'
+                  ${scope === 'v114'
+    ? `WHEN a.status <> 'APPLIED'
+                                                          THEN 'the action never reached APPLIED, so it never published a placeholder'
+                  WHEN a.result_session_id IS DISTINCT FROM s.id
+                                                          THEN 'the applied dispatch does not point at this session'
+                  WHEN a.subject_type <> 'TASK'           THEN 'the action does not dispatch a TASK'
+                  WHEN s.task_id IS NULL                  THEN 'the placeholder session runs no task'
+                  WHEN a.subject_id IS DISTINCT FROM s.task_id
+                                                          THEN 'the action dispatches a different task than this session runs'
+                  WHEN NOT EXISTS (SELECT 1 FROM task t
+                                    WHERE t.id = s.task_id AND t.project_id = a.project_id)
+                                                          THEN 'the task this session runs belongs to another project'`
+    : `WHEN a.status =  'APPLIED' AND a.result_session_id IS DISTINCT FROM s.id
+                                                          THEN 'the applied dispatch does not point at this session'`}
                   WHEN EXISTS (SELECT 1 FROM project_action o
                                 WHERE o.result_session_id = s.id
                                   AND o.project_id IS DISTINCT FROM p_project_id)
@@ -5408,16 +5434,24 @@ test('PC-CX-61 on real Postgres: both commit orders have a typed winner',
     const publisher = await connect();
     try {
       const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 250));
+      // v1.14 (PC-CX-62): the late placeholder has to satisfy I11-A like any other — its own Task,
+      // in this Project, named by the action's TASK subject. A task-less placeholder was v1.13's
+      // shape, and D20 ⓪ now (correctly) refuses to call it a placeholder at all.
       const late = (id: string): string =>
-        `INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id)
-           VALUES ('${id}', NULL, 'RUNNING', 'COORDINATOR', 'act-late')`;
+        MATCHING_SESSION(id, 'act-late').replace(`'t1'`, `'t-late'`);
       const seedRace = async (): Promise<void> => {
         await installV19(purger);
         await installPurge113(purger);
         await publisher.query(`SET search_path TO ${V19_SCHEMA}`);
+        await purger.query(`INSERT INTO task VALUES ('t-late','p1') ON CONFLICT DO NOTHING`);
         assert.equal(await seedPurgeFixture(purger), '', 'the published dispatch must commit first');
-        assert.equal(await txn(purger, async () => { await purger.query(claimAction19('act-late', 'k-late')); }), '',
-          'and the unpublished action the race turns on must exist');
+        assert.equal(await txn(purger, async () => {
+          // D17 ties the authorization half's taskId to the action's own TASK subject, so the late
+          // dispatch names `t-late` on both sides — the digests are recomputed from that context.
+          await purger.query(claimAction19('act-late', 'k-late',
+            { ctx: context19().split(`"taskId":"t1"`).join(`"taskId":"t-late"`) })
+            .replace(`'TASK','t1'`, `'TASK','t-late'`));
+        }), '', 'and the unpublished action the race turns on must exist');
       };
 
       // ── purge-wins. The publication queues on the shared Project row and gets a typed answer.
@@ -5508,5 +5542,176 @@ test('PC-CX-61 on real Postgres: both commit orders have a typed winner',
       await purger.query('ROLLBACK').catch(() => undefined);
       await publisher.query('ROLLBACK').catch(() => undefined);
       await Promise.all([purger.end(), publisher.end()]);
+    }
+  });
+
+// A ledger row as an old write end would have left it: only the columns the schema demands. The
+// result link is published in a third statement because `project_action_result_session_fk` is a
+// real foreign key — `DISABLE TRIGGER USER` suspends the contract's gates, never the FK.
+const legacyAction = (id: string, project: string, status: string, subjectType: string,
+  subjectId: string): string =>
+  `INSERT INTO project_action (id,idempotency_key,project_id,type,status,subject_type,subject_id,
+     fencing_token,result_session_id,detail)
+   VALUES ('${id}','k-${id}','${project}','DISPATCH_TASK','${status}','${subjectType}','${subjectId}',1,
+     NULL,'{}'::jsonb)`;
+const legacySession = (id: string, task: string | null, action: string): string =>
+  `INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id)
+   VALUES ('${id}', ${task ? `'${task}'` : 'NULL'}, 'RUNNING', 'COORDINATOR', '${action}')`;
+const legacyPublish = (action: string, session: string): string =>
+  `UPDATE project_action SET status='APPLIED', result_session_id='${session}' WHERE id='${action}'`;
+
+/**
+ * §4.3 I11-A's attribution, shape by shape: the six ledgers v1.13's ⓪ called placeholders and
+ * I11-A never did (v1.14, `PC-CX-62`). Each gets its own Project so the two entry points can be
+ * run against the same committed fact twice, and each names what has to survive both runs.
+ */
+const UNDECIDABLE_114: {
+  project: string; seed: () => string; reason: RegExp; kept: string;
+  keptTask?: string; keptProject?: string;
+}[] = [
+  { project: 'p-terminal', kept: 's-terminal', reason: /never reached APPLIED/,
+    seed: () => `INSERT INTO project VALUES ('p-terminal');
+      INSERT INTO task VALUES ('t-terminal','p-terminal');
+      ${legacyAction('a-terminal', 'p-terminal', 'REFUSED', 'TASK', 't-terminal')};
+      ${legacySession('s-terminal', 't-terminal', 'a-terminal')};` },
+  { project: 'p-claimed', kept: 's-claimed', reason: /never reached APPLIED/,
+    seed: () => `INSERT INTO project VALUES ('p-claimed');
+      INSERT INTO task VALUES ('t-claimed','p-claimed');
+      ${legacyAction('a-claimed', 'p-claimed', 'CLAIMED', 'TASK', 't-claimed')};
+      ${legacySession('s-claimed', 't-claimed', 'a-claimed')};` },
+  { project: 'p-subject-type', kept: 's-subject-type', reason: /does not dispatch a TASK/,
+    seed: () => `INSERT INTO project VALUES ('p-subject-type');
+      INSERT INTO task VALUES ('t-subject-type','p-subject-type');
+      ${legacyAction('a-subject-type', 'p-subject-type', 'CLAIMED', 'PROJECT', 'p-subject-type')};
+      ${legacySession('s-subject-type', 't-subject-type', 'a-subject-type')};
+      ${legacyPublish('a-subject-type', 's-subject-type')};` },
+  { project: 'p-notask', kept: 's-notask', reason: /runs no task/,
+    seed: () => `INSERT INTO project VALUES ('p-notask');
+      INSERT INTO task VALUES ('t-notask','p-notask');
+      ${legacyAction('a-notask', 'p-notask', 'CLAIMED', 'TASK', 't-notask')};
+      ${legacySession('s-notask', null, 'a-notask')};
+      ${legacyPublish('a-notask', 's-notask')};` },
+  // The review's witness B: a formally complete two-way link whose Session runs another Project's Task.
+  { project: 'p-owner', kept: 's-foreign', keptTask: 't-foreign', keptProject: 'p-foreign',
+    reason: /different task than this session runs/,
+    seed: () => `INSERT INTO project VALUES ('p-owner'), ('p-foreign');
+      INSERT INTO task VALUES ('t-owner','p-owner'), ('t-foreign','p-foreign');
+      ${legacyAction('a-owner', 'p-owner', 'CLAIMED', 'TASK', 't-owner')};
+      ${legacySession('s-foreign', 't-foreign', 'a-owner')};
+      ${legacyPublish('a-owner', 's-foreign')};` },
+  // …and the same boundary crossed with the subject itself: the action dispatches the Task the
+  // Session runs, but that Task has never belonged to this Project.
+  { project: 'p-cross', kept: 's-cross', keptTask: 't-cross', keptProject: 'p-outside',
+    reason: /belongs to another project/,
+    seed: () => `INSERT INTO project VALUES ('p-cross'), ('p-outside');
+      INSERT INTO task VALUES ('t-cross','p-outside');
+      ${legacyAction('a-cross', 'p-cross', 'CLAIMED', 'TASK', 't-cross')};
+      ${legacySession('s-cross', 't-cross', 'a-cross')};
+      ${legacyPublish('a-cross', 's-cross')};` },
+];
+
+test('PC-CX-62 on real Postgres: the I11-A attribution closure decides both entry points',
+  { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+    const c = await connect();
+    const seedLegacy = async (shape: typeof UNDECIDABLE_114[number]): Promise<void> => {
+      // Same discipline as PC-CX-60's fixtures: in the full topology D9 refuses every one of these
+      // at the commit point (D9-d's counterexamples are exactly "wrong status / wrong Task /
+      // wrong Project"), so the only way this data exists is an old write end — gates off, row in,
+      // gates back on (D18-e ④). That is precisely why D20-i calls them existing data.
+      await c.query('ALTER TABLE project_action DISABLE TRIGGER USER');
+      await c.query('ALTER TABLE session DISABLE TRIGGER USER');
+      const seeded = await txn(c, async () => { await c.query(shape.seed()); });
+      await c.query('ALTER TABLE project_action ENABLE TRIGGER USER');
+      await c.query('ALTER TABLE session ENABLE TRIGGER USER');
+      assert.equal(seeded, '', `${shape.project}: the legacy fixture must land to be worth refusing`);
+    };
+    try {
+      await installV19(c);
+      await installPurge113(c);
+      assert.equal(await seedPurgeFixture(c), '', 'the ordinary dispatch must commit first');
+
+      for (const shape of UNDECIDABLE_114) {
+        await seedLegacy(shape);
+        const classified = (await c.query<{ in_scope: boolean; reason: string }>(
+          `SELECT in_scope, reason FROM coordinator_purge_ledger_pairs('${shape.project}')`)).rows[0];
+        assert.equal(classified.in_scope, false,
+          `${shape.project}: ⓪ still admits a pair §4.3 I11-A does not attribute`);
+        assert.match(classified.reason, shape.reason, `${shape.project}: classified for the wrong reason`);
+
+        const answers: string[] = [];
+        for (const sql of [`SELECT * FROM coordinator_purge_project('${shape.project}')`,
+          `DELETE FROM project WHERE id='${shape.project}'`]) {
+          const answer = await txn(c, async () => { await c.query(sql); });
+          assert.match(answer, /PROJECT_PURGE_UNDECIDABLE/, `${shape.project}: not refused with D20-i's typed code`);
+          assert.match(answer, shape.reason, `${shape.project}: refused for the wrong reason`);
+          assert.match(answer, /owner=USER, recovery=HUMAN/, `${shape.project}: the refusal names no owner`);
+          answers.push(answer);
+        }
+        assert.equal(answers[0], answers[1],
+          `${shape.project}: the function and the bare DELETE give different answers — that is PC-CX-62`);
+        assert.equal((await c.query<{ n: string }>(
+          `SELECT count(*)::text AS n FROM session WHERE id='${shape.kept}'`)).rows[0].n, '1',
+        `${shape.project}: the Session I11-A does not attribute to this ledger was deleted anyway`);
+        if (shape.keptProject) {
+          assert.equal((await c.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM project WHERE id='${shape.keptProject}'`)).rows[0].n, '1',
+          `${shape.project}: the other Project is gone`);
+          assert.equal((await c.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM task WHERE id='${shape.keptTask}'`)).rows[0].n, '1',
+          `${shape.project}: the other Project's Task is gone`);
+        }
+      }
+
+      // Positive controls, so "it refuses everything" cannot pass this test: a placeholder that
+      // satisfies I11-A column by column is still swept, and a Project with nothing to strand still
+      // deletes on a bare statement.
+      assert.deepEqual((await c.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('p1')`)).rows[0], { purged_actions: '1', purged_sessions: '1' },
+      'a fully attributed placeholder must still purge in one call');
+      assert.equal(await txn(c, async () => { await c.query(`DELETE FROM project WHERE id='p-empty'`); }), '',
+        'and an empty Project must still delete on a bare statement');
+
+      // Reverse control: the v1.13 predicate, with the same two committed facts the review reported.
+      await installV19(c);
+      await installPurge113(c, { scope: 'v113' });
+      const terminal = UNDECIDABLE_114[0];
+      const foreign = UNDECIDABLE_114[4];
+      await seedLegacy(terminal);
+      await seedLegacy(foreign);
+      assert.equal((await c.query<{ in_scope: boolean }>(
+        `SELECT in_scope FROM coordinator_purge_ledger_pairs('${terminal.project}')`)).rows[0].in_scope, true,
+      'PC-CX-62 must reproduce: v1.13 admitted a REFUSED dispatch as an unpublished placeholder');
+      assert.deepEqual((await c.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('${terminal.project}')`)).rows[0],
+      { purged_actions: '1', purged_sessions: '1' });
+      assert.equal((await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM session WHERE id='${terminal.kept}'`)).rows[0].n, '0',
+      'PC-CX-62 must reproduce: the function physically deleted it');
+      await c.query(`INSERT INTO project VALUES ('${terminal.project}-bare')`);
+      await c.query('ALTER TABLE project_action DISABLE TRIGGER USER');
+      await c.query('ALTER TABLE session DISABLE TRIGGER USER');
+      await c.query(`${legacyAction('a-bare', `${terminal.project}-bare`, 'REFUSED', 'TASK', 't-terminal')};
+        ${legacySession('s-bare', null, 'a-bare')};`);
+      await c.query('ALTER TABLE project_action ENABLE TRIGGER USER');
+      await c.query('ALTER TABLE session ENABLE TRIGGER USER');
+      assert.match(await txn(c, async () => {
+        await c.query(`DELETE FROM project WHERE id='${terminal.project}-bare'`);
+      }), /PROJECT_PURGE_UNDECLARED/,
+      'PC-CX-62 must reproduce: the bare entry point keeps the same shape the function deleted');
+      assert.equal((await c.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM session WHERE id='s-bare'`)).rows[0].n, '1',
+      'PC-CX-62 must reproduce: one committed fact, two different results');
+      assert.deepEqual((await c.query<{ purged_actions: string; purged_sessions: string }>(
+        `SELECT * FROM coordinator_purge_project('${foreign.project}')`)).rows[0],
+      { purged_actions: '1', purged_sessions: '1' });
+      assert.deepEqual((await c.query<{ session: string; project: string; task: string }>(
+        `SELECT (SELECT count(*)::text FROM session WHERE id='${foreign.kept}') AS session,
+                (SELECT count(*)::text FROM project WHERE id='${foreign.keptProject}') AS project,
+                (SELECT count(*)::text FROM task    WHERE id='${foreign.keptTask}')    AS task`)).rows[0],
+      { session: '0', project: '1', task: '1' },
+      'PC-CX-62 must reproduce: purging one Project deleted the Session of another Project, '
+        + 'while that Project and its Task stayed exactly where they were');
+    } finally {
+      await c.end();
     }
   });

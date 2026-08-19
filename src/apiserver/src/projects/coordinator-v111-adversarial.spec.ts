@@ -161,6 +161,10 @@ test('PC-CX-56 on isolated Postgres: the declared Project purge commits and leav
       await resetSchema(client, 'pcc_v111_review_purge');
       await client.query(`
         CREATE TABLE project (id text PRIMARY KEY);
+        -- v1.14 (PC-CX-62): D20 ⓪ is now §4.3 I11-A's attribution closure, so the fixture carries
+        -- the Task it reads. Same discipline as the two columns v1.13 added below: the defaults are
+        -- the in-scope ones, so every assertion in this file is the same fixture it always was.
+        CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL);
         CREATE TABLE project_action (
           id text PRIMARY KEY,
           project_id text NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -169,12 +173,15 @@ test('PC-CX-56 on isolated Postgres: the declared Project purge commits and leav
           -- v1.13 (PC-CX-60): D20 ⓪ reads the action type and the Session origin, because D20-c
           -- always excluded a USER Session and a non-dispatch action. The two columns carry the
           -- in-scope defaults so every assertion below is the same fixture it was in v1.12.
-          type text NOT NULL DEFAULT 'DISPATCH_TASK'
+          type text NOT NULL DEFAULT 'DISPATCH_TASK',
+          subject_type text NOT NULL DEFAULT 'TASK',
+          subject_id text NOT NULL DEFAULT 't1'
         );
         CREATE TABLE session (
           id text PRIMARY KEY,
           project_action_id text UNIQUE,
-          dispatch_origin text NOT NULL DEFAULT 'COORDINATOR'
+          dispatch_origin text NOT NULL DEFAULT 'COORDINATOR',
+          task_id text DEFAULT 't1'
         );
         CREATE INDEX project_action_result_session_idx ON project_action(result_session_id);
         CREATE INDEX project_action_project_idx ON project_action(project_id);
@@ -192,6 +199,7 @@ test('PC-CX-56 on isolated Postgres: the declared Project purge commits and leav
       }
       await client.query(`
         INSERT INTO project VALUES ('p-linked'), ('p-empty');
+        INSERT INTO task VALUES ('t1', 'p-linked');
         INSERT INTO project_action VALUES ('a1', 'p-linked', 'APPLIED', NULL);
         INSERT INTO session VALUES ('s1', 'a1');
         UPDATE project_action SET result_session_id = 's1' WHERE id = 'a1';

@@ -6920,8 +6920,24 @@ test('PC-CX-59 the one-shot migration installs every v1.11 hard gate', () => {
 
 /** §7.7 D20 ⓪: one `(action, session)` pair of a ledger, and whether D20-c admits it. */
 type Pair = { action: string; session: string; origin: 'COORDINATOR' | 'USER'; type: string; status: string;
-  link: string | null; lineage: string | null; alsoReferencedElsewhere?: boolean };
+  link: string | null; lineage: string | null; project: string; subjectType: string; subjectId: string | null;
+  taskId: string | null; taskProject: string | null; alsoReferencedElsewhere?: boolean };
+/**
+ * v1.14 (PC-CX-62): the predicate *is* §4.3 I11-A's attribution closure, column by column — an
+ * APPLIED DISPATCH_TASK, both directions of the link, and the Task this session runs being the one
+ * that action dispatched, inside this same Project. PC-CX-60 collapsed two copies of the set into
+ * one function; this is the other half of that sentence — the surviving copy has to quantify the
+ * thing it claims to, and the only definition of "whose placeholder is this" is I11-A.
+ */
 function inScope(p: Pair): boolean {
+  return p.origin === 'COORDINATOR' && p.type === 'DISPATCH_TASK' && p.lineage === p.action
+    && p.status === 'APPLIED' && p.link === p.session
+    && p.subjectType === 'TASK' && p.taskId !== null && p.subjectId === p.taskId
+    && p.taskProject === p.project
+    && !p.alsoReferencedElsewhere;
+}
+/** v1.13 ⓪: the shape conditions only — every terminal status passed and attribution went unread. */
+function inScopeV113(p: Pair): boolean {
   return p.origin === 'COORDINATOR' && p.type === 'DISPATCH_TASK' && p.lineage === p.action
     && (p.status === 'APPLIED' ? p.link === p.session : p.link === null)
     && !p.alsoReferencedElsewhere;
@@ -6931,13 +6947,15 @@ function inScopeV112(p: Pair): boolean {
   return p.lineage === p.action || p.link === p.session;
 }
 type PurgeAnswer = { outcome: 'committed' | 'undecidable' | 'undeclared'; deleted: string[] };
-function purge113(pairs: Pair[], entry: 'function' | 'bare'): PurgeAnswer {
+function purgeLedger(pairs: Pair[], entry: 'function' | 'bare',
+  admits: (p: Pair) => boolean = inScope): PurgeAnswer {
   // D20-i: both entry points adjudicate the same domain, in the same order, before anything moves.
-  if (pairs.some((p) => !inScope(p))) return { outcome: 'undecidable', deleted: [] };
-  const scope = pairs.filter(inScope).map((p) => p.session);
+  if (pairs.some((p) => !admits(p))) return { outcome: 'undecidable', deleted: [] };
+  const scope = pairs.filter(admits).map((p) => p.session);
   if (entry === 'bare' && scope.length > 0) return { outcome: 'undeclared', deleted: [] };
   return { outcome: 'committed', deleted: scope };
 }
+const purge113 = (pairs: Pair[], entry: 'function' | 'bare'): PurgeAnswer => purgeLedger(pairs, entry);
 function purge112(pairs: Pair[], entry: 'function' | 'bare'): PurgeAnswer {
   if (entry === 'bare') {
     // v1.12's fence only counted the lineage half of the union.
@@ -6947,11 +6965,17 @@ function purge112(pairs: Pair[], entry: 'function' | 'bare'): PurgeAnswer {
   return { outcome: 'committed', deleted: pairs.filter(inScopeV112).map((p) => p.session) };
 }
 
+/** A pair that satisfies §4.3 I11-A on every column: the positive control both rounds are read against. */
+const WELL_FORMED: Pair = { action: 'a1', session: 's1', origin: 'COORDINATOR', type: 'DISPATCH_TASK',
+  status: 'APPLIED', link: 's1', lineage: 'a1', project: 'p1', subjectType: 'TASK', subjectId: 't1',
+  taskId: 't1', taskProject: 'p1' };
+/** The review's v1.12 witness: a terminal dispatch whose result link points at a USER Session. */
+const USER_ORIGIN: Pair = { ...WELL_FORMED, session: 'u1', origin: 'USER', status: 'REFUSED',
+  link: 'u1', lineage: null, taskId: null, taskProject: null };
+
 test('PC-CX-60 the purge collection predicate is D20-c, mechanically', () => {
-  const userOrigin: Pair = { action: 'a1', session: 'u1', origin: 'USER', type: 'DISPATCH_TASK',
-    status: 'REFUSED', link: 'u1', lineage: null };
-  const wellFormed: Pair = { action: 'a1', session: 's1', origin: 'COORDINATOR', type: 'DISPATCH_TASK',
-    status: 'APPLIED', link: 's1', lineage: 'a1' };
+  const userOrigin = USER_ORIGIN;
+  const wellFormed = WELL_FORMED;
   const unpublished: Pair = { ...wellFormed, session: 's2', status: 'CLAIMED', link: null };
   const shapes: [string, Pair][] = [
     ['USER-origin', userOrigin],
@@ -6971,8 +6995,11 @@ test('PC-CX-60 the purge collection predicate is D20-c, mechanically', () => {
   // Positive controls, so "refuse everything" cannot pass.
   assert.deepEqual(purge113([wellFormed], 'function'), { outcome: 'committed', deleted: ['s1'] },
     'a well-formed placeholder must still be swept');
-  assert.deepEqual(purge113([unpublished], 'function'), { outcome: 'committed', deleted: ['s2'] },
-    'an unpublished placeholder is in scope too — the action never got to publish');
+  // v1.14 (PC-CX-62): this was v1.13's second positive control, and it was the finding. §4.3 I11-A
+  // only ever attributed a placeholder to an APPLIED dispatch — D9 refuses the other shapes at the
+  // commit point — so an unpublished one is existing data to adjudicate, not a row to sweep.
+  assert.deepEqual(purge113([unpublished], 'function'), { outcome: 'undecidable', deleted: [] },
+    'an unpublished dispatch is not an I11-A placeholder: it must fail closed, not be swept (§32.1)');
   assert.deepEqual(purge113([], 'bare'), { outcome: 'committed', deleted: [] },
     'a Project with nothing to strand must still delete on a bare statement');
 
@@ -7047,9 +7074,108 @@ test('PC-CX-61 purge and publication share one linearization point', () => {
   assert.match(section(PCC, '12.1'), /㉕/, 'G5 does not verify the two commit orders');
 });
 
+/** §4.3 I11-A as a predicate over one pair, so §7.7 D20 ⓪ can be compared against it column by column. */
+function attributedByI11A(p: Pair): boolean {
+  return p.type === 'DISPATCH_TASK' && p.status === 'APPLIED' && p.subjectType === 'TASK'
+    && p.taskId !== null && p.subjectId === p.taskId && p.taskProject === p.project;
+}
+
+test("PC-CX-62 the purge scope is I11-A's attribution closure, mechanically", () => {
+  const shapes: [string, Pair][] = [
+    ['terminal REFUSED', { ...WELL_FORMED, session: 's-refused', status: 'REFUSED', link: null }],
+    ['terminal SUPERSEDED', { ...WELL_FORMED, session: 's-superseded', status: 'SUPERSEDED', link: null }],
+    ['still CLAIMED', { ...WELL_FORMED, session: 's-claimed', status: 'CLAIMED', link: null }],
+    ['wrong subject type', { ...WELL_FORMED, subjectType: 'PROJECT' }],
+    ['wrong subject id', { ...WELL_FORMED, subjectId: 't-other' }],
+    ['session runs no task', { ...WELL_FORMED, taskId: null, taskProject: null }],
+    ['task of another Project', { ...WELL_FORMED, taskProject: 'p-foreign' }],
+  ];
+  for (const [label, shape] of shapes) {
+    assert.equal(attributedByI11A(shape), false, `${label}: positive control — I11-A does not attribute this shape`);
+    for (const entry of ['function', 'bare'] as const) {
+      assert.deepEqual(purgeLedger([shape], entry), { outcome: 'undecidable', deleted: [] },
+        `${label} via the ${entry} entry must fail closed with nothing deleted`);
+    }
+    assert.deepEqual(purgeLedger([shape], 'function'), purgeLedger([shape], 'bare'),
+      `${label}: the two entry points must give the same answer — D20-f on malformed data`);
+  }
+
+  // The binding itself, which is the whole fix: over every shape in play, ⓪ admits exactly the pairs
+  // I11-A attributes to this ledger (plus the two structural conditions D20-c always had).
+  const universe: Pair[] = [WELL_FORMED, USER_ORIGIN, ...shapes.map(([, shape]) => shape),
+    { ...WELL_FORMED, lineage: null }, { ...WELL_FORMED, link: 's-other' },
+    { ...WELL_FORMED, type: 'ROTATE_COORDINATOR_SESSION' },
+    { ...WELL_FORMED, alsoReferencedElsewhere: true }];
+  for (const p of universe) {
+    const attributed = attributedByI11A(p) && p.origin === 'COORDINATOR'
+      && p.lineage === p.action && p.link === p.session && !p.alsoReferencedElsewhere;
+    assert.equal(inScope(p), attributed,
+      `⓪ and I11-A disagree about ${p.session}: a second definition of "whose placeholder is this"`);
+  }
+
+  // Positive controls, so "refuse everything" cannot pass this test.
+  assert.deepEqual(purgeLedger([WELL_FORMED], 'function'), { outcome: 'committed', deleted: ['s1'] },
+    'a placeholder that satisfies I11-A column by column must still be swept');
+  assert.deepEqual(purgeLedger([], 'bare'), { outcome: 'committed', deleted: [] },
+    'a Project with nothing to strand must still delete on a bare statement');
+
+  // Reverse controls: the review's two witnesses, replayed against the v1.13 predicate.
+  const refused = shapes[0][1];
+  const foreign: Pair = { ...WELL_FORMED, session: 's-foreign', link: 's-foreign',
+    taskId: 't-foreign', taskProject: 'p-foreign' };
+  for (const [label, witness] of [['REFUSED terminal', refused], ['foreign Task', foreign]] as const) {
+    assert.equal(inScopeV113(witness), true, `PC-CX-62 must reproduce: v1.13 admitted the ${label} shape`);
+    assert.deepEqual(purgeLedger([witness], 'function', inScopeV113),
+      { outcome: 'committed', deleted: [witness.session] },
+      `PC-CX-62 must reproduce: v1.13's function physically deletes the ${label} Session`);
+  }
+  assert.deepEqual(purgeLedger([refused], 'bare', inScopeV113), { outcome: 'undeclared', deleted: [] },
+    'PC-CX-62 must reproduce: the bare DELETE keeps the same Session, so the entry point decides');
+  assert.notDeepEqual(purgeLedger([refused], 'function', inScopeV113).deleted,
+    purgeLedger([refused], 'bare', inScopeV113).deleted,
+    'and that difference is the finding: D20-f claimed the two committed result sets are equal');
+
+  // The document half: one definition of attribution, read by the one function that authorises the delete.
+  const seven = section(PCC, '7.7');
+  const d20 = seven.slice(seven.indexOf('#### D20 '), seven.indexOf('#### D7 '));
+  assert.match(d20, /a\.status = 'APPLIED'/, '⓪ no longer requires the dispatch to be APPLIED');
+  assert.doesNotMatch(d20, /OR \(a\.status <> 'APPLIED' AND a\.result_session_id IS NULL\)\)/,
+    'the superseded status branch is alive in D20 — that is PC-CX-62');
+  for (const column of [/a\.subject_type = 'TASK'/, /a\.subject_id IS NOT DISTINCT FROM s\.task_id/,
+    /t\.project_id = a\.project_id/]) {
+    assert.match(d20, column, `⓪ does not read the I11-A attribution column ${String(column)}`);
+  }
+  assert.match(section(PCC, '4.3'), /subject_id = session\.task_id/,
+    'positive control: I11-A no longer states the attribution ⓪ is bound to');
+  assert.match(d20, /PROJECT_PURGE_UNDECIDABLE/, 'the fail-closed refusal has no typed code');
+  assert.match(section(PCC, '15'), /\*\*F62\*\*/, '§15 has no fault row for an unattributed placeholder');
+  assert.match(section(PCC, '12.1'), /㉖/, 'G5 does not verify that ⓪ reads every I11-A column');
+});
+
+test('mutation check: the I11-A binding added for PC-CX-62 is load-bearing', () => {
+  const refused: Pair = { ...WELL_FORMED, session: 's-refused', status: 'REFUSED', link: null };
+  const foreign: Pair = { ...WELL_FORMED, session: 's-foreign', link: 's-foreign',
+    taskId: 't-foreign', taskProject: 'p-foreign' };
+  // Remove exactly what v1.14 added — the predicate falls back to v1.13's — and both published
+  // witnesses reappear: one fact with two committed results, and one Project's purge taking
+  // another Project's Session with it.
+  assert.deepEqual(purgeLedger([refused], 'function', inScopeV113).deleted, ['s-refused'],
+    'PC-CX-62: without the I11-A binding the terminal witness is not deleted, so it is not what closed it');
+  assert.deepEqual(purgeLedger([refused], 'bare', inScopeV113).deleted, [],
+    'PC-CX-62: the bare entry point kept it, which is the half that made the two answers differ');
+  assert.deepEqual(purgeLedger([foreign], 'function', inScopeV113).deleted, ['s-foreign'],
+    'PC-CX-62: without the binding the cross-Project witness is not deleted either');
+  // …and with the fence in place neither witness is reachable through either entry point.
+  for (const shape of [refused, foreign]) {
+    for (const entry of ['function', 'bare'] as const) {
+      assert.deepEqual(purgeLedger([shape], entry), { outcome: 'undecidable', deleted: [] },
+        `${shape.session} is still reachable through the ${entry} entry`);
+    }
+  }
+});
+
 test('mutation check: every fence added for PC-CX-58..61 is load-bearing', () => {
-  const userOrigin: Pair = { action: 'a1', session: 'u1', origin: 'USER', type: 'DISPATCH_TASK',
-    status: 'REFUSED', link: 'u1', lineage: null };
+  const userOrigin = USER_ORIGIN;
   const mutants: { finding: string; fence: string; defectReappears: () => boolean }[] = [
     {
       finding: 'PC-CX-58',
@@ -7108,5 +7234,29 @@ test('§31 names a test that exists for every finding, and points at clauses tha
   for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
     const m = /§(\d+(?:\.\d+)?)/.exec(clause);
     if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§31 points at §${m[1]}, which does not exist`);
+  }
+});
+
+test('§32 names a test that exists for every finding, and points at clauses that exist', () => {
+  // The same mirror §20–§31 have, for the fourteenth round.
+  const rows = tables(section(PCC, '32'))[0];
+  const ids = column(rows, 'ID').map(bare);
+  assert.deepEqual(ids, ['PC-CX-62']);
+  const self = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
+  for (const name of column(rows, '可执行断言').map(bare)) {
+    assert.ok(self.includes(`test('${name}'`) || self.includes(`test("${name}"`),
+      `§32 names "${name}", which is not a test in this file`);
+  }
+  const pg = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-linearization.pg.spec.ts'), 'utf8');
+  const named = Array.from(section(PCC, '32').matchAll(/`(PC-CX-\d\d on real Postgres:[^`]+)`/g), (m) => m[1]);
+  assert.ok(named.length >= 1, '§32 promises no real-Postgres assertion for a P0 the review found on real Postgres');
+  for (const name of named) {
+    assert.ok(pg.includes(`test('${name}'`), `§32 names "${name}", which is not a test in the Postgres spec`);
+  }
+
+  assert.match(section(PCC, '32').split('\n').slice(0, 4).join('\n'), /本节是非规范的/, '§32 is not marked non-normative');
+  for (const clause of column(rows, '规范条款').map(bare).flatMap((c) => c.split(' · '))) {
+    const m = /§(\d+(?:\.\d+)?)/.exec(clause);
+    if (m) assert.doesNotThrow(() => section(PCC, m[1]), `§32 points at §${m[1]}, which does not exist`);
   }
 });
