@@ -3,6 +3,8 @@ import { test } from 'node:test';
 
 import type { Client } from 'pg';
 
+import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
+
 // `PC-CX-09` is the one finding in either review round whose whole claim is about Postgres. It says
 // a `BEFORE INSERT` trigger that reads `task.dispatch_authority` with a plain `SELECT` cannot see an
 // authority flip that has been written but not committed, and therefore admits a session the flip
@@ -32,9 +34,11 @@ const URL = process.env.COORDINATOR_PG_URL;
 // module-resolution failure and make the skip worthless exactly where it is needed.
 type ClientCtor = new (config: { connectionString?: string }) => Client;
 async function connect(): Promise<Client> {
+  assertCoordinatorPgUrlIsIsolated(URL);
   const { Client: Ctor } = (await import('pg')) as unknown as { Client: ClientCtor };
   const client = new Ctor({ connectionString: URL });
   await client.connect();
+  await verifyCoordinatorPgIdentity(client);
   return client;
 }
 

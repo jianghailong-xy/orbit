@@ -6,6 +6,8 @@ import { test } from 'node:test';
 
 import type { Client } from 'pg';
 
+import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from './coordinator-pg-test-safety';
+
 // Unit 02 wrote this file in its fourth review round, when every assertion in it proved that a
 // defect *existed*: `PC-CX-21..27` against contract v1.3. Its own follow-up list (review §5) says
 // what happens next — "翻转成旧交错被拒绝/得到唯一合法结果": once v1.4 closes the findings, these
@@ -28,9 +30,11 @@ const PG_URL = process.env.COORDINATOR_PG_URL;
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
 async function connect(): Promise<Client> {
+  assertCoordinatorPgUrlIsIsolated(PG_URL);
   const { Client: Ctor } = (await import('pg')) as unknown as { Client: ClientCtor };
   const client = new Ctor({ connectionString: PG_URL });
   await client.connect();
+  await verifyCoordinatorPgIdentity(client);
   return client;
 }
 
