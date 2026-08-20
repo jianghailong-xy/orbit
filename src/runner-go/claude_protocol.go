@@ -55,7 +55,8 @@ func userFrame(sessionID string, content []map[string]interface{}) string {
 }
 
 // controlRequestFrame asks the CLI to do something out of band of the conversation
-// (currently only "interrupt"). requestID is what the matching control_response echoes.
+// (currently only ctrlInterrupt). requestID is what the matching control_response echoes,
+// and is what routes that answer back to this request (claude_control.go).
 func controlRequestFrame(requestID, subtype string) string {
 	return marshalFrame(map[string]interface{}{
 		"type":       frameControlRequest,

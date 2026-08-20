@@ -34,6 +34,7 @@ import {
   SessionConfigDto,
   SessionRenameDto,
   SessionResumeDto,
+  SessionInterruptDto,
   SessionTurnDto,
 } from './dto';
 import { SessionsService } from './sessions.service';
@@ -224,9 +225,16 @@ export class SessionsController {
     return this.sessions.rename(user.userId, id, dto.title);
   }
 
+  /** Stop the running turn. With a body carrying `content`, the follow-up is queued in
+   *  the same transaction — see SessionsService.interrupt for why the two cannot be two
+   *  requests. A bodyless POST stays exactly what it was. */
   @Post(':id/interrupt')
-  interrupt(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.interrupt(user.userId, id);
+  interrupt(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
+  ) {
+    return this.sessions.interrupt(user.userId, id, dto);
   }
 
   @Post(':id/end')

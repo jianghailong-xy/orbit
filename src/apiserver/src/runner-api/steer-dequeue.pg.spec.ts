@@ -178,3 +178,45 @@ pgTest('an interrupt still overtakes a steer', async () => {
   const first = await dequeue();
   assert.equal(first?.kind, 'interrupt');
 });
+
+// ── interrupt-and-send ──────────────────────────────────────────────────────────────
+//
+// The two rows the interrupt endpoint writes, seen from the runner's side. What makes
+// "interrupt, then do this instead" safe is not a promise in the runner but the predicate
+// below: the interrupt goes through immediately, and the follow-up — an ordinary message,
+// deliberately not a steer — is gated behind the very turn it is meant to replace. So the
+// new frame cannot be folded into that turn, whether the interrupt lands or not.
+
+pgTest('the interrupt goes first and its follow-up waits for the turn it is replacing', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
+  await addTurn(2, 'interrupt', 'PENDING', '');
+  await addTurn(3, 'message', 'PENDING', 'stop — just rename the one file');
+
+  const first = await dequeue();
+  assert.equal(first?.kind, 'interrupt');
+
+  // Still nothing: the turn being stopped holds the slot. The redirection reaches the
+  // engine as its own turn, after that one is over — never written into it.
+  assert.equal(await dequeue(), null);
+});
+
+pgTest('the follow-up is handed over once the interrupted turn is out of flight', async () => {
+  await addTurn(1, 'message', 'ANSWERED', 'refactor everything');
+  await addTurn(2, 'interrupt', 'ANSWERED', '');
+  await addTurn(3, 'message', 'PENDING', 'stop — just rename the one file');
+
+  const next = await dequeue();
+  assert.equal(next?.kind, 'message');
+  assert.equal(next?.content, 'stop — just rename the one file');
+});
+
+pgTest('a follow-up filed as an ordinary message can never ride into the running turn', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
+  await addTurn(2, 'interrupt', 'ANSWERED', '');
+  await addTurn(3, 'message', 'PENDING', 'stop — just rename the one file');
+
+  // The same three rows with the follow-up filed as a steer WOULD be handed over here.
+  // That difference is the whole reason interrupt files a message rather than letting
+  // createTurn decide the kind.
+  assert.equal(await dequeue(), null);
+});

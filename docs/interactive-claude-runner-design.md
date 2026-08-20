@@ -248,6 +248,58 @@ Three goroutines, decoupled:
 ### Interrupt = signal, not stdin (RT: hang-backpressure critical)
 Interrupt uses **process SIGINT** (the design's stated fallback becomes the default), so it cannot be blocked by a stuck stdin write. Mid-turn steer via `control_request{subtype:'interrupt'}` is best-effort behind a Phase-0-verified capability flag; SIGINT+`--resume <sessionUuid>` is the shipped behavior. On interrupt, emit an `interrupt` `RunEvent` **with a real seq at the point generation actually stops**, so the transcript delimits abandoned output.
 
+#### Superseded: interrupt is a control request with an answer
+
+The premise above — that a stuck stdin write could block an interrupt — was removed by the
+single-writer queue (§ resident runtime): handing a frame over never touches the pipe, so the
+control request cannot be blocked by whatever is in front of it. What replaced SIGINT is not
+just a different transport but a different guarantee.
+
+- **Asked, and answered.** The runner writes
+  `control_request{request_id, request:{subtype:'interrupt'}}` through the same single writer
+  every other frame goes through, and waits for the `control_response` carrying **that**
+  `request_id`. Only a `subtype:'success'` for that id makes the operation succeed. A refusal, a
+  deadline (30 s), a stdin that broke, a process that exited, or the caller giving up are all
+  reported as failures — and the request is retired on the way out, so a reply that arrives
+  afterwards resolves nothing and cannot turn a reported failure into a success.
+- **Unique, generation-stamped ids.** `req-<runtimeGeneration>-<n>`. The counter alone repeats
+  across a re-spawn, and two generations' stdout can overlap while one is torn down; naming the
+  generation makes a straggler recognisable instead of matching it against the new process's
+  identically numbered request. Waiters live in a table owned by their own runtime, and every
+  one of them is failed when that process goes terminal.
+- **No kill anywhere on this path.** The process, its conversation and its stdin survive an
+  interrupt — that is the entire difference from `end`. A kill would stop the turn too and look
+  identical for a second, at the cost of a resumable context, so an interrupt that cannot be
+  confirmed is *reported*, never covered up.
+- **The transcript marker costs an answer.** `interrupt{requestId}` is emitted only once the
+  engine has confirmed; a failure emits an `error` event saying the session is still running and
+  its context intact. The drain's own teardown marker (`interrupt{reason:'runner_restart'}`) is a
+  third, distinct thing: there the process really is being taken away.
+- **Asked unconditionally.** The runner does not first check whether a turn of *its own* is in
+  flight. The engine also runs turns nobody sent it (a background task reporting in, a scheduled
+  wake-up), and those are exactly the ones people reach for stop over.
+
+#### Interrupt-and-send: one transaction, never a steer
+
+"Stop, and do this instead" is one server-side operation (`POST /sessions/:id/interrupt` with a
+body), not a stop followed by a send.
+
+- **Why it cannot be two requests.** Interrupting *deletes* the `message`/`shell`/`steer` turns
+  still PENDING — stopping means stop. A client that interrupted and then sent would race its own
+  delete; one that sent and then interrupted would have its message filed as a **steer**, written
+  into the very turn being stopped. Which happened would come down to network ordering.
+- **The order inside the transaction** is: validate → drop the queue → file the `interrupt` →
+  file the follow-up. The follow-up is therefore never its own casualty, and takes a later `seq`.
+- **Filed as a `message`, deliberately not a steer.** The inbox gate then holds it until no
+  executable turn is in flight — i.e. until the interrupted turn's `result` has landed. So the new
+  frame reaches the engine only after the turn it replaces is over. **That is also the fallback**:
+  if the interrupt does not take, the message still waits for that turn to finish on its own
+  rather than being folded into it. Never early, in either case.
+- **Idempotent on the interrupt, not on the message.** The interrupt half is filed under
+  `interrupt-<clientTurnId>`; a control turn is never deleted, so its presence is the durable
+  record that the request already ran. Keying on the message would misread "a later interrupt
+  dropped it" as "never happened" and file the whole thing again.
+
 ### Per-turn `result` = end-of-turn, not terminal
 `msg["type"]=="result"` → emit `turn_end{turnSeq,subtype,usage}`, POST `/turn-complete`, set run `AWAITING_INPUT`, park. The process dies only on EOF / idle reap / crash / cancel / **per-turn timeout**. If `result.subtype` indicates the process hit its own `--max-turns`/`--max-budget-usd`, the runner marks the **session terminal** (not `AWAITING_INPUT`) and `/complete`s, because those limits are process-wide for a long-lived process (RT: hang high).
 
