@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -28,7 +32,40 @@ const migration = (name: string) =>
 const IDENTITY = migration('0111_project_coordinator_identity');
 const COMPANIONS = migration('0112_project_coordinator_companions');
 const FINAL_ROW = migration('0113_project_coordinator_final_row');
+const IDENTITY_SOURCE_GUARD = migration('0113_project_coordinator_identity_source_guard');
 const IDENTITY_SOURCE = migration('0114_project_coordinator_identity_source');
+const IDENTITY_WINDOW_REPAIR = migration('0115_project_coordinator_identity_window_repair');
+
+const PRISMA_SCHEMA = `
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+`;
+
+const BASELINE_0110 = `
+CREATE TABLE "workspace" (
+  "id" UUID PRIMARY KEY,
+  "owner_id" UUID NOT NULL,
+  "name" TEXT NOT NULL,
+  "enabled" BOOLEAN NOT NULL DEFAULT true,
+  "deleted_at" TIMESTAMP(3)
+);
+CREATE TABLE "session" ("id" UUID PRIMARY KEY, "owner_id" UUID NOT NULL);
+CREATE TABLE "project" (
+  "id" UUID PRIMARY KEY,
+  "owner_id" UUID NOT NULL,
+  "title" TEXT NOT NULL,
+  "coordinator_session_id" UUID UNIQUE REFERENCES "session"("id") ON DELETE SET NULL,
+  "coordinator_workspace_id" UUID REFERENCES "workspace"("id") ON DELETE SET NULL,
+  "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+`;
 
 const OWNER = '00000000-0000-7000-8000-0000000008a1';
 const OTHER_OWNER = '00000000-0000-7000-8000-0000000008a2';
@@ -47,17 +84,103 @@ const P = (n: number) =>
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
 
-async function open(): Promise<Client> {
+async function open(schema = SCHEMA): Promise<Client> {
   assertCoordinatorPgUrlIsIsolated(URL);
   const { Client: Ctor } = (await import('pg')) as unknown as { Client: ClientCtor };
   const client = new Ctor({ connectionString: URL });
   await client.connect();
   await verifyCoordinatorPgIdentity(client);
-  await client.query(`SET search_path TO ${SCHEMA}`);
+  await client.query(`SET search_path TO ${schema}`);
   return client;
 }
 
-async function setup(client: Client): Promise<void> {
+async function writeMigration(root: string, name: string, sql: string): Promise<void> {
+  const directory = path.join(root, 'migrations', name);
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, 'migration.sql'), sql);
+}
+
+async function makeExecutorFixture(schema: string): Promise<{
+  root: string;
+  schemaPath: string;
+  databaseUrl: string;
+}> {
+  assert.ok(URL);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'pcc03d-prisma-'));
+  const schemaPath = path.join(root, 'schema.prisma');
+  await writeFile(schemaPath, PRISMA_SCHEMA);
+  await writeMigration(root, '0000_coordinator_0110', BASELINE_0110);
+  await writeMigration(root, '0111_project_coordinator_identity', IDENTITY);
+  await writeMigration(root, '0112_project_coordinator_companions', COMPANIONS);
+  await writeMigration(root, '0113_project_coordinator_final_row', FINAL_ROW);
+  const parsed = new globalThis.URL(URL);
+  parsed.searchParams.set('schema', schema);
+  parsed.searchParams.set('application_name', `prisma_${schema}`);
+  return { root, schemaPath, databaseUrl: parsed.toString() };
+}
+
+function startPrismaDeploy(schemaPath: string, databaseUrl: string) {
+  let output = '';
+  let finished = false;
+  const child = spawn(
+    process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    ['--no-install', 'prisma', 'migrate', 'deploy', '--schema', schemaPath],
+    {
+      cwd: path.resolve(__dirname, '../..'),
+      env: { ...process.env, DATABASE_URL: databaseUrl, NO_COLOR: '1' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  child.stdout.on('data', (chunk) => { output += String(chunk); });
+  child.stderr.on('data', (chunk) => { output += String(chunk); });
+  const done = new Promise<string>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => {
+      finished = true;
+      if (code === 0) resolve(output);
+      else reject(new Error(`prisma migrate deploy exited ${code ?? signal}:\n${output}`));
+    });
+  });
+  return {
+    done,
+    output: () => output,
+    finished: () => finished,
+    stop: () => child.kill('SIGTERM'),
+  };
+}
+
+async function prismaDeploy(schemaPath: string, databaseUrl: string): Promise<string> {
+  return startPrismaDeploy(schemaPath, databaseUrl).done;
+}
+
+async function waitForExecutorPause(client: Client, schema: string, deploy: ReturnType<typeof startPrismaDeploy>) {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const { rows } = await client.query(`
+      SELECT state, wait_event
+        FROM pg_stat_activity
+       WHERE datname = current_database()
+         AND pid <> pg_backend_pid()
+         AND application_name = $1`, [`prisma_${schema}`]);
+    if (rows.some((row: any) => row.state === 'active' && row.wait_event === 'PgSleep')) return;
+    if (deploy.finished()) throw new Error(`migration exited before pause was observed:\n${deploy.output()}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`did not observe Prisma executor pause in ${schema}:\n${deploy.output()}`);
+}
+
+async function seedExecutor(client: Client): Promise<void> {
+  await client.query(`
+    INSERT INTO "workspace" ("id", "owner_id", "name", "enabled", "deleted_at") VALUES
+      ('${A}', '${OWNER}', 'A', true, NULL),
+      ('${B}', '${OWNER}', 'B', true, NULL),
+      ('${C}', '${OWNER}', 'C', true, NULL);
+    INSERT INTO "session" ("id", "owner_id")
+    SELECT s, '${OWNER}' FROM unnest(ARRAY[${S.map((s) => `'${s}'::uuid`).join(',')}]) s;
+  `);
+}
+
+async function setup(client: Client, mode: 'current' | 'applied-0114' = 'current'): Promise<void> {
   await client.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);
   await client.query(`CREATE SCHEMA ${SCHEMA}`);
   await client.query(`SET search_path TO ${SCHEMA}`);
@@ -92,7 +215,9 @@ async function setup(client: Client): Promise<void> {
   await client.query(IDENTITY);
   await client.query(COMPANIONS);
   await client.query(FINAL_ROW);
+  if (mode === 'current') await client.query(IDENTITY_SOURCE_GUARD);
   await client.query(IDENTITY_SOURCE);
+  if (mode === 'current') await client.query(IDENTITY_WINDOW_REPAIR);
   if (process.env.COORDINATOR_PG_REVERSE_0114 === '1') await client.query(FINAL_ROW);
 }
 
@@ -424,6 +549,205 @@ test('a DERIVED row committed in the 0114 backfill/function gap still converges 
   }
 });
 
+test('an already-applied 0114 database installs the guard and recovers a gap row safely', { skip }, async () => {
+  const client = await open();
+  try {
+    await setup(client, 'applied-0114');
+    const id = P(0x51);
+    await client.query(oldInsert(id, A, S[0]));
+    await client.query(`UPDATE "project_runtime"
+      SET "coordinator_identity_source" = 'DERIVED',
+          "coordinator_identity_landing_id" = NULL
+      WHERE "project_id" = '${id}'`);
+
+    // A database which already recorded 0114 sees the newly-added, lexically earlier guard as a
+    // pending migration. It remains retryably fail-closed until 0115 installs the recovery path.
+    await client.query(IDENTITY_SOURCE_GUARD);
+    await assert.rejects(
+      () => client.query(`UPDATE "project" SET "coordinator_workspace_id" = '${B}' WHERE "id" = '${id}'`),
+      (error: any) => {
+        assert.equal(error.code, 'ORB02');
+        assert.match(String(error.message), /provenance migration is in progress/);
+        return true;
+      },
+    );
+    assert.deepEqual(
+      (({ landing, agent, source, identity_baseline }: any) =>
+        ({ landing, agent, source, identity_baseline }))(await state(client, id)),
+      { landing: A, agent: A, source: 'DERIVED', identity_baseline: null },
+      'the typed refusal commits no partial relocation or provenance change',
+    );
+
+    await client.query(IDENTITY_WINDOW_REPAIR);
+    const repairedBeforeMove = await state(client, id);
+    assert.equal(repairedBeforeMove.identity_baseline, A, '0115 safely backfills the equal seat');
+    await client.query(`UPDATE "project" SET "coordinator_workspace_id" = '${B}' WHERE "id" = '${id}'`);
+    const after = await state(client, id);
+    assert.deepEqual(
+      { landing: after.landing, agent: after.agent, source: after.source,
+        identity_baseline: after.identity_baseline },
+      { landing: B, agent: B, source: 'DERIVED', identity_baseline: B },
+    );
+  } finally {
+    await client.end();
+  }
+});
+
+test('the real Prisma executor keeps an old writer typed fail-closed in the 0114 statement gap',
+  { skip, timeout: 30_000 }, async () => {
+    const executorSchema = 'pcc03d_executor';
+    const marker = 'pcc03d_0114_executor_pause';
+    const admin = await open('public');
+    let writer: Client | undefined;
+    let fixture: Awaited<ReturnType<typeof makeExecutorFixture>> | undefined;
+    let deploy: ReturnType<typeof startPrismaDeploy> | undefined;
+    try {
+      await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
+      await admin.query(`CREATE SCHEMA ${executorSchema}`);
+      fixture = await makeExecutorFixture(executorSchema);
+      await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+
+      writer = await open(executorSchema);
+      await seedExecutor(writer);
+      await writeMigration(
+        fixture.root,
+        '0113_project_coordinator_identity_source_guard',
+        IDENTITY_SOURCE_GUARD,
+      );
+      const breakpoint = '-- ── The one rule, now told where the identity came from';
+      assert.ok(IDENTITY_SOURCE.includes(breakpoint), '0114 pause injection point moved');
+      const paused0114 = IDENTITY_SOURCE.replace(
+        breakpoint,
+        `SELECT pg_sleep(4) /* ${marker} */;\n\n${breakpoint}`,
+      );
+      await writeMigration(
+        fixture.root,
+        '0114_project_coordinator_identity_source',
+        paused0114,
+      );
+      await writeMigration(
+        fixture.root,
+        '0115_project_coordinator_identity_window_repair',
+        IDENTITY_WINDOW_REPAIR,
+      );
+
+      deploy = startPrismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      await waitForExecutorPause(admin, executorSchema, deploy);
+      const id = P(0x52);
+      await assert.rejects(
+        () => writer!.query(oldInsert(id, A, S[0])),
+        (error: any) => {
+          assert.equal(error.code, 'ORB02');
+          assert.match(String(error.hint), /migrate deploy has completed/);
+          return true;
+        },
+      );
+      assert.equal(
+        (await writer.query(`SELECT count(*)::int AS n FROM "project" WHERE "id" = '${id}'`)).rows[0].n,
+        0,
+        'the refused window write leaves no Project or companion rows',
+      );
+
+      const output = await deploy.done;
+      deploy = undefined;
+      assert.match(output, /Applying migration `0113_project_coordinator_identity_source_guard`/);
+      assert.match(output, /Applying migration `0114_project_coordinator_identity_source`/);
+      assert.match(output, /Applying migration `0115_project_coordinator_identity_window_repair`/);
+
+      await writer.query(oldInsert(id, A, S[0]));
+      await writer.query(`UPDATE "project" SET "coordinator_workspace_id" = '${B}' WHERE "id" = '${id}'`);
+      const after = await state(writer, id);
+      assert.deepEqual(
+        { landing: after.landing, agent: after.agent, source: after.source,
+          identity_baseline: after.identity_baseline },
+        { landing: B, agent: B, source: 'DERIVED', identity_baseline: B },
+        'the same old writer succeeds and converges after the guarded deploy commits',
+      );
+    } finally {
+      if (deploy) {
+        if (!deploy.finished()) deploy.stop();
+        await deploy.done.catch(() => undefined);
+      }
+      await writer?.end();
+      await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
+      await admin.end();
+      if (fixture) await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+test('Prisma applies the compatibility migrations after recorded 0114 without changing its checksum',
+  { skip, timeout: 30_000 }, async () => {
+    const executorSchema = 'pcc03d_applied_0114';
+    const admin = await open('public');
+    let writer: Client | undefined;
+    let fixture: Awaited<ReturnType<typeof makeExecutorFixture>> | undefined;
+    try {
+      await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
+      await admin.query(`CREATE SCHEMA ${executorSchema}`);
+      fixture = await makeExecutorFixture(executorSchema);
+      await writeMigration(
+        fixture.root,
+        '0114_project_coordinator_identity_source',
+        IDENTITY_SOURCE,
+      );
+      await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+
+      writer = await open(executorSchema);
+      await seedExecutor(writer);
+      const id = P(0x53);
+      await writer.query(oldInsert(id, A, S[0]));
+      await writer.query(`UPDATE "project_runtime"
+        SET "coordinator_identity_source" = 'DERIVED',
+            "coordinator_identity_landing_id" = NULL
+        WHERE "project_id" = '${id}'`);
+      const checksumBefore = (
+        await writer.query(`SELECT checksum FROM "_prisma_migrations"
+          WHERE migration_name = '0114_project_coordinator_identity_source'`)
+      ).rows[0].checksum;
+      assert.equal(
+        checksumBefore,
+        createHash('sha256').update(IDENTITY_SOURCE).digest('hex'),
+        'the applied checksum is the unchanged 0114 file',
+      );
+
+      // Prisma sees both additions as pending even though the guard sorts before an already
+      // recorded 0114. This is the deployed-database compatibility path, not a checksum rewrite.
+      await writeMigration(
+        fixture.root,
+        '0113_project_coordinator_identity_source_guard',
+        IDENTITY_SOURCE_GUARD,
+      );
+      await writeMigration(
+        fixture.root,
+        '0115_project_coordinator_identity_window_repair',
+        IDENTITY_WINDOW_REPAIR,
+      );
+      const output = await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      assert.match(output, /Applying migration `0113_project_coordinator_identity_source_guard`/);
+      assert.match(output, /Applying migration `0115_project_coordinator_identity_window_repair`/);
+      const checksumAfter = (
+        await writer.query(`SELECT checksum FROM "_prisma_migrations"
+          WHERE migration_name = '0114_project_coordinator_identity_source'`)
+      ).rows[0].checksum;
+      assert.equal(checksumAfter, checksumBefore, '0114 history remains byte-for-byte compatible');
+
+      const repaired = await state(writer, id);
+      assert.equal(repaired.identity_baseline, A);
+      await writer.query(`UPDATE "project" SET "coordinator_workspace_id" = '${B}' WHERE "id" = '${id}'`);
+      const after = await state(writer, id);
+      assert.deepEqual(
+        { landing: after.landing, agent: after.agent, source: after.source,
+          identity_baseline: after.identity_baseline },
+        { landing: B, agent: B, source: 'DERIVED', identity_baseline: B },
+      );
+    } finally {
+      await writer?.end();
+      await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
+      await admin.end();
+      if (fixture) await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
 test('source has a closed enum, a safe old-writer default, and a deliberately non-FK baseline', { skip }, async () => {
   const client = await open();
   try {
@@ -467,6 +791,17 @@ test('source has a closed enum, a safe old-writer default, and a deliberately no
        WHERE conrelid = '${SCHEMA}.project_runtime'::regclass AND contype = 'f'
          AND pg_get_constraintdef(oid) LIKE '%coordinator_identity_landing_id%'`);
     assert.equal(foreignKeys.length, 0, 'the baseline is a historical marker, not a live relation');
+
+    const { rows: triggers } = await client.query(`
+      SELECT tgname FROM pg_trigger
+       WHERE tgrelid = '${SCHEMA}.project'::regclass AND NOT tgisinternal
+         AND tgname LIKE 'project_coordinator_identity%'
+       ORDER BY tgname`);
+    assert.deepEqual(
+      triggers.map((row: any) => row.tgname),
+      ['project_coordinator_identity_window_repair'],
+      '0115 removes both temporary guards only after the permanent recovery predicate exists',
+    );
   } finally {
     await client.end();
   }
