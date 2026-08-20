@@ -205,9 +205,10 @@ enum TaskCompletionPolicy {
 /// has not concluded, and — deliberately — is not PASS: `VERIFICATION_PASSED` reads this column
 /// fail-closed, so a verification task that merely finished never completes its subject.
 ///
-/// This phase only READS the verdict (aggregation) and lets it be written and revoked. The
-/// mechanical consequences of FAIL — native revert, defect subtask, downstream blocking — are
-/// §13.2's own unit and are not implemented here.
+/// The value alone is not the whole of a conclusion: `verdictRevision` beside it says WHICH
+/// conclusion it is, and that is what §13.2's mechanical consequences — the native revert, the
+/// defect subtask, the downstream block — are keyed on. A verdict can return to a value it already
+/// held, so it could never have been the key itself.
 enum TaskVerdict {
   PASS
   FAIL
@@ -1334,6 +1335,7 @@ model Project {
   events  ProjectEvent[]
   actions ProjectAction[]
   decisions ProjectDecision[]
+  verdictFailures TaskVerificationFailure[]
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -1474,6 +1476,7 @@ model ProjectAction {
   resultSessionId String? @unique @map("result_session_id") @db.Uuid
   resultSession   Session? @relation("ProjectActionResultSession", fields: [resultSessionId], references: [id], onDelete: NoAction)
   dispatchedSession Session? @relation("ProjectActionSession")
+  verdictFailures   TaskVerificationFailure[] @relation("VerificationFailureAction")
   refusalCode     String? @map("refusal_code")
   detail          Json    @default("{}")
   executionContext       Json?   @map("execution_context")
@@ -1853,6 +1856,12 @@ model Task {
   /// again if it is revoked; only meaningful together with `verifiesTaskId`, which migration 0123
   /// enforces with a CHECK rather than a comment.
   verdict          TaskVerdict? @map("verdict")
+  /// Which conclusion this is (§13.2 V7). Monotonic, never reused, never reset — it advances in
+  /// the transaction that reaches a verdict and is what the mechanical consequences are keyed on.
+  /// Without it the key would be built from `verdict`, a value with three states that a re-run can
+  /// return to: the second FAIL would collide with the first, be skipped as already applied, and
+  /// leave the subject at DONE with no defect and nothing downstream stopped.
+  verdictRevision  BigInt      @default(0) @map("verdict_revision")
   verifiesTaskId   String?     @map("verifies_task_id") @db.Uuid
   verifies         Task?       @relation("TaskVerification", fields: [verifiesTaskId], references: [id], onDelete: Cascade)
   verifiedBy       Task[]      @relation("TaskVerification")
@@ -1870,6 +1879,11 @@ model Task {
   dependsOn    TaskDependency[] @relation("DependencyFromTask")
   // Dependency edges where THIS task is the prerequisite: tasks blocked until it's DONE.
   dependedOnBy TaskDependency[] @relation("DependencyToTask")
+  /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
+  /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
+  verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
+  verdictFailuresAbout    TaskVerificationFailure[] @relation("VerificationFailureSubject")
+  verdictFailuresRepaired TaskVerificationFailure[] @relation("VerificationFailureDefect")
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -1904,6 +1918,62 @@ model Task {
   /// subject" and "how many has it had" — key on this column.
   @@index([verifiesTaskId])
   @@map("task")
+}
+
+/// One verification conclusion that was not a PASS, and what it is still holding up (§13.2).
+///
+/// A row rather than a status written onto the tasks it blocks (V3): "why can this task not run"
+/// has to remain a question the data answers. Rewriting the downstream tasks' status would answer
+/// it once, in a place nobody can read afterwards.
+///
+/// Identity is `(verifierTaskId, verdictRevision)`, the same pair the action key is built from, so
+/// the same conclusion delivered any number of times leaves exactly one row — while a genuinely
+/// new conclusion, which by V7 carries a new revision, leaves a new one.
+model TaskVerificationFailure {
+  id              String  @id @default(uuid(7)) @db.Uuid
+  projectId       String  @map("project_id") @db.Uuid
+  project         Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  verifierTaskId  String  @map("verifier_task_id") @db.Uuid
+  verifier        Task    @relation("VerificationFailureVerifier", fields: [verifierTaskId], references: [id], onDelete: Cascade)
+  subjectTaskId   String  @map("subject_task_id") @db.Uuid
+  subject         Task    @relation("VerificationFailureSubject", fields: [subjectTaskId], references: [id], onDelete: Cascade)
+
+  /// FAIL or INCONCLUSIVE; a PASS has no condition to record, it resolves the ones already here.
+  /// The migration says so with a CHECK, since this table is written from more than one place.
+  verdict         TaskVerdict
+  verdictRevision BigInt      @map("verdict_revision")
+  /// Whether the tasks depending on the subject are stopped. True exactly for FAIL — §13.2 gives
+  /// downstream blocking to the revert, and INCONCLUSIVE deliberately reverts nothing.
+  blocksDownstream Boolean    @map("blocks_downstream")
+
+  /// The subtask filed under the subject to fix what the check found. Null for INCONCLUSIVE, and
+  /// null again if somebody deletes it — which leaves the condition unresolved and visibly without
+  /// the work item that was going to resolve it.
+  defectTaskId     String? @map("defect_task_id") @db.Uuid
+  defect           Task?   @relation("VerificationFailureDefect", fields: [defectTaskId], references: [id], onDelete: SetNull)
+  raisedByActionId String? @map("raised_by_action_id") @db.Uuid
+  raisedByAction   ProjectAction? @relation("VerificationFailureAction", fields: [raisedByActionId], references: [id], onDelete: SetNull)
+
+  /// Base62 throughout, like `ProjectDecision.decisionInput`: this is read back over the audit API
+  /// and an id spelled as a UUID here is one no caller could hand to any other endpoint.
+  evidence Json @default("{}")
+
+  /// Set only by a later PASS on the same subject. Revoking the verdict deliberately does NOT
+  /// resolve it — otherwise deleting an inconvenient conclusion would be the way to unblock the
+  /// work, which is the hole V4 names.
+  resolvedAt       DateTime? @map("resolved_at")
+  /// Historical attribution without a foreign key, as ProjectDecision does it: deleting the
+  /// verification that passed must not rewrite what resolved this.
+  resolvedByTaskId String?   @map("resolved_by_task_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([verifierTaskId, verdictRevision])
+  /// The dispatch guard's read is `subject_task_id WHERE resolved_at IS NULL` — a partial index
+  /// this schema cannot spell, declared in migration 0124 (as with Session.retryAt).
+  @@index([projectId, createdAt])
+  @@map("task_verification_failure")
 }
 
 // Comments on a Task (dedicated table; append-only MVP: create/list/delete).

@@ -320,11 +320,12 @@ test("updating another owner's project stays a 404 from the service", async () =
 // The whole surface, named. Growing a list or a delete here is a decision, not a side effect of
 // adding a route — and `getProject` staying a GET is what keeps the read working for the
 // coordinators that already depend on it.
-test('the runner project bridge exposes exactly create, read and update', () => {
+test('the runner project bridge exposes exactly create, read, verifications and update', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
-  assert.deepEqual(handlers.slice().sort(), ['createProject', 'getProject', 'updateProject']);
+  assert.deepEqual(handlers.slice().sort(),
+    ['createProject', 'getProject', 'projectVerifications', 'updateProject']);
   const verbs = Object.fromEntries(
     handlers.map((name) => [
       name,
@@ -334,6 +335,7 @@ test('the runner project bridge exposes exactly create, read and update', () => 
   assert.deepEqual(verbs, {
     createProject: RequestMethod.POST,
     getProject: RequestMethod.GET,
+    projectVerifications: RequestMethod.GET,
     updateProject: RequestMethod.PATCH,
   });
 });

@@ -81,6 +81,18 @@ export class RunnerProjectsController {
   }
 
   /**
+   * What every verification in this project concluded, and what is still blocked by one (§13.2).
+   *
+   * A read a coordinator needs and cannot reconstruct: which check failed, at which conclusion
+   * (`verdictRevision`), what defect subtask it filed, and exactly which tasks are not
+   * dispatchable because of it. Same service and same owner scoping as the user door.
+   */
+  @Get('projects/:id/verifications')
+  projectVerifications(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.verifications(runner.ownerId, id);
+  }
+
+  /**
    * Change a project's title, goal, acceptance criteria, instructions or status.
    *
    * Partial by construction: `ProjectsService.update` writes only the fields the body carries, so

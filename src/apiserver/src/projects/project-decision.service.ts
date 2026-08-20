@@ -16,6 +16,10 @@ import {
   TaskVerdictValue,
   planTaskAggregation,
 } from './task-aggregation';
+import {
+  VerificationSubjectFact,
+  VerificationVerdictFact,
+} from './task-verification-verdict';
 
 export const PROJECT_DECISION_INPUT_VERSION = 1 as const;
 
@@ -93,6 +97,12 @@ export interface ProjectDecisionInput {
        */
       completionPolicy?: string;
       verdict?: string | null;
+      /**
+       * Absent on decisions captured before migration 0124, which readers must treat as `'0'` —
+       * an unrevisioned verdict has no action identity, and §13.2's consequences deliberately do
+       * not fire for one. The next conclusion on that verifier advances the counter and carries it.
+       */
+      verdictRevision?: string;
       dependsOnTaskIds: string[];
       liveSessionIds: string[];
       failureCount: number;
@@ -192,6 +202,9 @@ export interface ProjectDecisionInput {
         verificationTaskId: string;
         verifiesTaskId: string;
         taskStatus: string;
+        /** Absent on pre-0123 / pre-0124 snapshots, read as no conclusion and revision `'0'`. */
+        verdict?: string | null;
+        verdictRevision?: string;
         sessionId: string | null;
         runStatus: string | null;
         finishedAt: string | null;
@@ -310,6 +323,7 @@ interface TaskRow {
   verifiesTaskId: string | null;
   completionPolicy: string;
   verdict: string | null;
+  verdictRevision: bigint;
   updatedAt: Date;
 }
 
@@ -498,6 +512,7 @@ export class ProjectDecisionService {
                t."required_capabilities" AS "requiredCapabilities", t."run_at" AS "runAt",
                t."verifies_task_id" AS "verifiesTaskId",
                t."completion_policy"::text AS "completionPolicy", t."verdict"::text AS "verdict",
+               t."verdict_revision" AS "verdictRevision",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -667,6 +682,7 @@ export class ProjectDecisionService {
         verifiesTaskId: toPublicIdOrNull(row.verifiesTaskId),
         completionPolicy: row.completionPolicy,
         verdict: row.verdict,
+        verdictRevision: String(row.verdictRevision),
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,
@@ -854,6 +870,10 @@ export class ProjectDecisionService {
               verificationTaskId: toPublicId(row.id),
               verifiesTaskId: toPublicId(row.verifiesTaskId),
               taskStatus: row.status,
+              // The conclusion belongs beside the run that produced it: §13.2 reads both, and a
+              // snapshot that carried only the run would leave "what did it decide" to a join.
+              verdict: row.verdict,
+              verdictRevision: String(row.verdictRevision),
               sessionId: evidence ? toPublicId(evidence.id) : null,
               runStatus: evidence?.status ?? null,
               finishedAt: iso(evidence?.finishedAt ?? null),
@@ -1119,6 +1139,52 @@ function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
     verifiesTaskId: task.verifiesTaskId,
     verdict: (task.verdict ?? null) as TaskVerdictValue | null,
   }));
+}
+
+/**
+ * The snapshot's verifications and their subjects as §13.2 reads them, Base62 throughout.
+ *
+ * `hasLiveSession` comes from the task's own live session list, never from a turn count: `numTurns`
+ * lands when a turn ENDS, and a task is normally marked DONE from inside the turn that did the
+ * work, so counting turns reports "never ran" for precisely the runs that did (V5).
+ *
+ * A pre-0124 snapshot has no revision column. Defaulting it to `'0'` here keeps one rule in one
+ * place — an unrevisioned verdict has no action identity, and the planner skips it.
+ */
+export function verificationVerdictFacts(input: ProjectDecisionInput): {
+  verifications: VerificationVerdictFact[];
+  subjects: VerificationSubjectFact[];
+} {
+  const evidenceByVerifier = new Map(
+    input.world.evidence.tests.map((test) => [test.verificationTaskId, test]),
+  );
+  const verifications = input.world.tasks
+    .filter((task) => task.verifiesTaskId != null)
+    .map((task) => {
+      const evidence = evidenceByVerifier.get(task.id);
+      return {
+        id: task.id,
+        status: task.status as AggregationTaskStatus,
+        verifiesTaskId: task.verifiesTaskId,
+        verdict: (task.verdict ?? null) as TaskVerdictValue | null,
+        verdictRevision: task.verdictRevision ?? '0',
+        hasLiveSession: task.liveSessionIds.length > 0,
+        session: evidence?.sessionId
+          ? {
+              id: evidence.sessionId,
+              runStatus: evidence.runStatus ?? 'UNKNOWN',
+              finishedAt: evidence.finishedAt ?? null,
+              resultHash: evidence.resultHash ?? null,
+              errorHash: evidence.errorHash ?? null,
+            }
+          : null,
+      };
+    });
+  const subjects = input.world.tasks.map((task) => ({
+    id: task.id,
+    status: task.status as AggregationTaskStatus,
+  }));
+  return { verifications, subjects };
 }
 
 function runStateOf(input: ProjectDecisionInput): ProjectDecisionRunState {

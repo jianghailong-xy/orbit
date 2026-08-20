@@ -61,6 +61,18 @@ export class ProjectsController {
   }
 
   /**
+   * What every verification in this project concluded, and what is still blocked by one (§13.2).
+   *
+   * The audit face for verdicts: each check's current conclusion and its `verdictRevision`, every
+   * non-PASS conclusion's defect subtask and the action that raised it, and the exact list of
+   * tasks the dispatch guard is currently holding back — with the reason. Ids are Base62.
+   */
+  @Get(':id/verifications')
+  verifications(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.verifications(user.userId, id);
+  }
+
+  /**
    * Open (or return) the session this project is coordinated from.
    *
    * POST because it may create one, and idempotent in the way that matters: calling it twice

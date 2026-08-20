@@ -31,6 +31,7 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 
 Usage:
   orbit project get PROJECT_ID [--json]
+  orbit project verifications PROJECT_ID [--json]
   orbit project create --title TITLE [options]
   orbit project update PROJECT_ID [options]
 
@@ -48,6 +49,30 @@ instructions, its status, the session and workspace it is coordinated from, and 
 tasks are distributed (_count plus tasksByStatus).
 
 Returns the shape of the project, not its tasks — use ` + "`orbit task list`" + ` for those.
+PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
+`,
+	"verifications": `orbit project verifications — what the checks concluded, and what they hold up
+
+Usage:
+  orbit project verifications PROJECT_ID [--json]
+
+Returns three lists:
+  verifications  each check in the project, its subject, its verdict, and which conclusion
+                 that is (verdictRevision — a re-run gets a new one, so the same verdict
+                 twice is two findings rather than one)
+  failures       what each FAIL or INCONCLUSIVE left behind: the defect subtask filed under
+                 the subject, the action that raised it, and whether a later PASS resolved it
+  blockedTasks   the tasks that cannot be dispatched because of an unresolved failure, and
+                 the reason for each (SUBJECT_DEFECT_OPEN, or UPSTREAM for a dependent)
+
+Read it when a task looks ready and is not running. A blocked task looks like an ordinary
+OPEN task on purpose — the block is a dispatch precondition, not a status anybody rewrote —
+so this is the only place that says why.
+
+A FAIL sends its subject back to OPEN and files the defect on its own. Fixing the defect is
+what makes the subject runnable again; the check still has to run again before the work
+downstream is released, because an old verdict never becomes a pass by itself.
+
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
 `,
 	"create": `orbit project create — record a new project
@@ -111,6 +136,7 @@ Only one --*-file flag per invocation: they all read the same stdin.
 
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
+	{Tool: "project_verifications", Argv: []string{"orbit", "project", "verifications"}, Usage: "orbit project verifications PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what every verification in one project concluded and what those conclusions are still holding up: each check's verdict and verdictRevision, the defect subtask each FAIL filed under its subject, the action that raised it, whether a later PASS resolved it, and blockedTasks — the exact tasks that cannot be dispatched because of an unresolved failure, with the reason. Read it when a task looks ready and is not running: a blocked task looks like an ordinary OPEN task on purpose, because the block is a dispatch precondition rather than a status anybody rewrote."},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that the goal was reached; max 4,000 characters)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use it when you are asked to set up or plan out a body of work: --goal says what it is trying to achieve, --acceptance-criteria what would settle that the goal was reached, and --instructions how the work is to be done. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
 	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--json"}, Description: "Update a project you own. Only the flags you pass are sent, so revising the goal never blanks the instructions. Each prose field is a whole-field replacement: text replaces it and --clear-<field> removes it, which is why naming both for one field is refused. --status DONE records that the goal was reached and CANCELLED that it will not be — say so when the work actually lands, and note that neither is a way to file the project out of sight. At least one flag is required. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
 }
@@ -146,6 +172,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectCreate(args[1:], in, out)
 	case "update":
 		return cliProjectUpdate(args[1:], in, out)
+	case "verifications":
+		return cliProjectVerifications(args[1:], out)
 	default:
 		return cliProjectGet(args[1:], out)
 	}
@@ -173,6 +201,32 @@ func cliProjectGet(args []string, out io.Writer) error {
 	raw, err := t.getProject(id)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// cliProjectVerifications is the read half of §13.2 at a terminal: what the checks concluded and
+// which tasks are waiting on one. Same shape as `get` — one path segment, one raw body through.
+func cliProjectVerifications(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project verifications")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getProjectVerifications(id)
+	if err != nil {
+		return fmt.Errorf("get project verifications: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

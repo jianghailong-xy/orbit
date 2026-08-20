@@ -3178,6 +3178,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         'Only a verification task can carry a verdict — this task does not verify anything',
       );
     }
+    // Does this write REACH a verdict? That is a narrower thing than "the verdict column was in
+    // the request" — writing FAIL onto a row that already says FAIL concluded nothing — and it is
+    // what §13.2 V7's revision counts.
+    //
+    // The counter itself, and the revocation that pairs with it, are migration 0124's triggers:
+    // both rules have to hold for every write path including raw SQL, and a rule each writer is
+    // trusted to remember is one the next writer forgets. What a trigger cannot do is the reason
+    // this flag exists — take the project's acceptance-fact lock (§13.4 AE6-a) before the task
+    // row is written, since by the time a trigger runs that row is already held and taking the
+    // project lock there would reverse the loop's one lock order.
+    const concludesVerdict = dto.verdict != null && dto.verdict !== before.verdict;
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
       data.assignee = dto.assigneeId ? { connect: { id: dto.assigneeId } } : { disconnect: true };
@@ -3206,10 +3217,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // lock exists to close. An update that touches neither still takes no lock at all: renaming a
     // task must not queue behind another owner's DAG rewrite.
     const updated = await (
-      dependsOnTaskIds === undefined && !touchesHierarchy
+      dependsOnTaskIds === undefined && !touchesHierarchy && !concludesVerdict
         ? this.prisma.task.update({ where: { id }, data })
         : this.prisma.$transaction(async (tx) => {
             await this.lockDependencyGraph(tx, ownerId);
+            // §13.4 AE6-a. A verdict is one of the facts a project's acceptance is computed from,
+            // so reaching one takes the project's own row before it writes — the same lock the
+            // acceptance gate takes, which is what puts the two in an order instead of letting
+            // both commit and leave a DONE project asserting a verdict it never saw. Taken after
+            // the owner lock and before the task write, so the order here is always
+            // user -> project -> task and two of these can never wait on each other backwards.
+            if (concludesVerdict && before.projectId) {
+              await tx.$queryRaw`
+                SELECT 1 FROM "project" WHERE "id" = ${before.projectId}::uuid FOR NO KEY UPDATE`;
+            }
             if (touchesHierarchy) {
               // Re-read INSIDE the lock. `before` was loaded before it was held, so by now another
               // request may have moved this task's project or given it subtasks — and judging

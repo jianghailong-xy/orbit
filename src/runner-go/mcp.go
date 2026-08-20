@@ -251,6 +251,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_verifications":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectVerifications(id)
+		if err != nil {
+			return toolResult("get project verifications failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_create":
 		title := getString(args, "title")
 		if title == "" {
@@ -1226,6 +1237,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
 				"project_create and project_update.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_verifications",
+			"description": "Read what every verification in one project concluded, and what those " +
+				"conclusions are still holding up. Three things nothing else tells you: each " +
+				"check's verdict and which conclusion it is (verdictRevision — a re-run gets a new " +
+				"one, so the same verdict twice is two findings, not one); what each FAIL or " +
+				"INCONCLUSIVE left behind (the defect subtask filed under the subject, the action " +
+				"that raised it, and whether a later PASS has resolved it); and blockedTasks — the " +
+				"exact tasks that cannot be dispatched because of one, with the reason. Read this " +
+				"when a task looks ready and is not running: a blocked task looks like an ordinary " +
+				"OPEN task on purpose, because the block is a precondition rather than a status " +
+				"anybody rewrote, so this is the only place the reason is written down. A FAIL " +
+				"sends its subject back to OPEN and files the defect by itself — you do not have " +
+				"to do either, and fixing the defect is what makes the subject runnable again " +
+				"(the check still has to run again before the work downstream is released).",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",

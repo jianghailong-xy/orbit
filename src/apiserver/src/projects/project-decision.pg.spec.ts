@@ -167,6 +167,7 @@ async function reset(client: Client): Promise<void> {
       "required_capabilities" TEXT[] NOT NULL DEFAULT '{}',
       "verifies_task_id" UUID,
       "completion_policy" TEXT NOT NULL DEFAULT 'MANUAL', "verdict" TEXT,
+      "verdict_revision" BIGINT NOT NULL DEFAULT 0,
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE "task_dependency" (

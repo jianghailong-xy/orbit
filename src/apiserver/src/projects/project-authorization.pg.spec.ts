@@ -103,6 +103,21 @@ async function reset(client: Client): Promise<void> {
       "depends_on_task_id" UUID NOT NULL,
       PRIMARY KEY ("task_id", "depends_on_task_id")
     );
+    -- §13.2's condition row, in the shape the guard reads it: the commit-time gate answers "is a
+    -- failed check still holding this task" from here, so the harness has to have it for the
+    -- guard to be exercised at all.
+    CREATE TABLE "task_verification_failure" (
+      "id" UUID PRIMARY KEY,
+      "project_id" UUID NOT NULL,
+      "verifier_task_id" UUID NOT NULL,
+      "subject_task_id" UUID NOT NULL,
+      "verdict" TEXT NOT NULL,
+      "verdict_revision" BIGINT NOT NULL,
+      "blocks_downstream" BOOLEAN NOT NULL,
+      "defect_task_id" UUID,
+      "resolved_at" TIMESTAMP(3),
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
     CREATE TABLE "session" (
       "id" UUID PRIMARY KEY,
       "owner_id" UUID NOT NULL,

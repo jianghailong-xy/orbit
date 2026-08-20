@@ -7,6 +7,7 @@ import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
+import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
 import { ProjectsService } from './projects.service';
 
 // PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
@@ -23,6 +24,7 @@ import { ProjectsService } from './projects.service';
     ProjectAuthorizationService,
     ProjectReconcileService,
     ProjectTaskDispatcherService,
+    ProjectVerificationVerdictService,
     ProjectAvailabilityReaperService,
   ],
   exports: [
@@ -32,6 +34,7 @@ import { ProjectsService } from './projects.service';
     ProjectAuthorizationService,
     ProjectReconcileService,
     ProjectTaskDispatcherService,
+    ProjectVerificationVerdictService,
   ],
 })
 export class ProjectsModule {}

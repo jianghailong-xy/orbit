@@ -162,9 +162,9 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 		t.Fatal("unknown project command was accepted")
 	}
 
-	// The three verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that
+	// The four verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that
 	// the family does not route to is text nobody can read.
-	for _, action := range []string{"get", "create", "update"} {
+	for _, action := range []string{"get", "verifications", "create", "update"} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
 			t.Fatalf("project %s --help: %v", action, err)
@@ -191,7 +191,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
 		specs[spec.Tool] = spec
 	}
-	if len(specs) != 3 {
+	if len(specs) != 4 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -206,6 +206,18 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	}
 	if spec.Mutates {
 		t.Fatal("project_get is advertised as mutating")
+	}
+	// The audit read is a read, and an agent decides from `mutates` whether it is safe to run
+	// while it is still working out what is going on — which is exactly when this one is wanted.
+	audit, ok := specs["project_verifications"]
+	if !ok {
+		t.Fatalf("project capabilities lost project_verifications: %#v", projectCLICapabilities)
+	}
+	if got := strings.Join(audit.Argv, " "); got != "orbit project verifications" {
+		t.Fatalf("project_verifications argv = %q", got)
+	}
+	if audit.Mutates {
+		t.Fatal("project_verifications is advertised as mutating")
 	}
 	// The two write verbs must say so: an agent reads `mutates` to decide whether a command is
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.

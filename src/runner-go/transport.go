@@ -792,6 +792,23 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// getProjectVerifications reads what every verification in one project concluded, and what those
+// conclusions are still holding up: each check's verdict and verdictRevision, each non-PASS
+// conclusion's defect subtask and the action that raised it, and the tasks the dispatch guard is
+// currently holding back with the reason for each.
+//
+// The question it answers is the one a coordinator cannot answer from the task list: a blocked
+// task looks exactly like an ordinary OPEN task, deliberately — the block is a precondition, not a
+// status somebody rewrote — so "why is this not running" has to be read from here.
+func (t *Transport) getProjectVerifications(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/verifications", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // createProject records a new project under the runner's owner — the same tenant every task write
 // here lands in, since the credential names a machine rather than a person.
 //

@@ -122,10 +122,10 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	}
 }
 
-// The project surface is exactly these three. Listing projects, deleting one and opening its
-// coordinator stay the human's door, so a fourth appearing here is a decision somebody makes
+// The project surface is exactly these four. Listing projects, deleting one and opening its
+// coordinator stay the human's door, so a fifth appearing here is a decision somebody makes
 // rather than something a refactor adds.
-func TestMCPExposesExactlyTheThreeProjectTools(t *testing.T) {
+func TestMCPExposesExactlyTheFourProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
@@ -137,7 +137,9 @@ func TestMCPExposesExactlyTheThreeProjectTools(t *testing.T) {
 				seen[name] = true
 			}
 		}
-		for _, want := range []string{"project_get", "project_create", "project_update"} {
+		for _, want := range []string{
+			"project_get", "project_verifications", "project_create", "project_update",
+		} {
 			if !seen[want] {
 				t.Fatalf("%s missing from the tools", want)
 			}

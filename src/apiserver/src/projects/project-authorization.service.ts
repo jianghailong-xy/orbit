@@ -65,6 +65,10 @@ export type ProjectAuthorizationReasonCode =
   | 'TASK_DISPATCH_HELD'
   | 'TASK_NOT_DUE'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
+  // §13.2 V3: an unresolved verification failure stops work here rather than by rewriting the
+  // blocked tasks' status, so "why is this not running" stays a question the data answers.
+  | 'VERIFICATION_DEFECT_OPEN'
+  | 'VERIFICATION_FAILED_UPSTREAM'
   | 'TASK_ALREADY_RUNNING'
   | 'WHO_UNRESOLVED'
   | 'WHO_NOT_IN_TEAM'
@@ -107,6 +111,26 @@ export interface ProjectRunnerAuthorizationInput {
   requiredCapabilities: string[];
 }
 
+/**
+ * Why an unresolved verification failure stops this task (§13.2 V3, §7.4 precondition 3).
+ *
+ * `SUBJECT_DEFECT_OPEN` is the subject of the failed check itself: the defect subtask filed under
+ * it has not been settled, so re-running the subject would repeat the finding. `UPSTREAM` is a
+ * task that depends on that subject: its prerequisite's completion is what the failed check
+ * withdrew, and only a later PASS puts it back (V4) — the subject reaching DONE again on its own
+ * does not, or the old verdict would silently have become a pass.
+ */
+export interface ProjectVerificationBlock {
+  reason: 'SUBJECT_DEFECT_OPEN' | 'UPSTREAM';
+  /** Base62 throughout, like every other id in an audit record. */
+  failureId: string;
+  verifierTaskId: string;
+  subjectTaskId: string;
+  verdict: string;
+  verdictRevision: string;
+  defectTaskId: string | null;
+}
+
 export interface ProjectActionAuthorizationInput {
   v: 1;
   sourceDecisionInputHash: string;
@@ -141,6 +165,11 @@ export interface ProjectActionAuthorizationInput {
     dispatchHold: boolean;
     runAtDue: boolean;
     dependenciesReady: boolean;
+    /**
+     * The unresolved verification failure that stops this task, or null. Absent on audits captured
+     * before §13.2 landed, which read as "nothing was blocking" — which is what was true then.
+     */
+    verificationBlock?: ProjectVerificationBlock | null;
     hasLiveSession: boolean;
     assigneeAgentId: string | null;
     assigneeIsProjectMember: boolean;
@@ -425,6 +454,19 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
   if (task.status !== 'OPEN') return { decision: 'DEFER', reasonCode: 'TASK_NOT_OPEN' };
   if (task.dispatchHold) return { decision: 'DEFER', reasonCode: 'TASK_DISPATCH_HELD' };
   if (!task.runAtDue) return { decision: 'DEFER', reasonCode: 'TASK_NOT_DUE' };
+  // §7.4's third precondition is one bullet with two halves — prerequisites DONE, and a subject
+  // that has not been sent back by a failed check — so both answer the same question. The verdict
+  // goes first because when both are true it is the answer somebody can act on: an outstanding
+  // prerequisite says "wait", while a failed check says what to go and fix. DEFER, not DENY: the
+  // condition clears when the defect is fixed and the check passes again, with nobody asked.
+  if (task.verificationBlock) {
+    return {
+      decision: 'DEFER',
+      reasonCode: task.verificationBlock.reason === 'SUBJECT_DEFECT_OPEN'
+        ? 'VERIFICATION_DEFECT_OPEN'
+        : 'VERIFICATION_FAILED_UPSTREAM',
+    };
+  }
   if (!task.dependenciesReady) {
     return { decision: 'DEFER', reasonCode: 'TASK_DEPENDENCIES_INCOMPLETE' };
   }
@@ -717,6 +759,57 @@ export class ProjectAuthorizationService {
              AND prerequisite."owner_id" = ${command.ownerId}::uuid
              AND prerequisite."status"::text <> 'DONE'
         `);
+    // §7.4 precondition 3's second half. Two shapes, one read, most-specific first:
+    //
+    //   SUBJECT_DEFECT_OPEN — this task IS the subject of a failed check whose defect subtask is
+    //     still outstanding. Re-running it before the defect is fixed repeats the finding, and V4
+    //     says it becomes dispatchable again once that subtask is settled. A defect somebody
+    //     deleted stops holding it: an unresolvable block is a wedge, not a safeguard.
+    //   UPSTREAM — this task depends on such a subject. Only a later PASS lifts this one; the
+    //     subject going DONE again on its own must not, or the old verdict would have quietly
+    //     become a pass, which is precisely the hole V4 names.
+    //
+    // The tasks this reads are already locked above (the task row FOR SHARE, its prerequisites
+    // FOR SHARE), and every write that raises a condition takes FOR UPDATE on the subject — so a
+    // verdict landing concurrently is serialized against this read rather than racing it.
+    const [verificationBlockRow] = command.taskId == null ? [undefined]
+      : await tx.$queryRaw<Array<{
+          reason: 'SUBJECT_DEFECT_OPEN' | 'UPSTREAM';
+          failureId: string;
+          verifierTaskId: string;
+          subjectTaskId: string;
+          verdict: string;
+          verdictRevision: bigint;
+          defectTaskId: string | null;
+        }>>(Prisma.sql`
+          SELECT * FROM (
+            SELECT 'SUBJECT_DEFECT_OPEN' AS "reason", 0 AS "rank", f."id" AS "failureId",
+                   f."verifier_task_id" AS "verifierTaskId",
+                   f."subject_task_id" AS "subjectTaskId", f."verdict"::text AS "verdict",
+                   f."verdict_revision" AS "verdictRevision",
+                   f."defect_task_id" AS "defectTaskId", f."created_at" AS "createdAt"
+              FROM "task_verification_failure" f
+              JOIN "task" defect ON defect."id" = f."defect_task_id"
+             WHERE f."subject_task_id" = ${command.taskId}::uuid
+               AND f."project_id" = ${command.projectId}::uuid
+               AND f."resolved_at" IS NULL
+               AND defect."status"::text NOT IN ('DONE', 'CANCELLED')
+            UNION ALL
+            SELECT 'UPSTREAM' AS "reason", 1 AS "rank", f."id" AS "failureId",
+                   f."verifier_task_id" AS "verifierTaskId",
+                   f."subject_task_id" AS "subjectTaskId", f."verdict"::text AS "verdict",
+                   f."verdict_revision" AS "verdictRevision",
+                   f."defect_task_id" AS "defectTaskId", f."created_at" AS "createdAt"
+              FROM "task_verification_failure" f
+              JOIN "task_dependency" d ON d."depends_on_task_id" = f."subject_task_id"
+             WHERE d."task_id" = ${command.taskId}::uuid
+               AND f."project_id" = ${command.projectId}::uuid
+               AND f."resolved_at" IS NULL AND f."blocks_downstream" = true
+          ) blocks
+           ORDER BY "rank", "createdAt", "failureId"
+           LIMIT 1
+        `);
+
     const [liveTask] = command.taskId == null ? [{ count: 0 }]
       : await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
           SELECT count(*)::int AS "count" FROM "session" s
@@ -775,6 +868,17 @@ export class ProjectAuthorizationService {
               dispatchHold: task?.dispatchHold ?? true,
               runAtDue: task?.runAt == null || task.runAt <= now,
               dependenciesReady: (dependencyState?.incomplete ?? 0) === 0,
+              verificationBlock: verificationBlockRow == null ? null : {
+                reason: verificationBlockRow.reason,
+                failureId: uuidToBase62(verificationBlockRow.failureId),
+                verifierTaskId: uuidToBase62(verificationBlockRow.verifierTaskId),
+                subjectTaskId: uuidToBase62(verificationBlockRow.subjectTaskId),
+                verdict: verificationBlockRow.verdict,
+                verdictRevision: String(verificationBlockRow.verdictRevision),
+                defectTaskId: verificationBlockRow.defectTaskId == null
+                  ? null
+                  : uuidToBase62(verificationBlockRow.defectTaskId),
+              },
               hasLiveSession: (liveTask?.count ?? 0) > 0,
               assigneeAgentId: task?.assigneeAgentId == null
                 ? null

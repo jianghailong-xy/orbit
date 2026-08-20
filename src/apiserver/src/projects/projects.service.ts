@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -445,6 +446,110 @@ export class ProjectsService {
     return {
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
+    };
+  }
+
+  /**
+   * What every verification in this project concluded, and what those conclusions are still
+   * holding up (contract AC6 / §13.2).
+   *
+   * The audit read face for the whole mechanism, and it answers three questions that are otherwise
+   * only answerable by reading the code: which conclusion is current (`verdictRevision` — the same
+   * value the action key is built from, so an action row and a conclusion can be lined up), what
+   * each non-PASS conclusion left behind (the defect subtask, the action that raised it, whether
+   * it is resolved), and — `blockedTasks` — exactly which tasks are not dispatchable because of
+   * one, with the reason. That last list is the same read the dispatch guard makes at commit time,
+   * so "why is this task not running" has an answer somebody can fetch rather than reconstruct.
+   *
+   * Ids come back as Base62: the columns are classified in `PUBLIC_ID_FIELDS`, so the response
+   * interceptor rewrites them, and `evidence` was written in Base62 to begin with.
+   */
+  async verifications(ownerId: string, projectId: string) {
+    await this.assertOwned(ownerId, projectId);
+    const verifications = await this.prisma.task.findMany({
+      where: { projectId, ownerId, verifiesTaskId: { not: null } },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        verdict: true,
+        verdictRevision: true,
+        verifiesTaskId: true,
+        verifies: { select: { id: true, title: true, status: true } },
+      },
+    });
+    const failures = await this.prisma.taskVerificationFailure.findMany({
+      where: { projectId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      include: {
+        defect: { select: { id: true, title: true, status: true } },
+        raisedByAction: { select: { id: true, status: true, refusalCode: true, idempotencyKey: true } },
+      },
+    });
+    const blockedTasks = await this.prisma.$queryRaw<Array<{
+      taskId: string;
+      reason: string;
+      failureId: string;
+      verifierTaskId: string;
+      subjectTaskId: string;
+      defectTaskId: string | null;
+    }>>(Prisma.sql`
+      SELECT blocked."id" AS "taskId", 'SUBJECT_DEFECT_OPEN' AS "reason", f."id" AS "failureId",
+             f."verifier_task_id" AS "verifierTaskId", f."subject_task_id" AS "subjectTaskId",
+             f."defect_task_id" AS "defectTaskId"
+        FROM "task_verification_failure" f
+        JOIN "task" blocked ON blocked."id" = f."subject_task_id"
+        JOIN "task" defect ON defect."id" = f."defect_task_id"
+       WHERE f."project_id" = ${projectId}::uuid AND f."resolved_at" IS NULL
+         AND defect."status"::text NOT IN ('DONE', 'CANCELLED')
+      UNION ALL
+      SELECT d."task_id" AS "taskId", 'UPSTREAM' AS "reason", f."id" AS "failureId",
+             f."verifier_task_id" AS "verifierTaskId", f."subject_task_id" AS "subjectTaskId",
+             f."defect_task_id" AS "defectTaskId"
+        FROM "task_verification_failure" f
+        JOIN "task_dependency" d ON d."depends_on_task_id" = f."subject_task_id"
+       WHERE f."project_id" = ${projectId}::uuid AND f."resolved_at" IS NULL
+         AND f."blocks_downstream" = true
+       ORDER BY "taskId", "reason", "failureId"
+    `);
+    return {
+      projectId,
+      verifications: verifications.map((row) => ({
+        verifierTaskId: row.id,
+        title: row.title,
+        status: row.status,
+        verdict: row.verdict,
+        verdictRevision: String(row.verdictRevision),
+        subjectTaskId: row.verifiesTaskId,
+        subjectTitle: row.verifies?.title ?? null,
+        subjectStatus: row.verifies?.status ?? null,
+      })),
+      failures: failures.map((row) => ({
+        id: row.id,
+        verifierTaskId: row.verifierTaskId,
+        subjectTaskId: row.subjectTaskId,
+        verdict: row.verdict,
+        verdictRevision: String(row.verdictRevision),
+        blocksDownstream: row.blocksDownstream,
+        defectTaskId: row.defectTaskId,
+        defectTitle: row.defect?.title ?? null,
+        defectStatus: row.defect?.status ?? null,
+        raisedByActionId: row.raisedByActionId,
+        actionStatus: row.raisedByAction?.status ?? null,
+        actionRefusalCode: row.raisedByAction?.refusalCode ?? null,
+        // The key carries the project and verifier UUIDs by construction (the ledger's uniqueness
+        // is declared on it), so it is hashed rather than echoed. The pair that identifies it —
+        // verifier and revision — is right here in the clear.
+        actionIdempotencyKeyHash: row.raisedByAction
+          ? createHash('sha256').update(row.raisedByAction.idempotencyKey).digest('hex')
+          : null,
+        evidence: row.evidence,
+        resolvedAt: row.resolvedAt,
+        resolvedByTaskId: row.resolvedByTaskId,
+        createdAt: row.createdAt,
+      })),
+      blockedTasks,
     };
   }
 
