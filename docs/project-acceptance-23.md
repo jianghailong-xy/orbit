@@ -320,3 +320,52 @@ git merge-base --is-ancestor 07eefde9 1144099c       # -> 1
 
 > **派发给验收类任务的工作树，其 HEAD 必须先被断言为被验提交。**
 > 如果基线是从 main 派生而被验分支落后于 main，`merge --ff-only` 这条常规修法会失败；正确动作是从被验分支新建工作树/分支。建议把「`git merge-base --is-ancestor <被验SHA> HEAD` 必须为 0」做成验收任务开跑前的第一条断言。
+
+---
+
+## 附录 B — 在协调者修正后的工作树里整套复跑
+
+协调者以非破坏方式修正了附录 A 的错配：原任务工作树
+`/root/.orbit/worktrees/01a0211a-70f6-7b30-b3fa-908223723ab3` 现为干净分支
+`orbit/23-project-acceptance-correct`，错开的 `orbit/23-feat-project-b80670`（`07eefde9`）保留未动、不再被检出，仅作审计留痕。
+
+**§2 的全套证据已在这棵被指定的工作树里重跑一遍，逐项复现。**
+
+### B.1 被测代码与 §2 那次逐字节相同
+
+`orbit/23-project-acceptance-correct` 从 `1144099c` 快进到 `feat/project`（`0e4fc164`），再快进吃下附录 A 的 `a5746ab6`。
+两次快进都合法（祖先关系成立），未使用 `reset` / `update-ref`。而 `1144099c → 0e4fc164` 的全部差异是：
+
+```
+git diff --stat 1144099c 0e4fc164
+ docs/project-acceptance-23.md | 270 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 270 insertions(+)
+```
+
+**只有本报告一个文件**——没有一行实现、迁移或测试改动。所以本次复跑与 §2 跑的是同一份产品代码，两组数字可以直接互相对照。
+
+### B.2 复跑结果（容器/库全部换新命名 `pcc23c_*`，与 §2 无共享状态）
+
+| 命令 | §2（`pcc23-349bQHCJ` 树） | 附录 B（协调者指定树） |
+| --- | --- | --- |
+| `scripts/project-e2e.sh` 迁移 | 141 | **141** |
+| acceptance suite | 28/28 | **28/28** |
+| recovery suite | 16/16 | **16/16** |
+| §10.3 活性审计 | 零行 | **零行**，`EXIT=0` |
+| 26 个 `.pg.spec` | 238 / 237 pass / 0 fail / 1 skip | **238 / 237 pass / 0 fail / 1 skip** |
+| apiserver 全量单测 | 2143 / 1927 pass / 0 fail / 216 skip | **2143 / 1927 pass / 0 fail / 216 skip** |
+| web `vitest run` | 54 文件 / 797 通过 | **54 文件 / 797 通过** |
+| `go test -v -run Project ./...` | 87 PASS / 1 FAIL | **87 PASS / 1 FAIL**（同一条 `TestKimiFindProjectRootFallsBackToCWD`） |
+| 变异探针（`GUARDED_AUTO→AUTO`） | 26/28，`EXIT=1` | **26/28，`EXIT=1`**，同样是 `not ok 5 - AC1: a project recorded in a session is bound to it in one insert` |
+
+本次 pg 套件里 `project-reconcile-fault-injection` 直接就是 **7/7**：先按 §2.3 的注记跑了
+`tsc -p tsconfig.project-reconcile-faults.json`，子进程要的 `build-project-reconcile-faults/` 才存在。
+这反过来证实 §2.3 那次 5/7 确是跑法问题而非产品缺陷。
+
+一次性容器 `pcc23c-e2e-pg16` / `pcc23c-pgspec-pg16` / `pcc23c-mut-pg16` 及其全部库已删除；变异探针已还原
+（`git status` 该文件 0 行差异）；共享 `orbit-postgres` 本轮未被写入。
+
+### B.3 对裁决的影响
+
+**无。** 两次独立运行、两套一次性数据库、两棵工作树，数字逐项一致。
+§3 的 **10 PASS / 2 FAIL** 与三条 blocker（BLK-23-01 / 02 / 03）维持原判。
