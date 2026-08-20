@@ -2,7 +2,7 @@
 # Build context is the repo root: docker build -f src/apiserver/Dockerfile .
 
 # ───────────────────────────────── build ─────────────────────────────────
-FROM node:20-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 
 # Prisma needs OpenSSL present on Debian slim
@@ -24,7 +24,7 @@ RUN npm run build -w @orbit/shared \
  && npm run build -w @orbit/apiserver
 
 # ──────────────────────────────── runtime ────────────────────────────────
-FROM node:20-slim AS runtime
+FROM node:26-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
