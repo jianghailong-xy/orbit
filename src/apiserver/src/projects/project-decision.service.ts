@@ -8,6 +8,14 @@ import {
   replayProjectAuthorizationAudit,
 } from './project-authorization.service';
 import { retryBackoffUntil } from '../tasks/task-retry-policy';
+import {
+  AggregationTaskFact,
+  AggregationTaskStatus,
+  PlannedTaskAggregation,
+  TaskCompletionPolicyValue,
+  TaskVerdictValue,
+  planTaskAggregation,
+} from './task-aggregation';
 
 export const PROJECT_DECISION_INPUT_VERSION = 1 as const;
 
@@ -78,6 +86,13 @@ export interface ProjectDecisionInput {
       requiredCapabilities: string[];
       runAt: string | null;
       verifiesTaskId: string | null;
+      /**
+       * Absent on decisions captured before migration 0123. Readers must treat that as MANUAL and
+       * a null verdict, which is exactly what those tasks had: an old snapshot replays to the same
+       * outcome it originally produced rather than to today's rules applied to yesterday's world.
+       */
+      completionPolicy?: string;
+      verdict?: string | null;
       dependsOnTaskIds: string[];
       liveSessionIds: string[];
       failureCount: number;
@@ -210,6 +225,14 @@ export interface ProjectDecisionOutcome {
   authorizations: ProjectAuthorizationAudit[];
   blockersOpened: string[];
   blockersCleared: string[];
+  /**
+   * Parent statuses this snapshot implies (§13.1). Recomputed from `world.tasks`, so it is part of
+   * what replay checks; the reconcile pass applies each as a compare-and-set and deliberately does
+   * NOT claim an action-ledger key for it (AG5).
+   */
+  aggregations: PlannedTaskAggregation[];
+  /** Tasks on a `parentTaskId` cycle. Non-empty means aggregation was skipped for this pass (AG2). */
+  aggregationCycleTaskIds: string[];
   nextWakeAt: string | null;
   nextWakeReason: string | null;
   consumedEventIds: string[];
@@ -285,6 +308,8 @@ interface TaskRow {
   requiredCapabilities: string[];
   runAt: Date | null;
   verifiesTaskId: string | null;
+  completionPolicy: string;
+  verdict: string | null;
   updatedAt: Date;
 }
 
@@ -471,7 +496,9 @@ export class ProjectDecisionService {
                t."dispatch_authority"::text AS "dispatchAuthority",
                t."dispatch_attempt" AS "dispatchAttempt",
                t."required_capabilities" AS "requiredCapabilities", t."run_at" AS "runAt",
-               t."verifies_task_id" AS "verifiesTaskId", t."updated_at" AS "updatedAt"
+               t."verifies_task_id" AS "verifiesTaskId",
+               t."completion_policy"::text AS "completionPolicy", t."verdict"::text AS "verdict",
+               t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
            AND t."owner_id" = p."owner_id" AND p."owner_id" = ${project.ownerId}::uuid
@@ -638,6 +665,8 @@ export class ProjectDecisionService {
         requiredCapabilities: [...row.requiredCapabilities].sort(),
         runAt: iso(row.runAt),
         verifiesTaskId: toPublicIdOrNull(row.verifiesTaskId),
+        completionPolicy: row.completionPolicy,
+        verdict: row.verdict,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,
@@ -939,10 +968,16 @@ export class ProjectDecisionService {
     const row = rows[0];
     if (!row) return null;
     const input = row.decisionInput as ProjectDecisionInput;
-    const rawStored = row.outcome as ProjectDecisionOutcome & { authorizations?: ProjectAuthorizationAudit[] };
+    const rawStored = row.outcome as ProjectDecisionOutcome & {
+      authorizations?: ProjectAuthorizationAudit[];
+      aggregations?: PlannedTaskAggregation[];
+      aggregationCycleTaskIds?: string[];
+    };
     const stored: ProjectDecisionOutcome = {
       ...rawStored,
       authorizations: rawStored.authorizations ?? [],
+      aggregations: rawStored.aggregations ?? [],
+      aggregationCycleTaskIds: rawStored.aggregationCycleTaskIds ?? [],
     };
     const hashMatches = input.decisionInputHash === row.decisionInputHash
       && hashDecisionInput(input) === row.decisionInputHash;
@@ -1012,6 +1047,7 @@ export function planProjectDecision(
       throw new Error('Project authorization audit does not replay from this decision input');
     }
   }
+  const aggregation = planTaskAggregation(aggregationFacts(input));
   const runStateAfter = runStateOf(input);
   const nextWakeAt = runStateAfter === 'SETTLED'
     ? null
@@ -1039,6 +1075,8 @@ export function planProjectDecision(
     authorizations: options.authorizations ?? [],
     blockersOpened: options.blockersOpened ?? [],
     blockersCleared: options.blockersCleared ?? [],
+    aggregations: aggregation.aggregations,
+    aggregationCycleTaskIds: aggregation.cycleTaskIds,
     nextWakeAt,
     nextWakeReason,
     consumedEventIds: options.consumedEventIds ?? [],
@@ -1063,6 +1101,24 @@ function canonicalValue(value: unknown): unknown {
       .map(([key, item]) => [key, canonicalValue(item)]));
   }
   return value;
+}
+
+/**
+ * The snapshot's tasks as §13.1 reads them, in Base62 throughout — the plan lands in the decision
+ * outcome, which is the public audit protocol, so it must never carry a raw UUID.
+ *
+ * A pre-0123 snapshot has neither column. Defaulting them here rather than at the database keeps
+ * one rule in one place: no policy means MANUAL means no aggregation.
+ */
+function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
+  return input.world.tasks.map((task) => ({
+    id: task.id,
+    status: task.status as AggregationTaskStatus,
+    parentTaskId: task.parentTaskId,
+    completionPolicy: (task.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
+    verifiesTaskId: task.verifiesTaskId,
+    verdict: (task.verdict ?? null) as TaskVerdictValue | null,
+  }));
 }
 
 function runStateOf(input: ProjectDecisionInput): ProjectDecisionRunState {

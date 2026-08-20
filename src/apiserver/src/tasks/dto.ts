@@ -18,8 +18,16 @@ import {
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
+import {
+  TASK_COMPLETION_POLICIES,
+  TASK_VERDICTS,
+  TaskCompletionPolicyValue,
+  TaskVerdictValue,
+} from '../projects/task-aggregation';
 
 const TASK_STATUSES = Object.values(TaskStatus);
+const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
+const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
 
 /**
  * Bounds on one task's labels. Not a taxonomy — a stop on a caller that has confused the label
@@ -52,6 +60,9 @@ export class CreateTaskDto {
   @IsString()
   @MaxLength(MAX_TASK_ACCEPTANCE_CRITERIA_CHARS)
   acceptanceCriteria?: string;
+  // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
+  // what every task has always been: nothing completes it but a status write. See §13.1.
+  @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
   @IsOptional() @IsDateString() dueDate?: string;
   // The earliest time this task may start automatically (ISO 8601, stored and returned UTC).
   // Omitted means unscheduled, which is what every task has always been. Distinct from dueDate on
@@ -182,6 +193,16 @@ export class UpdateTaskDto {
   dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
+  // How this task's completion is decided. Switching to MANUAL stops aggregation without undoing
+  // whatever it last concluded; switching away from it hands the status to the subtasks.
+  @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
+  // This verification task's conclusion about its subject. Three-state like the pins above: omit
+  // to leave it alone, null to revoke it, a value to record it. Only a task that names a subject
+  // (verifiesTaskId) can carry one, and a revoked PASS reopens whatever it had completed.
+  @ValidateIf((_dto, value) => value !== null)
+  @IsOptional()
+  @IsIn(TASK_VERDICT_VALUES)
+  verdict?: TaskVerdictValue | null;
   // Full replacement for this task's labels, like dependsOnTaskIds above: omit to leave them
   // alone, pass [] to clear them.
   @ValidateIf((_dto, value) => value !== undefined)

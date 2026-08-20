@@ -154,6 +154,11 @@ export const TASK_LIST_SELECT = {
   autoRunWhenReady: true,
   provider: true,
   model: true,
+  // Two enum columns, in for the same reason parentTaskId is: a reader looking at a project's tree
+  // needs to know which rows complete themselves and what their checks concluded, and the only
+  // alternative is one GET per row.
+  completionPolicy: true,
+  verdict: true,
   assignee: {
     select: {
       id: true,
@@ -1348,6 +1353,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       provider: dto.provider,
       model: dto.model,
       autoRunWhenReady: dto.autoRunWhenReady,
+      // Omitted leaves the column default, MANUAL — the behaviour every task created before
+      // migration 0123 has, and the one that never completes anything on its own.
+      completionPolicy: dto.completionPolicy,
     };
   }
 
@@ -3155,7 +3163,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       acceptanceCriteria:
         dto.acceptanceCriteria === undefined ? undefined : (dto.acceptanceCriteria ?? null),
       autoRunWhenReady: dto.autoRunWhenReady,
+      completionPolicy: dto.completionPolicy,
+      // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
+      // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
+      // to OPEN on the next reconcile, which is the point of storing the verdict rather than
+      // reading "the verification finished" as a pass.
+      verdict: dto.verdict === undefined ? undefined : (dto.verdict ?? null),
     };
+    // The column is only meaningful on a row that names what it verifies, and the database says so
+    // too (0123's task_verdict_requires_subject). Checked here as well so the caller gets the
+    // reason rather than a constraint name.
+    if (dto.verdict != null && !before.verifiesTaskId) {
+      throw new BadRequestException(
+        'Only a verification task can carry a verdict — this task does not verify anything',
+      );
+    }
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
       data.assignee = dto.assigneeId ? { connect: { id: dto.assigneeId } } : { disconnect: true };

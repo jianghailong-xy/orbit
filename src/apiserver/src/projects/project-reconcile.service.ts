@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ProjectDecisionInput,
@@ -17,6 +17,7 @@ import {
   ProjectEventHandler,
   ProjectEventsService,
 } from './project-events.service';
+import { PlannedTaskAggregation } from './task-aggregation';
 
 export const PROJECT_RECONCILE_LEASE_MS = 60_000;
 export const PROJECT_RECONCILE_HEARTBEAT_MS = 20_000;
@@ -235,6 +236,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         throw new ProjectLeaseLostError(projectId);
       }
       await this.decisions.persist(tx, captured, outcome, decisionId);
+      await this.applyAggregations(tx, projectId, outcome.aggregations, now);
       state = outcome.runStateAfter;
       nextWakeAt = outcome.nextWakeAt ? new Date(outcome.nextWakeAt) : null;
       nextWakeReason = outcome.nextWakeReason;
@@ -638,6 +640,44 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       fencingToken: BigInt(rows[0].fencingToken),
       expiresAt: rows[0].leaseExpiresAt,
     };
+  }
+
+  /**
+   * Write the parent statuses this pass recomputed (§13.1 AG5).
+   *
+   * Each one is a compare-and-set against the status the decision snapshot read, and matching zero
+   * rows is a normal result with two harmless readings: the parent already holds the recomputed
+   * value, or somebody changed it after the snapshot — in which case the row's own write has
+   * already enqueued the signal that will bring this loop back with the newer facts. That is the
+   * entire concurrency story, and it is why this takes no action-ledger key: there is no permanent
+   * identity to collide with when a child goes DONE, OPEN and DONE again (PC-CX-17).
+   *
+   * The Project row is already held `FOR NO KEY UPDATE` by the delivery transaction, and each
+   * write here fires the same `task.status_changed` source every other status write fires — so a
+   * level this pass could not see (a parent whose own parent is in another Project, a tree that
+   * grew mid-transaction) is picked up by the next reconcile rather than missed.
+   *
+   * Public for the same reason `applyAction` is: the compare-and-set is the guarantee, so the
+   * harness that proves a stale plan writes nothing has to call the real one.
+   */
+  async applyAggregations(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    aggregations: readonly PlannedTaskAggregation[],
+    now: Date,
+  ): Promise<number> {
+    let applied = 0;
+    for (const aggregation of aggregations) {
+      applied += await tx.$executeRaw(Prisma.sql`
+        UPDATE "task"
+           SET "status" = ${aggregation.to}::"task_status", "updated_at" = ${now}
+         WHERE "id" = ${base62ToUuid(aggregation.taskId)}::uuid
+           AND "project_id" = ${projectId}::uuid
+           AND "status" = ${aggregation.from}::"task_status"
+           AND "status" IS DISTINCT FROM ${aggregation.to}::"task_status"
+      `);
+    }
+    return applied;
   }
 
   private async ensureRuntime(

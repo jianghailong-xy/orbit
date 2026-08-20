@@ -95,6 +95,17 @@ interface ProjectEventRow {
   nextAttemptAt: Date | null;
 }
 
+/**
+ * `project_event.id` is a UUID column and these are JavaScript strings. The Prisma driver binds a
+ * bare string parameter as text, and PostgreSQL has no `uuid = text` operator — so an uncast list
+ * fails the whole delivery with 42883 and every event in it retries until it is DEAD. The `pg`
+ * shim the isolated harnesses use sends parameters untyped, where the server infers uuid, which is
+ * why this only appears on the real client.
+ */
+function uuidList(ids: readonly string[]): Prisma.Sql {
+  return Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`));
+}
+
 const EVENT_CHANNEL = 'project_event';
 const LISTENER_RECONNECT_MS = 2_000;
 const MAX_PROJECTS_PER_DRAIN = 25;
@@ -272,7 +283,7 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
           await tx.$executeRaw(Prisma.sql`
             UPDATE "project_event"
                SET "next_attempt_at" = ${deferUntil}
-             WHERE "id" IN (${Prisma.join(ids)}) AND "consumed_at" IS NULL
+             WHERE "id" IN (${uuidList(ids)}) AND "consumed_at" IS NULL
           `);
           await tx.$executeRawUnsafe('RELEASE SAVEPOINT project_event_delivery');
           return {
@@ -286,7 +297,7 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
           UPDATE "project_event"
              SET "consumed_at" = ${now}, "next_attempt_at" = NULL,
                  "disposition" = ${disposition}
-           WHERE "id" IN (${Prisma.join(ids)}) AND "consumed_at" IS NULL
+           WHERE "id" IN (${uuidList(ids)}) AND "consumed_at" IS NULL
         `);
         await tx.$executeRawUnsafe('RELEASE SAVEPOINT project_event_delivery');
         return {
@@ -310,7 +321,7 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
                    "next_attempt_at" = NULL,
                    "consumed_at" = ${now},
                    "disposition" = 'DEAD'
-             WHERE "id" IN (${Prisma.join(dead.map((event) => event.id))})
+             WHERE "id" IN (${uuidList(dead.map((event) => event.id))})
                AND "consumed_at" IS NULL
           `);
         }

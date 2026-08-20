@@ -180,6 +180,42 @@ enum ProjectIdentitySource {
   @@map("project_identity_source")
 }
 
+/// How a parent task decides it is finished (contract AC7 / §13.1).
+///
+/// MANUAL is the column default and the historical behaviour: nothing but a person or an agent
+/// writing the status ever completes the task. The other two make the parent's status a
+/// RECOMPUTATION over its direct children, which is what removes the hand-maintained roll-up node
+/// — and, because it is a recomputation rather than an accumulation, what makes a reopened child
+/// pull its parent back open instead of leaving it stuck DONE.
+///
+/// The policy is inert on a task with no children. "Every one of zero children is done" is true
+/// and useless, and honouring it would let setting a policy complete a leaf that nobody did.
+enum TaskCompletionPolicy {
+  MANUAL
+  ALL_CHILDREN_DONE
+  VERIFICATION_PASSED
+
+  @@map("task_completion_policy")
+}
+
+/// The structured conclusion a verification task reached about the task it verifies (§13.2 V1).
+///
+/// It lives on the VERIFIER's row, beside `verifiesTaskId`, because that row is the thing that has
+/// a conclusion; the verified task has a status, which is a different claim. NULL means the check
+/// has not concluded, and — deliberately — is not PASS: `VERIFICATION_PASSED` reads this column
+/// fail-closed, so a verification task that merely finished never completes its subject.
+///
+/// This phase only READS the verdict (aggregation) and lets it be written and revoked. The
+/// mechanical consequences of FAIL — native revert, defect subtask, downstream blocking — are
+/// §13.2's own unit and are not implemented here.
+enum TaskVerdict {
+  PASS
+  FAIL
+  INCONCLUSIVE
+
+  @@map("task_verdict")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -1809,6 +1845,14 @@ model Task {
   /// and never itself verified — plus the thing a boolean could not: it identifies the subject,
   /// so "is this already being checked" and "how many times has this been checked" are exact
   /// rather than inferred.
+  /// How this task's own completion is decided. See TaskCompletionPolicy: MANUAL (the default,
+  /// and what every task created before migration 0123 keeps) leaves the status entirely to
+  /// whoever writes it, while the other values make it a recomputation over the direct children.
+  completionPolicy TaskCompletionPolicy @default(MANUAL) @map("completion_policy")
+  /// This verification task's conclusion about its subject. NULL until it concludes, and NULL
+  /// again if it is revoked; only meaningful together with `verifiesTaskId`, which migration 0123
+  /// enforces with a CHECK rather than a comment.
+  verdict          TaskVerdict? @map("verdict")
   verifiesTaskId   String?     @map("verifies_task_id") @db.Uuid
   verifies         Task?       @relation("TaskVerification", fields: [verifiesTaskId], references: [id], onDelete: Cascade)
   verifiedBy       Task[]      @relation("TaskVerification")
