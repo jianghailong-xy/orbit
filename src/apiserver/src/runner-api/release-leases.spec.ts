@@ -68,6 +68,7 @@ function makeController(
       {} as never,
       {} as never,
       {} as never,
+      { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
     ),
     lockCall: () => lockCall,
     notifiedSessionId: () => notifiedSessionId,

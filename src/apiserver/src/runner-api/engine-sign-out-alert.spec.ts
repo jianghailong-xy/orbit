@@ -43,7 +43,7 @@ function harness(priorEngines: unknown) {
     },
   } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, push, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, push, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     notified,
   };
 }

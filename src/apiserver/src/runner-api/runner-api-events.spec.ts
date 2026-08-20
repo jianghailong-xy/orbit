@@ -67,7 +67,7 @@ function makeController(
   return {
     calls,
     published: () => published,
-    controller: new RunnerApiController(prisma as never, {} as never, realtime as never, {} as never, {} as never, {} as never),
+    controller: new RunnerApiController(prisma as never, {} as never, realtime as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
   };
 }
 
@@ -536,7 +536,7 @@ function makeReaderController(rows: unknown[], assignedRunnerId = 'runner-1') {
     session: { findUnique: async () => ({ id: 'session-1', assignedRunnerId }) },
     $queryRaw: async () => rows,
   };
-  return new RunnerApiController(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  return new RunnerApiController(prisma as never, {} as never, {} as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
 }
 
 test('the transcript read hands back whole payloads oldest-first', async () => {

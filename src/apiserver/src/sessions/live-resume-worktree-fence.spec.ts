@@ -79,7 +79,7 @@ function makeService(
   const service = new SessionsService(
     prisma,
     { notifySessionQueued: () => queueWakes++ } as never,
-    { notifyInbox: () => inboxWakes++ } as never,
+    { notifyInbox: () => inboxWakes++, publishQueuedTurnsChanged: () => undefined } as never,
   );
   return {
     service,
