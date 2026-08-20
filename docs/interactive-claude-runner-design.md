@@ -153,6 +153,7 @@ about steering is decided at a door, so there is no per-client version of it to 
 | Send, engine mid-turn | *the same request* | `steer` — written into the running turn | `{ turnId, seq, kind: 'steer' }` |
 | Stop | `POST /sessions/:id/interrupt`, no body | `interrupt`, and the queue behind the running turn is dropped | `{ ok: true }` |
 | Stop and do this instead | `POST /sessions/:id/interrupt` **with** `content` | `interrupt`, then an ordinary `message` filed after the drop | `{ ok: true, turnId, seq }` |
+| End the session | `POST /sessions/:id/end` | `end` — terminal teardown, not a turn interruption | `{ ok: true }` |
 
 - **Mode is never a parameter.** The turns endpoint's `kind` is a whitelist of what a caller may
   *request* — an ordinary message or a `!cmd` — and steering is not in it. Timing decides it, under
@@ -192,6 +193,17 @@ about steering is decided at a door, so there is no per-client version of it to 
 - **Permissions are untouched.** Every path still runs claude with
   `--permission-prompt-tool mcp__orbit__permission_prompt`; steering changes what reaches the
   engine's stdin, never how it asks to use a tool.
+- **Stop is not End.** The UI's Stop action is the acknowledged `interrupt` operation above: it
+  stops the current generation only after the matching `control_response`, and keeps the resident
+  process, its context and stdin alive. `end` is the terminal session operation: the runner closes
+  the runtime, reaps the process tree and does not accept another turn. A runner drain/restart is
+  different again and is recorded as `interrupt{reason:'runner_restart'}`; it is never presented as
+  a user-confirmed Stop.
+- **A remote runner still executes locally.** “Remote” describes where the Orbit runner is
+  installed relative to the control plane. On that target machine the runner directly execs the
+  `claude` binary and writes JSONL frames to its stdin; prompts do not enter argv or a shell. This
+  path has no Orbit SSH transport, no `ssh`, and no `sh`/`bash -c` hop. HTTP connects the runner to
+  the control plane; it does not make the control plane a remote shell client.
 
 
 ---
