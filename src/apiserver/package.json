@@ -11,7 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "test": "tsc -p tsconfig.test.json && node --test \"build/**/*.spec.js\""
+    "test": "tsc -p tsconfig.test.json && node --test build/*/*.spec.js"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
