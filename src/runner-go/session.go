@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1042,16 +1041,12 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
-	if provider == providerCodex {
-		return runCodexSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
-	}
-	if provider == providerKimi {
-		return runKimiSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
-	}
-	if provider == providerOpenCode {
-		return runOpenCodeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
-	}
-	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
+	return providerRuntimeFor(provider).run(sessionProcessArgs{
+		ctx: ctx, shutdownCtx: shutdownCtx, t: t, job: job, leaseGeneration: leaseGeneration,
+		execDir: execDir, scratchDir: scratchDir, emit: emit, setTurn: setTurn,
+		firstSpawn: firstSpawn, bg: bg, onCodexRateLimits: onCodexRateLimits,
+		completeTurn: completeTurn, waitTurnPermit: waitTurnPermit, onLeaseLost: onLeaseLost,
+	})
 }
 
 // How often the shutdown drain re-checks whether the in-flight turns have finished.
@@ -1107,7 +1102,6 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
-	a := job.Agent
 	// Set when an inbox 'reload' turn asks us to re-spawn with a new model/mode.
 	var reloadRequested atomic.Bool
 	// Set by the stdout reader on the first stream-json message. A process that exits
@@ -1117,86 +1111,14 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// Set by the stderr reader when claude refuses the --session-id we asked it to open
 	// because that id already names a conversation (see sessionIDInUse).
 	var sessionIDTaken atomic.Bool
-	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
-	// intentionally NOT passed for a long-lived interactive session.
-	args := []string{
-		"-p",
-		"--input-format", "stream-json",
-		"--output-format", "stream-json",
-		"--include-partial-messages",
-		"--replay-user-messages",
-		"--verbose",
-		"--model", a.Model,
-		"--permission-mode", a.PermissionMode,
-	}
-	if a.Effort != "" {
-		args = append(args, "--effort", a.Effort)
-	}
-	// Apply the agent's configured prompts (claim payload carries both; previously
-	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.
-	// The Orbit CLI discovery instructions are platform instructions and therefore
-	// always join the append prompt rather than replacing the provider's defaults.
-	orbitExe := orbitCLIExecutable()
-	args = appendClaudeAgentInstructionArgs(
-		args,
-		a,
-		orbitExe,
-		job.AllowOrchestration,
-	)
-	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
-	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
-	// reaches for them, but those entries are session-local todos that never reach
-	// Orbit's DB — so the tasks never appear in the UI. Always disable the built-in
-	// family so task work is forced through the orbit MCP server.
-	if disallowed := withBuiltinTaskToolsDisallowed(a.DisallowedTools); len(disallowed) > 0 {
-		args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
-	}
-	// Always pass an --mcp-config: merge the agent's configured servers with the
-	// built-in `orbit` server (this same binary in `mcp` mode), so every session can
-	// manage Tasks. os.Executable() is resolved per-spawn, so it survives self-update.
-	// The orbit entry carries an explicit timeout because permission_prompt blocks on a
-	// human, which claude otherwise aborts after its 30-minute idle default (see
-	// mcpToolTimeoutMs). Scoping it to this server leaves the agent's own MCP servers on
-	// claude's normal timeouts, where an unresponsive server SHOULD self-heal.
-	servers := map[string]interface{}{}
-	for k, v := range a.McpConfig {
-		servers[k] = v
-	}
-	if orbitExe != "" {
-		servers["orbit"] = map[string]interface{}{
-			"command": orbitExe,
-			"args":    []string{"mcp"},
-			"timeout": mcpToolTimeoutMs,
-		}
-	}
-	if len(servers) > 0 {
-		mcpPath := filepath.Join(scratchDir, "mcp.json")
-		b, _ := json.Marshal(map[string]interface{}{"mcpServers": servers})
-		_ = os.WriteFile(mcpPath, b, 0o644)
-		args = append(args, "--mcp-config", mcpPath)
-		// Route tool-permission prompts (incl. plan-mode ExitPlanMode) to the orbit MCP
-		// server's permission_prompt tool, which blocks on a human allow/deny in the UI.
-		// The orbit server is always injected above, so this target always exists.
-		args = append(args, "--permission-prompt-tool", "mcp__orbit__permission_prompt")
-	}
-	if firstSpawn {
-		args = append(args, "--session-id", job.SessionUUID)
-	} else {
+	if !firstSpawn {
 		// claude keeps the conversation in a local file keyed by cwd + session id, which this
 		// machine may simply not have: the session's first spawn on a different runner, a wiped
 		// ~/.claude, a moved worktree. Orbit still has every event, so rebuild the file instead
 		// of letting --resume fail with "No conversation found with session ID".
 		ensureClaudeTranscript(ctx, t, job, execDir, emit)
-		args = append(args, "--resume", job.SessionUUID)
 	}
-	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
-	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read
-	// them without a per-read permission prompt; created up front so the flag points at an
-	// existing dir even before the first upload arrives.
-	upDir := uploadsDir(job.SessionID)
-	if err := os.MkdirAll(upDir, 0o755); err == nil {
-		args = append(args, "--add-dir", upDir)
-	}
+	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 
 	procCtx, procCancel := context.WithCancel(ctx)
 	defer procCancel()
@@ -1205,34 +1127,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// ack before we detach. It derives from procCtx, so procCancel also stops the poller.
 	pollCtx, pollCancel := context.WithCancel(procCtx)
 	defer pollCancel()
-	cmd := exec.CommandContext(procCtx, "claude", args...)
-	configureSessionProcessTree(cmd)
-	cmd.Dir = execDir
-	// Start from the runner's own env, then layer the agent's custom env vars on top.
-	cmd.Env = envWithAgent(job.Agent.Env)
-	// Inject session context so the built-in `orbit mcp` server (a child of claude)
-	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
-	// from config.json so it never lands in the claude process environment.
-	// Appended last so a custom env var can't shadow the session context.
-	//
-	// Spelled base62, like every id the agent can see: these three are what `orbit mcp` and the
-	// `orbit` CLI default to and echo back in help text, so a UUID here is a UUID in front of the
-	// model. The control plane takes either spelling, so an older runner sending the raw form
-	// keeps working — the flip is cosmetic on the wire and load-bearing only in what it shows.
-	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+publicID(job.SessionID),
-		"ORBIT_AGENT_ID="+publicID(job.AgentID), // empty => orbit mcp falls back to USER attribution
-		"ORBIT_TASK_ID="+publicID(job.TaskID),   // empty => no "current task"
-		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
-	)
-	stdin, _ := cmd.StdinPipe()
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-	if err := cmd.Start(); err != nil {
+	proc, err := spawnClaude(procCtx, job, execDir, args)
+	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to spawn claude: " + err.Error()})
 		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
+	cmd, stdin, stdout, stderr := proc.cmd, proc.stdin, proc.stdout, proc.stderr
 
 	var stderrWg sync.WaitGroup
 	stderrWg.Add(1)
