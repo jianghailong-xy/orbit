@@ -1,10 +1,27 @@
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import {
+  ProjectCoordinatorPanel,
+  type TriggerResult,
+} from '../components/ProjectCoordinatorPanel';
+import {
+  isForbidden,
+  isStaleConfigRevision,
+  policyDraftOf,
+  policyPatchBody,
+  triggerBody,
+  type PolicyDraft,
+} from '../lib/coordinatorStatus';
 import { encodeId, routeId } from '../lib/idCodec';
-import { providersQuery, runnersQuery, workspacesQuery } from '../lib/queries';
+import {
+  projectCoordinatorStatusQuery,
+  providersQuery,
+  runnersQuery,
+  workspacesQuery,
+} from '../lib/queries';
 import {
   RUN_AT_IMPOSSIBLE,
   runAtIso,
@@ -247,6 +264,11 @@ export function ProjectDetailPage() {
             error={coordinator.error}
             onOpen={() => coordinator.mutate()}
           />
+          {/* Under the button that opens the conversation, because they are two halves of one
+              question: that one is where a coordinator is TALKED to, this is what it has been
+              doing and what it is allowed to do. Inside the loaded branch for the same reason the
+              task page is — a project that 404s puts no second doomed request on the wire. */}
+          <ProjectCoordinatorSection projectId={id} />
           {/* Inside this branch on purpose: the tasks page is only asked for once the project it
               belongs to came back, so a project that 404s never puts a second doomed request on
               the wire. `id` is the normalized route id — the same spelling the project query
@@ -255,6 +277,148 @@ export function ProjectDetailPage() {
         </>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * What the coordination-settings form is handed before the first status lands.
+ *
+ * Never rendered — the panel draws a spinner until a status exists — but the form's props are not
+ * nullable, and a nullable path through it would be a branch nothing can reach. The values are the
+ * conservative ones on purpose: if this ever DID render, it would render a project that is switched
+ * off and manual, which is the safe reading of "we do not know yet".
+ */
+const UNREAD_POLICY_DRAFT: PolicyDraft = {
+  coordinatorEnabled: false,
+  automationPolicy: 'MANUAL',
+  maxConcurrentTasks: 1,
+  sessionBudgetPerDay: null,
+};
+
+/** An id for one press of Run now, or null when this browser cannot mint one — in which case the
+ *  server allocates it and only a retry loses its idempotency. */
+function newTriggerId(): string | null {
+  // `typeof crypto` rather than `crypto?.` — optional chaining still throws on an identifier that
+  // was never declared, which is the only case this guard is for.
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : null;
+}
+
+/**
+ * The Coordinator surface's one stateful half: the read, the two control writes, and what each
+ * refusal does to the form.
+ *
+ * Everything it decides is about the WRITE path, and there are only three decisions in it:
+ *
+ *  - A 403 latches the whole surface read-only. Not guessed from the payload — the status read
+ *    carries no permission field — but taken from the one place the answer actually exists.
+ *  - A 409 `STALE_CONFIG_REVISION` records the conflict and re-reads the project. The form stays
+ *    CLOSED until the reader presses "Review current settings": the next submit would carry the
+ *    revision that has just superseded theirs and would therefore succeed, writing their stale
+ *    intent over the change that refused it.
+ *  - A press of Run now keeps its `triggerId` until it is answered, so a retry is the same request.
+ *
+ * The draft is `null` until the reader touches something, so the form shows the server's values and
+ * follows them as they move. The moment it is edited it stops following — an edit being overwritten
+ * by a poll is the same silent loss the revision fence exists to stop, one layer up.
+ */
+function ProjectCoordinatorSection({ projectId }: { projectId: string }) {
+  const qc = useQueryClient();
+  const statusQ = useQuery(projectCoordinatorStatusQuery(projectId));
+  const status = statusQ.data;
+
+  const [readOnly, setReadOnly] = useState(false);
+  const [draft, setDraft] = useState<PolicyDraft | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [conflict, setConflict] = useState<{ message: string } | null>(null);
+  const [triggerResult, setTriggerResult] = useState<TriggerResult | null>(null);
+  const triggerId = useRef<string | null>(null);
+
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['project', projectId] });
+  };
+
+  /** What a refused control write means for the surface. Both branches are latches on purpose: a
+   *  refusal that cleared itself on the next render would leave a button that keeps failing. */
+  const noteRefusal = (error: Error) => {
+    if (isForbidden(error)) setReadOnly(true);
+    if (isStaleConfigRevision(error)) {
+      setConflict({ message: error.message });
+      refresh();
+    }
+  };
+
+  const trigger = useMutation({
+    mutationFn: () => {
+      if (!status) throw new Error('The coordinator’s state has not loaded yet.');
+      triggerId.current = triggerId.current ?? newTriggerId();
+      return api<TriggerResult>(
+        `/projects/${encodeURIComponent(projectId)}/coordinator/trigger`,
+        { method: 'POST', body: triggerBody(status, triggerId.current) },
+      );
+    },
+    onSuccess: (result) => {
+      triggerId.current = null;
+      setTriggerResult(result);
+      refresh();
+    },
+    onError: noteRefusal,
+  });
+
+  const savePolicy = useMutation({
+    mutationFn: () => {
+      if (!status) throw new Error('The coordinator’s state has not loaded yet.');
+      return api(`/projects/${encodeURIComponent(projectId)}`, {
+        method: 'PATCH',
+        body: policyPatchBody(draft ?? policyDraftOf(status), status),
+      });
+    },
+    onSuccess: () => {
+      // Back to following the server: what was just written IS the server's value now, and a draft
+      // left behind would keep the form pinned to a revision that has moved.
+      setDraft(null);
+      setConfirmed(false);
+      refresh();
+    },
+    onError: noteRefusal,
+  });
+
+  return (
+    <ProjectCoordinatorPanel
+      status={status}
+      loading={statusQ.isLoading}
+      error={statusQ.error instanceof Error ? statusQ.error : null}
+      onRetry={() => void statusQ.refetch()}
+      readOnly={readOnly}
+      trigger={{
+        pending: trigger.isPending,
+        conflict: conflict !== null,
+        error: trigger.error,
+        result: triggerResult,
+        onRun: () => {
+          setTriggerResult(null);
+          trigger.mutate();
+        },
+      }}
+      policy={{
+        draft: draft ?? (status ? policyDraftOf(status) : UNREAD_POLICY_DRAFT),
+        onDraft: setDraft,
+        pending: savePolicy.isPending,
+        conflict,
+        confirmed,
+        onConfirm: setConfirmed,
+        error: savePolicy.error,
+        onSubmit: () => savePolicy.mutate(),
+        onReview: () => {
+          // The refreshed settings become the form's values again, and only then does Save reopen.
+          setDraft(null);
+          setConfirmed(false);
+          setConflict(null);
+          void statusQ.refetch();
+        },
+      }}
+    />
   );
 }
 

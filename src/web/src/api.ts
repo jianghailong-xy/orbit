@@ -183,8 +183,9 @@ export async function api<T = unknown>(
   if (!res.ok) {
     const msg = (await res.json().catch(() => ({ message: res.statusText }))) as {
       message?: string;
+      code?: string;
     };
-    throw new ApiError(msg.message || res.statusText, res.status);
+    throw new ApiError(msg.message || res.statusText, res.status, msg.code);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -192,7 +193,18 @@ export async function api<T = unknown>(
 
 /** HTTP-aware error used only where a rolling-upgrade compatibility fallback is safe. */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    /**
+     * The server's own machine code for this refusal, when the body carried one (a NestJS
+     * exception thrown with an object body). Kept beside the prose because one status can mean
+     * several different things — `STALE_CONFIG_REVISION`, `PROJECT_SETTLED` and
+     * `COORDINATOR_DISABLED` are all 409 — and only one of them may ever be retried automatically.
+     * Branching on the message instead would break the first time somebody reworded it.
+     */
+    public readonly code?: string,
+  ) {
     super(message);
     this.name = 'ApiError';
   }
