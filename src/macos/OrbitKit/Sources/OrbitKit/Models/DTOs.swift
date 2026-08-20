@@ -470,6 +470,26 @@ public struct SessionTurnRequest: Codable, Sendable {
     }
 }
 
+/// POST /sessions/:id/interrupt WITH a body — stop the turn that is running and queue what to
+/// do instead, in one request.
+///
+/// The two halves cannot be two requests. Interrupting drops the follow-ups queued behind the
+/// running turn (stopping means stop), so a client that interrupted and then sent would be racing
+/// its own delete; and a message sent while the turn still runs is filed as a steer — written INTO
+/// the turn being stopped, the opposite of what was asked. Sent together, the follow-up is filed
+/// after the drop and delivered as the next turn.
+public struct SessionInterruptRequest: Codable, Sendable {
+    /// Idempotency key for the follow-up; it also keys the interrupt, so a retry re-files neither.
+    public let clientTurnId: String
+    public let content: String
+    public let attachmentIds: [String]?
+    public init(clientTurnId: String, content: String, attachmentIds: [String]? = nil) {
+        self.clientTurnId = clientTurnId
+        self.content = content
+        self.attachmentIds = attachmentIds
+    }
+}
+
 public struct TurnAccepted: Codable, Sendable {
     public let turnId: String?
     public let seq: Int?

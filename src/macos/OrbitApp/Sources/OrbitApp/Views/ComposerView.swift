@@ -266,6 +266,27 @@ struct ComposerView: View {
                     .buttonStyle(.plain)
                     .help("Stop the current turn")
                 } else {
+                    // With something typed while a turn generates, Send steers — the message joins
+                    // the turn that is running. "Stop this and do THIS instead" is the other intent
+                    // people have at that moment and cannot be expressed by typing, so it gets its
+                    // own control, beside Send rather than instead of it (web parity).
+                    if ComposerLogic.offersInterruptAndSend(
+                        session: app.session(id: console.sessionID)?.effectiveRunStatus,
+                        stream: console.state.status,
+                        canSend: console.canSend,
+                        ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell
+                            && !(ComposerHostCommand.commandName(in: console.composerText).map { ComposerHostCommand.isLocal($0) } ?? false),
+                        replying: console.replyContext != nil,
+                        busy: console.sending) {
+                        Button { Task { await console.interruptAndSend() } } label: {
+                            Image(systemName: "stop.circle")
+                                .font(sendGlyphFont)
+                                .foregroundStyle(Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Stop the current turn and send this instead")
+                        .accessibilityLabel("Stop and send")
+                    }
                     Button {
                         // Capture the authoritative status at tap time so a mid-turn send is labeled
                         // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.

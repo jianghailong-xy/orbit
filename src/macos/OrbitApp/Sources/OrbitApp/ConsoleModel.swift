@@ -82,6 +82,10 @@ final class ConsoleModel {
     /// `onSend` re-pins `atBottom` before the new bubble lands (AgentView.tsx).
     private(set) var localSendTick = 0
     private(set) var connected = false
+    /// The follow-up filed by the most recent "stop and send this instead", until the interrupt it
+    /// travelled with lands. See `foldQueuedBackIntoComposer`, which must leave that one message
+    /// alone: it was filed AFTER the interrupt dropped the queue, so it was never dropped.
+    private var interruptFollowUpClientTurnId: String?
 
     // Reconnect-loop state (see `run()`). `reconnectPolicy` decides wait-vs-stop and ramps the
     // backoff (pure OrbitKit, unit-tested); `kickRequested` is set by `reconnectNow()` — the network
@@ -1382,6 +1386,68 @@ final class ConsoleModel {
         catch { statusMessage = "Interrupt failed" }
     }
 
+    /// "Stop the current turn and send THIS instead" — one request, not a stop followed by a send
+    /// (web parity, `interruptAndSend`). Two requests could not express it: the interrupt drops the
+    /// follow-ups queued behind the running turn, so a send racing it might be deleted by it, and a
+    /// send that landed first would be filed as a steer — written INTO the turn being stopped.
+    ///
+    /// The follow-up is filed as an ordinary queued message, so it shows as Queued and runs once the
+    /// interrupted turn is actually over.
+    func interruptAndSend() async {
+        guard !sending, !waitingForUploads else { return }
+        // Same wait as `send`: a chip staged while its bytes are still going up would otherwise be
+        // left behind for good.
+        if pendingAttachments.contains(where: \.isUploading) {
+            waitingForUploads = true
+            await waitForStagedUploads()
+            waitingForUploads = false
+        }
+        let (text, shell) = ComposerLogic.parseShell(composerText)
+        // A `!cmd` runs on the runner beside the engine, so it is not something the engine is
+        // stopped for; the button is not offered for one, and this is the backstop.
+        guard !shell, !text.isEmpty || canSendAttachmentsAlone else { return }
+        let clientTurnId = UUID().uuidString
+        let draft = composerText
+        let staged = pendingAttachments
+        let ready = pendingAttachments.compactMap { att in att.remoteID.map { (att, $0) } }
+        let attachmentIds = ready.map(\.1)
+        let turnAttachments = ready.map { TurnAttachment(id: $0.1, mime: $0.0.mimeType, name: $0.0.filename) }
+        // Always queued: the follow-up waits for the interrupted turn's result, whether or not the
+        // engine honours the stop.
+        reducer.addOptimisticUser(clientTurnId: clientTurnId, text: text,
+                                  attachments: turnAttachments, queued: true)
+        // Claimed BEFORE the request goes out, because the `interrupt` event can beat its response
+        // back here: the salvage below must already know this one message was not dropped.
+        interruptFollowUpClientTurnId = clientTurnId
+        awaitingReply = true
+        publishStateNow()
+        localSendTick &+= 1
+        composerText = ""
+        pendingAttachments = []
+        sending = true
+        defer { sending = false }
+        do {
+            let accepted = try await api.interruptAndSend(
+                sessionID: sessionID,
+                SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
+                                        attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+            if let tid = accepted.turnId {
+                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
+            }
+            publishStateNow()
+        } catch {
+            // Nothing was queued and nothing was stopped: take the bubble back down and hand the
+            // draft back, exactly as a failed send does.
+            reducer.removeOptimisticUser(clientTurnId: clientTurnId)
+            interruptFollowUpClientTurnId = nil
+            awaitingReply = false
+            publishStateNow()
+            composerText = composerText.isEmpty ? draft : draft + "\n" + composerText
+            pendingAttachments = staged + pendingAttachments
+            statusMessage = ComposerLogic.sendFailureMessage(error)
+        }
+    }
+
     /// Withdraw a message still waiting behind the in-flight turn (the queued bubble's Cancel button,
     /// web parity). Removes it from the local queue optimistically for instant feedback, then issues
     /// the server DELETE. Gated in the UI on a known `turnId` (the DELETE needs it); if the runner has
@@ -1420,7 +1486,14 @@ final class ConsoleModel {
     private func foldQueuedBackIntoComposer(before ev: RunEvent) {
         guard case .interrupt = ev.type, !reducer.state.queued.isEmpty,
               composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // The follow-up of a "stop and send this instead" is in this same queue and was NOT dropped
+        // — it was filed after the interrupt's delete, which is the whole point of sending them
+        // together. Pulling it back into the composer would show the user their message twice: once
+        // as the queued bubble that is really there, once as a draft they never retyped.
+        let followUp = interruptFollowUpClientTurnId
+        interruptFollowUpClientTurnId = nil
         let restored = reducer.state.queued
+            .filter { $0.clientTurnId == nil || $0.clientTurnId != followUp }
             .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
