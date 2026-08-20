@@ -122,10 +122,14 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	}
 }
 
-// The project surface is exactly these four. Listing projects, deleting one and opening its
-// coordinator stay the human's door, so a fifth appearing here is a decision somebody makes
-// rather than something a refactor adds.
-func TestMCPExposesExactlyTheFourProjectTools(t *testing.T) {
+// The project surface is exactly these five. Listing projects, deleting one, opening its
+// coordinator and triggering a coordination run all stay the human's door, so a sixth appearing
+// here is a decision somebody makes rather than something a refactor adds.
+//
+// project_status joined in unit 20 (contract AC10) and is a READ. The manual trigger that shipped
+// beside it deliberately did not: enqueuing a signal attributed to USER is how a person drives a
+// MANUAL project, so an agent able to do it would be driving its own coordinator.
+func TestMCPExposesExactlyTheFiveProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
@@ -138,7 +142,8 @@ func TestMCPExposesExactlyTheFourProjectTools(t *testing.T) {
 			}
 		}
 		for _, want := range []string{
-			"project_get", "project_verifications", "project_create", "project_update",
+			"project_get", "project_status", "project_verifications", "project_create",
+			"project_update",
 		} {
 			if !seen[want] {
 				t.Fatalf("%s missing from the tools", want)
@@ -171,8 +176,14 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	}
 
 	updateProps := mcpToolProps(tools, "project_update")
-	if len(updateProps) != 6 {
+	if len(updateProps) != 7 {
 		t.Fatalf("project_update properties = %#v", updateProps)
+	}
+	// The seventh is the compare-and-swap fence, and it is a STRING: configRevision is a bigint
+	// column served as a decimal string, and a numeric schema would tell a model to round it.
+	revisionProp, _ := updateProps["expectedConfigRevision"].(map[string]interface{})
+	if revisionProp["type"] != "string" {
+		t.Fatalf("project_update expectedConfigRevision type = %#v", revisionProp["type"])
 	}
 	// The prose fields accept null, and that is not decoration: without it a model following the
 	// schema has no way to express "there is no stated goal any more" and would send "" instead.
@@ -562,5 +573,89 @@ func TestMCPProjectCreateDescriptionStatesTheCoordinatorDefault(t *testing.T) {
 		if _, ok := props[name]; ok {
 			t.Fatalf("project_create exposes a %q input", name)
 		}
+	}
+}
+
+// ── project_status (contract AC10, unit 20) ───────────────────────────────────────────────────
+
+// The same read the CLI and the web app get, through the tool a coordinator calls. It has to reach
+// the coordinator-status route specifically: the plain project read returns prose and tallies and
+// says nothing about why the loop is or is not moving.
+func TestMCPProjectStatusReadsTheCoordinatorStatusRoute(t *testing.T) {
+	var path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		_, _ = w.Write([]byte(`{"projectId":"proj-1","runtime":{"runState":"PLANNING"}}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_status", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] == true {
+		t.Fatalf("project_status result = %#v", res)
+	}
+	if path != "/api/runner/projects/proj-1/coordinator/status" {
+		t.Fatalf("project_status hit %s", path)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	text, _ := content[0]["text"].(string)
+	if !strings.Contains(text, `"runState"`) {
+		t.Fatalf("project_status returned %q", text)
+	}
+}
+
+func TestMCPProjectStatusRequiresAProjectID(t *testing.T) {
+	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
+	res := mcp.callTool("project_status", map[string]interface{}{})
+	if res["isError"] != true {
+		t.Fatalf("project_status without an id isError = %#v", res["isError"])
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if !strings.Contains(content[0]["text"].(string), "projectId is required") {
+		t.Fatalf("project_status without an id result = %#v", res)
+	}
+}
+
+// The fence is forwarded as the caller spelled it, and only when the caller sent it. Dropping it
+// would silently turn a compare-and-swap into a last-write-wins; inventing one would refuse writes
+// nobody asked to fence.
+func TestMCPProjectUpdateForwardsTheFenceOnlyWhenSent(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body = nil
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(`{"id":"proj-1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "title": "Crawl", "expectedConfigRevision": "7",
+	})
+	if body["expectedConfigRevision"] != "7" {
+		t.Fatalf("project_update body = %#v", body)
+	}
+
+	mcp.callTool("project_update", map[string]interface{}{"projectId": "proj-1", "title": "Crawl"})
+	if _, present := body["expectedConfigRevision"]; present {
+		t.Fatalf("project_update invented a fence: %#v", body)
+	}
+}
+
+// A fence alone names nothing to write. Sending it would be a request the server accepts and that
+// changes nothing, which reads back to the model as an edit that went through.
+func TestMCPProjectUpdateRefusesAFenceWithNoFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("an update with no fields reached the server")
+		_, _ = w.Write([]byte(`{"id":"proj-1"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_update", map[string]interface{}{
+		"projectId": "proj-1", "expectedConfigRevision": "7",
+	})
+	if res["isError"] != true {
+		t.Fatalf("a fence-only update isError = %#v", res["isError"])
 	}
 }

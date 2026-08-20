@@ -4,6 +4,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
@@ -39,6 +40,15 @@ export const MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS = 4_000;
  */
 export const MAX_PROJECT_CONCURRENT_TASKS = 100;
 export const MAX_PROJECT_SESSION_BUDGET_PER_DAY = 10_000;
+
+/**
+ * A `configRevision` as it travels: decimal digits, no sign, no separators.
+ *
+ * It is a `bigint` column and it is served as a STRING for that reason, so the validator has to be
+ * a string one. `@IsInt()` would silently cap the value a caller can express at 2^53 and reject
+ * the exact spelling the read endpoint hands them.
+ */
+export const CONFIG_REVISION_PATTERN = /^\d{1,20}$/;
 
 /**
  * Validate this field when the caller SENT it — including when what they sent was `null`.
@@ -118,6 +128,51 @@ export class UpdateProjectDto {
    *  `null` removes it. Not part of the authorization set above: it says WHO decides, not what a
    *  decider is permitted to do, and the two are revoked and audited separately. */
   @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
+
+  /**
+   * The `configRevision` this edit was composed against. Sent, it is a compare-and-swap: the write
+   * commits only if the project is still at that revision, and a 409 `STALE_CONFIG_REVISION`
+   * otherwise, with nothing written.
+   *
+   * It exists because the authorization set is edited from several places at once — the web app,
+   * the user API, a coordinator's own session — and last-write-wins on those four fields is not a
+   * merge, it is one person silently undoing another's revoke. The revision is bumped by every
+   * write of that set, so stating the one you read turns "I did not see your change" from an
+   * outcome into a refusal.
+   *
+   * OPTIONAL, and that is the compatibility rule: a client that does not send it keeps the
+   * behaviour it has always had (last write wins). Nothing existing breaks by adding it, and
+   * nothing new has to guess a revision it has no way to know.
+   */
+  @IsOptional() @IsString() @Matches(CONFIG_REVISION_PATTERN, {
+    message: 'expectedConfigRevision must be the decimal configRevision you read from the project',
+  })
+  expectedConfigRevision?: string;
+}
+
+/**
+ * `POST /projects/:id/coordinator/trigger` — "look at this project now".
+ *
+ * Both fields are optional, and both are about being able to press a button twice safely: the
+ * revision fences the request against a policy change the caller has not seen, and `triggerId`
+ * makes a retry the SAME request rather than a second one.
+ */
+export class TriggerProjectCoordinatorDto {
+  /** As on UpdateProjectDto: the revision this request was composed against, or nothing. */
+  @IsOptional() @IsString() @Matches(CONFIG_REVISION_PATTERN, {
+    message: 'expectedConfigRevision must be the decimal configRevision you read from the project',
+  })
+  expectedConfigRevision?: string;
+
+  /**
+   * This request's identity, in the id spelling everything else on this API uses (Base62, or the
+   * raw UUID). Two calls carrying the same one are one request — the durable signal coalesces on
+   * it — so a client that retries a timed-out POST does not queue a second coordination run.
+   *
+   * Omitted, the server allocates one and returns it, which is the honest default: a caller that
+   * did not name its request cannot have meant "the same one as last time".
+   */
+  @IsOptional() @IsPublicId() triggerId?: string;
 }
 
 export class OpenProjectCoordinatorDto {

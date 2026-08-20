@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -12,12 +12,15 @@ import {
   ProjectAutomationPolicy,
   ProjectIdentitySource,
   ProjectRole,
+  ProjectRunState,
   ProjectStatus,
+  RunStatus,
   TaskStatus,
 } from '@prisma/client';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { withSessionState } from '../sessions/session-state';
 import {
   DEFAULT_TASK_PAGE_SIZE,
   MAX_TASK_PAGE_SIZE,
@@ -26,6 +29,18 @@ import {
 } from '../tasks/tasks.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
+import { publicIdempotencyKey } from './project-decision.service';
+import {
+  COORDINATOR_DISABLED_CODE,
+  COORDINATOR_STATUS_DECISION_LIMIT,
+  COORDINATOR_STATUS_EVENT_LIMIT,
+  COORDINATOR_STATUS_MERGE_EVIDENCE_LIMIT,
+  PROJECT_SETTLED_CODE,
+  STALE_CONFIG_REVISION_CODE,
+  counter,
+  reasonIfAbsent,
+  reasonIfEmpty,
+} from './project-coordinator-status';
 
 /**
  * "This project's coordinator belongs in a workspace that will not have it."
@@ -130,6 +145,153 @@ function withCoordination<T extends WithCoordination>(
     // can only mean "nothing has rotated", and a 500 on a read would be the wrong way to say that.
     coordinatorGeneration: runtime?.coordinatorGeneration ?? 0n,
   };
+}
+
+/**
+ * The rows `coordinatorStatus` reads, one interface per query.
+ *
+ * Written out rather than inferred because every one of them comes from `$queryRaw`, where the
+ * type parameter IS the only check: a column renamed in the SQL and not here compiles, runs, and
+ * serves `undefined` under the old name. Keeping them next to each other is also what makes the
+ * "no raw UUID leaves this endpoint" rule reviewable — every id-shaped field is in this block.
+ */
+interface CoordinatorStatusHeadRow {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  acceptanceCriteria: string | null;
+  coordinatorEnabled: boolean;
+  automationPolicy: string;
+  configRevision: bigint;
+  maxConcurrentTasks: number;
+  sessionBudgetPerDay: number | null;
+  coordinatorSessionId: string | null;
+  coordinatorWorkspaceId: string | null;
+  /** Null on a project whose runtime row is somehow missing — see `withCoordination` for why that
+   *  reads as "nothing has happened yet" rather than as an error. */
+  runState: string | null;
+  nextWakeAt: Date | null;
+  nextWakeReason: string | null;
+  coordinatorGeneration: bigint | null;
+  identitySource: string | null;
+  /** Whether a holder is recorded. The holder ITSELF is deliberately not selected: it is a
+   *  compare-and-swap fence (`NEVER_PUBLIC_ID_FIELDS`), not an address to hand out. */
+  leaseTaken: boolean | null;
+  leaseExpiresAt: Date | null;
+  leaseHeartbeatAt: Date | null;
+  fencingToken: bigint | null;
+  acceptanceAttempt: bigint | null;
+  coordinatorAgentId: string | null;
+  coordinatorAgentName: string | null;
+  sessionStatus: string | null;
+  sessionEndReason: string | null;
+  sessionStartedAt: Date | null;
+  sessionFinishedAt: Date | null;
+  sessionCompletedAt: Date | null;
+  sessionArchivedAt: Date | null;
+  sessionDeletedAt: Date | null;
+}
+
+interface CoordinatorStatusDecisionRow {
+  id: string;
+  createdAt: Date;
+  decidedBy: string;
+  reason: string;
+  decisionInputHash: string;
+  fencingToken: bigint;
+  coordinatorAgentId: string | null;
+  coordinatorSessionId: string | null;
+  outcome: unknown;
+}
+
+interface CoordinatorStatusActionRow {
+  id: string;
+  decisionId: string | null;
+  type: string;
+  status: string;
+  subjectType: string;
+  subjectId: string | null;
+  idempotencyKey: string;
+  refusalCode: string | null;
+  reasonCode: string | null;
+  resultSessionId: string | null;
+  fencingToken: bigint;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CoordinatorStatusEventRow {
+  id: string;
+  kind: string;
+  occurredAt: Date;
+  sourceType: string;
+  sourceId: string;
+  dedupeKey: string;
+  occurrences: number;
+  lastAt: Date;
+  attempts: number;
+  nextAttemptAt: Date | null;
+  consumedAt: Date | null;
+  disposition: string | null;
+}
+
+interface CoordinatorStatusMergeRow {
+  sessionId: string;
+  taskId: string | null;
+  taskTitle: string;
+  taskStatus: string;
+  branch: string | null;
+  baseSha: string | null;
+  mergeStatus: string | null;
+  mergeTarget: string | null;
+  mergedSourceSha: string | null;
+  branchMerged: boolean | null;
+  mergedAt: Date | null;
+  commitStatus: string | null;
+  worktreeDirty: boolean | null;
+}
+
+interface CoordinatorStatusVerdictTally {
+  total: number;
+  pending: number;
+  pass: number;
+  fail: number;
+  inconclusive: number;
+}
+
+/** The parts of a stored decision outcome this read projects. Everything is optional: the column
+ *  is JSON and rows written by older binaries genuinely lack these fields (§10.4 W5 arrived in
+ *  migration 0125), which a reader must report as "not recorded" rather than as "none". */
+interface CoordinatorStatusOutcome {
+  runStateBefore?: string;
+  runStateAfter?: string;
+  configRevision?: string;
+  nextWakeAt?: string | null;
+  nextWakeReason?: string | null;
+  detail?: {
+    wakeCandidates?: Array<{
+      at: string;
+      source: number;
+      subjectType: string;
+      subjectId: string;
+      reason: string;
+    }>;
+    flooredBy?: 'W3' | null;
+  };
+}
+
+interface CoordinatorStatusSession {
+  id: string;
+  runStatus: string;
+  runState: string;
+  lifecycleState: string;
+  endReason: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  completedAt: Date | null;
+  deletedAt: Date | null;
 }
 
 /**
@@ -643,6 +805,462 @@ export class ProjectsService {
         raisedByActionStatus: row.raisedByActionStatus,
         detail: row.detail,
       })),
+    };
+  }
+
+  /**
+   * Everything the control loop knows about this project, in one read (contract AC10).
+   *
+   * The question it exists for is "why is this project not moving", and that question has eleven
+   * possible answers spread over seven tables: nobody is coordinating it, the coordinator is
+   * switched off, its policy is MANUAL, it is at its concurrency cap, it has spent its budget, it
+   * is blocked on something, it is waiting for a person, its next look is scheduled for later, its
+   * last decision refused an action, its events are backing off, or it is finished. Before this
+   * endpoint each of those was a different join, and the most common outcome — a user concluding
+   * "it is broken" about a project that was working exactly as configured — was the one the whole
+   * control loop was built to make impossible.
+   *
+   * Every section is a projection of committed rows. Nothing is recomputed against a second clock:
+   * `nextWake.candidates` is the table §10.4 W5 made the deciding pass record, read back out of
+   * `project_decision.outcome`, rather than W5 re-run at read time against a `now()` no decision
+   * ever saw. Absent facts are `null` beside a closed-set `absentReason`, never dropped, so a
+   * client can tell "nothing is blocking this" from "this server does not report blockers".
+   *
+   * Ids leave as Base62. The two that would otherwise escape as raw UUIDs are handled here rather
+   * than by the interceptor, which cannot see inside a string: an action's `idempotencyKey` and an
+   * event's `dedupeKey` are machine keys with row ids embedded in them. `lease_holder` is not
+   * served at all — it is a compare-and-swap fence rather than an address (`NEVER_PUBLIC_ID_FIELDS`),
+   * so this reports whether the lease is HELD and until when, and never who holds it.
+   */
+  async coordinatorStatus(ownerId: string, projectId: string) {
+    const readAt = new Date();
+    const [head] = await this.prisma.$queryRaw<Array<CoordinatorStatusHeadRow>>(Prisma.sql`
+      SELECT p."id", p."title", p."status"::text AS "status",
+             p."created_at" AS "createdAt", p."updated_at" AS "updatedAt",
+             p."acceptance_criteria" AS "acceptanceCriteria",
+             p."coordinator_enabled" AS "coordinatorEnabled",
+             p."automation_policy"::text AS "automationPolicy",
+             p."config_revision" AS "configRevision",
+             p."max_concurrent_tasks" AS "maxConcurrentTasks",
+             p."session_budget_per_day" AS "sessionBudgetPerDay",
+             p."coordinator_session_id" AS "coordinatorSessionId",
+             p."coordinator_workspace_id" AS "coordinatorWorkspaceId",
+             r."run_state"::text AS "runState",
+             r."next_wake_at" AS "nextWakeAt", r."next_wake_reason" AS "nextWakeReason",
+             r."coordinator_generation" AS "coordinatorGeneration",
+             r."coordinator_identity_source"::text AS "identitySource",
+             r."lease_holder" IS NOT NULL AS "leaseTaken",
+             r."lease_expires_at" AS "leaseExpiresAt",
+             r."lease_heartbeat_at" AS "leaseHeartbeatAt",
+             r."fencing_token" AS "fencingToken",
+             r."acceptance_attempt" AS "acceptanceAttempt",
+             coordinator."agent_id" AS "coordinatorAgentId",
+             agent."name" AS "coordinatorAgentName",
+             s."status"::text AS "sessionStatus", s."end_reason" AS "sessionEndReason",
+             s."started_at" AS "sessionStartedAt", s."finished_at" AS "sessionFinishedAt",
+             s."completed_at" AS "sessionCompletedAt", s."archived_at" AS "sessionArchivedAt",
+             s."deleted_at" AS "sessionDeletedAt"
+        FROM "project" p
+        LEFT JOIN "project_runtime" r ON r."project_id" = p."id"
+        LEFT JOIN LATERAL (
+          SELECT pm."agent_id" FROM "project_member" pm
+           WHERE pm."project_id" = p."id" AND pm."role"::text = 'COORDINATOR'
+           ORDER BY pm."id" LIMIT 1
+        ) coordinator ON true
+        LEFT JOIN "workspace" agent ON agent."id" = coordinator."agent_id"
+        LEFT JOIN "session" s ON s."id" = p."coordinator_session_id"
+       WHERE p."id" = ${projectId}::uuid AND p."owner_id" = ${ownerId}::uuid
+    `);
+    // The same 404 every other project read gives an id belonging to somebody else. Decided by the
+    // query's own owner predicate rather than by a second lookup, so there is no window in which
+    // the row is checked and then read.
+    if (!head) throw new NotFoundException('project not found');
+
+    const since24h = new Date(readAt.getTime() - 24 * 60 * 60 * 1_000);
+    const [byStatus, [consumption], decisionRows, pendingActionRows, eventRows, mergeRows,
+      [verdicts], [unresolvedFailures], [acceptanceRow]] = await Promise.all([
+      this.prisma.task.groupBy({
+        by: ['status'],
+        where: { projectId, ownerId },
+        _count: { _all: true },
+      }),
+      // The two numbers the admission gates actually compare against, read the way §9.6 and §9.4
+      // read them. A status page that counted "running tasks" its own way would eventually differ
+      // from the gate by one and send somebody looking for a bug in the gate.
+      this.prisma.$queryRaw<Array<{ tasksInFlight: number; coordinatorSessionsLast24h: number }>>(Prisma.sql`
+        SELECT
+          (SELECT count(*)::int FROM "session" s JOIN "task" t ON t."id" = s."task_id"
+            WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${ownerId}::uuid
+              AND s."owner_id" = ${ownerId}::uuid AND s."deleted_at" IS NULL
+              AND s."status"::text IN ('PENDING', 'RUNNING')) AS "tasksInFlight",
+          (SELECT count(*)::int FROM "project_action" a
+            WHERE a."project_id" = ${projectId}::uuid
+              AND a."type"::text IN ('DISPATCH_TASK', 'ROTATE_COORDINATOR_SESSION')
+              AND a."status"::text IN ('CLAIMED', 'APPLIED')
+              AND a."created_at" >= ${since24h}) AS "coordinatorSessionsLast24h"
+      `),
+      this.prisma.$queryRaw<Array<CoordinatorStatusDecisionRow>>(Prisma.sql`
+        SELECT d."id", d."created_at" AS "createdAt", d."decided_by" AS "decidedBy", d."reason",
+               d."decision_input_hash" AS "decisionInputHash", d."fencing_token" AS "fencingToken",
+               d."coordinator_agent_id" AS "coordinatorAgentId",
+               d."coordinator_session_id" AS "coordinatorSessionId", d."outcome"
+          FROM "project_decision" d
+         WHERE d."project_id" = ${projectId}::uuid
+         ORDER BY d."created_at" DESC, d."id" DESC
+         LIMIT ${COORDINATOR_STATUS_DECISION_LIMIT}
+      `),
+      // CLAIMED and nothing else: an action is claimed before its effect and published in the same
+      // transaction as it (§8.3), so a row still sitting here is the loop's answer to "what is it
+      // doing right now" — and, if it stays, the one thing an operator has to look at.
+      this.prisma.$queryRaw<Array<CoordinatorStatusActionRow>>(Prisma.sql`
+        SELECT a."id", a."decision_id" AS "decisionId", a."type"::text AS "type",
+               a."status"::text AS "status", a."subject_type" AS "subjectType",
+               a."subject_id" AS "subjectId", a."idempotency_key" AS "idempotencyKey",
+               a."refusal_code" AS "refusalCode", a."reason_code" AS "reasonCode",
+               a."result_session_id" AS "resultSessionId", a."fencing_token" AS "fencingToken",
+               a."created_at" AS "createdAt", a."updated_at" AS "updatedAt"
+          FROM "project_action" a
+         WHERE a."project_id" = ${projectId}::uuid AND a."status"::text = 'CLAIMED'
+         ORDER BY a."created_at", a."id"
+         LIMIT ${COORDINATOR_STATUS_EVENT_LIMIT}
+      `),
+      // Pending first, then newest — the order somebody reads them in. `attempts`/`nextAttemptAt`
+      // are the retry facts §5.4 backs off with, and they are the reason an event that looks
+      // delivered can still be waiting.
+      this.prisma.$queryRaw<Array<CoordinatorStatusEventRow>>(Prisma.sql`
+        SELECT e."id", e."kind", e."occurred_at" AS "occurredAt",
+               e."source_type" AS "sourceType", e."source_id" AS "sourceId",
+               e."dedupe_key" AS "dedupeKey", e."occurrences", e."last_at" AS "lastAt",
+               e."attempts", e."next_attempt_at" AS "nextAttemptAt",
+               e."consumed_at" AS "consumedAt", e."disposition"
+          FROM "project_event" e
+         WHERE e."project_id" = ${projectId}::uuid
+         ORDER BY (e."consumed_at" IS NULL) DESC, e."last_at" DESC, e."id" DESC
+         LIMIT ${COORDINATOR_STATUS_EVENT_LIMIT}
+      `),
+      // §13.4 clause 6: merge state is read from what the runner reported about the branch —
+      // `branchMerged` and `mergedSourceSha` — because a squash makes `--contains` a false
+      // negative. This serves the facts; it does not decide from them.
+      this.prisma.$queryRaw<Array<CoordinatorStatusMergeRow>>(Prisma.sql`
+        SELECT s."id" AS "sessionId", s."task_id" AS "taskId", t."title" AS "taskTitle",
+               t."status"::text AS "taskStatus", s."branch", s."base_sha" AS "baseSha",
+               s."merge_status" AS "mergeStatus", s."merge_target" AS "mergeTarget",
+               s."merged_source_sha" AS "mergedSourceSha", s."branch_merged" AS "branchMerged",
+               s."merged_at" AS "mergedAt", s."commit_status" AS "commitStatus",
+               s."worktree_dirty" AS "worktreeDirty"
+          FROM "session" s JOIN "task" t ON t."id" = s."task_id"
+         WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${ownerId}::uuid
+           AND s."owner_id" = ${ownerId}::uuid AND s."deleted_at" IS NULL
+           AND s."branch" IS NOT NULL
+         ORDER BY s."created_at" DESC, s."id" DESC
+         LIMIT ${COORDINATOR_STATUS_MERGE_EVIDENCE_LIMIT}
+      `),
+      this.prisma.$queryRaw<Array<CoordinatorStatusVerdictTally>>(Prisma.sql`
+        SELECT count(*)::int AS "total",
+               count(*) FILTER (WHERE t."verdict" IS NULL)::int AS "pending",
+               count(*) FILTER (WHERE t."verdict"::text = 'PASS')::int AS "pass",
+               count(*) FILTER (WHERE t."verdict"::text = 'FAIL')::int AS "fail",
+               count(*) FILTER (WHERE t."verdict"::text = 'INCONCLUSIVE')::int AS "inconclusive"
+          FROM "task" t
+         WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${ownerId}::uuid
+           AND t."verifies_task_id" IS NOT NULL
+      `),
+      this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+        SELECT count(*)::int AS "count" FROM "task_verification_failure" f
+         WHERE f."project_id" = ${projectId}::uuid AND f."resolved_at" IS NULL
+      `),
+      this.prisma.$queryRaw<Array<CoordinatorStatusActionRow>>(Prisma.sql`
+        SELECT a."id", a."decision_id" AS "decisionId", a."type"::text AS "type",
+               a."status"::text AS "status", a."subject_type" AS "subjectType",
+               a."subject_id" AS "subjectId", a."idempotency_key" AS "idempotencyKey",
+               a."refusal_code" AS "refusalCode", a."reason_code" AS "reasonCode",
+               a."result_session_id" AS "resultSessionId", a."fencing_token" AS "fencingToken",
+               a."created_at" AS "createdAt", a."updated_at" AS "updatedAt"
+          FROM "project_action" a
+         WHERE a."project_id" = ${projectId}::uuid
+           AND a."type"::text = 'RUN_PROJECT_ACCEPTANCE'
+         ORDER BY a."created_at" DESC, a."id" DESC
+         LIMIT 1
+      `),
+    ]);
+
+    // The actions of the decisions just read, in one query rather than one per decision. Skipped
+    // entirely when there are none: `IN ()` is not valid SQL, and a project that has never
+    // reconciled is the common case on a project somebody just made.
+    const decisionActions = decisionRows.length === 0 ? [] : await this.prisma.$queryRaw<
+      Array<CoordinatorStatusActionRow>
+    >(Prisma.sql`
+      SELECT a."id", a."decision_id" AS "decisionId", a."type"::text AS "type",
+             a."status"::text AS "status", a."subject_type" AS "subjectType",
+             a."subject_id" AS "subjectId", a."idempotency_key" AS "idempotencyKey",
+             a."refusal_code" AS "refusalCode", a."reason_code" AS "reasonCode",
+             a."result_session_id" AS "resultSessionId", a."fencing_token" AS "fencingToken",
+             a."created_at" AS "createdAt", a."updated_at" AS "updatedAt"
+        FROM "project_action" a
+       WHERE a."project_id" = ${projectId}::uuid
+         AND a."decision_id" IN (${Prisma.join(decisionRows.map((row) => Prisma.sql`${row.id}::uuid`))})
+       ORDER BY a."created_at", a."id"
+    `);
+
+    // §11 through the endpoint that already serves it, history included, then split. Re-querying
+    // the table here would be a second definition of "open", and the two would drift the first
+    // time §11.4's auto-clear changed.
+    const { blockers } = await this.blockers(ownerId, projectId, true);
+    const open = blockers.filter((blocker) => blocker.resolvedAt === null);
+    const resolved = blockers.filter((blocker) => blocker.resolvedAt !== null);
+
+    const latest = decisionRows[0];
+    const latestOutcome = ProjectsService.decisionOutcome(latest?.outcome);
+    const wakeDetail = latestOutcome?.detail;
+
+    const budget = head.sessionBudgetPerDay;
+    const leaseLive = head.leaseTaken
+      && head.leaseExpiresAt != null && head.leaseExpiresAt.getTime() > readAt.getTime();
+
+    const pendingEvents = eventRows
+      .filter((row) => row.consumedAt === null)
+      .map(ProjectsService.eventSummary);
+    const criteria = ProjectsService.blankToNull(head.acceptanceCriteria) ?? null;
+    const candidates = wakeDetail?.wakeCandidates ?? [];
+    const decisions = decisionRows.map((row) => ProjectsService.decisionSummary(row, decisionActions));
+    const pendingActions = pendingActionRows.map(ProjectsService.actionSummary);
+
+    return {
+      projectId,
+      readAt,
+      project: {
+        title: head.title,
+        status: head.status,
+        createdAt: head.createdAt,
+        updatedAt: head.updatedAt,
+        taskCount: byStatus.reduce((sum, row) => sum + row._count._all, 0),
+        tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
+      },
+      coordination: {
+        // WHO decides. Outlives every coordinator SESSION, which is the distinction the fields
+        // below exist to keep visible.
+        agentId: head.coordinatorAgentId,
+        agentIdAbsentReason: reasonIfAbsent(head.coordinatorAgentId, 'NO_COORDINATOR_AGENT'),
+        agentName: head.coordinatorAgentName ?? null,
+        identitySource: head.identitySource ?? ProjectIdentitySource.DERIVED,
+        // WHERE it runs. Recorded when a coordinator is bound and kept after one is trashed, so
+        // the replacement reopens in the same place.
+        workspaceId: head.coordinatorWorkspaceId,
+        workspaceIdAbsentReason: reasonIfAbsent(
+          head.coordinatorWorkspaceId,
+          'NO_COORDINATION_WORKSPACE',
+        ),
+        generation: counter(head.coordinatorGeneration),
+        sessionId: head.coordinatorSessionId,
+        // Generation tells the two empty states apart: a project that has rotated and lost its
+        // pointer HAS been coordinated before, so "never opened" about it would be false. Both end
+        // in the same place — the next POST opens one — but only one has history to go and read.
+        sessionIdAbsentReason: head.coordinatorSessionId != null
+          ? null
+          : (head.coordinatorGeneration != null && head.coordinatorGeneration > 0n
+            ? 'COORDINATOR_SESSION_TRASHED'
+            : 'COORDINATOR_NEVER_OPENED'),
+        session: head.coordinatorSessionId == null
+          ? null
+          : ProjectsService.coordinatorSessionState(head),
+        sessionAbsentReason: head.coordinatorSessionId != null
+          ? null
+          : (head.coordinatorGeneration != null && head.coordinatorGeneration > 0n
+            ? 'COORDINATOR_SESSION_TRASHED'
+            : 'COORDINATOR_NEVER_OPENED'),
+      },
+      policy: {
+        // Two fields, deliberately: "paused" and "how far it may go when it runs" are separate
+        // decisions, so a pause cannot overwrite the level chosen to come back to.
+        coordinatorEnabled: head.coordinatorEnabled,
+        automationPolicy: head.automationPolicy,
+        // The compare-and-swap value a control write states back (`expectedConfigRevision`).
+        configRevision: counter(head.configRevision),
+        maxConcurrentTasks: head.maxConcurrentTasks,
+        sessionBudgetPerDay: budget,
+        sessionBudgetPerDayAbsentReason: reasonIfAbsent(budget, 'UNLIMITED'),
+      },
+      consumption: {
+        tasksInFlight: consumption.tasksInFlight,
+        concurrencyRemaining: Math.max(0, head.maxConcurrentTasks - consumption.tasksInFlight),
+        coordinatorSessionsLast24h: consumption.coordinatorSessionsLast24h,
+        budgetRemaining: budget == null
+          ? null
+          : Math.max(0, budget - consumption.coordinatorSessionsLast24h),
+        budgetRemainingAbsentReason: reasonIfAbsent(budget, 'UNLIMITED'),
+        budgetWindowStartedAt: since24h,
+      },
+      runtime: {
+        runState: head.runState ?? ProjectRunState.PLANNING,
+        // Whether the loop is mid-pass and until when — never WHO holds it. The holder is a fence
+        // token the commit path compares byte-for-byte, not an address anybody may hand back.
+        lease: leaseLive
+          ? {
+            expiresAt: head.leaseExpiresAt,
+            heartbeatAt: head.leaseHeartbeatAt,
+            fencingToken: counter(head.fencingToken),
+          }
+          : null,
+        leaseAbsentReason: leaseLive ? null : ('NOT_LEASED' as const),
+        fencingToken: counter(head.fencingToken),
+        acceptanceAttempt: counter(head.acceptanceAttempt),
+      },
+      nextWake: {
+        // The committed instant, which is what the timer actually fires on.
+        at: head.nextWakeAt,
+        reason: head.nextWakeReason,
+        absentReason: reasonIfAbsent(head.nextWakeAt, 'NO_WAKE_SCHEDULED'),
+        // The losers, as the deciding pass recorded them (W5 clause 4). Read back rather than
+        // recomputed: re-running W5 here would answer against a clock no decision ever saw.
+        candidates,
+        candidatesAbsentReason: candidates.length > 0
+          ? null
+          : (latest === undefined ? 'NO_DECISION_YET' : 'DECISION_PREDATES_WAKE_AUDIT'),
+        flooredBy: wakeDetail?.flooredBy ?? null,
+        decisionId: latest?.id ?? null,
+      },
+      decisions,
+      decisionsEmptyReason: reasonIfEmpty(decisions, 'NO_DECISION_YET'),
+      // What is in flight right now: claimed, not yet published. Empty is the healthy state.
+      pendingActions,
+      pendingActionsEmptyReason: reasonIfEmpty(pendingActions, 'NO_PENDING_ACTION'),
+      blockers: {
+        open,
+        openEmptyReason: reasonIfEmpty(open, 'NO_OPEN_BLOCKER'),
+        resolved,
+      },
+      events: {
+        pending: pendingEvents,
+        pendingEmptyReason: reasonIfEmpty(pendingEvents, 'NO_PENDING_EVENT'),
+        recent: eventRows.map(ProjectsService.eventSummary),
+      },
+      acceptance: {
+        // §13.4's evidence, not its verdict: running project acceptance is a coordinator turn, and
+        // this endpoint reads. What it serves is what such a turn — or a person — has to check.
+        criteria,
+        criteriaAbsentReason: reasonIfAbsent(criteria, 'NO_ACCEPTANCE_CRITERIA'),
+        attempt: counter(head.acceptanceAttempt),
+        lastRun: acceptanceRow === undefined
+          ? null
+          : ProjectsService.actionSummary(acceptanceRow),
+        lastRunAbsentReason: reasonIfAbsent(acceptanceRow, 'ACCEPTANCE_NOT_ATTEMPTED'),
+        evidence: {
+          verifications: {
+            total: verdicts.total,
+            pending: verdicts.pending,
+            pass: verdicts.pass,
+            fail: verdicts.fail,
+            inconclusive: verdicts.inconclusive,
+            unresolvedFailures: unresolvedFailures.count,
+          },
+          merges: mergeRows,
+          mergesEmptyReason: reasonIfEmpty(mergeRows, 'NO_MERGE_EVIDENCE'),
+        },
+      },
+    };
+  }
+
+  /** The stored outcome, or undefined when a row predates the audit fields this read projects.
+   *  `outcome` is a JSON column, so its shape is a claim about older rows rather than a type. */
+  private static decisionOutcome(outcome: unknown): CoordinatorStatusOutcome | undefined {
+    return outcome && typeof outcome === 'object' && !Array.isArray(outcome)
+      ? (outcome as CoordinatorStatusOutcome)
+      : undefined;
+  }
+
+  /** One decision, with the actions it produced and the two run states it moved between. */
+  private static decisionSummary(
+    row: CoordinatorStatusDecisionRow,
+    actions: CoordinatorStatusActionRow[],
+  ) {
+    const outcome = ProjectsService.decisionOutcome(row.outcome);
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      decidedBy: row.decidedBy,
+      reason: row.reason,
+      // The identity of the snapshot it decided on: two decisions with the same hash saw the same
+      // world, which is what makes "it decided differently" a question worth asking.
+      decisionInputHash: row.decisionInputHash,
+      fencingToken: counter(row.fencingToken),
+      coordinatorAgentId: row.coordinatorAgentId,
+      coordinatorSessionId: row.coordinatorSessionId,
+      runStateBefore: outcome?.runStateBefore ?? null,
+      runStateAfter: outcome?.runStateAfter ?? null,
+      configRevision: outcome?.configRevision ?? null,
+      nextWakeAt: outcome?.nextWakeAt ?? null,
+      nextWakeReason: outcome?.nextWakeReason ?? null,
+      actions: actions
+        .filter((action) => action.decisionId === row.id)
+        .map(ProjectsService.actionSummary),
+    };
+  }
+
+  /**
+   * One ledger row as the audit serves it.
+   *
+   * `idempotencyKey` goes through `publicIdempotencyKey` because it is a machine key with row
+   * UUIDs joined into it — the response interceptor rewrites FIELDS holding an id and cannot see
+   * inside a string, so this is the only place that leak can be closed.
+   */
+  private static actionSummary(row: CoordinatorStatusActionRow) {
+    return {
+      id: row.id,
+      decisionId: row.decisionId,
+      type: row.type,
+      status: row.status,
+      subjectType: row.subjectType,
+      subjectId: row.subjectId,
+      idempotencyKey: publicIdempotencyKey(row.idempotencyKey),
+      refusalCode: row.refusalCode,
+      reasonCode: row.reasonCode,
+      resultSessionId: row.resultSessionId,
+      fencingToken: counter(row.fencingToken),
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  /** One outbox row. `dedupeKey` carries embedded ids for the same reason an action key does. */
+  private static eventSummary(row: CoordinatorStatusEventRow) {
+    return {
+      id: row.id,
+      kind: row.kind,
+      occurredAt: row.occurredAt,
+      sourceType: row.sourceType,
+      sourceId: row.sourceId,
+      dedupeKey: publicIdempotencyKey(row.dedupeKey),
+      // Delivery observations. §11 BL7 confines them to display, and so does this: they say how
+      // long something has been redelivering and they decide nothing.
+      occurrences: row.occurrences,
+      lastAt: row.lastAt,
+      attempts: row.attempts,
+      nextAttemptAt: row.nextAttemptAt,
+      consumedAt: row.consumedAt,
+      disposition: row.disposition,
+    };
+  }
+
+  /** The coordinator conversation's run and lifecycle state, derived the one way every other
+   *  Session payload derives it — a second mapping here is a second answer to "is it finished". */
+  private static coordinatorSessionState(head: CoordinatorStatusHeadRow): CoordinatorStatusSession {
+    const state = withSessionState({
+      status: head.sessionStatus ?? RunStatus.PENDING,
+      endReason: head.sessionEndReason,
+      completedAt: head.sessionCompletedAt,
+      archivedAt: head.sessionArchivedAt,
+      deletedAt: head.sessionDeletedAt,
+    });
+    return {
+      id: head.coordinatorSessionId!,
+      runStatus: state.runStatus,
+      runState: state.runState,
+      lifecycleState: state.lifecycleState,
+      endReason: head.sessionEndReason,
+      startedAt: head.sessionStartedAt,
+      finishedAt: head.sessionFinishedAt,
+      completedAt: head.sessionCompletedAt,
+      deletedAt: head.sessionDeletedAt,
     };
   }
 
@@ -1205,11 +1823,18 @@ export class ProjectsService {
         // and "the coordinator acted on what it read" two orderings rather than an interleaving:
         // whichever commits first, the other sees it. It also fixes the order of the two writes
         // below (project before its team row), which is the order every path takes.
-        const [locked] = await tx.$queryRaw<Array<{ coordinator_enabled: boolean }>>`
-          SELECT "coordinator_enabled" FROM "project"
+        const [locked] = await tx.$queryRaw<Array<{
+          coordinator_enabled: boolean;
+          config_revision: bigint;
+        }>>`
+          SELECT "coordinator_enabled", "config_revision" FROM "project"
           WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
           FOR NO KEY UPDATE`;
         if (!locked) throw new NotFoundException('project not found');
+        // Under the lock, so the comparison and the write cannot be separated by another writer.
+        // Throwing here rolls the transaction back, which is the whole guarantee a stale write
+        // needs: refused AND nothing written, including the team row below.
+        ProjectsService.assertConfigRevision(dto.expectedConfigRevision, locked.config_revision);
         // The value the lock produced, not the one read before it: a concurrent write that turned
         // this project off is exactly the case the check has to see.
         ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
@@ -1235,6 +1860,148 @@ export class ProjectsService {
       }
       throw e;
     }
+  }
+
+
+  /**
+   * "Look at this project now" — the owner's manual trigger (§7.6 TR2, §9.2's MANUAL row).
+   *
+   * The only way a person makes the loop run on demand, and deliberately the ONLY thing it does:
+   * it commits a durable `user.manual_trigger` signal and returns. It starts no session, opens no
+   * turn, and grants nothing — every action the resulting pass might take is still decided by the
+   * same policy, authorization, concurrency and budget gates as a pass woken by anything else. A
+   * "run it now" that bypassed those would be a second dispatch path, which is the one thing §12.3
+   * says there must never be.
+   *
+   * Three refusals, all typed, all before any write:
+   *  - `STALE_CONFIG_REVISION` — the caller stated a revision the project has moved past, so the
+   *    policy they were looking at when they pressed the button is not the policy that would run.
+   *  - `PROJECT_SETTLED` — DONE or CANCELLED. §4.2 guard 1 makes such a project SETTLED and §5.5
+   *    discards its events, so accepting one would be a request that silently never happens.
+   *  - `COORDINATOR_DISABLED` — the same, for the off switch, and with the remedy in the message.
+   *
+   * `triggerId` is the request's identity, and the reason a double-click is one run: the signal's
+   * dedupe key is built from it, and the outbox coalesces on that key while the row is unconsumed.
+   * A caller that omits one gets a fresh id back, because a request that did not name itself
+   * cannot have meant "the same one as before".
+   */
+  async triggerCoordinator(
+    ownerId: string,
+    projectId: string,
+    options: { expectedConfigRevision?: string; triggerId?: string } = {},
+  ) {
+    const triggerId = options.triggerId ?? randomUUID();
+    return this.prisma.$transaction(async (tx) => {
+      // The same row lock `update` takes, for the same reason: the policy this trigger is checked
+      // against has to be the policy that is still in force when the signal commits.
+      const [locked] = await tx.$queryRaw<Array<{
+        status: string;
+        coordinator_enabled: boolean;
+        config_revision: bigint;
+        automation_policy: string;
+      }>>`
+        SELECT "status"::text AS "status", "coordinator_enabled", "config_revision",
+               "automation_policy"::text AS "automation_policy"
+          FROM "project"
+         WHERE id = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR NO KEY UPDATE`;
+      if (!locked) throw new NotFoundException('project not found');
+      ProjectsService.assertConfigRevision(options.expectedConfigRevision, locked.config_revision);
+      if (locked.status !== ProjectStatus.OPEN) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: PROJECT_SETTLED_CODE,
+          message:
+            `this project is ${locked.status}, and a settled project's coordinator does not run — ` +
+            'reopen it (status OPEN) if there is more work to do',
+          owner: 'USER',
+          requiredAction: 'set this project’s status back to OPEN, then trigger it again',
+        });
+      }
+      if (!locked.coordinator_enabled) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: COORDINATOR_DISABLED_CODE,
+          message:
+            'this project’s coordinator is switched off, so a trigger would be discarded rather ' +
+            'than acted on — nothing was queued',
+          owner: 'USER',
+          requiredAction:
+            'enable the coordinator (coordinatorEnabled true, naming an automationPolicy in the ' +
+            'same request), then trigger it again',
+        });
+      }
+      // The authoritative producer, called rather than reimplemented: every Project event is
+      // enqueued by this function at the database write, which is what keeps old binaries, raw SQL
+      // and this endpoint on one contract (migration 0117). A hand-written INSERT here would be a
+      // second producer, and the first one to drift.
+      await tx.$executeRaw`
+        SELECT "project_event_manual_trigger"(
+          ${projectId}::uuid, ${ownerId}::uuid, ${triggerId}::uuid)`;
+      // Read back what the upsert did. `occurrences > 1` is the coalesce — the same request
+      // arriving twice — and it is the difference between "queued" and "already queued", which is
+      // exactly what a client retrying a timed-out POST needs to be told.
+      const [event] = await tx.$queryRaw<Array<{
+        id: string;
+        occurrences: number;
+        occurredAt: Date;
+        lastAt: Date;
+        consumedAt: Date | null;
+        nextAttemptAt: Date | null;
+      }>>`
+        SELECT "id", "occurrences", "occurred_at" AS "occurredAt", "last_at" AS "lastAt",
+               "consumed_at" AS "consumedAt", "next_attempt_at" AS "nextAttemptAt"
+          FROM "project_event"
+         WHERE "project_id" = ${projectId}::uuid
+           AND "dedupe_key" = ${`user.manual_trigger:${triggerId}`}
+         ORDER BY ("consumed_at" IS NULL) DESC, "occurred_at" DESC
+         LIMIT 1`;
+      return {
+        projectId,
+        // Base62 on the way out, like every other id here. It is echoed so a caller that let the
+        // server allocate one can still retry idempotently.
+        triggerId: uuidToBase62(triggerId),
+        accepted: true,
+        // What it was checked against, so the answer carries the state it was true of.
+        configRevision: String(locked.config_revision),
+        automationPolicy: locked.automation_policy,
+        eventId: event?.id ?? null,
+        occurrences: event?.occurrences ?? 1,
+        deduplicated: (event?.occurrences ?? 1) > 1,
+        occurredAt: event?.occurredAt ?? null,
+        // Null while pending, which is the normal answer here: the pass runs after this commits.
+        consumedAt: event?.consumedAt ?? null,
+        nextAttemptAt: event?.nextAttemptAt ?? null,
+      };
+    });
+  }
+
+  /**
+   * The compare-and-swap every control write goes through, or nothing if the caller did not state
+   * a revision.
+   *
+   * Not sending one is a legitimate request — it is what every client sent before this existed,
+   * and what a caller with no reason to fence still sends. Sending one is a claim: "I composed
+   * this against revision N". If the project has moved on, the edit is refused with both numbers
+   * in the body, so the client can re-read, re-decide and retry rather than guess what changed.
+   */
+  private static assertConfigRevision(expected: string | undefined, actual: bigint): void {
+    if (expected === undefined) return;
+    if (expected === String(actual)) return;
+    throw new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: STALE_CONFIG_REVISION_CODE,
+      message:
+        `this project is at configRevision ${actual}, not ${expected} — its coordination settings ` +
+        'changed after you read them, so nothing was written',
+      owner: 'USER',
+      requiredAction: 're-read this project, decide against the current settings, and write again',
+      expectedConfigRevision: expected,
+      configRevision: String(actual),
+    });
   }
 
   /**

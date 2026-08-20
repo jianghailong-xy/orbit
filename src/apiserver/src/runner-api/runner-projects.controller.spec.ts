@@ -320,12 +320,23 @@ test("updating another owner's project stays a 404 from the service", async () =
 // The whole surface, named. Growing a list or a delete here is a decision, not a side effect of
 // adding a route — and `getProject` staying a GET is what keeps the read working for the
 // coordinators that already depend on it.
-test('the runner project bridge exposes exactly create, read, verifications and update', () => {
+//
+// `projectCoordinatorStatus` joined it in unit 20 (contract AC10) and is a GET for the reason the
+// other two reads are: it answers "why is this project not moving" and changes nothing. The write
+// that unit added — the manual trigger — deliberately did NOT join it. Enqueuing a signal
+// attributed to USER is how a person drives a MANUAL project, so an agent able to do it would be
+// driving its own coordinator; that one stays on the door a person signs in to.
+test('the runner project bridge exposes exactly create, the reads, and update', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
-  assert.deepEqual(handlers.slice().sort(),
-    ['createProject', 'getProject', 'projectVerifications', 'updateProject']);
+  assert.deepEqual(handlers.slice().sort(), [
+    'createProject',
+    'getProject',
+    'projectCoordinatorStatus',
+    'projectVerifications',
+    'updateProject',
+  ]);
   const verbs = Object.fromEntries(
     handlers.map((name) => [
       name,
@@ -335,7 +346,19 @@ test('the runner project bridge exposes exactly create, read, verifications and 
   assert.deepEqual(verbs, {
     createProject: RequestMethod.POST,
     getProject: RequestMethod.GET,
+    projectCoordinatorStatus: RequestMethod.GET,
     projectVerifications: RequestMethod.GET,
     updateProject: RequestMethod.PATCH,
   });
+});
+
+// No trigger over the machine door, stated as its own assertion rather than left to the list
+// above: the list is sorted and a reader skims it, and this is the one absence that is a security
+// property rather than a scoping choice.
+test('the manual trigger is not reachable with a runner credential', () => {
+  assert.equal(
+    Object.getOwnPropertyNames(RunnerProjectsController.prototype)
+      .some((name) => /trigger/i.test(name)),
+    false,
+  );
 });

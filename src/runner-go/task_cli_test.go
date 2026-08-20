@@ -40,7 +40,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 24 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 25 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -62,6 +62,10 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// project_verifications is ungated for the same two reasons as project_get, plus one of its
 	// own: it is the only place that says why a task that looks ready is not running, and the
 	// session that hits that wall is the coordinator, which has no session_* tools to gate on.
+	// project_status is ungated for the same reason as project_verifications, and answers the
+	// question that most often gets a coordinator to file work nobody needed: "why is this project
+	// not moving". It reads the control loop and cannot drive it — the manual trigger is the
+	// account owner's door, not this one.
 	// project_get is ungated on the same principle as task_labels: it only reads, and the agent
 	// that needs a project's goal and acceptance criteria is the coordinator session, which has no
 	// session_* tools at all. project_create/project_update ride the same gate rather than an
@@ -71,7 +75,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
-		"provider_list", "notify", "task_labels", "project_get",
+		"provider_list", "notify", "task_labels", "project_get", "project_status",
 		"project_verifications", "project_create", "project_update",
 	} {
 		found := false

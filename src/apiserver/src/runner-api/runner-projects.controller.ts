@@ -93,6 +93,26 @@ export class RunnerProjectsController {
   }
 
   /**
+   * Everything the control loop knows about this project (contract AC10), through the machine door.
+   *
+   * Same service, same owner scoping, same body as the user route — a coordinator that cannot read
+   * its own control state is left inferring it from whichever task it happens to be looking at,
+   * which is the failure this whole endpoint exists to remove. It is also the read a person gets at
+   * a terminal: `orbit project status` and the `project_status` MCP tool are this route.
+   *
+   * READ only. The manual trigger is deliberately not mirrored here: enqueuing a signal attributed
+   * to USER is how a person drives a MANUAL project, and an agent able to do it would be driving
+   * its own coordinator. `refuseGovernance` below draws the same line for the authorization set.
+   */
+  @Get('projects/:id/coordinator/status')
+  projectCoordinatorStatus(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.projects.coordinatorStatus(runner.ownerId, id);
+  }
+
+  /**
    * Change a project's title, goal, acceptance criteria, instructions or status.
    *
    * Partial by construction: `ProjectsService.update` writes only the fields the body carries, so
@@ -127,6 +147,9 @@ export class RunnerProjectsController {
    * happened, and the caller here is a model that will go on to act as though it did.
    */
   private static refuseGovernance(dto: UpdateProjectDto): void {
+    // `expectedConfigRevision` is NOT one of them, and deliberately: it grants nothing, it only
+    // refuses. An agent stating the revision it read is an agent that will be told when the owner
+    // changed something underneath it, which is the opposite of widening its own authority.
     const named = [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId' as const].filter(
       (field) => dto[field] !== undefined,
     );

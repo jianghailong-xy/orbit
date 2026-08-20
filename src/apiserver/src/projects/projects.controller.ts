@@ -14,7 +14,12 @@ import { ProjectStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
-import { CreateProjectDto, OpenProjectCoordinatorDto, UpdateProjectDto } from './dto';
+import {
+  CreateProjectDto,
+  OpenProjectCoordinatorDto,
+  TriggerProjectCoordinatorDto,
+  UpdateProjectDto,
+} from './dto';
 import { ProjectsService } from './projects.service';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -85,6 +90,47 @@ export class ProjectsController {
     @Query('history') history?: string,
   ) {
     return this.projects.blockers(user.userId, id, history === '1' || history === 'true');
+  }
+
+  /**
+   * Everything the control loop knows about this project, in one read (contract AC10).
+   *
+   * The endpoint that answers "why is this project not moving": lifecycle and run state, who
+   * coordinates it and where, the coordination session and which generation it is, the automation
+   * policy and whether it is switched on at all, the concurrency and budget it is spending against,
+   * the last few decisions with the actions and idempotency keys they produced, what is claimed and
+   * unpublished right now, what is blocking it and what would clear that, when it next wakes and
+   * which candidates lost, and the acceptance evidence — verdict tallies and per-branch merge
+   * state. Every id is Base62 and every absent fact is `null` beside a closed-set `absentReason`.
+   *
+   * A read, and only a read: nothing here triggers a pass. `POST …/coordinator/trigger` does that.
+   */
+  @Get(':id/coordinator/status')
+  coordinatorStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.coordinatorStatus(user.userId, id);
+  }
+
+  /**
+   * Ask this project's coordinator to look now.
+   *
+   * It commits one durable signal and returns; the pass happens after, under exactly the gates it
+   * would have run under anyway, so this grants no authority and skips no check. It is on the user
+   * door alone and deliberately not on the runner one: an agent that could enqueue a signal
+   * attributed to USER would be driving its own coordinator, which is precisely what MANUAL means
+   * it may not do.
+   *
+   * Both body fields are optional and both are about pressing the button twice safely —
+   * `expectedConfigRevision` refuses a request composed against settings that have since changed
+   * (409 `STALE_CONFIG_REVISION`, nothing written), and `triggerId` makes a retry the same request
+   * rather than a second run.
+   */
+  @Post(':id/coordinator/trigger')
+  triggerCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: TriggerProjectCoordinatorDto,
+  ) {
+    return this.projects.triggerCoordinator(user.userId, id, dto ?? {});
   }
 
   /**

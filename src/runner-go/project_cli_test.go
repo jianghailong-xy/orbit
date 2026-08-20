@@ -162,9 +162,9 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 		t.Fatal("unknown project command was accepted")
 	}
 
-	// The four verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that
+	// The five verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that
 	// the family does not route to is text nobody can read.
-	for _, action := range []string{"get", "verifications", "create", "update"} {
+	for _, action := range []string{"get", "status", "verifications", "create", "update"} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
 			t.Fatalf("project %s --help: %v", action, err)
@@ -173,8 +173,9 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 			t.Fatalf("project %s --help = %q", action, out.String())
 		}
 	}
-	// Listing, deleting and opening a coordinator stay the human's door.
-	for _, forbidden := range []string{"delete", "list", "coordinator"} {
+	// Listing, deleting, opening a coordinator and triggering a coordination run stay the human's
+	// door — `status` reads that loop, it does not drive it.
+	for _, forbidden := range []string{"delete", "list", "coordinator", "trigger"} {
 		if _, exists := projectActionHelp[forbidden]; exists {
 			t.Fatalf("project family grew a %q action", forbidden)
 		}
@@ -191,7 +192,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
 		specs[spec.Tool] = spec
 	}
-	if len(specs) != 4 {
+	if len(specs) != 5 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -815,5 +816,147 @@ func TestProjectCreateHelpStatesTheCoordinatorDefault(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("project_create is missing from the capability document")
+	}
+}
+
+// ── `orbit project status` (contract AC10, unit 20) ───────────────────────────────────────────
+
+// The control loop's own state, served as the server composed it. Two things are being asserted:
+// the route (the runner bridge, not the JWT-guarded user one), and that the body reaches stdout
+// verbatim — a CLI that reformatted it would be a second, disagreeing account of what the
+// coordinator is doing, and this command exists precisely because there was no single account.
+const projectStatusJSON = `{"projectId":"proj-1","project":{"status":"OPEN"},` +
+	`"coordination":{"agentId":null,"agentIdAbsentReason":"NO_COORDINATOR_AGENT"},` +
+	`"policy":{"coordinatorEnabled":false,"automationPolicy":"MANUAL","configRevision":"3"},` +
+	`"runtime":{"runState":"PLANNING","lease":null,"leaseAbsentReason":"NOT_LEASED"},` +
+	`"nextWake":{"at":null,"absentReason":"NO_WAKE_SCHEDULED"}}`
+
+func TestProjectStatusReadsTheCoordinatorStatusRoute(t *testing.T) {
+	var method, path, auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		auth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(projectStatusJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"status", "proj-1", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project status: %v", err)
+	}
+	if method != http.MethodGet || path != "/api/runner/projects/proj-1/coordinator/status" {
+		t.Fatalf("project status hit %s %s", method, path)
+	}
+	if auth != "Bearer runner-secret" {
+		t.Fatalf("project status sent authorization %q", auth)
+	}
+	if out.String() != projectStatusJSON+"\n" {
+		t.Fatalf("project status output = %q", out.String())
+	}
+}
+
+// No id, no request. The task commands default to ORBIT_TASK_ID; there is no ORBIT_PROJECT_ID and
+// guessing one would read a different project than the caller meant.
+func TestProjectStatusRequiresAnID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("project status without an id reached the server")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"status"}, strings.NewReader(""), &out); err == nil {
+		t.Fatal("project status without an id was accepted")
+	}
+}
+
+// ── The compare-and-swap fence on `orbit project update` ──────────────────────────────────────
+
+func TestProjectUpdateSendsTheExpectedConfigRevision(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdProjectCLI(
+		[]string{"update", "proj-1", "--title", "Crawl", "--expected-config-revision", "7"},
+		strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatalf("project update: %v", err)
+	}
+	// A string on the wire, not a number: configRevision is a bigint served as decimal text, and a
+	// JSON number would stop being able to tell two revisions apart past 2^53 — which is exactly
+	// the comparison the fence exists to make.
+	if body["expectedConfigRevision"] != "7" {
+		t.Fatalf("update body = %#v", body)
+	}
+}
+
+// The fence names nothing to write, so an invocation carrying only it is the no-op the command
+// already refuses. Accepting it would send a request that changes nothing and report success.
+func TestProjectUpdateRefusesAFenceWithNoFields(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("an update with no fields reached the server")
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdProjectCLI(
+		[]string{"update", "proj-1", "--expected-config-revision", "7"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "no fields to update") {
+		t.Fatalf("update with only a fence = %v", err)
+	}
+}
+
+func TestProjectUpdateRejectsANonDecimalRevision(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Error("a malformed fence reached the server")
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	for _, bad := range []string{"", "7.0", "-1", "seven", "0x7", "999999999999999999999"} {
+		var out bytes.Buffer
+		err := cmdProjectCLI(
+			[]string{"update", "proj-1", "--title", "Crawl", "--expected-config-revision", bad},
+			strings.NewReader(""), &out)
+		if err == nil {
+			t.Fatalf("--expected-config-revision %q was accepted", bad)
+		}
+	}
+}
+
+// Omitting it keeps the behaviour every existing script has: the write goes as it always did.
+func TestProjectUpdateWithoutAFenceSendsNoSuchField(t *testing.T) {
+	var body map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_, _ = w.Write([]byte(projectDetailJSON))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"update", "proj-1", "--title", "Crawl"},
+		strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project update: %v", err)
+	}
+	if _, present := body["expectedConfigRevision"]; present {
+		t.Fatalf("update body carried a fence nobody asked for: %#v", body)
 	}
 }

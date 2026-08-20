@@ -809,6 +809,26 @@ func (t *Transport) getProjectVerifications(id string) (json.RawMessage, error) 
 	return out, err
 }
 
+// getProjectCoordinatorStatus reads everything the control loop knows about one project: its run
+// state, who coordinates it and where, the coordination session and generation, the automation
+// policy and whether it is switched on, the concurrency and budget it is spending against, the last
+// few decisions and the actions they produced, what is claimed and unpublished right now, what is
+// blocking it, when it next wakes and which candidates lost, and the acceptance evidence.
+//
+// The question it answers is "why is this project not moving", which otherwise has no answer a
+// caller can fetch — the state is spread over seven tables and the most common conclusion, that the
+// project is broken, is usually wrong: it is at its cap, out of budget, MANUAL, or waiting.
+//
+// Read only. Asking the coordinator to run now is the user API's door, deliberately not this one.
+func (t *Transport) getProjectCoordinatorStatus(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/coordinator/status", nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // createProject records a new project under the runner's owner — the same tenant every task write
 // here lands in, since the credential names a machine rather than a person.
 //

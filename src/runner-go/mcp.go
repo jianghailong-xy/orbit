@@ -251,6 +251,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_status":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectCoordinatorStatus(id)
+		if err != nil {
+			return toolResult("get project status failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_verifications":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -289,7 +300,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// is forwarded as given, and an explicit null survives as null rather than being mistaken
 		// for "not supplied" — that last one is the whole clear path.
 		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "instructions", "status")
-		if len(body) == 0 {
+		// The fence, counted separately: it names no field to write, so an update carrying only it
+		// would be a request that changes nothing while claiming to have gone through.
+		fields := len(body)
+		copyIfPresent(body, args, "expectedConfigRevision")
+		if fields == 0 {
 			return toolResult("no fields to update", true)
 		}
 		raw, err := s.t.updateProject(id, body)
@@ -1245,6 +1260,36 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId"),
 		},
 		{
+			"name": "project_status",
+			"description": "Read everything the control loop knows about one project — the answer " +
+				"to \"why is this project not moving\", which nothing else gives you: the state is " +
+				"spread over seven tables and the usual conclusion, that the project is broken, is " +
+				"usually wrong. It returns its run state and lifecycle; which agent coordinates it, " +
+				"where it runs, and the coordination session with its generation (the agent " +
+				"outlives every session); whether the coordinator is switched on at all and how " +
+				"far it may go when it runs — MANUAL, GUARDED_AUTO or AUTO — with the " +
+				"configRevision a control write states back; tasks in flight against the " +
+				"concurrency cap and coordinator sessions against the daily budget, counted exactly " +
+				"as the admission gates count them; whether a pass currently holds the lease; when " +
+				"it next wakes, why, and which candidates lost; the last few decisions with the " +
+				"actions and idempotency keys each produced; actions claimed but not yet published; " +
+				"what is blocking it, who can fix it, what would clear it and when it is rechecked; " +
+				"durable signals still pending with their attempts and backoff; and the acceptance " +
+				"evidence — stated criteria, last acceptance run, verdict tallies and per-branch " +
+				"merge state. Read it before concluding a project is stuck, and before filing work " +
+				"to unstick it. Every absent fact is null beside a reason (agentIdAbsentReason, " +
+				"leaseAbsentReason, candidatesAbsentReason), so \"nothing is blocking this\" and " +
+				"\"this cannot be reported\" are different answers rather than the same empty one. " +
+				"Read only: asking the coordinator to run now is the account owner's, through the " +
+				"web app or the user API.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
 			"name": "project_verifications",
 			"description": "Read what every verification in one project concluded, and what those " +
 				"conclusions are still holding up. Three things nothing else tells you: each " +
@@ -1342,6 +1387,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
 					"description": "Where the work stands: OPEN, DONE (the goal was reached) or CANCELLED (it will not be).",
+				},
+				"expectedConfigRevision": map[string]interface{}{
+					"type": "string",
+					"description": "The configRevision you read from project_status, as a " +
+						"compare-and-swap: the write commits only if the project is still at that " +
+						"revision, and is refused with STALE_CONFIG_REVISION otherwise, with " +
+						"nothing written. Pass it when you read the project first and are acting " +
+						"on what you read — the owner may have changed its coordination settings " +
+						"since, and being told beats silently overwriting a decision you did not " +
+						"see. Omit it if you did not read one; the write then behaves as it always " +
+						"has.",
 				},
 			}, "projectId"),
 		},
