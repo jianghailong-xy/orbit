@@ -1,0 +1,73 @@
+name: Bug report
+description: Report reproducible behavior that does not work as expected.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Orbit. Do not include credentials, private repository content, or vulnerability details. Report security issues through SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Orbit version
+      description: Release, tag, or commit SHA.
+      placeholder: v0.x.y or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - Control plane / API
+        - Web client
+        - Runner / CLI
+        - macOS client
+        - iOS client
+        - Docker Compose / gateway
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, deployment type, browser/client, runtime, and relevant versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest repeatable sequence and sanitized sample data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove tokens, cookies, private URLs, user data, repository content, and runner config.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: This report does not contain security-sensitive details or secrets.
+          required: true
