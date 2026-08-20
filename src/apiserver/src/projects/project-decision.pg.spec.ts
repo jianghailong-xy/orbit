@@ -132,6 +132,9 @@ async function reset(client: Client): Promise<void> {
     CREATE TABLE "project_runtime" (
       "project_id" UUID PRIMARY KEY REFERENCES "project"("id") ON DELETE CASCADE,
       "coordinator_generation" BIGINT NOT NULL DEFAULT 0,
+      -- §7.5's rotation baseline (migration 0113). This fixture builds a subset of the real
+      -- schema by hand, and §6.1 reads this column, so it belongs in the subset.
+      "coordinator_session_id" UUID,
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updated_at" TIMESTAMP(3) NOT NULL
     );

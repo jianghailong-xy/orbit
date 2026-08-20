@@ -11,6 +11,7 @@ import {
   createDecisionId,
   hashDecisionInput,
   planProjectDecision,
+  publicIdempotencyKey,
 } from './project-decision.service';
 import {
   ProjectEventEnvelope,
@@ -473,9 +474,13 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         throw new Error(`Project decision ${decisionId} has an invalid outcome lineage`);
       }
       const publicSubjectId = action.subject.id ? uuidToBase62(action.subject.id) : null;
+      // Both spellings of the key, normalized to the audit's (§6.2). A plan is written in Base62
+      // and the ledger row is keyed by the internal id (§8.2); comparing the two raw would make a
+      // legitimately planned action look unplanned purely because of how each side spells an id.
+      const plannedKey = publicIdempotencyKey(action.idempotencyKey);
       const planned = decisionOutcome.actions.some((candidate) =>
         candidate.type === action.type
-        && candidate.idempotencyKey === action.idempotencyKey
+        && publicIdempotencyKey(candidate.idempotencyKey) === plannedKey
         && candidate.subject.type === action.subject.type
         && (candidate.subject.id ?? null) === publicSubjectId);
       if (!planned) {

@@ -5,6 +5,7 @@ import { ProjectAvailabilityReaperService } from './project-availability-reaper.
 import { ProjectDecisionService } from './project-decision.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectEventsService } from './project-events.service';
+import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
@@ -23,6 +24,7 @@ import { ProjectsService } from './projects.service';
     ProjectDecisionService,
     ProjectAuthorizationService,
     ProjectReconcileService,
+    ProjectCoordinatorSessionService,
     ProjectTaskDispatcherService,
     ProjectVerificationVerdictService,
     ProjectAvailabilityReaperService,
@@ -33,6 +35,7 @@ import { ProjectsService } from './projects.service';
     ProjectDecisionService,
     ProjectAuthorizationService,
     ProjectReconcileService,
+    ProjectCoordinatorSessionService,
     ProjectTaskDispatcherService,
     ProjectVerificationVerdictService,
   ],

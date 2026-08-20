@@ -32,6 +32,12 @@ import {
 } from './project-blocker';
 import { detectProjectBlockerConditions } from './project-blocker-conditions';
 import {
+  CoordinatorSessionPlan,
+  isLiveSessionStatus,
+  planCoordinatorSessionRotation,
+  rotateCoordinatorSessionIdempotencyKey,
+} from './project-coordinator-session';
+import {
   ProjectWakeCandidate,
   ProjectWakeDecision,
   PROJECT_WAKE_FALLBACK_MS,
@@ -76,6 +82,17 @@ export interface ProjectDecisionInput {
       runState: ProjectDecisionRunState;
       fencingToken: string;
       coordinatorGeneration: string;
+      /**
+       * §7.5's rotation baseline — the coordinator session `coordinatorGeneration` was last counted
+       * against (migration 0113, maintained entirely by the database).
+       *
+       * Absent on decisions captured before migration 0126, which readers must treat as "this
+       * snapshot predates rotation" and NOT as "there was no baseline": those decisions were made
+       * by a binary that never rotated a coordinator, so replaying one has to reproduce what it
+       * decided rather than today's rules applied to yesterday's world. `world.blockers` carries
+       * the same shape for the same reason.
+       */
+      coordinatorSessionId?: string | null;
       nextWakeAt: string | null;
       acceptanceAttempt: string;
     };
@@ -296,6 +313,14 @@ export interface ProjectDecisionOutcome {
     flooredBy: 'W3' | null;
   };
   /**
+   * §7.5's answer for this snapshot: whether the coordination run has to be replaced, and whether
+   * it may be. Absent on decisions captured before migration 0126 (see
+   * `world.runtime.coordinatorSessionId`) — a binary that never rotated must replay to what it
+   * decided. The ROTATE action itself is claimed by the pass that applies it; this is the frozen
+   * judgment it is claimed against.
+   */
+  coordinator?: CoordinatorSessionPlan;
+  /**
    * Parent statuses this snapshot implies (§13.1). Recomputed from `world.tasks`, so it is part of
    * what replay checks; the reconcile pass applies each as a compare-and-set and deliberately does
    * NOT claim an action-ledger key for it (AG5).
@@ -352,6 +377,7 @@ interface ProjectRow {
   runState: ProjectDecisionRunState;
   fencingToken: bigint;
   coordinatorGeneration: bigint;
+  runtimeCoordinatorSessionId: string | null;
   nextWakeAt: Date | null;
   acceptanceAttempt: bigint;
 }
@@ -558,6 +584,7 @@ export class ProjectDecisionService {
              coordinator."agent_id" AS "coordinatorAgentId",
              r."run_state"::text AS "runState", r."fencing_token" AS "fencingToken",
              r."coordinator_generation" AS "coordinatorGeneration",
+             r."coordinator_session_id" AS "runtimeCoordinatorSessionId",
              r."next_wake_at" AS "nextWakeAt",
              r."acceptance_attempt" AS "acceptanceAttempt"
         FROM "project" p
@@ -885,6 +912,7 @@ export class ProjectDecisionService {
         runState: project.runState,
         fencingToken: String(project.fencingToken),
         coordinatorGeneration: String(project.coordinatorGeneration),
+        coordinatorSessionId: toPublicIdOrNull(project.runtimeCoordinatorSessionId),
         nextWakeAt: iso(project.nextWakeAt),
         acceptanceAttempt: String(project.acceptanceAttempt),
       },
@@ -1192,7 +1220,8 @@ export function planProjectDecision(
     }
   }
   const aggregation = planTaskAggregation(aggregationFacts(input));
-  const blockerPlan = planBlockers(input, aggregation.cycleTaskIds);
+  const coordinator = planCoordinatorSessionRotation(input);
+  const blockerPlan = planBlockers(input, aggregation.cycleTaskIds, coordinator);
   const runStateAfter = runStateOf(input, blockerPlan?.openAfter ?? []);
   const wake = blockerPlan
     ? chooseProjectWake({ epoch: input.evaluation.epoch, runStateAfter }, collectProjectWakeCandidates({
@@ -1221,7 +1250,7 @@ export function planProjectDecision(
     runStateAfter,
     decidedBy: options.decidedBy ?? 'ORCHESTRATOR',
     reason: wake.nextWakeReason ?? 'Project is outside the active coordination loop',
-    actions: options.actions ?? [],
+    actions: options.actions ?? plannedActions(input, coordinator),
     authorizations: options.authorizations ?? [],
     blockersOpened: blockerPlan?.raises.map((raise) => raise.dedupeKey) ?? [],
     blockersCleared: blockerPlan?.clears.map((clear) => clear.blockerId) ?? [],
@@ -1237,12 +1266,42 @@ export function planProjectDecision(
         detail: { wakeCandidates: wake.candidates, flooredBy: wake.flooredBy },
       }
       : {}),
+    ...(coordinator.status === 'UNSUPPORTED' ? {} : { coordinator }),
     aggregations: aggregation.aggregations,
     aggregationCycleTaskIds: aggregation.cycleTaskIds,
     nextWakeAt: wake.nextWakeAt,
     nextWakeReason: wake.nextWakeReason,
     consumedEventIds: options.consumedEventIds ?? [],
   };
+}
+
+/**
+ * The actions this snapshot itself proposes, for a caller that supplied none.
+ *
+ * Only §7.5's rotation today, and deliberately: every other action in §7.3's table is proposed by
+ * the unit that applies it, which passes its own list. Planning it here is what makes the ledger's
+ * `planned` gate meaningful — an action that no decision proposed may not be claimed against that
+ * decision (§8.3), so the pass that decides and the pass that acts agree on one frozen list.
+ *
+ * The key is spelled the way the AUDIT spells everything — Base62 — while the ledger stores the
+ * same key with the raw project UUID, because a permanent action key is an internal identity that
+ * must not change spelling when the codec does (§8.2). The two are one key in two spellings, and
+ * `publicIdempotencyKey` is the single translation between them; the blocker dedupe keys have
+ * carried exactly this shape since §11.3.
+ */
+function plannedActions(
+  input: ProjectDecisionInput,
+  coordinator: CoordinatorSessionPlan,
+): ProjectDecisionOutcome['actions'] {
+  if (coordinator.status !== 'ROTATE') return [];
+  return [{
+    type: 'ROTATE_COORDINATOR_SESSION',
+    idempotencyKey: rotateCoordinatorSessionIdempotencyKey(
+      input.world.project.id,
+      coordinator.generation,
+    ),
+    subject: { type: 'PROJECT', id: input.world.project.id },
+  }];
 }
 
 /**
@@ -1259,6 +1318,7 @@ export function planProjectDecision(
 function planBlockers(
   input: ProjectDecisionInput,
   aggregationCycleTaskIds: readonly string[],
+  coordinatorSession: CoordinatorSessionPlan,
 ): ProjectBlockerPlan | null {
   const open = input.world.blockers;
   if (open === undefined) return null;
@@ -1267,6 +1327,7 @@ function planBlockers(
     observed = detectProjectBlockerConditions(input, {
       aggregationCycleTaskIds,
       verificationVerdicts: verificationVerdictPlan(input),
+      coordinatorSession,
     });
   } catch (cause) {
     observed = [{
@@ -1512,6 +1573,19 @@ function publicAudit(
   });
 }
 
+/**
+ * A permanent action key as the audit protocol spells it (§6.2): every embedded UUID in Base62.
+ *
+ * Not a second key — the same key, publicized, exactly as `publicDedupeKey` publicizes a blocker's.
+ * The ledger keeps the internal spelling (§8.2), so this is also what lets a plan and the call that
+ * applies it be compared without either having to know how the other spells an id.
+ */
+export function publicIdempotencyKey(key: string): string {
+  return key.replace(UUID_PATTERN, (id) => toPublicId(id));
+}
+
+const UUID_PATTERN = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+
 function publicizeIds(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(publicizeIds);
   if (value && typeof value === 'object') {
@@ -1559,8 +1633,9 @@ function isUsageLimitFailure(error: string | null): boolean {
     normalized.includes(marker.toLocaleLowerCase()));
 }
 
+/** §4.2 guard 5 and §7.5 must agree about what "still going" means, so they read one predicate. */
 function isLiveSession(status: string): boolean {
-  return ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'].includes(status);
+  return isLiveSessionStatus(status);
 }
 
 function iso(value: Date | string | null | undefined): string | null {

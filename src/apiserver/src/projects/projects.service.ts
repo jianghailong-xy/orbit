@@ -25,6 +25,7 @@ import {
   encodeTaskPageCursor,
 } from '../tasks/tasks.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 
 /**
  * "This project's coordinator belongs in a workspace that will not have it."
@@ -844,8 +845,8 @@ export class ProjectsService {
         ownerId,
         {
           workspaceId: runIn,
-          title: `协调：${project.title}`.slice(0, 80),
-          prompt: ProjectsService.buildCoordinatorOpening(project.title, project.id),
+          title: coordinatorSessionTitle(project.title),
+          prompt: buildCoordinatorOpening(project.title, project.id),
         },
         { source: 'user' },
       );
@@ -1145,18 +1146,6 @@ export class ProjectsService {
    * Still no promise of listing or deleting projects, opening another coordinator, or driving a
    * runner directly. None of those reaches a runner, and naming one would recreate the hunt.
    */
-  private static buildCoordinatorOpening(title: string, projectId: string): string {
-    return (
-      `你是项目「${title}」（id: ${uuidToBase62(projectId)}）的协调会话。\n\n` +
-      `这里用来跟进这个项目的进展、协调它下面的任务，不是用来替它干活的——具体实现交给各个任务自己的会话去做。\n\n` +
-      `先读再说：用 project_get 读这个项目的目标、验收标准和作业指导，再用 task_list（projectId 传上面那个 id）` +
-      `看它下面的任务各自停在哪里。这两样都不在任务的描述里，不读就只能靠猜。读完先简短汇报现状。\n\n` +
-      `该动的时候你手上有工具，按我这次的要求来定：project_update 改这个项目的标题、目标、验收标准、作业指导，` +
-      `或在工作真的落地时把 status 记成 DONE / CANCELLED；task_create、task_update、task_start 管它下面的任务。` +
-      `我没让你改的，先说清楚该动什么、为什么，由我来决定。\n\n` +
-      `没给你的工具就别去找：列出或删除项目、另开一个协调会话、直接指挥 runner，都不在你手上。`
-    );
-  }
 
   /** Each field is written only when the caller sent it, so closing a project cannot blank the goal
    *  that says what it was for, and a rename cannot reopen it. Settling `status` changes nothing

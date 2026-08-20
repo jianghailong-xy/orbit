@@ -23,6 +23,7 @@
  */
 
 import type { ProjectDecisionInput } from './project-decision.service';
+import type { CoordinatorSessionPlan } from './project-coordinator-session';
 import {
   ObservedBlockerCondition,
   blockerKindForRefusal,
@@ -44,6 +45,12 @@ export interface ProjectBlockerConditionSources {
   aggregationCycleTaskIds: readonly string[];
   /** §13.2's plan for this same snapshot, computed once by the decision planner. */
   verificationVerdicts: readonly PlannedVerificationVerdict[];
+  /**
+   * §7.5's plan for this same snapshot. It is passed in rather than recomputed for the reason the
+   * other two are: the sentence the blocker shows a user has to be the same one that stopped the
+   * rotation, and two copies of "may this project open a coordination run" would eventually differ.
+   */
+  coordinatorSession: CoordinatorSessionPlan;
 }
 
 /** Every condition the snapshot holds, sorted so the same world always produces the same list. */
@@ -60,7 +67,7 @@ export function detectProjectBlockerConditions(
     ...awaitingUserInputConditions(input),
     ...manualHoldConditions(input),
     ...dependencyCycleConditions(input, sources.aggregationCycleTaskIds),
-    ...coordinatorConditions(input),
+    ...coordinatorConditions(input, sources.coordinatorSession),
     ...workspaceConditions(input),
   ];
   return conditions.sort((a, b) => compare(
@@ -326,20 +333,33 @@ function dependencyCycleConditions(
  * kind. Raising it eagerly would put every newly created project into AWAITING_HUMAN before its
  * owner had done anything wrong.
  */
-function coordinatorConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
+function coordinatorConditions(
+  input: ProjectDecisionInput,
+  rotation: CoordinatorSessionPlan,
+): ObservedBlockerCondition[] {
   const project = input.world.project;
-  if (!project.coordinatorAgentId) return [];
-  const seat = input.world.team.find((member) => member.agentId === project.coordinatorAgentId);
+  const seat = project.coordinatorAgentId
+    ? input.world.team.find((member) => member.agentId === project.coordinatorAgentId)
+    : undefined;
   const workspace = project.coordinatorWorkspaceId
     ? input.world.workspaces.find((row) => row.workspaceId === project.coordinatorWorkspaceId)
     : undefined;
-  const reason = !seat
-    ? 'COORDINATOR_NOT_IN_TEAM'
-    : seat.deletedAt || !seat.enabled
-      ? 'COORDINATOR_AGENT_DISABLED'
-      : workspace && (workspace.deletedAt || !workspace.enabled)
-        ? 'COORDINATION_WORKSPACE_UNAVAILABLE'
-        : null;
+  const seatReason = !project.coordinatorAgentId
+    ? null
+    : !seat
+      ? 'COORDINATOR_NOT_IN_TEAM'
+      : seat.deletedAt || !seat.enabled
+        ? 'COORDINATOR_AGENT_DISABLED'
+        : workspace && (workspace.deletedAt || !workspace.enabled)
+          ? 'COORDINATION_WORKSPACE_UNAVAILABLE'
+          : null;
+  // §7.5's other way to be unavailable, and the one only the rotation planner can see: a run has to
+  // be replaced and there is nowhere it may open. Second, so a project whose seat is already broken
+  // keeps naming the seat — that is the sentence its owner can act on, and both refusals name the
+  // same kind and the same subject, so the dedupe key would otherwise depend on which was asked
+  // first. `UNSUPPORTED` is a pre-0126 snapshot: no clause of this ran when it was captured.
+  const reason = seatReason
+    ?? (rotation.status === 'UNAVAILABLE' ? rotation.reason : null);
   if (!reason) return [];
   return [{
     kind: 'COORDINATOR_UNAVAILABLE',
@@ -350,6 +370,10 @@ function coordinatorConditions(input: ProjectDecisionInput): ObservedBlockerCond
       reason,
       coordinatorAgentId: project.coordinatorAgentId,
       coordinatorWorkspaceId: project.coordinatorWorkspaceId,
+      ...(seatReason ? {} : {
+        rotationTrigger: rotation.status === 'UNAVAILABLE' ? rotation.trigger : null,
+        coordinatorSessionId: rotation.status === 'UNAVAILABLE' ? rotation.fromSessionId : null,
+      }),
     },
   }];
 }
