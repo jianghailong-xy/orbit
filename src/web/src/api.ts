@@ -1,4 +1,4 @@
-import type { BgShell, SessionCapabilities } from '@orbit/shared';
+import type { BgShell, ConversationTurnKind, SessionCapabilities } from '@orbit/shared';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
 
 const TOKEN_KEY = 'orbit_token';
@@ -300,17 +300,21 @@ const uuid = (): string => {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 };
 
-/** Send the next user message to a live interactive session. While a turn is running
- *  the message is queued (delivered when the current turn finishes); the returned
- *  turnId identifies it, e.g. to withdraw it with cancelQueuedTurn. `attachmentIds` are
- *  ids of images already uploaded via uploadAttachment, sent alongside the text. */
+/** Send the next user message to a live interactive session. The returned turnId identifies
+ *  it, e.g. to withdraw it with cancelQueuedTurn. `attachmentIds` are ids of images already
+ *  uploaded via uploadAttachment, sent alongside the text.
+ *
+ *  The response's `kind` is what the server filed it as, which is not what was asked for: a
+ *  message sent while a turn is running becomes a `steer` — written into that turn instead of
+ *  queued behind it — and a steer is neither withdrawable nor waiting. See lib/steerDelivery.
+ *  Older servers omit it; absent means the pre-steer behaviour (queued behind the turn). */
 export const sendTurn = (
   sessionId: string,
   content: string,
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
 ) =>
-  api<{ turnId: string; seq: number }>(`/sessions/${sessionId}/turns`, {
+  api<{ turnId: string; seq: number; kind?: ConversationTurnKind }>(`/sessions/${sessionId}/turns`, {
     method: 'POST',
     body: {
       clientTurnId: uuid(),
@@ -480,8 +484,32 @@ export const updateSessionConfig = (
 export const renameSession = (sessionId: string, title: string) =>
   api(`/sessions/${sessionId}`, { method: 'PATCH', body: { title } });
 
-export const interruptSession = (sessionId: string) =>
-  api(`/sessions/${sessionId}/interrupt`, { method: 'POST' });
+/**
+ * Stop the turn the session is running. With `followUp`, what to do instead is queued in
+ * the SAME request — one transaction server-side, not a stop followed by a send.
+ *
+ * The two cannot be two requests: interrupting drops the follow-ups queued behind the
+ * running turn, so a send that arrives just before the interrupt is deleted by it, and one
+ * that arrives just after is filed as a steer — written into the very turn being stopped.
+ * Which of those happened would come down to network ordering. Sent together, the message
+ * is filed after the drop and delivered as the next turn.
+ */
+export const interruptSession = (
+  sessionId: string,
+  followUp?: { content: string; attachmentIds?: string[] },
+) =>
+  api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
+    method: 'POST',
+    ...(followUp
+      ? {
+          body: {
+            clientTurnId: uuid(),
+            content: followUp.content,
+            ...(followUp.attachmentIds?.length ? { attachmentIds: followUp.attachmentIds } : {}),
+          },
+        }
+      : {}),
+  });
 
 export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end`, { method: 'POST' });
 

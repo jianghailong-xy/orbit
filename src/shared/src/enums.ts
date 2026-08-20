@@ -282,6 +282,13 @@ export enum RunEventType {
   RESULT = 'result',
   /** Interactive sessions (Route B). */
   USER = 'user', // a user turn entered the transcript
+  // How far a user message got on its way into the engine's conversation. The runner
+  // publishes one per transition after the `user` event that opens the turn (which carries
+  // the first state itself): enqueued -> written -> acknowledged, or failed with a reason
+  // and whether re-sending is safe. Payload: { turnId, delivery, reason?, retryable? }.
+  // A message is only shown as sent once the engine's writer has accepted it, and only
+  // `acknowledged` — the engine echoing it back — means it entered the conversation.
+  USER_DELIVERY = 'user_delivery',
   TURN_END = 'turn_end', // one turn finished; session parks for the next input
   INTERRUPT = 'interrupt', // a turn was interrupted by the user
   // Tool-permission approvals (live-only SSE nudges; the durable record is the

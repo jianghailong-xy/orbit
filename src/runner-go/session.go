@@ -7,12 +7,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -92,12 +89,6 @@ const (
 	providerKimi     = "kimi"
 	providerOpenCode = "opencode"
 )
-
-var ctrlReqCounter int64
-
-func nextReqID() string {
-	return "req-" + strconv.FormatInt(atomic.AddInt64(&ctrlReqCounter, 1), 10)
-}
 
 // runInteractiveSession drives a long-lived `claude` process for an interactive
 // session (Route B): it pulls user turns from the per-run inbox, feeds them over
@@ -315,6 +306,18 @@ func contextWithStopGrace(ctx, stop context.Context, grace time.Duration) (conte
 // owns a permit; generation matching in sessionPool protects a newer claim.
 func retainsTurnPermit(status string) bool { return status == stRunning }
 
+// turnCompletionEndsSession reports whether reporting this turn ends the run: a failed turn
+// terminalizes the Session server-side, so the runner seals event admission and drains its
+// tail before saying so.
+//
+// A steer is the exception, and it matters more than it looks. It settles a message written
+// INTO a turn that is still running — the server acks that row and touches nothing else —
+// so treating its failure as the session's would seal the transcript of a run that is going
+// perfectly well, and the reply the user is waiting for would simply stop appearing.
+func turnCompletionEndsSession(req TurnCompleteRequest) bool {
+	return req.Status == stFailed && req.Subtype != subtypeSteer
+}
+
 func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{}), pool *sessionPool, live *liveSession) {
 	syncJobProvider(job)
 	// Stable across warm/cold claims. The outer loop swaps `job` to the newest
@@ -427,7 +430,13 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// Baseline for the shared-checkout warning below, taken before this session runs anything
 	// so pre-existing dirt is never blamed on it. Nil unless the session is isolated.
 	sharedDirt := watchSharedCheckout(job.WT)
-	emit := func(eventType string, payload map[string]interface{}) {
+	// emitFor files one event against a turn the caller names, instead of against whatever
+	// the attribution cursor happens to hold. Only one thing needs it: a steer's own `user`
+	// event belongs to the steer's turn, while every byte the engine is streaming at that
+	// moment still belongs to the turn being steered. Moving the cursor to emit it and
+	// moving it back would file whatever the stdout reader emitted in between under the
+	// wrong turn — which is the crossing this avoids rather than races.
+	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				lastErrMu.Lock()
@@ -440,16 +449,20 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			s := seq
 			seq++
 			seqMu.Unlock()
-			curTurnMu.Lock()
-			tid := curTurn
-			curTurnMu.Unlock()
 			bufMu.Lock()
-			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: tid, Payload: payload})
+			buf = append(buf, RunEvent{Seq: s, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload})
 			bufMu.Unlock()
 		})
 		// Do NOT postEvents inline: emit runs on the stdout-reader goroutine, and a
 		// slow post must never stall draining claude's stdout (backpressure freeze).
 		// The 250ms flush goroutine owns all network sends.
+	}
+	// The ordinary path: whatever turn the session is attributing to right now.
+	emit := func(eventType string, payload map[string]interface{}) {
+		curTurnMu.Lock()
+		tid := curTurn
+		curTurnMu.Unlock()
+		emitFor(tid, eventType, payload)
 	}
 
 	// Snappier streaming for interactive: flush every 250ms (vs 1s one-shot).
@@ -540,7 +553,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// is what keeps the error itself on screen: events posted after the Session is
 		// terminal are persisted but no longer broadcast, so a watching client would see the
 		// status flip to Failed with no sign of what failed until it reloaded.
-		failedTurn := req.Status == stFailed
+		failedTurn := turnCompletionEndsSession(req)
 		var providerCtx context.Context
 		// A provider's asynchronous finalizer must not keep its generation alive
 		// after cleanup begins.
@@ -707,7 +720,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		if pool.engineStarted(live, engineGeneration, engineCancel) {
 			engineCancel() // timer/LRU won while this engine was being reserved
 		}
-		st, ended, reload := runSessionProcess(engineCtx, shutdownCtx, t, job, leaseGeneration, execDir, scratch, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, markOwnershipLost)
+		st, ended, reload := runSessionProcess(engineCtx, shutdownCtx, t, job, leaseGeneration, execDir, scratch, emit, emitFor, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, markOwnershipLost)
 		engineStopMu.Lock()
 		if currentEngine == engineHandle {
 			currentEngine = nil
@@ -1016,7 +1029,7 @@ func envWithAgent(agentEnv map[string]string) []string {
 	return env
 }
 
-func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	provider := runtimeProvider(job)
 	// The engine CLI is installed on demand, so this is where a runner that has never
 	// run this provider gets it — and where a machine that can't (no consent, install
@@ -1042,16 +1055,12 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
-	if provider == providerCodex {
-		return runCodexSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onCodexRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
-	}
-	if provider == providerKimi {
-		return runKimiSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
-	}
-	if provider == providerOpenCode {
-		return runOpenCodeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
-	}
-	return runClaudeSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, completeTurn, waitTurnPermit, onLeaseLost)
+	return providerRuntimeFor(provider).run(sessionProcessArgs{
+		ctx: ctx, shutdownCtx: shutdownCtx, t: t, job: job, leaseGeneration: leaseGeneration,
+		execDir: execDir, scratchDir: scratchDir, emit: emit, emitFor: emitFor, setTurn: setTurn,
+		firstSpawn: firstSpawn, bg: bg, onCodexRateLimits: onCodexRateLimits,
+		completeTurn: completeTurn, waitTurnPermit: waitTurnPermit, onLeaseLost: onLeaseLost,
+	})
 }
 
 // How often the shutdown drain re-checks whether the in-flight turns have finished.
@@ -1103,11 +1112,10 @@ func watchShutdownDrain(procCtx, shutdownCtx context.Context, pending <-chan str
 // ends (an 'end' turn closes stdin) or the process exits. Returns (status, ended,
 // reload). ended=false means the caller should re-spawn: reload=true for a requested
 // model/permission-mode change, reload=false for an unexpected crash.
-func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	// Reset turn attribution for this (possibly re-spawned) process: events before
 	// the first turn is (re-)fed — claude's system/init — are session-level (null).
 	setTurn("")
-	a := job.Agent
 	// Set when an inbox 'reload' turn asks us to re-spawn with a new model/mode.
 	var reloadRequested atomic.Bool
 	// Set by the stdout reader on the first stream-json message. A process that exits
@@ -1117,86 +1125,14 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// Set by the stderr reader when claude refuses the --session-id we asked it to open
 	// because that id already names a conversation (see sessionIDInUse).
 	var sessionIDTaken atomic.Bool
-	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
-	// intentionally NOT passed for a long-lived interactive session.
-	args := []string{
-		"-p",
-		"--input-format", "stream-json",
-		"--output-format", "stream-json",
-		"--include-partial-messages",
-		"--replay-user-messages",
-		"--verbose",
-		"--model", a.Model,
-		"--permission-mode", a.PermissionMode,
-	}
-	if a.Effort != "" {
-		args = append(args, "--effort", a.Effort)
-	}
-	// Apply the agent's configured prompts (claim payload carries both; previously
-	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.
-	// The Orbit CLI discovery instructions are platform instructions and therefore
-	// always join the append prompt rather than replacing the provider's defaults.
-	orbitExe := orbitCLIExecutable()
-	args = appendClaudeAgentInstructionArgs(
-		args,
-		a,
-		orbitExe,
-		job.AllowOrchestration,
-	)
-	// Orbit ships its own task tools via the `orbit` MCP server (mcp__orbit__task_*).
-	// Claude's built-in Task* tools collide by intent: an agent told to "create tasks"
-	// reaches for them, but those entries are session-local todos that never reach
-	// Orbit's DB — so the tasks never appear in the UI. Always disable the built-in
-	// family so task work is forced through the orbit MCP server.
-	if disallowed := withBuiltinTaskToolsDisallowed(a.DisallowedTools); len(disallowed) > 0 {
-		args = append(args, "--disallowedTools", strings.Join(disallowed, ","))
-	}
-	// Always pass an --mcp-config: merge the agent's configured servers with the
-	// built-in `orbit` server (this same binary in `mcp` mode), so every session can
-	// manage Tasks. os.Executable() is resolved per-spawn, so it survives self-update.
-	// The orbit entry carries an explicit timeout because permission_prompt blocks on a
-	// human, which claude otherwise aborts after its 30-minute idle default (see
-	// mcpToolTimeoutMs). Scoping it to this server leaves the agent's own MCP servers on
-	// claude's normal timeouts, where an unresponsive server SHOULD self-heal.
-	servers := map[string]interface{}{}
-	for k, v := range a.McpConfig {
-		servers[k] = v
-	}
-	if orbitExe != "" {
-		servers["orbit"] = map[string]interface{}{
-			"command": orbitExe,
-			"args":    []string{"mcp"},
-			"timeout": mcpToolTimeoutMs,
-		}
-	}
-	if len(servers) > 0 {
-		mcpPath := filepath.Join(scratchDir, "mcp.json")
-		b, _ := json.Marshal(map[string]interface{}{"mcpServers": servers})
-		_ = os.WriteFile(mcpPath, b, 0o644)
-		args = append(args, "--mcp-config", mcpPath)
-		// Route tool-permission prompts (incl. plan-mode ExitPlanMode) to the orbit MCP
-		// server's permission_prompt tool, which blocks on a human allow/deny in the UI.
-		// The orbit server is always injected above, so this target always exists.
-		args = append(args, "--permission-prompt-tool", "mcp__orbit__permission_prompt")
-	}
-	if firstSpawn {
-		args = append(args, "--session-id", job.SessionUUID)
-	} else {
+	if !firstSpawn {
 		// claude keeps the conversation in a local file keyed by cwd + session id, which this
 		// machine may simply not have: the session's first spawn on a different runner, a wiped
 		// ~/.claude, a moved worktree. Orbit still has every event, so rebuild the file instead
 		// of letting --resume fail with "No conversation found with session ID".
 		ensureClaudeTranscript(ctx, t, job, execDir, emit)
-		args = append(args, "--resume", job.SessionUUID)
 	}
-	// Uploaded attachments land in the session's uploads dir, which is OUTSIDE execDir so they
-	// stay out of git (see writeUpload). Add it as an explicit working dir so claude can read
-	// them without a per-read permission prompt; created up front so the flag points at an
-	// existing dir even before the first upload arrives.
-	upDir := uploadsDir(job.SessionID)
-	if err := os.MkdirAll(upDir, 0o755); err == nil {
-		args = append(args, "--add-dir", upDir)
-	}
+	args := claudeCommandArgs(job, scratchDir, firstSpawn)
 
 	procCtx, procCancel := context.WithCancel(ctx)
 	defer procCancel()
@@ -1205,34 +1141,16 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// ack before we detach. It derives from procCtx, so procCancel also stops the poller.
 	pollCtx, pollCancel := context.WithCancel(procCtx)
 	defer pollCancel()
-	cmd := exec.CommandContext(procCtx, "claude", args...)
-	configureSessionProcessTree(cmd)
-	cmd.Dir = execDir
-	// Start from the runner's own env, then layer the agent's custom env vars on top.
-	cmd.Env = envWithAgent(job.Agent.Env)
-	// Inject session context so the built-in `orbit mcp` server (a child of claude)
-	// knows where it is. The runner token is NOT passed here — `orbit mcp` reads it
-	// from config.json so it never lands in the claude process environment.
-	// Appended last so a custom env var can't shadow the session context.
-	//
-	// Spelled base62, like every id the agent can see: these three are what `orbit mcp` and the
-	// `orbit` CLI default to and echo back in help text, so a UUID here is a UUID in front of the
-	// model. The control plane takes either spelling, so an older runner sending the raw form
-	// keeps working — the flip is cosmetic on the wire and load-bearing only in what it shows.
-	cmd.Env = append(cmd.Env,
-		"ORBIT_SESSION_ID="+publicID(job.SessionID),
-		"ORBIT_AGENT_ID="+publicID(job.AgentID), // empty => orbit mcp falls back to USER attribution
-		"ORBIT_TASK_ID="+publicID(job.TaskID),   // empty => no "current task"
-		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
-		"ORBIT_SPAWN_DEPTH="+strconv.Itoa(job.SpawnDepth),
-	)
-	stdin, _ := cmd.StdinPipe()
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-	if err := cmd.Start(); err != nil {
+	proc, err := spawnClaude(procCtx, job, execDir, args)
+	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to spawn claude: " + err.Error()})
 		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
+	// The resident runtime for this session: the child, its generation and phase, and the
+	// bounded single-writer queue every frame to its stdin goes through (claude_runtime.go).
+	rt := newClaudeRuntime(proc)
+	defer rt.close()
+	cmd, stdout, stderr := proc.cmd, proc.stdout, proc.stderr
 
 	var stderrWg sync.WaitGroup
 	stderrWg.Add(1)
@@ -1252,21 +1170,28 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	pending := make(chan string, 8) // message turnIds fed but not yet resulted (FIFO)
 	inflight := map[string]bool{}   // turnIds being processed (dedup lease re-delivery)
 	var inflightMu sync.Mutex
+	// How far each user message got on its way into the conversation, and what the CLI's
+	// replays (--replay-user-messages) answer (claude_delivery.go).
+	deliveries := &deliveryLedger{}
+	// reportDelivery publishes one message's delivery state. The turn is named in the
+	// payload rather than left to the event's own attribution: a delivery settles on the
+	// writer's schedule, not the conversation's, so the turn in progress when it settles
+	// is often a different one.
+	reportDelivery := deliveryReporter(func(turnID string, state deliveryState, reason string, retryable bool) {
+		p := map[string]interface{}{"turnId": turnID, "delivery": string(state)}
+		if reason != "" {
+			p["reason"] = reason
+			p["retryable"] = retryable
+		}
+		emit(evUserDelivery, p)
+	})
 	endedCh := make(chan struct{})
 	var endOnce sync.Once
 	endSession := func() {
 		endOnce.Do(func() {
 			close(endedCh)
-			_ = stdin.Close()
+			rt.close()
 		})
-	}
-
-	var stdinMu sync.Mutex
-	writeStdin := func(line string) error {
-		stdinMu.Lock()
-		defer stdinMu.Unlock()
-		_, err := io.WriteString(stdin, line)
-		return err
 	}
 
 	// Inbox poller: pulls turns and acts immediately so interrupt/end land mid-turn.
@@ -1298,14 +1223,23 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				return // drain raced a pulled turn: drop it (the next runner re-delivers)
 			}
 			switch resp.Kind {
-			case "message":
-				if !waitTurnPermit(procCtx) {
-					return
+			case "message", "steer":
+				// A steer is a user message for the turn that is ALREADY running: the server
+				// hands it over only while an executable turn holds the slot, and it goes
+				// down the same stdin to the same process, to be folded into that turn at
+				// the engine's next tool boundary. Everything that belongs to the turn it
+				// joins — the active-turn permit, the attribution cursor, the ack queue that
+				// a `result` pops — therefore stays with that turn and is not touched here.
+				steer := resp.Kind == "steer"
+				if !steer {
+					if !waitTurnPermit(procCtx) {
+						return
+					}
+					// Attribute this process's output to this turn. Set BEFORE the dedup
+					// early-return so a lease re-delivery (turn still running) still tags
+					// the resumed/replayed output with the correct turn.
+					setTurn(resp.TurnID)
 				}
-				// Attribute this process's output to this turn. Set BEFORE the dedup
-				// early-return so a lease re-delivery (turn still running) still tags
-				// the resumed/replayed output with the correct turn.
-				setTurn(resp.TurnID)
 				// The inbox lease can re-deliver a turn still running (turn > lease).
 				// Dedup by turnId so we never double-feed claude or desync `pending`.
 				inflightMu.Lock()
@@ -1317,6 +1251,31 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				if dup {
 					continue
 				}
+				// A steer only means anything while a turn is actually in progress. The
+				// server decides that from the lease, and this is the same question asked of
+				// the process itself: writing into an idle engine would open a turn nobody
+				// asked for, whose `result` no queued turn is waiting to answer.
+				if steer && rt.currentPhase() != phaseWaiting {
+					logln("dropping a steer for", job.SessionID, "— no turn is running on", rt.String())
+					// A refused steer is the one refusal that has to enter the transcript. A
+					// refused message fails its session, which is loud; a steer settles only
+					// itself, so with no event at all the sender is left watching their own
+					// optimistic bubble wait for something that is never coming. It goes in
+					// as the failure it is — never as a message that looks sent.
+					emitFor(resp.TurnID, evUser, map[string]interface{}{
+						"text": resp.Content, "delivery": string(deliveryFailed), "steer": true,
+					})
+					reportDelivery(resp.TurnID, deliveryFailed, errNoTurnToSteer.Error(), true)
+					settleSteerTurn(resp.TurnID, errNoTurnToSteer, job, completeTurn)
+					inflightMu.Lock()
+					delete(inflight, resp.TurnID)
+					inflightMu.Unlock()
+					continue
+				}
+				// Opened here, where the turn is first taken on, so the interval spent
+				// assembling it below (every attachment is fetched over the network) is
+				// `pending` — pulled, promised nothing.
+				delivery := newMessageDelivery(resp.TurnID, steer)
 				// Build the claude user message by dispatching each attachment on its MIME
 				// type: images and PDFs are inlined as base64 content blocks; anything else is
 				// written to the session's uploads dir outside the worktree for claude to read
@@ -1371,7 +1330,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				feedText := resp.Content
 				if len(pendingShellCtx) > 0 {
 					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
-					pendingShellCtx = nil
+					// NOT cleared here: a message the runtime refuses below is never fed, and
+					// the shell output it was carrying still belongs to whatever is fed next.
 				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
@@ -1394,23 +1354,86 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				if len(attRefs) > 0 {
 					userEv["attachments"] = attRefs
 				}
-				emit(evUser, userEv)
-				select {
-				case pending <- resp.TurnID:
-				case <-procCtx.Done():
-					return
+				// Take a place in the write queue BEFORE anything records the message as
+				// sent. A turn the runtime refuses — a CLI that stopped reading stdin, an
+				// `end` that closed the queue, a process already gone — leaves no user
+				// bubble, no entry in the ack queue and no unanswered turn: it is reported
+				// as the failure it is, and the poller keeps polling so `interrupt` and
+				// `end` still land on a session whose CLI is wedged.
+				slot, err := rt.reserve()
+				if err != nil {
+					logln("feeding a turn to", rt.String(), "failed for", job.SessionID+":", err)
+					deliveries.fail(delivery)
+					reportDelivery(resp.TurnID, deliveryFailed, err.Error(), true)
+					if steer {
+						settleSteerTurn(resp.TurnID, err, job, completeTurn)
+					} else {
+						failUndeliveredTurn(resp.TurnID, err, job, completeTurn)
+						setTurn("")
+					}
+					inflightMu.Lock()
+					delete(inflight, resp.TurnID)
+					inflightMu.Unlock()
+					continue
 				}
-				line, _ := json.Marshal(map[string]interface{}{
-					"type": "user",
-					"message": map[string]interface{}{
-						"role":    "user",
-						"content": content,
-					},
-				})
-				if err := writeStdin(string(line) + "\n"); err != nil {
-					logln("stdin write failed for", job.SessionID+":", err)
-					return
+				// Accepted: from here the frame WILL be offered to the CLI, in this order,
+				// so everything that answers for it can be put in place before it can be
+				// answered.
+				deliveries.accept(delivery, slot.receipt)
+				pendingShellCtx = nil // this message carries it now
+				userEv["delivery"] = string(deliveryEnqueued)
+				if steer {
+					// Which kind this message was filed as, on the one event that survives a
+					// reload. A steer is answered by the turn it joined rather than by one of
+					// its own, so how far it got IS its whole visible outcome — a client that
+					// cannot tell it from an ordinary message has nothing to show for it, and
+					// would show the same silence for a steer still on its way and one that
+					// never landed.
+					userEv["steer"] = true
 				}
+				// Filed against its own turn either way. For a message that is the turn the
+				// cursor already names; for a steer it is the only event of its turn, and
+				// naming it explicitly is what keeps the steered turn's stream out of it.
+				emitFor(resp.TurnID, evUser, userEv)
+				if !steer {
+					// `pending` is what a `result` pops to ack a turn. A steer produces no
+					// result of its own — it is answered by the result of the turn it joined
+					// — so putting it here would ack the wrong turn.
+					select {
+					case pending <- resp.TurnID:
+					case <-procCtx.Done():
+						slot.abandon()
+						return
+					}
+				}
+				receipt := slot.commit(userFrame(job.SessionUUID, content))
+				if !steer {
+					rt.beginTurn() // a steer joins a turn that is already waiting
+				}
+				// The writer answers on its own schedule — a frame behind a CLI that
+				// stopped reading stdin is accepted now and written whenever the tool
+				// finishes — so watch the receipt off to the side rather than making the
+				// poller wait on the pipe it exists not to wait on.
+				go func(d *messageDelivery, turnID string, steer bool) {
+					switch err := receipt.wait(procCtx); {
+					case err == nil:
+						if deliveries.markWritten(d) {
+							reportDelivery(turnID, deliveryWritten, "", false)
+						}
+					case procCtx.Err() != nil:
+						// The process is going away; its teardown accounts for what it
+						// still owed (see settleUndeliveredMessages).
+					default:
+						if deliveries.fail(d) {
+							reportDelivery(turnID, deliveryFailed, err.Error(), true)
+							if steer {
+								settleSteerTurn(turnID, err, job, completeTurn)
+							} else {
+								failUndeliveredTurn(turnID, err, job, completeTurn)
+							}
+						}
+					}
+				}(delivery, resp.TurnID, steer)
 			case "shell":
 				if !waitTurnPermit(procCtx) {
 					return
@@ -1457,13 +1480,44 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				inflightMu.Unlock()
 				setTurn("")
 			case "interrupt":
-				ctrl, _ := json.Marshal(map[string]interface{}{
-					"type":       "control_request",
-					"request_id": nextReqID(),
-					"request":    map[string]interface{}{"subtype": "interrupt"},
-				})
-				_ = writeStdin(string(ctrl) + "\n")
-				emit(evInterrupt, map[string]interface{}{})
+				// Stopping a turn is a request with an answer, not a shout into the pipe:
+				// the CLI is asked over the control protocol and has to confirm, and the
+				// process — with its conversation, its stdin and its place in the session —
+				// is left standing either way. Ending the session is the separate operation
+				// that takes the process away (`end`, below), and the drain's own interrupt
+				// marker names its reason, so the three are told apart in the transcript.
+				//
+				// Asked unconditionally, without first checking whether a turn of OURS is in
+				// flight. The engine also runs turns nobody sent it — a background task
+				// reporting in, a scheduled wake-up — and those are exactly the ones somebody
+				// reaches for stop over. Gating on the runtime's own phase would leave those
+				// unstoppable, with the button doing nothing and saying nothing.
+				//
+				// Queued on the poller's own goroutine, so the request keeps its place in
+				// the order the session intended; waited on off to the side, because this
+				// same goroutine is how `end` and the next interrupt arrive.
+				w, err := rt.requestControl(ctrlInterrupt)
+				if err != nil {
+					logln("interrupting", rt.String(), "failed for", job.SessionID+":", err)
+					emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
+					continue
+				}
+				go func(w *controlWaiter) {
+					err := rt.awaitControl(procCtx, w, claudeInterruptTimeout)
+					switch {
+					case err == nil:
+						// The marker goes up only now. Emitting it on the way out would say
+						// the turn was stopped before anything had agreed to stop it — which
+						// is precisely the claim an unconfirmed interrupt cannot make.
+						emit(evInterrupt, map[string]interface{}{"requestId": w.id})
+					case procCtx.Err() != nil:
+						// The process is going away; its teardown owns that account.
+						logln("interrupt", w.id, "for", job.SessionID, "abandoned:", err)
+					default:
+						logln("interrupt", w.id, "for", job.SessionID, "failed:", err)
+						emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
+					}
+				}(w)
 			case "reload":
 				// Model / permission-mode / effort / provider changed on this idle session.
 				// --model, --permission-mode and --effort are spawn flags, so we apply
@@ -1548,7 +1602,34 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			continue
 		}
 		sawOutput.Store(true)
+		// A control_response is the answer to something Orbit asked, not part of the
+		// conversation: route it to the request waiting for it and read the next line. An
+		// id no request here is waiting for is dropped — a straggler from a process that
+		// is already gone, or a second answer to a request that has already been settled
+		// (claude_control.go).
+		if resp, ok := parseControlResponse(msg); ok {
+			if !rt.resolveControl(resp) {
+				logln("dropping an unmatched control_response", resp.RequestID,
+					fmt.Sprintf("(generation %d)", controlIDGeneration(resp.RequestID)),
+					"for", job.SessionID, "on", rt.String())
+			}
+			continue
+		}
 		handleMessage(msg, emit, bg)
+		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
+		// only signal that a message became part of the conversation rather than just bytes
+		// in a pipe. Replays arrive in the order the frames were read, so the oldest
+		// unacknowledged message is the one this answers (deliveryLedger).
+		if isReplayedUserTurn(msg) {
+			if d, ok := deliveries.acknowledgeNext(); ok {
+				reportDelivery(d.turnID, deliveryAcknowledged, "", false)
+				if d.steer {
+					// The echo is a steer's only answer: it has no `result` of its own, so
+					// this is the moment its turn is settled. The turn it joined carries on.
+					settleSteerTurn(d.turnID, nil, job, completeTurn)
+				}
+			}
+		}
 		if msg["type"] == "assistant" {
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
@@ -1576,6 +1657,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			if isResumeCarrierResult(r, lastAssistantText) {
 				continue
 			}
+			// A turn boundary, not an exit: the process stays up with stdin open, which is
+			// what lets the session's next message reuse it instead of spawning again.
+			rt.endTurn()
 			turnStatus := stSucceeded
 			if r.Subtype == "error_during_execution" {
 				turnStatus = stInterrupted
@@ -1634,7 +1718,12 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			}
 		}
 	}
-	_ = waitSessionProcessTree(cmd)
+	// stdout EOF: the CLI is on its way out. Reclaim the child (and anything it left
+	// running) once the writer has finished with stdin.
+	rt.markTerminal()
+	_ = rt.wait()
+	// Account for the messages this process still owed before anything re-delivers them.
+	settleUndeliveredMessages(deliveries, job, completeTurn, reportDelivery)
 	// stderr is an event source too. Join it before the provider generation
 	// returns, otherwise it can append after the supervisor's final flush.
 	stderrWg.Wait()

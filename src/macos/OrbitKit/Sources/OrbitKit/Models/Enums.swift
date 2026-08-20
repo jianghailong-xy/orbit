@@ -200,6 +200,13 @@ public enum RunEventType: String, Codable, Sendable {
     case error
     case result
     case user
+    /// How far a user message got on its way into the engine's conversation, published by the
+    /// runner after the `user` event that opens the turn (which carries the first state itself):
+    /// enqueued → written → acknowledged, or failed with a reason. Payload:
+    /// `{ turnId, delivery, reason?, retryable? }`. Durable, and named by `turnId` in the payload
+    /// rather than by the event's own attribution — a delivery settles on the writer's schedule,
+    /// so the turn in progress when it does is often a different one.
+    case userDelivery = "user_delivery"
     case turnEnd = "turn_end"
     case interrupt
     case approvalRequest = "approval_request"

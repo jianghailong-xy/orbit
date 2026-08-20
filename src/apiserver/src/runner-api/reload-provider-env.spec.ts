@@ -39,7 +39,9 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
       }
       return [];
     },
-    conversationTurn: { updateMany: async () => ({ count: 1 }) },
+    conversationTurn: { updateMany: async () => ({ count: 1 }),
+      findFirst: async () => null,
+    },
     session: {
       findUnique: async () => ({
         ownerId: OWNER_ID,
@@ -62,6 +64,7 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
     {} as never,
     {} as never,
     {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
   return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn.bind(controller);
 }

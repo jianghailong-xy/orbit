@@ -41,7 +41,9 @@ function makeController(current: { numTurns: number; retryAt?: Date | null; prov
         return { count: 1 };
       },
     },
-    conversationTurn: { updateMany: async () => ({ count: 1 }) },
+    conversationTurn: { updateMany: async () => ({ count: 1 }),
+      findFirst: async () => null,
+    },
     // Only read when the terminal message is a quota refusal; this runner reports no snapshot,
     // so the reset moment has to come from the message itself.
     runner: { findUnique: async () => ({ planUsage: null }) },
@@ -49,7 +51,7 @@ function makeController(current: { numTurns: number; retryAt?: Date | null; prov
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = { publish: () => undefined } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     updates,
   };
 }

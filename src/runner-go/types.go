@@ -763,9 +763,13 @@ const (
 	evToolResult    = "tool_result"
 	evError         = "error"
 	// Interactive sessions (Route B)
-	evUser      = "user"
-	evTurnEnd   = "turn_end"
-	evInterrupt = "interrupt"
+	evUser    = "user"
+	evTurnEnd = "turn_end"
+	// How far a user message got on its way into the engine's conversation: enqueued ->
+	// written -> acknowledged, or failed with a reason (claude_delivery.go). The `user`
+	// event that opens a turn carries its own first state; this reports every one after.
+	evUserDelivery = "user_delivery"
+	evInterrupt    = "interrupt"
 	// Background shells (Bash run_in_background): durable lifecycle signal parsed from
 	// Claude's <task-notification> user message, and the live tail of the output file.
 	evBackgroundTask   = "background_task"

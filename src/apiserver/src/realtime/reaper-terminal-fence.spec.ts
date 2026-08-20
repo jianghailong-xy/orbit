@@ -23,6 +23,7 @@ test('reaper terminalization retires the inbox generation before draining turns'
         order.push('drain');
         return { count: 1 };
       },
+      findFirst: async () => null,
     },
   };
   const prisma = {

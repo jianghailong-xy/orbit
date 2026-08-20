@@ -65,7 +65,10 @@ function harness(
   const sessionWrites: unknown[] = [];
   const tx = {
     $queryRaw: async () => [],
-    conversationTurn: { findUnique: async () => ({ id: 'seed-turn' }) },
+    conversationTurn: { findUnique: async () => ({ id: 'seed-turn' }),
+      findFirst: async () => null,
+      count: async () => 0,
+    },
   };
   const prisma = {
     session: {

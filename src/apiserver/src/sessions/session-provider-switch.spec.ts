@@ -82,6 +82,7 @@ function harness(
         reloads.push(data);
         return { id: '33333333-3333-4333-8333-333333333333', ...data };
       },
+      count: async () => 0,
     },
   };
   const prisma = {

@@ -111,6 +111,7 @@ test('remove atomically finalizes PENDING and stamps deletedAt', async () => {
         drained++;
         return { count: 1 };
       },
+      findFirst: async () => null,
     },
   };
   const prisma = {

@@ -56,7 +56,7 @@ function harness(session: SessionRow, rules: { toolName: string; ruleContent: st
     },
   } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, push, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, push, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     created,
     published,
     pushed,
