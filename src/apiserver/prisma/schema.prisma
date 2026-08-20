@@ -126,6 +126,37 @@ enum ProjectActionType {
   @@map("project_action_type")
 }
 
+/// Which scheduler is currently authorized to create a task-bound Session. This is a database-
+/// maintained projection of Project.coordinatorEnabled, not a second policy setting.
+enum TaskDispatchAuthority {
+  LEGACY
+  COORDINATOR
+
+  @@map("task_dispatch_authority")
+}
+
+/// The authority under which a task-bound Session was inserted. Kept separate from runSource:
+/// runSource is product provenance, while this column is consumed by the database authorization
+/// trigger during mixed-version deployment.
+enum SessionDispatchOrigin {
+  USER
+  PROJECT_COORDINATOR
+  LEGACY_SWEEP
+
+  @@map("session_dispatch_origin")
+}
+
+/// User-visible/auditable provenance for a Session start. Existing create paths keep MANUAL;
+/// Task List dependency/schedule sweeps opt into TASK_LIST_AUTO, and only the Project dispatcher
+/// may write PROJECT_COORDINATOR.
+enum SessionRunSource {
+  MANUAL
+  TASK_LIST_AUTO
+  PROJECT_COORDINATOR
+
+  @@map("session_run_source")
+}
+
 /// What an agent is to a project it is on the team of. COORDINATOR is the identity that decides
 /// what this project does next; MEMBER is an agent the coordinator may hand work to.
 enum ProjectRole {
@@ -299,6 +330,10 @@ model Runner {
   planUsage         Json?        @map("plan_usage")
   // Runtime model catalog reported via heartbeat (for example Codex `debug models`).
   modelCatalog      Json?        @map("model_catalog")
+  // Declarative scheduler capabilities. NULL reported-at means an old runner: it remains eligible
+  // for an empty requirement set, but can never prove a non-empty requirement.
+  capabilities           String[]  @default([])
+  capabilitiesReportedAt DateTime? @map("capabilities_reported_at")
   // Effective default reported by each built-in runtime on this machine. Heartbeat-owned cache,
   // kept separate from modelCatalog because availability and selected-default are independent.
   // Shape: { "claude": "claude-opus-5", "codex": "gpt-5.6-sol", ... }.
@@ -628,6 +663,18 @@ model Session {
   // Optional parent work item; deleting the Task detaches but keeps the session.
   taskId               String?   @map("task_id") @db.Uuid
   task                 Task?     @relation("SessionTask", fields: [taskId], references: [id], onDelete: SetNull)
+  // Project Coordinator dispatch lineage. USER and legacy sweep sessions carry NULL; a
+  // PROJECT_COORDINATOR row is inserted in the same transaction as the referenced action.
+  projectActionId      String?   @unique @map("project_action_id") @db.Uuid
+  projectAction        ProjectAction? @relation("ProjectActionSession", fields: [projectActionId], references: [id], onDelete: NoAction)
+  dispatchOrigin       SessionDispatchOrigin @default(LEGACY_SWEEP) @map("dispatch_origin")
+  runSource            SessionRunSource @default(MANUAL) @map("run_source")
+  // Frozen dispatcher result. The coordinator path writes all four atomically with the Session;
+  // legacy rows keep NULL/empty defaults and continue to use their existing columns.
+  resolution           Json?
+  snapshotFrozenAt     DateTime? @map("snapshot_frozen_at")
+  requiredCapabilities String[]  @default([]) @map("required_capabilities")
+  executionPinGeneration BigInt  @default(0) @map("execution_pin_generation")
   // Set when another session's agent spawned this one via the orbit mcp session_create tool
   // (L3 orchestration). Detaches (SetNull) if the parent is purged; drives the orchestration
   // tree, the spawn-depth / child-count guards, and attribution.
@@ -873,6 +920,7 @@ model Session {
   diff                  SessionDiff?
   // Personal colored labels applied to this session (many-to-many via the join table).
   tagLinks              SessionTagLink[]
+  resultOfProjectAction ProjectAction? @relation("ProjectActionResultSession")
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -1383,13 +1431,19 @@ model ProjectAction {
   subjectId      String?             @map("subject_id") @db.Uuid
   fencingToken   BigInt              @map("fencing_token")
 
-  /// Decision lineage is now a same-Project composite FK (migration 0120). Result-session lineage
-  /// remains reserved for the unit that owns that commit-time invariant.
+  /// Decision lineage is a same-Project composite FK (migration 0120). Result-session lineage is
+  /// bidirectional and commit-time checked by the Project dispatch boundary (migration 0122).
   decisionId      String? @map("decision_id") @db.Uuid
   decision        ProjectDecision? @relation(fields: [decisionId, projectId], references: [id, projectId], onDelete: NoAction)
-  resultSessionId String? @map("result_session_id") @db.Uuid
+  resultSessionId String? @unique @map("result_session_id") @db.Uuid
+  resultSession   Session? @relation("ProjectActionResultSession", fields: [resultSessionId], references: [id], onDelete: NoAction)
+  dispatchedSession Session? @relation("ProjectActionSession")
   refusalCode     String? @map("refusal_code")
   detail          Json    @default("{}")
+  executionContext       Json?   @map("execution_context")
+  executionContextDigest String? @map("execution_context_digest") @db.Char(64)
+  executionResultDigest  String? @map("execution_result_digest") @db.Char(64)
+  reasonCode             String? @map("reason_code")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1644,10 +1698,9 @@ model Task {
   // Optional parent list grouping; deleting the list detaches but keeps the task.
   listId           String?     @map("list_id") @db.Uuid
   list             TaskList?   @relation(fields: [listId], references: [id], onDelete: SetNull)
-  /// The project this task is work towards. A third grouping axis, and — like `labels` and unlike
-  /// `listId` — one that carries no authority: no dispatch path reads it, so filing a task under a
-  /// project cannot change whether, when or how it runs. That is what makes this column safe to add
-  /// to 110k existing rows as NULL and leave there.
+  /// The project this task is work towards. Legacy Projects keep the original grouping-only
+  /// behaviour; enabling the Project Coordinator atomically transfers automatic dispatch authority
+  /// to that control loop. User-initiated runs remain available in either mode.
   ///
   /// Restrict on delete, NOT SetNull, and this is the one place it differs from `listId`. A list is
   /// a dispatch policy its tasks can outlive; a project is what its tasks are *for*, so silently
@@ -1737,6 +1790,15 @@ model Task {
   /// single flag write. It is a separate column from `autoRunWhenReady` so resuming restores each
   /// task's own setting instead of overwriting it with a guess.
   dispatchHold     Boolean     @default(false) @map("dispatch_hold")
+  // Derived by database triggers from (project_id, project.coordinator_enabled). No service may
+  // use this as a second policy knob; it is the mixed-version dispatch brake.
+  dispatchAuthority TaskDispatchAuthority @default(LEGACY) @map("dispatch_authority")
+  // Monotonic action-key epoch. Every first observation of a Coordinator dispatch outcome advances
+  // it in the same transaction; duplicate delivery of the same action key does not.
+  dispatchAttempt   BigInt @default(0) @map("dispatch_attempt")
+  // Requirements consumed by the Runner scheduler after WHO/WITH resolution. Empty preserves the
+  // behaviour of every pre-0122 task and remains runnable on an old runner.
+  requiredCapabilities String[] @default([]) @map("required_capabilities")
   // This task is a coordination run over its list, not one of the list's units of work. Two
   // consequences: it does not receive the list's standing instructions (those describe how the
   // *work* is done, and the foreman is not doing it), and an unfinished one suppresses further

@@ -142,7 +142,9 @@ async function reset(client: Client): Promise<void> {
     CREATE TABLE "runner" (
       "id" UUID PRIMARY KEY, "owner_id" UUID NOT NULL, "status" TEXT NOT NULL,
       "labels" TEXT[] NOT NULL DEFAULT '{}', "version" TEXT,
-      "last_heartbeat_at" TIMESTAMP(3), "model_catalog" JSONB
+      "last_heartbeat_at" TIMESTAMP(3), "model_catalog" JSONB,
+      "capabilities" TEXT[] NOT NULL DEFAULT '{}', "capabilities_reported_at" TIMESTAMP(3),
+      "engines" JSONB, "runs_as_root" BOOLEAN
     );
     CREATE TABLE "workspace" (
       "id" UUID PRIMARY KEY, "owner_id" UUID NOT NULL, "name" TEXT NOT NULL,
@@ -160,6 +162,9 @@ async function reset(client: Client): Promise<void> {
       "parent_task_id" UUID, "assignee_id" UUID, "provider" TEXT, "model" TEXT,
       "auto_run_when_ready" BOOLEAN NOT NULL DEFAULT true,
       "dispatch_hold" BOOLEAN NOT NULL DEFAULT false, "run_at" TIMESTAMP(3),
+      "dispatch_authority" TEXT NOT NULL DEFAULT 'LEGACY',
+      "dispatch_attempt" BIGINT NOT NULL DEFAULT 0,
+      "required_capabilities" TEXT[] NOT NULL DEFAULT '{}',
       "verifies_task_id" UUID, "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE "task_dependency" (

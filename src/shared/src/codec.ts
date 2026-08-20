@@ -101,6 +101,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'tagId',
   'turnId',
   'approvalId',
+  'projectActionId',
+  'decisionId',
+  'resultSessionId',
+  // ProjectAction subjects are currently tasks. Keep the generic wire name classified so an
+  // action returned by the coordinator API can be handed back in either public-id spelling.
+  'subjectId',
   'assigneeId',
   // The project's coordinator, and any agent on its team. An Agent is a `workspace` row today, so
   // these name the same kind of thing `workspaceId` does — but under the name the coordinator API
@@ -140,6 +146,8 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'leaseOwner',
   'inboxLeaseGeneration',
   'inboxLeaseOwner',
+  // Project coordinator lease ownership is an internal compare-and-swap fence, not a row address.
+  'leaseHolder',
   'mergeOperationId',
   'mergeOperationOwner',
   'commitOperationId',

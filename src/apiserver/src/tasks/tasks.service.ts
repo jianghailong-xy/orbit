@@ -8,7 +8,15 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { CreatorType, Prisma, RunStatus, Task, TaskComment } from '@prisma/client';
+import {
+  CreatorType,
+  Prisma,
+  RunStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  Task,
+  TaskComment,
+} from '@prisma/client';
 import {
   AgentProvider,
   planUsageBlockedUntil,
@@ -68,6 +76,28 @@ type TaskRunTarget = {
   provider?: string | null;
   model?: string | null;
 };
+
+export function buildTaskExecutionPrompt(task: {
+  title: string;
+  description?: string | null;
+  isForeman?: boolean;
+  verifiesTaskId?: string | null;
+  list?: { instructions?: string | null } | null;
+}): string {
+  const systemRun = task.isForeman === true || task.verifiesTaskId != null;
+  const instructions = systemRun ? undefined : task.list?.instructions?.trim();
+  return (
+    `请开始执行任务「${task.title}」。\n\n` +
+    (task.description ? `任务描述：\n${task.description}\n\n` : '') +
+    (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
+    `请按以下步骤进行：\n` +
+    `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
+    `2. 执行任务。\n` +
+    `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
+    `再用 task_update 将该任务状态（status）置为 DONE。\n` +
+    `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
+  );
+}
 
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
 // Postgres and surface as a 500; we treat it like any unknown task instead.
@@ -185,6 +215,7 @@ const RUNNABLE_TASK_SQL = Prisma.sql`
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
+  AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
   AND t.auto_run_when_ready = true
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- A held task is out of the sweep entirely: pausing a list is the stop for a campaign
@@ -253,6 +284,7 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   t.run_at IS NOT NULL
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
+  AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
   AND t.dispatch_hold = false
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND NOT EXISTS (
@@ -4438,6 +4470,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // concurrency cap. Omitted for single runs (@-mention / 开始执行), which then
     // clears any stale batch membership so the session escapes a prior batch's cap.
     batch?: { id: string; maxConcurrent: number },
+    provenance?: {
+      dispatchOrigin: SessionDispatchOrigin;
+      runSource: SessionRunSource;
+    },
   ): Promise<string | undefined> {
     if (!workspace.runnerId) return undefined;
     // Dedup against a session already mid-flight (PENDING/RUNNING): don't spawn a
@@ -4496,7 +4532,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Task runs belong in Active regardless of whether they were started manually,
       // as a batch, by dependency auto-run, or from an @-mention. Keep `source`
       // explicit so a future default change cannot silently move them back to System.
-      { source: 'user', batch },
+      {
+        source: 'user',
+        batch,
+        dispatchOrigin: provenance?.dispatchOrigin ?? SessionDispatchOrigin.USER,
+        runSource: provenance?.runSource ?? SessionRunSource.MANUAL,
+      },
     );
     return session.id;
   }
@@ -4549,12 +4590,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         isForeman: true,
         verifiesTaskId: true,
         dispatchHold: true,
+        dispatchAuthority: true,
         runAt: true,
         list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    if (auto && task.dispatchAuthority === 'COORDINATOR') {
+      return { ok: false as const, skipped: 'coordinator-authority' as const };
+    }
     // The schedule fence, and it comes before every other check because it decides whether this
     // call has any business running at all. Only automatic triggers pass `auto`: an explicit Run
     // Now is a person deciding to start the work despite the schedule, which is exactly the case
@@ -4602,6 +4647,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       task.listId && task.list?.maxConcurrent != null
         ? { id: task.listId, maxConcurrent: task.list.maxConcurrent }
         : undefined,
+      auto
+        ? {
+            dispatchOrigin: SessionDispatchOrigin.LEGACY_SWEEP,
+            runSource: SessionRunSource.TASK_LIST_AUTO,
+          }
+        : {
+            dispatchOrigin: SessionDispatchOrigin.USER,
+            runSource: SessionRunSource.MANUAL,
+          },
     );
     if (task.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, task.id);
     // The run is away, so the appointment has been kept — including when this call IS the button
@@ -4693,19 +4747,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // noise at best and misdirection at worst. For a verifier it is worse than noise: handing it
     // the work procedure is the surest way to get it to do the job itself instead of judging it,
     // which launders a failure into a pass.
-    const systemRun = task.isForeman === true || task.verifiesTaskId != null;
-    const instructions = systemRun ? undefined : task.list?.instructions?.trim();
-    return (
-      `请开始执行任务「${task.title}」。\n\n` +
-      (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-      (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
-      `请按以下步骤进行：\n` +
-      `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
-      `2. 执行任务。\n` +
-      `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
-      `再用 task_update 将该任务状态（status）置为 DONE。\n` +
-      `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
-    );
+    return buildTaskExecutionPrompt(task);
   }
 
   /**

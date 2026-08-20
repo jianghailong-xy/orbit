@@ -590,6 +590,8 @@ export interface ProjectAuthorizationTransactionCommand {
   requiredPermission?: ProjectRequiredPermission;
   taskId?: string;
   sourceDecisionInputHash: string;
+  /** The task-13 action reservation already present in this transaction; it is not prior spend. */
+  currentActionId?: string;
   approval?: {
     state: ProjectApprovalState;
     targetIdempotencyKey?: string | null;
@@ -669,6 +671,19 @@ export class ProjectAuthorizationService {
         `);
     const targetAgent = targetAgents[0];
 
+    // Lock the current edge/prerequisite set before interpreting it. Migration 0122 touches the
+    // dependent Task on edge insert/delete, closing the otherwise-unlockable empty-set phantom.
+    if (command.taskId != null) {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT d."task_id", prerequisite."id"
+          FROM "task_dependency" d
+          JOIN "task" prerequisite ON prerequisite."id" = d."depends_on_task_id"
+         WHERE d."task_id" = ${command.taskId}::uuid
+         ORDER BY prerequisite."id"
+         FOR SHARE OF d, prerequisite
+      `);
+    }
+
     const [projectConcurrency] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
       SELECT count(*)::int AS "count" FROM "session" s
         JOIN "task" t ON t."id" = s."task_id"
@@ -690,6 +705,8 @@ export class ProjectAuthorizationService {
        WHERE a."project_id" = ${command.projectId}::uuid
          AND a."type"::text IN ('DISPATCH_TASK', 'ROTATE_COORDINATOR_SESSION')
          AND a."status"::text IN ('CLAIMED', 'APPLIED')
+         AND (${command.currentActionId ?? null}::uuid IS NULL
+              OR a."id" <> ${command.currentActionId ?? null}::uuid)
          AND a."created_at" >= ${new Date(now.getTime() - 24 * 60 * 60 * 1_000)}
     `);
     const [dependencyState] = command.taskId == null ? [{ incomplete: 0 }]

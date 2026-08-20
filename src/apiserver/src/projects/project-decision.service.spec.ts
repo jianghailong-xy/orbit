@@ -32,6 +32,7 @@ function input(overrides: Partial<ProjectDecisionInput['world']> = {}): ProjectD
       id: uuidToBase62(TASK), title: 'work', contentHash: 'a'.repeat(64), status: 'OPEN',
       parentTaskId: null, assigneeAgentId: null, provider: null, model: null,
       autoRunWhenReady: true, dispatchHold: false, runAt: null, verifiesTaskId: null,
+      dispatchAuthority: 'COORDINATOR', dispatchAttempt: '0', requiredCapabilities: [],
       dependsOnTaskIds: [], liveSessionIds: [], updatedAt: '2026-08-20T00:00:00.000Z',
       failureCount: 0, lastFailureAt: null, failureAttributable: true, retryBackoffUntil: null,
     }],

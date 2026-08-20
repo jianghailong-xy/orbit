@@ -73,6 +73,9 @@ export interface ProjectDecisionInput {
       model: string | null;
       autoRunWhenReady: boolean;
       dispatchHold: boolean;
+      dispatchAuthority: string;
+      dispatchAttempt: string;
+      requiredCapabilities: string[];
       runAt: string | null;
       verifiesTaskId: string | null;
       dependsOnTaskIds: string[];
@@ -128,6 +131,10 @@ export interface ProjectDecisionInput {
       version: string | null;
       lastHeartbeatAt: string | null;
       modelCatalog: unknown;
+      capabilities: string[];
+      capabilitiesReportedAt: string | null;
+      engines: unknown;
+      runsAsRoot: boolean | null;
     }>;
     providers: Array<{
       providerId: string | null;
@@ -273,6 +280,9 @@ interface TaskRow {
   model: string | null;
   autoRunWhenReady: boolean;
   dispatchHold: boolean;
+  dispatchAuthority: string;
+  dispatchAttempt: bigint;
+  requiredCapabilities: string[];
   runAt: Date | null;
   verifiesTaskId: string | null;
   updatedAt: Date;
@@ -332,6 +342,10 @@ interface RunnerRow {
   version: string | null;
   lastHeartbeatAt: Date | null;
   modelCatalog: unknown;
+  capabilities: string[];
+  capabilitiesReportedAt: Date | null;
+  engines: unknown;
+  runsAsRoot: boolean | null;
 }
 
 interface ProviderRow {
@@ -453,7 +467,10 @@ export class ProjectDecisionService {
                t."acceptance_criteria" AS "acceptanceCriteria", t."labels", t."status"::text,
                t."parent_task_id" AS "parentTaskId", t."assignee_id" AS "assigneeAgentId",
                t."provider", t."model", t."auto_run_when_ready" AS "autoRunWhenReady",
-               t."dispatch_hold" AS "dispatchHold", t."run_at" AS "runAt",
+               t."dispatch_hold" AS "dispatchHold",
+               t."dispatch_authority"::text AS "dispatchAuthority",
+               t."dispatch_attempt" AS "dispatchAttempt",
+               t."required_capabilities" AS "requiredCapabilities", t."run_at" AS "runAt",
                t."verifies_task_id" AS "verifiesTaskId", t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -518,7 +535,9 @@ export class ProjectDecisionService {
       `);
     const runnerRows = await tx.$queryRaw<RunnerRow[]>(Prisma.sql`
         SELECT r."id" AS "runnerId", r."status"::text, r."labels", r."version",
-               r."last_heartbeat_at" AS "lastHeartbeatAt", r."model_catalog" AS "modelCatalog"
+               r."last_heartbeat_at" AS "lastHeartbeatAt", r."model_catalog" AS "modelCatalog",
+               r."capabilities", r."capabilities_reported_at" AS "capabilitiesReportedAt",
+               r."engines", r."runs_as_root" AS "runsAsRoot"
           FROM "runner" r JOIN "project" p ON p."id" = ${projectId}::uuid
          WHERE r."owner_id" = p."owner_id" AND p."owner_id" = ${project.ownerId}::uuid
            AND (
@@ -614,6 +633,9 @@ export class ProjectDecisionService {
         model: row.model,
         autoRunWhenReady: row.autoRunWhenReady,
         dispatchHold: row.dispatchHold,
+        dispatchAuthority: row.dispatchAuthority,
+        dispatchAttempt: String(row.dispatchAttempt),
+        requiredCapabilities: [...row.requiredCapabilities].sort(),
         runAt: iso(row.runAt),
         verifiesTaskId: toPublicIdOrNull(row.verifiesTaskId),
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
@@ -752,6 +774,10 @@ export class ProjectDecisionService {
         version: row.version,
         lastHeartbeatAt: iso(row.lastHeartbeatAt),
         modelCatalog: jsonValue(row.modelCatalog),
+        capabilities: [...row.capabilities].sort(),
+        capabilitiesReportedAt: iso(row.capabilitiesReportedAt),
+        engines: jsonValue(row.engines),
+        runsAsRoot: row.runsAsRoot,
       })),
       providers: [...providerRows.map((row) => ({
         providerId: toPublicId(row.providerId),

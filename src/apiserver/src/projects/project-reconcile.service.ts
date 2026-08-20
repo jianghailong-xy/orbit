@@ -69,10 +69,25 @@ export type ProjectActionApplyResult =
       actualDecisionInputHash: string;
     }
   | {
+      status: 'REFUSED' | 'SUPERSEDED';
+      actionId: string;
+      refusalCode: string;
+      reasonCode: string;
+      expectedDecisionInputHash?: string;
+      actualDecisionInputHash?: string;
+    }
+  | {
       status: 'ALREADY_APPLIED';
       actionId: string;
       actionStatus: 'CLAIMED' | 'APPLIED' | 'REFUSED' | 'SUPERSEDED';
     };
+
+export interface ProjectActionEffectRefusal {
+  status: 'REFUSED' | 'SUPERSEDED';
+  refusalCode: string;
+  reasonCode?: string;
+  detail?: Prisma.InputJsonValue;
+}
 
 interface LeaseRow {
   fencingToken: bigint;
@@ -403,7 +418,10 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     lease: ProjectReconcileLease,
     decisionId: string,
     action: ProjectReconcileAction,
-    effect: (tx: Prisma.TransactionClient, actionId: string) => Promise<void>,
+    effect: (
+      tx: Prisma.TransactionClient,
+      actionId: string,
+    ) => Promise<void | ProjectActionEffectRefusal>,
     now = new Date(),
   ): Promise<ProjectActionApplyResult> {
     this.assertAction(lease, action);
@@ -411,7 +429,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       throw new Error('Project action subject belongs to another Project');
     }
     if (!this.decisions) throw new Error('Project decision protocol is not configured');
-    return this.prisma.$transaction(async (tx) => {
+    return this.repeatableRead(async (tx) => {
       const projects = await tx.$queryRaw<Array<{
         status: 'OPEN' | 'DONE' | 'CANCELLED'; coordinatorEnabled: boolean;
       }>>(Prisma.sql`
@@ -466,11 +484,23 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       const detail = action.detail && typeof action.detail === 'object' && !Array.isArray(action.detail)
         ? { ...(action.detail as Record<string, Prisma.JsonValue>),
             decisionInputHash: decision.decisionInputHash,
-            ...(stale ? { actualDecisionInputHash: current.input.decisionInputHash } : {}) }
+            ...(stale ? {
+              actualDecisionInputHash: current.input.decisionInputHash,
+              dispatchFailure: {
+                v: 1, refusalCode: 'STALE_SNAPSHOT', reasonCode: 'STALE_SNAPSHOT',
+                retryable: true, retryAt: now.toISOString(),
+              },
+            } : {}) }
         : {
             value: action.detail ?? null,
             decisionInputHash: decision.decisionInputHash,
-            ...(stale ? { actualDecisionInputHash: current.input.decisionInputHash } : {}),
+            ...(stale ? {
+              actualDecisionInputHash: current.input.decisionInputHash,
+              dispatchFailure: {
+                v: 1, refusalCode: 'STALE_SNAPSHOT', reasonCode: 'STALE_SNAPSHOT',
+                retryable: true, retryAt: now.toISOString(),
+              },
+            } : {}),
           };
       const inserted = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO "project_action" (
@@ -497,6 +527,16 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         return {
           status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
         } as const;
+      }
+
+      // The attempt belongs to the permanently claimed action key, not to a process invocation.
+      // It therefore advances once for stale/refused/applied outcomes and never on a replay.
+      if (action.type === 'DISPATCH_TASK' && action.subject.id) {
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE "task" SET "dispatch_attempt" = "dispatch_attempt" + 1
+           WHERE "id" = ${action.subject.id}::uuid
+             AND "project_id" = ${lease.projectId}::uuid
+        `);
       }
 
       if (stale) {
@@ -532,7 +572,27 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         } as const;
       }
 
-      await effect(tx, actionId);
+      const effectResult = await effect(tx, actionId);
+      if (effectResult) {
+        const reasonCode = effectResult.reasonCode ?? effectResult.refusalCode;
+        const refused = await tx.$executeRaw(Prisma.sql`
+          UPDATE "project_action"
+             SET "status" = ${effectResult.status}::"project_action_status",
+                 "refusal_code" = ${effectResult.refusalCode},
+                 "reason_code" = ${reasonCode},
+                 "detail" = "detail" || ${JSON.stringify(effectResult.detail ?? {})}::jsonb,
+                 "updated_at" = ${now}
+           WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
+             AND "decision_id" = ${decisionId}::uuid
+        `);
+        if (refused !== 1) throw new Error(`failed to refuse Project action ${actionId}`);
+        return {
+          status: effectResult.status,
+          actionId,
+          refusalCode: effectResult.refusalCode,
+          reasonCode,
+        } as const;
+      }
       const published = await tx.$executeRaw(Prisma.sql`
         UPDATE "project_action" SET "status" = 'APPLIED', "updated_at" = ${now}
          WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
@@ -540,7 +600,20 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       `);
       if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
       return { status: 'APPLIED', actionId } as const;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    });
+  }
+
+  /** PostgreSQL may abort an RR contender whose first snapshot predates a conflicting action. */
+  private async repeatableRead<T>(effect: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.prisma.$transaction(effect, {
+          isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+        });
+      } catch (cause) {
+        if (attempt >= 3 || !isSerializationFailure(cause)) throw cause;
+      }
+    }
   }
 
   private async acquireLeaseInTransaction(
@@ -677,4 +750,14 @@ function contentionWake(projectId: string, expiresAt: Date | null | undefined, n
 function errorText(cause: unknown): string {
   const text = cause instanceof Error ? cause.message : String(cause);
   return text.slice(0, 2_000);
+}
+
+function isSerializationFailure(cause: unknown): boolean {
+  if (!cause || typeof cause !== 'object') return false;
+  const error = cause as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
+  return error.code === 'P2034'
+    || error.code === '40001'
+    || error.meta?.code === '40001'
+    || (typeof error.message === 'string'
+      && /could not serialize access|write conflict|deadlock/i.test(error.message));
 }
