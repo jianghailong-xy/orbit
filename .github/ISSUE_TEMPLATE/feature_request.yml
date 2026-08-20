@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose an improvement by describing the problem and desired outcome.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is difficult today, for whom, and how often?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe success without requiring one specific implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Existing workarounds or other approaches you evaluated.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mockups, examples, compatibility constraints, or operational impact.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for a similar request.
+          required: true
+        - label: I described the problem and outcome, not only a preferred implementation.
+          required: true
