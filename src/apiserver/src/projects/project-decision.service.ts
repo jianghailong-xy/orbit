@@ -1179,10 +1179,18 @@ export class ProjectDecisionService {
       const detail = action.detail && typeof action.detail === 'object' && !Array.isArray(action.detail)
         ? action.detail as Record<string, unknown>
         : {};
+      // Both spellings of the key, normalized to the audit's — the same translation
+      // `applyDecisionActionInTransaction` makes before it decides an action was planned (§8.2).
+      // A plan is written in Base62 and the ledger row is keyed by the internal id, so comparing
+      // them raw reports every legitimately applied action as untraceable: `ROTATE_COORDINATOR_
+      // SESSION` is planned by `plannedActions` from the Base62 snapshot and claimed by the
+      // executor under `lease.projectId`, which made `matches` false for every project that had
+      // ever rotated its coordinator — an audit that accuses the loop of acting on its own.
+      const ledgerKey = publicIdempotencyKey(action.idempotencyKey);
       return detail.decisionInputHash === row.decisionInputHash
         && stored.actions.some((planned) =>
           planned.type === action.type
-          && planned.idempotencyKey === action.idempotencyKey
+          && publicIdempotencyKey(planned.idempotencyKey) === ledgerKey
           && planned.subject.type === action.subjectType
           && (planned.subject.id ?? null) === toPublicIdOrNull(action.subjectId));
     });

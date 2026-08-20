@@ -144,6 +144,17 @@ async function reset(client: Client): Promise<void> {
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updated_at" TIMESTAMP(3) NOT NULL
     );
+    -- §10.2 W4 (ii)/(iii): the backstop reads open blockers to tell "waiting on a person who has
+    -- already been told" — the one shape §10.4 N-null lets stop its own clock — apart from a
+    -- stopped clock with nothing behind it. Unit 17's table landed after this subset was written;
+    -- these are the four columns that predicate reads.
+    CREATE TABLE "project_blocker" (
+      "id" UUID PRIMARY KEY,
+      "project_id" UUID NOT NULL REFERENCES "project"("id") ON DELETE CASCADE,
+      "recovery" TEXT NOT NULL,
+      "escalated_at" TIMESTAMP(3),
+      "resolved_at" TIMESTAMP(3)
+    );
     INSERT INTO "project" ("id") VALUES
       ('${PROJECT_PLANNING}'), ('${PROJECT_EXECUTING}'),
       ('${PROJECT_VERIFYING}'), ('${PROJECT_ERROR}');

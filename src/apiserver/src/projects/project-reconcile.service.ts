@@ -1117,6 +1117,15 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     `);
   }
 
+  /**
+   * §10.2 W4's predicate: "the wake that SHOULD exist does not", never "there is no wake".
+   *
+   * Splitting the NULL-wake case into (ii) and (iii) is the whole of `PC-CX-05`. §10.4 N-null lets
+   * exactly one shape stop its own clock — every open blocker `recovery = HUMAN` and already
+   * escalated — and a predicate that hits any NULL wake reports that shape as a stalled project
+   * every sixty seconds, forever. W2 makes each hit a WARN, so an alarm that is permanently true
+   * for every project legitimately waiting on a person is an alarm nobody can read.
+   */
   private async enqueueBackstopWakes(now: Date): Promise<number> {
     const staleBefore = new Date(now.getTime() - PROJECT_RECONCILE_STALE_MS);
     return this.prisma.$executeRaw(Prisma.sql`
@@ -1130,9 +1139,25 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
        WHERE p."status" = 'OPEN' AND p."coordinator_enabled" = true
          AND r."run_state" <> 'SETTLED'
          AND (
+           -- (i) the timer path is stuck: due long ago and still not handled.
            r."next_wake_at" < ${staleBefore}
+           -- (ii) it stopped its own clock while something could still end without a person, or
+           -- while an alarm had not gone off yet.
            OR (r."next_wake_at" IS NULL
-               AND (r."lease_holder" IS NULL OR r."lease_expires_at" < ${staleBefore}))
+               AND (r."lease_holder" IS NULL OR r."lease_expires_at" < ${staleBefore})
+               AND EXISTS (
+                 SELECT 1 FROM "project_blocker" b
+                  WHERE b."project_id" = p."id" AND b."resolved_at" IS NULL
+                    AND (b."recovery"::text <> 'HUMAN' OR b."escalated_at" IS NULL)
+               ))
+           -- (iii) it stopped its own clock with nothing open at all. THIS is silent idling.
+           OR (r."next_wake_at" IS NULL
+               AND (r."lease_holder" IS NULL OR r."lease_expires_at" < ${staleBefore})
+               AND NOT EXISTS (
+                 SELECT 1 FROM "project_blocker" b
+                  WHERE b."project_id" = p."id" AND b."resolved_at" IS NULL
+               ))
+           -- (iv) the delivery path is stuck: a committed signal nobody has taken.
            OR EXISTS (
              SELECT 1 FROM "project_event" e
               WHERE e."project_id" = p."id" AND e."consumed_at" IS NULL
