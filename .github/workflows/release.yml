@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: write          # create the GitHub Release + push the gh-pages appcast
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0       # full history so build-dmg.sh's commit-count CFBundleVersion is monotonic
 
@@ -162,7 +162,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.platform != 'macos'
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0        # full history → commit-count build number is monotonic
       - name: Select latest Xcode
