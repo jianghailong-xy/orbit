@@ -27,8 +27,10 @@ import {
   PlannedBlockerRaise,
   ProjectBlockerFact,
   ProjectBlockerPlan,
+  ProjectDeadLetterFact,
   planProjectBlockers,
   blockerRunState,
+  projectBlockerDedupeKey,
 } from './project-blocker';
 import { detectProjectBlockerConditions } from './project-blocker-conditions';
 import {
@@ -233,6 +235,20 @@ export interface ProjectDecisionInput {
      * the outcome it originally produced, not to today's rules applied to yesterday's world.
      */
     blockers?: ProjectBlockerFact[];
+    /**
+     * §5.4 F22's UNACKNOWLEDGED dead letters — events this project lost for good, minus the ones
+     * somebody has already dealt with.
+     *
+     * "Unacknowledged" is what makes this a condition (§11.4) instead of a permanent mark: a dead
+     * letter counts until a person resolves the `UNKNOWN_FAILURE` row it opened, and only a
+     * resolution the loop did not perform itself counts — an `AUTO` clear would be the control loop
+     * acknowledging its own failure, which is the silent recovery BL2 forbids.
+     *
+     * Absent on decisions captured before this projection existed, which readers must treat as
+     * "this snapshot predates dead-letter blockers" and NOT as "there were none" — the same reading
+     * `blockers` above asks for, and for the same reason.
+     */
+    deadLetters?: ProjectDeadLetterFact[];
     evidence: {
       branches: Array<{
         sessionId: string;
@@ -525,6 +541,13 @@ interface BlockerRow {
   escalatedAt: Date | null;
 }
 
+interface DeadLetterRow {
+  id: string;
+  kind: string;
+  dedupeKey: string;
+  attempts: number;
+}
+
 interface SignalRow {
   id: string;
   kind: 'user.manual_trigger';
@@ -764,6 +787,28 @@ export class ProjectDecisionService {
            AND e."consumed_at" IS NULL AND e."kind" = 'user.manual_trigger'
          ORDER BY e."dedupe_key", e."id"
       `);
+    // §5.4 F22, as the one fact §11.4 can recompute a dead letter from: DEAD rows this project
+    // has not acknowledged. The acknowledgement instant is the last time somebody resolved the
+    // `UNKNOWN_FAILURE` row these open — by hand, which `resolved_by <> 'AUTO'` is the database's
+    // way of saying. Without that exclusion the loop's own auto-clear would be an acknowledgement
+    // and the row would close itself the first time delivery started working again.
+    const deadLetterRows = await tx.$queryRaw<DeadLetterRow[]>(Prisma.sql`
+        WITH "ack" AS (
+          SELECT MAX(b."resolved_at") AS "at"
+            FROM "project_blocker" b
+           WHERE b."project_id" = ${projectId}::uuid
+             AND b."dedupe_key" = ${deadLetterDedupeKey(projectId)}
+             AND b."resolved_at" IS NOT NULL
+             AND b."resolved_by" <> 'AUTO'::"project_blocker_resolved_by"
+        )
+        SELECT e."id", e."kind", e."dedupe_key" AS "dedupeKey", e."attempts"
+          FROM "project_event" e JOIN "project" p ON p."id" = e."project_id"
+         CROSS JOIN "ack"
+         WHERE e."project_id" = ${projectId}::uuid AND p."owner_id" = ${project.ownerId}::uuid
+           AND e."disposition" = 'DEAD'
+           AND ("ack"."at" IS NULL OR e."consumed_at" > "ack"."at")
+         ORDER BY e."id"
+      `);
 
     const dependencies = new Map<string, string[]>();
     for (const row of dependencyRows) {
@@ -1001,6 +1046,18 @@ export class ProjectDecisionService {
         occurrences: row.occurrences,
         nextCheckAt: isoRequired(row.nextCheckAt),
         escalatedAt: iso(row.escalatedAt),
+      })),
+      // Omitted rather than sent empty, so the overwhelmingly common snapshot — a project that has
+      // never lost a signal — hashes exactly as it did before this projection existed.
+      deadLetters: deadLetterRows.length === 0 ? undefined : deadLetterRows.map((row) => ({
+        eventId: toPublicId(row.id),
+        kind: row.kind,
+        // An event's dedupe key is `<kind>:<rowId>` (§5.3 N3), so it carries a raw uuid — and this
+        // one is read by a person, through the blocker `detail` §11 puts in front of them. Same
+        // transform a permanent action key gets on the way out: spell every uuid, change nothing
+        // else.
+        dedupeKey: publicIdempotencyKey(row.dedupeKey),
+        attempts: row.attempts,
       })),
       evidence: {
         branches: sessionRows.filter((row): row is SessionRow & { branch: string } => Boolean(row.branch))
@@ -1690,6 +1747,12 @@ function publicSubjectId(subjectId: string): string {
   } catch {
     return subjectId;
   }
+}
+
+/** §5.4 F22's row, addressed the way it is STORED: the dedupe key keeps internal ids (§11.3), and
+ *  this query runs against the table rather than against a snapshot. */
+function deadLetterDedupeKey(projectId: string): string {
+  return projectBlockerDedupeKey('UNKNOWN_FAILURE', 'PROJECT', projectId);
 }
 
 /** §11.3's key is `<kind>:<subjectType>:<subjectId>`, so the subject inside it is publicized too —

@@ -21,7 +21,13 @@ import {
 } from './project-events.service';
 import { PlannedTaskAggregation } from './task-aggregation';
 import {
+  PlannedBlockerRaise,
+  ProjectBlockerFact,
+  blockerRunState,
   clearBlockerIdempotencyKey,
+  planProjectBlockers,
+  projectBlockerDedupeKey,
+  projectDeadLetterCondition,
   raiseBlockerIdempotencyKey,
 } from './project-blocker';
 import type { PlannedCoordinatorRotation } from './project-coordinator-session';
@@ -100,6 +106,25 @@ export interface ProjectActionEffectRefusal {
 interface LeaseRow {
   fencingToken: bigint;
   leaseExpiresAt: Date;
+}
+
+/** §5.4's dead letter reads back the one open row it may be touching, in the columns §11.3's plan
+ *  is a function of. */
+interface OpenBlockerRow {
+  id: string;
+  kind: string;
+  owner: string;
+  recovery: string;
+  severity: string;
+  requiredAction: string;
+  subjectType: string;
+  lifecycleGeneration: bigint;
+  conditionVersion: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  occurrences: number;
+  nextCheckAt: Date;
+  escalatedAt: Date | null;
 }
 
 interface ExistingActionRow {
@@ -328,19 +353,107 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     await this.flushPendingRotations();
   }
 
+  /**
+   * §5.4 F22: these events have failed ten deliveries and are about to be discarded for good.
+   *
+   * What that costs is not recoverable — the signals are gone, and no later pass can re-derive what
+   * they would have changed — so this writes the fail-closed row §11.2 BL2 requires, in the SAME
+   * transaction that marks them DEAD. Either both happen or neither does: the caller lets this
+   * throw precisely so that a blocker that could not be written keeps the events live.
+   *
+   * It is a raise-OR-touch, not an insert. Repeated, concurrent, out-of-order and post-restart
+   * dead letters all land on the one dedupe key §11.3 gives this cause, so the second one moves two
+   * display columns instead of opening a second episode, and an episode that is already old enough
+   * escalates exactly once. The row then stays open on its own: §11.4 recomputes the condition from
+   * `world.deadLetters`, which keeps returning these events until a person acknowledges them.
+   *
+   * The clock stays too. `next_wake_at` is deliberately the recovery poll this path has always
+   * written rather than §10.4's answer — no snapshot was captured here, so there is nothing to run
+   * §10.4 against; it is strictly earlier than the escalation alarm, so it costs one recompute and
+   * misses nothing, and the pass it schedules is what writes the contract's wake.
+   */
   async deadLetter(
     tx: Prisma.TransactionClient,
     projectId: string,
-    _events: readonly ProjectEventEnvelope[],
+    events: readonly ProjectEventEnvelope[],
     error: string,
   ): Promise<void> {
     const now = new Date();
     await this.ensureRuntime(tx, projectId, now);
     const lease = await this.acquireLeaseInTransaction(tx, projectId, now);
     if (!lease) throw new Error(`cannot persist dead-letter recovery while ${projectId} is leased`);
+
+    const publicProjectId = uuidToBase62(projectId);
+    const condition = projectDeadLetterCondition(publicProjectId, events.map((event) => ({
+      eventId: uuidToBase62(event.id),
+      kind: event.kind,
+      // §8.2 / AC1: this lands in a blocker `detail` a person reads, so the uuid inside the
+      // event's dedupe key is spelled the way they can paste it — exactly as `capture` does it
+      // for the same field on the recomputation side.
+      dedupeKey: publicIdempotencyKey(event.dedupeKey),
+      attempts: event.attempts + 1,
+    })));
+    const dedupeKey = projectBlockerDedupeKey('UNKNOWN_FAILURE', 'PROJECT', publicProjectId);
+    // Only THIS key's open row, never the project's whole open set: §11.4's clear is a set
+    // difference against what was observed, and handing it rows this call has no opinion about
+    // would resolve every other blocker the project has.
+    const openRows = await tx.$queryRaw<OpenBlockerRow[]>(Prisma.sql`
+      SELECT "id", "kind", "owner"::text, "recovery"::text, "severity"::text,
+             "required_action" AS "requiredAction", "subject_type" AS "subjectType",
+             "lifecycle_generation" AS "lifecycleGeneration",
+             "condition_version" AS "conditionVersion", "first_seen_at" AS "firstSeenAt",
+             "last_seen_at" AS "lastSeenAt", "occurrences",
+             "next_check_at" AS "nextCheckAt", "escalated_at" AS "escalatedAt"
+        FROM "project_blocker"
+       WHERE "project_id" = ${projectId}::uuid
+         AND "dedupe_key" = ${internalDedupeKey(dedupeKey)}
+         AND "resolved_at" IS NULL
+    `);
+    const plan = planProjectBlockers({
+      epoch: Math.floor(now.getTime() / 1_000),
+      open: openRows.map((row) => ({
+        id: uuidToBase62(row.id),
+        kind: row.kind as ProjectBlockerFact['kind'],
+        owner: row.owner as ProjectBlockerFact['owner'],
+        recovery: row.recovery as ProjectBlockerFact['recovery'],
+        severity: row.severity as ProjectBlockerFact['severity'],
+        requiredAction: row.requiredAction,
+        subjectType: row.subjectType as ProjectBlockerFact['subjectType'],
+        // Provably this project: the row was selected BY the key whose third field is its id.
+        subjectId: publicProjectId,
+        dedupeKey,
+        lifecycleGeneration: String(row.lifecycleGeneration),
+        conditionVersion: row.conditionVersion,
+        firstSeenAt: row.firstSeenAt.toISOString(),
+        lastSeenAt: row.lastSeenAt.toISOString(),
+        occurrences: row.occurrences,
+        nextCheckAt: row.nextCheckAt.toISOString(),
+        escalatedAt: row.escalatedAt ? row.escalatedAt.toISOString() : null,
+      })),
+      observed: [condition],
+    });
+    await this.applyBlockers(tx, projectId, lease, null, {
+      raised: plan.raises,
+      touched: plan.touches,
+      // Nothing this call saw says any OTHER condition went away, and the only key it was given is
+      // the one it just observed — so there is nothing to clear, by construction.
+      cleared: [],
+      escalated: plan.escalations,
+      open: plan.openAfter,
+    }, now, {
+      // The exception text is a delivery observation, so it stays out of the blocker row that
+      // §11.3 rewrites on every touch and goes to the append-only ledger instead: one permanent
+      // record per episode, which is where somebody reading "what happened here" should land.
+      lastError: errorText(error),
+      deadEventIds: (condition.facts as { deadEventIds: string[] }).deadEventIds,
+    });
+
+    // §4.2 RS0 / TS4: the state persisted here has to be the one this snapshot's guards produce,
+    // and an open USER blocker makes that AWAITING_HUMAN by guard 2.
+    const state = blockerRunState(plan.openAfter) ?? 'PLANNING';
     const updated = await tx.$executeRaw(Prisma.sql`
       UPDATE "project_runtime"
-         SET "run_state" = 'PLANNING',
+         SET "run_state" = ${state}::"project_run_state",
              "next_wake_at" = ${new Date(now.getTime() + PROJECT_RECONCILE_STALE_MS)},
              "next_wake_reason" = ${`reconcile dead letter: ${errorText(error)}`},
              "lease_holder" = NULL, "lease_expires_at" = NULL, "lease_heartbeat_at" = NULL,
@@ -878,68 +991,15 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     tx: Prisma.TransactionClient,
     projectId: string,
     lease: ProjectReconcileLease,
-    decisionId: string,
+    decisionId: string | null,
     plan: ProjectDecisionBlockerAudit | undefined,
     now: Date,
+    actionDetail: Record<string, unknown> = {},
   ): Promise<void> {
     if (!plan) return;
 
     for (const raise of plan.raised) {
-      const subjectId = internalSubjectId(raise.subjectId);
-      // §11.3 BE1: the generation is allocated INSIDE the insert as `MAX + 1` over this key's whole
-      // history, which is why resolved rows are never deleted. Returning no row means this episode
-      // is already open — §8.5 C2: read the existing row, keep ITS generation so the key is
-      // unchanged, and skip the side effect.
-      const inserted = await tx.$queryRaw<Array<{ id: string; lifecycleGeneration: bigint }>>(Prisma.sql`
-        INSERT INTO "project_blocker" (
-          "id", "project_id", "kind", "owner", "recovery", "severity", "required_action",
-          "next_check_at", "subject_type", "subject_id", "detail", "dedupe_key",
-          "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at",
-          "occurrences", "created_at", "updated_at"
-        )
-        SELECT ${randomUUID()}::uuid, ${projectId}::uuid, ${raise.kind},
-               ${raise.owner}::"project_blocker_owner",
-               ${raise.recovery}::"project_blocker_recovery",
-               ${raise.severity}::"project_blocker_severity",
-               ${raise.requiredAction}, ${new Date(raise.nextCheckAt)},
-               ${raise.subjectType}, ${subjectId ?? raise.subjectId},
-               ${JSON.stringify(raise.detail)}::jsonb,
-               ${internalDedupeKey(raise.dedupeKey)},
-               COALESCE(MAX(b."lifecycle_generation"), 0) + 1,
-               ${raise.conditionVersion}, ${new Date(raise.firstSeenAt)},
-               ${new Date(raise.firstSeenAt)}, 1, ${now}, ${now}
-          FROM "project_blocker" b
-         WHERE b."project_id" = ${projectId}::uuid
-           AND b."dedupe_key" = ${internalDedupeKey(raise.dedupeKey)}
-        ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
-        RETURNING "id", "lifecycle_generation" AS "lifecycleGeneration"
-      `);
-      const row = inserted[0] ?? (await tx.$queryRaw<Array<{ id: string; lifecycleGeneration: bigint }>>(Prisma.sql`
-        SELECT "id", "lifecycle_generation" AS "lifecycleGeneration" FROM "project_blocker"
-         WHERE "project_id" = ${projectId}::uuid
-           AND "dedupe_key" = ${internalDedupeKey(raise.dedupeKey)}
-           AND "resolved_at" IS NULL
-      `))[0];
-      if (!row) throw new Error(`failed to raise ${raise.kind} blocker on ${projectId}`);
-      await this.claimBlockerAction(tx, projectId, lease, decisionId, {
-        type: 'RAISE_BLOCKER',
-        idempotencyKey: raiseBlockerIdempotencyKey(
-          projectId, raise.kind, subjectId ?? raise.subjectId, row.lifecycleGeneration,
-        ),
-        subjectType: raise.subjectType,
-        subjectId,
-        detail: {
-          blockerId: uuidToBase62(row.id),
-          kind: raise.kind,
-          owner: raise.owner,
-          recovery: raise.recovery,
-          dedupeKey: raise.dedupeKey,
-          lifecycleGeneration: String(row.lifecycleGeneration),
-          conditionVersion: raise.conditionVersion,
-          requiredAction: raise.requiredAction,
-          nextCheckAt: raise.nextCheckAt,
-        },
-      }, now);
+      await this.raiseBlocker(tx, projectId, lease, decisionId, raise, now, actionDetail);
     }
 
     // §11.3 / AC8. The same cause seen again moves exactly two display columns and recomputes the
@@ -1024,6 +1084,82 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * §11.3 BE1's raise, as one statement two callers share.
+   *
+   * The reconcile pass raises from a decision; §5.4's dead letter raises from the batch it is about
+   * to discard and has no decision to cite (`decisionId` null, which is what migration 0120 left
+   * the column nullable for). Everything else — the generation allocated inside the INSERT, C2's
+   * read-back, and the permanent key beside the row — has to be identical, so it is written once.
+   */
+  private async raiseBlocker(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    lease: ProjectReconcileLease,
+    decisionId: string | null,
+    raise: PlannedBlockerRaise,
+    now: Date,
+    actionDetail: Record<string, unknown> = {},
+  ): Promise<{ id: string; lifecycleGeneration: bigint }> {
+    const subjectId = internalSubjectId(raise.subjectId);
+    // §11.3 BE1: the generation is allocated INSIDE the insert as `MAX + 1` over this key's whole
+    // history, which is why resolved rows are never deleted. Returning no row means this episode
+    // is already open — §8.5 C2: read the existing row, keep ITS generation so the key is
+    // unchanged, and skip the side effect.
+    const inserted = await tx.$queryRaw<Array<{ id: string; lifecycleGeneration: bigint }>>(Prisma.sql`
+      INSERT INTO "project_blocker" (
+        "id", "project_id", "kind", "owner", "recovery", "severity", "required_action",
+        "next_check_at", "subject_type", "subject_id", "detail", "dedupe_key",
+        "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at",
+        "occurrences", "created_at", "updated_at"
+      )
+      SELECT ${randomUUID()}::uuid, ${projectId}::uuid, ${raise.kind},
+             ${raise.owner}::"project_blocker_owner",
+             ${raise.recovery}::"project_blocker_recovery",
+             ${raise.severity}::"project_blocker_severity",
+             ${raise.requiredAction}, ${new Date(raise.nextCheckAt)},
+             ${raise.subjectType}, ${subjectId ?? raise.subjectId},
+             ${JSON.stringify(raise.detail)}::jsonb,
+             ${internalDedupeKey(raise.dedupeKey)},
+             COALESCE(MAX(b."lifecycle_generation"), 0) + 1,
+             ${raise.conditionVersion}, ${new Date(raise.firstSeenAt)},
+             ${new Date(raise.firstSeenAt)}, 1, ${now}, ${now}
+        FROM "project_blocker" b
+       WHERE b."project_id" = ${projectId}::uuid
+         AND b."dedupe_key" = ${internalDedupeKey(raise.dedupeKey)}
+      ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
+      RETURNING "id", "lifecycle_generation" AS "lifecycleGeneration"
+    `);
+    const row = inserted[0] ?? (await tx.$queryRaw<Array<{ id: string; lifecycleGeneration: bigint }>>(Prisma.sql`
+      SELECT "id", "lifecycle_generation" AS "lifecycleGeneration" FROM "project_blocker"
+       WHERE "project_id" = ${projectId}::uuid
+         AND "dedupe_key" = ${internalDedupeKey(raise.dedupeKey)}
+         AND "resolved_at" IS NULL
+    `))[0];
+    if (!row) throw new Error(`failed to raise ${raise.kind} blocker on ${projectId}`);
+    await this.claimBlockerAction(tx, projectId, lease, decisionId, {
+      type: 'RAISE_BLOCKER',
+      idempotencyKey: raiseBlockerIdempotencyKey(
+        projectId, raise.kind, subjectId ?? raise.subjectId, row.lifecycleGeneration,
+      ),
+      subjectType: raise.subjectType,
+      subjectId,
+      detail: {
+        blockerId: uuidToBase62(row.id),
+        kind: raise.kind,
+        owner: raise.owner,
+        recovery: raise.recovery,
+        dedupeKey: raise.dedupeKey,
+        lifecycleGeneration: String(row.lifecycleGeneration),
+        conditionVersion: raise.conditionVersion,
+        requiredAction: raise.requiredAction,
+        nextCheckAt: raise.nextCheckAt,
+        ...actionDetail,
+      },
+    }, now);
+    return row;
+  }
+
+  /**
    * Claim a blocker action's permanent key beside the row it describes.
    *
    * Published APPLIED in the same statement rather than CLAIMED-then-published: the effect is
@@ -1034,7 +1170,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     tx: Prisma.TransactionClient,
     projectId: string,
     lease: ProjectReconcileLease,
-    decisionId: string,
+    decisionId: string | null,
     action: {
       type: 'RAISE_BLOCKER' | 'CLEAR_BLOCKER';
       idempotencyKey: string;

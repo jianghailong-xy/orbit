@@ -19,6 +19,7 @@ import {
   planProjectBlockers,
   projectBlockerConditionVersion,
   projectBlockerDedupeKey,
+  projectDeadLetterCondition,
   raiseBlockerIdempotencyKey,
 } from './project-blocker';
 
@@ -315,6 +316,117 @@ test('N-mask: a masked SYSTEM blocker is still recomputed and still carries its 
 });
 
 // ── BL2 fail closed ─────────────────────────────────────────────────────────────────────────
+
+// ── §5.4 F22: the dead letter both writers have to name identically ─────────────────────────────
+
+const DEAD_A = { eventId: 'AAAAAAAAAAAAAAAAAAAAAA', kind: 'task.updated', dedupeKey: 'task.updated:1', attempts: 10 };
+const DEAD_B = { eventId: 'BBBBBBBBBBBBBBBBBBBBBB', kind: 'session.ended', dedupeKey: 'session.ended:1', attempts: 10 };
+
+test('F22: a dead letter is a PROJECT-subject UNKNOWN_FAILURE, so it stops the whole project', () => {
+  const condition = projectDeadLetterCondition(PROJECT, [DEAD_A]);
+  assert.equal(condition.kind, 'UNKNOWN_FAILURE');
+  assert.equal(condition.subjectType, 'PROJECT');
+  assert.equal(condition.subjectId, PROJECT);
+  // The dedupe key is the whole point: the delivery path opens the row and §11.4's recomputation
+  // keeps it open, and they only meet on this string.
+  assert.equal(
+    projectBlockerDedupeKey(condition.kind, condition.subjectType, condition.subjectId),
+    `UNKNOWN_FAILURE:PROJECT:${PROJECT}`,
+  );
+  // §11.2's row, reached through the policy table rather than restated: whoever writes it gets a
+  // person as the owner, a person as the only recovery, and an escalation alarm for a clock.
+  const [raise] = planProjectBlockers({ epoch: EPOCH, open: [], observed: [condition] }).raises;
+  assert.equal(raise.owner, 'USER');
+  assert.equal(raise.recovery, 'HUMAN');
+  assert.equal(raise.severity, 'CRITICAL');
+  assert.ok(raise.requiredAction.length > 0);
+  assert.equal(Date.parse(raise.nextCheckAt), EPOCH * 1_000 + 30 * MINUTE);
+});
+
+test('F22: the same losses in any order are one condition, and a new loss is a changed one', () => {
+  // Redelivery reorders batches, and two instances can dead-letter the same events from different
+  // sides of a restart. TF2 has to see one condition through all of it, so the digest is taken over
+  // a SET of event identities — never over the order they arrived in or how many attempts each took.
+  const forwards = projectDeadLetterCondition(PROJECT, [DEAD_A, DEAD_B]);
+  const backwards = projectDeadLetterCondition(PROJECT, [DEAD_B, DEAD_A]);
+  const version = (condition: ObservedBlockerCondition) => projectBlockerConditionVersion(
+    condition.kind, condition.subjectType, condition.subjectId, condition.facts,
+  );
+  assert.equal(version(forwards), version(backwards));
+  assert.deepEqual(forwards.detail, backwards.detail, 'the display payload is order-free too');
+  assert.notEqual(version(forwards), version(projectDeadLetterCondition(PROJECT, [DEAD_A])),
+    'a signal lost that was not lost before is a changed condition, not the same one');
+  assert.equal(
+    version(projectDeadLetterCondition(PROJECT, [{ ...DEAD_A, attempts: 40 }])),
+    version(projectDeadLetterCondition(PROJECT, [DEAD_A])),
+    'BL7: how hard delivery tried is a delivery observation, not the condition',
+  );
+});
+
+test('F22: a second dead letter touches the open episode instead of opening a second one', () => {
+  const first = planProjectBlockers({
+    epoch: EPOCH, open: [], observed: [projectDeadLetterCondition(PROJECT, [DEAD_A])],
+  });
+  const [raise] = first.raises;
+  const open: ProjectBlockerFact[] = [{
+    id: 'BLOCKERBLOCKERBLOCKER1',
+    kind: raise.kind,
+    owner: raise.owner,
+    recovery: raise.recovery,
+    severity: raise.severity,
+    requiredAction: raise.requiredAction,
+    subjectType: raise.subjectType,
+    subjectId: raise.subjectId,
+    dedupeKey: raise.dedupeKey,
+    lifecycleGeneration: '1',
+    conditionVersion: raise.conditionVersion,
+    firstSeenAt: raise.firstSeenAt,
+    lastSeenAt: raise.firstSeenAt,
+    occurrences: 1,
+    nextCheckAt: raise.nextCheckAt,
+    escalatedAt: null,
+  }];
+  const second = planProjectBlockers({
+    epoch: EPOCH + 60, open, observed: [projectDeadLetterCondition(PROJECT, [DEAD_A, DEAD_B])],
+  });
+  assert.deepEqual(second.raises, [], 'the episode is already open');
+  assert.deepEqual(second.clears, [], 'and the losses have not gone away');
+  assert.equal(second.touches.length, 1);
+  assert.equal(second.touches[0].blockerId, 'BLOCKERBLOCKERBLOCKER1');
+  assert.notEqual(second.touches[0].conditionVersion, raise.conditionVersion,
+    'the digest follows the set of lost signals, which grew');
+  assert.equal(second.openAfter[0].firstSeenAt, raise.firstSeenAt,
+    'ES5: the age the escalation is measured from does not restart');
+  assert.equal(second.openAfter[0].nextCheckAt, raise.nextCheckAt,
+    'BL5: a HUMAN row\'s clock is its escalation alarm, so it does not move with redelivery');
+});
+
+test('F22: nothing but a person clears it — the recomputation on its own never does', () => {
+  // §11.4 clears whatever it no longer observes, which is exactly how every other kind recovers.
+  // This one has no world left to look at — the event is gone and its effect never happened — so
+  // the condition holds until the snapshot stops carrying it, and only an acknowledgement can do
+  // that. Asserted in both directions so "it never clears" cannot be true by accident.
+  const condition = projectDeadLetterCondition(PROJECT, [DEAD_A]);
+  const [raise] = planProjectBlockers({ epoch: EPOCH, open: [], observed: [condition] }).raises;
+  const open: ProjectBlockerFact[] = [{
+    id: 'BLOCKERBLOCKERBLOCKER2',
+    kind: raise.kind, owner: raise.owner, recovery: raise.recovery, severity: raise.severity,
+    requiredAction: raise.requiredAction, subjectType: raise.subjectType,
+    subjectId: raise.subjectId, dedupeKey: raise.dedupeKey, lifecycleGeneration: '1',
+    conditionVersion: raise.conditionVersion, firstSeenAt: raise.firstSeenAt,
+    lastSeenAt: raise.firstSeenAt, occurrences: 1, nextCheckAt: raise.nextCheckAt,
+    escalatedAt: null,
+  }];
+  assert.deepEqual(
+    planProjectBlockers({ epoch: EPOCH + 3_600, open, observed: [condition] }).clears, [],
+    'an hour of healthy passes does not resolve a signal that is still lost',
+  );
+  assert.deepEqual(
+    planProjectBlockers({ epoch: EPOCH + 3_600, open, observed: [] }).clears.map((c) => c.blockerId),
+    ['BLOCKERBLOCKERBLOCKER2'],
+    'and once the snapshot stops carrying it — somebody acknowledged it — it clears like anything else',
+  );
+});
 
 test('BL2: an unclassified refusal becomes UNKNOWN_FAILURE, never nothing', () => {
   assert.equal(blockerKindForRefusal('SOMETHING_NOBODY_CLASSIFIED'), 'UNKNOWN_FAILURE');

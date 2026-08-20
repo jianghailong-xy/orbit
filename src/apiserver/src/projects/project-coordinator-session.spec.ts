@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { uuidToBase62 } from '@orbit/shared';
 import {
@@ -9,6 +11,7 @@ import {
   publicIdempotencyKey,
 } from './project-decision.service';
 import { detectProjectBlockerConditions } from './project-blocker-conditions';
+import { bare, section, tableRows } from './contract-doc';
 import {
   COORDINATOR_ROTATION_REASON_CODE,
   PROJECT_LIVE_SESSION_STATUSES,
@@ -101,6 +104,28 @@ test('a run that ended is rotated, in the landing the project already records', 
   assert.equal(
     rotateCoordinatorSessionIdempotencyKey(PROJECT, plan.status === 'ROTATE' ? plan.generation : ''),
     `pc:v1:${PROJECT}:rotate:4`,
+  );
+});
+
+test('the contract names this rotation key the way the ledger spells it', () => {
+  // F-22-04 / BLK-23-01's sibling: §7.3 said `coord-session` while every key ever written said
+  // `rotate`, and nothing was wrong enough to fail — the key is permanent and unique either way, so
+  // the only cost was that somebody reading the contract to find a historical action would not find
+  // it. That is exactly the kind of drift a document nobody executes accumulates, so the document
+  // and the builder are compared here instead of trusted to agree.
+  //
+  // The template is compared with the generation substituted, not by eyeballing the words: it is
+  // the WHOLE key that has to match, and the epoch §8.2 GE1 gives this action is `generation + 1`
+  // — the generation the run being opened will be, which is what the builder is handed.
+  const row = tableRows(section(
+    readFileSync(path.resolve(__dirname, '../../../../docs/project-coordinator-contract.md'), 'utf8'),
+    '7.3',
+  )).find((cells) => bare(cells[0]) === 'ROTATE_COORDINATOR_SESSION');
+  assert.ok(row, '§7.3 no longer has a row for ROTATE_COORDINATOR_SESSION');
+  assert.equal(
+    bare(row[2]).replace('<projectId>', PROJECT).replace('<generation+1>', '4'),
+    rotateCoordinatorSessionIdempotencyKey(PROJECT, '4'),
+    'the contract states a key template no writer produces',
   );
 });
 
@@ -304,6 +329,40 @@ test('a rotation that cannot happen is a COORDINATOR_UNAVAILABLE the owner can a
     coordinatorSession: planCoordinatorSessionRotation(both),
   }).filter((condition) => condition.kind === 'COORDINATOR_UNAVAILABLE');
   assert.deepEqual(seat[0].facts, { reason: 'COORDINATOR_AGENT_DISABLED' });
+});
+
+test('F22: an unacknowledged dead letter is a condition the recomputation keeps observing', () => {
+  // The wiring assertion for §5.4 F22: the delivery path opens the row, and THIS is what stops the
+  // very next healthy pass from clearing it. A detector that was written but never added to the
+  // list would leave the blocker to be resolved by §11.4 on the project's behalf, and automatic
+  // dispatch would resume as though the lost signal had been handled.
+  const lost = input({
+    deadLetters: [{
+      eventId: uuidToBase62('00000000-0000-7000-8000-0000000019f1'),
+      kind: 'task.updated',
+      dedupeKey: 'task.updated:pcc24',
+      attempts: 10,
+    }],
+  });
+  const conditions = detectProjectBlockerConditions(lost, {
+    aggregationCycleTaskIds: [],
+    verificationVerdicts: [],
+    coordinatorSession: planCoordinatorSessionRotation(lost),
+  }).filter((condition) => condition.kind === 'UNKNOWN_FAILURE');
+  assert.equal(conditions.length, 1);
+  assert.equal(conditions[0].subjectType, 'PROJECT');
+  assert.equal(conditions[0].subjectId, uuidToBase62(PROJECT));
+
+  // …and a project that has lost nothing says nothing, so the row cannot be raised by the mere
+  // existence of the detector.
+  assert.deepEqual(
+    detectProjectBlockerConditions(input(), {
+      aggregationCycleTaskIds: [],
+      verificationVerdicts: [],
+      coordinatorSession: planCoordinatorSessionRotation(input()),
+    }).filter((condition) => condition.kind === 'UNKNOWN_FAILURE'),
+    [],
+  );
 });
 
 test('a healthy coordinator raises nothing and proposes nothing', () => {

@@ -390,6 +390,49 @@ export function blockerKindForRefusal(code: string | null | undefined): ProjectB
   return PROJECT_BLOCKER_REFUSAL_KINDS[code] ?? 'UNKNOWN_FAILURE';
 }
 
+/** One dead letter as both writers name it: what was lost, not how hard delivery tried. */
+export interface ProjectDeadLetterFact {
+  /** Base62, like every id a decision carries. */
+  eventId: string;
+  kind: string;
+  dedupeKey: string;
+  attempts: number;
+}
+
+/**
+ * §5.4 F22's dead letter, as one condition both of its writers derive from.
+ *
+ * Two places have to name this row. The delivery path knows the batch it is about to mark DEAD and
+ * opens the row inside that same transaction; §11.4's recomputation knows every dead letter nobody
+ * has acknowledged yet, and is what keeps the row open afterwards. They must produce the SAME
+ * dedupe key — a recomputation that did not observe this condition would clear the very row that
+ * stopped the project, and automatic dispatch would resume as if the lost signal had been handled.
+ * That is exactly the silent recovery BL2 exists to prevent, so the key is built here once and the
+ * two callers differ only in which events they hand it.
+ *
+ * The subject is the PROJECT: a signal the loop could not consume is not a fact about one task,
+ * and the dispatch guard reads a PROJECT-subject row as "stop everything" — which is what fail
+ * closed means here.
+ */
+export function projectDeadLetterCondition(
+  projectId: string,
+  events: readonly ProjectDeadLetterFact[],
+): ObservedBlockerCondition {
+  const sorted = [...events].sort((a, b) => compare(a.eventId, b.eventId));
+  return {
+    kind: 'UNKNOWN_FAILURE',
+    subjectType: 'PROJECT',
+    subjectId: projectId,
+    // TF2: WHICH signals were lost, never how many times delivery was attempted at them. A digest
+    // that moved with the attempt counter would call the same loss a new failure on every redelivery.
+    facts: { deadEventIds: sorted.map((event) => event.eventId) },
+    detail: {
+      reason: 'the control loop could not consume these signals and they were permanently discarded',
+      deadEvents: sorted,
+    },
+  };
+}
+
 /** §11.3: the default key, and the one every detector here uses. */
 export function projectBlockerDedupeKey(
   kind: ProjectBlockerKind,

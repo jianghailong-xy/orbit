@@ -682,7 +682,7 @@ v1.5 把这一格改成**全部未消费 `user.manual_trigger` 信号的 `dedupe
 |---|---|---|---|
 | `DISPATCH_TASK` | 把一个已授权的 Task 变成一次 Session | `pc:v1:<projectId>:dispatch:<taskId>:<dispatchAttempt>` | §7.4 全部满足；代次见 §8.2 DA1 |
 | `OPEN_COORDINATOR_TURN` | 唤醒 Coordinator Agent | `pc:v1:<projectId>:turn:<generation>:<reasonDigest>` | 存在活的 Coordinator Session；§7.6 的 TR1–TR3 全部满足 |
-| `ROTATE_COORDINATOR_SESSION` | 开一条新的 Coordinator Session | `pc:v1:<projectId>:coord-session:<generation+1>` | 旧 Session 已终结或被删除；落点必须是 `project.coordinatorWorkspaceId`（§7.5） |
+| `ROTATE_COORDINATOR_SESSION` | 开一条新的 Coordinator Session | `pc:v1:<projectId>:rotate:<generation+1>` | 旧 Session 已终结或被删除；落点必须是 `project.coordinatorWorkspaceId`（§7.5） |
 | `RAISE_BLOCKER` | 开一条结构化阻塞 | `pc:v1:<projectId>:blocker:<kind>:<subjectId>:<lifecycleGeneration>` | §11.2 的 kind 之一；代次由 §11.3 BE1 分配（v1.3，PC-CX-16） |
 | `CLEAR_BLOCKER` | 解除阻塞 | `pc:v1:<projectId>:unblock:<blockerId>` | 条件已消失（§11.4） |
 | `AGGREGATE_PARENT` | 按 `completionPolicy` 重算父任务状态 | 无（**current-state CAS**，不入账本，§13.1 AG5，v1.3） | §13.1 |

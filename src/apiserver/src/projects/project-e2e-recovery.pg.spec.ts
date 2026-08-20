@@ -23,6 +23,7 @@ import {
   drainToIdle,
   emptyWorld,
   servicesOn,
+  publicId,
   session,
   task,
   world,
@@ -73,6 +74,36 @@ async function livenessViolations(client: Client): Promise<LivenessViolation[]> 
 
 async function runtimeRow(services: E2eServices, projectId: string) {
   return services.db.projectRuntime.findUniqueOrThrow({ where: { projectId } });
+}
+
+/** One pass, then rest — the shape "and then the loop ran normally" takes everywhere here. */
+async function settle(services: E2eServices, projectId: string): Promise<void> {
+  await deliver(services, projectId);
+  await drainToIdle(services);
+}
+
+/** A signal §5.4 can never deliver, driven through the real consumer until it is DEAD. */
+async function killABatch(projectId: string, dedupeKey: string): Promise<string> {
+  const failing = servicesOn(URL!, { registerHandler: false });
+  failing.events.registerHandler({
+    handle: async () => { throw new Error('pcc22 permanent delivery failure'); },
+    deadLetter: (tx, id, events, error) => failing.reconciler.deadLetter(tx, id, events, error),
+  });
+  try {
+    await failing.events.enqueue(failing.db as unknown as Prisma.TransactionClient, {
+      projectId, kind: 'task.updated', source: { type: 'TASK', id: projectId }, dedupeKey });
+    let last = await failing.events.drainOnce();
+    for (let attempt = 0; attempt < 12 && last.status !== 'DEAD'; attempt += 1) {
+      await failing.db.projectEvent.updateMany({
+        where: { projectId, dedupeKey },
+        data: { nextAttemptAt: new Date(Date.now() - 1_000) } });
+      last = await failing.events.drainOnce();
+    }
+    assert.equal(last.status, 'DEAD', 'AC2: a batch that cannot be delivered ends, loudly');
+    return last.eventIds[0];
+  } finally {
+    await failing.dispose();
+  }
 }
 
 /**
@@ -291,54 +322,253 @@ test('unit 22: the project control loop under injected faults', { skip, timeout:
 
       await scenario('AC2: a batch that never succeeds dead-letters into a named blocker',
         async () => {
-          const target = await world(services.db, 'ac2-dead');
-          await task(services.db, target, 'work');
+          const target = await world(services.db, 'ac2-dead', { policy: ProjectAutomationPolicy.AUTO });
+          const work = await task(services.db, target, 'work');
           await drainToIdle(services);
           await services.db.projectEvent.deleteMany({ where: { projectId: target.projectId } });
 
-          const failing = servicesOn(URL!, { registerHandler: false });
-          failing.events.registerHandler({
-            handle: async () => { throw new Error('pcc22 permanent delivery failure'); },
-            deadLetter: (tx, id, events, error) =>
-              failing.reconciler.deadLetter(tx, id, events, error),
-          });
-          try {
-            await failing.events.enqueue(failing.db as unknown as Prisma.TransactionClient, {
-              projectId: target.projectId, kind: 'task.updated',
-              source: { type: 'TASK', id: target.projectId }, dedupeKey: 'ac2-dead' });
-            let last = await failing.events.drainOnce();
-            for (let attempt = 0; attempt < 12 && last.status !== 'DEAD'; attempt += 1) {
-              await failing.db.projectEvent.updateMany({
-                where: { projectId: target.projectId, dedupeKey: 'ac2-dead' },
-                data: { nextAttemptAt: new Date(Date.now() - 1_000) } });
-              last = await failing.events.drainOnce();
-            }
-            assert.equal(last.status, 'DEAD', 'AC2: a batch that cannot be delivered ends, loudly');
-          } finally {
-            await failing.dispose();
-          }
+          // A production dedupe key, uuid and all (§5.3 N3), because the blocker `detail` this
+          // ends up in is asserted by AC1 to name rows in the spelling a person can paste.
+          const deadKey = `task.updated:${target.projectId}`;
+          const eventId = await killABatch(target.projectId, deadKey);
 
           const dead = await services.db.projectEvent.findFirstOrThrow({
-            where: { projectId: target.projectId, dedupeKey: 'ac2-dead' } });
+            where: { projectId: target.projectId, dedupeKey: deadKey } });
           assert.equal(dead.disposition, 'DEAD', 'AC2: the batch ends in a recorded terminal state');
           assert.equal(dead.attempts, 10, '§5.4: after the tenth attempt, not silently before it');
 
-          // What `ProjectReconcileService.deadLetter` persists today is the RECOVERY, not a
-          // blocker: PLANNING plus a wake whose reason names the dead letter. That keeps AC3 (the
-          // project is not silent and a person reading the runtime row learns why), and it is
-          // deliberately asserted as what it is — `ProjectEventHandler.deadLetter`'s own doc
-          // comment promises "the fail-closed UNKNOWN_FAILURE state supplied by the blocker unit",
-          // which unit 17 added after unit 05 and which this path never grew. Recorded in
-          // docs/project-e2e-validation-22.md as F-22-02 rather than asserted away.
+          // §5.4 F22 / §11.2 BL2: what a permanently discarded signal costs is not recoverable, so
+          // the same transaction that discards it has to leave a row somebody can act on.
+          const open = await services.db.projectBlocker.findMany({
+            where: { projectId: target.projectId, resolvedAt: null } });
+          assert.equal(open.length, 1, 'F22: a dead letter opens exactly one blocker');
+          const blocker = open[0];
+          assert.equal(blocker.kind, 'UNKNOWN_FAILURE');
+          assert.equal(blocker.subjectType, 'PROJECT',
+            'F22: a lost signal is not a fact about one task — it stops the project');
+          assert.equal(blocker.subjectId, target.projectId);
+          assert.equal(blocker.dedupeKey, `UNKNOWN_FAILURE:PROJECT:${target.projectId}`);
+          assert.equal(blocker.lifecycleGeneration, 1n);
+          assert.equal(blocker.occurrences, 1);
+          // §11.1's five questions, all five present — which is also what §10.3 clause (c) reads.
+          assert.equal(blocker.owner, 'USER');
+          assert.equal(blocker.recovery, 'HUMAN');
+          assert.equal(blocker.severity, 'CRITICAL');
+          assert.ok(blocker.requiredAction.length > 0);
+          assert.equal(blocker.nextCheckAt.getTime(),
+            blocker.firstSeenAt.getTime() + 30 * 60_000,
+            'BL5: a HUMAN row\'s clock is its escalation alarm');
+          assert.equal(blocker.escalatedAt, null, 'a row cannot escalate in the pass that opened it');
+          assert.deepEqual(
+            (blocker.detail as { deadEvents?: Array<{ eventId: string; dedupeKey: string }> })
+              .deadEvents,
+            [{
+              eventId: publicId(eventId),
+              kind: 'task.updated',
+              dedupeKey: `task.updated:${publicId(target.projectId)}`,
+              attempts: 10,
+            }],
+            'AC1/§8.2: it names the signal that was lost, in the spelling a person can paste',
+          );
+
+          // §11.3 BE3: the raise key and the row are one-to-one, so the ledger says which action
+          // opened it. There was no decision to cite — this pass never captured a snapshot — and
+          // migration 0120 left the column nullable for exactly that.
+          const raise = await services.db.projectAction.findFirstOrThrow({
+            where: { projectId: target.projectId, type: 'RAISE_BLOCKER' } });
+          assert.equal(raise.idempotencyKey,
+            `pc:v1:${target.projectId}:blocker:UNKNOWN_FAILURE:${target.projectId}:1`);
+          assert.equal(raise.status, 'APPLIED');
+          assert.equal(raise.decisionId, null);
+          assert.match((raise.detail as { lastError?: string }).lastError ?? '',
+            /pcc22 permanent delivery failure/,
+            'the exception text lands in the append-only ledger, not in a column §11.3 rewrites');
+
+          // §4.2 guard 2: an open USER blocker IS `AWAITING_HUMAN`, and TS4 makes persisting any
+          // other value an illegal transition. The clock stays: it is the recompute this path
+          // schedules, and it is earlier than the escalation alarm, so nothing is missed.
           const state = await runtimeRow(services, target.projectId);
-          assert.equal(state.runState, 'PLANNING');
+          assert.equal(state.runState, 'AWAITING_HUMAN');
           assert.ok(state.nextWakeAt && state.nextWakeAt.getTime() > Date.now(),
             'AC3: a dead-lettered batch still leaves a clock');
           assert.match(state.nextWakeReason ?? '', /dead letter/i,
             'AC2: and the reason a reader sees names the dead letter');
+
+          // AC10: it is on the face the control plane serves, not only in a table.
+          const served = await services.projects.blockers(target.ownerId, target.projectId);
+          assert.equal(served.blockers.length, 1);
+          assert.equal(served.blockers[0].kind, 'UNKNOWN_FAILURE');
+          assert.equal(served.blockers[0].raisedByActionId, raise.id,
+            'AC10: and "which action opened this" is answered rather than inferred');
+
+          // The point of all of it: automatic dispatch STOPS. Asserted through the production
+          // authorization path, not by reading the blocker table a second time.
+          const refused = await dispatch(services, target, work);
+          assert.equal(refused.status, 'REFUSED');
+          assert.equal(refused.refusalCode, 'PROJECT_BLOCKED',
+            'F22: an event discarded for good must not be followed by an automatic dispatch');
+          assert.equal(await services.db.session.count({ where: { taskId: work } }), 0);
+
+          // And it stays stopped. §11.4 clears whatever it no longer observes, so a healthy pass
+          // right afterwards is the moment this could silently recover — the recomputation has to
+          // keep seeing the unacknowledged dead letter instead.
+          await settle(services, target.projectId);
+          const after = await services.db.projectBlocker.findMany({
+            where: { projectId: target.projectId, resolvedAt: null } });
+          assert.equal(after.length, 1, 'F22: a healthy pass does not clear it on the project\'s behalf');
+          assert.equal(after[0].id, blocker.id, 'and it is the same episode, not a fresh one');
+          assert.equal(after[0].lifecycleGeneration, 1n);
+          assert.ok(after[0].occurrences > blocker.occurrences,
+            '§11.3: the recomputation touches it — two display columns and nothing else');
+          // …and the pass that recomputed it agrees about the state, so the `AWAITING_HUMAN` the
+          // dead letter wrote is what §4.2's guards produce and not a value only this path holds.
+          assert.equal((await runtimeRow(services, target.projectId)).runState, 'AWAITING_HUMAN');
+          const stillRefused = await dispatch(services, target, work, 2);
+          assert.equal(stillRefused.refusalCode, 'PROJECT_BLOCKED');
+
+          // …until somebody deals with it. That is the whole of `recovery = HUMAN`: the condition
+          // stops being carried once a person resolves the row, and only then does the loop move.
+          await services.db.projectBlocker.update({
+            where: { id: blocker.id },
+            data: { resolvedAt: new Date(), resolvedBy: 'USER' },
+          });
+          await settle(services, target.projectId);
+          assert.deepEqual(await services.db.projectBlocker.findMany({
+            where: { projectId: target.projectId, resolvedAt: null } }), [],
+            'F22: an acknowledged dead letter does not re-raise itself on the next pass');
+          const allowed = await dispatch(services, target, work, 3);
+          assert.equal(allowed.status, 'APPLIED', 'and the project may run again');
+        });
+
+      await scenario('AC2: repeated, concurrent and post-restart dead letters are one episode',
+        async () => {
+          const target = await world(services.db, 'ac2-dead-dedupe');
+          await task(services.db, target, 'work');
+          await drainToIdle(services);
+          await services.db.projectEvent.deleteMany({ where: { projectId: target.projectId } });
+
+          await killABatch(target.projectId, 'ac2-dead-1');
+          const first = await services.db.projectBlocker.findFirstOrThrow({
+            where: { projectId: target.projectId, resolvedAt: null } });
+
+          // A second loss, through a service that has never run before — a restart, as far as the
+          // database can tell: new instance id, new lease holder, same key.
+          await killABatch(target.projectId, 'ac2-dead-2');
+
+          // …and two dead letters committing at once. The lease serialises them (§8.1 F1) and the
+          // partial unique index is the backstop under it (§11.3 BE2), so whichever way this lands
+          // there is one episode.
+          const envelopes = await services.db.projectEvent.findMany({
+            where: { projectId: target.projectId } });
+          const racers = [servicesOn(URL!, { registerHandler: false }),
+            servicesOn(URL!, { registerHandler: false })];
+          try {
+            const outcomes = await Promise.allSettled(racers.map((racer) => racer.db.$transaction(
+              (tx) => racer.reconciler.deadLetter(
+                tx as unknown as Prisma.TransactionClient, target.projectId,
+                envelopes.map((row) => ({
+                  v: row.v, id: row.id, projectId: row.projectId, kind: row.kind,
+                  occurredAt: row.occurredAt,
+                  source: { type: row.sourceType as 'TASK', id: row.sourceId },
+                  dedupeKey: row.dedupeKey, payload: row.payload, occurrences: row.occurrences,
+                  lastAt: row.lastAt, attempts: row.attempts, nextAttemptAt: row.nextAttemptAt,
+                })),
+                'pcc24 concurrent dead letter'),
+              { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+            )));
+            assert.ok(outcomes.some((outcome) => outcome.status === 'fulfilled'),
+              'one of two concurrent dead letters has to be the one that records it');
+          } finally {
+            await Promise.all(racers.map((racer) => racer.dispose()));
+          }
+
+          const open = await services.db.projectBlocker.findMany({
+            where: { projectId: target.projectId, resolvedAt: null } });
+          assert.equal(open.length, 1, '§11.3: the same cause never opens a second episode');
+          assert.equal(open[0].id, first.id);
+          assert.equal(open[0].lifecycleGeneration, 1n, 'BE1: and the generation does not advance');
+          assert.equal(await services.db.projectAction.count({
+            where: { projectId: target.projectId, type: 'RAISE_BLOCKER' } }), 1,
+            'BE3: one row, one permanent key, one ledger entry');
+          assert.equal(open[0].firstSeenAt.getTime(), first.firstSeenAt.getTime(),
+            'ES5: the age escalation is measured from does not restart');
+          assert.equal(open[0].nextCheckAt.getTime(), first.nextCheckAt.getTime(),
+            'ES5: and a HUMAN row\'s clock does not move with redelivery');
+          assert.ok(open[0].occurrences >= 2, 'BL7: only the display columns move');
+
+          // §11.5 ES4: the one thing that escalates it is its own age. Aged by hand rather than by
+          // waiting thirty minutes; the pass, the compare-and-set and the notification are real.
+          await services.db.projectBlocker.update({
+            where: { id: first.id },
+            data: {
+              firstSeenAt: new Date(Date.now() - 31 * 60_000),
+              nextCheckAt: new Date(Date.now() - 60_000),
+            },
+          });
+          await settle(services, target.projectId);
+          const escalated = await services.db.projectBlocker.findUniqueOrThrow(
+            { where: { id: first.id } });
+          assert.ok(escalated.escalatedAt, '§11.5: an episode this old has been handed to a person');
+          assert.equal(escalated.owner, 'USER', 'ES3: escalation goes to USER, once');
+          assert.equal(escalated.recovery, 'HUMAN', 'ES1: and leaves recovery alone');
+          assert.equal(await services.db.projectEvent.count({
+            where: { projectId: target.projectId, kind: 'blocker.escalated' } }), 1,
+            '§11.5: at most one notification per lifecycle');
+          await settle(services, target.projectId);
+          assert.equal((await services.db.projectBlocker.findUniqueOrThrow(
+            { where: { id: first.id } })).escalatedAt!.getTime(), escalated.escalatedAt!.getTime(),
+            'and a second pass does not escalate it again');
+        });
+
+      await scenario('AC2: a dead letter that cannot record its blocker discards nothing',
+        async () => {
+          const target = await world(services.db, 'ac2-dead-atomic');
+          await task(services.db, target, 'work');
+          await drainToIdle(services);
+          await services.db.projectEvent.deleteMany({ where: { projectId: target.projectId } });
+
+          // The delivery transaction fails AFTER the reconciler has written its blocker. If that
+          // write lived anywhere but this transaction it would survive; the events service says it
+          // must not, and that no event may become DEAD without it.
+          const failing = servicesOn(URL!, { registerHandler: false });
+          failing.events.registerHandler({
+            handle: async () => { throw new Error('pcc24 permanent delivery failure'); },
+            deadLetter: async (tx, id, events, error) => {
+              await failing.reconciler.deadLetter(tx, id, events, error);
+              throw new Error('pcc24 injected failure after the blocker was written');
+            },
+          });
+          try {
+            await failing.events.enqueue(failing.db as unknown as Prisma.TransactionClient, {
+              projectId: target.projectId, kind: 'task.updated',
+              source: { type: 'TASK', id: target.projectId }, dedupeKey: 'ac2-dead-atomic' });
+            await failing.db.projectEvent.updateMany({
+              where: { projectId: target.projectId, dedupeKey: 'ac2-dead-atomic' },
+              data: { attempts: 9 } });
+            await assert.rejects(() => failing.events.drainOnce(),
+              /pcc24 injected failure/,
+              '§5.4: a dead letter that cannot be recorded fails the whole delivery');
+          } finally {
+            await failing.dispose();
+          }
+
+          assert.deepEqual(await services.db.projectBlocker.findMany({
+            where: { projectId: target.projectId } }), [],
+            'F22: the blocker rolled back with the transaction it was written in');
+          const row = await services.db.projectEvent.findFirstOrThrow({
+            where: { projectId: target.projectId, dedupeKey: 'ac2-dead-atomic' } });
+          assert.equal(row.consumedAt, null, 'and the event is still live, so nothing was lost');
+          assert.equal(row.disposition, null);
+          assert.equal(row.attempts, 9, '§5.4: the attempt that could not be recorded did not count');
+
+          // The same batch, delivered by a service that is not sabotaged: now both happen.
+          await killABatch(target.projectId, 'ac2-dead-atomic');
+          assert.equal((await services.db.projectEvent.findFirstOrThrow({
+            where: { projectId: target.projectId, dedupeKey: 'ac2-dead-atomic' } })).disposition,
+            'DEAD');
           assert.equal(await services.db.projectBlocker.count({
-            where: { projectId: target.projectId, resolvedAt: null } }), 0,
-            'F-22-02: today this path raises no blocker — change this assertion when it does');
+            where: { projectId: target.projectId, resolvedAt: null } }), 1,
+            'F22: DEAD and the blocker are one commit, in both directions');
         });
 
       // --------------------------------------------------------------------------------------

@@ -27,6 +27,7 @@ import {
   ObservedBlockerCondition,
   blockerKindForRefusal,
   compare,
+  projectDeadLetterCondition,
 } from './project-blocker';
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
@@ -69,11 +70,28 @@ export function detectProjectBlockerConditions(
     ...coordinatorConditions(input, sources.coordinatorSession),
     ...coordinatorProgressConditions(input, sources.coordinatorSession),
     ...workspaceConditions(input),
+    ...deadLetterConditions(input),
   ];
   return conditions.sort((a, b) => compare(
     `${a.kind}:${a.subjectType}:${a.subjectId}`,
     `${b.kind}:${b.subjectType}:${b.subjectId}`,
   ));
+}
+
+/**
+ * §5.4 F22 / BL2: signals this project lost for good.
+ *
+ * Every other detector here asks "is this still true of the world?" and gets an answer from the
+ * world itself. A dead letter cannot be asked that way — the event is consumed, its effect never
+ * happened, and nothing that is still visible says so. What the snapshot carries instead is the set
+ * of dead letters nobody has ACKNOWLEDGED (§6.1's `deadLetters`, which drops a row once somebody
+ * resolves the blocker it opened by hand). So the condition holds until a person deals with it,
+ * which is what `recovery = HUMAN` means, and §11.4 cannot clear it on the project's behalf.
+ */
+function deadLetterConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
+  const dead = input.world.deadLetters ?? [];
+  if (dead.length === 0) return [];
+  return [projectDeadLetterCondition(input.world.project.id, dead)];
 }
 
 /**
