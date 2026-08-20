@@ -114,6 +114,31 @@ question rather than a scheduling one, and the answer is a kind of its own.
   of the conversation; the runner settles the steer's turn on that acknowledgement (§ delivery
   receipts), and on a process going away it settles it rather than re-delivering it.
 
+**What the clients show for one.** A steer is not a queued message and must not be dressed as one:
+it is not waiting, it cannot be withdrawn (`cancelQueuedTurn` deletes only `message`/`shell`), and
+it gets no reply of its own, so how far it got is the only report it ever produces.
+
+- **The kind travels back.** `POST /sessions/:id/turns` returns `{ turnId, seq, kind }`. The client
+  learns what the server decided instead of inferring it from a status its stream may not have
+  caught up with. An older server omits it, which reads as the pre-steer behaviour: queued.
+- **The kind survives a reload.** The runner marks `steer: true` on the steer's `user` event, so a
+  transcript rebuilt from durable events alone still knows which bubble that was.
+- **A still-PENDING steer is listed** by `GET /sessions/:id/turns`, tagged `kind: 'steer'`. Until
+  the runner leases it there is nothing else to render it from, and a message that vanishes on
+  refresh is the one outcome mid-turn sending must not produce. Listed ≠ withdrawable.
+- **Four states, from the runner's own `user_delivery` transitions:** *Sending…* (accepted, by the
+  control plane or the runner's writer), *Delivering…* (`written` — its bytes are in the engine's
+  stdin, unread while a tool runs), *Sent into this turn* (`acknowledged` — the engine echoed it
+  back), *Not delivered* (`failed`, with the reason). Shown for a steer alone: an ordinary message
+  is reported by the reply that follows it. Web `lib/steerDelivery.ts` and OrbitKit
+  `Transcript/SteerDelivery.swift` are the same table, so every client says the same words.
+- **A mid-turn `user` event is not a turn boundary.** It lands inside a reply that is still
+  streaming: clients must not clear/close the open assistant bubble on it, or the reply is blanked
+  (web) or rendered twice once its authoritative `assistant` event arrives (native).
+- **Recovery is a new send.** An undelivered message can be put back in the composer; it goes out
+  with a fresh `clientTurnId`, since the old turn is settled and re-using its id would be answered
+  with that settled turn instead of sending anything.
+
 ---
 
 ## 4. seq ownership & monotonicity across respawn (RT: failure/scaling high ×2)
