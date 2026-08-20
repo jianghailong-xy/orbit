@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ProjectEventsService } from './project-events.service';
 import { ProjectsService } from './projects.service';
 
 // PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
@@ -10,7 +11,7 @@ import { ProjectsService } from './projects.service';
 @Module({
   imports: [SessionsModule],
   controllers: [ProjectsController],
-  providers: [ProjectsService],
-  exports: [ProjectsService],
+  providers: [ProjectsService, ProjectEventsService],
+  exports: [ProjectsService, ProjectEventsService],
 })
 export class ProjectsModule {}

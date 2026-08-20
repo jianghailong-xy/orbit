@@ -1198,6 +1198,7 @@ model Project {
   tasks   Task[]
   members ProjectMember[]
   runtime ProjectRuntime?
+  events  ProjectEvent[]
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -1301,6 +1302,43 @@ model ProjectRuntime {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("project_runtime")
+}
+
+/// A durable signal that some committed fact belonging to a Project changed.
+///
+/// This is a transactional outbox, not a second source of business truth: consumers use the
+/// envelope to decide which Project to reconcile, then re-read the current world. Repeated signals
+/// with the same `dedupeKey` coalesce while pending; the partial unique index that enforces that is
+/// declared in migration 0116 because Prisma cannot express a partial unique constraint.
+model ProjectEvent {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Envelope schema version. Readers deliberately accept values they do not know yet: an event
+  /// is still a valid dirty signal even when its audit payload came from a newer binary.
+  v          Int      @default(1)
+  kind       String
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  sourceType String   @map("source_type")
+  sourceId   String   @map("source_id") @db.Uuid
+  dedupeKey  String   @map("dedupe_key")
+  payload    Json     @default("{}")
+
+  /// Delivery observations, not business facts. They must never enter a semantic decision digest.
+  occurrences   Int       @default(1)
+  lastAt        DateTime  @default(now()) @map("last_at")
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at")
+
+  /// Set only in the same transaction that commits the handler's database effects. `disposition`
+  /// is null while pending and one of RECONCILED / DISCARDED_OUT_OF_LOOP / DEAD afterwards; the
+  /// migration CHECK freezes that closed terminal set.
+  consumedAt  DateTime? @map("consumed_at")
+  disposition String?
+
+  @@index([projectId])
+  @@map("project_event")
 }
 
 model TaskList {

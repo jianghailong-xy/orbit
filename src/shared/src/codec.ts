@@ -96,6 +96,8 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'batchId',
   'listId',
   'projectId',
+  'eventId',
+  'sourceId',
   'tagId',
   'turnId',
   'approvalId',
