@@ -114,8 +114,16 @@ func TestClaudePromptCarriesShellMetacharactersToStdinAndNowhereElse(t *testing.
 			t.Errorf("argv[%d] = %q carries the prompt (argv %v)", i, arg, spawns[0].Argv)
 		}
 	}
+	// One whole, well-formed `user` frame per turn: a newline that reached stdin unescaped
+	// would have split one of them, and Stdin() would have failed to parse the halves.
 	stdin := fake.WaitStdin(len(turns))
+	if len(stdin) != len(turns) {
+		t.Errorf("%d frames reached stdin, want %d", len(stdin), len(turns))
+	}
 	for i, want := range turns {
+		if got := stdin[i]["type"]; got != frameUser {
+			t.Errorf("stdin frame %d is a %v, want a %s frame", i, got, frameUser)
+		}
 		if got := userFrameText(t, stdin[i]); got != want {
 			t.Errorf("stdin frame %d carried %q, want %q", i, got, want)
 		}
