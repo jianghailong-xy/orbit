@@ -1254,6 +1254,17 @@ model ProjectRuntime {
   /// the project — a counter that can go back is a counter that can make two different runs look
   /// like the same one.
   coordinatorGeneration BigInt   @default(0) @map("coordinator_generation")
+  /// The coordinator session `coordinatorGeneration` was last counted against — the baseline a
+  /// rotation is measured FROM, so that "how many times has this pointer been replaced" is a
+  /// function of two committed facts (this column and the project row) rather than of how many
+  /// statements a writer split its change across. Maintained entirely by the database
+  /// (`project_coordinator_reconcile`, migration 0113); no service writes it.
+  ///
+  /// No relation, deliberately, for the reason `project_decision.coordinator_session_id` has none
+  /// (contract §7.7 D19-b): a historical id, not a reference. SetNull would reset the baseline
+  /// when a rotated-away session is purged — and a baseline that resets is a rotation that goes
+  /// uncounted — while Restrict would make deleting a session fail against a counter.
+  coordinatorSessionId  String?  @map("coordinator_session_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
