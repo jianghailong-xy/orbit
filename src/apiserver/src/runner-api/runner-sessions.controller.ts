@@ -199,7 +199,7 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: { message: string },
+    @Body() dto: { message: string; clientTurnId?: string },
   ) {
     if (isHeadlessCaller(callingSessionId)) {
       await this.sessions.assertHostedByRunner(
@@ -211,8 +211,12 @@ export class RunnerSessionsController {
       this.assertNoServiceToken(grant);
       await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     }
+    // Same idempotency key every other entry point sends. A caller that retries a request it
+    // never saw the answer to (the MCP tool, the CLI, a script) can repeat the key and get the
+    // turn it already filed back, instead of a second copy of the message. Minting one here
+    // when none is given keeps the historical behaviour for callers that don't care.
     return this.sessions.createTurn(runner.ownerId, id, {
-      clientTurnId: randomUUID(),
+      clientTurnId: dto.clientTurnId?.trim() || randomUUID(),
       content: dto.message,
     });
   }
@@ -228,10 +232,21 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
+    @Body() dto?: { message?: string; clientTurnId?: string },
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
-    return this.sessions.interrupt(runner.ownerId, id);
+    // With a message, this is the same one-transaction "stop that and do this instead" the
+    // browser sends (SessionInterruptDto): the follow-up is filed after the interrupt drops
+    // what was queued, so it cannot be its own casualty. Bodyless stays a plain interrupt.
+    const followUp = dto?.message?.trim();
+    return this.sessions.interrupt(
+      runner.ownerId,
+      id,
+      followUp
+        ? { content: followUp, clientTurnId: dto?.clientTurnId?.trim() || randomUUID() }
+        : undefined,
+    );
   }
 
   @Post('sessions/:id/merge')

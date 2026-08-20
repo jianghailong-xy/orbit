@@ -35,6 +35,8 @@ function makeService(rows: Array<Record<string, unknown>>) {
         deleteFilters.push(where);
         return { count: 0 };
       },
+      // What the delete matched nothing BECAUSE of: a steer row, or nothing at all.
+      findFirst: async () => (rows.some((r) => r.kind === 'steer') ? { id: rows[0].id } : null),
       count: async () => 1,
     },
   };
@@ -107,11 +109,13 @@ test('a steer is not withdrawable, however it got onto that list', async () => {
   // The mirror of listing it: cancelQueuedTurn deletes only message/shell, so a client that
   // offered Cancel on a steer would be offering a button that always fails. This is what makes
   // hiding that affordance correct rather than merely tidy.
-  const h = makeService([]);
+  const h = makeService([row('t1', 'steer', 'actually, call it gadget')]);
 
   await assert.rejects(
     h.service.cancelQueuedTurn(OWNER_ID, SESSION_ID, '33333333-3333-4333-8333-333333333333'),
-    /message already started|not found/,
+    // And refused for the reason it is actually refused for: the message is not gone, it is
+    // already on its way into the running turn (see turn-error-contract.spec.ts).
+    /written into the running turn/,
   );
 
   const where = h.deleteFilters[0] as { kind: { in: string[] } };

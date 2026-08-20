@@ -17,8 +17,8 @@ Usage:
   orbit session list [--status STATUS] [--parent-session-id ID] [--json]
   orbit session search --query TEXT [--limit N] [--json]
   orbit session get SESSION_ID [--json]
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--json]
-  orbit session interrupt SESSION_ID [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
+  orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--json]
   orbit session end SESSION_ID [--json]
   orbit session complete SESSION_ID [--json]
@@ -80,14 +80,24 @@ long-lived session has finished the turn it was given.
 	"send": `orbit session send — send a follow-up message to a session
 
 Usage:
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
 
 --message-file accepts only '-' (stdin), so the CLI never opens an arbitrary path.
+
+The reply's "kind" says what the server did with the message: "steer" means it is being
+written into the turn already running (no reply of its own, and not withdrawable), while
+"message" means it is queued behind that turn. --client-turn-id makes the send idempotent:
+repeating a key returns the turn already filed instead of queueing a second message.
 `,
 	"interrupt": `orbit session interrupt — interrupt a session's current turn
 
 Usage:
-  orbit session interrupt SESSION_ID [--json]
+  orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
+
+Interrupting drops whatever was queued behind the running turn — stopping means stop. With
+--message the follow-up is filed in the SAME operation, after that drop, so it survives and
+runs as the next turn; without one, nothing takes the stopped turn's place. Accepting the
+request is not a promise the engine stopped: the transcript's "interrupt" event is.
 `,
 	"merge": `orbit session merge — merge a session's worktree branch
 
@@ -111,8 +121,8 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
-	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--json"}, Mutates: true},
-	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
+	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--json"}, Mutates: true},
+	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
@@ -182,7 +192,7 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 	case "send":
 		return cliSessionSend(args[1:], in, out, ctx)
 	case "interrupt":
-		return cliSessionInterrupt(args[1:], out, ctx)
+		return cliSessionInterrupt(args[1:], in, out, ctx)
 	case "merge":
 		return cliSessionMerge(args[1:], out, ctx)
 	case "end":
@@ -541,6 +551,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	fs := newCLIFlagSet("orbit session send")
 	message := fs.String("message", "", "follow-up message")
 	messageFile := fs.String("message-file", "", "read message from stdin (-)")
+	clientTurnID := fs.String("client-turn-id", "", "idempotency key for this message")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -560,15 +571,32 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if err != nil {
 		return err
 	}
-	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, map[string]interface{}{"message": messageText})
+	body := map[string]interface{}{"message": messageText}
+	if key := strings.TrimSpace(*clientTurnID); key != "" {
+		body["clientTurnId"] = key
+	}
+	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("send session message: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionInterrupt(args []string, out io.Writer, ctx cliOrchestrationContext) error {
-	id, jsonOut, err := parseSessionTargetArgs("orbit session interrupt", args)
+func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit session interrupt")
+	message := fs.String("message", "", "what to do instead, sent with the stop")
+	messageFile := fs.String("message-file", "", "read the follow-up from stdin (-)")
+	clientTurnID := fs.String("client-turn-id", "", "idempotency key for the follow-up")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveSessionCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	messageText, _, err := readCLIText(in, *message, flagWasSet(fs, "message"), *messageFile, flagWasSet(fs, "message-file"), "message")
 	if err != nil {
 		return err
 	}
@@ -576,11 +604,21 @@ func cliSessionInterrupt(args []string, out io.Writer, ctx cliOrchestrationConte
 	if err != nil {
 		return err
 	}
-	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id)
+	// A plain interrupt stays a bodyless POST, exactly as it was; the follow-up only rides
+	// along when there is one.
+	var body interface{}
+	if follow := strings.TrimSpace(messageText); follow != "" {
+		req := map[string]interface{}{"message": follow}
+		if key := strings.TrimSpace(*clientTurnID); key != "" {
+			req["clientTurnId"] = key
+		}
+		body = req
+	}
+	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("interrupt session: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, jsonOut)
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
 func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) error {

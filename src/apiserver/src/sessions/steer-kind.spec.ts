@@ -16,12 +16,21 @@ import { SessionsService } from './sessions.service';
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 
-function makeService(inFlight: number, status: RunStatus = RunStatus.RUNNING) {
+function makeService(
+  inFlight: number,
+  status: RunStatus = RunStatus.RUNNING,
+  provider: { provider: string; providerBuiltin: boolean; customRuntime?: string } = {
+    provider: 'claude',
+    providerBuiltin: true,
+  },
+) {
   const created: Record<string, unknown>[] = [];
   const countFilters: Record<string, unknown>[] = [];
   const session = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
+    provider: provider.provider,
+    providerBuiltin: provider.providerBuiltin,
     status,
     cancelRequestedAt: null,
     prompt: 'opening prompt',
@@ -52,6 +61,11 @@ function makeService(inFlight: number, status: RunStatus = RunStatus.RUNNING) {
       },
     },
     attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
+    // Only consulted for a configured (BYOK) provider, which borrows a built-in runtime.
+    modelProvider: {
+      findFirst: async () =>
+        provider.customRuntime ? { runtime: provider.customRuntime, enabled: true } : null,
+    },
   };
   const prisma = {
     session: { findFirst: async () => ({ ...session }), findUnique: async () => ({ ...session }) },
@@ -107,6 +121,22 @@ test('a message sent to an idle session is an ordinary turn, and queues as one',
   assert.equal(h.created[0].kind, 'message');
 });
 
+test('a client cannot claim the kind: asking to steer an idle session files a message', async () => {
+  const h = makeService(0, RunStatus.AWAITING_INPUT);
+
+  // `kind` is a whitelist of what a caller may REQUEST — a message or a `!cmd`. If a caller could
+  // claim `steer`, it could have a message filed into a turn that is not running: the runner would
+  // refuse to write it (nothing to steer) and the message would fail for no reason the sender
+  // could see, while the dequeue gate for a steer is not the one the message needed.
+  await h.service.createTurn(OWNER_ID, SESSION_ID, {
+    clientTurnId: '55555555-5555-4555-8555-555555555555',
+    content: 'pretend this is mid-turn',
+    kind: 'steer' as never,
+  });
+
+  assert.equal(h.created[0].kind, 'message');
+});
+
 test('a `!cmd` shell turn never becomes a steer, however busy the engine is', async () => {
   const h = makeService(1);
 
@@ -132,4 +162,53 @@ test('the response still carries the turn id and seq it always did', async () =>
 
   assert.equal(accepted.turnId, 'turn-new');
   assert.equal(accepted.seq, 2);
+});
+
+/**
+ * A steer is written into a stdin that stays open across the turn, which only claude's
+ * stream-json transport has. Filing one for any other engine delivered a turn nobody consumes:
+ * leased (so gone from the queued list) and never re-leased (so never coming back) — the message
+ * would simply disappear. Those sessions keep the behaviour they always had: an ordinary queued
+ * message, which is what their clients already know how to show.
+ */
+const CODEX = { provider: 'codex', providerBuiltin: true };
+const KIMI = { provider: 'kimi', providerBuiltin: true };
+const OPENCODE = { provider: 'opencode', providerBuiltin: true };
+
+test('an engine that cannot be written to mid-turn queues the message instead of steering it', async () => {
+  for (const provider of [CODEX, KIMI, OPENCODE]) {
+    const h = makeService(1, RunStatus.RUNNING, provider);
+
+    await send(h);
+
+    assert.equal(h.created[0].kind, 'message', `${provider.provider} must not be handed a steer`);
+  }
+});
+
+test('a configured provider is judged by the runtime it borrows, not by its slug', async () => {
+  // A BYOK identity on the claude runtime steers exactly like claude — the stdin is the same one.
+  const onClaude = makeService(1, RunStatus.RUNNING, {
+    provider: 'deepseek',
+    providerBuiltin: false,
+    customRuntime: 'claude',
+  });
+  await send(onClaude);
+  assert.equal(onClaude.created[0].kind, 'steer');
+
+  // …and one on the codex runtime does not, however claude-like its slug looks.
+  const onCodex = makeService(1, RunStatus.RUNNING, {
+    provider: 'some-openai-endpoint',
+    providerBuiltin: false,
+    customRuntime: 'codex',
+  });
+  await send(onCodex);
+  assert.equal(onCodex.created[0].kind, 'message');
+});
+
+test('the answer tells a non-steering session what it got, so no client shows the wrong thing', async () => {
+  const accepted = await send(makeService(1, RunStatus.RUNNING, CODEX));
+
+  // 'message' is what a client renders as "Queued" with a withdraw — which is exactly what this
+  // is. A blank kind would leave every door guessing from a status it may not have caught up on.
+  assert.equal(accepted.kind, 'message');
 });

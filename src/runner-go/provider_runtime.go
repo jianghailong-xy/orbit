@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+)
 
 // What each provider's engine is, as far as running a session is concerned. A session's
 // driver is picked from this table rather than by comparing the provider name, so adding
@@ -67,7 +71,7 @@ var providerRuntimes = map[string]providerRuntime{
 		transport: transportJSONRPC,
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runCodexSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
-				p.execDir, p.scratchDir, p.emit, p.setTurn, p.firstSpawn, p.bg,
+				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
 				p.onCodexRateLimits, p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
 	},
@@ -75,7 +79,7 @@ var providerRuntimes = map[string]providerRuntime{
 		transport: transportJSONRPC,
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runKimiSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
-				p.execDir, p.scratchDir, p.emit, p.setTurn, p.firstSpawn, p.bg,
+				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
 				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
 	},
@@ -83,7 +87,7 @@ var providerRuntimes = map[string]providerRuntime{
 		transport: transportOneShot,
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runOpenCodeSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
-				p.execDir, p.scratchDir, p.emit, p.setTurn, p.firstSpawn, p.bg,
+				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
 				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
 	},
@@ -93,4 +97,34 @@ var providerRuntimes = map[string]providerRuntime{
 // normalised by runtimeProvider, which only ever returns a name this table holds.
 func providerRuntimeFor(provider string) providerRuntime {
 	return providerRuntimes[provider]
+}
+
+// errSteerUnsupported: a steer — a user message meant to be written into the turn already
+// running — reached an engine that has no way to take one. The control plane decides that
+// question before it files the turn (shared/providerTransport.ts), so this is the two of
+// them disagreeing: a runner older than the control plane, or a session whose provider
+// moved under it. It is settled loudly rather than ignored because the alternative is the
+// one outcome mid-turn delivery must not produce — the turn is already leased and is never
+// re-leased, so a message dropped here would simply be gone.
+var errSteerUnsupported = errors.New("this engine cannot be given a message while a turn is running; send it again once the turn ends")
+
+// refuseUnsupportedSteer settles a steer that arrived at a non-stream-json engine. It
+// settles only that message: the turn it was meant to join is still running, and failing
+// the session over a side-channel message that never reached the engine would take a
+// working run down with it. Mirrors the claude loop's own refusal (errNoTurnToSteer) so a
+// message refused by any provider reads the same on every client.
+func refuseUnsupportedSteer(turnID, content, provider string, job *ClaimedSession, emitFor emitTurnFn, completeTurn turnCompleter) {
+	cause := fmt.Errorf("%s: %w", provider, errSteerUnsupported)
+	logln("refusing a steer for", job.SessionID+":", cause.Error())
+	// The refusal enters the transcript as the failure it is. With no event at all the
+	// sender is left watching an optimistic bubble wait for something never coming, and a
+	// reload has nothing to render it from — a steer produces no reply of its own.
+	emitFor(turnID, evUser, map[string]interface{}{
+		"text": content, "delivery": string(deliveryFailed), "steer": true,
+	})
+	emitFor(turnID, evUserDelivery, map[string]interface{}{
+		"turnId": turnID, "delivery": string(deliveryFailed),
+		"reason": cause.Error(), "retryable": true,
+	})
+	settleSteerTurn(turnID, cause, job, completeTurn)
 }

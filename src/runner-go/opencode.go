@@ -51,7 +51,7 @@ type openCodeInboxResult struct {
 // `opencode run` process. Unlike the legacy Codex exec loop, this lets an interrupt
 // cancel the active child immediately while keeping the Orbit session available for
 // another turn. Runner shutdown stops polling but drains an active turn.
-func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	inboxCtx, stopInbox := contextUntilEither(ctx, shutdownCtx)
 	defer stopInbox()
@@ -205,6 +205,9 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 		switch resp.Kind {
 		case "message":
 			startMessage(resp)
+		case "steer":
+			// Nothing is running to steer here, and each turn is its own process anyway.
+			refuseUnsupportedSteer(resp.TurnID, resp.Content, providerOpenCode, job, emitFor, completeTurn)
 		case "shell":
 			if seen[resp.TurnID] || !waitTurnPermit(ctx) {
 				return false
@@ -310,6 +313,10 @@ func runOpenCodeSessionProcess(ctx context.Context, shutdownCtx context.Context,
 			case "interrupt":
 				activeCancel(errOpenCodeInterrupted)
 				emit(evInterrupt, map[string]interface{}{})
+			case "steer":
+				// One process per turn: the running child took its whole prompt at spawn and
+				// there is no stdin to add to. Refuse it where the sender can see it.
+				refuseUnsupportedSteer(resp.TurnID, resp.Content, providerOpenCode, job, emitFor, completeTurn)
 			case "end":
 				endRequested = true
 				queued = nil

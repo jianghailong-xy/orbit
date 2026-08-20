@@ -88,7 +88,7 @@ func TestOrchestrationTransportMethodsSendSessionCredential(t *testing.T) {
 			method: http.MethodPost,
 			path:   "/api/runner/sessions/child-session/interrupt",
 			call: func(transport *Transport) error {
-				_, err := transport.interruptSession("caller-session", "session-token", "child-session")
+				_, err := transport.interruptSession("caller-session", "session-token", "child-session", nil)
 				return err
 			},
 		},

@@ -259,11 +259,18 @@ func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
 
 // inbox long-polls for the next user turn of an interactive session; returns nil
 // when the server holds then yields nothing (turnId == "").
+//
+// `acceptsSteer` says this binary knows the `steer` kind — a message written into the turn
+// already running. It is a property of the runner, not of the session: every session loop
+// here either folds a steer into the running turn (claude) or refuses it where the sender
+// can see it (refuseUnsupportedSteer). A runner that predates the kind sends no such flag
+// and is handed no steer, so the message waits and becomes an ordinary turn when the
+// running one ends, instead of being leased by a poller with no case for it.
 func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string) (*RunInboxResponse, error) {
 	var r RunInboxResponse
-	path := "/runner/sessions/" + sessionID + "/inbox"
+	path := "/runner/sessions/" + sessionID + "/inbox?acceptsSteer=1"
 	if leaseGeneration != "" {
-		path += "?leaseGeneration=" + url.QueryEscape(leaseGeneration)
+		path += "&leaseGeneration=" + url.QueryEscape(leaseGeneration)
 	}
 	if err := t.do(ctx, "GET", path, nil, &r, 35*time.Second); err != nil {
 		return nil, err
@@ -981,12 +988,15 @@ func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id s
 	return out, err
 }
 
-func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
+// interruptSession stops a session's current turn. A non-nil body carrying `message` makes
+// it the atomic "stop that and do this instead" the browser sends: one transaction, so the
+// follow-up cannot be deleted by the interrupt it travels with. nil is a plain interrupt.
+func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, callerSessionID, orchestrationToken)
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

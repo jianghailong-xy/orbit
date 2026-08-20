@@ -25,6 +25,7 @@ type Dequeue = (
   sessionId: string,
   runnerId: string,
   leaseGeneration: string | null,
+  acceptsSteer: boolean,
 ) => Promise<{ turnId: string; kind: string; content?: string } | null>;
 
 let client: Client;
@@ -88,7 +89,8 @@ function pgTx() {
   };
 }
 
-function dequeue(): Promise<{ turnId: string; kind: string; content?: string } | null> {
+/** `acceptsSteer` is the poller saying it knows the kind — what a current runner sends. */
+function dequeue(acceptsSteer = true): Promise<{ turnId: string; kind: string; content?: string } | null> {
   const tx = pgTx();
   const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
   const controller = new RunnerApiController(
@@ -105,6 +107,7 @@ function dequeue(): Promise<{ turnId: string; kind: string; content?: string } |
     SESSION_ID,
     RUNNER_ID,
     null,
+    acceptsSteer,
   );
 }
 
@@ -219,4 +222,29 @@ pgTest('a follow-up filed as an ordinary message can never ride into the running
   // That difference is the whole reason interrupt files a message rather than letting
   // createTurn decide the kind.
   assert.equal(await dequeue(), null);
+});
+
+pgTest('a poller that does not know the kind is handed no steer, and the queue is not stuck on it', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'actually, call it gadget');
+
+  // A runner older than the control plane has no case for a steer in its inbox switch, so
+  // leasing it to that poller would drop the message for good — a steer's lease is never
+  // reclaimed. Withheld, it stays PENDING, which turn-complete turns back into an ordinary
+  // message when the running turn ends: a turn later, not lost.
+  assert.equal(await dequeue(false), null);
+
+  // Still there, and still a steer, for a poller that can act on it.
+  const forACurrentRunner = await dequeue(true);
+  assert.equal(forACurrentRunner?.kind, 'steer');
+});
+
+pgTest('withholding a steer does not withhold anything else', async () => {
+  await addTurn(1, 'message', 'PENDING', 'the real turn');
+  await addTurn(2, 'interrupt', 'PENDING', '');
+
+  // The capability covers one kind. An old poller still gets its interrupts, its messages
+  // and everything else at exactly the priority it always did.
+  assert.equal((await dequeue(false))?.kind, 'interrupt');
+  assert.equal((await dequeue(false))?.content, 'the real turn');
 });

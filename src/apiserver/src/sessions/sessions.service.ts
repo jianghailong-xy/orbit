@@ -35,6 +35,7 @@ import {
   SessionRunState,
   SessionState,
   type SessionSearchHit,
+  supportsMidTurnSteer,
 } from '@orbit/shared';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -2741,6 +2742,38 @@ export class SessionsService {
     return running > 0;
   }
 
+  /**
+   * Whether the engine this session runs on can be handed a message mid-turn at all.
+   *
+   * A steer is written into a stdin that stays open across the turn, which only the
+   * stream-json transport has (see supportsMidTurnSteer). Filing one for a runtime whose
+   * session loop has no case for it delivered a turn nobody consumes: it is leased, so it
+   * leaves the queued list, and it is never re-leased, so it never reappears — the message
+   * would simply be gone. Asking here keeps those sessions on exactly the behaviour they
+   * already had: an ordinary `message`, queued behind the running turn.
+   *
+   * The runtime is resolved with the same `execRuntime` dispatch uses, so a configured
+   * (BYOK) provider is judged by the built-in runtime it borrows rather than by its slug.
+   */
+  private async runtimeTakesSteer(
+    tx: Prisma.TransactionClient,
+    session: { provider: string; providerBuiltin: boolean; ownerId: string },
+  ) {
+    const declared = session.provider;
+    const customRow = isBuiltinProvider(declared, session.providerBuiltin)
+      ? null
+      : await tx.modelProvider.findFirst({
+          where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+        });
+    return supportsMidTurnSteer(
+      execRuntime({
+        declaredProvider: declared,
+        declaredProviderBuiltin: session.providerBuiltin,
+        customRow,
+      }),
+    );
+  }
+
   private async insertTurnLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
@@ -2900,9 +2933,15 @@ export class SessionsService {
       // every entry point behaves the same without any of them knowing about steering.
       //
       // Only a message steers. A `!cmd` shell turn runs on the runner, not in the engine,
-      // so there is nothing to fold it into and it keeps queuing exactly as before.
+      // so there is nothing to fold it into and it keeps queuing exactly as before — and
+      // neither does a message on an engine that cannot be written to mid-turn, which is
+      // every runtime but claude's (see runtimeTakesSteer).
       const kind =
-        dto.kind === 'shell' ? 'shell' : (await this.engineTurnInFlight(tx, id)) ? 'steer' : 'message';
+        dto.kind === 'shell'
+          ? 'shell'
+          : (await this.engineTurnInFlight(tx, id)) && (await this.runtimeTakesSteer(tx, session))
+            ? 'steer'
+            : 'message';
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
         kind,
@@ -3196,7 +3235,21 @@ export class SessionsService {
           clientTurnId: { not: SessionsService.initialTurnClientId(id) },
         },
       });
-      if (res.count === 0) throw new ConflictException('message already started or not found');
+      if (res.count === 0) {
+        // A steer is the one thing here that is refused for a reason of its own rather than
+        // for being gone: it is not waiting its turn, it is on its way into the one already
+        // running, and the engine may be reading it as we ask. Saying "already started or
+        // not found" would send a client looking for a race that never happened, so name it.
+        const steer = await tx.conversationTurn.findFirst({
+          where: { id: turnId, sessionId: id, kind: 'steer' },
+          select: { id: true },
+        });
+        throw new ConflictException(
+          steer
+            ? 'this message is being written into the running turn and can no longer be withdrawn'
+            : 'message already started or not found',
+        );
+      }
 
       // Sending to AWAITING_INPUT changes the Session to PENDING. If that last queued
       // message is withdrawn before claim, restore the idle state instead of letting an

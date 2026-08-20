@@ -1508,11 +1508,19 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Query('leaseGeneration') leaseGeneration?: string,
+    /** This poller understands `steer` — a message written into the turn already running.
+     *  A runner that predates the kind does not send it, and must not be handed one: its
+     *  inbox switch has no case for it, so the turn would be leased and then ignored, and a
+     *  steer's lease is never reclaimed. Left unclaimed it is not lost — turn-complete
+     *  re-files a still-PENDING steer as an ordinary message once its turn ends — so the
+     *  message runs a turn later instead of vanishing. This is what makes the control plane
+     *  safe to deploy ahead of the runners rather than only after them. */
+    @Query('acceptsSteer') acceptsSteer?: string,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
     for (;;) {
-      const turn = await this.dequeueTurn(sessionId, runner.id, generation);
+      const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1');
       if (turn) return turn;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { turnId: '', seq: 0, kind: 'message' };
@@ -1602,6 +1610,8 @@ export class RunnerApiController {
     sessionId: string,
     runnerId: string,
     leaseGeneration: string | null,
+    /** Whether this poller can act on a steer at all — see the inbox route. */
+    acceptsSteer = false,
   ): Promise<RunInboxResponse | null> {
     return this.prisma.$transaction(async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
@@ -1688,6 +1698,7 @@ export class RunnerApiController {
               -- its turn ends is not stranded either — turn-complete files it as an ordinary
               -- message, which is what it becomes once there is nothing to steer.
               OR (turn."kind" = 'steer' AND turn."status" = 'PENDING'
+                AND ${acceptsSteer}::boolean
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid

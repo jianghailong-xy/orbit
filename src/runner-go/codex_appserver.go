@@ -120,7 +120,7 @@ func finishCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTur
 	activeMu.Unlock()
 }
 
-func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	upDir := uploadsDir(job.SessionID)
 	_ = os.MkdirAll(upDir, 0o755)
@@ -509,6 +509,12 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			}
 			startTurn(resp, pendingShellCtx)
 			pendingShellCtx = nil
+
+		case "steer":
+			// A message meant to join the turn already running. This engine's turn call is
+			// outstanding until the turn ends, so there is nothing to hand it to — refuse it
+			// where the sender can see it rather than let a leased turn go quiet.
+			refuseUnsupportedSteer(resp.TurnID, resp.Content, providerCodex, job, emitFor, completeTurn)
 
 		case "shell":
 			if !waitTurnPermit(ctx) {
