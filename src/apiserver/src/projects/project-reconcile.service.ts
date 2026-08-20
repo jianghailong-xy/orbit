@@ -24,6 +24,7 @@ import {
   clearBlockerIdempotencyKey,
   raiseBlockerIdempotencyKey,
 } from './project-blocker';
+import type { PlannedCoordinatorRotation } from './project-coordinator-session';
 
 export const PROJECT_RECONCILE_LEASE_MS = 60_000;
 export const PROJECT_RECONCILE_HEARTBEAT_MS = 20_000;
@@ -107,6 +108,26 @@ interface ExistingActionRow {
   status: 'CLAIMED' | 'APPLIED' | 'REFUSED' | 'SUPERSEDED';
 }
 
+/**
+ * What the reconcile pass needs from §7.5's rotation, and nothing else.
+ *
+ * Stated here rather than imported so the ledger does not depend on the service that uses it: the
+ * rotation service registers itself at startup, the way the event consumer does.
+ */
+export interface ProjectRotationExecutor {
+  idempotencyKey(projectId: string, generation: string): string;
+  actionDetail(planned: PlannedCoordinatorRotation): Prisma.InputJsonValue;
+  rotateInTransaction(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    command: { decisionId: string; planned: PlannedCoordinatorRotation },
+    actionId: string,
+    now: Date,
+  ): Promise<void | ProjectActionEffectRefusal>;
+  /** Post-commit only: wake the runner for a Session that is already committed PENDING. */
+  announce(sessionId: string): void;
+}
+
 export class ProjectLeaseLostError extends Error {
   constructor(projectId: string) {
     super(`Project reconcile lease lost for ${projectId}`);
@@ -131,6 +152,8 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private ticking = false;
   private lastBackstopAt = 0;
   private _backstopHits = 0;
+  private rotationExecutor?: ProjectRotationExecutor;
+  private readonly pendingRotations: string[] = [];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -142,6 +165,21 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
 
   get backstopHits(): number {
     return this._backstopHits;
+  }
+
+  /**
+   * Install the sole §7.5 rotation executor, on the same terms the event consumer is installed on:
+   * one, replacing a different live one is refused, and the unregister function makes an isolated
+   * test's teardown explicit.
+   */
+  registerRotationExecutor(executor: ProjectRotationExecutor): () => void {
+    if (this.rotationExecutor && this.rotationExecutor !== executor) {
+      throw new Error('a Project rotation executor is already registered');
+    }
+    this.rotationExecutor = executor;
+    return () => {
+      if (this.rotationExecutor === executor) this.rotationExecutor = undefined;
+    };
   }
 
   onModuleInit(): void {
@@ -166,6 +204,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     this.ticking = true;
     try {
       await this.events.drainAvailable();
+      await this.flushPendingRotations();
       await this.enqueueScheduledWakes(now);
       if (now.getTime() - this.lastBackstopAt >= PROJECT_RECONCILE_BACKSTOP_MS) {
         this.lastBackstopAt = now.getTime();
@@ -176,6 +215,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // Timer/backstop rows are ordinary durable signals. Draining them here keeps a due Project
       // inside the ten-second path even if PostgreSQL NOTIFY is lost.
       await this.events.drainAvailable();
+      await this.flushPendingRotations();
     } catch (cause) {
       this.log.error(`Project reconcile recovery tick failed: ${errorText(cause)}`);
     } finally {
@@ -242,6 +282,12 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         throw new ProjectLeaseLostError(projectId);
       }
       await this.decisions.persist(tx, captured, outcome, decisionId);
+      // Before the two writers below, and not after them, for a reason the ledger makes concrete:
+      // §7.7's staleness gate re-captures the world and compares hashes, and REPEATABLE READ shows
+      // a transaction its OWN writes. Aggregating a parent or raising a blocker first would make
+      // this pass's snapshot differ from itself, and the rotation it just decided would be refused
+      // `STALE_SNAPSHOT` by the very facts it produced.
+      await this.applyCoordinatorRotation(tx, lease, decisionId, outcome, now);
       await this.applyAggregations(tx, projectId, outcome.aggregations, now);
       await this.applyBlockers(tx, projectId, lease, decisionId, outcome.blockers, now);
       state = outcome.runStateAfter;
@@ -271,6 +317,15 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     `);
     if (updated !== 1) throw new ProjectLeaseLostError(projectId);
     return { disposition: 'RECONCILED' };
+  }
+
+  /**
+   * §8.3's commit has happened; now the rest of the system can be told about it. Nothing here is
+   * allowed to be load-bearing — a lost notification costs latency, and the Session it announces is
+   * already committed PENDING where the runner's own poll will find it.
+   */
+  async afterCommit(): Promise<void> {
+    await this.flushPendingRotations();
   }
 
   async deadLetter(
@@ -438,7 +493,33 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       throw new Error('Project action subject belongs to another Project');
     }
     if (!this.decisions) throw new Error('Project decision protocol is not configured');
-    return this.repeatableRead(async (tx) => {
+    return this.repeatableRead(async (tx) =>
+      this.applyDecisionActionInTransaction(tx, lease, decisionId, action, effect, now));
+  }
+
+  /**
+   * §8.3's transaction, as a step rather than as a transaction.
+   *
+   * The published SQL puts the side effect, the ledger row, the decision and the event consumption
+   * in ONE commit; `applyDecisionAction` above is that shape when the caller has nothing else to
+   * commit, and this is the same shape when it has — the reconcile pass, which is already inside a
+   * REPEATABLE READ transaction holding this Project's row lock and its lease. Sharing the body is
+   * the point: an action applied from the loop and one applied by a lease holder outside it must
+   * pass through the same fence, the same staleness gate and the same ledger, or the two paths
+   * would eventually disagree about what "already done" means.
+   */
+  private async applyDecisionActionInTransaction(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    action: ProjectReconcileAction,
+    effect: (
+      tx: Prisma.TransactionClient,
+      actionId: string,
+    ) => Promise<void | ProjectActionEffectRefusal>,
+    now: Date,
+  ): Promise<ProjectActionApplyResult> {
+    {
       const projects = await tx.$queryRaw<Array<{
         status: 'OPEN' | 'DONE' | 'CANCELLED'; coordinatorEnabled: boolean;
       }>>(Prisma.sql`
@@ -613,7 +694,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       `);
       if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
       return { status: 'APPLIED', actionId } as const;
-    });
+    }
   }
 
   /** PostgreSQL may abort an RR contender whose first snapshot predates a conflicting action. */
@@ -706,6 +787,93 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
    * key (§7.3), and §8.5 C1/C2's "conflict is a return value, not a rollback" is the reason the
    * inserts end in `ON CONFLICT DO NOTHING`.
    */
+  /**
+   * §7.5's rotation, executed by the loop that decided it.
+   *
+   * Registered rather than injected, exactly as the event handler is: the rotation service needs
+   * the ledger and the ledger needs the rotation service, and a registration keeps that a wiring
+   * fact instead of a `forwardRef` between two singletons. The reconcile pass is the ONLY
+   * production caller, and it calls this INSIDE its own transaction — §8.3's commit is one commit,
+   * so the ledger row, the new run, the pointer swap, this pass's decision and the events it
+   * consumes either all land or none do.
+   *
+   * A refusal is a committed audit row and not an exception: the pass carries on and publishes its
+   * state, because the reason the rotation did not happen is a fact somebody has to be able to
+   * read. An exception, by contrast, rolls the pass back to its savepoint and the events retry —
+   * which is the right answer for a fault nobody classified (§8.5 C4) and the wrong one for
+   * "this was refused".
+   */
+  private async applyCoordinatorRotation(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    outcome: ProjectDecisionOutcome,
+    now: Date,
+  ): Promise<void> {
+    const planned = outcome.coordinator;
+    if (planned?.status !== 'ROTATE') return;
+    const action = outcome.actions.find((candidate) =>
+      candidate.type === 'ROTATE_COORDINATOR_SESSION');
+    if (!action) return;
+    if (!this.rotationExecutor) {
+      // Nest always registers one. Warn rather than throw: a deployment that somehow has none must
+      // still publish its run state and consume its events, and the next pass re-plans the same
+      // rotation from the same facts.
+      this.log.warn(`Project ${lease.projectId} planned a coordinator rotation with no executor`);
+      return;
+    }
+    const result = await this.applyDecisionActionInTransaction(
+      tx,
+      lease,
+      decisionId,
+      {
+        type: 'ROTATE_COORDINATOR_SESSION',
+        idempotencyKey: this.rotationExecutor.idempotencyKey(lease.projectId, planned.generation),
+        subject: { type: 'PROJECT', id: lease.projectId },
+        detail: this.rotationExecutor.actionDetail(planned),
+      },
+      async (effectTx, actionId) =>
+        this.rotationExecutor!.rotateInTransaction(effectTx, lease, {
+          decisionId,
+          planned,
+        }, actionId, now),
+      now,
+    );
+    if (result.status === 'APPLIED') {
+      // The runner has to be told, and telling it is not a database write — so it happens after the
+      // commit this is part of, never inside it. `pendingRotations` is drained by whoever drove the
+      // drain, and re-reads the ledger before notifying: a rollback after this point leaves a row
+      // that says nothing was applied, and no notification is sent for it.
+      this.pendingRotations.push(result.actionId);
+    }
+  }
+
+  /**
+   * Fire the post-commit notifications a rotation owes the rest of the system.
+   *
+   * Called after the delivery transaction has returned, and deliberately re-reading the ledger
+   * instead of trusting what was queued: the only thing that makes a rotation real is its APPLIED
+   * row and the session it links, and a transaction can still fail between the effect and the
+   * COMMIT.
+   */
+  private async flushPendingRotations(): Promise<void> {
+    const actionIds = this.pendingRotations.splice(0, this.pendingRotations.length);
+    for (const actionId of actionIds) {
+      try {
+        const rows = await this.prisma.$queryRaw<Array<{ resultSessionId: string | null }>>(Prisma.sql`
+          SELECT "result_session_id" AS "resultSessionId" FROM "project_action"
+           WHERE "id" = ${actionId}::uuid AND "status" = 'APPLIED'
+        `);
+        const sessionId = rows[0]?.resultSessionId;
+        if (sessionId) this.rotationExecutor?.announce(sessionId);
+      } catch (cause) {
+        // A missed notification costs latency, never correctness: the Session is committed PENDING
+        // and the runner's own poll finds it.
+        this.log.warn(`Project rotation notification failed for ${actionId}: ${errorText(cause)}`);
+      }
+    }
+  }
+
   private async applyBlockers(
     tx: Prisma.TransactionClient,
     projectId: string,

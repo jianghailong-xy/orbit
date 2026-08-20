@@ -63,6 +63,15 @@ export interface ProjectEventHandler {
     events: readonly ProjectEventEnvelope[],
     error: string,
   ): Promise<void>;
+  /**
+   * Called once per delivery, AFTER its transaction has committed, and never when it rolled back.
+   *
+   * The one thing a handler is forbidden to do inside the delivery transaction is touch the world
+   * outside the database — and a Session the loop just created is useless until the runner is told
+   * it exists. This is where that goes, and it is deliberately not given the transaction: anything
+   * that needs to be atomic with the decision was already written by `handle`.
+   */
+  afterCommit?(result: ProjectEventDeliveryResult): Promise<void> | void;
 }
 
 export interface ProjectEventHandleResult {
@@ -227,6 +236,12 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
 
   /** Process at most one Project. Public so database/fault tests can drive a deterministic tick. */
   async drainOnce(now = new Date()): Promise<ProjectEventDeliveryResult> {
+    const result = await this.deliverOnce(now);
+    if (result.status !== 'NO_HANDLER') await this.handler?.afterCommit?.(result);
+    return result;
+  }
+
+  private async deliverOnce(now: Date): Promise<ProjectEventDeliveryResult> {
     const handler = this.handler;
     if (!handler) return { status: 'NO_HANDLER' };
 

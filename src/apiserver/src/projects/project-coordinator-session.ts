@@ -12,6 +12,7 @@
  * the same snapshot always computes the same key.
  */
 
+import { createHash } from 'node:crypto';
 import type { ProjectDecisionInput } from './project-decision.service';
 
 /**
@@ -76,6 +77,8 @@ export type CoordinatorSessionPlan =
     /** Base62. §7.5 落点固定: the new run opens here or not at all. */
     landingWorkspaceId: string;
     coordinatorAgentId: string;
+    /** §7.6 TR1's digest of the facts this run is being opened ON (see `rotationReasonDigest`). */
+    reasonDigest: string;
   }
   | {
     status: 'UNAVAILABLE';
@@ -83,7 +86,25 @@ export type CoordinatorSessionPlan =
     reason: CoordinatorRotationRefusal;
     fromSessionId: string | null;
     landingWorkspaceId: string | null;
+  }
+  /**
+   * §7.6 TR3, applied to a run instead of to a turn: the last coordination run this project opened
+   * was opened on exactly these facts, and it has ended without changing any of them. Opening
+   * another one would be the foreman accident — a project that burns a session a minute and never
+   * moves. The answer is a blocker with a name on it, and it falls away by itself the moment the
+   * facts change (§11.4 BL3).
+   */
+  | {
+    status: 'NO_PROGRESS';
+    trigger: CoordinatorRotationTrigger;
+    reasonDigest: string;
+    /** The run that made no progress, Base62, for the blocker's detail. */
+    lastRunSessionId: string | null;
+    fromSessionId: string | null;
   };
+
+/** The one variant the rotation executor acts on, named because three modules pass it around. */
+export type PlannedCoordinatorRotation = Extract<CoordinatorSessionPlan, { status: 'ROTATE' }>;
 
 /**
  * §8.2's key for a rotation. The epoch is `coordinator_generation + 1` — the generation the run
@@ -190,6 +211,22 @@ export function planCoordinatorSessionRotation(
     };
   }
 
+  // §7.6 TR3. Everything above answered "may this project have a run"; this answers "would another
+  // one be a second look at the same world". The comparison is against the run the LAST rotation
+  // opened, and only once that run is over — a rotation whose run is still going never gets here,
+  // because a live coordinator is HEALTHY.
+  const reasonDigest = rotationReasonDigest(input);
+  const previous = lastAppliedRotation(input);
+  if (previous && previous.reasonDigest === reasonDigest) {
+    return {
+      status: 'NO_PROGRESS',
+      trigger,
+      reasonDigest,
+      lastRunSessionId: previous.resultSessionId,
+      fromSessionId: project.coordinatorSessionId,
+    };
+  }
+
   return {
     status: 'ROTATE',
     trigger,
@@ -197,7 +234,78 @@ export function planCoordinatorSessionRotation(
     fromSessionId: project.coordinatorSessionId,
     landingWorkspaceId: landing,
     coordinatorAgentId: agentId,
+    reasonDigest,
   };
+}
+
+/** The `reason_code` a rotation's ledger row carries, and the prefix TR3 reads it back through. */
+export const COORDINATOR_ROTATION_REASON_CODE = 'COORDINATOR_RUN_GONE';
+
+export function rotationReasonCode(reasonDigest: string): string {
+  return `${COORDINATOR_ROTATION_REASON_CODE}:${reasonDigest}`;
+}
+
+/**
+ * §7.6 TR1's digest, for a coordination RUN: what the coordinator would be looking at.
+ *
+ * Deliberately NOT the trigger. "The run ended" and "the run failed" are the same request for the
+ * same work, and letting them differ would give a crash-loop a way to alternate its way past TR3.
+ * What decides whether another run is worth opening is whether anything it could act on has moved:
+ *
+ *   * every task's status — the coordinator's whole subject matter;
+ *   * every open blocker, WITH its lifecycle generation (§7.6's TR3 premise, PC-CX-24: a blocker
+ *     that was resolved and came back is a new episode, not the old one still sitting there);
+ *   * `configRevision` — an owner changing the policy, the cap or the budget is a new instruction.
+ *
+ * Nothing here advances with delivery count (PC-CX-10), so a redelivered event cannot manufacture
+ * "the world changed". `COORDINATOR_NO_PROGRESS` itself is excluded for the reason a rule may not
+ * be its own input: the row this digest DECIDES to open would otherwise change the digest, the
+ * condition would go false on the next pass, the row would clear, and the loop would rotate again.
+ */
+export function rotationReasonDigest(input: ProjectDecisionInput): string {
+  const facts = {
+    v: 1,
+    reasonCode: COORDINATOR_ROTATION_REASON_CODE,
+    configRevision: input.world.project.configRevision,
+    tasks: input.world.tasks
+      .map((task) => `${task.id}:${task.status}`)
+      .sort(),
+    blockers: (input.world.blockers ?? [])
+      .filter((blocker) => blocker.kind !== 'COORDINATOR_NO_PROGRESS')
+      .map((blocker) => `${blocker.dedupeKey}#${blocker.lifecycleGeneration}`)
+      .sort(),
+  };
+  return createHash('sha256').update(canonical(facts)).digest('hex');
+}
+
+/** The most recent rotation this project actually applied, and the facts it was applied on. */
+function lastAppliedRotation(
+  input: ProjectDecisionInput,
+): { reasonDigest: string; resultSessionId: string | null } | null {
+  // `world.actions` arrives in commit order, so the last match is the most recent one.
+  for (let i = input.world.actions.length - 1; i >= 0; i -= 1) {
+    const action = input.world.actions[i];
+    if (action.type !== 'ROTATE_COORDINATOR_SESSION' || action.status !== 'APPLIED') continue;
+    const reasonCode = action.reasonCode ?? '';
+    if (!reasonCode.startsWith(`${COORDINATOR_ROTATION_REASON_CODE}:`)) return null;
+    return {
+      reasonDigest: reasonCode.slice(COORDINATOR_ROTATION_REASON_CODE.length + 1),
+      resultSessionId: action.resultSessionId,
+    };
+  }
+  return null;
+}
+
+/** Key-sorted JSON, the same shape `hashDecisionInput` canonicalizes with. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
 }
 
 /** Null when the current run is still going, else why it is not. */

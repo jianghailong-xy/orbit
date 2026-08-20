@@ -15,10 +15,10 @@
 --      a task-less session owned by a Project action. The guard is EXTENDED, not relaxed — the
 --      rotate branch carries its own fence, subject and landing conditions.
 --   3. Nothing stops any writer — an old binary, a raw statement, a future service — from pointing
---      `project.coordinator_session_id` at a session that is soft-deleted, belongs to somebody
---      else, or runs somewhere other than the project's fixed coordination workspace. §7.5 freezes
---      "轮换不是迁移"; that sentence has to hold against the 0110-era binary still serving requests
---      during a rolling deploy (§12.4), which means it belongs here rather than in a service.
+--      `project.coordinator_session_id` at a session that belongs to somebody else, or that runs
+--      somewhere other than the project's fixed coordination workspace. §7.5 freezes "轮换不是迁移";
+--      that sentence has to hold against the 0110-era binary still serving requests during a
+--      rolling deploy (§12.4), which means it belongs here rather than in a service.
 --
 -- Every statement is re-runnable: functions are `CREATE OR REPLACE`, triggers are dropped by name
 -- first, and nothing is backfilled — this migration adds no column and rewrites no row.
@@ -357,11 +357,16 @@ $$ LANGUAGE plpgsql;
 --   * the session must exist (a dangling pointer is not a coordinator);
 --   * it must belong to the project's owner (`coordinator_session_id` carries no tenant check of
 --     its own, exactly as `coordinator_workspace_id` carries none — 0113 says so about WHO);
---   * it must not be in Trash (`ProjectsService.coordinator` already refuses to hand a trashed
---     conversation back; this is the same sentence, said where every writer passes);
 --   * it must run in the project's coordination workspace when the project records one. §7.5:
 --     rotation replaces the SESSION, not the landing. NULL admits anything because a project that
 --     records no landing has not fixed one yet — that is the FIRST binding, not a migration.
+--
+-- What is deliberately NOT checked is whether the session is in Trash. A bound coordinator can be
+-- soft-deleted at any time — that is an UPDATE on `session`, which never passes here — so "the
+-- pointer names a trashed conversation" is a state this system reaches on its own and already
+-- knows how to leave: `ProjectsService.coordinator` replaces such a binding rather than reviving
+-- it, and §7.5's planner reads it as a rotation trigger. Refusing to WRITE the state the system
+-- can already be IN would only break the paths that repair it.
 --
 -- Emptying the pointer is always allowed: the FK's SET NULL does exactly that, and a project
 -- waiting for its next coordinator is a legal, recoverable state (§7.5, and it is the state the
@@ -385,9 +390,6 @@ BEGIN
   END IF;
   IF s."owner_id" IS DISTINCT FROM NEW."owner_id" THEN
     RAISE EXCEPTION 'COORDINATOR_POINTER_INVALID: session % belongs to another owner', s."id";
-  END IF;
-  IF s."deleted_at" IS NOT NULL THEN
-    RAISE EXCEPTION 'COORDINATOR_POINTER_INVALID: session % is deleted', s."id";
   END IF;
   IF NEW."coordinator_workspace_id" IS NOT NULL
      AND s."workspace_id" IS DISTINCT FROM NEW."coordinator_workspace_id" THEN

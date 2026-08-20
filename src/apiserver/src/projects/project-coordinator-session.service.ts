@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import {
@@ -17,15 +17,15 @@ import {
   ProjectActionEffectRefusal,
   ProjectReconcileLease,
   ProjectReconcileService,
+  ProjectRotationExecutor,
 } from './project-reconcile.service';
 import {
-  CoordinatorSessionPlan,
+  PlannedCoordinatorRotation,
   isLiveSessionStatus,
   rotateCoordinatorSessionIdempotencyKey,
+  rotationReasonCode,
 } from './project-coordinator-session';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
-
-export type PlannedCoordinatorRotation = Extract<CoordinatorSessionPlan, { status: 'ROTATE' }>;
 
 export interface RotateCoordinatorSessionCommand {
   decisionId: string;
@@ -75,7 +75,10 @@ interface RotationRow {
  * leave the project with no coordinator at all.
  */
 @Injectable()
-export class ProjectCoordinatorSessionService {
+export class ProjectCoordinatorSessionService
+implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
+  private unregister?: () => void;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly reconciler: ProjectReconcileService,
@@ -84,6 +87,50 @@ export class ProjectCoordinatorSessionService {
     private readonly realtime: RealtimeService,
   ) {}
 
+  /**
+   * The production wiring, and the whole of it: from here on the reconcile pass that DECIDES a
+   * rotation is the pass that PERFORMS it, inside its own commit. Nothing else drives §7.5 — no
+   * poll of its own, no second timer, no endpoint that has to be called.
+   */
+  onModuleInit(): void {
+    this.unregister = this.reconciler.registerRotationExecutor(this);
+  }
+
+  onModuleDestroy(): void {
+    this.unregister?.();
+    this.unregister = undefined;
+  }
+
+  /** §8.2's key, as the ledger stores it. Part of `ProjectRotationExecutor`. */
+  idempotencyKey(projectId: string, generation: string): string {
+    return rotateCoordinatorSessionIdempotencyKey(projectId, generation);
+  }
+
+  /** The audit face of a planned rotation: Base62 throughout, no wall clock. */
+  actionDetail(planned: PlannedCoordinatorRotation): Prisma.InputJsonValue {
+    return {
+      v: 1,
+      trigger: planned.trigger,
+      generation: planned.generation,
+      fromSessionId: planned.fromSessionId,
+      landingWorkspaceId: planned.landingWorkspaceId,
+      coordinatorAgentId: planned.coordinatorAgentId,
+      reasonDigest: planned.reasonDigest,
+    } as unknown as Prisma.InputJsonValue;
+  }
+
+  /** Post-commit only (see `ProjectRotationExecutor.announce`). */
+  announce(sessionId: string): void {
+    this.queue.notifySessionQueued();
+    this.realtime.publishSessionCreated(sessionId);
+  }
+
+  /**
+   * The out-of-loop entry: one rotation in a transaction of its own, for a holder that has a lease
+   * and a decision but is not inside a reconcile pass. The loop does NOT come through here — it
+   * calls `rotateInTransaction` inside its own commit — so this exists for recovery and for the
+   * control surface, and it shares every guard with the production path by sharing the effect.
+   */
   async rotate(
     lease: ProjectReconcileLease,
     command: RotateCoordinatorSessionCommand,
@@ -101,14 +148,7 @@ export class ProjectCoordinatorSessionService {
         // The PROJECT is the subject. A rotation is a statement about which conversation this
         // project is coordinated from; the session it produces is its result, not its subject.
         subject: { type: 'PROJECT', id: lease.projectId },
-        detail: {
-          v: 1,
-          trigger: command.planned.trigger,
-          generation: command.planned.generation,
-          fromSessionId: command.planned.fromSessionId,
-          landingWorkspaceId: command.planned.landingWorkspaceId,
-          coordinatorAgentId: command.planned.coordinatorAgentId,
-        } as unknown as Prisma.InputJsonValue,
+        detail: this.actionDetail(command.planned),
       },
       async (tx, actionId) => this.rotateInTransaction(tx, lease, command, actionId, now),
       now,
@@ -118,13 +158,12 @@ export class ProjectCoordinatorSessionService {
       select: { resultSessionId: true },
     });
     if (action.status === 'APPLIED' && result?.resultSessionId) {
-      this.queue.notifySessionQueued();
-      this.realtime.publishSessionCreated(result.resultSessionId);
+      this.announce(result.resultSessionId);
     }
     return { action, sessionId: result?.resultSessionId ?? null };
   }
 
-  private async rotateInTransaction(
+  async rotateInTransaction(
     tx: Prisma.TransactionClient,
     lease: ProjectReconcileLease,
     command: RotateCoordinatorSessionCommand,
@@ -308,7 +347,7 @@ export class ProjectCoordinatorSessionService {
          SET "execution_context" = ${JSON.stringify(executionContext)}::jsonb,
              "execution_context_digest" = ${digests.authorization},
              "execution_result_digest" = ${digests.result},
-             "reason_code" = ${audit.result.reasonCode},
+             "reason_code" = ${rotationReasonCode(planned.reasonDigest)},
              "detail" = "detail" || ${JSON.stringify({ authorization: audit, resolution })}::jsonb,
              "updated_at" = ${now}
        WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'

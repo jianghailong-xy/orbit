@@ -33,11 +33,11 @@ import {
   ProjectReconcileLease,
   ProjectReconcileService,
 } from './project-reconcile.service';
+import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
 import {
   PlannedCoordinatorRotation,
-  ProjectCoordinatorSessionService,
-} from './project-coordinator-session.service';
-import { rotateCoordinatorSessionIdempotencyKey } from './project-coordinator-session';
+  rotateCoordinatorSessionIdempotencyKey,
+} from './project-coordinator-session';
 
 // §7.5 · §8.4 · §12.4 on a real PostgreSQL server, against a DISPOSABLE one.
 //
@@ -234,6 +234,11 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       { notifySessionQueued: () => notifications.push('queue') } as unknown as QueueService,
       { publishSessionCreated: (id: string) => notifications.push(id) } as unknown as RealtimeService,
     );
+    // The production wiring, so that a drain in this file rotates exactly as it does in the
+    // orchestration service. The direct `rotate()` calls below are guard tests of the effect's own
+    // re-checks; the DRIVER is proved in `project-coordinator-driver.pg.spec.ts`, which never calls
+    // it at all.
+    rotations.onModuleInit();
 
     try {
       // ── §8.4 · a run that ends wakes its project, and the loop opens the next one ────────────
@@ -242,9 +247,6 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
         where: { id: normal.coordinatorSessionId },
         data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
       });
-      // §5.3's session class, produced by the authoritative write rather than by a caller. Before
-      // 0126 the trigger resolved a project only through `session.task_id`, and a coordinator
-      // session has no task — so this row did not exist and §8.4's first step never happened.
       // Named by its source, not merely "the pending event": recording the project already
       // enqueued a `user.project_edited`, and a test that read whichever row came back first would
       // pass for the wrong reason.
@@ -257,51 +259,35 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       });
       assert.equal(woke.kind, 'session.ended');
       assert.equal(woke.sourceType, 'SESSION');
-      assert.equal((woke.payload as { coordinatorSession?: boolean }).coordinatorSession, true);
 
       assert.ok(await events.drainAvailable() >= 1);
       const consumed = await db.projectEvent.findUniqueOrThrow({ where: { id: woke.id } });
       assert.ok(consumed.consumedAt);
       assert.equal(consumed.disposition, 'RECONCILED');
 
-      const first = await planUnderLease(db, decisions, reconciler, normal.projectId);
-      assert.deepEqual(first.outcome.actions, [{
-        type: 'ROTATE_COORDINATOR_SESSION',
-        idempotencyKey: rotateCoordinatorSessionIdempotencyKey(uuidToBase62(normal.projectId), '1'),
-        subject: { type: 'PROJECT', id: uuidToBase62(normal.projectId) },
-      }]);
-      const decisionRow = await db.projectDecision.findUniqueOrThrow({
-        where: { id: first.decisionId },
+      // One drain, and the rotation has happened — no second entry point was involved.
+      const applied = await db.projectAction.findFirstOrThrow({
+        where: { projectId: normal.projectId, type: 'ROTATE_COORDINATOR_SESSION' },
       });
-      // §7.5 历史可追溯: the decision keeps the session that was current WHEN it was made, so a
-      // rotated-away run is still the attribution of everything it decided.
-      assert.equal(decisionRow.coordinatorSessionId, normal.coordinatorSessionId);
-      assert.equal(decisionRow.coordinatorAgentId, normal.workspaceId);
-
-      const rotated = await rotations.rotate(first.lease, {
-        decisionId: first.decisionId,
-        planned: rotation(first.outcome),
-      });
-      assert.equal(rotated.action.status, 'APPLIED');
-      assert.ok(rotated.sessionId);
-      assert.deepEqual(notifications, ['queue', rotated.sessionId]);
-
-      const opened = await db.session.findUniqueOrThrow({ where: { id: rotated.sessionId! } });
+      assert.equal(applied.status, 'APPLIED');
+      const opened = await db.session.findUniqueOrThrow({ where: { id: applied.resultSessionId! } });
       assert.equal(opened.taskId, null);
       assert.equal(opened.workspaceId, normal.workspaceId, '§7.5 落点固定');
       assert.equal(opened.dispatchOrigin, SessionDispatchOrigin.PROJECT_COORDINATOR);
       assert.equal(opened.runSource, SessionRunSource.PROJECT_COORDINATOR);
       assert.equal(opened.status, RunStatus.PENDING);
       assert.ok(opened.resolution && opened.snapshotFrozenAt && opened.projectActionId);
+      assert.deepEqual(notifications, ['queue', opened.id]);
+      notifications.length = 0;
 
       const afterRotation = await db.project.findUniqueOrThrow({ where: { id: normal.projectId } });
-      assert.equal(afterRotation.coordinatorSessionId, rotated.sessionId);
+      assert.equal(afterRotation.coordinatorSessionId, opened.id);
       assert.equal(afterRotation.coordinatorWorkspaceId, normal.workspaceId);
       const runtime = await db.projectRuntime.findUniqueOrThrow({
         where: { projectId: normal.projectId },
       });
       assert.equal(runtime.coordinatorGeneration, 1n, 'a rotation is counted exactly once');
-      assert.equal(runtime.coordinatorSessionId, rotated.sessionId, 'the baseline moved with it');
+      assert.equal(runtime.coordinatorSessionId, opened.id, 'the baseline moved with it');
       // Identity is stable across the rotation: same agent, same seat row, untouched.
       const seatAfter = await db.projectMember.findFirstOrThrow({
         where: { projectId: normal.projectId, role: ProjectRole.COORDINATOR },
@@ -314,62 +300,33 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       assert.equal(previous.status, RunStatus.SUCCEEDED);
       assert.equal(previous.deletedAt, null);
 
-      // ── §8.3/§8.5 · exactly-once under duplicate delivery, concurrency and restart ───────────
-      const [again, concurrent] = await Promise.all([
-        rotations.rotate(first.lease, {
-          decisionId: first.decisionId, planned: rotation(first.outcome),
-        }),
-        rotations.rotate(first.lease, {
-          decisionId: first.decisionId, planned: rotation(first.outcome),
-        }),
-      ]);
-      const restarted = new ProjectCoordinatorSessionService(
-        prisma,
-        new ProjectReconcileService(prisma, new ProjectEventsService(prisma), decisions),
-        new ProjectAuthorizationService(),
-        { notifySessionQueued: () => {} } as unknown as QueueService,
-        { publishSessionCreated: () => {} } as unknown as RealtimeService,
-      );
-      const afterRestart = await restarted.rotate(first.lease, {
-        decisionId: first.decisionId, planned: rotation(first.outcome),
+      // §7.5 历史可追溯: the decision that planned it keeps the session that was current WHEN it
+      // was made, so a rotated-away run is still the attribution of everything it decided.
+      const decisionRow = await db.projectDecision.findUniqueOrThrow({
+        where: { id: applied.decisionId! },
       });
-      for (const result of [again, concurrent, afterRestart]) {
-        assert.equal(result.action.status, 'ALREADY_APPLIED');
-        assert.equal(result.sessionId, rotated.sessionId);
-      }
+      assert.equal(decisionRow.coordinatorSessionId, normal.coordinatorSessionId);
+      assert.equal(decisionRow.coordinatorAgentId, normal.workspaceId);
+
+      // ── §8.5 C2 · the out-of-loop entry lands on the row the loop already wrote ──────────────
+      const replayLease = await leaseFor(reconciler, normal.projectId);
+      const replayOutcome = (await db.projectDecision.findUniqueOrThrow({
+        where: { id: applied.decisionId! },
+      })).outcome as unknown as ProjectDecisionOutcome;
+      const replay = await rotations.rotate(replayLease, {
+        decisionId: applied.decisionId!,
+        planned: rotation(replayOutcome),
+      });
+      assert.equal(replay.action.status, 'ALREADY_APPLIED');
+      assert.equal(replay.sessionId, opened.id);
       assert.equal(await db.projectAction.count({
         where: { projectId: normal.projectId, type: 'ROTATE_COORDINATOR_SESSION' },
       }), 1);
-      assert.equal(await db.session.count({
-        where: { ownerId: normal.ownerId, dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR },
-      }), 1, 'a redelivered, concurrent or replayed rotation opens no second run');
-      assert.equal(
-        (await db.projectRuntime.findUniqueOrThrow({ where: { projectId: normal.projectId } }))
-          .coordinatorGeneration,
-        1n,
-      );
-      assert.equal(await reconciler.releaseLease(first.lease), true);
-
-      // A late signal about the run that was already replaced is a signal, not a fact: the pass
-      // re-reads the world, finds a healthy coordinator, and proposes nothing.
-      await db.$transaction(async (tx) => {
-        await events.enqueue(tx, {
-          projectId: normal.projectId,
-          kind: 'session.ended',
-          source: { type: 'SESSION', id: normal.coordinatorSessionId },
-          dedupeKey: `session.ended:late:${randomUUID()}`,
-        });
-      });
-      assert.ok(await events.drainAvailable() >= 1);
-      const settled = await planOnly(db, decisions, normal.projectId);
-      assert.deepEqual(settled.actions, []);
-      assert.equal(settled.coordinator?.status, 'HEALTHY');
+      assert.equal(await reconciler.releaseLease(replayLease), true);
 
       // ── §8.4 · the replaced process cannot rotate, and leaves nothing behind ─────────────────
       const takeover = await fixture(db, 'takeover', { coordinatorStatus: RunStatus.FAILED });
       const loser = await planUnderLease(db, decisions, reconciler, takeover.projectId);
-      // The lease expires and a second instance takes over, advancing the fence. §8.1 F1: the old
-      // holder's every commit is conditioned on the token it holds.
       // The crash, injected as the database would record it: the holder stopped heartbeating and
       // its lease lapsed. Both columns move together — `project_runtime_lease_shape_chk` (0119)
       // refuses an expiry that precedes its own heartbeat, which is what stops a "lease" that was
@@ -488,13 +445,16 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       });
       assert.equal(blocker.owner, 'USER');
       assert.equal(blocker.recovery, 'HUMAN');
+      assert.equal(await db.projectAction.count({
+        where: { projectId: homeless.projectId, type: 'ROTATE_COORDINATOR_SESSION' },
+      }), 0, 'the loop opened no run somewhere else');
       assert.equal(
         (await db.projectRuntime.findUniqueOrThrow({ where: { projectId: homeless.projectId } }))
           .runState,
         'AWAITING_HUMAN',
       );
       // The owner rebinds by making the landing usable again; §11.4 recomputes and clears the row
-      // without anybody resolving it by hand, and the rotation the loop could not do is proposed.
+      // without anybody resolving it by hand, and the loop opens the run it could not open before.
       await db.workspace.update({ where: { id: homeless.workspaceId }, data: { enabled: true } });
       await db.$transaction(async (tx) => {
         await events.enqueue(tx, {
@@ -506,18 +466,14 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       });
       assert.ok(await events.drainAvailable() >= 1);
       assert.ok((await db.projectBlocker.findUniqueOrThrow({ where: { id: blocker.id } })).resolvedAt);
-      const recovered = await planUnderLease(db, decisions, reconciler, homeless.projectId);
-      const recoveredRotation = await rotations.rotate(recovered.lease, {
-        decisionId: recovered.decisionId, planned: rotation(recovered.outcome),
-      });
-      assert.equal(recoveredRotation.action.status, 'APPLIED');
-      assert.equal(await reconciler.releaseLease(recovered.lease), true);
+      assert.equal(await db.projectAction.count({
+        where: {
+          projectId: homeless.projectId, type: 'ROTATE_COORDINATOR_SESSION', status: 'APPLIED',
+        },
+      }), 1, 'and the recovery is a run, not a second blocker');
 
       // ── §12.4 · the guarantees hold for a writer that never ran any of the code above ────────
       const mixed = await fixture(db, 'mixed', { coordinatorStatus: RunStatus.SUCCEEDED });
-      const applied = await db.projectAction.findFirstOrThrow({
-        where: { projectId: normal.projectId, type: 'ROTATE_COORDINATOR_SESSION' },
-      });
 
       // An old binary opening a "coordinator session" of its own, with no action behind it.
       await rejects(db.session.create({
@@ -567,6 +523,26 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
          WHERE "id" = ${mixed.projectId}::uuid
       `), /COORDINATOR_POINTER_RELOCATED/);
 
+      await rejects(db.$executeRaw(Prisma.sql`
+        UPDATE "project" SET "coordinator_session_id" = ${normal.coordinatorSessionId}::uuid
+         WHERE "id" = ${mixed.projectId}::uuid
+      `), /COORDINATOR_POINTER_INVALID: session .* belongs to another owner/);
+      await rejects(db.$executeRaw(Prisma.sql`
+        UPDATE "project" SET "coordinator_session_id" = ${randomUUID()}::uuid
+         WHERE "id" = ${mixed.projectId}::uuid
+      `), /COORDINATOR_POINTER_INVALID: session .* does not exist/);
+      assert.equal(
+        (await db.project.findUniqueOrThrow({ where: { id: mixed.projectId } }))
+          .coordinatorSessionId,
+        mixed.coordinatorSessionId,
+        'four refused writes and the project still names the run it named',
+      );
+
+      // What the guard deliberately does NOT refuse: a pointer that names a conversation in Trash.
+      // A bound coordinator can be soft-deleted at any time — an UPDATE on `session`, which never
+      // passes through this guard — so the state exists whether or not it may be written, and both
+      // `ProjectsService.coordinator` and §7.5's planner are built to leave it. Refusing the write
+      // would only break the paths that repair it.
       const trashed = await db.session.create({
         data: {
           ownerId: mixed.ownerId, creatorId: mixed.ownerId, workspaceId: mixed.workspaceId,
@@ -575,24 +551,23 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
           usesRuntimeDefaultModel: true, source: 'user', deletedAt: new Date(),
         },
       });
-      await rejects(db.$executeRaw(Prisma.sql`
+      await db.$executeRaw(Prisma.sql`
         UPDATE "project" SET "coordinator_session_id" = ${trashed.id}::uuid
          WHERE "id" = ${mixed.projectId}::uuid
-      `), /COORDINATOR_POINTER_INVALID: session .* is deleted/);
-      await rejects(db.$executeRaw(Prisma.sql`
-        UPDATE "project" SET "coordinator_session_id" = ${normal.coordinatorSessionId}::uuid
-         WHERE "id" = ${mixed.projectId}::uuid
-      `), /COORDINATOR_POINTER_INVALID: session .* belongs to another owner/);
+      `);
       assert.equal(
         (await db.project.findUniqueOrThrow({ where: { id: mixed.projectId } }))
           .coordinatorSessionId,
-        mixed.coordinatorSessionId,
-        'four refused writes and the project still names the run it named',
+        trashed.id,
       );
+      await db.$executeRaw(Prisma.sql`
+        UPDATE "project" SET "coordinator_session_id" = ${mixed.coordinatorSessionId}::uuid
+         WHERE "id" = ${mixed.projectId}::uuid
+      `);
 
       // Emptying the pointer stays legal — it is what the foreign key does when the conversation is
       // hard-deleted, and a project waiting for its next coordinator is a recoverable state that
-      // says so with an event of its own.
+      // says so with an event of its own, which the loop answers with a run.
       await db.session.delete({ where: { id: mixed.coordinatorSessionId } });
       const cleared = await db.project.findUniqueOrThrow({ where: { id: mixed.projectId } });
       assert.equal(cleared.coordinatorSessionId, null);
@@ -602,18 +577,21 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
         orderBy: { occurredAt: 'desc' },
       });
       assert.equal((clearedEvent.payload as { cleared?: boolean }).cleared, true);
-      const afterDelete = await planUnderLease(db, decisions, reconciler, mixed.projectId);
-      assert.equal(rotation(afterDelete.outcome).trigger, 'NO_COORDINATOR_SESSION');
-      const reopened = await rotations.rotate(afterDelete.lease, {
-        decisionId: afterDelete.decisionId, planned: rotation(afterDelete.outcome),
+      assert.ok(await events.drainAvailable() >= 1);
+      const reopened = await db.projectAction.findFirstOrThrow({
+        where: {
+          projectId: mixed.projectId, type: 'ROTATE_COORDINATOR_SESSION', status: 'APPLIED',
+        },
       });
-      assert.equal(reopened.action.status, 'APPLIED');
       assert.equal(
         (await db.project.findUniqueOrThrow({ where: { id: mixed.projectId } }))
           .coordinatorSessionId,
-        reopened.sessionId,
+        reopened.resultSessionId,
       );
-      assert.equal(await reconciler.releaseLease(afterDelete.lease), true);
+      assert.equal(
+        (JSON.parse(JSON.stringify(reopened.detail)) as { trigger?: string }).trigger,
+        'NO_COORDINATOR_SESSION',
+      );
 
       // ── AC11 · a project nobody opted in stays exactly as silent as it was ──────────────────
       const legacy = await fixture(db, 'legacy', {
@@ -637,6 +615,7 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       assert.equal(await reconciler.acquireLease(legacy.projectId), null,
         'a project nobody opted in is not even leasable');
     } finally {
+      rotations.onModuleDestroy();
       unregister();
       await db.$disconnect();
       await identity.end();

@@ -10,10 +10,13 @@ import {
 } from './project-decision.service';
 import { detectProjectBlockerConditions } from './project-blocker-conditions';
 import {
+  COORDINATOR_ROTATION_REASON_CODE,
   PROJECT_LIVE_SESSION_STATUSES,
   isLiveSessionStatus,
   planCoordinatorSessionRotation,
   rotateCoordinatorSessionIdempotencyKey,
+  rotationReasonCode,
+  rotationReasonDigest,
 } from './project-coordinator-session';
 
 // §7.5 as a pure function of a frozen snapshot. Everything the rotation does downstream is keyed on
@@ -82,7 +85,8 @@ function input(overrides: Partial<World> = {}): ProjectDecisionInput {
 }
 
 test('a run that ended is rotated, in the landing the project already records', () => {
-  const plan = planCoordinatorSessionRotation(input());
+  const frozen = input();
+  const plan = planCoordinatorSessionRotation(frozen);
   assert.deepEqual(plan, {
     status: 'ROTATE',
     trigger: 'COORDINATOR_SESSION_ENDED',
@@ -90,6 +94,7 @@ test('a run that ended is rotated, in the landing the project already records', 
     fromSessionId: uuidToBase62(SESSION),
     landingWorkspaceId: uuidToBase62(AGENT),
     coordinatorAgentId: uuidToBase62(AGENT),
+    reasonDigest: rotationReasonDigest(frozen),
   });
   // §8.2: the epoch is the generation the NEW run will be, and the key names the project by its
   // raw uuid — a permanent key is an internal identity, not a public one.
@@ -309,4 +314,131 @@ test('a healthy coordinator raises nothing and proposes nothing', () => {
   assert.deepEqual(outcome.actions, []);
   assert.deepEqual(outcome.coordinator, { status: 'HEALTHY', sessionId: uuidToBase62(SESSION) });
   assert.deepEqual(outcome.blockersOpened, []);
+});
+
+// ── §7.6 TR3 · a second look at the same world is not another run ──────────────────────────────
+
+/** A world where the previous rotation was applied on `digest`, and its run has since ended. */
+function afterRotation(digest: string, overrides: Partial<World> = {}): ProjectDecisionInput {
+  const base = input(overrides).world;
+  return input({
+    ...overrides,
+    runtime: { ...base.runtime, coordinatorGeneration: '4' },
+    actions: [{
+      actionId: uuidToBase62('00000000-0000-7000-8000-000000001909'),
+      type: 'ROTATE_COORDINATOR_SESSION',
+      status: 'APPLIED',
+      subjectType: 'PROJECT',
+      subjectId: uuidToBase62(PROJECT),
+      decisionId: uuidToBase62(DECISION),
+      resultSessionId: uuidToBase62(SESSION),
+      refusalCode: null,
+      reasonCode: rotationReasonCode(digest),
+      idempotencyKeyHash: 'b'.repeat(64),
+      detailHash: 'c'.repeat(64),
+      createdAt: '2026-08-19T00:00:00.000Z',
+    }],
+  });
+}
+
+test('a run opened on these very facts, now ended without changing them, opens no second run', () => {
+  const digest = rotationReasonDigest(input());
+  const world = afterRotation(digest);
+  assert.equal(rotationReasonDigest(world), digest, 'the ledger row is not itself a fact');
+  const plan = planCoordinatorSessionRotation(world);
+  assert.deepEqual(plan, {
+    status: 'NO_PROGRESS',
+    trigger: 'COORDINATOR_SESSION_ENDED',
+    reasonDigest: digest,
+    lastRunSessionId: uuidToBase62(SESSION),
+    fromSessionId: uuidToBase62(SESSION),
+  });
+
+  // And it is a row with a name on it, not silence.
+  const outcome = planProjectDecision(world, { decisionId: DECISION });
+  assert.deepEqual(outcome.actions, [], 'a project that made no progress starts no run');
+  const conditions = detectProjectBlockerConditions(world, {
+    aggregationCycleTaskIds: [],
+    verificationVerdicts: [],
+    coordinatorSession: plan,
+  }).filter((condition) => condition.kind === 'COORDINATOR_NO_PROGRESS');
+  assert.equal(conditions.length, 1);
+  assert.deepEqual(conditions[0].facts, { reasonDigest: digest });
+  assert.equal(conditions[0].subjectType, 'PROJECT');
+});
+
+test('a world that moved earns a new run; how the last one died does not', () => {
+  const digest = rotationReasonDigest(input());
+
+  // Same facts, a different way of dying. TR3 still holds — otherwise a crash loop could alternate
+  // ENDED/FAILED forever and never be anybody's problem.
+  const crashed = afterRotation(digest, {
+    coordinatorSession: { ...input().world.coordinatorSession!, runStatus: 'FAILED' },
+  });
+  assert.equal(planCoordinatorSessionRotation(crashed).status, 'NO_PROGRESS');
+
+  // A task finished while the last run was going. That IS progress, and the next run is allowed.
+  const moved = afterRotation(digest, {
+    tasks: [{
+      id: uuidToBase62('00000000-0000-7000-8000-00000000190a'), title: 'work',
+      contentHash: 'a'.repeat(64), status: 'DONE', parentTaskId: null, assigneeAgentId: null,
+      provider: null, model: null, autoRunWhenReady: true, dispatchHold: false,
+      dispatchAuthority: 'COORDINATOR', dispatchAttempt: '0', requiredCapabilities: [],
+      runAt: null, verifiesTaskId: null, dependsOnTaskIds: [], liveSessionIds: [],
+      failureCount: 0, lastFailureAt: null, failureAttributable: true, retryBackoffUntil: null,
+      updatedAt: '2026-08-20T00:00:00.000Z',
+    }],
+  });
+  assert.notEqual(rotationReasonDigest(moved), digest);
+  const plan = planCoordinatorSessionRotation(moved);
+  assert.equal(plan.status, 'ROTATE');
+  assert.equal(plan.status === 'ROTATE' && plan.generation, '5', 'the epoch follows the generation');
+});
+
+test('the no-progress row is not an input to the rule that raises it', () => {
+  const digest = rotationReasonDigest(input());
+  // The blocker this decision opens would otherwise change the world it was decided from: next pass
+  // computes a different digest, the condition goes false, the row clears, and the loop rotates
+  // again — a two-pass cycle that never converges. Its kind is excluded from the digest for that
+  // reason, so the answer is stable across the pass that raises it.
+  const withRow = afterRotation(digest, {
+    blockers: [{
+      id: uuidToBase62('00000000-0000-7000-8000-00000000190b'),
+      kind: 'COORDINATOR_NO_PROGRESS', owner: 'USER', recovery: 'HUMAN', severity: 'CRITICAL',
+      requiredAction: 'take it from here', subjectType: 'PROJECT', subjectId: uuidToBase62(PROJECT),
+      dedupeKey: `COORDINATOR_NO_PROGRESS:PROJECT:${uuidToBase62(PROJECT)}`,
+      lifecycleGeneration: '1', conditionVersion: 'd'.repeat(64),
+      firstSeenAt: '2026-08-20T00:00:00.000Z', lastSeenAt: '2026-08-20T00:00:00.000Z',
+      nextCheckAt: '2026-08-20T00:05:00.000Z', occurrences: 1, escalatedAt: null,
+    }],
+  });
+  assert.equal(rotationReasonDigest(withRow), digest);
+  assert.equal(planCoordinatorSessionRotation(withRow).status, 'NO_PROGRESS');
+
+  // Any OTHER blocker is a fact about the world, and a new episode of one is new information.
+  const other = afterRotation(digest, {
+    blockers: [{
+      id: uuidToBase62('00000000-0000-7000-8000-00000000190c'),
+      kind: 'MERGE_CONFLICT', owner: 'COORDINATOR', recovery: 'EVENT', severity: 'WARNING',
+      requiredAction: 'resolve', subjectType: 'SESSION', subjectId: uuidToBase62(SESSION),
+      dedupeKey: `MERGE_CONFLICT:SESSION:${uuidToBase62(SESSION)}`,
+      lifecycleGeneration: '2', conditionVersion: 'e'.repeat(64),
+      firstSeenAt: '2026-08-20T00:00:00.000Z', lastSeenAt: '2026-08-20T00:00:00.000Z',
+      nextCheckAt: '2026-08-20T00:05:00.000Z', occurrences: 1, escalatedAt: null,
+    }],
+  });
+  assert.notEqual(rotationReasonDigest(other), digest);
+  assert.equal(planCoordinatorSessionRotation(other).status, 'ROTATE');
+});
+
+test('the rotation reason code carries its digest, and reads back through the prefix', () => {
+  const digest = rotationReasonDigest(input());
+  assert.equal(rotationReasonCode(digest), `${COORDINATOR_ROTATION_REASON_CODE}:${digest}`);
+  assert.match(digest, /^[0-9a-f]{64}$/);
+  // A ledger row from a binary that wrote no digest is read as "no comparable previous run" rather
+  // than as a match, so an old row can never manufacture a COORDINATOR_NO_PROGRESS.
+  const legacy = afterRotation(digest);
+  legacy.world.actions[0].reasonCode = 'POLICY_ALLOWED';
+  legacy.decisionInputHash = hashDecisionInput(legacy);
+  assert.equal(planCoordinatorSessionRotation(legacy).status, 'ROTATE');
 });

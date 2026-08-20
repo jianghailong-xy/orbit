@@ -11,15 +11,14 @@
  *
  * Two kinds have no detector, on purpose:
  *
- *   `COORDINATOR_NO_PROGRESS` is §7.6 TR3's, and TR3 compares `reasonDigest`s across turns. No
- *   turn is planned yet (`planProjectDecision` emits no `OPEN_COORDINATOR_TURN`), so a detector
- *   written now would be dead code guessing at an input that does not exist. The kind, its policy
- *   row and the whole raise / dedupe / escalate / clear path are here and tested; the detector
- *   belongs to the unit that opens turns.
- *
  *   `AWAITING_USER_APPROVAL` is raised from the REQUEST_APPROVAL side, not detected: whether an
  *   approval is still outstanding is the action ledger's own state, and the pass that requests one
  *   is the pass that knows its target. Its policy row and lifecycle are equally complete here.
+ *
+ * `COORDINATOR_NO_PROGRESS` is §7.6 TR3's, and TR3 compares `reasonDigest`s across coordination
+ * runs. It is detected here now that §7.5's rotation actually opens them, and the comparison is
+ * made by the rotation planner (which is the thing that knows what a run was opened ON); this
+ * function's job is to turn its answer into the row a person can act on.
  */
 
 import type { ProjectDecisionInput } from './project-decision.service';
@@ -68,6 +67,7 @@ export function detectProjectBlockerConditions(
     ...manualHoldConditions(input),
     ...dependencyCycleConditions(input, sources.aggregationCycleTaskIds),
     ...coordinatorConditions(input, sources.coordinatorSession),
+    ...coordinatorProgressConditions(input, sources.coordinatorSession),
     ...workspaceConditions(input),
   ];
   return conditions.sort((a, b) => compare(
@@ -374,6 +374,33 @@ function coordinatorConditions(
         rotationTrigger: rotation.status === 'UNAVAILABLE' ? rotation.trigger : null,
         coordinatorSessionId: rotation.status === 'UNAVAILABLE' ? rotation.fromSessionId : null,
       }),
+    },
+  }];
+}
+
+/**
+ * §7.6 TR3: the last coordination run was opened on exactly these facts and changed none of them.
+ *
+ * The subject is the DIGEST, not the project — that is what makes the row fall away on its own
+ * (§11.4 BL3 recomputes the condition, and a world that has moved computes a different digest, so
+ * the key stops being observed and the row resolves). It also makes the episode counting right: the
+ * same project going quiet twice on two different worlds is two rows, not one row seen twice.
+ */
+function coordinatorProgressConditions(
+  input: ProjectDecisionInput,
+  rotation: CoordinatorSessionPlan,
+): ObservedBlockerCondition[] {
+  if (rotation.status !== 'NO_PROGRESS') return [];
+  return [{
+    kind: 'COORDINATOR_NO_PROGRESS',
+    subjectType: 'PROJECT',
+    subjectId: input.world.project.id,
+    facts: { reasonDigest: rotation.reasonDigest },
+    detail: {
+      reasonDigest: rotation.reasonDigest,
+      trigger: rotation.trigger,
+      lastRunSessionId: rotation.lastRunSessionId,
+      coordinatorSessionId: rotation.fromSessionId,
     },
   }];
 }
