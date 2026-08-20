@@ -129,6 +129,7 @@ function startPrismaDeploy(schemaPath: string, databaseUrl: string) {
       cwd: path.resolve(__dirname, '../..'),
       env: { ...process.env, DATABASE_URL: databaseUrl, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
     },
   );
   child.stdout.on('data', (chunk) => { output += String(chunk); });
@@ -145,7 +146,13 @@ function startPrismaDeploy(schemaPath: string, databaseUrl: string) {
     done,
     output: () => output,
     finished: () => finished,
-    stop: () => child.kill('SIGTERM'),
+    stop: () => {
+      if (process.platform !== 'win32' && child.pid !== undefined) {
+        process.kill(-child.pid, 'SIGTERM');
+      } else {
+        child.kill('SIGTERM');
+      }
+    },
   };
 }
 
@@ -306,7 +313,6 @@ test('the corrected old assertion distinguishes a derivation from the 04R2 expli
     await client.end();
   }
 });
-
 test('chooser-first and relocation-first commits both preserve the final explicit WHO', { skip }, async () => {
   const left = await open();
   const right = await open();
@@ -592,6 +598,188 @@ test('an already-applied 0114 database installs the guard and recovers a gap row
     await client.end();
   }
 });
+
+test('0115 adopts only a provable derivation and preserves every ambiguous or explicit row',
+  { skip }, async () => {
+    const client = await open();
+    try {
+      await setup(client, 'applied-0114');
+      const safe = P(0x54);
+      const explicitEqual = P(0x55);
+      const ambiguousChoice = P(0x56);
+      const alreadyPromoted = P(0x57);
+      await client.query(oldInsert(safe, A, S[0]));
+      await client.query(oldInsert(explicitEqual, A, S[1]));
+      await client.query(oldInsert(ambiguousChoice, A, S[2]));
+      await client.query(oldInsert(alreadyPromoted, B, S[3]));
+
+      await client.query(`
+        UPDATE "project_runtime"
+           SET "coordinator_identity_source" = 'DERIVED',
+               "coordinator_identity_landing_id" = NULL
+         WHERE "project_id" IN ('${safe}', '${ambiguousChoice}');
+        UPDATE "project_runtime"
+           SET "coordinator_identity_source" = 'EXPLICIT',
+               "coordinator_identity_landing_id" = NULL
+         WHERE "project_id" IN ('${explicitEqual}', '${alreadyPromoted}');
+        UPDATE "project_member" SET "agent_id" = '${C}'
+         WHERE "project_id" = '${ambiguousChoice}' AND "role" = 'COORDINATOR';
+        UPDATE "project_member" SET "agent_id" = '${A}'
+         WHERE "project_id" = '${alreadyPromoted}' AND "role" = 'COORDINATOR';
+      `);
+
+      await client.query(IDENTITY_SOURCE_GUARD);
+      await client.query(IDENTITY_WINDOW_REPAIR);
+
+      const adopted = await state(client, safe);
+      const equalChoice = await state(client, explicitEqual);
+      const ambiguous = await state(client, ambiguousChoice);
+      const promoted = await state(client, alreadyPromoted);
+      assert.deepEqual(
+        { agent: adopted.agent, source: adopted.source,
+          baseline: adopted.identity_baseline },
+        { agent: A, source: 'DERIVED', baseline: A },
+        'DERIVED + no baseline + member == landing is the one mechanically provable adoption',
+      );
+      assert.deepEqual(
+        { agent: equalChoice.agent, source: equalChoice.source,
+          baseline: equalChoice.identity_baseline },
+        { agent: A, source: 'EXPLICIT', baseline: null },
+        'an explicit choice equal to the landing is never silently demoted',
+      );
+      assert.deepEqual(
+        { agent: ambiguous.agent, source: ambiguous.source,
+          baseline: ambiguous.identity_baseline },
+        { agent: C, source: 'DERIVED', baseline: null },
+        'a different member is not safe for 0115 to adopt from shape alone',
+      );
+      assert.deepEqual(
+        { landing: promoted.landing, agent: promoted.agent, source: promoted.source,
+          baseline: promoted.identity_baseline },
+        { landing: B, agent: A, source: 'EXPLICIT', baseline: null },
+        'an already-promoted historical window row remains on the explicit/manual-recovery side',
+      );
+
+      await client.query(`UPDATE "project" SET "coordinator_workspace_id" = '${B}'
+        WHERE "id" IN ('${safe}', '${explicitEqual}', '${ambiguousChoice}')`);
+      const adoptedAfter = await state(client, safe);
+      const equalChoiceAfter = await state(client, explicitEqual);
+      const ambiguousAfter = await state(client, ambiguousChoice);
+      assert.deepEqual(
+        { landing: adoptedAfter.landing, agent: adoptedAfter.agent,
+          source: adoptedAfter.source, baseline: adoptedAfter.identity_baseline },
+        { landing: B, agent: B, source: 'DERIVED', baseline: B },
+      );
+      assert.deepEqual(
+        { landing: equalChoiceAfter.landing, agent: equalChoiceAfter.agent,
+          source: equalChoiceAfter.source, baseline: equalChoiceAfter.identity_baseline },
+        { landing: B, agent: A, source: 'EXPLICIT', baseline: null },
+      );
+      assert.deepEqual(
+        { landing: ambiguousAfter.landing, agent: ambiguousAfter.agent,
+          source: ambiguousAfter.source, baseline: ambiguousAfter.identity_baseline },
+        { landing: B, agent: C, source: 'EXPLICIT', baseline: null },
+        'the permanent predicate leaves an old-binary C choice for 0114 to promote, not demote',
+      );
+    } finally {
+      await client.end();
+    }
+  });
+
+test('the migration guard remains durable and fail-closed after the 0114 executor is interrupted',
+  { skip, timeout: 30_000 }, async () => {
+    const executorSchema = 'pcc04r4_interrupted_guard';
+    const marker = 'pcc04r4_0114_interrupted_pause';
+    const admin = await open('public');
+    let writer: Client | undefined;
+    let fixture: Awaited<ReturnType<typeof makeExecutorFixture>> | undefined;
+    let deploy: ReturnType<typeof startPrismaDeploy> | undefined;
+    try {
+      await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
+      await admin.query(`CREATE SCHEMA ${executorSchema}`);
+      fixture = await makeExecutorFixture(executorSchema);
+      await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      writer = await open(executorSchema);
+      await seedExecutor(writer);
+
+      await writeMigration(
+        fixture.root,
+        '0113_project_coordinator_identity_source_guard',
+        IDENTITY_SOURCE_GUARD,
+      );
+      const breakpoint = '-- ── The one rule, now told where the identity came from';
+      assert.ok(IDENTITY_SOURCE.includes(breakpoint), '0114 pause injection point moved');
+      await writeMigration(
+        fixture.root,
+        '0114_project_coordinator_identity_source',
+        IDENTITY_SOURCE.replace(
+          breakpoint,
+          `SELECT pg_sleep(20) /* ${marker} */;\n\n${breakpoint}`,
+        ),
+      );
+      await writeMigration(
+        fixture.root,
+        '0115_project_coordinator_identity_window_repair',
+        IDENTITY_WINDOW_REPAIR,
+      );
+
+      deploy = startPrismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      await waitForExecutorPause(admin, executorSchema, deploy);
+      const id = P(0x58);
+      await assert.rejects(
+        () => writer!.query(oldInsert(id, A, S[0])),
+        (error: any) => error.code === 'ORB02',
+      );
+
+      const interrupted = assert.rejects(deploy.done, /prisma migrate deploy exited/);
+      deploy.stop();
+      await interrupted;
+      deploy = undefined;
+
+      const { rows: guards } = await writer.query(`
+        SELECT tgname
+          FROM pg_trigger
+         WHERE tgrelid = '"project"'::regclass
+           AND NOT tgisinternal
+           AND tgname LIKE 'project_coordinator_identity_migration_%'
+         ORDER BY tgname`);
+      assert.deepEqual(
+        guards.map((row: any) => row.tgname),
+        [
+          'project_coordinator_identity_migration_insert_guard',
+          'project_coordinator_identity_migration_update_guard',
+        ],
+        'both guards were committed by the earlier migration and survived the interrupted 0114',
+      );
+      await assert.rejects(
+        () => writer!.query(oldInsert(id, A, S[0])),
+        (error: any) => {
+          assert.equal(error.code, 'ORB02');
+          assert.match(String(error.hint), /migrate deploy has completed/);
+          return true;
+        },
+      );
+      const { rows: residue } = await writer.query(`
+        SELECT
+          (SELECT count(*)::int FROM "project" WHERE "id" = '${id}') AS projects,
+          (SELECT count(*)::int FROM "project_runtime" WHERE "project_id" = '${id}') AS runtimes,
+          (SELECT count(*)::int FROM "project_member" WHERE "project_id" = '${id}') AS members`);
+      assert.deepEqual(
+        residue[0],
+        { projects: 0, runtimes: 0, members: 0 },
+        'a failed write before and after interruption leaves no Project or companion row',
+      );
+    } finally {
+      if (deploy) {
+        if (!deploy.finished()) deploy.stop();
+        await deploy.done.catch(() => undefined);
+      }
+      await writer?.end();
+      await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
+      await admin.end();
+      if (fixture) await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
 
 test('the real Prisma executor keeps an old writer typed fail-closed in the 0114 statement gap',
   { skip, timeout: 30_000 }, async () => {
