@@ -3,6 +3,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectEventsService } from './project-events.service';
+import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectsService } from './projects.service';
 
 // PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
@@ -12,7 +13,12 @@ import { ProjectsService } from './projects.service';
 @Module({
   imports: [SessionsModule],
   controllers: [ProjectsController],
-  providers: [ProjectsService, ProjectEventsService, ProjectAvailabilityReaperService],
-  exports: [ProjectsService, ProjectEventsService],
+  providers: [
+    ProjectsService,
+    ProjectEventsService,
+    ProjectReconcileService,
+    ProjectAvailabilityReaperService,
+  ],
+  exports: [ProjectsService, ProjectEventsService, ProjectReconcileService],
 })
 export class ProjectsModule {}

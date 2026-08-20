@@ -86,6 +86,46 @@ enum ProjectAutomationPolicy {
   @@map("project_automation_policy")
 }
 
+/// The orchestration loop's derived state. This is deliberately separate from ProjectStatus:
+/// ProjectStatus describes the work, while this enum describes why the control loop is (or is
+/// not) able to advance it right now.
+enum ProjectRunState {
+  PLANNING
+  EXECUTING
+  AWAITING_VERIFICATION
+  BLOCKED
+  AWAITING_HUMAN
+  ACCEPTANCE
+  SETTLED
+
+  @@map("project_run_state")
+}
+
+/// A durable action is first claimed and then published into exactly one terminal state.
+enum ProjectActionStatus {
+  CLAIMED
+  APPLIED
+  REFUSED
+  SUPERSEDED
+
+  @@map("project_action_status")
+}
+
+/// Closed set of side-effecting orchestration actions. SCHEDULE_WAKE, NOOP and parent aggregation
+/// are current-state writes/audit outcomes rather than permanent-ledger entries.
+enum ProjectActionType {
+  DISPATCH_TASK
+  OPEN_COORDINATOR_TURN
+  ROTATE_COORDINATOR_SESSION
+  RAISE_BLOCKER
+  CLEAR_BLOCKER
+  APPLY_VERIFICATION_VERDICT
+  REQUEST_APPROVAL
+  RUN_PROJECT_ACCEPTANCE
+
+  @@map("project_action_type")
+}
+
 /// What an agent is to a project it is on the team of. COORDINATOR is the identity that decides
 /// what this project does next; MEMBER is an agent the coordinator may hand work to.
 enum ProjectRole {
@@ -1199,6 +1239,7 @@ model Project {
   members ProjectMember[]
   runtime ProjectRuntime?
   events  ProjectEvent[]
+  actions ProjectAction[]
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -1254,8 +1295,6 @@ model ProjectMember {
 /// next to it invites code that confuses the two. Write amplification: this row is where the loop's
 /// hot fields will live, and `project` is read by every list, task page and stream.
 ///
-/// This phase creates it for `coordinatorGeneration` alone; the reconcile lease, run state and next
-/// wake are added by the units that implement them, additively, on this same row.
 model ProjectRuntime {
   /// The primary key IS the project id: exactly one runtime row per project, stated by the schema
   /// instead of by a unique index over a surrogate key nothing would ever reference.
@@ -1298,10 +1337,56 @@ model ProjectRuntime {
   /// reference. Maintained entirely by the database and by the two service paths above.
   coordinatorIdentityLandingId String? @map("coordinator_identity_landing_id") @db.Uuid
 
+  /// Derived control-loop state and the durable recovery clock. A PLANNING runtime with no live
+  /// work always carries a next wake; SETTLED clears it.
+  runState       ProjectRunState @default(PLANNING) @map("run_state")
+  nextWakeAt     DateTime?       @map("next_wake_at")
+  nextWakeReason String?         @map("next_wake_reason")
+
+  /// One renewable lease per Project. Every successful acquisition increments fencingToken;
+  /// token-guarded commits make an expired process physically unable to publish an action.
+  leaseHolder      String?   @map("lease_holder") @db.Uuid
+  leaseExpiresAt   DateTime? @map("lease_expires_at")
+  leaseHeartbeatAt DateTime? @map("lease_heartbeat_at")
+  fencingToken     BigInt    @default(0) @map("fencing_token")
+
+  /// Persistent epoch used by RUN_PROJECT_ACCEPTANCE once that action is introduced.
+  acceptanceAttempt BigInt @default(0) @map("acceptance_attempt")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("project_runtime")
+}
+
+/// Permanent idempotency ledger for orchestration side effects. The unique key is claimed before
+/// the effect and both are committed in one transaction, so a retry observes the existing row and
+/// skips the effect. Rows are never deleted independently; the Project cascade is the only exit.
+model ProjectAction {
+  id             String              @id @default(uuid(7)) @db.Uuid
+  projectId      String              @map("project_id") @db.Uuid
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  idempotencyKey String              @unique @map("idempotency_key")
+  type           ProjectActionType
+  status         ProjectActionStatus @default(CLAIMED)
+  subjectType    String              @map("subject_type")
+  subjectId      String?             @map("subject_id") @db.Uuid
+  fencingToken   BigInt              @map("fencing_token")
+
+  /// Added without foreign keys in this unit: decisions and result-session lineage are wired by
+  /// the units that own those commit-time invariants. UUID shape is fixed now so those additions
+  /// are additive migrations rather than table rewrites.
+  decisionId      String? @map("decision_id") @db.Uuid
+  resultSessionId String? @map("result_session_id") @db.Uuid
+  refusalCode     String? @map("refusal_code")
+  detail          Json    @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([projectId, createdAt])
+  @@index([projectId, type, status])
+  @@map("project_action")
 }
 
 /// A durable signal that some committed fact belonging to a Project changed.

@@ -56,7 +56,7 @@ export interface ProjectEventHandler {
     tx: Prisma.TransactionClient,
     projectId: string,
     events: readonly ProjectEventEnvelope[],
-  ): Promise<void>;
+  ): Promise<ProjectEventHandleResult | void>;
   deadLetter(
     tx: Prisma.TransactionClient,
     projectId: string,
@@ -65,9 +65,17 @@ export interface ProjectEventHandler {
   ): Promise<void>;
 }
 
+export interface ProjectEventHandleResult {
+  /** Inert legacy/terminal projects consume their signals without running the control loop. */
+  disposition?: Extract<ProjectEventDisposition, 'RECONCILED' | 'DISCARDED_OUT_OF_LOOP'>;
+  /** Lease contention is not a failure: keep the events pending until the holder can be replaced. */
+  deferUntil?: Date;
+}
+
 export type ProjectEventDeliveryResult =
   | { status: 'NO_HANDLER' | 'IDLE' }
-  | { status: 'CONSUMED'; projectId: string; eventIds: string[] }
+  | { status: 'CONSUMED' | 'DISCARDED'; projectId: string; eventIds: string[] }
+  | { status: 'DEFERRED'; projectId: string; eventIds: string[]; nextAttemptAt: Date }
   | { status: 'RETRY_SCHEDULED'; projectId: string; eventIds: string[] }
   | { status: 'DEAD'; projectId: string; eventIds: string[] };
 
@@ -88,8 +96,6 @@ interface ProjectEventRow {
 }
 
 const EVENT_CHANNEL = 'project_event';
-const POLL_BASE_MS = 1_000;
-const POLL_JITTER_MS = 250;
 const LISTENER_RECONNECT_MS = 2_000;
 const MAX_PROJECTS_PER_DRAIN = 25;
 const MAX_EVENTS_PER_PROJECT = 100;
@@ -119,7 +125,6 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
   private connecting = false;
   private started = false;
   private stopped = false;
-  private pollTimer?: ReturnType<typeof setTimeout>;
   private reconnectTimer?: ReturnType<typeof setTimeout>;
   private draining = false;
   private drainRequested = false;
@@ -129,14 +134,15 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit(): Promise<void> {
     this.started = true;
     this.stopped = false;
-    this.schedulePoll(0);
     await this.startListener();
+    // A handler may have registered before Nest initialized this provider. LISTEN accelerates new
+    // commits; this immediate drain covers rows that were already durable at process start.
+    this.requestDrain();
   }
 
   onModuleDestroy(): void {
     this.started = false;
     this.stopped = true;
-    if (this.pollTimer) clearTimeout(this.pollTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.listener?.removeAllListeners('error');
     this.listener?.end().catch(() => undefined);
@@ -257,7 +263,37 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
       // retry schedule is committed by the same legal claimant instead of racing a second worker.
       await tx.$executeRawUnsafe('SAVEPOINT project_event_delivery');
       try {
-        await handler.handle(tx, projectId, events);
+        const handled = await handler.handle(tx, projectId, events);
+        if (handled?.deferUntil) {
+          const deferUntil = handled.deferUntil > now
+            ? handled.deferUntil
+            : new Date(now.getTime() + 1_000);
+          const ids = events.map((event) => event.id);
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "project_event"
+               SET "next_attempt_at" = ${deferUntil}
+             WHERE "id" IN (${Prisma.join(ids)}) AND "consumed_at" IS NULL
+          `);
+          await tx.$executeRawUnsafe('RELEASE SAVEPOINT project_event_delivery');
+          return {
+            status: 'DEFERRED', projectId, eventIds: ids, nextAttemptAt: deferUntil,
+          } as const;
+        }
+
+        const ids = events.map((event) => event.id);
+        const disposition = handled?.disposition ?? 'RECONCILED';
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE "project_event"
+             SET "consumed_at" = ${now}, "next_attempt_at" = NULL,
+                 "disposition" = ${disposition}
+           WHERE "id" IN (${Prisma.join(ids)}) AND "consumed_at" IS NULL
+        `);
+        await tx.$executeRawUnsafe('RELEASE SAVEPOINT project_event_delivery');
+        return {
+          status: disposition === 'RECONCILED' ? 'CONSUMED' : 'DISCARDED',
+          projectId,
+          eventIds: ids,
+        } as const;
       } catch (cause) {
         await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT project_event_delivery');
         const error = errorText(cause);
@@ -296,29 +332,7 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
           : { status: 'RETRY_SCHEDULED', projectId, eventIds: retry.map((event) => event.id) } as const;
       }
 
-      await tx.$executeRawUnsafe('RELEASE SAVEPOINT project_event_delivery');
-      const ids = events.map((event) => event.id);
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE "project_event"
-           SET "consumed_at" = ${now}, "next_attempt_at" = NULL, "disposition" = 'RECONCILED'
-         WHERE "id" IN (${Prisma.join(ids)}) AND "consumed_at" IS NULL
-      `);
-      return { status: 'CONSUMED', projectId, eventIds: ids } as const;
     });
-  }
-
-  private schedulePoll(delay = this.pollDelay()): void {
-    if (this.stopped || this.pollTimer) return;
-    this.pollTimer = setTimeout(() => {
-      this.pollTimer = undefined;
-      this.requestDrain();
-      this.schedulePoll();
-    }, delay);
-    this.pollTimer.unref();
-  }
-
-  private pollDelay(): number {
-    return POLL_BASE_MS + Math.floor(Math.random() * (POLL_JITTER_MS + 1));
   }
 
   private requestDrain(): void {
@@ -327,19 +341,27 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
     if (!this.draining) void this.drain();
   }
 
-  private async drain(): Promise<void> {
+  /** Durable poll entrypoint used by the orchestration service's sole recovery timer. */
+  async drainAvailable(limit = MAX_PROJECTS_PER_DRAIN): Promise<number> {
+    if (!Number.isSafeInteger(limit) || limit < 1) throw new RangeError('limit must be positive');
+    if (this.draining) {
+      this.drainRequested = true;
+      return 0;
+    }
     this.draining = true;
+    let total = 0;
     try {
       do {
         this.drainRequested = false;
         let processed = 0;
-        while (!this.stopped && this.handler && processed < MAX_PROJECTS_PER_DRAIN) {
+        while (!this.stopped && this.handler && total < limit) {
           const result = await this.drainOnce();
           if (result.status === 'IDLE' || result.status === 'NO_HANDLER') break;
           processed += 1;
+          total += 1;
         }
-        if (processed === MAX_PROJECTS_PER_DRAIN) this.drainRequested = true;
-      } while (this.drainRequested && !this.stopped && this.handler);
+        if (processed > 0 && total === limit) this.drainRequested = true;
+      } while (this.drainRequested && total < limit && !this.stopped && this.handler);
     } catch (cause) {
       // A transaction-level failure (lost connection, serialization failure) changed no event.
       // The durable poll will retry; do not turn infrastructure availability into a DEAD event.
@@ -348,6 +370,11 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
       this.draining = false;
       if (this.drainRequested) this.requestDrain();
     }
+    return total;
+  }
+
+  private async drain(): Promise<void> {
+    await this.drainAvailable();
   }
 
   private async startListener(): Promise<void> {
