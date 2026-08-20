@@ -21,8 +21,11 @@ export function assertCoordinatorPgUrlIsIsolated(connectionString: string | unde
   const url = new URL(connectionString);
   const database = decodeURIComponent(url.pathname.replace(/^\//, ''));
   const user = decodeURIComponent(url.username);
-  assert.match(database, /^pcc(?:[0-9]+)?[_-]/, 'destructive coordinator specs require a dedicated pcc_* database');
-  assert.match(user, /^pcc(?:[0-9]+)?[_-]/, 'destructive coordinator specs require a dedicated pcc_* role');
+  // `pcc<unit>_`, where a unit is 03, 04, 03a — a repair of a unit is not the unit, and its
+  // database must not be the unit's either. The prefix is the cheap half of the guard; the
+  // explicit expected database, role and server identity below are the half that decides.
+  assert.match(database, /^pcc[0-9a-z]*[_-]/, 'destructive coordinator specs require a dedicated pcc_* database');
+  assert.match(user, /^pcc[0-9a-z]*[_-]/, 'destructive coordinator specs require a dedicated pcc_* role');
   assert.doesNotMatch(`${url.hostname}/${database}/${user}`, /orbit-postgres|(^|[\/_-])orbit([\/_-]|$)/i,
     'shared Orbit PostgreSQL targets are forbidden');
   assert.equal(database, expectedDatabase, 'URL database does not match the explicitly expected isolated database');

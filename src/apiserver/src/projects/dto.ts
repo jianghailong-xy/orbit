@@ -8,6 +8,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
@@ -38,6 +39,22 @@ export const MAX_PROJECT_ACCEPTANCE_CRITERIA_CHARS = 4_000;
  */
 export const MAX_PROJECT_CONCURRENT_TASKS = 100;
 export const MAX_PROJECT_SESSION_BUDGET_PER_DAY = 10_000;
+
+/**
+ * Validate this field when the caller SENT it — including when what they sent was `null`.
+ *
+ * `@IsOptional()` skips `undefined` and `null` alike, which is right for a field whose `null`
+ * means "clear it" and wrong for one whose column is NOT NULL: the value sails past every
+ * validator on the property and reaches Prisma, which rejects it as a client validation error
+ * with no status and no code — a 500 for a request that was simply invalid (validation 04, P1-05).
+ *
+ * Omission stays optional, which is the distinction being drawn: not sending a field means "leave
+ * it alone", sending `null` means "make it null", and only the second is a claim about the value.
+ * A field that CAN be nulled (`sessionBudgetPerDay`, the prose fields) keeps `@IsOptional()`.
+ */
+function IsSent(): PropertyDecorator {
+  return ValidateIf((_object, value) => value !== undefined);
+}
 
 export class CreateProjectDto {
   @IsString()
@@ -83,12 +100,12 @@ export class UpdateProjectDto {
   /** Whether the coordinator may act at all. Turning it ON requires `automationPolicy` in the same
    *  request: "carry on with the safe default" is spelled by not sending this at all, so switching
    *  a project into automation is a choice someone made rather than one it inherited. */
-  @IsOptional() @IsBoolean() coordinatorEnabled?: boolean;
+  @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
   /** How far it may go when it runs: MANUAL, GUARDED_AUTO or AUTO. */
-  @IsOptional() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
+  @IsSent() @IsIn(PROJECT_AUTOMATION_POLICIES) automationPolicy?: ProjectAutomationPolicy;
   /** How many of this project's tasks may be in flight at once. An admission limit: lowering it
    *  never stops anything already running. */
-  @IsOptional() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
+  @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;
   /** How many sessions the coordinator itself may start in a rolling 24h. `null` clears the limit;
    *  sessions a person starts are never counted by it. */
   @IsOptional()

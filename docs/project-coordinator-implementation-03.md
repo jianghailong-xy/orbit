@@ -13,7 +13,7 @@
 | 枚举 `ProjectAutomationPolicy`（MANUAL / GUARDED_AUTO / AUTO） | 同上 + `src/shared/src/enums.ts` | §9.1 |
 | Coordinator Agent = `project_member.role = COORDINATOR`，partial unique index `project_member_coordinator_idx` | 同上 | §2.2 · PAC §3.2 T1/T2/T3 |
 | 默认协调 Workspace = 既有 `project.coordinator_workspace_id`（**不新增列、不与 PAC §3.3 的 Default Workspace 合并**） | 既有 schema，未改 | §1.2 · PAC W4 |
-| Coordinator Session 轮换代数 `project_runtime.coordinator_generation`，替换与计数同一事务 | 迁移 + `ProjectsService.coordinator` | §7.5 |
+| Coordinator Session 轮换代数 `project_runtime.coordinator_generation`，替换与计数同一事务 | 迁移 + `ProjectsService.coordinator`（03A 起计数由 0112 的触发器承担，条件不变，见 repair §5） | §7.5 |
 | 新建 Project 显式写 `true` / `GUARDED_AUTO`；列默认为 `false` / `MANUAL` | `ProjectsService.create` | §12.1 G1 |
 | 打开 `coordinatorEnabled` 必须同一请求显式给 `automationPolicy` | `ProjectsService.update`（锁后复核） | §12.1 G3 |
 | 四个授权字段的每次写入 `config_revision + 1`；散文字段不动它 | 同上 | §9.6 AU2/AU3 |
@@ -23,6 +23,10 @@
 **迁移只做加法**：无 `DROP COLUMN`、无 `UPDATE "project"`、不回填任何 blocker/事件/唤醒（§12.1 G2）。
 存量 Project 迁移后逐行为 `false` / `MANUAL` / `3` / `NULL` / `0`，并各得一条 `coordinator_generation = 0`
 的 `project_runtime`。
+
+> **03A 补充**：本单元**没有**回填 Coordinator 身份（PAC §11.2 步骤 4/5），04 的 P1-01 记录了后果；
+> 回填与混合版本闭环由迁移 `0112_project_coordinator_companions` 落地，见
+> [`project-coordinator-repair-03a.md`](./project-coordinator-repair-03a.md)。
 
 ## 2. 与契约文字的三处差异
 
@@ -53,6 +57,8 @@
   本单元提供的是"替换发生时，代数与指针在同一事务里前进，且落点不变"这一持久化保证。
 - 不动既有用户路径的语义：`POST /projects/:id/coordinator` 在协调会话被删除后仍允许显式换 workspace
   （既有冻结行为，有专门测试）；契约 §7.5 约束的是**控制环**的轮换不得迁移落点。
+  > **已被 03A 撤回**（04 的 P1-02）：该 endpoint 执行的就是 Session replacement，§7.5 对它没有例外。
+  > 现行为见 [`project-coordinator-repair-03a.md`](./project-coordinator-repair-03a.md) §2。
 - `project_decision.coordinator_session_id`（§7.5 的历史回放依据）属于 11。本单元的"历史可追溯"只到：
   轮换不删除、不结束被替换的 Session，代数单调可读。
 

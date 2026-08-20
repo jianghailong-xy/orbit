@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { uuidToBase62 } from '@orbit/shared';
-import { ProjectsService } from './projects.service';
+import { COORDINATOR_UNAVAILABLE_CODE, ProjectsService } from './projects.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000a1';
@@ -53,6 +58,10 @@ interface Bound {
   missing?: boolean;
   /** sessions.create rejects. */
   createFails?: Error;
+  /** The swap itself rejects — a constraint, a trigger, a dropped connection — after the session
+   *  this call created already exists. Distinct from LOSING the swap, which succeeds and updates
+   *  no row. */
+  swapFails?: Error;
   /** Discarding the losing session rejects. */
   discardFails?: Error;
 }
@@ -110,6 +119,7 @@ function makeService(bound: Bound = {}) {
       findFirst: async () => readProject(),
       updateMany: async ({ where, data }: any) => {
         swaps.push(where);
+        if (bound.swapFails) throw bound.swapFails;
         if (where.ownerId !== OWNER_ID) return { count: 0 }; // the write carries its own tenant scope
         // A `where` with no pointer predicate is an unconditional UPDATE, and is modelled as one.
         // Otherwise a swap that stopped being a swap would show up as a stub mismatch — every
@@ -283,7 +293,12 @@ test('a trashed coordinator is replaced', async () => {
 // conversation has been reopened four times" stay distinguishable — and it is what later keys are
 // derived from, so it may never go back or be skipped.
 
-test('replacing a coordinator counts one rotation, in the same transaction as the swap', async () => {
+test('replacing a coordinator swaps the pointer and leaves the counting to the database', async () => {
+  // The count is `project_coordinator_rotation_count` (migration 0112), not a second statement
+  // here. Written in this service it held only while this service was the only writer — a 0110
+  // binary still serving requests during a rolling deploy replaces coordinators too, and counts
+  // none of them (validation 04, P1-06). What this call owes the rule is the update it keys on:
+  // one pointer swapped for a different one, in one statement.
   const f = makeService({
     session: { id: SESSION_BOUND, deletedAt: new Date() },
     assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
@@ -291,12 +306,15 @@ test('replacing a coordinator counts one rotation, in the same transaction as th
 
   await f.open();
 
-  assert.equal(f.rotations.length, 1);
-  assert.deepEqual(f.rotations[0].where, { projectId: PROJECT_ID });
-  // Incremented, never read and written back: two replacements must not land on one number.
-  assert.deepEqual(f.rotations[0].update, { coordinatorGeneration: { increment: 1 } });
-  // A project whose runtime row predates it has rotated exactly once by the time it is created.
-  assert.equal(f.rotations[0].create.coordinatorGeneration, 1n);
+  assert.deepEqual(f.rotations, [], 'the generation is the database’s to advance');
+  assert.equal(f.swaps.length, 1);
+  // The transition the trigger counts: a session pointer that was set, replaced by a different
+  // one. That the count then happens is asserted against a real server, in
+  // coordinator-companions.pg.spec.ts, which is the only place it can be.
+  assert.equal(f.swaps[0].coordinatorSessionId, SESSION_BOUND);
+  assert.deepEqual(f.written, [
+    { coordinatorSessionId: SESSION_NEW, coordinatorWorkspaceId: WORKSPACE_TASKS },
+  ]);
 });
 
 test('the replaced conversation is left exactly where the user put it', async () => {
@@ -319,8 +337,10 @@ test('a first coordinator is not a rotation of anything', async () => {
   await f.open();
 
   // Generation 0 is "the coordinator this project has always had" — which is also what the
-  // migration wrote for every project that already existed.
+  // migration wrote for every project that already existed. The swap presents the database with
+  // NULL → set, which is outside the trigger's condition, so nothing counts it.
   assert.deepEqual(f.rotations, []);
+  assert.equal(f.swaps[0].coordinatorSessionId, null);
 });
 
 test('a swap that lost the race counts nothing', async () => {
@@ -333,8 +353,10 @@ test('a swap that lost the race counts nothing', async () => {
   await f.open();
 
   // The rotation the winner performed is the winner's to count. Counting it here as well would
-  // advance the generation twice for one replacement.
+  // advance the generation twice for one replacement — and the compare-and-swap is what makes that
+  // true at the database too: a losing swap updates no row, so it fires no trigger.
   assert.deepEqual(f.rotations, []);
+  assert.deepEqual(f.written, []);
 });
 
 test('reopening a live coordinator counts nothing either', async () => {
@@ -561,31 +583,61 @@ test('a replacement reopens where the coordinator ran before', async () => {
   assert.equal(result.workspaceId, WORKSPACE_OTHER);
 });
 
-test('an explicit workspace still wins over the remembered one', async () => {
+test('an explicit workspace does not move a coordinator that has one', async () => {
+  // It used to. A caller naming another workspace on a project whose coordinator was in Trash got
+  // exactly the silent migration the 409 on the live path exists to refuse — the answer to "not
+  // where you asked" must not depend on whether the old conversation happens to have been deleted
+  // (validation 04, P1-02; contract §7.5).
   const f = makeService({
     session: { id: SESSION_BOUND, deletedAt: new Date() },
     coordinatorWorkspaceId: WORKSPACE_OTHER,
   });
 
-  await f.open(WORKSPACE_TASKS);
-
-  assert.equal(f.created[0][1].workspaceId, WORKSPACE_TASKS);
+  await assert.rejects(() => f.open(WORKSPACE_TASKS), ConflictException);
+  assert.deepEqual(f.created, [], 'nothing may be opened before the refusal');
+  assert.deepEqual(f.written, []);
 });
 
-test('a remembered workspace that has been deleted is not reused', async () => {
+test('a coordination workspace that has been deleted is a blocker, not a move', async () => {
   // Workspaces are SOFT-deleted, so the FK's SET NULL never fires for one and the column goes on
-  // naming a workspace `sessions.create` refuses. Preferring it blindly would turn every
-  // replacement on this project into a 403 with the fallback sitting right there unused.
+  // naming a workspace `sessions.create` refuses. Falling through to the busiest assignee — which
+  // is what this used to do — answers "your coordinator's home is gone" by moving the coordinator
+  // somewhere else, silently, on the most ordinary path there is. §7.5: do not move it; say so.
   const f = makeService({
     session: { id: SESSION_BOUND, deletedAt: new Date() },
     coordinatorWorkspaceId: WORKSPACE_OTHER,
     deletedWorkspaces: [WORKSPACE_OTHER],
+    // Live, busier, and still not this project's coordination workspace.
     assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
   });
 
-  await f.open();
+  await assert.rejects(() => f.open(), (e: unknown) => {
+    assert.ok(e instanceof ConflictException);
+    assert.equal((e.getResponse() as { code: string }).code, COORDINATOR_UNAVAILABLE_CODE);
+    // The blocker names who has to act, because nothing the server retries resolves this.
+    assert.equal((e.getResponse() as { owner: string }).owner, 'USER');
+    return true;
+  });
+  assert.deepEqual(f.created, []);
+  assert.deepEqual(f.written, []);
+});
 
-  assert.equal(f.created[0][1].workspaceId, WORKSPACE_TASKS);
+test('a coordination workspace that was hard-deleted leaves nowhere to reopen', async () => {
+  // The FK's SET NULL emptied the column, so this project HAD a coordinator and no longer records
+  // where it ran. Choosing a new home for it is the one thing a replacement may not do.
+  const f = makeService({
+    coordinatorSessionId: SESSION_BOUND,
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    coordinatorWorkspaceId: null,
+    assignees: [{ id: WORKSPACE_TASKS, count: 9 }],
+  });
+
+  await assert.rejects(() => f.open(), (e: unknown) => {
+    assert.ok(e instanceof ConflictException);
+    assert.equal((e.getResponse() as { code: string }).code, COORDINATOR_UNAVAILABLE_CODE);
+    return true;
+  });
+  assert.deepEqual(f.created, []);
 });
 
 test('a first coordinator has nothing remembered and borrows as before', async () => {
@@ -714,21 +766,89 @@ test('a workspace deleted since the binding is not a conflict', async () => {
   assert.deepEqual(f.created, []);
 });
 
-test('a trashed coordinator may be replaced in a different workspace', async () => {
-  // There is no live coordinator to be in conflict with — the conflict rule protects a
-  // conversation that still exists, not the memory of one that was thrown away.
+test('a trashed coordinator is still not replaced in a different workspace', async () => {
+  // This file used to record the opposite, on the grounds that there is no live conversation left
+  // to be in conflict with. But the column is not a memory of a conversation — it is where this
+  // project's coordination BELONGS (§7.5), and a replacement that lands elsewhere is a migration
+  // performed by the most routine call in the endpoint. Deleting the session is not consent to it.
   const f = makeService({
     session: { id: SESSION_BOUND, deletedAt: new Date() },
     coordinatorWorkspaceId: WORKSPACE_TASKS,
   });
 
-  const result = await f.open(WORKSPACE_OTHER);
-
-  assert.equal(result.created, true);
-  assert.equal(result.workspaceId, WORKSPACE_OTHER);
+  await assert.rejects(() => f.open(WORKSPACE_OTHER), ConflictException);
+  assert.deepEqual(f.created, []);
+  assert.equal(f.state.coordinatorWorkspaceId, WORKSPACE_TASKS, 'the landing spot is untouched');
 });
 
 // ── Failure must not half-bind ────────────────────────────────────────────────────────────────
+
+test('a swap that FAILS discards the session it had already created', async () => {
+  // The gap this closes. Cleanup used to run only when the swap succeeded and updated no row —
+  // the lost-race branch — so a swap that THREW (validation 04 reached it with a trigger on
+  // `project_runtime`; a constraint or a dropped connection does as well) left a live session, in
+  // a workspace, that no project points at and nobody will ever open. The project's own write
+  // rolls back; the session does not roll back with it, because it was never in that transaction.
+  const boom = new Error('runtime update failed');
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
+    swapFails: boom,
+  });
+
+  await assert.rejects(() => f.open(), (e: unknown) => e === boom);
+
+  // Removed rather than ended: an unreferenced conversation left Open is litter that reads exactly
+  // like a real coordinator. And the failure is still reported as itself — a cleaned-up orphan is
+  // not a success, and must not be dressed as one.
+  assert.deepEqual(f.removed, [SESSION_NEW]);
+  assert.deepEqual(f.ended, []);
+});
+
+test('a cleanup that fails after a failed swap escalates instead of reporting success', async () => {
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    assignees: [{ id: WORKSPACE_TASKS, count: 1 }],
+    swapFails: new Error('swap failed'),
+    discardFails: new Error('discard failed'),
+  });
+
+  // Whichever of the two errors surfaces, the call must not return: an unreferenced live session
+  // is the one outcome that may never be reported as an opened coordinator.
+  await assert.rejects(() => f.open());
+  assert.deepEqual(f.removed, []);
+});
+
+test('a workspace that will not run a session is the coordinator’s blocker, on the fixed path', async () => {
+  // Disabled, unbound from its runner, or refused for any other reason `sessions.create` owns. A
+  // replacement has nowhere else to go, so "workspace is disabled" is not the answer the caller
+  // needs — the coordinator is unavailable until its owner rebinds it, and the reply says so, with
+  // who has to act.
+  const f = makeService({
+    session: { id: SESSION_BOUND, deletedAt: new Date() },
+    coordinatorWorkspaceId: WORKSPACE_OTHER,
+    createFails: new ForbiddenException('workspace is disabled'),
+  });
+
+  await assert.rejects(() => f.open(), (e: unknown) => {
+    assert.ok(e instanceof ConflictException);
+    const body = e.getResponse() as { code: string; owner: string; requiredAction: string };
+    assert.equal(body.code, COORDINATOR_UNAVAILABLE_CODE);
+    assert.equal(body.owner, 'USER');
+    assert.match(body.requiredAction, /rebind/);
+    return true;
+  });
+  assert.deepEqual(f.written, [], 'a project that cannot open its coordinator is not re-pointed');
+});
+
+test('a project choosing its first workspace is told plainly what was wrong with it', async () => {
+  // Nothing is fixed here — the caller named the workspace and can name another — so translating
+  // this into "your coordinator is unavailable" would hide the one fact that fixes it.
+  const refusal = new ForbiddenException('workspace is disabled');
+  const f = makeService({ createFails: refusal });
+
+  await assert.rejects(() => f.open(WORKSPACE_TASKS), (e: unknown) => e === refusal);
+});
 
 test('the binding is written only after the session exists', async () => {
   // Otherwise a failed create leaves the project pointing at a session that was never made, and

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { ValidationPipe } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -426,4 +427,71 @@ test('the budgets refuse the value nobody meant', async () => {
   assert.deepEqual(await validateDto({ automationPolicy: 'GUARDED_AUTO' }), []);
   assert.deepEqual(await validateDto({ automationPolicy: 'SOMETIMES' }), ['automationPolicy']);
   assert.deepEqual(await validateDto({ coordinatorEnabled: 'yes' }), ['coordinatorEnabled']);
+});
+
+// ── Sent-as-null is a value, not an omission (validation 04, P1-05) ────────────────────────────
+//
+// `@IsOptional()` skips `undefined` AND `null`, so `null` on a NOT NULL column used to pass every
+// validator on its property, reach Prisma, and come back as a `PrismaClientValidationError` — no
+// status, no code, a 500 for a request that was simply invalid. The three fields below have no
+// "cleared" state to spell; `sessionBudgetPerDay` does, and keeps it.
+
+/** The pipe exactly as `main.ts` configures it, which is the one both doors go through. */
+const appPipe = () =>
+  new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
+
+const BODY = { type: 'body', metatype: UpdateProjectDto } as const;
+
+test('an explicit null on a NOT NULL policy field is refused, not forwarded', async () => {
+  for (const field of ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks']) {
+    assert.deepEqual(await validateDto({ [field]: null }), [field], `${field}: null is a value`);
+    await assert.rejects(
+      () => appPipe().transform({ [field]: null }, BODY as never),
+      (e: { status?: number }) => e.status === 400,
+      `${field}: the door must answer 400 rather than let Prisma answer`,
+    );
+  }
+});
+
+test('omitting those fields still means "leave them alone"', async () => {
+  // The distinction being drawn, and the reason this is not just "reject null everywhere": a
+  // request that does not mention a field must go on writing nothing to it.
+  const forwarded = await appPipe().transform({ title: 'renamed' }, BODY as never);
+
+  assert.deepEqual(await validateDto({}), []);
+  // `undefined` is what the service reads as "not sent" — every write it builds is keyed on
+  // `!== undefined`. (The key itself may exist: class-transformer materialises declared
+  // properties, which is exactly why `in` is not the question.)
+  assert.equal(forwarded.coordinatorEnabled, undefined);
+  assert.equal(forwarded.automationPolicy, undefined);
+  assert.equal(forwarded.maxConcurrentTasks, undefined);
+});
+
+test('the one field that can be cleared still can be', async () => {
+  const forwarded = await appPipe().transform({ sessionBudgetPerDay: null }, BODY as never);
+
+  assert.equal(forwarded.sessionBudgetPerDay, null);
+  assert.notEqual(forwarded.sessionBudgetPerDay, undefined, 'cleared is not the same as unsent');
+});
+
+test('the runner door refuses those nulls too, before anything can be written', async () => {
+  // Two independent refusals, in the order a request meets them: the shared pipe answers 400, and
+  // a caller that somehow got past it still meets `refuseGovernance` — which counts a field as
+  // NAMED when it is null, so nothing reaches the service either way.
+  const projects = { update: async () => assert.fail('the refusal must come before the write') };
+  const controller = new RunnerProjectsController(projects as never);
+  const runner = { ownerId: OWNER_ID, id: 'runner-1' } as never;
+
+  for (const field of ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks']) {
+    await assert.rejects(
+      () => appPipe().transform({ [field]: null }, BODY as never),
+      (e: { status?: number }) => e.status === 400,
+      `${field}: the runner door goes through the same pipe`,
+    );
+    assert.throws(
+      () => controller.updateProject(runner, PROJECT_ID, { [field]: null } as never),
+      (e: { status?: number }) => e.status === 403,
+      `${field}: and the door itself does not treat null as unsent`,
+    );
+  }
 });
