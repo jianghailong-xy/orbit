@@ -57,6 +57,7 @@ const AGENT_DELETED = '00000000-0000-7000-8000-0000000006b3';
 const AGENT_THEIRS = '00000000-0000-7000-8000-0000000006b4';
 /** Live, this owner's, and switched off — a landing that cannot RUN, which is a different thing. */
 const AGENT_DISABLED = '00000000-0000-7000-8000-0000000006b5';
+const AGENT_C = '00000000-0000-7000-8000-0000000006b6';
 const S1 = '00000000-0000-7000-8000-0000000006c1';
 const S2 = '00000000-0000-7000-8000-0000000006c2';
 const S3 = '00000000-0000-7000-8000-0000000006c3';
@@ -109,7 +110,8 @@ async function migrated(client: Client): Promise<void> {
       ('${AGENT_B}',        '${OWNER}',       'agent B',  true,  NULL),
       ('${AGENT_DELETED}',  '${OWNER}',       'gone',     true,  CURRENT_TIMESTAMP),
       ('${AGENT_THEIRS}',   '${OWNER_OTHER}', 'theirs',   true,  NULL),
-      ('${AGENT_DISABLED}', '${OWNER}',       'disabled', false, NULL);
+      ('${AGENT_DISABLED}', '${OWNER}',       'disabled', false, NULL),
+      ('${AGENT_C}',        '${OWNER}',       'agent C',  true,  NULL);
     INSERT INTO "session" ("id", "owner_id") VALUES
       ('${S1}', '${OWNER}'), ('${S2}', '${OWNER}'), ('${S3}', '${OWNER}');
   `);
@@ -294,6 +296,35 @@ test('A → B → C in one transaction is one replacement, not two', { skip }, a
   }
 });
 
+test('A → B → C landing events reconcile identity from the final Project row once', { skip }, async () => {
+  const client = await open();
+  try {
+    await migrated(client);
+    const id = '00000000-0000-7000-8000-0000000006dd';
+    await client.query(oldWriterInsert(id, AGENT_A, S1));
+
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE "project" SET "coordinator_workspace_id" = '${AGENT_B}',
+                            "coordinator_session_id" = '${S2}' WHERE "id" = '${id}'`,
+    );
+    await client.query(
+      `UPDATE "project" SET "coordinator_workspace_id" = '${AGENT_C}',
+                            "coordinator_session_id" = '${S3}' WHERE "id" = '${id}'`,
+    );
+    await client.query('COMMIT');
+
+    const state = await committed(client, id);
+    assert.equal(state.landing, AGENT_C);
+    assert.equal(state.agent, AGENT_C);
+    assert.equal(state.memberships, 1);
+    assert.equal(state.generation, 1);
+    assert.equal(state.baseline, S3);
+  } finally {
+    await client.end();
+  }
+});
+
 test('losing a coordinator, re-binding it, and writing the same pointer again count nothing', { skip }, async () => {
   const client = await open();
   try {
@@ -457,6 +488,38 @@ test('rotating the session leaves a coordinator somebody chose exactly where it 
       `UPDATE "project" SET "coordinator_workspace_id" = '${AGENT_B}' WHERE "id" = '${id}'`,
     );
     assert.equal((await committed(client, id)).agent, AGENT_B);
+  } finally {
+    await client.end();
+  }
+});
+
+test('an old writer relocating WHERE cannot silently overwrite an explicitly chosen WHO', { skip }, async () => {
+  const client = await open();
+  try {
+    await migrated(client);
+    const id = '00000000-0000-7000-8000-0000000006de';
+    await client.query(oldWriterInsert(id, AGENT_A, S1));
+
+    // This is the durable state written by PATCH /projects/:id with coordinatorAgentId. The
+    // coordinator identity and the coordinator Session landing are independent PAC facts: WHO
+    // must not be inferred again merely because a 0110 binary changes WHERE during a rolling
+    // deployment.
+    await client.query(`
+      UPDATE "project_member" SET "agent_id" = '${AGENT_DISABLED}'
+       WHERE "project_id" = '${id}' AND "role" = 'COORDINATOR'`);
+
+    // The old writer knows neither project_member nor coordinatorAgentId. Its relocation must
+    // therefore preserve the explicit identity or fail visibly; silently replacing it with B is
+    // an unauthorized WHO change.
+    await client.query(
+      `UPDATE "project" SET "coordinator_workspace_id" = '${AGENT_B}',
+                            "coordinator_session_id" = '${S2}' WHERE "id" = '${id}'`,
+    );
+
+    const state = await committed(client, id);
+    assert.equal(state.landing, AGENT_B);
+    assert.equal(state.agent, AGENT_DISABLED, 'WHERE must not silently rewrite an explicit WHO');
+    assert.equal(state.generation, 1);
   } finally {
     await client.end();
   }
