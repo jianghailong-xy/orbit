@@ -127,6 +127,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
  *  server interpolates them into raw SQL as `::uuid`. Translating one breaks the fence silently,
  *  so neither direction may touch them — they are not addresses, they are equality tokens. */
 export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
+  // The coordination workspace a project's DERIVED coordinator identity was derived FROM
+  // (`project_runtime`, migration 0114). It names a workspace row, but it is not an address: it is
+  // the value `project_coordinator_reconcile` compares the seated agent against, byte-for-byte, to
+  // tell an identity the database worked out from one somebody chose. It appears in no request and
+  // no response, and decoding it on the way in is the one way to make that comparison lie.
+  'coordinatorIdentityLandingId',
   'generation',
   'leaseGeneration',
   'leaseOwner',

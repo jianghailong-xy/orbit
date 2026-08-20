@@ -9,6 +9,7 @@ import {
 import {
   Prisma,
   ProjectAutomationPolicy,
+  ProjectIdentitySource,
   ProjectRole,
   ProjectStatus,
   TaskStatus,
@@ -263,7 +264,16 @@ export class ProjectsService {
           automationPolicy: ProjectAutomationPolicy.GUARDED_AUTO,
           // The control loop's row, created with the project so that "has a runtime row" is never
           // a question a later reader has to answer with a fallback.
-          runtime: { create: {} },
+          //
+          // `coordinatorIdentityLandingId` is the landing the membership below was derived FROM,
+          // written in the same insert as the membership itself. Nobody has CHOSEN a coordinator
+          // here — the agent seated is the one whose session recorded the project — so the source
+          // stays DERIVED (the column default) and this project's identity remains correctable if
+          // its landing later moves (migration 0113, validation 04R). Recording the baseline is
+          // what lets migration 0114 tell that later move apart from an owner's explicit choice.
+          runtime: {
+            create: coordinator ? { coordinatorIdentityLandingId: coordinator.workspaceId } : {},
+          },
           // Both columns in the SAME insert as the project itself, which is the whole of
           // "bound atomically": one statement, so there is no instant in which the project exists
           // pointing at no conversation, and no failure in which the row lands and the binding
@@ -1106,6 +1116,18 @@ export class ProjectsService {
       where: { projectId, role: ProjectRole.COORDINATOR },
       select: { id: true, agentId: true },
     });
+    // Every one of the four outcomes below is the owner deciding WHO, so every one of them records
+    // that — in this transaction, next to the row it is about (validation 04R2, P1-04R2-01).
+    // Without it the next writer that only knows the 0110 columns relocates the coordination
+    // workspace and the database silently re-derives the identity from it, which is a change to
+    // WHO that nobody authorized and that PAC R3 forbids inferring from WHERE.
+    //
+    // Naming the agent that is already coordinating is still a decision, so it is recorded even
+    // though the membership row does not change: it is the one case the database cannot recognise
+    // structurally, because a seat that equals the landing is exactly what a derivation looks
+    // like. Clearing is recorded for the same reason — "this project has no coordinator" is a
+    // choice a landing event must not answer by seating one.
+    await ProjectsService.recordExplicitIdentity(tx, projectId);
     if (agentId === null) {
       if (current) await tx.projectMember.delete({ where: { id: current.id } });
       return;
@@ -1117,6 +1139,37 @@ export class ProjectsService {
     }
     await tx.projectMember.create({
       data: { projectId, agentId, role: ProjectRole.COORDINATOR },
+    });
+  }
+
+  /**
+   * "This identity was chosen, not worked out" — the one fact `project` and `project_member` cannot
+   * state between them.
+   *
+   * An upsert rather than an update: a project inserted by a binary that predates `project_runtime`
+   * has no runtime row until the deferred trigger gives it one at COMMIT, which is after this runs.
+   * Creating it here is not a race with that trigger — the trigger's own insert absorbs the
+   * conflict — and it is the only way the choice being made now is on record by the time the same
+   * COMMIT reconciles the project.
+   *
+   * `coordinatorIdentityLandingId` is cleared with it: it is the baseline a DERIVED identity is
+   * measured against, and keeping a stale one next to an EXPLICIT source would be a second answer
+   * to a question that now has one.
+   */
+  private static async recordExplicitIdentity(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+  ): Promise<void> {
+    await tx.projectRuntime.upsert({
+      where: { projectId },
+      update: {
+        coordinatorIdentitySource: ProjectIdentitySource.EXPLICIT,
+        coordinatorIdentityLandingId: null,
+      },
+      create: {
+        projectId,
+        coordinatorIdentitySource: ProjectIdentitySource.EXPLICIT,
+      },
     });
   }
 

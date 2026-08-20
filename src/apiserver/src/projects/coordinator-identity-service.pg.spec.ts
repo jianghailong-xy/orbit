@@ -222,6 +222,71 @@ test('a coordinator is set, replaced and cleared as one row', { skip: URL ? fals
   }
 });
 
+test('the service records where every coordinator identity came from, in the same transaction', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  const { prisma, service, teardown } = await open();
+  try {
+    // Recorded FROM a session: the agent seated is the one whose session recorded the project, so
+    // nobody chose it and the database must stay able to correct it if the landing moves later
+    // (migration 0113, validation 04R). What the insert adds is the baseline: the landing this
+    // identity was derived from, without which a later relocation cannot be told apart from an
+    // owner's explicit choice (migration 0114, validation 04R2).
+    await prisma.session.create({
+      data: {
+        id: SESSION_OLD,
+        ownerId: OWNER_ID,
+        creatorId: OWNER_ID,
+        workspaceId: AGENT_A,
+        title: 'recording session',
+        prompt: 'x',
+      },
+    });
+    const derived: any = await service.create(OWNER_ID, { title: 'pcc03c derived' } as never, {
+      sessionId: SESSION_OLD,
+      workspaceId: AGENT_A,
+    });
+    const derivedRuntime = await prisma.projectRuntime.findUnique({
+      where: { projectId: derived.id },
+    });
+    assert.equal(derived.coordinatorAgentId, AGENT_A);
+    assert.equal(derivedRuntime.coordinatorIdentitySource, 'DERIVED');
+    assert.equal(derivedRuntime.coordinatorIdentityLandingId, AGENT_A);
+
+    // Setting, replacing and clearing `coordinatorAgentId` are all the owner deciding WHO, and all
+    // three say so. The third is the one that cannot be recovered from the rows afterwards: the
+    // membership is gone, so without this the next landing event would seat one.
+    const source = async (projectId: string) =>
+      (await prisma.projectRuntime.findUnique({ where: { projectId } })).coordinatorIdentitySource;
+
+    await service.update(OWNER_ID, derived.id, { coordinatorAgentId: AGENT_B } as never);
+    assert.equal(await source(derived.id), 'EXPLICIT');
+    const replaced = await prisma.projectRuntime.findUnique({ where: { projectId: derived.id } });
+    assert.equal(replaced.coordinatorIdentityLandingId, null, 'and claims no derivation alongside');
+
+    await service.update(OWNER_ID, derived.id, { coordinatorAgentId: null } as never);
+    assert.equal(await source(derived.id), 'EXPLICIT', 'having no coordinator is a choice');
+    assert.equal(await prisma.projectMember.count({ where: { projectId: derived.id } }), 0);
+
+    // Naming the agent that is ALREADY coordinating changes no row, and is still a decision —
+    // the one case the database cannot recognise structurally, because a seat that equals the
+    // landing is exactly what a derivation looks like.
+    const plain: any = await service.create(OWNER_ID, { title: 'pcc03c plain' } as never);
+    assert.equal(await source(plain.id), 'DERIVED');
+    await prisma.project.update({
+      where: { id: plain.id },
+      data: { coordinatorWorkspaceId: AGENT_A },
+    });
+    assert.equal(
+      (await prisma.projectMember.findFirst({ where: { projectId: plain.id } })).agentId,
+      AGENT_A,
+      'the database derived one from the landing',
+    );
+    await service.update(OWNER_ID, plain.id, { coordinatorAgentId: AGENT_A } as never);
+    assert.equal(await source(plain.id), 'EXPLICIT');
+  } finally {
+    await teardown();
+  }
+});
+
 test('an agent that still coordinates a project cannot be deleted', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
   const { prisma, service, teardown } = await open();
   try {

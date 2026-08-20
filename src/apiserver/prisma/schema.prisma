@@ -95,6 +95,20 @@ enum ProjectRole {
   @@map("project_role")
 }
 
+/// Where a project's coordinator identity came from, and therefore who may change it.
+///
+/// DERIVED means the database worked it out from the project's coordination workspace and may work
+/// it out again — that is what lets a landing that moves take its identity with it (migration 0113,
+/// validation 04R). EXPLICIT means a person chose it, including choosing to have none, and no
+/// mechanical re-derivation may replace it (migration 0114, validation 04R2 P1-04R2-01): WHO and
+/// WHERE are two independent chains (PAC R3), so one must not be re-inferred from the other.
+enum ProjectIdentitySource {
+  DERIVED
+  EXPLICIT
+
+  @@map("project_identity_source")
+}
+
 // Who/what authored a Task. The creator is a polymorphic reference (no FK),
 // so a Task can be created by a user or by an agent (agent-spawned subtasks).
 enum CreatorType {
@@ -1265,6 +1279,23 @@ model ProjectRuntime {
   /// when a rotated-away session is purged — and a baseline that resets is a rotation that goes
   /// uncounted — while Restrict would make deleting a session fail against a counter.
   coordinatorSessionId  String?  @map("coordinator_session_id") @db.Uuid
+
+  /// Where the coordinator identity on `ProjectMember` came from. DERIVED is the default and the
+  /// value every pre-0114 row keeps, because it is the answer that leaves the database able to
+  /// correct a stale derivation; EXPLICIT is written by the service in the SAME transaction as the
+  /// membership whenever an owner sets, replaces or clears `coordinatorAgentId`, and by
+  /// `project_coordinator_reconcile` when it finds a seat only a chooser could have written.
+  coordinatorIdentitySource ProjectIdentitySource @default(DERIVED) @map("coordinator_identity_source")
+  /// The coordination workspace a DERIVED identity was derived FROM — the baseline for WHO, exactly
+  /// as `coordinatorSessionId` is the baseline the generation is counted from. It is how the
+  /// database recognises a choice made by a writer that cannot write the column above (a 0113-era
+  /// binary rolled back onto this schema writes `project_member` directly): the seat it derived
+  /// names this workspace, so a seat naming anything else was moved, and a seat that is gone was
+  /// removed. Meaningless while the source is EXPLICIT, and cleared when it becomes so.
+  ///
+  /// No relation, for the reason `coordinatorSessionId` has none: a historical marker, not a
+  /// reference. Maintained entirely by the database and by the two service paths above.
+  coordinatorIdentityLandingId String? @map("coordinator_identity_landing_id") @db.Uuid
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

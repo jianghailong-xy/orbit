@@ -43,6 +43,8 @@ interface Fixture {
 function makeService(fx: Fixture = {}) {
   const projectWrites: any[] = [];
   const memberWrites: string[] = [];
+  /** Where the identity each member write establishes came from — the same transaction, one row. */
+  const runtimeWrites: string[] = [];
   const agents = fx.agents ?? [AGENT_ID, AGENT_OTHER];
   let coordinator = fx.coordinator === undefined ? null : fx.coordinator;
 
@@ -91,6 +93,14 @@ function makeService(fx: Fixture = {}) {
         return { id: where.id };
       },
     },
+    projectRuntime: {
+      // An upsert because a project an old writer inserted has no runtime row until the deferred
+      // trigger gives it one at COMMIT, which is after this runs.
+      upsert: async ({ where, update }: any) => {
+        runtimeWrites.push(`${where.projectId}:${update.coordinatorIdentitySource}`);
+        return { projectId: where.projectId, ...update };
+      },
+    },
     workspace: {
       // Honours owner and soft-deletion, so the check's own test cannot pass with the check gone.
       findFirst: async ({ where }: any) =>
@@ -109,6 +119,7 @@ function makeService(fx: Fixture = {}) {
   return {
     projectWrites,
     memberWrites,
+    runtimeWrites,
     service: new ProjectsService(prisma as never, sessions as never),
   };
 }
@@ -266,6 +277,10 @@ test('setting a coordinator agent writes one membership row', async () => {
 
   assert.deepEqual(f.memberWrites, [`create:${AGENT_ID}:COORDINATOR`]);
   assert.equal(project.coordinatorAgentId, AGENT_ID);
+  // And, in the same transaction, that this identity was CHOSEN. Without it the next writer that
+  // only knows the 0110 columns relocates the coordination workspace and the database re-derives
+  // the identity from it — a change to WHO nobody authorized (validation 04R2, P1-04R2-01).
+  assert.deepEqual(f.runtimeWrites, [`${PROJECT_ID}:EXPLICIT`]);
   // Not part of the authorization set — see the test above — so it moves no revision.
   assert.equal(f.projectWrites[0].configRevision, undefined);
 });
@@ -286,6 +301,11 @@ test('naming the agent that already coordinates it writes nothing', async () => 
   await f.service.update(OWNER_ID, PROJECT_ID, { coordinatorAgentId: AGENT_ID } as never);
 
   assert.deepEqual(f.memberWrites, []);
+  // Except the one thing this request is the only evidence of. A seat that equals the project's
+  // landing is exactly what a DERIVED identity looks like, so an owner naming it is the one case
+  // the database cannot recognise from the rows afterwards — and the case that would otherwise
+  // silently follow the landing the next time an old writer moved it.
+  assert.deepEqual(f.runtimeWrites, [`${PROJECT_ID}:EXPLICIT`]);
 });
 
 test('clearing it removes the membership and leaves the project', async () => {
@@ -297,6 +317,10 @@ test('clearing it removes the membership and leaves the project', async () => {
 
   assert.deepEqual(f.memberWrites, ['delete:member-1']);
   assert.equal(project.coordinatorAgentId, null);
+  // "This project has no coordinator" is a decision too, and the membership row that would have
+  // carried it is the row this request deleted — so it is recorded on the runtime row, where a
+  // later landing event can still find it and decline to seat one.
+  assert.deepEqual(f.runtimeWrites, [`${PROJECT_ID}:EXPLICIT`]);
 });
 
 test('an agent that is not this owner’s live agent is refused, in one wording', async () => {

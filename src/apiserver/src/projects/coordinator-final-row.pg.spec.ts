@@ -45,6 +45,7 @@ const migration = (name: string) =>
 const IDENTITY = migration('0111_project_coordinator_identity');
 const COMPANIONS = migration('0112_project_coordinator_companions');
 const FINAL_ROW = migration('0113_project_coordinator_final_row');
+const IDENTITY_SOURCE = migration('0114_project_coordinator_identity_source');
 
 const OWNER = '00000000-0000-7000-8000-0000000006a1';
 const OWNER_OTHER = '00000000-0000-7000-8000-0000000006a2';
@@ -118,11 +119,17 @@ async function migrated(client: Client): Promise<void> {
   await client.query(IDENTITY);
   await client.query(COMPANIONS);
   await client.query(FINAL_ROW);
+  await client.query(IDENTITY_SOURCE);
   // The reverse control, in one environment variable: 0112 re-applied on top puts its own two
   // functions back and re-points all three triggers at them, which is the state 04R measured. Every
   // case below that 0113 is responsible for then fails, and the ones it inherited unchanged pass —
   // which is how this file says which half of it is new.
   if (process.env.COORDINATOR_PG_REVERSE_0113 === '1') await client.query(COMPANIONS);
+  // The same control for 0114: 0113 re-applied on top replaces `project_coordinator_reconcile`
+  // with the version that has no notion of where an identity came from, which is the state 04R2
+  // measured. The provenance columns stay (a rollback keeps the forward schema — that is the whole
+  // deployment protocol), so this is exactly the older BINARY against the newer DATABASE.
+  if (process.env.COORDINATOR_PG_REVERSE_0114 === '1') await client.query(FINAL_ROW);
 }
 
 /** The 0110 INSERT: the columns that binary knows, and none of the rows it does not. */
@@ -482,12 +489,18 @@ test('rotating the session leaves a coordinator somebody chose exactly where it 
     assert.equal(rotated.agent, AGENT_DISABLED, '§7.5: the session changes, the agent does not');
     assert.equal(rotated.generation, 1);
 
-    // Moving the LANDING is the other event, and that one does re-derive: a chosen identity is
-    // stable across rotations, not across a relocation of the workspace it is derived from.
+    // Moving the LANDING is the other event, and 0113 answered it by re-deriving — which is the
+    // defect independent validation 04R2 recorded as P1-04R2-01 and migration 0114 closes. A
+    // chosen identity is stable across BOTH: WHO and WHERE are two independent chains (PAC R3),
+    // so relocating the coordination workspace changes where coordination runs and nothing about
+    // who is doing it. Re-deriving is for identities the database itself derived — the case the
+    // first three tests in this file cover, and the one 04R was about.
     await client.query(
       `UPDATE "project" SET "coordinator_workspace_id" = '${AGENT_B}' WHERE "id" = '${id}'`,
     );
-    assert.equal((await committed(client, id)).agent, AGENT_B);
+    const relocated = await committed(client, id);
+    assert.equal(relocated.landing, AGENT_B, 'WHERE moved');
+    assert.equal(relocated.agent, AGENT_DISABLED, 'and WHO did not');
   } finally {
     await client.end();
   }
