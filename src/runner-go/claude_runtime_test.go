@@ -362,6 +362,43 @@ func TestClaudeRuntimeRefusesFramesOnceTheChildIsGone(t *testing.T) {
 	}
 }
 
+// An engine killed mid-turn — what a remote runner sees when the machine running the CLI
+// takes it away — is terminal, is reaped as the failure it was, and fails the next send.
+// Nothing here may look like a delivery: the turn in flight never produced a `result`.
+func TestClaudeRuntimeReportsAnEngineKilledMidTurn(t *testing.T) {
+	fake := newFakeClaude(t,
+		fakeStep{Await: "user"},
+		fakeStep{Emit: "assistant", Text: "working on it"},
+		fakeStep{Await: "user"}, // never answered: the process dies inside the turn
+	)
+	rt, frames := startFakeRuntime(t, fake, claudeSpawnJob(t))
+
+	if err := rt.send(textFrame("do the thing")); err != nil {
+		t.Fatal(err)
+	}
+	rt.beginTurn()
+	waitFrameType(t, frames, "assistant")
+
+	if err := rt.cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	drainFrames(t, frames) // stdout EOF, with no result for the turn in flight
+	rt.markTerminal()
+
+	if err := rt.send(textFrame("are you there")); err == nil {
+		t.Error("a send to a killed engine was accepted for delivery")
+	}
+	if err := rt.wait(); err == nil {
+		t.Error("reaping a killed engine reported a clean exit")
+	}
+	if rt.cmd.ProcessState == nil || rt.cmd.ProcessState.Success() {
+		t.Errorf("a killed engine is recorded as having succeeded: %v", rt.cmd.ProcessState)
+	}
+	if got := rt.currentPhase(); got != phaseTerminal {
+		t.Errorf("phase after a killed engine is %q, want %q", got, phaseTerminal)
+	}
+}
+
 // ---------------------------------------------------------------------------
 
 // decodeWrittenFrame parses one line as the stdin writer emitted it (the scanner has
