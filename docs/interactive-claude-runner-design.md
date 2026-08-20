@@ -139,6 +139,61 @@ it gets no reply of its own, so how far it got is the only report it ever produc
   with a fresh `clientTurnId`, since the old turn is settled and re-using its id would be answered
   with that settled turn instead of sending anything.
 
+### 3b. One contract at every door
+
+Web, macOS/iOS, the HTTP API and the runner's MCP tools / `orbit session` CLI are doors onto the
+same two service methods — `SessionsService.createTurn` and `SessionsService.interrupt`. Nothing
+about steering is decided at a door, so there is no per-client version of it to drift.
+
+**The four things a person can mean, and how each is expressed:**
+
+| Intent | Request | What the server files | What comes back |
+|---|---|---|---|
+| Send, engine idle | `POST /sessions/:id/turns` | `message`, queued | `{ turnId, seq, kind: 'message' }` |
+| Send, engine mid-turn | *the same request* | `steer` — written into the running turn | `{ turnId, seq, kind: 'steer' }` |
+| Stop | `POST /sessions/:id/interrupt`, no body | `interrupt`, and the queue behind the running turn is dropped | `{ ok: true }` |
+| Stop and do this instead | `POST /sessions/:id/interrupt` **with** `content` | `interrupt`, then an ordinary `message` filed after the drop | `{ ok: true, turnId, seq }` |
+
+- **Mode is never a parameter.** The turns endpoint's `kind` is a whitelist of what a caller may
+  *request* — an ordinary message or a `!cmd` — and steering is not in it. Timing decides it, under
+  the row lock, which is the only place the answer cannot already be stale.
+- **Interrupt-and-send is one request** at every door, because two could not express it: stopping
+  drops what was queued, so a send racing the stop is either deleted by it (arriving first) or
+  folded into the turn being stopped as a steer (arriving second), decided by network ordering.
+- **`clientTurnId` is the retry contract**, and every door now has one. The browser and the native
+  clients mint a UUID per send; the runner door (`POST /runner/sessions/:id/turns`, reached by
+  `session_send` and `orbit session send`) accepts one and mints one only when the caller offers
+  none. An interrupt-and-send is keyed by the follow-up's id on both halves (the interrupt is filed
+  under `interrupt-<clientTurnId>`), so a retry re-files neither.
+- **Refusals say which refusal it is.** A missing/foreign session is `404 session not found` from
+  send, stop and withdraw alike; an ended one is `409 the session has ended` from all three.
+  Withdrawing a steer is refused as *"being written into the running turn"* rather than as
+  *"already started or not found"* — it is not gone, and sending a caller to look for a race that
+  never happened is worse than saying nothing.
+- **Only claude's engine can be steered.** `createTurn` resolves the session's runtime with the same
+  `execRuntime` dispatch uses (so a configured BYOK provider is judged by the runtime it borrows)
+  and asks `supportsMidTurnSteer`. Codex and Kimi hold one JSON-RPC turn call open for the whole
+  turn; OpenCode spawns a process per turn. None of them has an input to write into, so a mid-turn
+  message on those sessions stays an ordinary queued `message` — exactly the behaviour they had
+  before steering existed, and what their clients already render.
+- **A steer that arrives anyway is refused loudly.** Each non-stream-json session loop answers
+  `kind: "steer"` with `refuseUnsupportedSteer`: a failed `user` event, a `user_delivery` naming the
+  engine and the reason, and the steer's own turn settled — never the session's. This is the
+  disagreement case (a runner older than the control plane, a provider moved under a session), and
+  it must not be silent: a steer's lease is never reclaimed, so a dropped one is gone with no trace.
+- **The poller says what it can take.** The inbox long-poll carries `acceptsSteer=1`, and the
+  steer arm of the dequeue predicate is gated on it. A runner older than the control plane sends no
+  such flag and is handed no steer — its inbox switch has no case for one, and a steer's lease is
+  never reclaimed, so leasing it there would drop the message for good. Withheld it stays `PENDING`,
+  and `turn-complete` re-files it as an ordinary message when the running turn ends: it runs a turn
+  later instead of vanishing, and neither side has to be deployed first.
+  `TestEverySessionLoopThatCannotSteerRefusesOne` keeps a newly added engine from re-opening the
+  hole from the other direction.
+- **Permissions are untouched.** Every path still runs claude with
+  `--permission-prompt-tool mcp__orbit__permission_prompt`; steering changes what reaches the
+  engine's stdin, never how it asks to use a tool.
+
+
 ---
 
 ## 4. seq ownership & monotonicity across respawn (RT: failure/scaling high ×2)
