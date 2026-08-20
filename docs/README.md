@@ -50,6 +50,7 @@ that include an "implementation differences" section should be read with that se
 - [Contributing](../CONTRIBUTING.md) — workflow, tests, and pull-request expectations.
 - [Governance](../GOVERNANCE.md) — decision making and the path to maintainership.
 - [Security](../SECURITY.md) — supported versions and vulnerability reporting.
+- [Dependency security baseline](dependency-security.md) — alert reachability, remediation evidence, and update policy.
 - [Support](../SUPPORT.md) — where to ask questions and report problems.
 - [Code of Conduct](../CODE_OF_CONDUCT.md) — expected community behavior.
 - [Brand assets](../brand/README.md) — approved marks, colors, naming, and usage.
