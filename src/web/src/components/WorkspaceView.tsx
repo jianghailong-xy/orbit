@@ -153,7 +153,7 @@ import {
   updateSessionConfig,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage } from './Transcript';
+import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, MD, SessionNavCtx, StreamingMessage, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
 import { ApprovalPanel } from './ApprovalPanel';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
@@ -182,6 +182,7 @@ import {
   sessionRunStateOf,
   sessionRunStatusOf,
 } from '../lib/sessionState';
+import { isSteerKind, steerDeliveryState, supersedesLiveDrafts } from '../lib/steerDelivery';
 import { isSessionTurnActive, outlivingSessionWork } from '../lib/sessionActivity';
 import type { OutlivingWork } from '../lib/sessionActivity';
 import { shouldPollSessionDetail } from '../lib/sessionDetailPolling';
@@ -220,6 +221,11 @@ interface QueuedTurn {
   turnId: string;
   content: string;
   shell?: boolean;
+  // Filed as a steer by the server: written into the turn that is already running rather
+  // than queued behind it (see lib/steerDelivery). It shares this list because it is shown
+  // in the same place until the runner leases it — but it is not waiting for anything and
+  // cannot be withdrawn, so it says so and offers no Cancel.
+  steer?: boolean;
   // Server-side image refs (id + mime), so a reopened/reloaded queue can still render an
   // image-only follow-up turn — the local turnImages previews don't survive a reload.
   attachments?: { id: string; mimeType: string }[];
@@ -2084,7 +2090,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       listQueuedTurns(selectedId)
         .then((rows) => {
           if (closed || generation !== queuedRefreshGeneration) return;
-          setQueued(rows.map((r) => ({ ...r, shell: r.kind === 'shell' })));
+          setQueued(
+            rows.map((r) => ({ ...r, shell: r.kind === 'shell', steer: isSteerKind(r.kind) })),
+          );
         })
         .catch(() => undefined);
     };
@@ -2267,7 +2275,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // and re-spawns with a `resumed` system event — clear there too so a partial
         // bubble can't outlive its turn. (Don't clear on every system event: claude's
         // stderr also arrives as `system` and would wipe an in-progress bubble.)
-        if (['assistant', 'turn_end', 'user', 'interrupt', 'error'].includes(ev.type)) {
+        // A steer is the one `user` event that is NOT a boundary — see supersedesLiveDrafts.
+        if (supersedesLiveDrafts(ev)) {
           setStreamingText('');
           setStreamingThink('');
         } else if (ev.type === 'thinking') {
@@ -2597,7 +2606,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // for a shell turn that's the Bash card its output lands in. A mid-turn `!cmd`
         // waits behind the running turn exactly like a message, so it gets a bubble too:
         // without one it sat in the queue invisibly and read as a dropped command.
-        const queuedItem = idle ? undefined : { turnId: res.turnId, content, shell };
+        //
+        // Unless the server filed it as a steer, in which case it is not queued at all: it
+        // goes into the turn already running. Its own kind is authoritative over our `idle`
+        // belief — that belief is a stream-derived guess, while the server decided this under
+        // the Session row lock — so a steer always gets a bubble, saying what it actually is.
+        const steer = isSteerKind(res.kind);
+        const queuedItem = steer
+          ? { turnId: res.turnId, content, shell, steer: true }
+          : idle
+            ? undefined
+            : { turnId: res.turnId, content, shell };
         return { id: selected.id, turnId: res.turnId, queuedItem };
       }
       if (selected && !live) {
@@ -3877,6 +3896,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       navigate,
     ],
   );
+  // Hand an undelivered message back to the composer, so a message the engine never received can
+  // be re-sent without being retyped out of a bubble. Explicitly user-initiated, so unlike the
+  // interrupt/withdraw fold-backs (which fire on their own and therefore only write into an empty
+  // composer) it never discards a draft: whatever is being typed keeps its place above it.
+  const restoreUndelivered = useMemo(
+    () =>
+      selectedTrashed || selectedMissing
+        ? null
+        : (text: string) => {
+            const body = text.trim();
+            if (!body) return;
+            setText((draft) => (draft.trim() ? `${draft}\n\n${body}` : body));
+            setTimeout(() => taRef.current?.focus(), 0);
+          },
+    [selectedTrashed, selectedMissing],
+  );
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
   // is a plain fire-and-forget: the detail query refetches on settle, and the card's own
   // countdown is driven by the value it reads back.
@@ -4730,7 +4765,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 <EventFullCtx.Provider value={fetchEventFull}>
                   <AuthErrorCtx.Provider value={authErrorHelp}>
                     <AutoRetryCtx.Provider value={autoRetryHelp}>
-                      <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                      <UndeliveredCtx.Provider value={restoreUndelivered}>
+                        <Transcript events={events} live={live} turnImages={turnImages} artifactSessionId={selectedId} />
+                      </UndeliveredCtx.Provider>
                     </AutoRetryCtx.Provider>
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
@@ -4787,8 +4824,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     q.content && <MD breaks>{q.content}</MD>
                   )}
                   <span className="chat-queued-meta">
-                    <span className="chat-queued-tag">Queued</span>
-                    <a onClick={() => cancelQueued(q.turnId)}>Cancel</a>
+                    {/* A steer is not waiting its turn — it is on its way into the one already
+                        running — so it says so, and offers no Cancel: the server refuses to
+                        withdraw a message the engine may already be reading. */}
+                    <span className="chat-queued-tag">
+                      {q.steer ? steerDeliveryState(undefined).label : 'Queued'}
+                    </span>
+                    {!q.steer && <a onClick={() => cancelQueued(q.turnId)}>Cancel</a>}
                   </span>
                 </div>
               ))}

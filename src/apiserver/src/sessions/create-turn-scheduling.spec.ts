@@ -90,7 +90,7 @@ test('a turn sent to AWAITING_INPUT is atomically queued for a new slot', async 
     content: 'follow up',
   });
 
-  assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2 });
+  assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2, kind: 'message' });
   assert.deepEqual(h.statusWrites, [RunStatus.PENDING]);
   assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
   assert.equal(h.queueChanges(), 1, 'focused clients are nudged to refresh the durable queue');
@@ -117,7 +117,7 @@ test('an idempotent retry returns its linked turn before revalidating attachment
     attachmentIds: ['44444444-4444-4444-8444-444444444444'],
   });
 
-  assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2 });
+  assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2, kind: 'message' });
   assert.equal(h.attachmentValidations(), 0);
   assert.deepEqual(h.statusWrites, []);
   assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
@@ -154,7 +154,7 @@ for (const tc of [
     });
 
     // Accepted and parked for a slot — the claim fence holds it until the op settles.
-    assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2 });
+    assert.deepEqual(result, { turnId: '33333333-3333-4333-8333-333333333333', seq: 2, kind: 'message' });
     assert.deepEqual(h.statusWrites, [RunStatus.PENDING]);
     assert.deepEqual(h.wakes(), { queue: 1, inbox: 0 });
     // The executing operation is left pending (not superseded), so it still completes.

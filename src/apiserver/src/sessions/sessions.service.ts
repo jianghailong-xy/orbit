@@ -2966,7 +2966,12 @@ export class SessionsService {
     // No transcript event exists until the runner leases this turn. Tell every focused client to
     // refresh the durable queue now, so a message queued on web appears on iOS (and vice versa).
     this.realtime.publishQueuedTurnsChanged(id);
-    return { turnId: queued.turn.id, seq: queued.turn.seq };
+    // `kind` is the server's own decision (message / shell / steer), and the only way the
+    // caller learns which one it got: a steer joins the turn that is already running, while a
+    // message queues behind it. Every entry point sends the same request, so this is what lets
+    // web and the native clients tell "waiting its turn" from "going into this one" — and stop
+    // offering to withdraw something that is already on its way.
+    return { turnId: queued.turn.id, seq: queued.turn.seq, kind: queued.turn.kind };
   }
 
   /** Abort the in-flight turn of a live session (the process stays alive). */
@@ -3018,7 +3023,15 @@ export class SessionsService {
    *  session fetches this to restore the visible queue (mirrors listApprovals). `!cmd`
    *  shell turns queue behind the running turn exactly like messages do, so they're
    *  listed too (tagged by `kind`) — omitting them made a mid-turn command invisible
-   *  until it eventually ran. */
+   *  until it eventually ran.
+   *
+   *  A still-PENDING `steer` is listed for the same reason and NOT for the same purpose: it
+   *  is not waiting its turn, it is on its way into the one already running, and the runner
+   *  usually takes it within a poll. But until it does, a reload has nothing else to render it
+   *  from — the transcript event only exists once the runner leases it — and a message that
+   *  vanishes on refresh is the one outcome mid-turn sending must not produce. Callers tell the
+   *  two apart by `kind`: a steer must not be offered a withdraw, because cancelQueuedTurn
+   *  refuses it (a message the engine may already be reading is not withdrawable). */
   async listQueuedTurns(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -3030,7 +3043,7 @@ export class SessionsService {
       // it's the session's opening message, not a withdrawable queued follow-up.
       where: {
         sessionId: id,
-        kind: { in: ['message', 'shell'] },
+        kind: { in: ['message', 'shell', 'steer'] },
         status: 'PENDING',
         clientTurnId: { not: SessionsService.initialTurnClientId(id) },
       },

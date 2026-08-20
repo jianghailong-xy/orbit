@@ -1128,7 +1128,11 @@ final class ConsoleModel {
             // reconciles it instead of appending a duplicate (the runner echoes turnId, not
             // clientTurnId). The POST response always precedes that event — see setOptimisticTurnId.
             if let tid = accepted.turnId {
-                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
+                // …and with what the server filed it AS. A message sent during a running turn is
+                // written into that turn (a steer) rather than queued behind it, and the bubble
+                // has to stop saying "Queued" and stop offering a withdraw the server refuses.
+                reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid,
+                                            steer: SteerDelivery.isSteerKind(accepted.kind))
                 publishStateNow()
             }
         } catch {

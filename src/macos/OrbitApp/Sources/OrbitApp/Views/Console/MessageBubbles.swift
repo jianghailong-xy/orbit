@@ -130,14 +130,18 @@ struct UserBubbleView: View {
 
     // Copy + relative time, hidden until hover (web's `.chat-user-meta`). While the turn is
     // unconfirmed this shows "Queued" (a turn was already in flight) or "Sending…" in place of the
-    // time, and "Not delivered" once the run has ended without ever taking it. Always laid out so
-    // revealing it doesn't move the bubble. An image-only turn (empty text) has nothing to copy, so
-    // the row is suppressed — web parity (`{node.text && …}`).
+    // time, and "Not delivered" once the run has ended without ever taking it. A message written
+    // into the running turn instead of queued behind it (a steer) shows how far it got there
+    // instead — see SteerDelivery. Always laid out so revealing it doesn't move the bubble. An
+    // image-only turn (empty text) has nothing to copy, so the row is suppressed — web parity
+    // (`{node.text && …}`).
     @ViewBuilder
     private var meta: some View {
         // Anything not yet (or never) confirmed keeps its label on screen permanently; a settled
         // turn shows its timestamp on hover alone.
-        let unconfirmed = bubble.pending || bubble.undelivered
+        // A steer keeps its line up after it settles too: unlike a message, whose reply is its
+        // receipt, "Sent into this turn" is the only thing that ever says the engine took it.
+        let unconfirmed = bubble.pending || bubble.undelivered || bubble.steer
         if !bubble.text.isEmpty || unconfirmed {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
@@ -150,8 +154,16 @@ struct UserBubbleView: View {
                     // Amber, not red: nothing broke on this message — the run ended before its turn
                     // came — and the auth/error card above already says why. Re-sending is the fix,
                     // and the composer (or that card's Retry) is where it happens.
-                    Label("Not delivered", systemImage: "exclamationmark.circle")
+                    Label(SteerDelivery.state("failed").label, systemImage: "exclamationmark.circle")
                         .font(.orbitMeta).foregroundStyle(.orange)
+                } else if bubble.steer {
+                    // A steer is not waiting its turn — it is on its way into the one already
+                    // running — and the turn it joined answers something else, so this line is the
+                    // only report it gets. Shown whether or not it is still pending: "Sent into
+                    // this turn" is what says the engine took it, and it arrives after the durable
+                    // `user` event has already settled the bubble.
+                    Text(SteerDelivery.state(bubble.delivery).label)
+                        .font(.orbitMeta).foregroundStyle(.secondary)
                 } else if bubble.pending {
                     Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered

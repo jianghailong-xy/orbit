@@ -46,6 +46,7 @@ import { fetchAttachmentObjectUrl, fetchSessionArtifactObjectUrl } from '../api'
 import { stripAnsi } from '../lib/ansi';
 import { copyText } from '../lib/clipboard';
 import { describeInjected, splitDeliveredMessage } from '../lib/deliveredMessage';
+import { steerDeliveryState } from '../lib/steerDelivery';
 import { BatchGraph } from './BatchGraph';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 import { RunnerSignIn } from './RunnerSignIn';
@@ -127,6 +128,17 @@ export interface AuthErrorHelp {
   onUseApiKey?: () => void;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
+
+/**
+ * Put an undelivered message back into the composer, so a message the engine never received can
+ * be sent again without being retyped from a bubble the reader can only copy by hand.
+ *
+ * A new send, not a replay of the old one: it gets its own clientTurnId, because the old turn is
+ * settled and re-using its id would be answered with that settled turn instead of sending
+ * anything. WorkspaceView supplies this; the shared/public page and the static export leave it
+ * null, where the mark stands alone — a reader who cannot send cannot resend either.
+ */
+export const UndeliveredCtx = createContext<((text: string) => void) | null>(null);
 
 /**
  * The untrimmed payload of a clipped event, fetched the first time its card is opened (`want`).
@@ -249,6 +261,11 @@ type TextNode = {
   // does not — which is why nothing is shown for it unless it says the message failed.
   delivery?: string;
   deliveryReason?: string;
+  // Filed as a steer: written into the turn that was already running rather than queued
+  // behind it. A steer has no reply of its own — the turn it joined answers — so how far it
+  // got is the only thing that reports it, and the states above are shown for it alone. On
+  // the event itself so a reload still knows which bubble that was.
+  steer?: boolean;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -443,6 +460,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             images: imgs,
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
+            steer: p.steer === true,
           };
           if (ev.turnId) userByTurn.set(ev.turnId, node);
           into(parent).push(node);
@@ -1082,6 +1100,7 @@ const USER_BUBBLE_TRUNCATE = 6000;
 // it (CSS :hover hits ancestors).
 function UserBubble({ node }: { node: TextNode }) {
   const exp = useContext(ExportCtx);
+  const putBack = useContext(UndeliveredCtx);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   // What the runner echoed back is what it was *given*, which includes anything delivery appended
@@ -1139,15 +1158,28 @@ function UserBubble({ node }: { node: TextNode }) {
           </div>
         )}
       </div>
-      {node.delivery === 'failed' && (
+      {node.delivery === 'failed' ? (
         // The one thing a bubble must never do is stand there looking sent when the engine
         // never received the message. Outside the meta row on purpose: that row is hidden
         // until hover, and this is the one thing about a message nobody should have to go
         // looking for. The reason rides in the tooltip — what is needed at a glance is that
         // this message did not land.
         <div className="chat-undelivered" title={node.deliveryReason}>
-          ⚠ Not delivered
+          ⚠ {steerDeliveryState('failed').label}
+          {putBack && typed && (
+            <button type="button" className="chat-undelivered-retry" onClick={() => putBack(typed)}>
+              Put back in the composer
+            </button>
+          )}
         </div>
+      ) : (
+        node.steer && (
+          // A steer's own progress, shown for a steer alone. An ordinary message is answered by
+          // the reply that follows it, so narrating its delivery would be noise; a steer joins a
+          // turn that answers something else, so without this line the sender has nothing at all
+          // to distinguish "on its way into this turn" from "quietly dropped".
+          <div className="chat-steer-state">{steerDeliveryState(node.delivery).label}</div>
+        )
       )}
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>

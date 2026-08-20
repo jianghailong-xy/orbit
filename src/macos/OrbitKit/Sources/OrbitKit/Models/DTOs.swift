@@ -474,6 +474,11 @@ public struct TurnAccepted: Codable, Sendable {
     public let turnId: String?
     public let seq: Int?
     public let status: String?
+    /// What the server filed this message as — `message`, `shell`, or `steer` — which is not what
+    /// was asked for: a message sent while a turn is running becomes a steer, written into that
+    /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
+    /// kind, which is the pre-steer behaviour: queued.
+    public let kind: String?
 }
 
 /// One still-PENDING user turn from GET /sessions/:id/turns. These rows have not entered the

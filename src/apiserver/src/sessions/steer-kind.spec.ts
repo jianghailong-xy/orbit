@@ -114,3 +114,22 @@ test('a `!cmd` shell turn never becomes a steer, however busy the engine is', as
 
   assert.equal(h.created[0].kind, 'shell');
 });
+
+// The decision is the server's, but the sender has to be told what it decided: a steer joins the
+// running turn while a message waits for its own, and a client that cannot tell them apart shows
+// the same "Queued, Cancel" for both — offering to withdraw a message already on its way, and
+// then dropping it from the queue it was never in.
+test('the response says which kind the message was filed as', async () => {
+  const steered = await send(makeService(1));
+  assert.equal(steered.kind, 'steer');
+
+  const queued = await send(makeService(0, RunStatus.AWAITING_INPUT));
+  assert.equal(queued.kind, 'message');
+});
+
+test('the response still carries the turn id and seq it always did', async () => {
+  const accepted = await send(makeService(1));
+
+  assert.equal(accepted.turnId, 'turn-new');
+  assert.equal(accepted.seq, 2);
+});

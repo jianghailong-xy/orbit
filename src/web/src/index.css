@@ -4610,6 +4610,30 @@ html[data-theme='dark'] .session-tag-chip {
   line-height: 1.4;
   color: var(--error-solid);
 }
+/* Send it again without retyping it. A link, not a button: the message is already gone, and
+   the weight of a real button next to a failure reads as the fix rather than as an offer. */
+.chat-undelivered-retry {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.chat-undelivered-retry:hover {
+  text-decoration: underline;
+}
+/* How far a mid-turn message (a steer) got into the turn it joined. Muted and in the bubble's
+   own column: it is the only report that message gets — the running turn's reply answers
+   something else — but it is a progress note, not a problem, so it never competes with the
+   failure mark above, which owns the error colour. */
+.chat-steer-state {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
 .chat-copy {
   display: inline-flex;
   align-items: center;

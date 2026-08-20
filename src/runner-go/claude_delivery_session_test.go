@@ -50,6 +50,23 @@ func (r *deliverySession) userBubbles() map[string]string {
 	return out
 }
 
+// steeredTurns is the set of turns whose user event says it was written into a turn that was
+// already running. The clients show a steer's delivery and nothing for an ordinary message, so
+// this flag is what a reloaded transcript reads to tell them apart.
+func (r *deliverySession) steeredTurns() map[string]bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := map[string]bool{}
+	for _, e := range r.events {
+		if e.Type == evUser {
+			if flag, _ := e.Payload["steer"].(bool); flag {
+				out[e.TurnID] = true
+			}
+		}
+	}
+	return out
+}
+
 // deliveryStates lists the transitions reported for one turn, in order.
 func (r *deliverySession) deliveryStates(turnID string) []string {
 	var out []string
@@ -464,6 +481,15 @@ func TestSessionWritesASteerIntoTheRunningTurn(t *testing.T) {
 	if got := run.userBubbles()["steer-1"]; got != string(deliveryEnqueued) {
 		t.Errorf("the steer's bubble was filed as %q under turn steer-1", got)
 	}
+	// …and the event says which kind it was, since after a reload that event is all a client
+	// has: a steer is reported by how far it got, an ordinary message by the reply to it.
+	steered := run.steeredTurns()
+	if !steered["steer-1"] {
+		t.Error("the steer's user event does not say it was steered into the running turn")
+	}
+	if steered["turn-1"] || steered["turn-2"] {
+		t.Errorf("an ordinary message was filed as a steer: %v", steered)
+	}
 	for _, e := range run.eventsOfType(evToolResult) {
 		if e.TurnID != "turn-1" {
 			t.Errorf("a tool_result of the steered turn was filed under %q, want turn-1", e.TurnID)
@@ -509,6 +535,9 @@ func TestSessionRefusesASteerWhenNoTurnIsRunning(t *testing.T) {
 	// waiting on this turn, and nothing else reports a steer that could not land.
 	if got := run.userBubbles()["steer-1"]; got != string(deliveryFailed) {
 		t.Errorf("the refused steer's bubble says %q, want %q", got, deliveryFailed)
+	}
+	if !run.steeredTurns()["steer-1"] {
+		t.Error("the refused steer's event does not say it was a steer, so no client can explain it")
 	}
 	if len(run.fake.Stdin()) != 0 {
 		t.Errorf("a steer with no turn to steer was written to the engine: %v", run.fake.Stdin())

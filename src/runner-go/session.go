@@ -1270,7 +1270,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					// optimistic bubble wait for something that is never coming. It goes in
 					// as the failure it is — never as a message that looks sent.
 					emitFor(resp.TurnID, evUser, map[string]interface{}{
-						"text": resp.Content, "delivery": string(deliveryFailed),
+						"text": resp.Content, "delivery": string(deliveryFailed), "steer": true,
 					})
 					reportDelivery(resp.TurnID, deliveryFailed, errNoTurnToSteer.Error(), true)
 					settleSteerTurn(resp.TurnID, errNoTurnToSteer, job, completeTurn)
@@ -1389,6 +1389,15 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				deliveries.accept(delivery, slot.receipt)
 				pendingShellCtx = nil // this message carries it now
 				userEv["delivery"] = string(deliveryEnqueued)
+				if steer {
+					// Which kind this message was filed as, on the one event that survives a
+					// reload. A steer is answered by the turn it joined rather than by one of
+					// its own, so how far it got IS its whole visible outcome — a client that
+					// cannot tell it from an ordinary message has nothing to show for it, and
+					// would show the same silence for a steer still on its way and one that
+					// never landed.
+					userEv["steer"] = true
+				}
 				// Filed against its own turn either way. For a message that is the turn the
 				// cursor already names; for a steer it is the only event of its turn, and
 				// naming it explicitly is what keeps the steered turn's stream out of it.

@@ -127,6 +127,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .toolResult:     closeTool(ev)
         case .turnEnd:        endTurn(ev)
         case .user:           appendUser(ev)
+        case .userDelivery:   applyUserDelivery(ev)
         case .interrupt:      appendInterrupt(seq: ev.seq)
         case .error:          appendError(ev)
         case .approvalRequest:  upsertApproval(ev)
@@ -237,10 +238,18 @@ public struct TranscriptReducer: Sendable, Codable {
     /// from the POST /turns (or /resume) response. The durable `user` event echoes `turnId`, not
     /// `clientTurnId`, so without this tag it wouldn't reconcile and the bubble would duplicate.
     /// No-op if the bubble was already reconciled (no longer pending) or never added.
-    public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String) {
+    ///
+    /// `steer` is the same response's verdict on what this message actually became: the server
+    /// files a message sent while a turn is running into that turn instead of queueing it behind
+    /// it. It is authoritative over the send's own guess — that guess is read off a status the
+    /// stream may not have caught up with, while the server decided this under the Session row
+    /// lock — so a bubble that says "Queued" here stops saying it, and stops offering a withdraw
+    /// the server would refuse.
+    public mutating func setOptimisticTurnId(clientTurnId: String, turnId: String, steer: Bool = false) {
         // A queued send lives in `state.queued`, an idle one in `state.items` — tag whichever holds it.
         if let i = state.queued.firstIndex(where: { $0.clientTurnId == clientTurnId && $0.pending }) {
             state.queued[i].turnId = turnId
+            if steer { state.queued[i].steer = true }
             return
         }
         guard let i = state.items.firstIndex(where: {
@@ -248,6 +257,7 @@ public struct TranscriptReducer: Sendable, Codable {
             return false
         }), case .user(var b) = state.items[i] else { return }
         b.turnId = turnId
+        if steer { b.steer = true }
         state.items[i] = .user(b)
     }
 
@@ -322,11 +332,15 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.pending = true
                 bubble.queued = true
                 bubble.undelivered = false
+                // The server's kind, so a reopened console can still tell the message waiting for
+                // its turn from the one being written into the turn in progress.
+                bubble.steer = SteerDelivery.isSteerKind(turn.kind)
                 reconciled.append(bubble)
             } else {
                 reconciled.append(UserBubble(id: "server-\(turn.turnId)", text: turn.content,
                                              attachments: incomingAttachments ?? [], turnId: turn.turnId,
-                                             pending: true, queued: true))
+                                             pending: true, queued: true,
+                                             steer: SteerDelivery.isSteerKind(turn.kind)))
             }
         }
 
@@ -533,8 +547,41 @@ public struct TranscriptReducer: Sendable, Codable {
         }
     }
 
+    /// The runner's own account of what happened to a message it was given (`user_delivery`).
+    ///
+    /// It names its turn in the payload rather than relying on the event's own attribution,
+    /// because a delivery settles on the writer's schedule and not the conversation's: the turn in
+    /// progress when a message is finally written is often a different one. A report for a turn
+    /// this window has never seen is dropped — after a resync the bubble it belongs to may be off
+    /// the loaded page, and there is nothing to amend.
+    ///
+    /// A failure sets `undelivered`, which is the same fact the drained-on-terminal path records
+    /// and reads the same to the person: this message never reached the engine. A message is never
+    /// re-marked as arrived by a later report — the states only move forward — but neither is a
+    /// failure ever overwritten by a stale one, since the runner reports each transition once.
+    private mutating func applyUserDelivery(_ ev: RunEvent) {
+        guard let turnId = str(ev, "turnId") ?? ev.turnId, let delivery = str(ev, "delivery") else { return }
+        if let i = state.items.lastIndex(where: {
+            if case .user(let b) = $0 { return b.turnId == turnId }
+            return false
+        }), case .user(var b) = state.items[i] {
+            b.delivery = delivery
+            b.undelivered = delivery == "failed"
+            state.items[i] = .user(b)
+            return
+        }
+        // Still in the queued tail: a steer can be reported failed before the runner ever files
+        // its `user` event (it is refused outright when no turn is running to fold it into).
+        if let i = state.queued.firstIndex(where: { $0.turnId == turnId }) {
+            state.queued[i].delivery = delivery
+            if delivery == "failed" {
+                state.queued[i].pending = false
+                state.queued[i].undelivered = true
+            }
+        }
+    }
+
     private mutating func appendUser(_ ev: RunEvent) {
-        flushStreaming()
         markOutageOver()          // the session went on — whatever was waiting on a retry no longer is
         let cid = str(ev, "clientTurnId")
         // What the runner echoes is what it was *given*, which includes anything delivery appended
@@ -543,6 +590,19 @@ public struct TranscriptReducer: Sendable, Codable {
         // typed: an unsplit body never matches, so a referencing message would strand its
         // optimistic bubble on "Sending…" and append a duplicate next to it.
         let delivered = splitDeliveredMessage(str(ev, "text") ?? str(ev, "content") ?? "")
+        // How far the runner had got with this message when it filed the event, and whether it
+        // was filed as a steer — the message written into the turn already running. Both ride the
+        // durable event, so a reload rebuilds the indicator instead of showing a message that
+        // says nothing about itself.
+        let delivery = str(ev, "delivery")
+        let steer = ev.payload["steer"]?.boolValue == true
+        // An ordinary user message opens a turn, so anything still streaming when it arrives was
+        // left dangling and is closed here. A steer is the one user message that is NOT a
+        // boundary: it lands in the middle of a reply that is still being written. Closing that
+        // bubble would strand it holding a half-sentence, and the authoritative `assistant` event
+        // for the same block — arriving with the whole text and no open bubble to fill — would
+        // then append the reply a SECOND time, in full, under the partial copy.
+        if !steer { flushStreaming() }
         let body = delivered.text
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
@@ -576,13 +636,23 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.injected = delivered.injected
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
+                b.steer = b.steer || steer
+                // Only a runner that reports delivery at all gets to settle this: an older one
+                // says nothing, and reading its silence as "arrived" would clear a bubble the
+                // terminal-drain had already marked as never taken.
+                if let delivery {
+                    b.delivery = delivery
+                    b.undelivered = delivery == "failed"
+                }
                 state.items[i] = .user(b)
             }
             return
         }
         state.items.append(.user(UserBubble(id: nextID(), text: body, attachments: atts, ts: ev.ts,
                                             clientTurnId: cid, turnId: ev.turnId, pending: false,
-                                            injected: delivered.injected)))
+                                            undelivered: delivery == "failed",
+                                            injected: delivered.injected, steer: steer,
+                                            delivery: delivery)))
     }
 
     private mutating func appendInterrupt(seq: Int) {
