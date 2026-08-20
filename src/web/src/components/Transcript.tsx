@@ -243,6 +243,12 @@ type TextNode = {
   // attachments survive a reload (and show on the seeded first turn, which has no local
   // preview). Images render inline; non-image files render as a downloadable chip.
   attachmentRefs?: { id: string; mime?: string; name?: string }[];
+  // How far this message got on its way into the engine's conversation: the state its
+  // `user` event opened with, patched by each `user_delivery` that followed. Absent on
+  // events recorded before the runner reported delivery at all, and on every runtime that
+  // does not — which is why nothing is shown for it unless it says the message failed.
+  delivery?: string;
+  deliveryReason?: string;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -399,6 +405,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     into(parentId).push(node);
   };
 
+  // User bubbles by turn, so a delivery report that lands after one can amend it. A
+  // message is never re-rendered as sent by a later event — only ever as failed.
+  const userByTurn = new Map<string, TextNode>();
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
@@ -426,14 +435,29 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             name: typeof a.name === 'string' ? a.name : undefined,
           }));
         if (p.text || (imgs && imgs.length) || (refs && refs.length)) {
-          into(parent).push({
+          const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
             text: p.text ? String(p.text) : '',
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
-          });
+            delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
+          };
+          if (ev.turnId) userByTurn.set(ev.turnId, node);
+          into(parent).push(node);
+        }
+        break;
+      }
+      case 'user_delivery': {
+        // The runner's own account of what happened to a message it was given. It names its
+        // turn in the payload because a delivery settles on the writer's schedule, not the
+        // conversation's — the turn in progress when it settles is often a different one.
+        const turnId = typeof p.turnId === 'string' ? p.turnId : ev.turnId;
+        const node = turnId ? userByTurn.get(turnId) : undefined;
+        if (node && typeof p.delivery === 'string') {
+          node.delivery = p.delivery;
+          node.deliveryReason = typeof p.reason === 'string' ? p.reason : undefined;
         }
         break;
       }
@@ -1115,6 +1139,16 @@ function UserBubble({ node }: { node: TextNode }) {
           </div>
         )}
       </div>
+      {node.delivery === 'failed' && (
+        // The one thing a bubble must never do is stand there looking sent when the engine
+        // never received the message. Outside the meta row on purpose: that row is hidden
+        // until hover, and this is the one thing about a message nobody should have to go
+        // looking for. The reason rides in the tooltip — what is needed at a glance is that
+        // this message did not land.
+        <div className="chat-undelivered" title={node.deliveryReason}>
+          ⚠ Not delivered
+        </div>
+      )}
       {longText && !exp && (
         <button className="chat-more" onClick={() => setExpanded((e) => !e)}>
           {expanded

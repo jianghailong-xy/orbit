@@ -238,6 +238,78 @@ describe('spent quota card', () => {
   });
 });
 
+describe('message delivery', () => {
+  const userEvent = (seq: number, turnId: string, text: string, delivery?: string): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: delivery ? { text, delivery } : { text },
+  });
+  const deliveryEvent = (
+    seq: number,
+    turnId: string,
+    delivery: string,
+    reason?: string,
+  ): RunEvent => ({
+    seq,
+    type: 'user_delivery',
+    payload: { turnId, delivery, ...(reason ? { reason, retryable: true } : {}) },
+  });
+
+  it('marks a message the engine never received', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          userEvent(1, 't1', 'rename the widget', 'enqueued'),
+          deliveryEvent(2, 't1', 'failed', 'claude stdin is closed'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Not delivered');
+    expect(html).toContain('claude stdin is closed');
+  });
+
+  it('says nothing about a message that arrived', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          userEvent(1, 't1', 'rename the widget', 'enqueued'),
+          deliveryEvent(2, 't1', 'written'),
+          deliveryEvent(3, 't1', 'acknowledged'),
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain('Not delivered');
+  });
+
+  it('marks only the message that failed, not the one before it', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          userEvent(1, 't1', 'first', 'enqueued'),
+          deliveryEvent(2, 't1', 'acknowledged'),
+          userEvent(3, 't2', 'second', 'enqueued'),
+          deliveryEvent(4, 't2', 'failed', 'claude process has exited'),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-undelivered').length - 1).toBe(1);
+    expect(html.indexOf('second')).toBeLessThan(html.indexOf('Not delivered'));
+  });
+
+  it('leaves a transcript recorded before delivery was reported alone', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[userEvent(1, 't1', 'rename the widget')]} />,
+    );
+
+    expect(html).not.toContain('chat-undelivered');
+    expect(html).toContain('rename the widget');
+  });
+});
+
 describe('engine stderr', () => {
   const stderrEvent = (seq: number, stderr: string): RunEvent => ({
     seq,

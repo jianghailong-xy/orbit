@@ -1155,6 +1155,21 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	pending := make(chan string, 8) // message turnIds fed but not yet resulted (FIFO)
 	inflight := map[string]bool{}   // turnIds being processed (dedup lease re-delivery)
 	var inflightMu sync.Mutex
+	// How far each user message got on its way into the conversation, and what the CLI's
+	// replays (--replay-user-messages) answer (claude_delivery.go).
+	deliveries := &deliveryLedger{}
+	// reportDelivery publishes one message's delivery state. The turn is named in the
+	// payload rather than left to the event's own attribution: a delivery settles on the
+	// writer's schedule, not the conversation's, so the turn in progress when it settles
+	// is often a different one.
+	reportDelivery := deliveryReporter(func(turnID string, state deliveryState, reason string, retryable bool) {
+		p := map[string]interface{}{"turnId": turnID, "delivery": string(state)}
+		if reason != "" {
+			p["reason"] = reason
+			p["retryable"] = retryable
+		}
+		emit(evUserDelivery, p)
+	})
 	endedCh := make(chan struct{})
 	var endOnce sync.Once
 	endSession := func() {
@@ -1212,6 +1227,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				if dup {
 					continue
 				}
+				// Opened here, where the turn is first taken on, so the interval spent
+				// assembling it below (every attachment is fetched over the network) is
+				// `pending` — pulled, promised nothing.
+				delivery := newMessageDelivery(resp.TurnID)
 				// Build the claude user message by dispatching each attachment on its MIME
 				// type: images and PDFs are inlined as base64 content blocks; anything else is
 				// written to the session's uploads dir outside the worktree for claude to read
@@ -1266,7 +1285,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				feedText := resp.Content
 				if len(pendingShellCtx) > 0 {
 					feedText = strings.Join(pendingShellCtx, "\n") + "\n\n" + resp.Content
-					pendingShellCtx = nil
+					// NOT cleared here: a message the runtime refuses below is never fed, and
+					// the shell output it was carrying still belongs to whatever is fed next.
 				}
 				// Tell claude where the written-to-disk uploads landed (absolute paths outside
 				// the worktree), so it reads them with its tools instead of expecting inline
@@ -1289,17 +1309,59 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				if len(attRefs) > 0 {
 					userEv["attachments"] = attRefs
 				}
+				// Take a place in the write queue BEFORE anything records the message as
+				// sent. A turn the runtime refuses — a CLI that stopped reading stdin, an
+				// `end` that closed the queue, a process already gone — leaves no user
+				// bubble, no entry in the ack queue and no unanswered turn: it is reported
+				// as the failure it is, and the poller keeps polling so `interrupt` and
+				// `end` still land on a session whose CLI is wedged.
+				slot, err := rt.reserve()
+				if err != nil {
+					logln("feeding a turn to", rt.String(), "failed for", job.SessionID+":", err)
+					deliveries.fail(delivery)
+					reportDelivery(resp.TurnID, deliveryFailed, err.Error(), true)
+					failUndeliveredTurn(resp.TurnID, err, job, completeTurn)
+					inflightMu.Lock()
+					delete(inflight, resp.TurnID)
+					inflightMu.Unlock()
+					setTurn("")
+					continue
+				}
+				// Accepted: from here the frame WILL be offered to the CLI, in this order,
+				// so everything that answers for it can be put in place before it can be
+				// answered.
+				deliveries.accept(delivery, slot.receipt)
+				pendingShellCtx = nil // this message carries it now
+				userEv["delivery"] = string(deliveryEnqueued)
 				emit(evUser, userEv)
 				select {
 				case pending <- resp.TurnID:
 				case <-procCtx.Done():
+					slot.abandon()
 					return
 				}
-				if err := rt.send(userFrame(job.SessionUUID, content)); err != nil {
-					logln("feeding a turn to", rt.String(), "failed for", job.SessionID+":", err)
-					return
-				}
+				receipt := slot.commit(userFrame(job.SessionUUID, content))
 				rt.beginTurn()
+				// The writer answers on its own schedule — a frame behind a CLI that
+				// stopped reading stdin is accepted now and written whenever the tool
+				// finishes — so watch the receipt off to the side rather than making the
+				// poller wait on the pipe it exists not to wait on.
+				go func(d *messageDelivery, turnID string) {
+					switch err := receipt.wait(procCtx); {
+					case err == nil:
+						if deliveries.markWritten(d) {
+							reportDelivery(turnID, deliveryWritten, "", false)
+						}
+					case procCtx.Err() != nil:
+						// The process is going away; its teardown accounts for what it
+						// still owed (see settleUndeliveredMessages).
+					default:
+						if deliveries.fail(d) {
+							reportDelivery(turnID, deliveryFailed, err.Error(), true)
+							failUndeliveredTurn(turnID, err, job, completeTurn)
+						}
+					}
+				}(delivery, resp.TurnID)
 			case "shell":
 				if !waitTurnPermit(procCtx) {
 					return
@@ -1435,6 +1497,15 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		}
 		sawOutput.Store(true)
 		handleMessage(msg, emit, bg)
+		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
+		// only signal that a message became part of the conversation rather than just bytes
+		// in a pipe. Replays arrive in the order the frames were read, so the oldest
+		// unacknowledged message is the one this answers (deliveryLedger).
+		if isReplayedUserTurn(msg) {
+			if d, ok := deliveries.acknowledgeNext(); ok {
+				reportDelivery(d.turnID, deliveryAcknowledged, "", false)
+			}
+		}
 		if msg["type"] == "assistant" {
 			if txt := assistantText(msg); txt != "" {
 				lastAssistantText = txt
@@ -1527,6 +1598,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	// running) once the writer has finished with stdin.
 	rt.markTerminal()
 	_ = rt.wait()
+	// Account for the messages this process still owed before anything re-delivers them.
+	settleUndeliveredMessages(deliveries, job, completeTurn, reportDelivery)
 	// stderr is an event source too. Join it before the provider generation
 	// returns, otherwise it can append after the supervisor's final flush.
 	stderrWg.Wait()

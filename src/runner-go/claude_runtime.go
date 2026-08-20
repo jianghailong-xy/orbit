@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -74,8 +75,12 @@ type claudeRuntime struct {
 	generation uint64
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser
-	writes     chan string
-	wrote      chan struct{} // closed once the writer goroutine has finished
+	writes     chan queuedFrame
+	// slots is the queue's free space, one token per place. Held from reserve() to
+	// commit(), which is what lets commit() hand a frame over without ever blocking: a
+	// caller that holds a token is holding a place nothing else can take.
+	slots chan struct{}
+	wrote chan struct{} // closed once the writer goroutine has finished
 
 	mu       sync.Mutex
 	phase    runtimePhase
@@ -90,9 +95,13 @@ func newClaudeRuntime(proc *claudeSpawn) *claudeRuntime {
 		generation: claudeRuntimeGeneration.Add(1),
 		cmd:        proc.cmd,
 		stdin:      proc.stdin,
-		writes:     make(chan string, claudeWriteQueueDepth),
+		writes:     make(chan queuedFrame, claudeWriteQueueDepth),
+		slots:      make(chan struct{}, claudeWriteQueueDepth),
 		wrote:      make(chan struct{}),
 		phase:      phaseStarting,
+	}
+	for i := 0; i < claudeWriteQueueDepth; i++ {
+		r.slots <- struct{}{}
 	}
 	go r.writeLoop()
 	return r
@@ -111,32 +120,153 @@ func (r *claudeRuntime) String() string {
 	return fmt.Sprintf("claude runtime %d (pid %d)", r.generation, r.pid())
 }
 
-// send queues one frame and returns immediately — accepted, not yet written. A nil error
-// means the runtime took ownership of delivering it in order; every other outcome names
-// why it will never arrive.
-func (r *claudeRuntime) send(frame string) error {
-	if frame == "" {
-		return nil // marshalFrame's cannot-happen case; nothing to write
+// queuedFrame is one accepted frame on its way to the writer, with the receipt that
+// answers for it. Every frame taken out of the queue settles its receipt exactly once —
+// written, or named as never arriving — so nothing the runtime accepted is dropped in
+// silence.
+type queuedFrame struct {
+	frame   string
+	receipt *writeReceipt
+}
+
+// A writeReceipt answers one question: did those bytes reach the CLI? It resolves when
+// the writer has written the frame, or when it has established that it never will.
+//
+// Acceptance and arrival are separate facts and a user message needs both. Acceptance is
+// what makes the message the runtime's responsibility — the point at which showing it as
+// sent stops being a guess. Arrival is what makes it the CLI's. Between them sits the
+// case this type exists for: a `claude` inside a tool call that has stopped reading
+// stdin, where a frame can sit accepted-but-unwritten for as long as the tool runs.
+type writeReceipt struct {
+	once sync.Once
+	done chan struct{}
+	err  error
+}
+
+func newWriteReceipt() *writeReceipt {
+	return &writeReceipt{done: make(chan struct{})}
+}
+
+// settle records the frame's fate. Idempotent: whichever of the writer's paths reaches it
+// first is the answer.
+func (w *writeReceipt) settle(err error) {
+	w.once.Do(func() {
+		w.err = err
+		close(w.done)
+	})
+}
+
+// wait blocks until the frame is written (nil) or established as undeliverable (the write
+// error), or until ctx ends — which says nothing about the frame, only that the caller
+// stopped waiting.
+func (w *writeReceipt) wait(ctx context.Context) error {
+	select {
+	case <-w.done:
+		return w.err
+	case <-ctx.Done():
+		return ctx.Err()
 	}
+}
+
+// settled reports the frame's fate without waiting: (err, true) once it is known, (nil,
+// false) while it is still queued. Once the runtime has been waited on, every receipt it
+// ever handed out has settled — the writer answers for each frame it takes out of the
+// queue, including the ones it declines to write — so this is how a session that is
+// shutting down reads off what it actually delivered.
+func (w *writeReceipt) settled() (error, bool) {
+	select {
+	case <-w.done:
+		return w.err, true
+	default:
+		return nil, false
+	}
+}
+
+// writeSlot is a reserved place in the queue: the frame's delivery is already guaranteed
+// to be attempted, and its bytes have not been handed over yet.
+//
+// Splitting the two is what lets a caller record a message as sent without racing the
+// answer to it. Everything that says "this turn is on its way" — the transcript event,
+// the ack queue, the delivery ledger — has to be in place before the CLI can possibly
+// reply, and none of it may happen for a frame the queue refuses. reserve() decides that
+// question without writing anything; commit() hands the bytes over afterwards.
+type writeSlot struct {
+	rt *claudeRuntime
+	// receipt exists from the reservation, before the frame does, so a caller can file it
+	// alongside whatever it records about the message and never has to consult a record it
+	// has not finished writing.
+	receipt *writeReceipt
+	once    sync.Once
+}
+
+// reserve takes a place in the queue for one frame, or names why the frame will never
+// arrive. Nothing is written and nothing is queued until the slot is committed.
+func (r *claudeRuntime) reserve() (*writeSlot, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Checked before `closed`: a pipe that broke is the more specific and more useful
 	// answer, and teardown closes the queue right after.
 	if r.writeErr != nil {
-		return r.writeErr
+		return nil, r.writeErr
 	}
 	if r.phase == phaseTerminal {
-		return errRuntimeGone
+		return nil, errRuntimeGone
 	}
 	if r.closed {
-		return errRuntimeClosed
+		return nil, errRuntimeClosed
 	}
 	select {
-	case r.writes <- frame:
-		return nil
+	case <-r.slots:
+		return &writeSlot{rt: r, receipt: newWriteReceipt()}, nil
 	default:
-		return errWriteQueueFull
+		return nil, errWriteQueueFull
 	}
+}
+
+// commit hands the frame to the writer and returns immediately — accepted, not yet
+// written. The receipt is what says when (or whether) it arrives. Never blocks: the slot
+// is a place in the queue nothing else can take.
+func (s *writeSlot) commit(frame string) *writeReceipt {
+	s.once.Do(func() {
+		r := s.rt
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if r.closed {
+			// close() raced this reservation. The queue is shut, so the frame is not going
+			// to be written, and the receipt says so rather than the send panicking on a
+			// closed channel.
+			r.slots <- struct{}{}
+			s.receipt.settle(errRuntimeClosed)
+			return
+		}
+		r.writes <- queuedFrame{frame: frame, receipt: s.receipt}
+	})
+	return s.receipt
+}
+
+// abandon gives the place back for a frame the caller decided not to send, and settles its
+// receipt: a message withdrawn before it was handed over did not arrive either.
+func (s *writeSlot) abandon() {
+	s.once.Do(func() {
+		s.receipt.settle(errRuntimeGone)
+		s.rt.slots <- struct{}{}
+	})
+}
+
+// send queues one frame and returns immediately — accepted, not yet written. A nil error
+// means the runtime took ownership of delivering it in order; every other outcome names
+// why it will never arrive. For a caller that also needs to know when the bytes land,
+// reserve/commit hands back a receipt.
+func (r *claudeRuntime) send(frame string) error {
+	if frame == "" {
+		return nil // marshalFrame's cannot-happen case; nothing to write
+	}
+	slot, err := r.reserve()
+	if err != nil {
+		return err
+	}
+	slot.commit(frame)
+	return nil
 }
 
 // beginTurn records that a turn has been handed over and is unanswered; endTurn records
@@ -184,25 +314,33 @@ func (r *claudeRuntime) wait() error {
 }
 
 // writeLoop is the single writer. It keeps draining after a failed write so a sender can
-// never wedge on a queue that nobody is emptying; send() reports the recorded error, so
-// nothing is written into a pipe that is already gone.
+// never wedge on a queue that nobody is emptying; reserve() reports the recorded error, so
+// nothing is written into a pipe that is already gone. Every frame it takes out settles
+// its receipt, including the ones it declines to write.
 func (r *claudeRuntime) writeLoop() {
 	defer close(r.wrote)
 	defer r.stdin.Close()
-	for frame := range r.writes {
-		if r.failed() {
+	for qf := range r.writes {
+		r.slots <- struct{}{} // out of the queue: its place is free again
+		if err := r.failed(); err != nil {
+			qf.receipt.settle(err)
 			continue
 		}
-		if _, err := io.WriteString(r.stdin, frame); err != nil {
+		if _, err := io.WriteString(r.stdin, qf.frame); err != nil {
 			r.recordWriteErr(err)
+			qf.receipt.settle(err)
+			continue
 		}
+		qf.receipt.settle(nil)
 	}
 }
 
-func (r *claudeRuntime) failed() bool {
+// failed returns the write error that ended this runtime's stdin, or nil while it is
+// healthy.
+func (r *claudeRuntime) failed() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.writeErr != nil
+	return r.writeErr
 }
 
 func (r *claudeRuntime) recordWriteErr(err error) {

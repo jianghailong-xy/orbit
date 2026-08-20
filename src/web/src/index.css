@@ -4602,6 +4602,14 @@ html[data-theme='dark'] .session-tag-chip {
   line-height: 1;
   color: var(--text-3);
 }
+/* A message the engine never received. Always visible (unlike the hover-only meta row):
+   the whole point is that nobody has to hover to find out their message did not land. */
+.chat-undelivered {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error-solid);
+}
 .chat-copy {
   display: inline-flex;
   align-items: center;

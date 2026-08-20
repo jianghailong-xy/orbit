@@ -46,7 +46,15 @@ func TestMain(m *testing.M) {
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
 	// Emit: system_init | assistant | tool_use | tool_result | result | control_request |
-	// control_response | eof (eof exits, closing stdout).
+	// control_response | replay_user | stop_reading | eof (eof exits, closing stdout).
+	//
+	// replay_user is what --replay-user-messages does: echo the user frame just awaited
+	// back on stdout, verbatim, as the CLI does when it reads one off stdin.
+	//
+	// stop_reading stands in for a CLI busy inside a tool call: the process stays up and
+	// keeps writing to stdout, but never takes another byte off stdin, so its pipe fills
+	// and stays full. It must be the whole script's decision — it is read before the
+	// reader starts — and a script that uses it has no `await` steps to run.
 	Emit string `json:"emit,omitempty"`
 	// Await: user | control_request | control_response, optionally narrowed by Subtype
 	// (control_request) or RequestID (control_response).
@@ -95,13 +103,18 @@ func runFakeClaude(dir string) int {
 	ctrlReqs := make(chan map[string]interface{}, 64)
 	ctrlResps := make(chan map[string]interface{}, 64)
 	closed := make(chan struct{})
-	go readFakeStdin(filepath.Join(dir, "stdin.jsonl"), users, ctrlReqs, ctrlResps, closed)
+	if !scriptStopsReading(steps) {
+		go readFakeStdin(filepath.Join(dir, "stdin.jsonl"), users, ctrlReqs, ctrlResps, closed)
+	}
 
 	sessionID := argValue(argv, "--session-id")
 	if sessionID == "" {
 		sessionID = argValue(argv, "--resume")
 	}
 	lastReqID := ""
+	// The user frame most recently read off stdin, kept so a replay_user step can echo the
+	// real thing rather than a reconstruction — that is what --replay-user-messages emits.
+	var lastUser map[string]interface{}
 	for _, s := range steps {
 		if s.Await != "" {
 			var msg map[string]interface{}
@@ -109,6 +122,9 @@ func runFakeClaude(dir string) int {
 			switch s.Await {
 			case "user":
 				msg, ok = awaitFrame(users, closed, func(map[string]interface{}) bool { return true })
+				if ok {
+					lastUser = msg
+				}
 			case "control_request":
 				msg, ok = awaitFrame(ctrlReqs, closed, func(m map[string]interface{}) bool {
 					req, _ := m["request"].(map[string]interface{})
@@ -134,6 +150,19 @@ func runFakeClaude(dir string) int {
 		if s.Emit == "eof" {
 			return 0
 		}
+		if s.Emit == "stop_reading" {
+			continue // stdin is simply never read; see scriptStopsReading
+		}
+		if s.Emit == "replay_user" {
+			if lastUser == nil {
+				io.WriteString(os.Stderr, "fake claude: replay_user with no user frame read\n")
+				return 2
+			}
+			if _, err := io.WriteString(os.Stdout, marshalFrame(lastUser)); err != nil {
+				return 1
+			}
+			continue
+		}
 		frame, err := fakeFrame(s, sessionID, lastReqID, argValue(argv, "--model"))
 		if err != nil {
 			io.WriteString(os.Stderr, "fake claude: "+err.Error()+"\n")
@@ -147,6 +176,15 @@ func runFakeClaude(dir string) int {
 	// until the driver closes stdin.
 	<-closed
 	return 0
+}
+
+func scriptStopsReading(steps []fakeStep) bool {
+	for _, s := range steps {
+		if s.Emit == "stop_reading" {
+			return true
+		}
+	}
+	return false
 }
 
 // readFakeStdin records every frame verbatim, in arrival order, then routes it by type.
