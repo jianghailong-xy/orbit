@@ -268,3 +268,55 @@ assert.equal(await services.db.projectBlocker.count({
 | nextCheckAt | BLK-23-01 修复复验时一并收口 |
 
 **全部三条关闭且标准 8 复验为 PASS 之前，Project `349bHrtPbgwiouD3cfCVP` 保持 OPEN。**
+
+---
+
+## 附录 A — 启动基线错配（launch-base mismatch）
+
+本单元的**任务工作树**在派发时并没有落在被验分支上。这条记录在这里，是因为它决定了"本次验收是不是在正确的树上跑的"。
+
+### A.1 事实
+
+| 时点 | 对象 | 值 |
+| --- | --- | --- |
+| 派发时 | 任务工作树 `/root/.orbit/worktrees/01a0211a-70f6-7b30-b3fa-908223723ab3` | HEAD `07eefde9`，分支 `orbit/23-feat-project-b80670` —— 即 **main 的头**，不含 Project Coordinator 的任何一行 |
+| 派发时 | `git merge-base --is-ancestor 1144099c HEAD` | 返回 **1**（被验提交不在该树的历史里） |
+| 派发时 | 被验分支 `feat/project` | `1144099c` |
+
+### A.2 处置：换树，而不是在错的树上跑
+
+发现错配后**没有**在任务工作树里做验证，而是另建了一棵专用审计树：
+
+```
+git worktree add /root/.orbit/worktrees/pcc23-349bQHCJ-20260820 \
+    -b orbit/23-project-acceptance-349bQHCJ feat/project
+# Preparing worktree (new branch 'orbit/23-project-acceptance-349bQHCJ')
+# HEAD is now at 1144099c test(projects): walk the control loop end to end, and break it on purpose
+```
+
+§1–§5 的每一条命令都在这棵树里跑。可核验的证据是提交图本身：本报告提交 `0e4fc164` 的**唯一父提交就是 `1144099c`**——
+
+```
+git log -1 --format='commit=%H parent=%P' orbit/23-project-acceptance-349bQHCJ
+# commit=0e4fc164d9ebf772c93fa4b077542bf61fd2e4d5 parent=1144099ce7935023296d305fb0159c2eac66f763
+```
+
+审计树的 reflog 也只有两个状态：全程 `1144099c`，直到写下本报告才前进到 `0e4fc164`。**没有任何一条验收命令跑在 `07eefde9` 上。**
+
+### A.3 为什么当时不能靠 `git merge --ff-only feat/project` 修任务工作树
+
+这条修法在派发那一刻**不可能成功**：`feat/project` 落后 main **4 个提交**（`07eefde9`、`711a3080`、`12b5ed75`、`154ef9e6`），所以任务工作树的 HEAD `07eefde9` **不是** `feat/project` 的祖先，`--ff-only` 会直接以 `Not possible to fast-forward` 中止。
+
+```
+git merge-base --is-ancestor 07eefde9 feat/project   # -> 1（不是祖先）
+git merge-base --is-ancestor 07eefde9 1144099c       # -> 1
+```
+
+要让任务工作树落在 `1144099c` 上，只能"检出/换分支"，不能"快进"。事后该工作树确实被外部改成了新分支 `orbit/23-project-acceptance-correct` @ `1144099c`（其 reflog: `checkout: moving from orbit/23-feat-project-b80670 to orbit/23-project-acceptance-correct`），与本单元的处置结论一致。
+
+### A.4 对裁决的影响
+
+**无。** 换树发生在任何验证动作之前，全部 §2 的数字与 §3 的逐条裁决都产自 `1144099c`。这条记录的意义是流程侧的：
+
+> **派发给验收类任务的工作树，其 HEAD 必须先被断言为被验提交。**
+> 如果基线是从 main 派生而被验分支落后于 main，`merge --ff-only` 这条常规修法会失败；正确动作是从被验分支新建工作树/分支。建议把「`git merge-base --is-ancestor <被验SHA> HEAD` 必须为 0」做成验收任务开跑前的第一条断言。
