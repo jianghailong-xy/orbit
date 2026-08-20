@@ -50,7 +50,7 @@ function harness(
     drainArtifactRequests: async () => [],
   } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, {} as never),
     findManyWhere,
     updateManyWhere,
     mergeDrainCalls,

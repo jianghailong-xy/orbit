@@ -64,6 +64,7 @@ function makeController(options: {
       {} as never,
       orchestration as never,
       {} as never,
+      {} as never,
     ),
     issueCalls,
     reissueCalls,

@@ -1,12 +1,14 @@
-# CI for both native clients (src/macos + src/ios). They share OrbitKit (the pure protocol/logic
-# core) and the OrbitApp SwiftUI sources (the iOS app reuses them in place — Structure B), so one
-# workflow tests everything:
+# CI for both native client shells (src/macos + src/ios). They share OrbitKit and the OrbitApp
+# SwiftUI sources (the iOS app reuses them in place — Structure B), so changes to either shell
+# compile both platforms here:
 #
-#   • orbitkit-linux — OrbitKit unit tests on Linux (platform-agnostic). Fast; runs on every push.
 #   • macos — macOS compile gate: `swift test`s OrbitKit on macOS (builds the `#if os(macOS)`
 #     Keychain + URLSession-SSE paths) and `swift build`s OrbitApp (SwiftUI; can't build on Linux).
 #   • ios — iOS compile gate: XcodeGen + `xcodebuild` for the Simulator (no signing). Surfaces
 #     iOS-only SDK nits in the shared SwiftUI surface.
+#
+# OrbitKit's platform-agnostic Linux tests run for every pull request in ci.yml, where they can be
+# a required check without path-filter deadlocks.
 #
 # Signed/distributable builds live in release.yml (tag-triggered). macOS runners bill at 10×, so the
 # two Xcode jobs run only on pull_request or an explicit workflow_dispatch — never plain pushes. A
@@ -35,18 +37,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  orbitkit-linux:
-    name: OrbitKit (Linux · swift test)
-    runs-on: ubuntu-latest
-    container: swift:6.1
-    steps:
-      - uses: actions/checkout@v4
-      - name: Swift version
-        run: swift --version
-      - name: Test OrbitKit
-        working-directory: src/macos/OrbitKit
-        run: swift test
-
   # Type-ramp guard: views must use the semantic tokens in Views/Typography.swift (the one file
   # allowed to hold fixed sizes) so iOS/macOS sizing stays platform-appropriate and Dynamic Type
   # keeps working. Hard fail — the sweep landed; add a token instead of a bare size.

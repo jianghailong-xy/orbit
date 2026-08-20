@@ -278,11 +278,12 @@ final class Phase2LogicTests: XCTestCase {
     }
 
     func testEffortLabelsAndRawValues() {
-        XCTAssertEqual(Effort.allCases, [.default, .minimal, .low, .medium, .high, .xhigh, .max])
+        XCTAssertEqual(Effort.allCases, [.default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra])
         XCTAssertEqual(Effort.allCases.map(\.label),
-                       ["Default", "Minimal", "Low", "Medium", "High", "xHigh", "Max"])
+                       ["Default", "Minimal", "Low", "Medium", "High", "xHigh", "Max", "Ultra"])
         XCTAssertEqual(Effort.default.rawValue, "")
         XCTAssertEqual(Effort.max.rawValue, "max")
+        XCTAssertEqual(Effort.ultra.rawValue, "ultra")
         XCTAssertEqual(Effort.xhigh.rawValue, "xhigh")
     }
 
