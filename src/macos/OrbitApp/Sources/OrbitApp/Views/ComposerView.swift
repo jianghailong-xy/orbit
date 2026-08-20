@@ -1153,13 +1153,17 @@ private struct ContextWindowDetailPresentation: ViewModifier {
     }
 }
 
-/// Presents the plan-usage detail per platform. macOS gets a tight anchored popover sized to its
-/// content. iOS gets a fitted bottom sheet — a bare `.popover` there auto-promotes to a full-screen
-/// modal that strands two short rows mid-screen, so we show a proper sheet: a grabber, a top-anchored
-/// title with Done, and a detent sized to the row count so there's no wasted space.
+/// Presents the plan-usage detail per platform. macOS and regular-width iPad layouts get a tight
+/// anchored popover sized to their content. Compact iOS layouts get a fitted bottom sheet — a bare
+/// `.popover` there auto-promotes to a full-screen modal that strands two short rows mid-screen, so
+/// the phone presentation instead has a grabber, a top-anchored title with Done, and a row-sized
+/// detent. Treating iPad as a phone produces a wide floating sheet far away from the usage pill.
 private struct PlanUsageDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let usage: PlanUsageSnapshot
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     func body(content: Content) -> some View {
         #if os(macOS)
@@ -1172,30 +1176,41 @@ private struct PlanUsageDetailPresentation: ViewModifier {
             .frame(width: 260)
         }
         #else
-        content.sheet(isPresented: $isPresented) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Plan usage").font(.title3.weight(.semibold))
-                    Spacer()
-                    Button("Done") { isPresented = false }
+        if horizontalSizeClass == .regular {
+            content.popover(isPresented: $isPresented, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Plan usage").font(.headline)
+                    PlanUsageDetailRows(rows: usage.rows)
                 }
-                .padding(.bottom, 16)
-                PlanUsageDetailRows(rows: usage.rows)
-                Spacer(minLength: 0)
+                .padding(16)
+                .frame(width: 320)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 24)
-            .padding(.bottom, 20)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66))])
-            .presentationDragIndicator(.visible)
+        } else {
+            content.sheet(isPresented: $isPresented) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("Plan usage").font(.title3.weight(.semibold))
+                        Spacer()
+                        Button("Done") { isPresented = false }
+                    }
+                    .padding(.bottom, 16)
+                    PlanUsageDetailRows(rows: usage.rows)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66))])
+                .presentationDragIndicator(.visible)
+            }
         }
         #endif
     }
 }
 
-/// The per-window rows shared by the macOS popover and the iOS sheet. `compact` shrinks the type and
-/// bar for the tight popover; the iOS sheet uses the roomier, touch-friendly sizing.
+/// The per-window rows shared by the popovers and the compact iOS sheet. `compact` shrinks the type
+/// and bar for the tighter macOS popover; the touch clients use the roomier sizing.
 private struct PlanUsageDetailRows: View {
     let rows: [PlanUsageRow]
     var compact: Bool = false
