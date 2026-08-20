@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 )
 
@@ -108,7 +109,7 @@ func TestFakeClaudeFramesParseAsRunnerEvents(t *testing.T) {
 			break
 		}
 		if msg["type"] == "result" {
-			if res := resultFrom(msg, t.Context()); res.Result != "done" || res.Status != stSucceeded {
+			if res := resultFrom(msg, context.Background()); res.Result != "done" || res.Status != stSucceeded {
 				t.Errorf("resultFrom = %+v, want done/succeeded", res)
 			}
 			continue
