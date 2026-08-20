@@ -1,9 +1,13 @@
 # 04R2 独立复审：0113 最终行协调身份
 
-日期：2026-08-20（Europe/Berlin）  
-任务：`34A9hr8j41AsVajr3Uo8j`  
-被验提交：`e2e426c67c864acafe91d59a4365c8d2d05ebd8c`  
-起点：`541d17b8291c0685a4aeb6285022d38413471418`  
+日期：2026-08-20（Europe/Berlin）
+
+任务：`34A9hr8j41AsVajr3Uo8j`
+
+被验提交：`e2e426c67c864acafe91d59a4365c8d2d05ebd8c`
+
+起点：`541d17b8291c0685a4aeb6285022d38413471418`
+
 结论：**FAIL — 1 个 P1 blocker**
 
 ## 1. 独立性与审计边界
@@ -95,7 +99,8 @@ landing = B, generation = 1, transaction committed
 - partial unique T1/T2、FK CASCADE/RESTRICT、tenant/live predicate、runtime baseline 与 generation；
 - insert+delete 无残留、landing relocation 与 soft-delete 的两个 commit ordering。
 
-正向新增矩阵：**16 total / 15 pass / 1 P1 fail**。  
+正向新增矩阵：**16 total / 15 pass / 1 P1 fail**。
+
 反向重装 0112：**16 total / 5 pass / 11 fail**；新加的 landing A→B→C 用例也变红，而显式 WHO
 用例在 0112 下反而通过，直接证明 P1 是 0113 新引入的过度覆盖。原失败 04R 三项在 0112 对照库上
 仍为 **3 total / 1 pass / 2 fail**（只有 insert+delete 合法项通过）。
