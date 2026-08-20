@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  javascript:
+    name: JavaScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+      - name: Build workspaces
+        run: npm run build
+      - name: Test shared
+        run: npm test -w @orbit/shared
+      - name: Test API server
+        run: npm test -w @orbit/apiserver
+      - name: Test web
+        run: npm test -w @orbit/web
+
+  go-runner:
+    name: Go runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache-dependency-path: src/runner-go/go.sum
+      - name: Test runner
+        working-directory: src/runner-go
+        run: go test ./...
+
+  swift-core:
+    name: Swift core
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: swift:6.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test OrbitKit
+        working-directory: src/macos/OrbitKit
+        run: swift test

@@ -737,7 +737,7 @@ func TestRunOpenCodeTurnGuardedModeDeniesEscapingSymlinkWithoutRefusingTheTurn(t
 	writeFakeBin(t, root, providerOpenCode, `printf started > "$STARTED_MARKER"`)
 	t.Setenv("PATH", root+":"+os.Getenv("PATH"))
 	var denied []interface{}
-	result := runOpenCodeTurn(t.Context(), &ClaimedSession{Agent: AgentExecConfig{
+	result := runOpenCodeTurn(context.Background(), &ClaimedSession{Agent: AgentExecConfig{
 		PermissionMode: "dontAsk",
 		Env:            map[string]string{"STARTED_MARKER": marker},
 	}}, root, root, "hello", nil, func(kind string, payload map[string]interface{}) {
@@ -857,7 +857,7 @@ printf '%s\n' '{"type":"step_finish","timestamp":3,"sessionID":"ses_fake","part"
 		"OPENCODE_DISABLE_SHARE": "0", "OPENCODE_AUTO_SHARE": "1",
 	}}}
 	var events []emittedEvent
-	result := runOpenCodeTurn(t.Context(), job, dir, dir, "hello stdin", nil, func(typ string, payload map[string]interface{}) {
+	result := runOpenCodeTurn(context.Background(), job, dir, dir, "hello stdin", nil, func(typ string, payload map[string]interface{}) {
 		events = append(events, emittedEvent{typ: typ, payload: payload})
 	})
 	if result.Status != stSucceeded || result.RuntimeSessionID != "ses_fake" || result.Result != "hello" {
@@ -905,7 +905,7 @@ wait`
 			"LEAK_PATH":  leakPath,
 		}},
 	}
-	ctx, cancel := context.WithCancelCause(t.Context())
+	ctx, cancel := context.WithCancelCause(context.Background())
 	done := make(chan openCodeTurnResult, 1)
 	go func() {
 		done <- runOpenCodeTurn(ctx, job, dir, dir, "stop me", nil, func(string, map[string]interface{}) {})
@@ -974,7 +974,7 @@ while :; do :; done`)
 	}))
 	defer srv.Close()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownCtx, stop := context.WithCancel(context.Background())
 	defer stop()
@@ -1051,7 +1051,7 @@ printf '%s\n' '{"type":"step_finish","part":{"cost":0,"tokens":{"total":2,"input
 	}))
 	defer srv.Close()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownCtx, stop := context.WithCancel(context.Background())
 	defer stop()
@@ -1142,7 +1142,7 @@ func TestOpenCodeInterruptCancelsAttachmentPreparation(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	shutdownCtx, stop := context.WithCancel(context.Background())
 	defer stop()

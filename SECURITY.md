@@ -31,6 +31,27 @@ The project aims to acknowledge a private report within three business days and 
 within seven. These are targets for a volunteer project, not guaranteed service levels. Please allow time for a
 coordinated fix and release before public disclosure.
 
+## Dependency vulnerability handling
+
+Orbit checks dependency changes on every pull request and asks Dependabot to check supported package ecosystems
+weekly. The root `package-lock.json` is the authoritative JavaScript lockfile; workspace-local lockfiles are not
+used. Dependency updates are reviewed and tested like any other code change and are never merged solely because
+an automated tool opened them.
+
+The maintainers use the following response targets after a dependency alert is published or reported:
+
+| Severity | Triage target | Fix or mitigation target |
+| --- | --- | --- |
+| Critical | 1 business day | 7 calendar days |
+| High | 3 business days | 14 calendar days |
+| Moderate | 10 business days | 30 calendar days |
+| Low | Next scheduled dependency review | Next routine update when practical |
+
+If a target cannot be met, the tracking issue or security advisory must record reachability, impact, an owner,
+compensating controls, and a review date. An alert is not considered resolved merely because it was dismissed.
+See the [dependency security baseline](docs/dependency-security.md) for the current audit record and verification
+commands.
+
 ## Scope
 
 Reports are especially useful for:

@@ -20,6 +20,6 @@
     "dev:web": "npm run build -w @orbit/shared && npm run dev -w @orbit/web"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.19.0"
   }
 }

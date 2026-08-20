@@ -283,6 +283,7 @@ final class Phase2LogicTests: XCTestCase {
                        ["Default", "Minimal", "Low", "Medium", "High", "xHigh", "Max", "Ultra"])
         XCTAssertEqual(Effort.default.rawValue, "")
         XCTAssertEqual(Effort.max.rawValue, "max")
+        XCTAssertEqual(Effort.ultra.rawValue, "ultra")
         XCTAssertEqual(Effort.xhigh.rawValue, "xhigh")
     }
 
