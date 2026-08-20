@@ -42,6 +42,7 @@ const LIVE_AFTER_SNAPSHOT = '00000000-0000-7000-8000-000000001128';
 const OUTBOX = migration('0116_project_event_outbox');
 const RECONCILE = migration('0119_project_reconcile_runtime');
 const DECISION = migration('0120_project_decision_audit');
+const AUTHORIZATION = migration('0121_project_authorization_policy');
 
 type ClientCtor = new (config: { connectionString?: string; connectionTimeoutMillis?: number }) => Client;
 type Tx = Prisma.TransactionClient;
@@ -185,6 +186,7 @@ async function reset(client: Client): Promise<void> {
       "action_id" UUID PRIMARY KEY, "marker" TEXT NOT NULL
     );
   `);
+  await client.query(AUTHORIZATION);
   await client.query(`
     INSERT INTO "project" (
       "id", "owner_id", "title", "goal", "acceptance_criteria",
@@ -207,6 +209,12 @@ async function reset(client: Client): Promise<void> {
       ($1, $2, 'coordinator', $3, true, 'gpt-5.6-sol', 'high', 'feat/project', true, true),
       ($4, $5, 'foreign', $6, true, 'secret-model', 'max', 'foreign/main', true, true)
   `, [COORDINATOR, OWNER, RUNNER, FOREIGN_WORKSPACE, FOREIGN_OWNER, FOREIGN_RUNNER]);
+  await client.query(`
+    UPDATE "workspace"
+       SET "provider_fallbacks" = '[{"provider":"codex","model":"gpt-5.6-sol"}]',
+           "can_create_tasks" = true, "can_delegate" = true, "max_concurrent_tasks" = 2
+     WHERE "id" = $1
+  `, [COORDINATOR]);
   await client.query(`
     INSERT INTO "project_member" ("id", "project_id", "agent_id", "role")
       VALUES ('00000000-0000-7000-8000-000000001129', $1, $2, 'COORDINATOR')
@@ -286,6 +294,9 @@ test('consistent snapshot, replay, stale refusal and restart recovery hold on re
 
       assert.equal(frozenInput!.world.project.ownerId.length <= 22, true);
       assert.equal(frozenInput!.world.team.length, 1);
+      assert.deepEqual(frozenInput!.world.team[0].providerFallbacks,
+        [{ provider: 'codex', model: 'gpt-5.6-sol' }]);
+      assert.equal(frozenInput!.world.team[0].maxConcurrentTasks, 2);
       assert.equal(frozenInput!.world.tasks.length, 2, 'foreign-owner task is outside the snapshot');
       assert.equal(frozenInput!.world.sessions.length, 3, 'foreign-owner session is outside the snapshot');
       assert.equal(frozenInput!.world.workspaces.length, 1);

@@ -36,6 +36,17 @@ import {
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
+import {
+  AUTO_RUN_RETRY_BACKOFF_MS,
+  MAX_AUTO_RUN_FAILURES,
+  QUOTA_BLIND_RETRY_BACKOFF_MS,
+} from './task-retry-policy';
+
+export {
+  AUTO_RUN_RETRY_BACKOFF_MS,
+  MAX_AUTO_RUN_FAILURES,
+  QUOTA_BLIND_RETRY_BACKOFF_MS,
+} from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
   canRun,
@@ -324,9 +335,6 @@ const RECONCILE_INTERVAL_MS = 60_000;
 // stop auto-running it: past MAX_AUTO_RUN_FAILURES only an explicit trigger ("开始执行",
 // an @-mention, a prerequisite reaching DONE) starts it again. Indexed by failure count,
 // so entry [0] is the wait after the first failed run.
-export const AUTO_RUN_RETRY_BACKOFF_MS = [2 * 60_000, 8 * 60_000, 30 * 60_000, 120 * 60_000];
-export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
-
 // Flat brake for runs killed by a provider usage limit that the quota gate could not put a
 // resume time on. Those failures are excluded from the budget above on purpose (see
 // autoRunHoldOff) — one quota outage must not permanently retire a fleet — and
@@ -336,8 +344,6 @@ export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
 // backoff exists to stop. This is that missing brake, and it is flat rather than escalating
 // because a quota is not evidence the task is broken — it recovers on its own schedule, and
 // the only job here is to stop burning a session a minute while waiting for it.
-export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
-
 // How many due tasks one scheduled sweep will look at (see dispatchDueScheduledTasks). A bound on
 // the pass, not a quota on the schedule: what it does not take this minute it takes the next, in
 // the same order, because the tasks it left keep their `run_at` and stay due. It exists so that

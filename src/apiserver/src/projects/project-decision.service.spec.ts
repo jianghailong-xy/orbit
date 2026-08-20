@@ -7,6 +7,7 @@ import {
   hashDecisionInput,
   planProjectDecision,
 } from './project-decision.service';
+import { createProjectAuthorizationAudit } from './project-authorization.service';
 
 const PROJECT = '00000000-0000-7000-8000-000000001101';
 const OWNER = '00000000-0000-7000-8000-000000001102';
@@ -32,6 +33,7 @@ function input(overrides: Partial<ProjectDecisionInput['world']> = {}): ProjectD
       parentTaskId: null, assigneeAgentId: null, provider: null, model: null,
       autoRunWhenReady: true, dispatchHold: false, runAt: null, verifiesTaskId: null,
       dependsOnTaskIds: [], liveSessionIds: [], updatedAt: '2026-08-20T00:00:00.000Z',
+      failureCount: 0, lastFailureAt: null, failureAttributable: true, retryBackoffUntil: null,
     }],
     sessions: [], coordinatorSession: null, workspaces: [], runners: [], providers: [],
     actions: [], evidence: { branches: [], tests: [] },
@@ -39,7 +41,7 @@ function input(overrides: Partial<ProjectDecisionInput['world']> = {}): ProjectD
   };
   const evaluation = {
     epoch: Date.parse('2026-04-25T00:00:00.000Z') / 1_000,
-    dueTasks: { [uuidToBase62(TASK)]: { runAtDue: false } },
+    dueTasks: { [uuidToBase62(TASK)]: { runAtDue: true, retryBackoffExpired: true } },
   };
   const signals: ProjectDecisionInput['signals'] = [];
   return {
@@ -93,7 +95,7 @@ test('the same frozen input replays to a byte-identical deterministic outcome', 
     runStateAfter: 'PLANNING',
     decidedBy: 'ORCHESTRATOR',
     reason: 'planning requires coordinator decision',
-    actions: [], blockersOpened: [], blockersCleared: [],
+    actions: [], authorizations: [], blockersOpened: [], blockersCleared: [],
     nextWakeAt: '2026-04-25T00:01:00.000Z',
     nextWakeReason: 'planning requires coordinator decision',
     consumedEventIds: options.consumedEventIds,
@@ -105,6 +107,45 @@ test('tampered or stale input cannot be planned under its old hash', () => {
   const stale = input();
   stale.world.tasks[0].status = 'DONE';
   assert.throws(() => planProjectDecision(stale, { decisionId: DECISION }), /input hash mismatch/);
+});
+
+test('authorization input and output are replayable parts of the durable Decision outcome', () => {
+  const frozen = input();
+  const authorization = createProjectAuthorizationAudit({
+    v: 1,
+    sourceDecisionInputHash: frozen.decisionInputHash,
+    idempotencyKey: 'pc:v1:project:acceptance:1',
+    evaluatedAt: frozen.readAt,
+    action: 'RUN_PROJECT_ACCEPTANCE',
+    requiredPermission: 'COORDINATE',
+    project: {
+      id: frozen.world.project.id,
+      status: 'OPEN',
+      coordinatorEnabled: true,
+      automationPolicy: 'GUARDED_AUTO',
+      configRevision: frozen.world.project.configRevision,
+      inFlightTasks: 0,
+      maxConcurrentTasks: 3,
+      coordinatorSessionsStartedLast24h: 0,
+      sessionBudgetPerDay: null,
+    },
+    principal: {
+      agentId: 'coordinator', coordinatorAgentId: 'coordinator', memberRole: 'COORDINATOR',
+      agentEnabled: true, agentDeleted: false, canCoordinate: true,
+      canCreateTasks: true, canDelegate: true,
+    },
+    approval: { state: 'NONE', targetIdempotencyKey: null },
+  });
+  const planned = planProjectDecision(frozen, { decisionId: DECISION, authorizations: [authorization] });
+  assert.equal(planned.authorizations[0].result.decision, 'REQUIRE_APPROVAL');
+  assert.equal(planned.authorizations[0].result.reasonCode, 'POLICY_REQUIRES_APPROVAL');
+
+  const tampered = structuredClone(authorization);
+  tampered.result.decision = 'ALLOW';
+  assert.throws(
+    () => planProjectDecision(frozen, { decisionId: DECISION, authorizations: [tampered] }),
+    /does not replay/,
+  );
 });
 
 test('run state is a pure function of the frozen session and verification facts', () => {

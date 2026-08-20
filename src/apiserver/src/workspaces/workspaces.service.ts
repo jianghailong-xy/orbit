@@ -69,6 +69,10 @@ export class WorkspacesService {
         appendSystemPrompt: dto.appendSystemPrompt,
         systemPrompt: dto.systemPrompt,
         disallowedTools: (dto.disallowedTools ?? []) as Prisma.InputJsonValue,
+        providerFallbacks: (dto.providerFallbacks ?? []) as unknown as Prisma.InputJsonValue,
+        canCreateTasks: dto.canCreateTasks ?? false,
+        canDelegate: dto.canDelegate ?? false,
+        maxConcurrentTasks: dto.maxConcurrentTasks,
         effort: dto.effort,
         targetRunnerId: dto.targetRunnerId,
         targetLabels: dto.targetLabels ?? [],
@@ -235,9 +239,15 @@ export class WorkspacesService {
       autoInitGit: dto.autoInitGit,
       enableWorktree: dto.enableWorktree,
       enableOrchestration: dto.enableOrchestration,
+      canCreateTasks: dto.canCreateTasks,
+      canDelegate: dto.canDelegate,
+      maxConcurrentTasks: dto.maxConcurrentTasks,
       defaultMergeTarget: dto.defaultMergeTarget,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
+    if (dto.providerFallbacks) {
+      data.providerFallbacks = dto.providerFallbacks as unknown as Prisma.InputJsonValue;
+    }
     if (dto.env) data.env = dto.env as Prisma.InputJsonValue;
     if (dto.targetLabels) data.targetLabels = dto.targetLabels;
     // runnerId is a relation FK: connect to (re)bind, disconnect to detach.

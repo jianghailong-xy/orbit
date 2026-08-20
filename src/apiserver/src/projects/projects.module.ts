@@ -3,6 +3,7 @@ import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectDecisionService } from './project-decision.service';
+import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectsService } from './projects.service';
@@ -18,9 +19,16 @@ import { ProjectsService } from './projects.service';
     ProjectsService,
     ProjectEventsService,
     ProjectDecisionService,
+    ProjectAuthorizationService,
     ProjectReconcileService,
     ProjectAvailabilityReaperService,
   ],
-  exports: [ProjectsService, ProjectEventsService, ProjectDecisionService, ProjectReconcileService],
+  exports: [
+    ProjectsService,
+    ProjectEventsService,
+    ProjectDecisionService,
+    ProjectAuthorizationService,
+    ProjectReconcileService,
+  ],
 })
 export class ProjectsModule {}

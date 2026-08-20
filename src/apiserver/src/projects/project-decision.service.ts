@@ -1,8 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, uuidToBase62 } from '@orbit/shared';
+import { AgentProvider, USAGE_LIMIT_ERROR_MARKERS, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ProjectAuthorizationAudit,
+  replayProjectAuthorizationAudit,
+} from './project-authorization.service';
+import { retryBackoffUntil } from '../tasks/task-retry-policy';
 
 export const PROJECT_DECISION_INPUT_VERSION = 1 as const;
 
@@ -52,6 +57,10 @@ export interface ProjectDecisionInput {
       runnerId: string | null;
       model: string | null;
       effort: string | null;
+      providerFallbacks: Array<{ provider: string; model?: string | null }>;
+      canCreateTasks: boolean;
+      canDelegate: boolean;
+      maxConcurrentTasks: number | null;
     }>;
     tasks: Array<{
       id: string;
@@ -68,6 +77,10 @@ export interface ProjectDecisionInput {
       verifiesTaskId: string | null;
       dependsOnTaskIds: string[];
       liveSessionIds: string[];
+      failureCount: number;
+      lastFailureAt: string | null;
+      failureAttributable: boolean;
+      retryBackoffUntil: string | null;
       updatedAt: string;
     }>;
     sessions: Array<{
@@ -167,7 +180,7 @@ export interface ProjectDecisionInput {
   };
   evaluation: {
     epoch: number;
-    dueTasks: Record<string, { runAtDue: boolean }>;
+    dueTasks: Record<string, { runAtDue: boolean; retryBackoffExpired: boolean }>;
   };
   signals: Array<{ eventId: string; kind: 'user.manual_trigger'; dedupeKey: string }>;
 }
@@ -187,6 +200,7 @@ export interface ProjectDecisionOutcome {
     idempotencyKey: string;
     subject: { type: string; id?: string | null };
   }>;
+  authorizations: ProjectAuthorizationAudit[];
   blockersOpened: string[];
   blockersCleared: string[];
   nextWakeAt: string | null;
@@ -240,6 +254,10 @@ interface TeamRow {
   runnerId: string | null;
   model: string | null;
   effort: string | null;
+  providerFallbacks: unknown;
+  canCreateTasks: boolean;
+  canDelegate: boolean;
+  maxConcurrentTasks: number | null;
 }
 
 interface TaskRow {
@@ -421,7 +439,9 @@ export class ProjectDecisionService {
     const teamRows = await tx.$queryRaw<TeamRow[]>(Prisma.sql`
         SELECT pm."id" AS "projectMemberId", pm."agent_id" AS "agentId", pm."role"::text,
                w."enabled", w."deleted_at" AS "deletedAt", w."runner_id" AS "runnerId",
-               w."model", w."effort"
+               w."model", w."effort", w."provider_fallbacks" AS "providerFallbacks",
+               w."can_create_tasks" AS "canCreateTasks", w."can_delegate" AS "canDelegate",
+               w."max_concurrent_tasks" AS "maxConcurrentTasks"
           FROM "project_member" pm
           JOIN "project" p ON p."id" = pm."project_id"
           JOIN "workspace" w ON w."id" = pm."agent_id" AND w."owner_id" = p."owner_id"
@@ -565,29 +585,46 @@ export class ProjectDecisionService {
       list.push(toPublicId(row.id));
       liveSessions.set(row.taskId, list);
     }
+    const failedSessions = new Map<string, SessionRow[]>();
+    for (const row of sessionRows) {
+      if (!row.taskId || row.status !== 'FAILED' || isUsageLimitFailure(row.error)) continue;
+      const list = failedSessions.get(row.taskId) ?? [];
+      list.push(row);
+      failedSessions.set(row.taskId, list);
+    }
 
-    const tasks = taskRows.map((row) => ({
-      id: toPublicId(row.id),
-      title: row.title,
-      contentHash: sha256({
+    const tasks = taskRows.map((row) => {
+      const failures = [...(failedSessions.get(row.id) ?? [])].sort((a, b) =>
+        a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+      const lastFailure = failures.at(-1) ?? null;
+      const backoffUntil = retryBackoffUntil(failures.length, lastFailure?.createdAt ?? null);
+      return {
+        id: toPublicId(row.id),
         title: row.title,
-        description: row.description,
-        acceptanceCriteria: row.acceptanceCriteria,
-        labels: [...row.labels].sort(),
-      }),
-      status: row.status,
-      parentTaskId: toPublicIdOrNull(row.parentTaskId),
-      assigneeAgentId: toPublicIdOrNull(row.assigneeAgentId),
-      provider: row.provider,
-      model: row.model,
-      autoRunWhenReady: row.autoRunWhenReady,
-      dispatchHold: row.dispatchHold,
-      runAt: iso(row.runAt),
-      verifiesTaskId: toPublicIdOrNull(row.verifiesTaskId),
-      dependsOnTaskIds: dependencies.get(row.id) ?? [],
-      liveSessionIds: liveSessions.get(row.id) ?? [],
-      updatedAt: isoRequired(row.updatedAt),
-    }));
+        contentHash: sha256({
+          title: row.title,
+          description: row.description,
+          acceptanceCriteria: row.acceptanceCriteria,
+          labels: [...row.labels].sort(),
+        }),
+        status: row.status,
+        parentTaskId: toPublicIdOrNull(row.parentTaskId),
+        assigneeAgentId: toPublicIdOrNull(row.assigneeAgentId),
+        provider: row.provider,
+        model: row.model,
+        autoRunWhenReady: row.autoRunWhenReady,
+        dispatchHold: row.dispatchHold,
+        runAt: iso(row.runAt),
+        verifiesTaskId: toPublicIdOrNull(row.verifiesTaskId),
+        dependsOnTaskIds: dependencies.get(row.id) ?? [],
+        liveSessionIds: liveSessions.get(row.id) ?? [],
+        failureCount: failures.length,
+        lastFailureAt: iso(lastFailure?.createdAt ?? null),
+        failureAttributable: failures.every((failure) => Boolean(failure.error?.trim())),
+        retryBackoffUntil: iso(backoffUntil),
+        updatedAt: isoRequired(row.updatedAt),
+      };
+    });
 
     const sessions = sessionRows.map((row) => ({
       id: toPublicId(row.id),
@@ -688,6 +725,10 @@ export class ProjectDecisionService {
         runnerId: toPublicIdOrNull(row.runnerId),
         model: row.model,
         effort: row.effort,
+        providerFallbacks: parseProviderFallbacks(row.providerFallbacks),
+        canCreateTasks: row.canCreateTasks,
+        canDelegate: row.canDelegate,
+        maxConcurrentTasks: row.maxConcurrentTasks,
       })),
       tasks,
       sessions,
@@ -773,7 +814,11 @@ export class ProjectDecisionService {
       epoch,
       dueTasks: Object.fromEntries(tasks.map((task) => [
         task.id,
-        { runAtDue: task.runAt != null && Date.parse(task.runAt) <= epoch * 1_000 },
+        {
+          runAtDue: task.runAt == null || Date.parse(task.runAt) <= epoch * 1_000,
+          retryBackoffExpired: task.retryBackoffUntil == null
+            || Date.parse(task.retryBackoffUntil) <= epoch * 1_000,
+        },
       ])),
     };
     const signals = signalRows.map((row) => ({
@@ -868,7 +913,11 @@ export class ProjectDecisionService {
     const row = rows[0];
     if (!row) return null;
     const input = row.decisionInput as ProjectDecisionInput;
-    const stored = row.outcome as ProjectDecisionOutcome;
+    const rawStored = row.outcome as ProjectDecisionOutcome & { authorizations?: ProjectAuthorizationAudit[] };
+    const stored: ProjectDecisionOutcome = {
+      ...rawStored,
+      authorizations: rawStored.authorizations ?? [],
+    };
     const hashMatches = input.decisionInputHash === row.decisionInputHash
       && hashDecisionInput(input) === row.decisionInputHash;
     const replayed = planProjectDecision(input, {
@@ -876,6 +925,7 @@ export class ProjectDecisionService {
       decidedBy: row.decidedBy,
       consumedEventIds: stored.consumedEventIds,
       actions: stored.actions,
+      authorizations: stored.authorizations ?? [],
       blockersOpened: stored.blockersOpened,
       blockersCleared: stored.blockersCleared,
     });
@@ -922,12 +972,19 @@ export function planProjectDecision(
     decidedBy?: 'ORCHESTRATOR' | 'COORDINATOR_AGENT';
     consumedEventIds?: string[];
     actions?: ProjectDecisionOutcome['actions'];
+    authorizations?: ProjectAuthorizationAudit[];
     blockersOpened?: string[];
     blockersCleared?: string[];
   },
 ): ProjectDecisionOutcome {
   if (hashDecisionInput(input) !== input.decisionInputHash) {
     throw new Error('Project decision input hash mismatch');
+  }
+  for (const audit of options.authorizations ?? []) {
+    if (audit.request.sourceDecisionInputHash !== input.decisionInputHash
+        || !replayProjectAuthorizationAudit(audit)) {
+      throw new Error('Project authorization audit does not replay from this decision input');
+    }
   }
   const runStateAfter = runStateOf(input);
   const nextWakeAt = runStateAfter === 'SETTLED'
@@ -953,6 +1010,7 @@ export function planProjectDecision(
     decidedBy: options.decidedBy ?? 'ORCHESTRATOR',
     reason: nextWakeReason ?? 'Project is outside the active coordination loop',
     actions: options.actions ?? [],
+    authorizations: options.authorizations ?? [],
     blockersOpened: options.blockersOpened ?? [],
     blockersCleared: options.blockersCleared ?? [],
     nextWakeAt,
@@ -1010,6 +1068,7 @@ function assertDecisionReplay(input: ProjectDecisionInput, outcome: ProjectDecis
     decidedBy: outcome.decidedBy,
     consumedEventIds: outcome.consumedEventIds,
     actions: outcome.actions,
+    authorizations: outcome.authorizations,
     blockersOpened: outcome.blockersOpened,
     blockersCleared: outcome.blockersCleared,
   });
@@ -1079,6 +1138,24 @@ function providerModels(catalog: unknown, slug: string): unknown[] {
   const value = (catalog as Record<string, unknown>)[slug];
   if (value == null) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function parseProviderFallbacks(value: unknown): Array<{ provider: string; model?: string | null }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return [];
+    const item = candidate as Record<string, unknown>;
+    if (typeof item.provider !== 'string' || !item.provider.trim()) return [];
+    if (item.model != null && typeof item.model !== 'string') return [];
+    return [{ provider: item.provider, ...(item.model == null ? {} : { model: item.model }) }];
+  });
+}
+
+function isUsageLimitFailure(error: string | null): boolean {
+  if (!error) return false;
+  const normalized = error.toLocaleLowerCase();
+  return USAGE_LIMIT_ERROR_MARKERS.some((marker) =>
+    normalized.includes(marker.toLocaleLowerCase()));
 }
 
 function isLiveSession(status: string): boolean {

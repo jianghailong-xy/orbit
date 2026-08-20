@@ -487,6 +487,15 @@ model Workspace {
   appendSystemPrompt  String?   @map("append_system_prompt")
   systemPrompt        String?   @map("system_prompt")
   disallowedTools     Json      @default("[]") @map("disallowed_tools")
+  // Explicit, ordered Project-dispatch fallback. Empty is the safety default: Provider
+  // unavailability is reported, never silently resolved from whatever else the fleet can run.
+  providerFallbacks   Json      @default("[]") @map("provider_fallbacks")
+  // Project-scoped Coordinator permissions. These are human-authored Agent properties; runner
+  // registration/update endpoints deliberately cannot set them.
+  canCreateTasks      Boolean   @default(false) @map("can_create_tasks")
+  canDelegate         Boolean   @default(false) @map("can_delegate")
+  // Optional admission cap for this Agent's Project tasks. NULL preserves legacy behaviour.
+  maxConcurrentTasks  Int?      @map("max_concurrent_tasks")
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
