@@ -53,7 +53,13 @@ import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
-import { CreateSessionDto, SessionConfigDto, SessionResumeDto, SessionTurnDto } from './dto';
+import {
+  CreateSessionDto,
+  SessionConfigDto,
+  SessionInterruptDto,
+  SessionResumeDto,
+  SessionTurnDto,
+} from './dto';
 import {
   enqueueBeautifySession,
   MAX_KNOWN_TAGS_PROMPTED,
@@ -2974,10 +2980,38 @@ export class SessionsService {
     return { turnId: queued.turn.id, seq: queued.turn.seq, kind: queued.turn.kind };
   }
 
-  /** Abort the in-flight turn of a live session (the process stays alive). */
-  async interrupt(ownerId: string, id: string) {
+  /**
+   * Abort the in-flight turn of a live session (the process stays alive), optionally
+   * queuing what to do instead in the same transaction.
+   *
+   * Interrupt-and-send is one operation rather than two requests because interrupting
+   * DROPS the follow-ups queued behind the running turn — stopping means stop, and a
+   * queued message firing straight afterwards is the opposite of what was asked. A client
+   * that interrupted and then sent would therefore be racing its own delete, and whether
+   * the redirection survived would come down to which request the server saw first. Filed
+   * here, after the delete and under the same row lock, the follow-up cannot be its own
+   * casualty.
+   *
+   * The follow-up is filed as an ordinary `message`, deliberately not a steer: a steer is
+   * written INTO the turn that is running, which is exactly what someone who just pressed
+   * stop is not asking for. As a message it waits on the inbox gate (no executable turn in
+   * flight) until the interrupted turn's result lands, so the new frame reaches the engine
+   * only after the turn it replaces is actually over — and if the interrupt does not take,
+   * it waits for that turn to finish on its own rather than being folded into it. Accepting
+   * the request is not a claim that the engine stopped: only the engine's own answer settles
+   * that, and the runner reports it as an `interrupt` transcript event.
+   */
+  async interrupt(ownerId: string, id: string, dto?: SessionInterruptDto) {
+    const content = dto?.content ?? '';
+    const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
+    if (followUp) {
+      assertPromptSize(content, 'message');
+      if (!dto?.clientTurnId) {
+        throw new BadRequestException('clientTurnId is required when interrupting with a follow-up');
+      }
+    }
     await this.getLive(ownerId, id);
-    await this.prisma.$transaction(async (tx) => {
+    const queued = await this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -2987,11 +3021,47 @@ export class SessionsService {
       if (!SessionsService.LIVE.includes(session.status) || session.cancelRequestedAt) {
         throw new ConflictException('the session has ended');
       }
+      // The same bar createTurn holds a message to. Stopping a trashed session's work is
+      // still allowed — it is running, and stopping is the whole point — but nothing new
+      // may be queued onto it behind that.
+      if (followUp && session.deletedAt) {
+        throw new ConflictException('the session is in Trash; restore it before sending a message');
+      }
+      // Keyed on the interrupt rather than on the message, because only the interrupt is
+      // certainly still there: a later interrupt may have dropped the follow-up, and a
+      // retry must not then re-file it. A control turn is never deleted, so its presence
+      // is the durable record that this request already ran.
+      const interruptClientTurnId = followUp
+        ? SessionsService.interruptClientId(dto!.clientTurnId!)
+        : randomUUID();
+      if (followUp) {
+        const already = await tx.conversationTurn.findUnique({
+          where: {
+            sessionId_clientTurnId: { sessionId: id, clientTurnId: interruptClientTurnId },
+          },
+          select: { id: true },
+        });
+        if (already) {
+          // A retry: everything below already happened. Re-running it would delete the
+          // follow-up this request queued and file a second interrupt behind it.
+          const turn = await tx.conversationTurn.findUnique({
+            where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto!.clientTurnId! } },
+            select: { id: true, seq: true },
+          });
+          return { turn, wakeQueue: false };
+        }
+      }
+      // Checked before anything is dropped, so a request that cannot be honoured leaves
+      // the queue exactly as it found it.
+      const attachmentIds = followUp
+        ? await this.assertLinkableAttachments(ownerId, id, dto?.attachmentIds, tx)
+        : [];
       // Drop queued-but-undelivered follow-ups: interrupting means "stop", so they
       // should not fire after the current turn is aborted. Queued `!cmd` shell turns go
       // too — they sit in the same "waiting behind the running turn" queue (as the
       // executable count below already assumes), and leaving them behind ran a command
-      // the user had just told to stop.
+      // the user had just told to stop. A queued steer goes for the same reason and one
+      // more: it would be written into the very turn being stopped.
       await tx.conversationTurn.deleteMany({
         where: { sessionId: id, kind: { in: ['message', 'shell', 'steer'] }, status: 'PENDING' },
       });
@@ -3010,11 +3080,47 @@ export class SessionsService {
           throw new ConflictException('the next turn is already starting');
         }
       }
-      await this.insertTurnLocked(tx, id, { kind: 'interrupt', clientTurnId: randomUUID() });
+      await this.insertTurnLocked(tx, id, {
+        kind: 'interrupt',
+        clientTurnId: interruptClientTurnId,
+      });
+      if (!followUp) return { turn: null, wakeQueue: false };
+      // A claim can race the lazy first-turn seed, exactly as in createTurn: under this
+      // same lock, make sure an unestablished runtime cannot lose its opening prompt.
+      if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
+      const turn = await this.insertTurnLocked(tx, id, {
+        kind: 'message',
+        content,
+        clientTurnId: dto!.clientTurnId!,
+      });
+      await this.linkAttachments(turn.id, attachmentIds, tx);
+      const nextStatus = statusAfterTurnEnqueued(session.status);
+      await tx.session.update({
+        where: { id },
+        data: {
+          status: nextStatus,
+          lastTurnAt: new Date(),
+          // The person took over: an auto-retry waiting on this session must not fire a
+          // second, unasked-for turn behind the one they just redirected to.
+          retryAt: null,
+        },
+      });
+      return { turn, wakeQueue: nextStatus === RunStatus.PENDING };
     });
+    // The inbox is woken unconditionally: the interrupt turn is what it is waiting for, and
+    // it is deliverable the moment this commits, whatever the follow-up's status implies.
+    if (queued.wakeQueue) this.queue.notifySessionQueued();
     this.realtime.notifyInbox(id);
     this.realtime.publishQueuedTurnsChanged(id);
-    return { ok: true };
+    return queued.turn
+      ? { ok: true as const, turnId: queued.turn.id, seq: queued.turn.seq }
+      : { ok: true as const };
+  }
+
+  /** The clientTurnId the interrupt half of an interrupt-and-send is filed under, derived
+   *  from the follow-up's so one key makes the whole operation idempotent. */
+  private static interruptClientId(clientTurnId: string): string {
+    return `interrupt-${clientTurnId}`;
   }
 
   /** The session's still-queued user turns (PENDING — accepted but not yet picked

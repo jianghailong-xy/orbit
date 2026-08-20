@@ -874,6 +874,43 @@ export interface RunTurnRequest {
 }
 
 /**
+ * Browser → control plane: stop the turn a live session is running, and — when a
+ * follow-up is included — queue what to do instead, in the same transaction.
+ *
+ * The two halves are one request because they are one decision. Interrupting drops the
+ * follow-ups queued behind the running turn (stopping means stop), so a client that
+ * interrupted and then sent would be racing its own delete: whether the redirection
+ * survived would depend on which request the server saw first. Sent together, the message
+ * is filed after that delete and cannot be its casualty.
+ *
+ * It is filed as an ordinary message, never a steer. A steer is written INTO the turn that
+ * is running — the opposite of what someone who just pressed stop is asking for — so the
+ * follow-up waits behind the interrupted turn's result and is delivered as the next turn.
+ * That ordering is also what happens if the interrupt does not take: the message is never
+ * folded into the turn it was meant to replace, it simply waits for that turn to end.
+ */
+export interface RunInterruptRequest {
+  /** Client-supplied idempotency key (UUID) for the follow-up message; also keys the
+   *  interrupt itself, so a retried request re-files neither. Required with `content`. */
+  clientTurnId?: string;
+  /** What to send once the current turn has stopped. Omitted → a plain interrupt. */
+  content?: string;
+  /** Ids of pre-uploaded attachments (`POST /api/attachments`) for the follow-up. */
+  attachmentIds?: string[];
+}
+
+/** Control plane → browser: the interrupt was accepted, and the turn the follow-up (if
+ *  any) was queued as. The runner reports whether the engine actually stopped, as an
+ *  `interrupt` transcript event — accepting the request is not the same as the turn
+ *  having stopped, and only the engine's own answer settles that. */
+export interface RunInterruptResponse {
+  ok: true;
+  /** Present only when the request carried a follow-up. */
+  turnId?: string;
+  seq?: number;
+}
+
+/**
  * Control plane → runner: the next turn to feed the live `claude` process, returned
  * by the per-session inbox long-poll. `turnId === ''` means "nothing available"
  * (mirrors the empty-id convention of the session claim poll).

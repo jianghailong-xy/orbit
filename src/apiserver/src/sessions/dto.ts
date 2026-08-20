@@ -47,6 +47,16 @@ export interface SessionTurnDto {
   attachmentIds?: string[];
 }
 
+/** Stop the running turn, and — when a follow-up rides along — queue what to do instead,
+ *  in the same transaction. See RunInterruptRequest for why the two travel together. */
+export interface SessionInterruptDto {
+  /** Idempotency key (UUID) for the follow-up; required whenever one is present. */
+  clientTurnId?: string;
+  /** What to send once the current turn has stopped. Omitted → a plain interrupt. */
+  content?: string;
+  attachmentIds?: string[];
+}
+
 export interface SessionResumeDto extends SessionTurnDto {
   /** Per-session overrides re-applied on resume (the runner re-spawns the runtime, so a
    *  new mode/model/effort takes effect). Omitted fields keep the session's prior value. */

@@ -81,9 +81,17 @@ type claudeRuntime struct {
 	// caller that holds a token is holding a place nothing else can take.
 	slots chan struct{}
 	wrote chan struct{} // closed once the writer goroutine has finished
+	// ctrlSeq numbers this process's control requests. Paired with the generation it
+	// makes a request id that is unique for the life of the runner (controlRequestID).
+	ctrlSeq atomic.Uint64
 
-	mu       sync.Mutex
-	phase    runtimePhase
+	mu    sync.Mutex
+	phase runtimePhase
+	// control is every control_request sent to this process and not yet answered, keyed
+	// by the request id its answer will carry. One table per process is what makes an
+	// answer from a torn-down generation unroutable rather than merely unlikely
+	// (claude_control.go).
+	control  map[string]*controlWaiter
 	closed   bool
 	writeErr error
 }
@@ -274,8 +282,13 @@ func (r *claudeRuntime) send(frame string) error {
 func (r *claudeRuntime) beginTurn() { r.setPhase(phaseWaiting) }
 func (r *claudeRuntime) endTurn()   { r.setPhase(phaseIdle) }
 
-// markTerminal records that the process is gone: stdout hit EOF, or the child exited.
-func (r *claudeRuntime) markTerminal() { r.setPhase(phaseTerminal) }
+// markTerminal records that the process is gone: stdout hit EOF, or the child exited. A
+// process that has exited answers nothing, so every control request still outstanding is
+// failed here rather than left to time out on a reply that cannot come.
+func (r *claudeRuntime) markTerminal() {
+	r.setPhase(phaseTerminal)
+	r.failPendingControl(errRuntimeGone)
+}
 
 func (r *claudeRuntime) setPhase(p runtimePhase) {
 	r.mu.Lock()
@@ -345,8 +358,11 @@ func (r *claudeRuntime) failed() error {
 
 func (r *claudeRuntime) recordWriteErr(err error) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.writeErr == nil {
 		r.writeErr = err
 	}
+	r.mu.Unlock()
+	// Nothing more will reach this CLI, so nothing it was already asked can still be
+	// answered: fail what is outstanding rather than letting it sit out its deadline.
+	r.failPendingControl(err)
 }

@@ -484,8 +484,32 @@ export const updateSessionConfig = (
 export const renameSession = (sessionId: string, title: string) =>
   api(`/sessions/${sessionId}`, { method: 'PATCH', body: { title } });
 
-export const interruptSession = (sessionId: string) =>
-  api(`/sessions/${sessionId}/interrupt`, { method: 'POST' });
+/**
+ * Stop the turn the session is running. With `followUp`, what to do instead is queued in
+ * the SAME request — one transaction server-side, not a stop followed by a send.
+ *
+ * The two cannot be two requests: interrupting drops the follow-ups queued behind the
+ * running turn, so a send that arrives just before the interrupt is deleted by it, and one
+ * that arrives just after is filed as a steer — written into the very turn being stopped.
+ * Which of those happened would come down to network ordering. Sent together, the message
+ * is filed after the drop and delivered as the next turn.
+ */
+export const interruptSession = (
+  sessionId: string,
+  followUp?: { content: string; attachmentIds?: string[] },
+) =>
+  api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
+    method: 'POST',
+    ...(followUp
+      ? {
+          body: {
+            clientTurnId: uuid(),
+            content: followUp.content,
+            ...(followUp.attachmentIds?.length ? { attachmentIds: followUp.attachmentIds } : {}),
+          },
+        }
+      : {}),
+  });
 
 export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end`, { method: 'POST' });
 

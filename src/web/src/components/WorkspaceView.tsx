@@ -633,6 +633,27 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
     : { text: bgRunningLabel(s.runningBgCount), kind };
 };
 
+/**
+ * Whether the composer offers "stop & send" alongside Send.
+ *
+ * Only while a turn is actually generating: with the engine idle, Send already means "do
+ * this next" and a stop would be asking to interrupt nothing. Not while replying to a
+ * blocking question either — that text answers the question, and there is no turn of the
+ * user's own to redirect. `canSend` carries the rest (something typed, uploads finished,
+ * the runner online, the session sendable), so this offers nothing Send itself would refuse.
+ */
+export const offersInterruptAndSend = (opts: {
+  running: boolean;
+  canSend: boolean;
+  replying: boolean;
+  busy: boolean;
+  /** The draft is an ordinary message. A `!cmd` runs on the runner beside the engine and a
+   *  local `/command` never leaves the browser: neither is something the engine has to be
+   *  stopped for, and this path can only send message text. */
+  ordinaryDraft: boolean;
+}): boolean =>
+  opts.running && opts.canSend && opts.ordinaryDraft && !opts.replying && !opts.busy;
+
 // The line shown under a session title. For a LIVE (openable) session that's working we
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
@@ -2803,6 +2824,31 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     onError: (e: Error) => message.error(e.message),
   });
+  // Stop this turn and do THIS instead: one request, so the message cannot be deleted by
+  // the interrupt it travels with, nor folded into the turn it is replacing (see
+  // interruptSession). The server queues it behind the interrupted turn; it shows as a
+  // queued bubble until that turn ends and the runner picks it up.
+  const interruptAndSend = useMutation({
+    mutationFn: async (vars: { id: string; content: string; images: ComposerImage[] }) => {
+      const attachmentIds = vars.images.map((im) => im.id).filter((x): x is string => !!x);
+      const res = await interruptSession(vars.id, { content: vars.content, attachmentIds });
+      return { turnId: res.turnId, content: vars.content };
+    },
+    onSuccess: ({ turnId, content }, vars) => {
+      pushHistory(vars.id, content);
+      setText('');
+      setComposerRefs({});
+      setImages([]);
+      setHistIdx(-1);
+      // Whatever was queued behind the running turn is gone — the interrupt dropped it —
+      // and this message is what stands in the queue now.
+      setQueued(turnId ? [{ turnId, content }] : []);
+      qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    // The composer keeps the text on failure: nothing was sent, so there is nothing to
+    // retype.
+    onError: (e: Error) => message.error(e.message),
+  });
   const control = useMutation({
     mutationFn: (id: string) => interruptSession(id),
     onSuccess: () => {
@@ -3535,6 +3581,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     !text.trim() &&
     readyImages.length === 0 &&
     !replyTo;
+  // With something typed while a turn generates, Send steers: the message joins the turn
+  // that is running. "Stop & send" is the other intent people have at that moment — stop
+  // this and do THIS instead — and it needs its own control, because there is no way to
+  // express it by typing. Offered beside Send, never instead of it.
+  const showInterruptAndSend = offersInterruptAndSend({
+    running: !!selected && sessionRunStatusOf(selectedSession ?? selected) === 'RUNNING',
+    canSend: !!canSend,
+    ordinaryDraft: !text.trim().startsWith('!') && !localSlashReady,
+    replying: !!replyTo,
+    busy: interruptAndSend.isPending,
+  });
 
   // ── `/` command, skill, and local command autocomplete ─────────────────────
   // The runner reports its on-disk slash commands/skills via heartbeat (runner.commands
@@ -5417,16 +5474,35 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             </Tooltip>
           ) : (
-            <Tooltip title={sameSessionSendBlocked ? sameSessionSendBlockedCopy : ''}>
-              <Button
-                type="primary"
-                icon={<ArrowUpOutlined />}
-                disabled={!canSend}
-                loading={send.isPending}
-                onClick={onSend}
-                aria-label="Send"
-              />
-            </Tooltip>
+            <>
+              {showInterruptAndSend && (
+                <Tooltip title="Stop the current turn and send this instead">
+                  <Button
+                    icon={<BorderOutlined />}
+                    loading={interruptAndSend.isPending}
+                    onClick={() =>
+                      selected &&
+                      interruptAndSend.mutate({
+                        id: selected.id,
+                        content: materializeReferences(text.trim(), composerRefs),
+                        images: readyImages,
+                      })
+                    }
+                    aria-label="Stop and send"
+                  />
+                </Tooltip>
+              )}
+              <Tooltip title={sameSessionSendBlocked ? sameSessionSendBlockedCopy : ''}>
+                <Button
+                  type="primary"
+                  icon={<ArrowUpOutlined />}
+                  disabled={!canSend}
+                  loading={send.isPending}
+                  onClick={onSend}
+                  aria-label="Send"
+                />
+              </Tooltip>
+            </>
           )}
         </div>
         <div className="composer-pills">

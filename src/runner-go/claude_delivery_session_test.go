@@ -141,6 +141,9 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, u
 			return RunInboxResponse{}, false
 		}
 		next := queued[0]
+		if next.after != "" && run.turnResult(next.after) == nil {
+			return RunInboxResponse{}, false // it is not this turn's moment yet
+		}
 		switch {
 		case next.ungated:
 		case next.turn.Kind == "steer":
@@ -237,6 +240,10 @@ type scriptedTurn struct {
 	// one thing the rule cannot produce: the gap between the server judging a steer
 	// deliverable and the runner reading it, in which the turn it was aimed at ended.
 	ungated bool
+	// after holds the turn back until the named turn has settled. The rule above says
+	// what the server WILL hand over; this says when the runner gets round to reading it,
+	// which for a control turn aimed at a turn that has just ended is the whole question.
+	after string
 }
 
 func messageTurn(id, text string) scriptedTurn {

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -90,12 +89,6 @@ const (
 	providerKimi     = "kimi"
 	providerOpenCode = "opencode"
 )
-
-var ctrlReqCounter int64
-
-func nextReqID() string {
-	return "req-" + strconv.FormatInt(atomic.AddInt64(&ctrlReqCounter, 1), 10)
-}
 
 // runInteractiveSession drives a long-lived `claude` process for an interactive
 // session (Route B): it pulls user turns from the per-run inbox, feeds them over
@@ -1487,10 +1480,44 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				inflightMu.Unlock()
 				setTurn("")
 			case "interrupt":
-				if err := rt.send(controlRequestFrame(nextReqID(), "interrupt")); err != nil {
+				// Stopping a turn is a request with an answer, not a shout into the pipe:
+				// the CLI is asked over the control protocol and has to confirm, and the
+				// process — with its conversation, its stdin and its place in the session —
+				// is left standing either way. Ending the session is the separate operation
+				// that takes the process away (`end`, below), and the drain's own interrupt
+				// marker names its reason, so the three are told apart in the transcript.
+				//
+				// Asked unconditionally, without first checking whether a turn of OURS is in
+				// flight. The engine also runs turns nobody sent it — a background task
+				// reporting in, a scheduled wake-up — and those are exactly the ones somebody
+				// reaches for stop over. Gating on the runtime's own phase would leave those
+				// unstoppable, with the button doing nothing and saying nothing.
+				//
+				// Queued on the poller's own goroutine, so the request keeps its place in
+				// the order the session intended; waited on off to the side, because this
+				// same goroutine is how `end` and the next interrupt arrive.
+				w, err := rt.requestControl(ctrlInterrupt)
+				if err != nil {
 					logln("interrupting", rt.String(), "failed for", job.SessionID+":", err)
+					emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
+					continue
 				}
-				emit(evInterrupt, map[string]interface{}{})
+				go func(w *controlWaiter) {
+					err := rt.awaitControl(procCtx, w, claudeInterruptTimeout)
+					switch {
+					case err == nil:
+						// The marker goes up only now. Emitting it on the way out would say
+						// the turn was stopped before anything had agreed to stop it — which
+						// is precisely the claim an unconfirmed interrupt cannot make.
+						emit(evInterrupt, map[string]interface{}{"requestId": w.id})
+					case procCtx.Err() != nil:
+						// The process is going away; its teardown owns that account.
+						logln("interrupt", w.id, "for", job.SessionID, "abandoned:", err)
+					default:
+						logln("interrupt", w.id, "for", job.SessionID, "failed:", err)
+						emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
+					}
+				}(w)
 			case "reload":
 				// Model / permission-mode / effort / provider changed on this idle session.
 				// --model, --permission-mode and --effort are spawn flags, so we apply
@@ -1575,6 +1602,19 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			continue
 		}
 		sawOutput.Store(true)
+		// A control_response is the answer to something Orbit asked, not part of the
+		// conversation: route it to the request waiting for it and read the next line. An
+		// id no request here is waiting for is dropped — a straggler from a process that
+		// is already gone, or a second answer to a request that has already been settled
+		// (claude_control.go).
+		if resp, ok := parseControlResponse(msg); ok {
+			if !rt.resolveControl(resp) {
+				logln("dropping an unmatched control_response", resp.RequestID,
+					fmt.Sprintf("(generation %d)", controlIDGeneration(resp.RequestID)),
+					"for", job.SessionID, "on", rt.String())
+			}
+			continue
+		}
 		handleMessage(msg, emit, bg)
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
