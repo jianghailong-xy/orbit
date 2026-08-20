@@ -1400,14 +1400,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				case <-procCtx.Done():
 					return
 				}
-				line, _ := json.Marshal(map[string]interface{}{
-					"type": "user",
-					"message": map[string]interface{}{
-						"role":    "user",
-						"content": content,
-					},
-				})
-				if err := writeStdin(string(line) + "\n"); err != nil {
+				if err := writeStdin(userFrame(job.SessionUUID, content)); err != nil {
 					logln("stdin write failed for", job.SessionID+":", err)
 					return
 				}
@@ -1457,12 +1450,7 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				inflightMu.Unlock()
 				setTurn("")
 			case "interrupt":
-				ctrl, _ := json.Marshal(map[string]interface{}{
-					"type":       "control_request",
-					"request_id": nextReqID(),
-					"request":    map[string]interface{}{"subtype": "interrupt"},
-				})
-				_ = writeStdin(string(ctrl) + "\n")
+				_ = writeStdin(controlRequestFrame(nextReqID(), "interrupt"))
 				emit(evInterrupt, map[string]interface{}{})
 			case "reload":
 				// Model / permission-mode / effort / provider changed on this idle session.
