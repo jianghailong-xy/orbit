@@ -37,6 +37,7 @@ type sessionProcessArgs struct {
 	execDir           string
 	scratchDir        string
 	emit              emitFn
+	emitFor           emitTurnFn
 	setTurn           func(string)
 	firstSpawn        bool
 	bg                *bgTailer
@@ -58,7 +59,7 @@ var providerRuntimes = map[string]providerRuntime{
 		transport: transportStreamJSON,
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runClaudeSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
-				p.execDir, p.scratchDir, p.emit, p.setTurn, p.firstSpawn, p.bg,
+				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
 				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
 	},

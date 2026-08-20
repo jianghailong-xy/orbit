@@ -41,7 +41,11 @@ const (
 // message is addressed to; receipt is the writer's own answer for it, and the only account
 // of what reached the CLI that survives a process going away mid-report.
 type messageDelivery struct {
-	turnID  string
+	turnID string
+	// steer: this message was written into a turn that was already running, so it has no
+	// `result` of its own. Its turn settles on the engine's echo instead — the one moment
+	// that says the message became part of the conversation it was aimed at.
+	steer   bool
 	receipt *writeReceipt
 	state   deliveryState
 }
@@ -66,8 +70,8 @@ type deliveryLedger struct {
 // fetches every attachment over the network first, so "pulled" and "handed over" are
 // minutes apart on a turn carrying a large image, and in between nobody has promised the
 // message anything.
-func newMessageDelivery(turnID string) *messageDelivery {
-	return &messageDelivery{turnID: turnID, state: deliveryPending}
+func newMessageDelivery(turnID string, steer bool) *messageDelivery {
+	return &messageDelivery{turnID: turnID, steer: steer, state: deliveryPending}
 }
 
 // accept records that the runtime has taken responsibility for delivering the message,
@@ -197,6 +201,39 @@ func failUndeliveredTurn(turnID string, cause error, job *ClaimedSession, comple
 	}
 }
 
+// subtypeSteer marks a completion that settles one mid-turn message rather than the
+// session's own turn. The control plane does not take the runner's word for it — it reads
+// the turn's kind off the row — but the runner needs to tell them apart locally, because a
+// failed turn is what makes it seal the session's event stream (turnCompletionEndsSession).
+const subtypeSteer = "steer"
+
+// errNoTurnToSteer: a steer reached the runner with nothing running to fold it into. The
+// server only hands one over while a turn holds the slot, so this is the turn ending in
+// the gap between that decision and this delivery — and writing it anyway would open a
+// turn of its own that no queued turn is waiting to answer.
+var errNoTurnToSteer = errors.New("no turn was running to steer; send it again")
+
+// settleSteerTurn closes a steer's own conversation turn. Success or failure, it settles
+// nothing else: the turn it was written into is still running, and its result — the slot,
+// the billing, the session's status — belongs to that turn. A steer that failed says so
+// through its user_delivery event, which is where a person can act on it, rather than by
+// failing a session that is still working.
+func settleSteerTurn(turnID string, cause error, job *ClaimedSession, completeTurn turnCompleter) {
+	req := TurnCompleteRequest{
+		TurnID:           turnID,
+		Status:           stSucceeded,
+		Subtype:          subtypeSteer,
+		RuntimeSessionID: currentRuntimeSessionID(job),
+	}
+	if cause != nil {
+		req.Status = stFailed
+		req.Result = "steer not delivered to the engine: " + cause.Error()
+	}
+	if err := completeTurn(req); err != nil {
+		logln("steer turn-complete failed for", job.SessionID+":", err)
+	}
+}
+
 // The two things a process on its way out can owe, and what each one means for whoever
 // sent the message.
 var (
@@ -223,7 +260,7 @@ func settleUndeliveredMessages(l *deliveryLedger, job *ClaimedSession, completeT
 	// and ending it seals event admission — so a report filed after the first settlement
 	// would be dropped, and the messages after the first would go unaccounted for in the
 	// one place a person reads.
-	var unconfirmed []string
+	var unconfirmed []*messageDelivery
 	for _, d := range l.outstanding() {
 		// The writer's own receipt, not the ledger's state: by the time a process is being
 		// accounted for, the writer has answered for every frame it was given, while the
@@ -239,12 +276,22 @@ func settleUndeliveredMessages(l *deliveryLedger, job *ClaimedSession, completeT
 				cause = writeErr
 			}
 			report(d.turnID, deliveryFailed, cause.Error(), true)
+			// A steer is settled even when it never left the runner: it is not re-delivered
+			// (the server never re-leases one), so leaving its turn unanswered would leave a
+			// row in flight that nothing will ever come back for.
+			if d.steer {
+				settleSteerTurn(d.turnID, cause, job, completeTurn)
+			}
 			continue
 		}
 		report(d.turnID, deliveryFailed, errDeliveryUnconfirmed.Error(), false)
-		unconfirmed = append(unconfirmed, d.turnID)
+		unconfirmed = append(unconfirmed, d)
 	}
-	for _, turnID := range unconfirmed {
-		failUndeliveredTurn(turnID, errDeliveryUnconfirmed, job, completeTurn)
+	for _, d := range unconfirmed {
+		if d.steer {
+			settleSteerTurn(d.turnID, errDeliveryUnconfirmed, job, completeTurn)
+			continue
+		}
+		failUndeliveredTurn(d.turnID, errDeliveryUnconfirmed, job, completeTurn)
 	}
 }

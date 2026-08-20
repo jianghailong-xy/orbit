@@ -840,7 +840,14 @@ export interface ApprovalDecisionResponse {
 // recompute the live worktree diff and push it back, so an opened file's diff reflects
 // the current worktree even when the stored snapshot lagged (the heartbeat refreshes the
 // file list but not the patch text — see SessionDiffResultRequest).
-export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload' | 'shell' | 'diff';
+// 'steer' is a user message written into the turn that is ALREADY running, instead of
+// queued behind its result. The kind is derived by the server, never sent by a client:
+// createTurn files a message as a steer exactly when an executable turn is in flight, so
+// every entry point (web, native, MCP, CLI) gets the behaviour without deciding anything.
+// It is deliberately its own kind rather than a relaxation of the message gate — a steer
+// neither occupies the single in-flight slot nor waits for it, and it settles its own turn
+// on the engine's echo rather than on a `result`, which belongs to the turn it joined.
+export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload' | 'shell' | 'diff' | 'steer';
 
 /** An attachment as handed to the runner on the inbox: the id to fetch its bytes with
  *  (runner-scoped `GET /runner/sessions/:id/attachments/:attId`), its MIME type, and the

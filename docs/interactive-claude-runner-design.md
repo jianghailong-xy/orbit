@@ -78,10 +78,41 @@ Residual risk: a turn re-served after lease expiry while the runner *did* consum
 
 - **Messages are strictly serialized per turn boundary.** `POST /tasks/:id/turns` is **rejected with 409** when the run is `RUNNING` (a turn is mid-flight), accepted only in `AWAITING_INPUT`. This removes the "feed a second user message into a busy process" undefined-behavior window (claude's mid-turn stdin semantics are unverified — Phase 0 gate).
   - Residual UX: a user who wants to queue-while-running gets a 409 + "a turn is in progress." If queue-while-running is later desired, the runner must gate the next pull on observing its own `result`/`AWAITING_INPUT` transition.
+  - **Superseded for `claude` by the steer lane below.** A send during `RUNNING` is no longer rejected: it is accepted and queued, and — once the mid-turn stdin semantics were settled (§3a) — written into the turn already running rather than behind it. Executable turns are still serialized; steering is a separate lane, not a relaxation of that one.
 - **`interrupt` and `end` are a priority lane.** The inbox dequeue returns `kind IN ('interrupt','end')` **before** any `message`, so Stop preempts queued sends. Interrupt is processed even while `RUNNING`.
 - **Interrupt while `AWAITING_INPUT` is a no-op** (nothing to interrupt) — rejected server-side rather than leaking into the next turn.
 - **Per-run pending cap:** `/turns` rejects with 429 if pending+in-flight message turns exceed `K` (e.g. 1, since we serialize) — backpressure against rapid sends / key-repeat.
 - **Idempotency key:** `RunTurnRequest.clientTurnId` (client UUID); `@@unique([runId, clientTurnId])` makes a double-click / cross-tab duplicate a no-op returning the existing turn.
+
+### 3a. The steer lane — a message written INTO the running turn
+
+Phase 0 left mid-turn stdin as an open question. It is now settled: a `user` frame written to a
+`claude` that is inside a tool call is queued by the CLI and folded into the turn already running at
+its next tool boundary, under the same `result`. That makes "send while it works" a delivery
+question rather than a scheduling one, and the answer is a kind of its own.
+
+- **`ConversationTurnKind.steer`.** Same `conversation_turn` row, same lease, same generation, same
+  `clientTurnId` — no second state machine, and no migration (`kind` is a plain string column).
+- **The server decides the kind, not the client.** `createTurn` files a message as a `steer` exactly
+  when an engine turn holds a live lease, under the Session row lock the inbox dequeues under. Every
+  entry point (web, native, MCP, CLI) therefore steers without knowing the word. A `!cmd` shell turn
+  is not an engine turn — the engine is idle beside it — so a message sent during one keeps queuing.
+- **Mirror-image gates.** A `message`/`shell` is deliverable only when `NOT EXISTS` an in-flight
+  executable turn; a `steer` only when `EXISTS` an in-flight **message** with a live lease. A steer
+  is in neither `NOT EXISTS` subquery, so it never becomes the reason a queued message waits.
+- **Delivered once.** A steer has no expired-lease arm: re-writing a message the engine may already
+  have acted on is the one thing mid-turn delivery must not do. A steer still `PENDING` when its turn
+  ends is re-filed as an ordinary `message` by `turn-complete`, which is what it becomes once there
+  is nothing left to steer.
+- **It settles only itself.** A steer produces no `result` of its own — the result belongs to the
+  turn it joined — so it never enters the runner's ack FIFO, never consumes the active-turn permit,
+  and never moves the event-attribution cursor (its own `user` event is filed against its own turn
+  by `emitFor`). `turn-complete` acks the steer's row and touches nothing else about the session: in
+  particular a steer that failed to reach the engine does **not** fail the session, it reports the
+  failure as a `user_delivery` event.
+- **Its answer is the engine's echo.** `--replay-user-messages` is what says the message became part
+  of the conversation; the runner settles the steer's turn on that acknowledgement (§ delivery
+  receipts), and on a process going away it settles it rather than re-delivering it.
 
 ---
 

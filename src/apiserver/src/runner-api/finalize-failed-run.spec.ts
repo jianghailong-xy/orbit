@@ -41,7 +41,9 @@ function makeController(current: { numTurns: number; retryAt?: Date | null; prov
         return { count: 1 };
       },
     },
-    conversationTurn: { updateMany: async () => ({ count: 1 }) },
+    conversationTurn: { updateMany: async () => ({ count: 1 }),
+      findFirst: async () => null,
+    },
     // Only read when the terminal message is a quota refusal; this runner reports no snapshot,
     // so the reset moment has to come from the message itself.
     runner: { findUnique: async () => ({ planUsage: null }) },

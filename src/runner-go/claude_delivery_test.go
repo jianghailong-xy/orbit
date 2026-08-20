@@ -204,7 +204,7 @@ func TestWriteSlotCommitsAtMostOneFrame(t *testing.T) {
 // The whole progression, in the order the states are meant to occur.
 func TestDeliveryLedgerWalksAMessageFromPendingToAcknowledged(t *testing.T) {
 	l := &deliveryLedger{}
-	d := newMessageDelivery("turn-1")
+	d := newMessageDelivery("turn-1", false)
 	if d.state != deliveryPending {
 		t.Errorf("a pulled message starts at %q, want %q", d.state, deliveryPending)
 	}
@@ -235,7 +235,7 @@ func TestDeliveryLedgerWalksAMessageFromPendingToAcknowledged(t *testing.T) {
 // not tell them apart at all.
 func TestDeliveryLedgerCorrelatesIdenticalMessagesByOrder(t *testing.T) {
 	l := &deliveryLedger{}
-	first, second := newMessageDelivery("turn-1"), newMessageDelivery("turn-2")
+	first, second := newMessageDelivery("turn-1", false), newMessageDelivery("turn-2", false)
 	l.accept(first, newWriteReceipt())
 	l.accept(second, newWriteReceipt())
 
@@ -251,7 +251,7 @@ func TestDeliveryLedgerCorrelatesIdenticalMessagesByOrder(t *testing.T) {
 // line up with the messages that are actually on their way.
 func TestDeliveryLedgerKeepsCorrelationAfterAFailure(t *testing.T) {
 	l := &deliveryLedger{}
-	first, second := newMessageDelivery("turn-1"), newMessageDelivery("turn-2")
+	first, second := newMessageDelivery("turn-1", false), newMessageDelivery("turn-2", false)
 	l.accept(first, newWriteReceipt())
 	l.accept(second, newWriteReceipt())
 	if !l.fail(first) {
@@ -273,7 +273,7 @@ func TestDeliveryLedgerAnswersNothingWhenNoMessageIsOutstanding(t *testing.T) {
 	if _, ok := l.acknowledgeNext(); ok {
 		t.Error("a replay answered a message that was never sent")
 	}
-	d := newMessageDelivery("turn-1")
+	d := newMessageDelivery("turn-1", false)
 	l.accept(d, newWriteReceipt())
 	if got, ok := l.acknowledgeNext(); !ok || got != d {
 		t.Error("the message sent after a stray replay was not the one the next replay answered")
@@ -352,7 +352,7 @@ func recordingCompleter(into *[]settledTurn) turnCompleter {
 // instead of standing as a message that looks delivered.
 func TestSettleUndeliveredLeavesANeverWrittenMessageRetryable(t *testing.T) {
 	l := &deliveryLedger{}
-	d := newMessageDelivery("turn-1")
+	d := newMessageDelivery("turn-1", false)
 	l.accept(d, newWriteReceipt()) // still queued: the writer never got to it
 	var settled []settledTurn
 	var reports []reportedDelivery
@@ -374,7 +374,7 @@ func TestSettleUndeliveredLeavesANeverWrittenMessageRetryable(t *testing.T) {
 // so the turn is settled and the decision left to a person.
 func TestSettleUndeliveredDoesNotRetryAnUnconfirmedMessage(t *testing.T) {
 	l := &deliveryLedger{}
-	acked, unconfirmed := newMessageDelivery("turn-1"), newMessageDelivery("turn-2")
+	acked, unconfirmed := newMessageDelivery("turn-1", false), newMessageDelivery("turn-2", false)
 	l.accept(acked, writtenReceipt())
 	l.accept(unconfirmed, writtenReceipt())
 	l.acknowledgeNext() // turn-1 came back and is part of the conversation
@@ -400,7 +400,7 @@ func TestSettleUndeliveredDoesNotRetryAnUnconfirmedMessage(t *testing.T) {
 func TestSettleUndeliveredReportsEveryMessageBeforeSettlingAnyTurn(t *testing.T) {
 	l := &deliveryLedger{}
 	for _, turnID := range []string{"turn-1", "turn-2"} {
-		l.accept(newMessageDelivery(turnID), writtenReceipt())
+		l.accept(newMessageDelivery(turnID, false), writtenReceipt())
 	}
 	var trace []string
 	settleUndeliveredMessages(l, &ClaimedSession{},
@@ -451,5 +451,35 @@ func readLine(t *testing.T, f *os.File) (string, error) {
 			return string(buf), nil
 		}
 		buf = append(buf, one[0])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// what a completion means for the session it belongs to
+// ---------------------------------------------------------------------------
+
+// Reporting a failed turn is what makes the runner seal its event stream and hand the
+// session over to be terminalized. A steer's completion settles one mid-turn message and
+// nothing else — sealing the transcript because a side message missed its window would
+// stop the reply the user is actually waiting for.
+func TestOnlyTheSessionsOwnTurnEndsTheRun(t *testing.T) {
+	cases := []struct {
+		name string
+		req  TurnCompleteRequest
+		want bool
+	}{
+		{"a failed turn", TurnCompleteRequest{Status: stFailed}, true},
+		{"a failed steer", TurnCompleteRequest{Status: stFailed, Subtype: subtypeSteer}, false},
+		{"a delivered steer", TurnCompleteRequest{Status: stSucceeded, Subtype: subtypeSteer}, false},
+		{"a turn that succeeded", TurnCompleteRequest{Status: stSucceeded}, false},
+		{"a turn the user interrupted", TurnCompleteRequest{Status: stInterrupted}, false},
+		{"a failed shell turn", TurnCompleteRequest{Status: stFailed, Subtype: "shell"}, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := turnCompletionEndsSession(c.req); got != c.want {
+				t.Errorf("turnCompletionEndsSession(%+v) = %v, want %v", c.req, got, c.want)
+			}
+		})
 	}
 }

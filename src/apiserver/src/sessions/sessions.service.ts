@@ -2709,6 +2709,32 @@ export class SessionsService {
   }
 
   /** Allocate a turn while the caller holds the Session row lock. */
+  /**
+   * Is the ENGINE running a turn right now — the only thing there is to steer?
+   *
+   * Messages only. A `!cmd` shell turn holds the same slot but runs on the runner, with the
+   * engine sitting idle beside it: a message sent during one has no turn to join, so it
+   * queues behind the shell turn exactly as it always has.
+   *
+   * Only a live lease counts. An IN_FLIGHT row whose lease has expired belongs to an engine
+   * that stopped answering: the inbox will re-deliver it to whoever takes over, and treating
+   * it as running would file a message as a steer for a turn nobody is executing.
+   *
+   * Called under the Session row lock that createTurn already holds, which is the same lock
+   * dequeueTurn takes — so a turn cannot finish between this answer and the insert.
+   */
+  private async engineTurnInFlight(tx: Prisma.TransactionClient, sessionId: string) {
+    const running = await tx.conversationTurn.count({
+      where: {
+        sessionId,
+        kind: 'message',
+        status: 'IN_FLIGHT',
+        leaseDeadlineAt: { gt: new Date() },
+      },
+    });
+    return running > 0;
+  }
+
   private async insertTurnLocked(
     tx: Prisma.TransactionClient,
     sessionId: string,
@@ -2861,9 +2887,19 @@ export class SessionsService {
       // A claim can race the lazy first-turn seed. While holding the same Session lock as
       // queue.buildSession, ensure an unestablished runtime cannot lose its opening prompt.
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
+      // A message sent while a turn is already running is a steer: it is written into that
+      // running turn rather than queued behind its result (see ConversationTurnKind). The
+      // kind is decided here, under the same Session row lock the inbox dequeues under, so
+      // the decision cannot race the turn it is about — and it is decided by the server so
+      // every entry point behaves the same without any of them knowing about steering.
+      //
+      // Only a message steers. A `!cmd` shell turn runs on the runner, not in the engine,
+      // so there is nothing to fold it into and it keeps queuing exactly as before.
+      const kind =
+        dto.kind === 'shell' ? 'shell' : (await this.engineTurnInFlight(tx, id)) ? 'steer' : 'message';
       const turn = await this.insertTurnLocked(tx, id, {
         // Whitelist: this endpoint cannot manufacture control turns.
-        kind: dto.kind === 'shell' ? 'shell' : 'message',
+        kind,
         content: dto.content,
         clientTurnId: dto.clientTurnId,
       });
@@ -2952,7 +2988,7 @@ export class SessionsService {
       // executable count below already assumes), and leaving them behind ran a command
       // the user had just told to stop.
       await tx.conversationTurn.deleteMany({
-        where: { sessionId: id, kind: { in: ['message', 'shell'] }, status: 'PENDING' },
+        where: { sessionId: id, kind: { in: ['message', 'shell', 'steer'] }, status: 'PENDING' },
       });
       if (session.status === RunStatus.RUNNING) {
         const executable = await tx.conversationTurn.count({

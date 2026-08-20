@@ -313,6 +313,7 @@ function turnHarness(branchSha?: string) {
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ kind: 'message' }),
       count: async () => 0,
+      findFirst: async () => null,
     },
     session: {
       findUniqueOrThrow: async () => ({

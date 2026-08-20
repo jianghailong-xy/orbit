@@ -52,6 +52,7 @@ function makeService(
       findUnique: async () => (opts.existing ? turn : null),
       findFirst: async () => ({ seq: 1 }),
       create: async () => turn,
+      count: async () => 0,
     },
     attachment: {
       findMany: async () => {

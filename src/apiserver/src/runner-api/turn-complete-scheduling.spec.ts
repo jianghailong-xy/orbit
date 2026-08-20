@@ -35,6 +35,7 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ kind: 'message' }),
       count: async () => pendingExecutable,
+      findFirst: async () => null,
     },
     session: {
       findUniqueOrThrow: async () => ({

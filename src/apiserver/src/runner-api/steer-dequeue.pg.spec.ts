@@ -1,0 +1,180 @@
+import assert from 'node:assert/strict';
+import { before, after, beforeEach, test } from 'node:test';
+import { Client } from 'pg';
+import { RunStatus } from '@prisma/client';
+import { RunnerApiController } from './runner-api.controller';
+
+/**
+ * What the inbox predicate actually selects, run as SQL against a real Postgres.
+ *
+ * The stubbed specs beside this one can only report the SQL they were handed; a predicate
+ * that let everything through would satisfy every one of them. This runs the real statement
+ * against real rows, which is the only way "the ordinary message is still gated" is a fact
+ * rather than a regex.
+ *
+ * Needs a database: set ORBIT_TEST_PG_URL (any empty Postgres — the two tables the predicate
+ * touches are created here, not the application schema). Without it the file reports that it
+ * did not run, rather than passing quietly.
+ */
+
+const PG_URL = process.env.ORBIT_TEST_PG_URL;
+const SESSION_ID = '11111111-1111-4111-8111-111111111111';
+const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
+
+type Dequeue = (
+  sessionId: string,
+  runnerId: string,
+  leaseGeneration: string | null,
+) => Promise<{ turnId: string; kind: string; content?: string } | null>;
+
+let client: Client;
+
+before(async () => {
+  if (!PG_URL) return;
+  client = new Client({ connectionString: PG_URL });
+  await client.connect();
+  // Only the columns the predicate reads. Deliberately not the application schema: this is a
+  // test of one WHERE clause, and pulling in migrations would make it a test of those too.
+  await client.query(`
+    DROP TABLE IF EXISTS "conversation_turn";
+    DROP TABLE IF EXISTS "session";
+    CREATE TABLE "session" (
+      id uuid PRIMARY KEY,
+      assigned_runner_id uuid,
+      inbox_lease_generation uuid,
+      inbox_lease_owner uuid,
+      status text NOT NULL,
+      cancel_requested_at timestamptz
+    );
+    CREATE TABLE "conversation_turn" (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      session_id uuid NOT NULL,
+      seq int NOT NULL,
+      kind text NOT NULL,
+      content text,
+      status text NOT NULL,
+      delivered_at timestamptz,
+      lease_deadline_at timestamptz,
+      lease_generation uuid
+    );
+  `);
+});
+
+after(async () => {
+  await client?.end();
+});
+
+beforeEach(async () => {
+  if (!PG_URL) return;
+  await client.query(`TRUNCATE "conversation_turn"; DELETE FROM "session";`);
+  await client.query(
+    `INSERT INTO "session"(id, assigned_runner_id, status) VALUES ($1::uuid, $2::uuid, $3)`,
+    [SESSION_ID, RUNNER_ID, RunStatus.RUNNING],
+  );
+});
+
+/** Prisma's tagged-template $queryRaw, forwarded to a real connection as $1,$2,… */
+function pgTx() {
+  return {
+    $queryRaw: async (strings: readonly string[], ...values: unknown[]) => {
+      const text = strings.reduce((sql, part, i) => sql + part + (i < values.length ? `$${i + 1}` : ''), '');
+      return (await client.query(text, values as never[])).rows;
+    },
+    // Everything past the predicate is stubbed: this file is about which row is chosen.
+    runEvent: { findFirst: async () => null },
+    attachment: { findMany: async () => [] },
+    session: { findUnique: async () => null },
+    conversationTurn: { updateMany: async () => ({ count: 1 }) },
+  };
+}
+
+function dequeue(): Promise<{ turnId: string; kind: string; content?: string } | null> {
+  const tx = pgTx();
+  const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
+  const controller = new RunnerApiController(
+    prisma,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+  return (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn.call(
+    controller,
+    SESSION_ID,
+    RUNNER_ID,
+    null,
+  );
+}
+
+async function addTurn(seq: number, kind: string, status: string, content: string, leaseMs?: number) {
+  const lease = leaseMs === undefined ? null : new Date(Date.now() + leaseMs);
+  await client.query(
+    `INSERT INTO "conversation_turn"(session_id, seq, kind, status, content, lease_deadline_at)
+     VALUES ($1::uuid, $2, $3, $4, $5, $6)`,
+    [SESSION_ID, seq, kind, status, content, lease],
+  );
+}
+
+const pgTest = (name: string, body: () => Promise<void>) =>
+  test(name, { skip: PG_URL ? false : 'set ORBIT_TEST_PG_URL to run the inbox predicate against Postgres' }, body);
+
+pgTest('a steer is handed over mid-turn while the message behind it keeps waiting', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'actually, call it gadget');
+  await addTurn(3, 'message', 'PENDING', 'and now revert it');
+
+  const first = await dequeue();
+  assert.equal(first?.kind, 'steer');
+  assert.equal(first?.content, 'actually, call it gadget');
+
+  // The queued message is still gated: the running turn holds the slot, and the steer that
+  // just went past it took nothing.
+  assert.equal(await dequeue(), null);
+});
+
+pgTest('a steer waits while nothing is running, and the ordinary message goes first', async () => {
+  await addTurn(1, 'steer', 'PENDING', 'nothing to steer');
+  await addTurn(2, 'message', 'PENDING', 'the real turn');
+
+  const first = await dequeue();
+  assert.equal(first?.kind, 'message');
+  assert.equal(first?.content, 'the real turn');
+});
+
+pgTest('an expired lease is not a running turn, so a steer stays put', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'abandoned by a dead runner', -60_000);
+  await addTurn(2, 'steer', 'PENDING', 'nobody is listening');
+
+  // The abandoned turn is re-delivered to whoever took over; the steer is not, because
+  // there is no live engine turn to fold it into.
+  const first = await dequeue();
+  assert.equal(first?.kind, 'message');
+  assert.equal(first?.content, 'abandoned by a dead runner');
+});
+
+pgTest('a `!cmd` shell turn is not an engine turn, so a steer does not ride along with it', async () => {
+  await addTurn(1, 'shell', 'IN_FLIGHT', 'ls -la', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'there is no turn to steer');
+
+  assert.equal(await dequeue(), null);
+});
+
+pgTest('a delivered steer is never leased a second time', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'IN_FLIGHT', 'already written', -60_000);
+
+  // Its lease expired with the runner that held it. Re-writing a message the engine may
+  // already have acted on is the one thing mid-turn delivery must not do.
+  assert.equal(await dequeue(), null);
+});
+
+pgTest('an interrupt still overtakes a steer', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'change course');
+  await addTurn(3, 'interrupt', 'PENDING', '');
+
+  const first = await dequeue();
+  assert.equal(first?.kind, 'interrupt');
+});

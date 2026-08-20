@@ -62,6 +62,7 @@ function makeController(current: LockedSnapshot) {
     },
     conversationTurn: {
       updateMany: async () => ({ count: 1 }),
+      findFirst: async () => null,
     },
     task: {
       updateMany: async ({ where }: { where: { id: string } }) => {

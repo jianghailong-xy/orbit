@@ -26,6 +26,7 @@ type deliverySession struct {
 	mu      sync.Mutex
 	events  []RunEvent
 	settled []TurnCompleteRequest
+	fake    *fakeClaude
 }
 
 func (r *deliverySession) record(turnID, eventType string, payload map[string]interface{}) {
@@ -72,6 +73,18 @@ func (r *deliverySession) deliveryReports() []map[string]interface{} {
 	return out
 }
 
+func (r *deliverySession) eventsOfType(eventType string) []RunEvent {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []RunEvent
+	for _, e := range r.events {
+		if e.Type == eventType {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func (r *deliverySession) turnResult(turnID string) *TurnCompleteRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -86,32 +99,63 @@ func (r *deliverySession) turnResult(turnID string) *TurnCompleteRequest {
 // runDeliverySession feeds `turns` to the session loop, one inbox response each. The run
 // ends when the CLI's stdout does — or, for a CLI scripted to stay up, as soon as `until`
 // reports that what the test was waiting for has happened.
-func runDeliverySession(t *testing.T, script []fakeStep, turns []RunInboxResponse, until func(*deliverySession) bool) *deliverySession {
+func runDeliverySession(t *testing.T, script []fakeStep, turns []scriptedTurn, until func(*deliverySession) bool) *deliverySession {
 	t.Helper()
 	fake := newFakeClaude(t, script...)
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ORBIT_HOME", t.TempDir())
 
-	queued := make(chan RunInboxResponse, len(turns))
-	for _, turn := range turns {
-		queued <- turn
+	run := &deliverySession{fake: fake}
+	// The inbox hands turns out under the same rule dequeueTurn applies, because that rule
+	// is half of what is being tested: an executable turn waits for the slot, and a steer
+	// is deliverable only BECAUSE something holds it. A harness that simply handed over
+	// whatever was queued would prove the runner works against a control plane Orbit does
+	// not have.
+	var queueMu sync.Mutex
+	queued := append([]scriptedTurn(nil), turns...)
+	inFlight := ""
+	nextTurn := func() (RunInboxResponse, bool) {
+		queueMu.Lock()
+		defer queueMu.Unlock()
+		if inFlight != "" && run.turnResult(inFlight) != nil {
+			inFlight = "" // its result came back: the slot is free again
+		}
+		if len(queued) == 0 {
+			return RunInboxResponse{}, false
+		}
+		next := queued[0]
+		switch {
+		case next.ungated:
+		case next.turn.Kind == "steer":
+			if inFlight == "" {
+				return RunInboxResponse{}, false // nothing running to steer: it waits
+			}
+		default:
+			if inFlight != "" {
+				return RunInboxResponse{}, false // the single in-flight slot is taken
+			}
+			inFlight = next.turn.TurnID
+		}
+		queued = queued[1:]
+		return next.turn, true
 	}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/inbox") {
 			_, _ = w.Write([]byte(`{}`))
 			return
 		}
-		select {
-		case turn := <-queued:
-			_ = json.NewEncoder(w).Encode(turn)
-		case <-r.Context().Done():
-		case <-time.After(20 * time.Millisecond):
-			_, _ = w.Write([]byte(`{}`)) // long-poll timeout: the runner re-polls
+		deadline := time.Now().Add(20 * time.Millisecond)
+		for time.Now().Before(deadline) && r.Context().Err() == nil {
+			if turn, ok := nextTurn(); ok {
+				_ = json.NewEncoder(w).Encode(turn)
+				return
+			}
+			time.Sleep(2 * time.Millisecond)
 		}
+		_, _ = w.Write([]byte(`{}`)) // long-poll timeout: the runner re-polls
 	}))
 	t.Cleanup(api.Close)
 
-	run := &deliverySession{}
 	// The loop stamps a turn onto every event through setTurn, which the supervisor owns
 	// in production; here the harness owns it, so each recorded event knows its turn.
 	var turnMu sync.Mutex
@@ -121,11 +165,14 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []RunInboxRespons
 		current = id
 		turnMu.Unlock()
 	}
+	emitFor := func(turnID, eventType string, payload map[string]interface{}) {
+		run.record(turnID, eventType, payload)
+	}
 	emit := func(eventType string, payload map[string]interface{}) {
 		turnMu.Lock()
 		id := current
 		turnMu.Unlock()
-		run.record(id, eventType, payload)
+		emitFor(id, eventType, payload)
 	}
 	complete := func(r TurnCompleteRequest, _ ...context.Context) error {
 		run.mu.Lock()
@@ -140,7 +187,7 @@ func runDeliverySession(t *testing.T, script []fakeStep, turns []RunInboxRespons
 	go func() {
 		defer close(done)
 		runClaudeSessionProcess(ctx, context.Background(), NewTransport(api.URL, "runner-token"),
-			job, "11111111-1111-4111-8111-111111111111", dir, dir, emit, setTurn, true, nil,
+			job, "11111111-1111-4111-8111-111111111111", dir, dir, emit, emitFor, setTurn, true, nil,
 			complete, func(context.Context) bool { return true }, func(error) {})
 	}()
 	if until != nil {
@@ -166,8 +213,47 @@ func waitUntil(t *testing.T, ok func() bool, whenNot string) {
 	}
 }
 
-func messageTurn(id, text string) RunInboxResponse {
-	return RunInboxResponse{TurnID: id, Kind: "message", Content: text}
+// scriptedTurn is one inbox response and whether the harness's gate applies to it.
+type scriptedTurn struct {
+	turn RunInboxResponse
+	// ungated hands the turn over whatever the in-flight rule says. Its only use is the
+	// one thing the rule cannot produce: the gap between the server judging a steer
+	// deliverable and the runner reading it, in which the turn it was aimed at ended.
+	ungated bool
+}
+
+func messageTurn(id, text string) scriptedTurn {
+	return scriptedTurn{turn: RunInboxResponse{TurnID: id, Kind: "message", Content: text}}
+}
+
+func steerTurn(id, text string) scriptedTurn {
+	return scriptedTurn{turn: RunInboxResponse{TurnID: id, Kind: "steer", Content: text}}
+}
+
+// raceySteerTurn is a steer that reaches the runner after its turn is already over.
+func raceySteerTurn(id, text string) scriptedTurn {
+	s := steerTurn(id, text)
+	s.ungated = true
+	return s
+}
+
+// seqOf reports the position of the first event matching `match`, or -1.
+func (r *deliverySession) seqOf(match func(RunEvent) bool) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, e := range r.events {
+		if match(e) {
+			return i
+		}
+	}
+	return -1
+}
+
+func isDelivery(turnID string, state deliveryState) func(RunEvent) bool {
+	return func(e RunEvent) bool {
+		return e.Type == evUserDelivery && e.Payload["turnId"] == turnID &&
+			e.Payload["delivery"] == string(state)
+	}
 }
 
 // The normal path, end to end: the message is shown as enqueued the moment the writer
@@ -183,7 +269,7 @@ func TestSessionReportsAMessageEnqueuedThenWrittenThenAcknowledged(t *testing.T)
 			{Emit: "result", Text: "done"},
 			{Emit: "eof"},
 		},
-		[]RunInboxResponse{messageTurn("turn-1", "rename the widget")}, nil)
+		[]scriptedTurn{messageTurn("turn-1", "rename the widget")}, nil)
 
 	if got := run.userBubbles()["turn-1"]; got != string(deliveryEnqueued) {
 		t.Fatalf("the user bubble opened at %q, want %q — a bubble may not claim more than the writer promised", got, deliveryEnqueued)
@@ -206,12 +292,13 @@ func TestSessionCorrelatesIdenticalMessagesInOrder(t *testing.T) {
 		[]fakeStep{
 			{Await: "user"},
 			{Emit: "replay_user"},
+			{Emit: "result", Text: "done"},
 			{Await: "user"},
 			{Emit: "replay_user"},
-			{Emit: "result", Text: "done"},
+			{Emit: "result", Text: "done again"},
 			{Emit: "eof"},
 		},
-		[]RunInboxResponse{
+		[]scriptedTurn{
 			messageTurn("turn-1", "carry on"),
 			messageTurn("turn-2", "carry on"),
 		}, nil)
@@ -239,7 +326,7 @@ func TestSessionSettlesAnUnconfirmedMessageInsteadOfRepeatingIt(t *testing.T) {
 			{Await: "user"}, // read off stdin, and then the CLI dies without echoing it
 			{Emit: "eof"},
 		},
-		[]RunInboxResponse{
+		[]scriptedTurn{
 			messageTurn("turn-1", "first"),
 			messageTurn("turn-2", "second"),
 		}, nil)
@@ -275,7 +362,7 @@ func TestSessionSettlesAnUnconfirmedMessageInsteadOfRepeatingIt(t *testing.T) {
 func TestSessionNeverShowsAMessageIntoADeadEngineAsSent(t *testing.T) {
 	run := runDeliverySession(t,
 		[]fakeStep{{Emit: "system_init"}, {Emit: "eof"}},
-		[]RunInboxResponse{messageTurn("turn-1", "too late")}, nil)
+		[]scriptedTurn{messageTurn("turn-1", "too late")}, nil)
 
 	// Whether the frame was refused outright or accepted into a pipe that broke under it
 	// depends on how far the exit had got, and either is honest — what may never happen is
@@ -311,4 +398,126 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// ---------------------------------------------------------------------------
+// steering a turn that is already running
+// ---------------------------------------------------------------------------
+
+// The point of the whole thing: a message sent while the engine is inside a tool call
+// reaches that engine, on the stdin it is already reading, before the turn it is steering
+// produces its result — and it does so without a second process, without taking the ack
+// queue's answer, and without moving the running turn's output onto its own turn.
+func TestSessionWritesASteerIntoTheRunningTurn(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},       // the message that opens the turn
+			{Emit: "replay_user"}, // …echoed back: it is in the conversation
+			{Emit: "system_init"},
+			{Emit: "tool_use", ToolUseID: "toolu_1", ToolName: "Bash", Input: map[string]interface{}{"command": "ls"}},
+			{Await: "user"},       // the steer, read while the tool call is open
+			{Emit: "replay_user"}, // …echoed back: folded into this same turn
+			{Emit: "tool_result", ToolUseID: "toolu_1", Text: "widget.go"},
+			{Emit: "result", Text: "renamed"}, // the ONE result of that turn — the steer adds none
+			{Await: "user"},                   // an ordinary follow-up, queued the ordinary way
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "reverted"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{
+			messageTurn("turn-1", "rename the widget"),
+			steerTurn("steer-1", "actually, call it gadget"),
+			messageTurn("turn-2", "and now revert it"),
+		}, nil)
+
+	// One process for both. A steer that spawned its own engine would be a new
+	// conversation, not a redirection of this one.
+	if spawns := run.fake.Spawns(); len(spawns) != 1 {
+		t.Fatalf("claude was spawned %d time(s), want 1 — the steer must reach the running process", len(spawns))
+	}
+	frames := run.fake.WaitStdin(3)
+	for i, want := range []string{"rename the widget", "actually, call it gadget", "and now revert it"} {
+		if got := userFrameText(t, frames[i]); got != want {
+			t.Errorf("stdin frame %d carried %q, want %q", i, got, want)
+		}
+	}
+
+	// Written before the result it was aimed at, which is the entire difference between
+	// steering a turn and queueing behind it.
+	acked := run.seqOf(isDelivery("steer-1", deliveryAcknowledged))
+	ended := run.seqOf(func(e RunEvent) bool { return e.Type == evTurnEnd })
+	if acked < 0 {
+		t.Fatalf("the steer was never acknowledged: %v", run.deliveryReports())
+	}
+	if ended < 0 || acked > ended {
+		t.Fatalf("the steer landed at %d and the turn ended at %d — it must reach the engine first", acked, ended)
+	}
+	// And the ordinary follow-up is NOT: it waited for the slot the running turn held, which
+	// is what makes the steer a different thing rather than the gate quietly removed.
+	followUp := run.seqOf(func(e RunEvent) bool { return e.Type == evUser && e.TurnID == "turn-2" })
+	if followUp < 0 || followUp < ended {
+		t.Fatalf("the queued message entered the transcript at %d, before the running turn ended at %d", followUp, ended)
+	}
+
+	// Its own turn, not the one it joined: the bubble is the steer's, and everything the
+	// engine streamed stays with the message that started the turn.
+	if got := run.userBubbles()["steer-1"]; got != string(deliveryEnqueued) {
+		t.Errorf("the steer's bubble was filed as %q under turn steer-1", got)
+	}
+	for _, e := range run.eventsOfType(evToolResult) {
+		if e.TurnID != "turn-1" {
+			t.Errorf("a tool_result of the steered turn was filed under %q, want turn-1", e.TurnID)
+		}
+	}
+
+	// A steer never enters the queue a `result` pops, so each result still answers the
+	// message that asked for it. Were the steer in that queue, the follow-up's result would
+	// be handed to the steer and the follow-up would never be answered at all.
+	if n := len(run.eventsOfType(evTurnEnd)); n != 2 {
+		t.Errorf("the session reported %d turn boundaries, want one per message", n)
+	}
+	settled := run.turnResult("turn-1")
+	if settled == nil || settled.Status != stSucceeded || settled.Result != "renamed" {
+		t.Fatalf("turn-1 settled as %v, want the engine's own result", settled)
+	}
+	if followUp := run.turnResult("turn-2"); followUp == nil || followUp.Result != "reverted" {
+		t.Fatalf("the follow-up settled as %v, want its own result", followUp)
+	}
+	steer := run.turnResult("steer-1")
+	if steer == nil || steer.Status != stSucceeded || steer.Subtype != "steer" {
+		t.Fatalf("the steer's turn settled as %v, want a steer completion of its own", steer)
+	}
+	if steer.NumTurns != 0 || steer.CostUsd != 0 {
+		t.Errorf("the steer's completion claims work of its own: %+v", steer)
+	}
+}
+
+// A steer that arrives with nothing running has nothing to fold into. Writing it anyway
+// would open a turn no queued turn is waiting to answer, so it is refused: no user bubble,
+// and its own turn is settled rather than left in flight.
+func TestSessionRefusesASteerWhenNoTurnIsRunning(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Emit: "system_init"},
+			{Await: "user"}, // never satisfied: the only turn offered is a steer
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{raceySteerTurn("steer-1", "too early")},
+		func(r *deliverySession) bool { return r.turnResult("steer-1") != nil })
+
+	// It enters the transcript as the failure it is: the sender has an optimistic bubble
+	// waiting on this turn, and nothing else reports a steer that could not land.
+	if got := run.userBubbles()["steer-1"]; got != string(deliveryFailed) {
+		t.Errorf("the refused steer's bubble says %q, want %q", got, deliveryFailed)
+	}
+	if len(run.fake.Stdin()) != 0 {
+		t.Errorf("a steer with no turn to steer was written to the engine: %v", run.fake.Stdin())
+	}
+	settled := run.turnResult("steer-1")
+	if settled == nil || settled.Status != stFailed || settled.Subtype != "steer" {
+		t.Fatalf("the refused steer settled as %v, want a failed steer completion", settled)
+	}
+	if !strings.Contains(settled.Result, "no turn was running") {
+		t.Errorf("the result %q does not say why the steer could not land", settled.Result)
+	}
 }

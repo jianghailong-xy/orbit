@@ -80,6 +80,7 @@ function harness(options: HarnessOptions = {}) {
       },
       findUnique: async () => ({ kind: 'message' }),
       count: async () => 0,
+      findFirst: async () => null,
     },
   };
   const prisma = {

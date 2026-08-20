@@ -39,7 +39,9 @@ function harness(reloadContent: string, session: Record<string, unknown>, provid
       }
       return [];
     },
-    conversationTurn: { updateMany: async () => ({ count: 1 }) },
+    conversationTurn: { updateMany: async () => ({ count: 1 }),
+      findFirst: async () => null,
+    },
     session: {
       findUnique: async () => ({
         ownerId: OWNER_ID,

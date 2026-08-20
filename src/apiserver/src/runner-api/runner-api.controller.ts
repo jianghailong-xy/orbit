@@ -1675,6 +1675,32 @@ export class RunnerApiController {
                   AND inflight."kind" IN ('message', 'shell')
                   AND inflight."status" = 'IN_FLIGHT'
               ))
+              -- A steer is the mirror image of an executable turn: it is deliverable
+              -- BECAUSE one is already running, and it is written into that turn instead of
+              -- waiting for its result. It neither occupies the single in-flight slot (the
+              -- NOT EXISTS below counts message/shell only) nor is gated by it. Only a live
+              -- lease counts as running — an expired one belongs to an engine that stopped
+              -- answering, and there is nothing resident to steer.
+              --
+              -- Delivered once and never re-leased: an expired steer lease means the runner
+              -- died holding it, and re-writing a message the engine may already have acted
+              -- on is the one thing mid-turn delivery must not do. A steer left PENDING when
+              -- its turn ends is not stranded either — turn-complete files it as an ordinary
+              -- message, which is what it becomes once there is nothing to steer.
+              OR (turn."kind" = 'steer' AND turn."status" = 'PENDING'
+                AND EXISTS (
+                  SELECT 1 FROM "session" active
+                  WHERE active.id = ${sessionId}::uuid
+                    AND active.status = 'RUNNING'
+                    AND active."cancel_requested_at" IS NULL
+                )
+                AND EXISTS (
+                  SELECT 1 FROM "conversation_turn" inflight
+                  WHERE inflight."session_id" = ${sessionId}::uuid
+                    AND inflight."kind" = 'message'
+                    AND inflight."status" = 'IN_FLIGHT'
+                    AND inflight."lease_deadline_at" > now()
+                ))
               -- User executable turns are deliverable only after claim changed the Session
               -- to RUNNING. An AWAITING_INPUT process may remain warm, but its inbox cannot
               -- bypass maxConcurrent merely because it is already resident.
@@ -1695,7 +1721,7 @@ export class RunnerApiController {
                   ))
                 ))
             )
-          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" = 'reload' THEN 1 ELSE 2 END), turn."seq" ASC
+          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" IN ('reload', 'steer') THEN 1 ELSE 2 END), turn."seq" ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
@@ -1705,10 +1731,11 @@ export class RunnerApiController {
       const t = rows[0];
       let attachments: TurnAttachment[] | undefined;
       let content = t.content ?? undefined;
-      if (t.kind === 'message') {
+      if (t.kind === 'message' || t.kind === 'steer') {
         // A message turn that already produced runtime output is a lease re-delivery.
-        // Resume with a continuation nudge instead of replaying its side effects.
-        const started = await tx.runEvent.findFirst({
+        // Resume with a continuation nudge instead of replaying its side effects. A steer is
+        // never re-delivered (its lease is not reclaimable above), so it never takes this.
+        const started = t.kind !== 'steer' && (await tx.runEvent.findFirst({
           where: {
             turnId: t.id,
             OR: [
@@ -1723,7 +1750,7 @@ export class RunnerApiController {
             ],
           },
           select: { id: true },
-        });
+        }));
         if (started) {
           content = buildResumeContinuation(t.content);
         } else {
@@ -1758,7 +1785,12 @@ export class RunnerApiController {
           // A list's console also carries back what the control plane noticed while nobody was
           // talking to it. Piggybacked here rather than pushed as its own turn — see
           // ListEventsService for why a second waking path is the thing being avoided.
-          content = (await this.listEvents.appendFor(tx, sessionId, content)) ?? content;
+          //
+          // Not on a steer: this consumes a delivered-stamp and reads as the opening context of
+          // a turn, and a steer joins a turn that is already under way.
+          if (t.kind !== 'steer') {
+            content = (await this.listEvents.appendFor(tx, sessionId, content)) ?? content;
+          }
         }
       } else if (t.kind !== 'shell') {
         // Control turns are fire-and-forget: ack on delivery so a stale one cannot
@@ -1997,6 +2029,29 @@ export class RunnerApiController {
           retryAt: true,
         },
       });
+      // A steer settles only itself. It joined a turn that is still running — the `result`
+      // that ends that turn belongs to the message it was folded into, and the slot, the
+      // billing and the session's status all belong there too. So this acks the steer's own
+      // row and stops: no numTurns, no parking, no terminal transition, and in particular no
+      // FAILED session when a steer merely failed to reach the engine (the runner reports
+      // that as a user_delivery event, which is where a person can act on it).
+      const steering = await tx.conversationTurn.findFirst({
+        where: { id: dto.turnId, sessionId, kind: 'steer' },
+        select: { id: true },
+      });
+      if (steering) {
+        const acked = await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+        return {
+          applied: acked.count > 0,
+          steer: true,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
+      }
       // A turn that failed mid-run (e.g. an API/content-filter error the workspace couldn't
       // recover from — the runner reports such turns as FAILED) would otherwise park at
       // AWAITING_INPUT, which is indistinguishable from an ordinary idle session: the list
@@ -2043,7 +2098,7 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
-        return { applied: false, status: current.status, failSession, retryAt: current.retryAt };
+        return { applied: false, steer: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -2054,6 +2109,14 @@ export class RunnerApiController {
         select: { kind: true },
       });
       const turnInc = completed?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
+      // A steer still queued when its turn ends has nothing left to steer, so it becomes
+      // what it would have been had it arrived a moment later: the next ordinary message.
+      // Same row, same seq, same clientTurnId — the kind is the only thing that was ever
+      // about timing. Done before the count below so it is counted as the follow-up it now is.
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, kind: 'steer', status: 'PENDING' },
+        data: { kind: 'message' },
+      });
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With
       // no executable follow-up, release the slot while the runtime remains warm.
@@ -2122,6 +2185,7 @@ export class RunnerApiController {
         });
         return {
           applied: false,
+          steer: false,
           status: latest?.status ?? current.status,
           failSession,
           retryAt: current.retryAt,
@@ -2168,8 +2232,14 @@ export class RunnerApiController {
         await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, status: nextStatus, failSession, retryAt: current.retryAt };
+      return { applied: true, steer: false, status: nextStatus, failSession, retryAt: current.retryAt };
     });
+    if (finalized.steer) {
+      // Nothing about the session changed, so nothing about it is announced. The queue view
+      // did change — a steer left it — and the clients read that from the durable list.
+      if (finalized.applied) this.realtime.publishQueuedTurnsChanged(sessionId);
+      return { ok: true, status: finalized.status };
+    }
     if (finalized.failSession) {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).

@@ -63,6 +63,7 @@ function makeService(
         turnCreates++;
         return { id: 'turn-2', ...data };
       },
+      count: async () => 0,
     },
   };
   const prisma = {
