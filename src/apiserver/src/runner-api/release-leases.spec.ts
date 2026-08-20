@@ -68,6 +68,7 @@ function makeController(
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     ),
     lockCall: () => lockCall,
     notifiedSessionId: () => notifiedSessionId,

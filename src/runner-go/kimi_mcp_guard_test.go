@@ -39,7 +39,10 @@ func TestKimiFindProjectRootFallsBackToCWD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := kimiFindProjectRoot(filepath.Join(cwd, "."))
+	got, err := kimiFindProjectRootWithStat(
+		filepath.Join(cwd, "."),
+		func(string) (os.FileInfo, error) { return nil, os.ErrNotExist },
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

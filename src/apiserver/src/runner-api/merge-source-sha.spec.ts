@@ -22,6 +22,7 @@ function controller(prisma: unknown) {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
 }
 

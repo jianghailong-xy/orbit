@@ -49,7 +49,7 @@ function makeController(current: { numTurns: number; retryAt?: Date | null; prov
   const prisma = { $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx) } as never;
   const realtime = { publish: () => undefined } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, {} as never),
     updates,
   };
 }

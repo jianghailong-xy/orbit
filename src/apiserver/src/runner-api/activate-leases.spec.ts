@@ -98,6 +98,7 @@ function harness({
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     ),
     executeCalls,
     preflightCalls,

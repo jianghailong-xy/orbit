@@ -57,11 +57,18 @@ func kimiProjectMCPPaths(cwd string) ([]string, error) {
 // upward to the nearest .git marker, and fall back to the original cwd when no
 // marker exists.
 func kimiFindProjectRoot(cwd string) (string, error) {
+	return kimiFindProjectRootWithStat(cwd, os.Stat)
+}
+
+func kimiFindProjectRootWithStat(
+	cwd string,
+	stat func(string) (os.FileInfo, error),
+) (string, error) {
 	start := filepath.Clean(cwd)
 	current := start
 
 	for {
-		_, err := os.Stat(filepath.Join(current, ".git"))
+		_, err := stat(filepath.Join(current, ".git"))
 		switch {
 		case err == nil:
 			return current, nil

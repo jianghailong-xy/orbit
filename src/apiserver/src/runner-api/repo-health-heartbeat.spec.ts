@@ -28,7 +28,7 @@ function harness(row: Record<string, unknown> = {}) {
     drainArtifactRequests: async () => [],
   } as never;
   return {
-    api: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never),
+    api: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, {} as never),
     writes,
     row,
   };
