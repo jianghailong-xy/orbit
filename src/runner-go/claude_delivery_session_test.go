@@ -385,12 +385,13 @@ func TestSessionSettlesAnUnconfirmedMessageInsteadOfRepeatingIt(t *testing.T) {
 // believes was sent.
 func TestSessionNeverShowsAMessageIntoADeadEngineAsSent(t *testing.T) {
 	run := runDeliverySession(t,
-		[]fakeStep{{Emit: "system_init"}, {Emit: "eof"}},
+		[]fakeStep{{Emit: "system_init"}, {Await: "user"}, {Emit: "eof"}},
 		[]scriptedTurn{messageTurn("turn-1", "too late")}, nil)
 
-	// Whether the frame was refused outright or accepted into a pipe that broke under it
-	// depends on how far the exit had got, and either is honest — what may never happen is
-	// the message being shown as having arrived.
+	// Synchronize the exit to the frame reaching stdin. If the CLI exits before the inbox
+	// poller has claimed the turn, this process owes no delivery report: the still-pending
+	// turn belongs to the next generation. Here the runner has taken responsibility, so
+	// the missing replay must end in a visible failure and never look acknowledged.
 	states := run.deliveryStates("turn-1")
 	for _, state := range states {
 		if state == string(deliveryAcknowledged) {
