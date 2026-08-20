@@ -4496,6 +4496,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Persist one manual-run request for every affected Project.
+   *
+   * The outbox row is the authoritative state of this user action, so there is no second business
+   * row to coordinate with it. All Projects share one transaction and request id: the partial
+   * outbox key is Project-scoped, which makes a batch one signal per Project while preserving a
+   * distinct identity for the next click.
+   */
+  private async recordManualProjectTriggers(
+    ownerId: string,
+    projectIds: Array<string | null | undefined>,
+  ): Promise<void> {
+    const distinct = [...new Set(projectIds.filter((id): id is string => !!id))].sort();
+    if (distinct.length === 0) return;
+    const requestId = randomUUID();
+    await this.prisma.$transaction(async (tx) => {
+      for (const projectId of distinct) {
+        await tx.$executeRaw(Prisma.sql`
+          SELECT "project_event_manual_trigger"(
+            ${projectId}::uuid,
+            ${ownerId}::uuid,
+            ${requestId}::uuid
+          )
+        `);
+      }
+    });
+  }
+
+  /**
    * Manually kick off the task's responsible workspace from the "开始执行" button: same
    * resume-first-else-create flow as an @-mention, but as a user-facing action, so a
    * missing assignee / runner becomes a hard error instead of a silent skip.
@@ -4507,6 +4535,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        projectId: true,
         provider: true,
         model: true,
         status: true,
@@ -4546,6 +4575,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
     if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
+    // The click is itself a durable semantic request to the Project coordinator. Record it only
+    // after every synchronous run gate above passed, and before dispatch: if this write fails no
+    // session is started, while a later dispatch race still leaves a truthful request for the
+    // coordinator to answer. Automatic sweeps carry `auto` and deliberately produce no USER event.
+    if (!auto && task.projectId) {
+      await this.recordManualProjectTriggers(ownerId, [task.projectId]);
+    }
     const prompt = this.buildExecutePrompt(task);
     const sessionId = await this.runWorkspaceOnTask(
       ownerId,
@@ -4684,6 +4720,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        projectId: true,
         provider: true,
         model: true,
         status: true,
@@ -4740,6 +4777,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const runnerIds = [...new Set(runnable.map((t) => t.assignee!.runnerId!))];
     // One id ties this batch's sessions together; the queue counts live siblings by it.
     const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
+
+    // One explicit request per affected Project, not one per task. The helper writes every row in
+    // one transaction and one request id names the whole click, so a fifty-task batch satisfies
+    // the event contract even though the session dispatches themselves use a bounded worker pool.
+    await this.recordManualProjectTriggers(
+      ownerId,
+      runnable.map((task) => task.projectId),
+    );
 
     const dispatch = async (t: (typeof runnable)[number]) => {
       try {
