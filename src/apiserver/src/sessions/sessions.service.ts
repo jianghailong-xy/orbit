@@ -828,8 +828,8 @@ export class SessionsService {
     const workspaceId =
       wantId ?? (wantName ? await this.resolveWorkspaceByName(ownerId, wantName) : undefined);
     // Give the child a real effort like a normal new session would (the target workspace's own
-    // effort, else the owner's account default). create() normalizes it per provider (codex maps
-    // max→xhigh). Without this the child's effort is empty, so a codex child falls back to the
+    // effort, else the owner's account default). create() normalizes it for the selected runtime
+    // model. Without this the child's effort is empty, so a codex child falls back to the
     // runner's codex config default — which can be invalid for its model → 400 on the first turn.
     const effort = await this.resolveDefaultEffort(ownerId, workspaceId);
     const created = await this.create(

@@ -456,9 +456,7 @@ func normalizeCodexReasoningEffort(effort string) string {
 	switch strings.TrimSpace(effort) {
 	case "":
 		return ""
-	case "max":
-		return "xhigh"
-	case "none", "minimal", "low", "medium", "high", "xhigh":
+	case "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra":
 		return strings.TrimSpace(effort)
 	default:
 		logln(fmt.Sprintf("unsupported Codex reasoning effort %q; using model default", effort))

@@ -19,10 +19,11 @@ func TestNormalizeCodexReasoningEffort(t *testing.T) {
 		want string
 	}{
 		{name: "empty", in: "", want: ""},
-		{name: "max maps to xhigh", in: "max", want: "xhigh"},
+		{name: "max passes through", in: "max", want: "max"},
 		{name: "xhigh passes through", in: "xhigh", want: "xhigh"},
+		{name: "ultra passes through", in: "ultra", want: "ultra"},
 		{name: "minimal passes through", in: "minimal", want: "minimal"},
-		{name: "unknown falls back to default", in: "ultra", want: ""},
+		{name: "unknown falls back to default", in: "project-custom", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -126,7 +127,7 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if got["clientUserMessageId"] != "orbit-turn-1" {
 		t.Fatalf("clientUserMessageId = %v", got["clientUserMessageId"])
 	}
-	if got["effort"] != "xhigh" {
+	if got["effort"] != "max" {
 		t.Fatalf("effort = %v", got["effort"])
 	}
 	input, ok := got["input"].([]map[string]interface{})

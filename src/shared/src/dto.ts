@@ -93,7 +93,7 @@ export interface AgentExecConfig {
   allowedTools: string[];
   disallowedTools: string[];
   permissionMode: PermissionMode;
-  /** Provider reasoning effort/variant. Claude supports max; Codex maps max to xhigh. */
+  /** Provider reasoning effort/variant. Valid levels depend on the runtime model. */
   effort?: string;
   maxTurns?: number;
   maxBudgetUsd?: number;

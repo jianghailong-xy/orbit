@@ -322,8 +322,8 @@ export const effectiveSessionEffort = (
   workspaceEffort?: string | null,
 ): string => sessionEffort ?? workspaceEffort ?? '';
 
-// Reasoning effort is provider-specific. Claude supports "max"; Codex's
-// Responses API effort values top out at "xhigh", with "minimal" also available.
+// Reasoning effort is provider- and model-specific. Codex's live runner catalog is authoritative;
+// these lists are the fallback when the selected model has not been reported yet.
 export const CLAUDE_EFFORT_OPTIONS = [
   { value: '', label: 'Default' },
   { value: 'low', label: 'Low' },
@@ -340,6 +340,8 @@ export const CODEX_EFFORT_OPTIONS = [
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
   { value: 'xhigh', label: 'xHigh' },
+  { value: 'max', label: 'Max' },
+  { value: 'ultra', label: 'Ultra' },
 ];
 
 // Kimi's vocabulary is closed, but which of these levels a model accepts is declared per model
@@ -368,18 +370,25 @@ export const OPENCODE_EFFORT_OPTIONS = [
 const effortLabel = (level: string): string =>
   level === 'xhigh' ? 'xHigh' : level.charAt(0).toUpperCase() + level.slice(1);
 
-/** The runner catalog row for one of the two runtimes whose reasoning levels are model-defined
- *  (both call sites gate on that), or undefined when the runner-wide catalog does not report the
+/** The runner catalog row for a runtime whose reasoning levels are model-defined
+ *  (call sites gate on that), or undefined when the runner-wide catalog does not report the
  *  model. "No row" means "unknown", never "unsupported": an OpenCode model may be project-scoped,
  *  and an older runner reports no Kimi models at all. */
 const modelDefinedEffortRow = (
   provider: string,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
-) =>
-  modelCatalog?.[provider === 'kimi' ? AgentProvider.KIMI : AgentProvider.OPENCODE]?.find(
+) => {
+  const runtime =
+    provider === 'codex'
+      ? AgentProvider.CODEX
+      : provider === 'kimi'
+        ? AgentProvider.KIMI
+        : AgentProvider.OPENCODE;
+  return modelCatalog?.[runtime]?.find(
     (entry) => entry.value === model,
   );
+};
 
 // Kimi has no `minimal`/`medium` and calls Codex's top level `max`, so a value carried in from
 // another runtime maps onto its vocabulary before the model's own list is consulted.
@@ -394,13 +403,17 @@ export const effortOptionsForProvider = (
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
 ) => {
-  if (provider === 'codex') return CODEX_EFFORT_OPTIONS;
-  if (provider !== 'opencode' && provider !== 'kimi') return CLAUDE_EFFORT_OPTIONS;
+  if (provider !== 'codex' && provider !== 'opencode' && provider !== 'kimi') {
+    return CLAUDE_EFFORT_OPTIONS;
+  }
 
   const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
   // A model the runner-wide catalog does not report keeps the generic fallback. An exact row with
   // no levels is authoritative: that model supports Default only.
-  if (!exactModel) return provider === 'kimi' ? KIMI_EFFORT_OPTIONS : OPENCODE_EFFORT_OPTIONS;
+  if (!exactModel) {
+    if (provider === 'codex') return CODEX_EFFORT_OPTIONS;
+    return provider === 'kimi' ? KIMI_EFFORT_OPTIONS : OPENCODE_EFFORT_OPTIONS;
+  }
   const unique = [...new Set((exactModel.reasoningLevels ?? []).filter(Boolean))];
   return [
     { value: '', label: 'Default' },
@@ -418,16 +431,17 @@ export const normalizeEffortForProvider = (
   const normalized =
     provider === 'kimi'
       ? (KIMI_EFFORT_ALIASES[effort] ?? effort)
-      : provider === 'codex' && effort === 'max'
-        ? 'xhigh'
-        : effort;
+      : effort;
 
-  if (provider === 'opencode' || provider === 'kimi') {
+  if (provider === 'codex' || provider === 'opencode' || provider === 'kimi') {
     const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
     // The heartbeat catalog is deliberately global, so a project-only model may
     // be absent. Preserve its variant only in that case; an exact row (including one
     // with an empty variants object) is authoritative.
-    if (!exactModel) return normalized;
+    if (!exactModel) {
+      if (provider !== 'codex') return normalized;
+      return CODEX_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
+    }
     const levels = exactModel.reasoningLevels ?? [];
     return normalized === '' || levels.includes(normalized) ? normalized : '';
   }

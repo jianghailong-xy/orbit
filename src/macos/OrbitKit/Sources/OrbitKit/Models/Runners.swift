@@ -91,10 +91,10 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         return rows?.first { $0.value == model }
     }
 
-    /// Runtimes whose reasoning levels are declared per model: OpenCode's variants, and Kimi's
-    /// `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max).
+    /// Runtimes whose reasoning levels are declared per model: Codex efforts, OpenCode variants,
+    /// and Kimi's `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max).
     public func reasoningLevels(for provider: String, model: String) -> [String]? {
-        guard provider == "opencode" || provider == "kimi" else { return nil }
+        guard provider == "codex" || provider == "opencode" || provider == "kimi" else { return nil }
         return modelInfo(for: provider, model: model)?.reasoningLevels
     }
 }

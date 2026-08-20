@@ -10,7 +10,17 @@ import { runtimeCatalogReasoningLevels } from './runtime-model';
 // Closed CLI enums. An account default last picked in an OpenCode session (whose variants are
 // model-defined and open-ended) must degrade to runtime Default rather than make these fail.
 const CLAUDE_EFFORTS = new Set(['', 'low', 'medium', 'high', 'xhigh', 'max']);
-const CODEX_EFFORTS = new Set(['', 'minimal', 'low', 'medium', 'high', 'xhigh']);
+const CODEX_EFFORTS = new Set([
+  '',
+  'none',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+  'ultra',
+]);
 
 /**
  * Turn a persisted provider identity into a built-in runner runtime.
@@ -69,10 +79,9 @@ export function normalizeBuiltinPermissionMode(
 
 /**
  * Keep persisted effort values valid when a session changes runtime or is resumed from an older
- * client. Codex historically called its top level `xhigh`; Kimi's vocabulary tops out at `max`
- * and has no `minimal`/`medium`. Which of those levels a Kimi model actually accepts is
- * per-model (K2.7 Coding accepts none at all), so this maps the vocabulary and
- * `normalizeEffortForRuntimeModel` applies the model's own list. OpenCode variants are
+ * client. Kimi's vocabulary tops out at `max` and has no `minimal`/`medium`. Which levels a Codex
+ * or Kimi model actually accepts is per-model (K2.7 Coding accepts none at all), so this maps the
+ * vocabulary and `normalizeEffortForRuntimeModel` applies the model's own list. OpenCode variants are
  * model/provider-defined and stay open-ended, so only the closed CLI enums are clamped.
  */
 export function normalizeEffortForProvider(
@@ -88,8 +97,7 @@ export function normalizeEffortForProvider(
     return effort;
   }
   if (provider === AgentProvider.CODEX) {
-    const normalized = effort === 'max' ? 'xhigh' : effort;
-    return CODEX_EFFORTS.has(normalized) ? normalized : '';
+    return CODEX_EFFORTS.has(effort) ? effort : '';
   }
   return CLAUDE_EFFORTS.has(effort) ? effort : '';
 }
@@ -98,6 +106,7 @@ export function normalizeEffortForProvider(
  *  whether one is valid. OpenCode's variants are model/provider-defined; Kimi's are declared by
  *  each model's `supportEfforts` and rejected with invalid_params when they are not. */
 const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
+  AgentProvider.CODEX,
   AgentProvider.OPENCODE,
   AgentProvider.KIMI,
 ];

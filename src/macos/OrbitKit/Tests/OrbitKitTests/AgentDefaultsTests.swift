@@ -80,7 +80,7 @@ final class AgentDefaultsTests: XCTestCase {
         XCTAssertEqual(AgentDefaults.efforts(for: "claude"),
                        [.default, .low, .medium, .high, .xhigh, .max])
         XCTAssertEqual(AgentDefaults.efforts(for: "codex"),
-                       [.default, .minimal, .low, .medium, .high, .xhigh])
+                       [.default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra])
         XCTAssertEqual(AgentDefaults.efforts(for: "kimi"),
                        [.default, .low, .high, .max])
         XCTAssertEqual(AgentDefaults.efforts(for: "opencode"),
@@ -88,19 +88,22 @@ final class AgentDefaultsTests: XCTestCase {
 
         // The whole point: neither provider is offered a value it rejects.
         XCTAssertFalse(AgentDefaults.efforts(for: "claude").contains(.minimal))
-        XCTAssertFalse(AgentDefaults.efforts(for: "codex").contains(.max))
+        XCTAssertTrue(AgentDefaults.efforts(for: "codex").contains(.ultra))
         XCTAssertFalse(AgentDefaults.efforts(for: "kimi").contains(.minimal))
 
         XCTAssertEqual(AgentDefaults.efforts(for: "gemini"), AgentDefaults.efforts(for: "claude"))
     }
 
-    func testMinimalEffortLabelAndRawValue() {
+    func testEffortLabelsAndRawValues() {
         XCTAssertEqual(Effort.minimal.rawValue, "minimal")
         XCTAssertEqual(Effort.minimal.label, "Minimal")
+        XCTAssertEqual(Effort.ultra.rawValue, "ultra")
+        XCTAssertEqual(Effort.ultra.label, "Ultra")
     }
 
     func testEffortNormalizationForProvider() {
-        XCTAssertEqual(AgentDefaults.normalizeEffort(.max, for: "codex"), .xhigh)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.max, for: "codex"), .max)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.ultra, for: "codex"), .ultra)
         XCTAssertEqual(AgentDefaults.normalizeEffort(.high, for: "codex"), .high)
 
         XCTAssertEqual(AgentDefaults.normalizeEffort(.minimal, for: "kimi"), .low)
@@ -113,6 +116,27 @@ final class AgentDefaultsTests: XCTestCase {
 
         XCTAssertEqual(AgentDefaults.normalizeEffort(.xhigh, for: "claude"), .xhigh)
         XCTAssertEqual(AgentDefaults.normalizeEffort(.medium, for: "deepseek"), .medium)
+    }
+
+    func testCodexEffortsComeFromSelectedModelCatalog() {
+        let catalog = RunnerModelCatalog(codex: [
+            RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6-Sol", priority: nil,
+                            contextWindow: nil,
+                            reasoningLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+                            defaultReasoningLevel: "low", serviceTiers: nil),
+        ])
+
+        XCTAssertEqual(
+            AgentDefaults.efforts(for: "codex", model: "gpt-5.6-sol", catalog: catalog),
+            [.default, .low, .medium, .high, .xhigh, .max, .ultra])
+        XCTAssertTrue(AgentDefaults.supportsEffort(.ultra, for: "codex",
+                                                   model: "gpt-5.6-sol", catalog: catalog))
+        XCTAssertFalse(AgentDefaults.supportsEffort(.minimal, for: "codex",
+                                                    model: "gpt-5.6-sol", catalog: catalog))
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.max, for: "codex",
+                                                      model: "gpt-5.6-sol", catalog: catalog), .max)
+        XCTAssertEqual(AgentDefaults.normalizedEffort(.minimal, for: "codex",
+                                                      model: "gpt-5.6-sol", catalog: catalog), .default)
     }
 
     /// The seed a session runs under when nobody said. Mirrors the server's `resolvePermissionMode`

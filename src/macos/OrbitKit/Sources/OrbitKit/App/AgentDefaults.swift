@@ -44,7 +44,10 @@ public struct Effort: RawRepresentable, CaseIterable, Hashable, Sendable, Identi
     public static let high = Effort(rawValue: "high")!
     public static let xhigh = Effort(rawValue: "xhigh")!
     public static let max = Effort(rawValue: "max")!
-    public static let allCases: [Effort] = [.default, .minimal, .low, .medium, .high, .xhigh, .max]
+    public static let ultra = Effort(rawValue: "ultra")!
+    public static let allCases: [Effort] = [
+        .default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra,
+    ]
 
     public var id: String { rawValue }
     public var label: String {
@@ -342,14 +345,13 @@ public enum AgentDefaults {
             ?? friendlyName(id, catalog: catalog, configured: configured)
     }
 
-    /// Reasoning-effort levels a provider accepts. Claude tops out at `max`; Codex's Responses API
-    /// tops out at `xhigh` and adds `minimal`. Kimi's and OpenCode's levels are model-defined, so
-    /// their static lists are only the fallback for a model the catalog does not report.
+    /// Reasoning-effort levels a provider accepts. Codex, Kimi and OpenCode report levels per model,
+    /// so their static lists are only the fallback when the runner catalog does not report a model.
     /// Mirrors web. The server and runner both coerce an illegal value, but a picker should never
     /// offer one.
     public static func efforts(for provider: String) -> [Effort] {
         switch provider {
-        case "codex":    return [.default, .minimal, .low, .medium, .high, .xhigh]
+        case "codex":    return [.default, .minimal, .low, .medium, .high, .xhigh, .max, .ultra]
         case "kimi":     return [.default, .low, .high, .max]
         case "opencode": return [.default, .minimal, .low, .medium, .high, .xhigh, .max]
         default:         return [.default, .low, .medium, .high, .xhigh, .max]
@@ -365,7 +367,7 @@ public enum AgentDefaults {
         case "opencode":
             return effort
         case "codex":
-            return effort == .max ? .xhigh : effort
+            return effort
         case "kimi":
             switch effort {
             case .minimal: return .low
@@ -378,15 +380,17 @@ public enum AgentDefaults {
         }
     }
 
-    /// OpenCode variants and Kimi thinking levels are model-specific. Preserve every runner-reported
-    /// key verbatim so a new runtime variant does not require a native-client release. An exact
+    /// Codex efforts, OpenCode variants and Kimi thinking levels are model-specific. Preserve every
+    /// runner-reported key verbatim so a new runtime variant does not require a native-client release. An exact
     /// catalog row is authoritative even when its variant list is empty — Kimi's K2.7 Coding
     /// declares no levels and rejects every one of them — while only a model absent from the global
     /// heartbeat catalog falls back to the common list, because it may be project-only or come from
     /// a runner too old to probe its CLI.
     public static func efforts(for provider: String, model: String,
                                catalog: RunnerModelCatalog?) -> [Effort] {
-        guard provider == "opencode" || provider == "kimi" else { return efforts(for: provider) }
+        guard provider == "codex" || provider == "opencode" || provider == "kimi" else {
+            return efforts(for: provider)
+        }
         guard let row = catalog?.modelInfo(for: provider, model: model) else {
             return efforts(for: provider)
         }
@@ -406,6 +410,12 @@ public enum AgentDefaults {
     public static func supportsEffort(_ effort: Effort, for provider: String, model: String,
                                       catalog: RunnerModelCatalog?) -> Bool {
         if effort == .default { return true }
+        if provider == "codex" {
+            guard let row = catalog?.modelInfo(for: provider, model: model) else {
+                return efforts(for: provider).contains(effort)
+            }
+            return (row.reasoningLevels ?? []).contains(effort.rawValue)
+        }
         if provider == "opencode" || provider == "kimi" {
             guard let row = catalog?.modelInfo(for: provider, model: model) else { return true }
             return (row.reasoningLevels ?? []).contains(effort.rawValue)
@@ -417,11 +427,11 @@ public enum AgentDefaults {
     /// incompatible. Unknown OpenCode models deliberately preserve custom project variants.
     public static func normalizedEffort(_ effort: Effort, for provider: String, model: String,
                                         catalog: RunnerModelCatalog?) -> Effort {
-        if provider == "opencode" {
+        if provider == "codex" || provider == "opencode" {
             return supportsEffort(effort, for: provider, model: model, catalog: catalog)
                 ? effort : .default
         }
-        // Closed vocabularies: map what maps (Codex max→xhigh, Kimi medium→high), clear the rest.
+        // Closed vocabularies: map what maps (for example Kimi medium→high), clear the rest.
         let mapped = normalizeEffort(effort, for: provider)
         // Kimi's vocabulary is closed but per-model, so the mapped value still has to clear the
         // model's own list: K2.7 Coding takes none of them.

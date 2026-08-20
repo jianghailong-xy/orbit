@@ -93,7 +93,8 @@ test('Codex and Kimi initialize their runtime id dynamically; Claude does not', 
 });
 
 test('effort normalization maps stale provider levels onto each runtime vocabulary', () => {
-  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'max'), 'xhigh');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'max'), 'max');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'ultra'), 'ultra');
   assert.equal(normalizeEffortForProvider(AgentProvider.KIMI, 'minimal'), 'low');
   assert.equal(normalizeEffortForProvider(AgentProvider.KIMI, 'medium'), 'high');
   assert.equal(normalizeEffortForProvider(AgentProvider.KIMI, 'xhigh'), 'max');
@@ -110,7 +111,8 @@ test('OpenCode preserves provider-defined variants; closed CLI enums reject leak
   );
   assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'ultra'), '');
   assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, 'max'), 'max');
-  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'ultra'), '');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'ultra'), 'ultra');
+  assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'project-custom'), '');
   assert.equal(normalizeEffortForProvider(AgentProvider.CODEX, 'minimal'), 'minimal');
   assert.equal(normalizeEffortForProvider(AgentProvider.CLAUDE, null), undefined);
 });
@@ -119,6 +121,13 @@ test('model-defined effort vocabularies are clamped against the assigned runner 
   // What a signed-in runner reports: Kimi's K2.7 Coding declares no thinking levels and answers
   // any of them with invalid_params, while K3 declares low/high/max.
   const catalog = {
+    codex: [
+      {
+        value: 'gpt-5.6-sol',
+        label: 'GPT-5.6-Sol',
+        reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+      },
+    ],
     kimi: [
       { value: 'kimi-code/kimi-for-coding', label: 'K2.7 Coding' },
       { value: 'kimi-code/k3', label: 'K3', reasoningLevels: ['low', 'high', 'max'] },
@@ -149,7 +158,15 @@ test('model-defined effort vocabularies are clamped against the assigned runner 
     normalizeEffortForRuntimeModel(AgentProvider.OPENCODE, 'max', 'anthropic/claude-sonnet-5', catalog),
     '',
   );
-  // Closed-vocabulary runtimes never consult the catalog.
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.CODEX, 'ultra', 'gpt-5.6-sol', catalog),
+    'ultra',
+  );
+  assert.equal(
+    normalizeEffortForRuntimeModel(AgentProvider.CODEX, 'minimal', 'gpt-5.6-sol', catalog),
+    '',
+  );
+  // Claude's closed vocabulary does not consult the catalog.
   assert.equal(
     normalizeEffortForRuntimeModel(AgentProvider.CLAUDE, 'max', 'claude-opus-5', catalog),
     'max',

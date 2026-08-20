@@ -28,7 +28,10 @@ func TestParseCodexModelCatalog(t *testing.T) {
       "visibility": "list",
       "priority": 1,
       "context_window": 372000,
-      "supported_reasoning_levels": [{"effort": "xhigh"}]
+      "supported_reasoning_levels": [
+        {"effort": "low"}, {"effort": "medium"}, {"effort": "high"},
+        {"effort": "xhigh"}, {"effort": "max"}, {"effort": "ultra"}
+      ]
     }
   ]
 }`)
@@ -44,6 +47,9 @@ func TestParseCodexModelCatalog(t *testing.T) {
 	}
 	if got := models[0].ContextWindow; got != 372000 {
 		t.Fatalf("context window = %d, want 372000", got)
+	}
+	if got := models[0].ReasoningLevels; len(got) != 6 || got[4] != "max" || got[5] != "ultra" {
+		t.Fatalf("Sol reasoning levels = %#v", got)
 	}
 	if got := models[1].ReasoningLevels; len(got) != 2 || got[0] != "low" || got[1] != "medium" {
 		t.Fatalf("reasoning levels = %#v", got)

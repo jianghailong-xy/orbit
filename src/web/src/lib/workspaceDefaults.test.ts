@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { RunnerModelCatalog } from '@orbit/shared';
 import {
   clampPermissionModeForModel,
+  CODEX_EFFORT_OPTIONS,
   contextWindowFor,
   defaultModelForProvider,
   effectiveSessionEffort,
@@ -37,6 +38,39 @@ describe('Claude model capabilities', () => {
     expect(clampPermissionModeForModel('auto', 'claude-haiku-4-5', 'claude')).toBe('default');
     expect(clampPermissionModeForModel('auto', 'claude-opus-5', 'claude')).toBe('auto');
     expect(clampPermissionModeForModel('plan', 'claude-haiku-4-5', 'claude')).toBe('plan');
+  });
+});
+
+describe('Codex model efforts', () => {
+  const catalog: RunnerModelCatalog = {
+    codex: [
+      {
+        value: 'gpt-5.6-sol',
+        label: 'GPT-5.6-Sol',
+        reasoningLevels: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+      },
+    ],
+  };
+
+  it('uses the selected model catalog, including max and Ultra', () => {
+    expect(effortOptionsForProvider('codex', 'gpt-5.6-sol', catalog)).toEqual([
+      { value: '', label: 'Default' },
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+      { value: 'xhigh', label: 'xHigh' },
+      { value: 'max', label: 'Max' },
+      { value: 'ultra', label: 'Ultra' },
+    ]);
+    expect(normalizeEffortForProvider('codex', 'ultra', 'gpt-5.6-sol', catalog)).toBe('ultra');
+    expect(normalizeEffortForProvider('codex', 'max', 'gpt-5.6-sol', catalog)).toBe('max');
+    expect(normalizeEffortForProvider('codex', 'minimal', 'gpt-5.6-sol', catalog)).toBe('');
+  });
+
+  it('keeps a closed fallback vocabulary when no catalog row is available', () => {
+    expect(effortOptionsForProvider('codex')).toEqual(CODEX_EFFORT_OPTIONS);
+    expect(normalizeEffortForProvider('codex', 'ultra')).toBe('ultra');
+    expect(normalizeEffortForProvider('codex', 'project-custom')).toBe('');
   });
 });
 
@@ -330,10 +364,9 @@ describe('OpenCode defaults', () => {
     expect(normalizeEffortForProvider('opencode', 'high', 'local/no-variants', noVariants)).toBe('');
   });
 
-  it('does not leak a dynamic OpenCode variant into another runtime', () => {
+  it('does not leak an unknown dynamic OpenCode variant into another runtime', () => {
     expect(normalizeEffortForProvider('claude', 'ultra', 'claude-opus-5', catalog)).toBe('');
-    expect(normalizeEffortForProvider('codex', 'ultra', 'gpt-5.6-sol', catalog)).toBe('');
-    expect(normalizeEffortForProvider('codex', 'max', 'gpt-5.6-sol', catalog)).toBe('xhigh');
+    expect(normalizeEffortForProvider('codex', 'project-custom', 'gpt-5.6-sol', catalog)).toBe('');
   });
 });
 

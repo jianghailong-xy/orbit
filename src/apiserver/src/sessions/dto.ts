@@ -25,7 +25,7 @@ export interface CreateSessionDto {
   /** Per-session override; omitted falls back to the Runner Runtime or ModelProvider default. */
   model?: string;
   permissionMode?: string;
-  /** Provider reasoning effort; '' / omitted → model default. Codex maps max to xhigh. */
+  /** Provider reasoning effort; '' / omitted → model default. */
   effort?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
