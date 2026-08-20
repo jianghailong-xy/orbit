@@ -288,6 +288,30 @@ export const PROJECT_BLOCKER_TURN_KINDS: readonly ProjectBlockerKind[] = PROJECT
   .filter((kind) => PROJECT_BLOCKER_POLICY[kind].opensTurn);
 
 /**
+ * §11.2's first seven rows: the kinds the RESOLUTION CHAIN itself produces (§7.4 re-answers every
+ * one of them, from the current world, on every attempt).
+ *
+ * They are singled out because a row of this kind is a DESCRIPTION of the last attempt, not an
+ * additional gate on the next one — and treating it as a gate makes its own condition impossible to
+ * falsify. §11.4 BL3 recomputes "was the latest dispatch refused, and how"; if the guard stops the
+ * dispatch, no later attempt is ever recorded, the recomputation keeps reading the same historical
+ * refusal, and a `recovery = EVENT` row that §11.2 says the world can end on its own instead stays
+ * open forever — the provider comes back and nothing notices. Unit 18's counterexample is exactly
+ * that shape, so this list is the boundary that keeps the guard on the rows the chain does NOT
+ * re-derive (a merge conflict, an exhausted retry budget, a failed check, an unclassified failure,
+ * and everything project-wide).
+ */
+export const PROJECT_BLOCKER_RESOLUTION_CHAIN_KINDS: readonly ProjectBlockerKind[] = [
+  'WHO_UNRESOLVED',
+  'WHO_NOT_IN_TEAM',
+  'WHO_DISABLED',
+  'PROVIDER_UNAVAILABLE',
+  'RUNTIME_REQUIREMENT_UNMET',
+  'NO_PROJECT_WORKSPACE',
+  'NO_MATCHING_RUNNER',
+];
+
+/**
  * PAC §12 refusal / authorization reason codes that ARE a blocker, and the kind they become.
  *
  * §11.2's first six rows say the code is carried across verbatim; the rest of this map is the same

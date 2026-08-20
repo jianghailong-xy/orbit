@@ -705,9 +705,18 @@ test('the guard stops the right dispatches and only those', { skip }, async () =
 
     assert.deepEqual(await guard(TASK), [], 'nothing open, nothing stopped');
 
-    await raw('WHO_UNRESOLVED', 'TASK', TASK);
-    assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['WHO_UNRESOLVED']);
+    await raw('MERGE_CONFLICT', 'TASK', TASK);
+    assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['MERGE_CONFLICT']);
     assert.deepEqual(await guard(OTHER_TASK), [], 'a task-scoped row stops its own task only');
+
+    // ...with one exception, and it is not a softening: §7.4 re-answers the resolution chain's own
+    // codes from the current world on EVERY attempt, so a row of one of those kinds describes the
+    // last answer rather than gating the next. Gating it would freeze §11.4's recomputation on a
+    // refusal that can no longer be superseded — the provider comes back and the row never clears
+    // (unit 18's counterexample, verify18-control-loop.pg.spec).
+    await raw('WHO_UNRESOLVED', 'TASK', TASK);
+    assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['MERGE_CONFLICT'],
+      'a chain-derived task row must not stop the attempt that recomputes it');
 
     // Somebody is being waited on inside one conversation. That stops that conversation, not the
     // rest of the project — otherwise one unanswered question freezes every other task.
@@ -717,7 +726,7 @@ test('the guard stops the right dispatches and only those', { skip }, async () =
     // A project-scoped row stops everything, because there is nowhere for anything to run.
     await raw('NO_PROJECT_WORKSPACE', 'PROJECT', PROJECT);
     assert.deepEqual((await guard(OTHER_TASK)).map((r) => r.kind), ['NO_PROJECT_WORKSPACE']);
-    assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['NO_PROJECT_WORKSPACE', 'WHO_UNRESOLVED']);
+    assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['MERGE_CONFLICT', 'NO_PROJECT_WORKSPACE']);
 
     // And resolving it lets the work through again without anything else changing.
     await client.query(`
