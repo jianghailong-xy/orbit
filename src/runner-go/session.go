@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1132,7 +1131,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 		emit(evError, map[string]interface{}{"message": "failed to spawn claude: " + err.Error()})
 		return stFailed, true, false // a spawn failure won't be fixed by respawning
 	}
-	cmd, stdin, stdout, stderr := proc.cmd, proc.stdin, proc.stdout, proc.stderr
+	// The resident runtime for this session: the child, its generation and phase, and the
+	// bounded single-writer queue every frame to its stdin goes through (claude_runtime.go).
+	rt := newClaudeRuntime(proc)
+	defer rt.close()
+	cmd, stdout, stderr := proc.cmd, proc.stdout, proc.stderr
 
 	var stderrWg sync.WaitGroup
 	stderrWg.Add(1)
@@ -1157,16 +1160,8 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 	endSession := func() {
 		endOnce.Do(func() {
 			close(endedCh)
-			_ = stdin.Close()
+			rt.close()
 		})
-	}
-
-	var stdinMu sync.Mutex
-	writeStdin := func(line string) error {
-		stdinMu.Lock()
-		defer stdinMu.Unlock()
-		_, err := io.WriteString(stdin, line)
-		return err
 	}
 
 	// Inbox poller: pulls turns and acts immediately so interrupt/end land mid-turn.
@@ -1300,10 +1295,11 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				case <-procCtx.Done():
 					return
 				}
-				if err := writeStdin(userFrame(job.SessionUUID, content)); err != nil {
-					logln("stdin write failed for", job.SessionID+":", err)
+				if err := rt.send(userFrame(job.SessionUUID, content)); err != nil {
+					logln("feeding a turn to", rt.String(), "failed for", job.SessionID+":", err)
 					return
 				}
+				rt.beginTurn()
 			case "shell":
 				if !waitTurnPermit(procCtx) {
 					return
@@ -1350,7 +1346,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				inflightMu.Unlock()
 				setTurn("")
 			case "interrupt":
-				_ = writeStdin(controlRequestFrame(nextReqID(), "interrupt"))
+				if err := rt.send(controlRequestFrame(nextReqID(), "interrupt")); err != nil {
+					logln("interrupting", rt.String(), "failed for", job.SessionID+":", err)
+				}
 				emit(evInterrupt, map[string]interface{}{})
 			case "reload":
 				// Model / permission-mode / effort / provider changed on this idle session.
@@ -1464,6 +1462,9 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			if isResumeCarrierResult(r, lastAssistantText) {
 				continue
 			}
+			// A turn boundary, not an exit: the process stays up with stdin open, which is
+			// what lets the session's next message reuse it instead of spawning again.
+			rt.endTurn()
 			turnStatus := stSucceeded
 			if r.Subtype == "error_during_execution" {
 				turnStatus = stInterrupted
@@ -1522,7 +1523,10 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			}
 		}
 	}
-	_ = waitSessionProcessTree(cmd)
+	// stdout EOF: the CLI is on its way out. Reclaim the child (and anything it left
+	// running) once the writer has finished with stdin.
+	rt.markTerminal()
+	_ = rt.wait()
 	// stderr is an event source too. Join it before the provider generation
 	// returns, otherwise it can append after the supervisor's final flush.
 	stderrWg.Wait()
