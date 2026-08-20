@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectsService } from './projects.service';
 
@@ -11,7 +12,7 @@ import { ProjectsService } from './projects.service';
 @Module({
   imports: [SessionsModule],
   controllers: [ProjectsController],
-  providers: [ProjectsService, ProjectEventsService],
+  providers: [ProjectsService, ProjectEventsService, ProjectAvailabilityReaperService],
   exports: [ProjectsService, ProjectEventsService],
 })
 export class ProjectsModule {}
