@@ -1,7 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ProjectDecisionInput,
+  ProjectDecisionOutcome,
+  ProjectDecisionService,
+  createDecisionId,
+  hashDecisionInput,
+  planProjectDecision,
+} from './project-decision.service';
 import {
   ProjectEventEnvelope,
   ProjectEventHandleResult,
@@ -53,6 +62,13 @@ export interface ProjectReconcileAction {
 export type ProjectActionApplyResult =
   | { status: 'APPLIED'; actionId: string }
   | {
+      status: 'REFUSED';
+      actionId: string;
+      refusalCode: 'STALE_SNAPSHOT';
+      expectedDecisionInputHash: string;
+      actualDecisionInputHash: string;
+    }
+  | {
       status: 'ALREADY_APPLIED';
       actionId: string;
       actionStatus: 'CLAIMED' | 'APPLIED' | 'REFUSED' | 'SUPERSEDED';
@@ -97,6 +113,9 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: ProjectEventsService,
+    // Optional only for the pre-0120 isolated unit harnesses. Nest always provides it; all new
+    // production protocol entry points fail closed when it is absent.
+    private readonly decisions?: ProjectDecisionService,
   ) {}
 
   get backstopHits(): number {
@@ -187,15 +206,34 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       return { deferUntil: contentionWake(projectId, rows[0]?.leaseExpiresAt, now) };
     }
 
-    const state = await this.runStateOf(tx, projectId);
-    const nextWakeAt = state === 'SETTLED' ? null : new Date(now.getTime() + 60_000);
-    const nextWakeReason = state === 'PLANNING'
-      ? 'planning requires coordinator turn'
-      : state === 'EXECUTING'
-        ? 'in-flight session may end'
-        : state === 'AWAITING_VERIFICATION'
-          ? 'verification may settle'
-          : 'reconcile state recheck';
+    let state: ProjectReconcileRunState;
+    let nextWakeAt: Date | null;
+    let nextWakeReason: string | null;
+    if (this.decisions) {
+      const captured = await this.decisions.capture(tx, projectId, now);
+      const decisionId = createDecisionId();
+      const outcome = planProjectDecision(captured.input, {
+        decisionId,
+        consumedEventIds: _events.map((event) => uuidToBase62(event.id)),
+      });
+      if (BigInt(outcome.fencingToken) !== lease.fencingToken) {
+        throw new ProjectLeaseLostError(projectId);
+      }
+      await this.decisions.persist(tx, captured, outcome, decisionId);
+      state = outcome.runStateAfter;
+      nextWakeAt = outcome.nextWakeAt ? new Date(outcome.nextWakeAt) : null;
+      nextWakeReason = outcome.nextWakeReason;
+    } else {
+      state = await this.runStateOf(tx, projectId);
+      nextWakeAt = state === 'SETTLED' ? null : new Date(now.getTime() + 60_000);
+      nextWakeReason = state === 'PLANNING'
+        ? 'planning requires coordinator turn'
+        : state === 'EXECUTING'
+          ? 'in-flight session may end'
+          : state === 'AWAITING_VERIFICATION'
+            ? 'verification may settle'
+            : 'reconcile state recheck';
+    }
     const updated = await tx.$executeRaw(Prisma.sql`
       UPDATE "project_runtime"
          SET "run_state" = ${state}::"project_run_state",
@@ -353,6 +391,156 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
       return { status: 'APPLIED', actionId } as const;
     });
+  }
+
+  /**
+   * Apply one action attributed to a persisted decision. The comparison reuses the decision's
+   * frozen evaluation instant, so time passing alone does not invalidate it; any changed world or
+   * semantic signal does. A stale proposal is a committed REFUSED audit result plus a durable
+   * outbox wake, never a partially applied effect or a silent rollback.
+   */
+  async applyDecisionAction(
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    action: ProjectReconcileAction,
+    effect: (tx: Prisma.TransactionClient, actionId: string) => Promise<void>,
+    now = new Date(),
+  ): Promise<ProjectActionApplyResult> {
+    this.assertAction(lease, action);
+    if (action.subject.type === 'PROJECT' && action.subject.id !== lease.projectId) {
+      throw new Error('Project action subject belongs to another Project');
+    }
+    if (!this.decisions) throw new Error('Project decision protocol is not configured');
+    return this.prisma.$transaction(async (tx) => {
+      const projects = await tx.$queryRaw<Array<{
+        status: 'OPEN' | 'DONE' | 'CANCELLED'; coordinatorEnabled: boolean;
+      }>>(Prisma.sql`
+        SELECT "status", "coordinator_enabled" AS "coordinatorEnabled"
+          FROM "project" WHERE "id" = ${lease.projectId}::uuid FOR NO KEY UPDATE
+      `);
+      if (projects[0]?.status !== 'OPEN' || !projects[0]?.coordinatorEnabled) {
+        throw new ProjectLeaseLostError(lease.projectId);
+      }
+
+      const expiresAt = new Date(now.getTime() + PROJECT_RECONCILE_LEASE_MS);
+      const fenced = await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_runtime"
+           SET "lease_heartbeat_at" = ${now}, "lease_expires_at" = ${expiresAt},
+               "updated_at" = ${now}
+         WHERE "project_id" = ${lease.projectId}::uuid
+           AND "lease_holder" = ${lease.holder}::uuid
+           AND "fencing_token" = ${lease.fencingToken}
+           AND "lease_expires_at" > ${now}
+      `);
+      if (fenced !== 1) throw new ProjectLeaseLostError(lease.projectId);
+
+      const decision = await this.decisions!.getInternal(tx, lease.projectId, decisionId);
+      if (!decision) throw new Error(`Project decision ${decisionId} does not belong to ${lease.projectId}`);
+      const input = decision.decisionInput as ProjectDecisionInput;
+      if (input.decisionInputHash !== decision.decisionInputHash
+        || hashDecisionInput(input) !== decision.decisionInputHash) {
+        throw new Error(`Project decision ${decisionId} has an invalid input hash`);
+      }
+      const decisionOutcome = decision.outcome as ProjectDecisionOutcome;
+      if (decisionOutcome.decisionInputHash !== decision.decisionInputHash
+        || decisionOutcome.reconcileId !== uuidToBase62(decisionId)) {
+        throw new Error(`Project decision ${decisionId} has an invalid outcome lineage`);
+      }
+      const publicSubjectId = action.subject.id ? uuidToBase62(action.subject.id) : null;
+      const planned = decisionOutcome.actions.some((candidate) =>
+        candidate.type === action.type
+        && candidate.idempotencyKey === action.idempotencyKey
+        && candidate.subject.type === action.subject.type
+        && (candidate.subject.id ?? null) === publicSubjectId);
+      if (!planned) {
+        throw new Error(`Project action ${action.idempotencyKey} is not present in decision ${decisionId}`);
+      }
+      const current = await this.decisions!.capture(
+        tx,
+        lease.projectId,
+        new Date(input.readAt),
+      );
+      const stale = current.input.decisionInputHash !== decision.decisionInputHash;
+
+      const actionId = randomUUID();
+      const detail = action.detail && typeof action.detail === 'object' && !Array.isArray(action.detail)
+        ? { ...(action.detail as Record<string, Prisma.JsonValue>),
+            decisionInputHash: decision.decisionInputHash,
+            ...(stale ? { actualDecisionInputHash: current.input.decisionInputHash } : {}) }
+        : {
+            value: action.detail ?? null,
+            decisionInputHash: decision.decisionInputHash,
+            ...(stale ? { actualDecisionInputHash: current.input.decisionInputHash } : {}),
+          };
+      const inserted = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        INSERT INTO "project_action" (
+          "id", "project_id", "idempotency_key", "type", "status", "subject_type",
+          "subject_id", "fencing_token", "decision_id", "refusal_code", "detail", "updated_at"
+        ) VALUES (
+          ${actionId}::uuid, ${lease.projectId}::uuid, ${action.idempotencyKey},
+          ${action.type}::"project_action_type", ${stale ? 'REFUSED' : 'CLAIMED'}::"project_action_status",
+          ${action.subject.type}, ${action.subject.id ?? null}::uuid, ${lease.fencingToken},
+          ${decisionId}::uuid, ${stale ? 'STALE_SNAPSHOT' : null},
+          ${JSON.stringify(detail)}::jsonb, ${now}
+        )
+        ON CONFLICT ("idempotency_key") DO NOTHING
+        RETURNING "id"
+      `);
+      if (!inserted[0]) {
+        const existing = (await tx.$queryRaw<ExistingActionRow[]>(Prisma.sql`
+          SELECT "id", "project_id" AS "projectId", "status"
+            FROM "project_action" WHERE "idempotency_key" = ${action.idempotencyKey}
+        `))[0];
+        if (!existing || existing.projectId !== lease.projectId) {
+          throw new Error(`idempotency key ${action.idempotencyKey} belongs to another Project`);
+        }
+        return {
+          status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
+        } as const;
+      }
+
+      if (stale) {
+        await this.events.enqueue(tx, {
+          projectId: lease.projectId,
+          kind: 'coordinator.snapshot_stale',
+          source: { type: 'TIMER', id: lease.projectId },
+          dedupeKey: `coordinator.snapshot_stale:${decisionId}:${actionId}`,
+          payload: {
+            decisionId,
+            actionId,
+            expectedDecisionInputHash: decision.decisionInputHash,
+            actualDecisionInputHash: current.input.decisionInputHash,
+          },
+          occurredAt: now,
+        });
+        const scheduled = await tx.$executeRaw(Prisma.sql`
+          UPDATE "project_runtime"
+             SET "next_wake_at" = LEAST(COALESCE("next_wake_at", ${now}), ${now}),
+                 "next_wake_reason" = 'stale Coordinator decision requires reconcile',
+                 "updated_at" = ${now}
+           WHERE "project_id" = ${lease.projectId}::uuid
+             AND "lease_holder" = ${lease.holder}::uuid
+             AND "fencing_token" = ${lease.fencingToken}
+        `);
+        if (scheduled !== 1) throw new ProjectLeaseLostError(lease.projectId);
+        return {
+          status: 'REFUSED',
+          actionId,
+          refusalCode: 'STALE_SNAPSHOT',
+          expectedDecisionInputHash: decision.decisionInputHash,
+          actualDecisionInputHash: current.input.decisionInputHash,
+        } as const;
+      }
+
+      await effect(tx, actionId);
+      const published = await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_action" SET "status" = 'APPLIED', "updated_at" = ${now}
+         WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
+           AND "decision_id" = ${decisionId}::uuid
+      `);
+      if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
+      return { status: 'APPLIED', actionId } as const;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
   }
 
   private async acquireLeaseInTransaction(

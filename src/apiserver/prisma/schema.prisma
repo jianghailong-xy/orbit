@@ -1240,6 +1240,7 @@ model Project {
   runtime ProjectRuntime?
   events  ProjectEvent[]
   actions ProjectAction[]
+  decisions ProjectDecision[]
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -1373,10 +1374,10 @@ model ProjectAction {
   subjectId      String?             @map("subject_id") @db.Uuid
   fencingToken   BigInt              @map("fencing_token")
 
-  /// Added without foreign keys in this unit: decisions and result-session lineage are wired by
-  /// the units that own those commit-time invariants. UUID shape is fixed now so those additions
-  /// are additive migrations rather than table rewrites.
+  /// Decision lineage is now a same-Project composite FK (migration 0120). Result-session lineage
+  /// remains reserved for the unit that owns that commit-time invariant.
   decisionId      String? @map("decision_id") @db.Uuid
+  decision        ProjectDecision? @relation(fields: [decisionId, projectId], references: [id, projectId], onDelete: NoAction)
   resultSessionId String? @map("result_session_id") @db.Uuid
   refusalCode     String? @map("refusal_code")
   detail          Json    @default("{}")
@@ -1387,6 +1388,34 @@ model ProjectAction {
   @@index([projectId, createdAt])
   @@index([projectId, type, status])
   @@map("project_action")
+}
+
+/// Append-only Coordinator judgment audit. The JSON protocol uses Base62 public ids, while the
+/// relational attribution columns retain UUIDs so ownership and action lineage remain enforceable.
+model ProjectDecision {
+  id                String  @id @default(uuid(7)) @db.Uuid
+  projectId         String  @map("project_id") @db.Uuid
+  project           Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inputVersion      Int     @map("input_version")
+  decisionInputHash String  @map("decision_input_hash") @db.Char(64)
+  decisionInput     Json    @map("decision_input")
+  outcome           Json
+  decidedBy         String  @map("decided_by")
+
+  /// Historical attribution, deliberately without foreign keys: deleting or rotating an Agent or
+  /// Session must not rewrite what identity made an earlier decision.
+  coordinatorAgentId   String? @map("coordinator_agent_id") @db.Uuid
+  coordinatorSessionId String? @map("coordinator_session_id") @db.Uuid
+  fencingToken         BigInt  @map("fencing_token")
+  reason               String
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  actions ProjectAction[]
+
+  @@unique([id, projectId])
+  @@index([projectId, createdAt])
+  @@index([projectId, decisionInputHash])
+  @@map("project_decision")
 }
 
 /// A durable signal that some committed fact belonging to a Project changed.

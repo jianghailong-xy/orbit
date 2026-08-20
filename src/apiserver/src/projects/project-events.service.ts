@@ -332,7 +332,7 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
           : { status: 'RETRY_SCHEDULED', projectId, eventIds: retry.map((event) => event.id) } as const;
       }
 
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
   }
 
   private requestDrain(): void {
