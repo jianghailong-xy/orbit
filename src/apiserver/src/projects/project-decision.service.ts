@@ -17,9 +17,28 @@ import {
   planTaskAggregation,
 } from './task-aggregation';
 import {
+  PlannedVerificationVerdict,
   VerificationSubjectFact,
   VerificationVerdictFact,
+  planVerificationVerdicts,
 } from './task-verification-verdict';
+import {
+  ObservedBlockerCondition,
+  PlannedBlockerRaise,
+  ProjectBlockerFact,
+  ProjectBlockerPlan,
+  planProjectBlockers,
+  blockerRunState,
+} from './project-blocker';
+import { detectProjectBlockerConditions } from './project-blocker-conditions';
+import {
+  ProjectWakeCandidate,
+  ProjectWakeDecision,
+  PROJECT_WAKE_FALLBACK_MS,
+  PROJECT_TURN_RATE_LIMIT_MS,
+  chooseProjectWake,
+  collectProjectWakeCandidates,
+} from './project-next-wake';
 
 export const PROJECT_DECISION_INPUT_VERSION = 1 as const;
 
@@ -179,10 +198,24 @@ export interface ProjectDecisionInput {
       decisionId: string | null;
       resultSessionId: string | null;
       refusalCode: string | null;
+      /**
+       * §7.6 TR2-a's window bucket. Absent on decisions captured before migration 0125, which
+       * readers must treat as "no window": those snapshots were taken by a binary that opened no
+       * turns, so there was none.
+       */
+      reasonCode?: string | null;
       idempotencyKeyHash: string;
       detailHash: string;
       createdAt: string;
     }>;
+    /**
+     * §11's open blockers, as facts (§4.2 guards 2/3 and §10.4 clauses 1/2 both read them).
+     *
+     * Absent on decisions captured before migration 0125. A reader must treat that as "this
+     * snapshot predates blockers" and NOT as "there were none": an old decision has to replay to
+     * the outcome it originally produced, not to today's rules applied to yesterday's world.
+     */
+    blockers?: ProjectBlockerFact[];
     evidence: {
       branches: Array<{
         sessionId: string;
@@ -216,6 +249,11 @@ export interface ProjectDecisionInput {
   evaluation: {
     epoch: number;
     dueTasks: Record<string, { runAtDue: boolean; retryBackoffExpired: boolean }>;
+    /**
+     * §7.6 TR2-a folded into S5's frozen instant: per `reasonCode`, the committed window boundary
+     * and whether it has passed. Absent on pre-0125 snapshots.
+     */
+    turnWindows?: Record<string, { windowEndsAt: string; rateLimitExpired: boolean }>;
   };
   signals: Array<{ eventId: string; kind: 'user.manual_trigger'; dedupeKey: string }>;
 }
@@ -236,8 +274,27 @@ export interface ProjectDecisionOutcome {
     subject: { type: string; id?: string | null };
   }>;
   authorizations: ProjectAuthorizationAudit[];
+  /** §11.3's dedupe keys this pass opened. Keys, not row ids: the row is created by the action
+   *  this plan proposes, so it has no id yet, and a plan has to replay byte-for-byte. */
   blockersOpened: string[];
+  /** Base62 ids of the rows §11.4's recomputation found no longer true. */
   blockersCleared: string[];
+  /**
+   * §11's full plan for this snapshot. Absent on pre-0125 snapshots (see `world.blockers`).
+   */
+  blockers?: ProjectDecisionBlockerAudit;
+  /**
+   * §10.4 W5 clause 4: the whole wake candidate table in the total order, plus whether the W3
+   * floor moved the answer. The contract calls this `project_decision.detail.wakeCandidates`;
+   * `project_decision` stores its audit in `outcome`, so this is where `detail` lives.
+   *
+   * Recording the losers is the point: a reason that did not win was not dropped, and "same input
+   * hash ⇒ same audit row" holds for the table and not only for the winner.
+   */
+  detail?: {
+    wakeCandidates: ProjectWakeCandidate[];
+    flooredBy: 'W3' | null;
+  };
   /**
    * Parent statuses this snapshot implies (§13.1). Recomputed from `world.tasks`, so it is part of
    * what replay checks; the reconcile pass applies each as a compare-and-set and deliberately does
@@ -249,6 +306,17 @@ export interface ProjectDecisionOutcome {
   nextWakeAt: string | null;
   nextWakeReason: string | null;
   consumedEventIds: string[];
+}
+
+/** §11's plan as the audit protocol carries it: Base62 ids, no wall clock beyond the frozen
+ *  epoch, and every axis of every row it touched. */
+export interface ProjectDecisionBlockerAudit {
+  raised: PlannedBlockerRaise[];
+  touched: ProjectBlockerPlan['touches'];
+  cleared: Array<ProjectBlockerPlan['clears'][number] & { resolvedBy: 'AUTO' }>;
+  escalated: ProjectBlockerPlan['escalations'];
+  /** The open set §4.2's guards and §10.4's clauses 1/2 were evaluated against. */
+  open: ProjectBlockerPlan['openAfter'];
 }
 
 export interface CapturedProjectDecisionInput {
@@ -407,8 +475,28 @@ interface ActionRow {
   decisionId: string | null;
   resultSessionId: string | null;
   refusalCode: string | null;
+  reasonCode: string | null;
   detail: unknown;
   createdAt: Date;
+}
+
+interface BlockerRow {
+  id: string;
+  kind: string;
+  owner: string;
+  recovery: string;
+  severity: string;
+  requiredAction: string;
+  nextCheckAt: Date;
+  subjectType: string;
+  subjectId: string;
+  dedupeKey: string;
+  lifecycleGeneration: bigint;
+  conditionVersion: string;
+  firstSeenAt: Date;
+  lastSeenAt: Date;
+  occurrences: number;
+  escalatedAt: Date | null;
 }
 
 interface SignalRow {
@@ -620,10 +708,27 @@ export class ProjectDecisionService {
         SELECT a."id" AS "actionId", a."idempotency_key" AS "idempotencyKey", a."type"::text,
                a."status"::text, a."subject_type" AS "subjectType", a."subject_id" AS "subjectId",
                a."decision_id" AS "decisionId", a."result_session_id" AS "resultSessionId",
-               a."refusal_code" AS "refusalCode", a."detail", a."created_at" AS "createdAt"
+               a."refusal_code" AS "refusalCode", a."reason_code" AS "reasonCode",
+               a."detail", a."created_at" AS "createdAt"
           FROM "project_action" a JOIN "project" p ON p."id" = a."project_id"
          WHERE a."project_id" = ${projectId}::uuid AND p."owner_id" = ${project.ownerId}::uuid
          ORDER BY a."created_at", a."id"
+      `);
+    // §11: the OPEN set only. Resolved rows stay on disk forever (BE1 needs their generations) but
+    // they are history, not facts about now.
+    const blockerRows = await tx.$queryRaw<BlockerRow[]>(Prisma.sql`
+        SELECT b."id", b."kind", b."owner"::text, b."recovery"::text, b."severity"::text,
+               b."required_action" AS "requiredAction", b."next_check_at" AS "nextCheckAt",
+               b."subject_type" AS "subjectType", b."subject_id" AS "subjectId",
+               b."dedupe_key" AS "dedupeKey",
+               b."lifecycle_generation" AS "lifecycleGeneration",
+               b."condition_version" AS "conditionVersion",
+               b."first_seen_at" AS "firstSeenAt", b."last_seen_at" AS "lastSeenAt",
+               b."occurrences", b."escalated_at" AS "escalatedAt"
+          FROM "project_blocker" b JOIN "project" p ON p."id" = b."project_id"
+         WHERE b."project_id" = ${projectId}::uuid AND p."owner_id" = ${project.ownerId}::uuid
+           AND b."resolved_at" IS NULL
+         ORDER BY b."dedupe_key", b."id"
       `);
     const signalRows = await tx.$queryRaw<SignalRow[]>(Prisma.sql`
         SELECT e."id", e."kind", e."dedupe_key" AS "dedupeKey"
@@ -843,9 +948,31 @@ export class ProjectDecisionService {
         decisionId: toPublicIdOrNull(row.decisionId),
         resultSessionId: toPublicIdOrNull(row.resultSessionId),
         refusalCode: row.refusalCode,
+        reasonCode: row.reasonCode,
         idempotencyKeyHash: sha256(row.idempotencyKey),
         detailHash: sha256(jsonValue(row.detail)),
         createdAt: isoRequired(row.createdAt),
+      })),
+      blockers: blockerRows.map((row) => ({
+        id: toPublicId(row.id),
+        kind: row.kind as ProjectBlockerFact['kind'],
+        owner: row.owner as ProjectBlockerFact['owner'],
+        recovery: row.recovery as ProjectBlockerFact['recovery'],
+        severity: row.severity as ProjectBlockerFact['severity'],
+        requiredAction: row.requiredAction,
+        subjectType: row.subjectType as ProjectBlockerFact['subjectType'],
+        // Row subjects are stored as UUID text and rendered Base62 here like every other id in
+        // this snapshot; a natural key (a builtin provider's slug) is not a UUID and passes
+        // through unchanged.
+        subjectId: publicSubjectId(row.subjectId),
+        dedupeKey: publicDedupeKey(row.dedupeKey),
+        lifecycleGeneration: String(row.lifecycleGeneration),
+        conditionVersion: row.conditionVersion,
+        firstSeenAt: isoRequired(row.firstSeenAt),
+        lastSeenAt: isoRequired(row.lastSeenAt),
+        occurrences: row.occurrences,
+        nextCheckAt: isoRequired(row.nextCheckAt),
+        escalatedAt: iso(row.escalatedAt),
       })),
       evidence: {
         branches: sessionRows.filter((row): row is SessionRow & { branch: string } => Boolean(row.branch))
@@ -895,6 +1022,7 @@ export class ProjectDecisionService {
             || Date.parse(task.retryBackoffUntil) <= epoch * 1_000,
         },
       ])),
+      turnWindows: turnWindowsOf(actionRows, epoch),
     };
     const signals = signalRows.map((row) => ({
       eventId: toPublicId(row.id),
@@ -1007,8 +1135,6 @@ export class ProjectDecisionService {
       consumedEventIds: stored.consumedEventIds,
       actions: stored.actions,
       authorizations: stored.authorizations ?? [],
-      blockersOpened: stored.blockersOpened,
-      blockersCleared: stored.blockersCleared,
     });
     const outcomeMatches = canonicalJson(replayed) === canonicalJson(stored);
     const actions = await this.prisma.$queryRaw<DecisionActionRow[]>(Prisma.sql`
@@ -1054,8 +1180,6 @@ export function planProjectDecision(
     consumedEventIds?: string[];
     actions?: ProjectDecisionOutcome['actions'];
     authorizations?: ProjectAuthorizationAudit[];
-    blockersOpened?: string[];
-    blockersCleared?: string[];
   },
 ): ProjectDecisionOutcome {
   if (hashDecisionInput(input) !== input.decisionInputHash) {
@@ -1068,10 +1192,116 @@ export function planProjectDecision(
     }
   }
   const aggregation = planTaskAggregation(aggregationFacts(input));
-  const runStateAfter = runStateOf(input);
-  const nextWakeAt = runStateAfter === 'SETTLED'
-    ? null
-    : new Date((input.evaluation.epoch + 60) * 1_000).toISOString();
+  const blockerPlan = planBlockers(input, aggregation.cycleTaskIds);
+  const runStateAfter = runStateOf(input, blockerPlan?.openAfter ?? []);
+  const wake = blockerPlan
+    ? chooseProjectWake({ epoch: input.evaluation.epoch, runStateAfter }, collectProjectWakeCandidates({
+      epoch: input.evaluation.epoch,
+      projectId: input.world.project.id,
+      runStateAfter,
+      blockers: blockerPlan.openAfter,
+      tasks: input.world.tasks.map((task) => ({
+        id: task.id,
+        retryBackoffUntil: task.retryBackoffUntil,
+        runAt: task.runAt,
+        retryBackoffExpired: input.evaluation.dueTasks[task.id]?.retryBackoffExpired ?? true,
+        runAtDue: input.evaluation.dueTasks[task.id]?.runAtDue ?? true,
+      })),
+      hasInFlightSession: hasLiveTaskSession(input),
+      rateLimitedTurnWindows: rateLimitedTurnWindows(input),
+    }))
+    : legacyWake(input, runStateAfter);
+  return {
+    v: 1,
+    reconcileId: toPublicId(options.decisionId),
+    fencingToken: input.world.runtime.fencingToken,
+    decisionInputHash: input.decisionInputHash,
+    configRevision: input.world.project.configRevision,
+    runStateBefore: input.world.runtime.runState,
+    runStateAfter,
+    decidedBy: options.decidedBy ?? 'ORCHESTRATOR',
+    reason: wake.nextWakeReason ?? 'Project is outside the active coordination loop',
+    actions: options.actions ?? [],
+    authorizations: options.authorizations ?? [],
+    blockersOpened: blockerPlan?.raises.map((raise) => raise.dedupeKey) ?? [],
+    blockersCleared: blockerPlan?.clears.map((clear) => clear.blockerId) ?? [],
+    ...(blockerPlan
+      ? {
+        blockers: {
+          raised: blockerPlan.raises,
+          touched: blockerPlan.touches,
+          cleared: blockerPlan.clears.map((clear) => ({ ...clear, resolvedBy: 'AUTO' as const })),
+          escalated: blockerPlan.escalations,
+          open: blockerPlan.openAfter,
+        },
+        detail: { wakeCandidates: wake.candidates, flooredBy: wake.flooredBy },
+      }
+      : {}),
+    aggregations: aggregation.aggregations,
+    aggregationCycleTaskIds: aggregation.cycleTaskIds,
+    nextWakeAt: wake.nextWakeAt,
+    nextWakeReason: wake.nextWakeReason,
+    consumedEventIds: options.consumedEventIds ?? [],
+  };
+}
+
+/**
+ * §11.4's recomputation, fail-closed (BL2).
+ *
+ * Returns `null` for a snapshot taken before migration 0125 — that decision was made by a binary
+ * with no blockers at all, and an audit replay has to reproduce what it decided rather than what
+ * today's rules would decide about yesterday's world.
+ *
+ * The `catch` is BL2 written out: a detector that throws is a failure nobody classified, and the
+ * answer to that is an `UNKNOWN_FAILURE` blocker that stops this project's automatic dispatch —
+ * not an empty condition list, which would silently clear every open row.
+ */
+function planBlockers(
+  input: ProjectDecisionInput,
+  aggregationCycleTaskIds: readonly string[],
+): ProjectBlockerPlan | null {
+  const open = input.world.blockers;
+  if (open === undefined) return null;
+  let observed: ObservedBlockerCondition[];
+  try {
+    observed = detectProjectBlockerConditions(input, {
+      aggregationCycleTaskIds,
+      verificationVerdicts: verificationVerdictPlan(input),
+    });
+  } catch (cause) {
+    observed = [{
+      kind: 'UNKNOWN_FAILURE',
+      subjectType: 'PROJECT',
+      subjectId: input.world.project.id,
+      // The reason, not the message: a digest that moved with an error string would open a new
+      // coordinator turn every time the wording changed.
+      facts: { reason: 'CONDITION_DETECTION_FAILED' },
+      detail: {
+        reason: 'CONDITION_DETECTION_FAILED',
+        error: (cause instanceof Error ? cause.message : String(cause)).slice(0, 500),
+      },
+    }];
+  }
+  return planProjectBlockers({ epoch: input.evaluation.epoch, open, observed });
+}
+
+/** §13.2's plan for this snapshot, shared by the verdict consequences and the blocker face so the
+ *  two cannot disagree about what a check concluded. */
+export function verificationVerdictPlan(
+  input: ProjectDecisionInput,
+): PlannedVerificationVerdict[] {
+  const facts = verificationVerdictFacts(input);
+  return planVerificationVerdicts(facts.verifications, facts.subjects).verdicts;
+}
+
+/**
+ * §10.4 as it read before W5 and before blockers existed, kept for exactly one caller: replaying a
+ * decision captured before migration 0125.
+ */
+function legacyWake(
+  input: ProjectDecisionInput,
+  runStateAfter: ProjectDecisionRunState,
+): ProjectWakeDecision {
   const nextWakeReason = runStateAfter === 'PLANNING'
     ? 'planning requires coordinator decision'
     : runStateAfter === 'EXECUTING'
@@ -1082,25 +1312,36 @@ export function planProjectDecision(
           ? null
           : 'reconcile state recheck';
   return {
-    v: 1,
-    reconcileId: toPublicId(options.decisionId),
-    fencingToken: input.world.runtime.fencingToken,
-    decisionInputHash: input.decisionInputHash,
-    configRevision: input.world.project.configRevision,
-    runStateBefore: input.world.runtime.runState,
-    runStateAfter,
-    decidedBy: options.decidedBy ?? 'ORCHESTRATOR',
-    reason: nextWakeReason ?? 'Project is outside the active coordination loop',
-    actions: options.actions ?? [],
-    authorizations: options.authorizations ?? [],
-    blockersOpened: options.blockersOpened ?? [],
-    blockersCleared: options.blockersCleared ?? [],
-    aggregations: aggregation.aggregations,
-    aggregationCycleTaskIds: aggregation.cycleTaskIds,
-    nextWakeAt,
+    nextWakeAt: runStateAfter === 'SETTLED'
+      ? null
+      : new Date(input.evaluation.epoch * 1_000 + PROJECT_WAKE_FALLBACK_MS).toISOString(),
     nextWakeReason,
-    consumedEventIds: options.consumedEventIds ?? [],
+    candidates: [],
+    flooredBy: null,
   };
+}
+
+/** §4.2 guard 5 / §10.4 clause 5 read the same predicate, so they read it from one place. */
+function hasLiveTaskSession(input: ProjectDecisionInput): boolean {
+  return input.world.sessions.some((session) =>
+    session.taskId != null && !session.deletedAt && isLiveSession(session.runStatus));
+}
+
+/**
+ * §7.6 TR2-b: windows a pending request is currently held behind.
+ *
+ * `MANUAL` is the only `reasonCode` §7.2's table has today, and it is triggered by an unconsumed
+ * `user.manual_trigger`; with none pending there is nothing being held and therefore no candidate.
+ * The clause is written per `reasonCode` so a second row in that table needs no change here.
+ */
+function rateLimitedTurnWindows(
+  input: ProjectDecisionInput,
+): Array<{ reasonCode: string; windowEndsAt: string }> {
+  return Object.entries(input.evaluation.turnWindows ?? {})
+    .filter(([reasonCode, window]) => !window.rateLimitExpired
+      && (reasonCode !== 'MANUAL' || input.signals.length > 0))
+    .map(([reasonCode, window]) => ({ reasonCode, windowEndsAt: window.windowEndsAt }))
+    .sort((a, b) => (a.reasonCode < b.reasonCode ? -1 : a.reasonCode > b.reasonCode ? 1 : 0));
 }
 
 export function hashDecisionInput(
@@ -1187,12 +1428,26 @@ export function verificationVerdictFacts(input: ProjectDecisionInput): {
   return { verifications, subjects };
 }
 
-function runStateOf(input: ProjectDecisionInput): ProjectDecisionRunState {
+/**
+ * §4.2 RS0: `run_state` is a pure function of the snapshot, evaluated in guard order, first match
+ * wins. Not a transition table — v1's was, and on a mixed blocker set two of its rows fired at once
+ * and the answer came down to which blocker the implementation happened to visit first
+ * (`PC-CX-03`).
+ *
+ * Guard 4 (ACCEPTANCE, an unconverged `RUN_PROJECT_ACCEPTANCE`) is absent because no pass produces
+ * that action yet; it belongs to §13.4's unit and slots in between guards 3 and 5.
+ */
+function runStateOf(
+  input: ProjectDecisionInput,
+  openBlockers: readonly { owner: 'USER' | 'COORDINATOR' | 'SYSTEM' }[],
+): ProjectDecisionRunState {
   if (input.world.project.status !== 'OPEN') return 'SETTLED';
-  if (input.world.sessions.some((session) =>
-    session.taskId != null && !session.deletedAt && isLiveSession(session.runStatus))) {
-    return 'EXECUTING';
-  }
+  // Guards 2 and 3. People before machines: AWAITING_HUMAN is the only state that may stop the
+  // loop's own clock, so letting a SYSTEM blocker mask it would hide the fact that somebody is
+  // being waited on.
+  const blocked = blockerRunState(openBlockers);
+  if (blocked) return blocked;
+  if (hasLiveTaskSession(input)) return 'EXECUTING';
   if (input.world.tasks.some((task) => task.verifiesTaskId && task.status !== 'DONE')) {
     return 'AWAITING_VERIFICATION';
   }
@@ -1217,8 +1472,6 @@ function assertDecisionReplay(input: ProjectDecisionInput, outcome: ProjectDecis
     consumedEventIds: outcome.consumedEventIds,
     actions: outcome.actions,
     authorizations: outcome.authorizations,
-    blockersOpened: outcome.blockersOpened,
-    blockersCleared: outcome.blockersCleared,
   });
   if (canonicalJson(replayed) !== canonicalJson(outcome)) {
     throw new Error('Project decision outcome is not reproducible from its input');
@@ -1316,6 +1569,52 @@ function iso(value: Date | string | null | undefined): string | null {
 
 function isoRequired(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+}
+
+/**
+ * §7.6 TR2-a's window per `reasonCode`, folded into S5's frozen instant.
+ *
+ * The anchor is the LATEST applied turn on that bucket and the boundary is its `created_at + 60s`
+ * — both committed facts, so a takeover, a restart or a replica reads the same window rather than
+ * inventing one from its own clock.
+ */
+function turnWindowsOf(
+  actions: ActionRow[],
+  epoch: number,
+): Record<string, { windowEndsAt: string; rateLimitExpired: boolean }> {
+  const anchors = new Map<string, Date>();
+  for (const action of actions) {
+    if (action.type !== 'OPEN_COORDINATOR_TURN' || action.status !== 'APPLIED') continue;
+    if (!action.reasonCode) continue;
+    anchors.set(action.reasonCode, action.createdAt);
+  }
+  return Object.fromEntries([...anchors]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([reasonCode, createdAt]) => {
+      const endsAt = createdAt.getTime() + PROJECT_TURN_RATE_LIMIT_MS;
+      return [reasonCode, {
+        windowEndsAt: new Date(endsAt).toISOString(),
+        rateLimitExpired: endsAt <= epoch * 1_000,
+      }];
+    }));
+}
+
+/** A blocker subject is either a row id (Base62 out, like everything else here) or a natural key
+ *  a builtin provider is named by, which is not a UUID and is left alone. */
+function publicSubjectId(subjectId: string): string {
+  try {
+    return uuidToBase62(subjectId);
+  } catch {
+    return subjectId;
+  }
+}
+
+/** §11.3's key is `<kind>:<subjectType>:<subjectId>`, so the subject inside it is publicized too —
+ *  otherwise the audit would carry a raw UUID in the middle of a string. */
+function publicDedupeKey(dedupeKey: string): string {
+  const parts = dedupeKey.split(':');
+  if (parts.length !== 3) return dedupeKey;
+  return `${parts[0]}:${parts[1]}:${publicSubjectId(parts[2])}`;
 }
 
 function toPublicId(id: string): string {

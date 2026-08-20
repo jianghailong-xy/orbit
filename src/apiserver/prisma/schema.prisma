@@ -1335,6 +1335,7 @@ model Project {
   events  ProjectEvent[]
   actions ProjectAction[]
   decisions ProjectDecision[]
+  blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
 
   @@index([ownerId])
@@ -1518,6 +1519,130 @@ model ProjectDecision {
   @@index([projectId, createdAt])
   @@index([projectId, decisionInputHash])
   @@map("project_decision")
+}
+
+/// WHO can resolve a blocker (contract §11.1). This column decides `run_state` — §4.2's guard 2
+/// selects AWAITING_HUMAN when any open blocker is USER, guard 3 BLOCKED otherwise — and nothing
+/// else. §11.5 ES3 moves it exactly once, always to USER.
+enum ProjectBlockerOwner {
+  USER
+  COORDINATOR
+  SYSTEM
+
+  @@map("project_blocker_owner")
+}
+
+/// WHAT can clear a blocker (§11.1, v1.1). This column decides the CLOCK (§10.4) and nothing else,
+/// and escalation never rewrites it (ES1).
+///
+/// It exists because `owner` alone was answering three questions at once. BUDGET_EXHAUSTED is the
+/// row that proved it: the person who can raise a budget is the user, so v1 wrote owner = USER,
+/// which made the state AWAITING_HUMAN, which made `next_wake_at` NULL — and a wait that ends by
+/// itself in six hours became a wait for somebody nobody told (`PC-CX-05`).
+enum ProjectBlockerRecovery {
+  TIME
+  EVENT
+  HUMAN
+
+  @@map("project_blocker_recovery")
+}
+
+/// How loudly this reads on the control plane. The contract names the column and leaves the values
+/// free; `PROJECT_BLOCKER_POLICY` freezes one per kind.
+enum ProjectBlockerSeverity {
+  INFO
+  WARNING
+  CRITICAL
+
+  @@map("project_blocker_severity")
+}
+
+/// Who ended the episode. AUTO is §11.4's recomputation finding the condition gone, which is the
+/// normal exit; the other two record a person or the coordinator resolving it deliberately.
+enum ProjectBlockerResolvedBy {
+  AUTO
+  USER
+  COORDINATOR
+
+  @@map("project_blocker_resolved_by")
+}
+
+/// One structured reason this project did not move (contract §11).
+///
+/// §11.1 BL1 is why the table exists at all: a pass that did not advance lands HERE or on a `NOOP`
+/// audit row that says why, and there is no third option. "It silently did nothing" is the failure
+/// mode this project was built to make impossible, so it has to be unrepresentable.
+///
+/// Rows are NEVER deleted on resolution — `resolvedAt` is set and the row stays. Two things depend
+/// on that: `lifecycleGeneration` is allocated as `MAX + 1` over this key's whole history (§11.3
+/// BE1), so the history has to still be there; and "what was blocking this last Tuesday" is a
+/// question the audit is supposed to answer.
+model ProjectBlocker {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// §11.2's closed set, frozen by a CHECK in migration 0125 rather than by a Prisma enum: the
+  /// first six values ARE PAC §12's refusal codes, and a second enum spelling them would be a
+  /// second place for them to drift from.
+  kind           String
+  owner          ProjectBlockerOwner
+  recovery       ProjectBlockerRecovery
+  severity       ProjectBlockerSeverity
+  /// BL0's fourth question: one executable sentence, not a restated error message.
+  requiredAction String   @map("required_action")
+  /// BL5. Meaning depends on `recovery`: the recovery instant (TIME), a recompute poll (EVENT), or
+  /// the escalation alarm (HUMAN). NOT NULL because §11.1 requires one even when owner = USER.
+  nextCheckAt    DateTime @map("next_check_at")
+
+  /// What it is about. `subjectId` is TEXT, not uuid: most subjects are a row id (rendered Base62
+  /// on the way out) but a builtin provider has no row of its own and is named by its slug, and
+  /// `dedupeKey` has to be a total function of these two.
+  subjectType String @map("subject_type")
+  subjectId   String @map("subject_id")
+
+  /// Display and diagnosis. Never an input to any decision.
+  detail Json @default("{}")
+
+  /// §11.3: `<kind>:<subjectType>:<subjectId>` by default. Two indexes are declared on it in the
+  /// migration — a partial unique over open rows (one open episode per key) and a full unique over
+  /// `(project, key, generation)` (no two episodes share a generation, even across a takeover).
+  dedupeKey String @map("dedupe_key")
+  /// §11.3 BE1: which failure episode this is on that key. Allocated inside the INSERT as
+  /// `COALESCE(MAX(...), 0) + 1`, so it advances only when a resolved condition genuinely comes
+  /// back — which is what makes it an identity §8.2 GE1 accepts, and what lets §7.6 TR3 tell "the
+  /// coordinator made no progress" apart from "it broke again".
+  lifecycleGeneration BigInt @map("lifecycle_generation")
+  /// §7.2 TF2: a digest of the snapshot FACTS that produced this row. Recomputed and overwritten
+  /// every time the same key is observed again, which is what makes "the conflicting file set
+  /// changed" distinguishable from "the same conflict was seen once more".
+  conditionVersion String @map("condition_version") @db.Char(64)
+
+  firstSeenAt DateTime @map("first_seen_at")
+  lastSeenAt  DateTime @map("last_seen_at")
+  /// BL7: `occurrences` and `lastSeenAt` are for display and diagnosis ONLY. They must never enter
+  /// an idempotency key, `turnFacts`, an escalation condition, a `run_state` decision, a
+  /// notification decision or a `nextWakeAt` computation. v1.2's `occurrences > 10` escalation made
+  /// the owner, the state and one notification depend on how often a queue redelivered the same
+  /// fact (`PC-CX-15`); ES5 is the regression test for its absence.
+  occurrences Int @default(1)
+
+  /// §11.5: set once, by the escalation that moved `owner` to USER. Non-null also means §7.2's
+  /// BLOCKER_DECISION stops firing for this row (BL6) and §10.4 clause 2 stops selecting it — the
+  /// precise mechanical meaning of "escalated" is a wait that has been handed over and stopped
+  /// ticking.
+  escalatedAt DateTime? @map("escalated_at")
+
+  resolvedAt DateTime?                 @map("resolved_at")
+  resolvedBy ProjectBlockerResolvedBy? @map("resolved_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([projectId, dedupeKey, lifecycleGeneration], map: "project_blocker_episode_idx")
+  @@index([projectId, resolvedAt])
+  @@index([projectId, nextCheckAt])
+  @@map("project_blocker")
 }
 
 /// A durable signal that some committed fact belonging to a Project changed.

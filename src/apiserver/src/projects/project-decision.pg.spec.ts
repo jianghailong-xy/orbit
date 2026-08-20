@@ -43,6 +43,7 @@ const OUTBOX = migration('0116_project_event_outbox');
 const RECONCILE = migration('0119_project_reconcile_runtime');
 const DECISION = migration('0120_project_decision_audit');
 const AUTHORIZATION = migration('0121_project_authorization_policy');
+const BLOCKER = migration('0125_project_blocker');
 
 type ClientCtor = new (config: { connectionString?: string; connectionTimeoutMillis?: number }) => Client;
 type Tx = Prisma.TransactionClient;
@@ -195,6 +196,10 @@ async function reset(client: Client): Promise<void> {
     );
   `);
   await client.query(AUTHORIZATION);
+  // §11's table, and the `reason_code` column §7.6 TR2-a's window bucket is read from — the latter
+  // arrives with 0122, whose dispatch-boundary triggers are not what this spec is about.
+  await client.query(`ALTER TABLE "project_action" ADD COLUMN "reason_code" TEXT`);
+  await client.query(BLOCKER);
   await client.query(`
     INSERT INTO "project" (
       "id", "owner_id", "title", "goal", "acceptance_criteria",

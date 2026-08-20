@@ -30,6 +30,8 @@ import {
   ProjectRunnerCandidate,
   scheduleProjectRunner,
 } from './project-runner-scheduler';
+import { ProjectBlockerKind } from './project-blocker';
+import { DispatchBlockingRow, openBlockersStoppingDispatch } from './project-blocker-guard';
 
 const BUILTIN_PROVIDERS = Object.values(AgentProvider);
 const PROVIDER_RETRY_MS = 5 * 60_000;
@@ -166,6 +168,29 @@ export class ProjectTaskDispatcherService {
     const row = rows[0];
     if (!row) {
       return this.refusal('TASK_NOT_OPEN', 'TASK_NOT_OPEN', null, now);
+    }
+
+    // §11 BL1/BL2: an open blocker means this step is KNOWN not to be able to go forward, so the
+    // dispatch stops here rather than being re-litigated by the resolution chain. Project-scoped
+    // rows stop everything (there is nowhere to run, no coordinator, no budget, a cycle, or an
+    // unclassified failure); task-scoped rows stop their own task.
+    //
+    // The refusal code is deliberately its own — `PROJECT_BLOCKED` is in §11.2's non-blocking list,
+    // so a stopped dispatch cannot breed a second blocker about being stopped, and the detector
+    // reads THROUGH it to the attempt that actually said something.
+    const blocking = await tx.$queryRaw<DispatchBlockingRow[]>(
+      openBlockersStoppingDispatch(lease.projectId, command.taskId),
+    );
+    if (blocking.length > 0) {
+      return this.refusal('PROJECT_BLOCKED', 'PROJECT_BLOCKED', {
+        blockers: blocking.map((blocker) => ({
+          blockerId: blocker.id,
+          kind: blocker.kind as ProjectBlockerKind,
+          owner: blocker.owner,
+          subjectType: blocker.subjectType,
+          requiredAction: blocker.requiredAction,
+        })),
+      }, now);
     }
     if (row.runnerId) {
       await tx.$queryRaw(Prisma.sql`

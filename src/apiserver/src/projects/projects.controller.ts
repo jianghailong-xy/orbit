@@ -73,6 +73,21 @@ export class ProjectsController {
   }
 
   /**
+   * What is currently stopping this project (contract §11), newest episode first.
+   *
+   * `?history=1` also returns the resolved ones — they are never deleted, so this is where "what
+   * was blocking this yesterday and what ended it" is answered. Ids are served in both spellings.
+   */
+  @Get(':id/blockers')
+  blockers(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('history') history?: string,
+  ) {
+    return this.projects.blockers(user.userId, id, history === '1' || history === 'true');
+  }
+
+  /**
    * Open (or return) the session this project is coordinated from.
    *
    * POST because it may create one, and idempotent in the way that matters: calling it twice

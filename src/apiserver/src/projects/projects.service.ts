@@ -554,6 +554,98 @@ export class ProjectsService {
   }
 
   /**
+   * What is currently stopping this project, and what would clear it (contract §11).
+   *
+   * The five questions §11.1 freezes, in the order somebody actually asks them: what happened
+   * (`kind`), who can fix it (`owner`), what would end it (`recovery`), what to DO
+   * (`requiredAction`), and when the loop looks again (`nextCheckAt`). Plus the two display
+   * columns BL7 confines to exactly this use — `occurrences` and `lastSeenAt` answer "how long has
+   * this been going on", and they answer nothing else anywhere in the system.
+   *
+   * `?history=1` adds the resolved episodes. They are never deleted (§11.3 BE1 allocates the next
+   * generation from them), so "what was blocking this yesterday, and what ended it" is a question
+   * the audit can still answer.
+   *
+   * Ids come back as UUIDs and `PublicIdInterceptor` twins each one into its Base62 spelling
+   * (`publicId`, `subjectPublicId`, `projectPublicId`), which is how every other endpoint here
+   * serves an address. `dedupeKey` embeds a subject too, so it is rewritten to the Base62 form
+   * rather than leaking the internal uuid inside a string the interceptor cannot see into.
+   */
+  async blockers(ownerId: string, projectId: string, history = false) {
+    await this.assertOwned(ownerId, projectId);
+    const rows = await this.prisma.$queryRaw<Array<{
+      id: string;
+      kind: string;
+      owner: string;
+      recovery: string;
+      severity: string;
+      requiredAction: string;
+      nextCheckAt: Date;
+      subjectType: string;
+      subjectId: string;
+      detail: unknown;
+      dedupeKey: string;
+      lifecycleGeneration: bigint;
+      conditionVersion: string;
+      firstSeenAt: Date;
+      lastSeenAt: Date;
+      occurrences: number;
+      escalatedAt: Date | null;
+      resolvedAt: Date | null;
+      resolvedBy: string | null;
+      raisedByActionId: string | null;
+      raisedByActionStatus: string | null;
+    }>>(Prisma.sql`
+      SELECT b."id", b."kind", b."owner"::text, b."recovery"::text, b."severity"::text,
+             b."required_action" AS "requiredAction", b."next_check_at" AS "nextCheckAt",
+             b."subject_type" AS "subjectType", b."subject_id" AS "subjectId", b."detail",
+             b."dedupe_key" AS "dedupeKey",
+             b."lifecycle_generation" AS "lifecycleGeneration",
+             b."condition_version" AS "conditionVersion",
+             b."first_seen_at" AS "firstSeenAt", b."last_seen_at" AS "lastSeenAt",
+             b."occurrences", b."escalated_at" AS "escalatedAt",
+             b."resolved_at" AS "resolvedAt", b."resolved_by"::text AS "resolvedBy",
+             a."id" AS "raisedByActionId", a."status"::text AS "raisedByActionStatus"
+        FROM "project_blocker" b
+        -- §11.3 BE3: the raise key and the row are one-to-one, so "which action opened this" is an
+        -- index lookup on a unique column rather than an inference from timestamps.
+        LEFT JOIN "project_action" a
+               ON a."project_id" = b."project_id"
+              AND a."idempotency_key" = 'pc:v1:' || b."project_id"::text || ':blocker:'
+                    || b."kind" || ':' || b."subject_id" || ':' || b."lifecycle_generation"::text
+       WHERE b."project_id" = ${projectId}::uuid
+         AND (${history} OR b."resolved_at" IS NULL)
+       ORDER BY b."resolved_at" NULLS FIRST, b."first_seen_at", b."id"
+    `);
+    return {
+      projectId,
+      blockers: rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        owner: row.owner,
+        recovery: row.recovery,
+        severity: row.severity,
+        requiredAction: row.requiredAction,
+        nextCheckAt: row.nextCheckAt,
+        subjectType: row.subjectType,
+        subjectId: row.subjectId,
+        dedupeKey: publicDedupeKey(row.dedupeKey),
+        lifecycleGeneration: String(row.lifecycleGeneration),
+        conditionVersion: row.conditionVersion,
+        firstSeenAt: row.firstSeenAt,
+        lastSeenAt: row.lastSeenAt,
+        occurrences: row.occurrences,
+        escalatedAt: row.escalatedAt,
+        resolvedAt: row.resolvedAt,
+        resolvedBy: row.resolvedBy,
+        raisedByActionId: row.raisedByActionId,
+        raisedByActionStatus: row.raisedByActionStatus,
+        detail: row.detail,
+      })),
+    };
+  }
+
+  /**
    * One level of the project's task tree, newest first.
    *
    * The tree is read a level at a time rather than as a tree. `parentId` absent means the
@@ -1357,5 +1449,19 @@ export class ProjectsService {
       `This project still holds ${tasks ?? 'one or more'} task(s) and cannot be deleted — ` +
       'move them to another project or delete them first'
     );
+  }
+}
+
+/** §11.3's key is `<kind>:<subjectType>:<subjectId>`. The subject inside it is an address, so it
+ *  is served in the same Base62 spelling `PublicIdInterceptor` gives every other id — a raw uuid
+ *  buried in a string is one no caller could hand to any other endpoint, and the interceptor
+ *  cannot see into it. */
+function publicDedupeKey(dedupeKey: string): string {
+  const parts = dedupeKey.split(':');
+  if (parts.length !== 3) return dedupeKey;
+  try {
+    return `${parts[0]}:${parts[1]}:${uuidToBase62(parts[2])}`;
+  } catch {
+    return dedupeKey;
   }
 }

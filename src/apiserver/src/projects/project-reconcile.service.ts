@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  ProjectDecisionBlockerAudit,
   ProjectDecisionInput,
   ProjectDecisionOutcome,
   ProjectDecisionService,
@@ -18,6 +19,10 @@ import {
   ProjectEventsService,
 } from './project-events.service';
 import { PlannedTaskAggregation } from './task-aggregation';
+import {
+  clearBlockerIdempotencyKey,
+  raiseBlockerIdempotencyKey,
+} from './project-blocker';
 
 export const PROJECT_RECONCILE_LEASE_MS = 60_000;
 export const PROJECT_RECONCILE_HEARTBEAT_MS = 20_000;
@@ -237,6 +242,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       }
       await this.decisions.persist(tx, captured, outcome, decisionId);
       await this.applyAggregations(tx, projectId, outcome.aggregations, now);
+      await this.applyBlockers(tx, projectId, lease, decisionId, outcome.blockers, now);
       state = outcome.runStateAfter;
       nextWakeAt = outcome.nextWakeAt ? new Date(outcome.nextWakeAt) : null;
       nextWakeReason = outcome.nextWakeReason;
@@ -680,6 +686,205 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     return applied;
   }
 
+  /**
+   * Commit §11's plan — the raises, the repeat-cause touches, the auto-clears and the one-shot
+   * escalations — inside the SAME transaction that publishes the decision and the runtime state.
+   *
+   * One transaction is not an optimisation: §11.4 requires that clearing a condition recompute
+   * `run_state` and `nextWakeAt` immediately rather than on the next tick, and the outcome this is
+   * given was already computed from the post-plan open set. Splitting them would publish a state
+   * derived from blockers that had not been written yet.
+   *
+   * This deliberately does not go through `applyDecisionAction`: that opens its own transaction,
+   * and a blocker written in a second one would be a state the runtime row could disagree with.
+   * The ledger discipline is kept in full here — every raise and every clear claims its permanent
+   * key (§7.3), and §8.5 C1/C2's "conflict is a return value, not a rollback" is the reason the
+   * inserts end in `ON CONFLICT DO NOTHING`.
+   */
+  private async applyBlockers(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    plan: ProjectDecisionBlockerAudit | undefined,
+    now: Date,
+  ): Promise<void> {
+    if (!plan) return;
+
+    for (const raise of plan.raised) {
+      const subjectId = internalSubjectId(raise.subjectId);
+      // §11.3 BE1: the generation is allocated INSIDE the insert as `MAX + 1` over this key's whole
+      // history, which is why resolved rows are never deleted. Returning no row means this episode
+      // is already open — §8.5 C2: read the existing row, keep ITS generation so the key is
+      // unchanged, and skip the side effect.
+      const inserted = await tx.$queryRaw<Array<{ id: string; lifecycleGeneration: bigint }>>(Prisma.sql`
+        INSERT INTO "project_blocker" (
+          "id", "project_id", "kind", "owner", "recovery", "severity", "required_action",
+          "next_check_at", "subject_type", "subject_id", "detail", "dedupe_key",
+          "lifecycle_generation", "condition_version", "first_seen_at", "last_seen_at",
+          "occurrences", "created_at", "updated_at"
+        )
+        SELECT ${randomUUID()}::uuid, ${projectId}::uuid, ${raise.kind},
+               ${raise.owner}::"project_blocker_owner",
+               ${raise.recovery}::"project_blocker_recovery",
+               ${raise.severity}::"project_blocker_severity",
+               ${raise.requiredAction}, ${new Date(raise.nextCheckAt)},
+               ${raise.subjectType}, ${subjectId ?? raise.subjectId},
+               ${JSON.stringify(raise.detail)}::jsonb,
+               ${internalDedupeKey(raise.dedupeKey)},
+               COALESCE(MAX(b."lifecycle_generation"), 0) + 1,
+               ${raise.conditionVersion}, ${new Date(raise.firstSeenAt)},
+               ${new Date(raise.firstSeenAt)}, 1, ${now}, ${now}
+          FROM "project_blocker" b
+         WHERE b."project_id" = ${projectId}::uuid
+           AND b."dedupe_key" = ${internalDedupeKey(raise.dedupeKey)}
+        ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
+        RETURNING "id", "lifecycle_generation" AS "lifecycleGeneration"
+      `);
+      const row = inserted[0] ?? (await tx.$queryRaw<Array<{ id: string; lifecycleGeneration: bigint }>>(Prisma.sql`
+        SELECT "id", "lifecycle_generation" AS "lifecycleGeneration" FROM "project_blocker"
+         WHERE "project_id" = ${projectId}::uuid
+           AND "dedupe_key" = ${internalDedupeKey(raise.dedupeKey)}
+           AND "resolved_at" IS NULL
+      `))[0];
+      if (!row) throw new Error(`failed to raise ${raise.kind} blocker on ${projectId}`);
+      await this.claimBlockerAction(tx, projectId, lease, decisionId, {
+        type: 'RAISE_BLOCKER',
+        idempotencyKey: raiseBlockerIdempotencyKey(
+          projectId, raise.kind, subjectId ?? raise.subjectId, row.lifecycleGeneration,
+        ),
+        subjectType: raise.subjectType,
+        subjectId,
+        detail: {
+          blockerId: uuidToBase62(row.id),
+          kind: raise.kind,
+          owner: raise.owner,
+          recovery: raise.recovery,
+          dedupeKey: raise.dedupeKey,
+          lifecycleGeneration: String(row.lifecycleGeneration),
+          conditionVersion: raise.conditionVersion,
+          requiredAction: raise.requiredAction,
+          nextCheckAt: raise.nextCheckAt,
+        },
+      }, now);
+    }
+
+    // §11.3 / AC8. The same cause seen again moves exactly two display columns and recomputes the
+    // condition digest from CURRENT facts. No new row, no ledger key, no notification — which is
+    // the entire content of "duplicate events produce no extra side effect".
+    for (const touch of plan.touched) {
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_blocker"
+           SET "occurrences" = "occurrences" + 1,
+               "last_seen_at" = GREATEST("last_seen_at", ${new Date(touch.lastSeenAt)}),
+               "condition_version" = ${touch.conditionVersion},
+               "next_check_at" = ${new Date(touch.nextCheckAt)},
+               "detail" = ${JSON.stringify(touch.detail)}::jsonb,
+               "updated_at" = ${now}
+         WHERE "id" = ${base62ToUuid(touch.blockerId)}::uuid
+           AND "project_id" = ${projectId}::uuid
+           AND "resolved_at" IS NULL
+      `);
+    }
+
+    // §11.4: the condition is gone, so the row is resolved — by AUTO, because nobody did anything;
+    // the world simply stopped being that way. The row itself stays forever (BE1).
+    for (const clear of plan.cleared) {
+      const blockerId = base62ToUuid(clear.blockerId);
+      const resolved = await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_blocker"
+           SET "resolved_at" = ${now}, "resolved_by" = 'AUTO'::"project_blocker_resolved_by",
+               "updated_at" = ${now}
+         WHERE "id" = ${blockerId}::uuid
+           AND "project_id" = ${projectId}::uuid
+           AND "resolved_at" IS NULL
+      `);
+      if (resolved !== 1) continue;
+      await this.claimBlockerAction(tx, projectId, lease, decisionId, {
+        type: 'CLEAR_BLOCKER',
+        idempotencyKey: clearBlockerIdempotencyKey(projectId, blockerId),
+        subjectType: 'BLOCKER',
+        subjectId: blockerId,
+        detail: {
+          blockerId: clear.blockerId,
+          kind: clear.kind,
+          lifecycleGeneration: clear.lifecycleGeneration,
+          resolvedBy: 'AUTO',
+        },
+      }, now);
+    }
+
+    // §11.5: at most once per lifecycle, always to USER (ES3), `recovery` untouched (ES1). The
+    // compare-and-set is what makes "at most once" true of the DATABASE and not merely of this
+    // code path — and the notification rides the transition, so its count is the count of
+    // successful transitions.
+    for (const escalation of plan.escalated) {
+      const blockerId = base62ToUuid(escalation.blockerId);
+      const escalated = await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_blocker"
+           SET "owner" = 'USER'::"project_blocker_owner", "escalated_at" = ${now},
+               "updated_at" = ${now}
+         WHERE "id" = ${blockerId}::uuid
+           AND "project_id" = ${projectId}::uuid
+           AND "resolved_at" IS NULL
+           AND "escalated_at" IS NULL
+      `);
+      if (escalated !== 1) continue;
+      await this.events.enqueue(tx, {
+        projectId,
+        kind: 'blocker.escalated',
+        // §5.2's source set is closed and has no BLOCKER. TIMER is the honest one anyway: what
+        // produced this is the clock crossing `first_seen_at + threshold`, exactly as it produces
+        // `timer.due`.
+        source: { type: 'TIMER', id: projectId },
+        // One per blocker lifetime, and the outbox's partial unique index coalesces even that.
+        dedupeKey: `blocker.escalated:${escalation.blockerId}`,
+        payload: {
+          blockerId: escalation.blockerId,
+          kind: escalation.kind,
+          owner: escalation.owner,
+          dueAt: escalation.dueAt,
+        },
+        occurredAt: now,
+      });
+    }
+  }
+
+  /**
+   * Claim a blocker action's permanent key beside the row it describes.
+   *
+   * Published APPLIED in the same statement rather than CLAIMED-then-published: the effect is
+   * already committed in this transaction by the time this runs, so a CLAIMED row that never
+   * reached APPLIED could only mean the whole transaction rolled back — taking the row with it.
+   */
+  private async claimBlockerAction(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    action: {
+      type: 'RAISE_BLOCKER' | 'CLEAR_BLOCKER';
+      idempotencyKey: string;
+      subjectType: string;
+      subjectId: string | null;
+      detail: Record<string, unknown>;
+    },
+    now: Date,
+  ): Promise<void> {
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "project_action" (
+        "id", "project_id", "idempotency_key", "type", "status", "subject_type",
+        "subject_id", "fencing_token", "decision_id", "detail", "created_at", "updated_at"
+      ) VALUES (
+        ${randomUUID()}::uuid, ${projectId}::uuid, ${action.idempotencyKey},
+        ${action.type}::"project_action_type", 'APPLIED', ${action.subjectType},
+        ${action.subjectId}::uuid, ${lease.fencingToken}, ${decisionId}::uuid,
+        ${JSON.stringify(action.detail)}::jsonb, ${now}, ${now}
+      )
+      ON CONFLICT ("idempotency_key") DO NOTHING
+    `);
+  }
+
   private async ensureRuntime(
     tx: Prisma.TransactionClient,
     projectId: string,
@@ -785,6 +990,24 @@ function contentionWake(projectId: string, expiresAt: Date | null | undefined, n
   for (const char of projectId) hash = (hash * 33 + char.charCodeAt(0)) >>> 0;
   const base = Math.max(now.getTime() + 1_000, expiresAt?.getTime() ?? now.getTime());
   return new Date(base + (hash % 251));
+}
+
+/** A blocker subject is a Base62 row id for everything the control loop can name today; a natural
+ *  key (a builtin provider's slug) is not an address and stays out of the uuid column. */
+function internalSubjectId(subjectId: string): string | null {
+  try {
+    return base62ToUuid(subjectId);
+  } catch {
+    return null;
+  }
+}
+
+/** The stored key keeps the internal id, so the partial unique index and `MAX + 1` key on the same
+ *  bytes the row does; the audit face publicizes it on the way out. */
+function internalDedupeKey(dedupeKey: string): string {
+  const parts = dedupeKey.split(':');
+  if (parts.length !== 3) return dedupeKey;
+  return `${parts[0]}:${parts[1]}:${internalSubjectId(parts[2]) ?? parts[2]}`;
 }
 
 function errorText(cause: unknown): string {
