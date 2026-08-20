@@ -194,6 +194,13 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/interrupt", body: Optional<Empty>.none)
     }
 
+    /// Stop the running turn and queue the follow-up in the SAME request (`SessionInterruptRequest`).
+    /// The reply names the turn the follow-up was filed as — an ordinary queued `message`, never a
+    /// steer. Accepting it is not a claim the engine stopped: the transcript's `interrupt` event is.
+    public func interruptAndSend(sessionID: String, _ req: SessionInterruptRequest) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/interrupt", body: req)
+    }
+
     // Lifecycle: gracefully end (settles CANCELLED but stays dormant/resumable), move between
     // Open/Completed/Trash, and permanently purge. Canonical transport names are attempted first;
     // the pre-Completed aliases remain a narrow compatibility fallback.

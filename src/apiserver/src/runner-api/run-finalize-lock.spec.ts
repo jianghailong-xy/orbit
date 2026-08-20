@@ -62,6 +62,7 @@ function makeController(current: LockedSnapshot) {
     },
     conversationTurn: {
       updateMany: async () => ({ count: 1 }),
+      findFirst: async () => null,
     },
     task: {
       updateMany: async ({ where }: { where: { id: string } }) => {
@@ -80,7 +81,7 @@ function makeController(current: LockedSnapshot) {
     },
   } as never;
   return {
-    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, {} as never, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     order,
     statusWrites,
     taskCountIds,

@@ -540,7 +540,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" || msg == "" {
 			return toolResult("sessionId and message are required", true)
 		}
-		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, map[string]interface{}{"message": msg})
+		body := map[string]interface{}{"message": msg}
+		copyIfPresent(body, args, "clientTurnId")
+		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("send message failed: "+err.Error(), true)
 		}
@@ -554,7 +556,16 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if id == "" {
 			return toolResult("sessionId is required", true)
 		}
-		raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id)
+		// With a message this is one operation, not an interrupt followed by a send: the
+		// interrupt drops what was queued behind the running turn, so a message sent as a
+		// second call would be racing that delete.
+		var body interface{}
+		if follow := strings.TrimSpace(getString(args, "message")); follow != "" {
+			req := map[string]interface{}{"message": follow}
+			copyIfPresent(req, args, "clientTurnId")
+			body = req
+		}
+		raw, err := s.t.interruptSession(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("interrupt session failed: "+err.Error(), true)
 		}
@@ -1307,13 +1318,21 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_send",
-				"description": "Send a follow-up message to a running or queued session (e.g. steer a sub-agent that's going off track).",
-				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp, "message": str}, "sessionId", "message"),
+				"description": "Send a follow-up message to a running or queued session (e.g. steer a sub-agent that's going off track). The reply's `kind` says what the server did with it: `steer` means it is being written into the turn already running (it gets no reply of its own — the running turn's is the answer — and it cannot be withdrawn), `message` means it is queued behind that turn and runs next. Which one you get is the server's decision, not a choice: only an engine whose input stays open mid-turn can take a steer.",
+				"inputSchema": obj(map[string]interface{}{
+					"sessionId":    sessionIDProp,
+					"message":      str,
+					"clientTurnId": map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending with the same key returns the turn already filed instead of queueing the message twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new message."},
+				}, "sessionId", "message"),
 			},
 			map[string]interface{}{
 				"name":        "session_interrupt",
-				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward).",
-				"inputSchema": obj(map[string]interface{}{"sessionId": sessionIDProp}, "sessionId"),
+				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward). Interrupting DROPS whatever was queued behind that turn — stopping means stop. To stop the turn and redirect it, pass `message`: that files the follow-up in the same operation, after the drop, so it survives and runs as the next turn. Accepting this is not a promise the engine stopped; the session's transcript carries an `interrupt` event when it actually did.",
+				"inputSchema": obj(map[string]interface{}{
+					"sessionId":    sessionIDProp,
+					"message":      map[string]interface{}{"type": "string", "description": "What to do instead, sent atomically with the stop. Omitted → a plain interrupt, and anything queued behind the running turn is dropped with nothing put in its place."},
+					"clientTurnId": map[string]interface{}{"type": "string", "description": "Optional idempotency key for the follow-up; a retry with the same key re-files neither the interrupt nor the message. Ignored without `message`."},
+				}, "sessionId"),
 			},
 			map[string]interface{}{
 				"name":        "session_merge",

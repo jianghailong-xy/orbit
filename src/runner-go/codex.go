@@ -50,8 +50,8 @@ type codexPreparedTurn struct {
 	ImagePaths     []string
 }
 
-func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
-	return runCodexAppServerSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, setTurn, firstSpawn, bg, onRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
+func runCodexSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onRateLimits func(map[string]interface{}), completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+	return runCodexAppServerSessionProcess(ctx, shutdownCtx, t, job, leaseGeneration, execDir, scratchDir, emit, emitFor, setTurn, firstSpawn, bg, onRateLimits, completeTurn, waitTurnPermit, onLeaseLost)
 }
 
 // runCodexExecSessionProcess keeps the Orbit session alive while executing each user

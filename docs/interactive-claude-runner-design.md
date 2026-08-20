@@ -78,10 +78,133 @@ Residual risk: a turn re-served after lease expiry while the runner *did* consum
 
 - **Messages are strictly serialized per turn boundary.** `POST /tasks/:id/turns` is **rejected with 409** when the run is `RUNNING` (a turn is mid-flight), accepted only in `AWAITING_INPUT`. This removes the "feed a second user message into a busy process" undefined-behavior window (claude's mid-turn stdin semantics are unverified — Phase 0 gate).
   - Residual UX: a user who wants to queue-while-running gets a 409 + "a turn is in progress." If queue-while-running is later desired, the runner must gate the next pull on observing its own `result`/`AWAITING_INPUT` transition.
+  - **Superseded for `claude` by the steer lane below.** A send during `RUNNING` is no longer rejected: it is accepted and queued, and — once the mid-turn stdin semantics were settled (§3a) — written into the turn already running rather than behind it. Executable turns are still serialized; steering is a separate lane, not a relaxation of that one.
 - **`interrupt` and `end` are a priority lane.** The inbox dequeue returns `kind IN ('interrupt','end')` **before** any `message`, so Stop preempts queued sends. Interrupt is processed even while `RUNNING`.
 - **Interrupt while `AWAITING_INPUT` is a no-op** (nothing to interrupt) — rejected server-side rather than leaking into the next turn.
 - **Per-run pending cap:** `/turns` rejects with 429 if pending+in-flight message turns exceed `K` (e.g. 1, since we serialize) — backpressure against rapid sends / key-repeat.
 - **Idempotency key:** `RunTurnRequest.clientTurnId` (client UUID); `@@unique([runId, clientTurnId])` makes a double-click / cross-tab duplicate a no-op returning the existing turn.
+
+### 3a. The steer lane — a message written INTO the running turn
+
+Phase 0 left mid-turn stdin as an open question. It is now settled: a `user` frame written to a
+`claude` that is inside a tool call is queued by the CLI and folded into the turn already running at
+its next tool boundary, under the same `result`. That makes "send while it works" a delivery
+question rather than a scheduling one, and the answer is a kind of its own.
+
+- **`ConversationTurnKind.steer`.** Same `conversation_turn` row, same lease, same generation, same
+  `clientTurnId` — no second state machine, and no migration (`kind` is a plain string column).
+- **The server decides the kind, not the client.** `createTurn` files a message as a `steer` exactly
+  when an engine turn holds a live lease, under the Session row lock the inbox dequeues under. Every
+  entry point (web, native, MCP, CLI) therefore steers without knowing the word. A `!cmd` shell turn
+  is not an engine turn — the engine is idle beside it — so a message sent during one keeps queuing.
+- **Mirror-image gates.** A `message`/`shell` is deliverable only when `NOT EXISTS` an in-flight
+  executable turn; a `steer` only when `EXISTS` an in-flight **message** with a live lease. A steer
+  is in neither `NOT EXISTS` subquery, so it never becomes the reason a queued message waits.
+- **Delivered once.** A steer has no expired-lease arm: re-writing a message the engine may already
+  have acted on is the one thing mid-turn delivery must not do. A steer still `PENDING` when its turn
+  ends is re-filed as an ordinary `message` by `turn-complete`, which is what it becomes once there
+  is nothing left to steer.
+- **It settles only itself.** A steer produces no `result` of its own — the result belongs to the
+  turn it joined — so it never enters the runner's ack FIFO, never consumes the active-turn permit,
+  and never moves the event-attribution cursor (its own `user` event is filed against its own turn
+  by `emitFor`). `turn-complete` acks the steer's row and touches nothing else about the session: in
+  particular a steer that failed to reach the engine does **not** fail the session, it reports the
+  failure as a `user_delivery` event.
+- **Its answer is the engine's echo.** `--replay-user-messages` is what says the message became part
+  of the conversation; the runner settles the steer's turn on that acknowledgement (§ delivery
+  receipts), and on a process going away it settles it rather than re-delivering it.
+
+**What the clients show for one.** A steer is not a queued message and must not be dressed as one:
+it is not waiting, it cannot be withdrawn (`cancelQueuedTurn` deletes only `message`/`shell`), and
+it gets no reply of its own, so how far it got is the only report it ever produces.
+
+- **The kind travels back.** `POST /sessions/:id/turns` returns `{ turnId, seq, kind }`. The client
+  learns what the server decided instead of inferring it from a status its stream may not have
+  caught up with. An older server omits it, which reads as the pre-steer behaviour: queued.
+- **The kind survives a reload.** The runner marks `steer: true` on the steer's `user` event, so a
+  transcript rebuilt from durable events alone still knows which bubble that was.
+- **A still-PENDING steer is listed** by `GET /sessions/:id/turns`, tagged `kind: 'steer'`. Until
+  the runner leases it there is nothing else to render it from, and a message that vanishes on
+  refresh is the one outcome mid-turn sending must not produce. Listed ≠ withdrawable.
+- **Four states, from the runner's own `user_delivery` transitions:** *Sending…* (accepted, by the
+  control plane or the runner's writer), *Delivering…* (`written` — its bytes are in the engine's
+  stdin, unread while a tool runs), *Sent into this turn* (`acknowledged` — the engine echoed it
+  back), *Not delivered* (`failed`, with the reason). Shown for a steer alone: an ordinary message
+  is reported by the reply that follows it. Web `lib/steerDelivery.ts` and OrbitKit
+  `Transcript/SteerDelivery.swift` are the same table, so every client says the same words.
+- **A mid-turn `user` event is not a turn boundary.** It lands inside a reply that is still
+  streaming: clients must not clear/close the open assistant bubble on it, or the reply is blanked
+  (web) or rendered twice once its authoritative `assistant` event arrives (native).
+- **Recovery is a new send.** An undelivered message can be put back in the composer; it goes out
+  with a fresh `clientTurnId`, since the old turn is settled and re-using its id would be answered
+  with that settled turn instead of sending anything.
+
+### 3b. One contract at every door
+
+Web, macOS/iOS, the HTTP API and the runner's MCP tools / `orbit session` CLI are doors onto the
+same two service methods — `SessionsService.createTurn` and `SessionsService.interrupt`. Nothing
+about steering is decided at a door, so there is no per-client version of it to drift.
+
+**The four things a person can mean, and how each is expressed:**
+
+| Intent | Request | What the server files | What comes back |
+|---|---|---|---|
+| Send, engine idle | `POST /sessions/:id/turns` | `message`, queued | `{ turnId, seq, kind: 'message' }` |
+| Send, engine mid-turn | *the same request* | `steer` — written into the running turn | `{ turnId, seq, kind: 'steer' }` |
+| Stop | `POST /sessions/:id/interrupt`, no body | `interrupt`, and the queue behind the running turn is dropped | `{ ok: true }` |
+| Stop and do this instead | `POST /sessions/:id/interrupt` **with** `content` | `interrupt`, then an ordinary `message` filed after the drop | `{ ok: true, turnId, seq }` |
+| End the session | `POST /sessions/:id/end` | `end` — terminal teardown, not a turn interruption | `{ ok: true }` |
+
+- **Mode is never a parameter.** The turns endpoint's `kind` is a whitelist of what a caller may
+  *request* — an ordinary message or a `!cmd` — and steering is not in it. Timing decides it, under
+  the row lock, which is the only place the answer cannot already be stale.
+- **Interrupt-and-send is one request** at every door, because two could not express it: stopping
+  drops what was queued, so a send racing the stop is either deleted by it (arriving first) or
+  folded into the turn being stopped as a steer (arriving second), decided by network ordering.
+- **`clientTurnId` is the retry contract**, and every door now has one. The browser and the native
+  clients mint a UUID per send; the runner door (`POST /runner/sessions/:id/turns`, reached by
+  `session_send` and `orbit session send`) accepts one and mints one only when the caller offers
+  none. An interrupt-and-send is keyed by the follow-up's id on both halves (the interrupt is filed
+  under `interrupt-<clientTurnId>`), so a retry re-files neither.
+- **Refusals say which refusal it is.** A missing/foreign session is `404 session not found` from
+  send, stop and withdraw alike; an ended one is `409 the session has ended` from all three.
+  Withdrawing a steer is refused as *"being written into the running turn"* rather than as
+  *"already started or not found"* — it is not gone, and sending a caller to look for a race that
+  never happened is worse than saying nothing.
+- **Only claude's engine can be steered.** `createTurn` resolves the session's runtime with the same
+  `execRuntime` dispatch uses (so a configured BYOK provider is judged by the runtime it borrows)
+  and asks `supportsMidTurnSteer`. Codex and Kimi hold one JSON-RPC turn call open for the whole
+  turn; OpenCode spawns a process per turn. None of them has an input to write into, so a mid-turn
+  message on those sessions stays an ordinary queued `message` — exactly the behaviour they had
+  before steering existed, and what their clients already render.
+- **A steer that arrives anyway is refused loudly.** Each non-stream-json session loop answers
+  `kind: "steer"` with `refuseUnsupportedSteer`: a failed `user` event, a `user_delivery` naming the
+  engine and the reason, and the steer's own turn settled — never the session's. This is the
+  disagreement case (a runner older than the control plane, a provider moved under a session), and
+  it must not be silent: a steer's lease is never reclaimed, so a dropped one is gone with no trace.
+- **The poller says what it can take.** The inbox long-poll carries `acceptsSteer=1`, and the
+  steer arm of the dequeue predicate is gated on it. A runner older than the control plane sends no
+  such flag and is handed no steer — its inbox switch has no case for one, and a steer's lease is
+  never reclaimed, so leasing it there would drop the message for good. Withheld it stays `PENDING`,
+  and `turn-complete` re-files it as an ordinary message when the running turn ends: it runs a turn
+  later instead of vanishing, and neither side has to be deployed first.
+  `TestEverySessionLoopThatCannotSteerRefusesOne` keeps a newly added engine from re-opening the
+  hole from the other direction.
+- **Permissions are untouched.** Every path still runs claude with
+  `--permission-prompt-tool mcp__orbit__permission_prompt`; steering changes what reaches the
+  engine's stdin, never how it asks to use a tool.
+- **Stop is not End.** The UI's Stop action is the acknowledged `interrupt` operation above: it
+  stops the current generation only after the matching `control_response`, and keeps the resident
+  process, its context and stdin alive. `end` is the terminal session operation: the runner closes
+  the runtime, reaps the process tree and does not accept another turn. A runner drain/restart is
+  different again and is recorded as `interrupt{reason:'runner_restart'}`; it is never presented as
+  a user-confirmed Stop.
+- **A remote runner still executes locally.** “Remote” describes where the Orbit runner is
+  installed relative to the control plane. On that target machine the runner directly execs the
+  `claude` binary and writes JSONL frames to its stdin; prompts do not enter argv or a shell. This
+  path has no Orbit SSH transport, no `ssh`, and no `sh`/`bash -c` hop. HTTP connects the runner to
+  the control plane; it does not make the control plane a remote shell client.
+
 
 ---
 
@@ -216,6 +339,58 @@ Three goroutines, decoupled:
 
 ### Interrupt = signal, not stdin (RT: hang-backpressure critical)
 Interrupt uses **process SIGINT** (the design's stated fallback becomes the default), so it cannot be blocked by a stuck stdin write. Mid-turn steer via `control_request{subtype:'interrupt'}` is best-effort behind a Phase-0-verified capability flag; SIGINT+`--resume <sessionUuid>` is the shipped behavior. On interrupt, emit an `interrupt` `RunEvent` **with a real seq at the point generation actually stops**, so the transcript delimits abandoned output.
+
+#### Superseded: interrupt is a control request with an answer
+
+The premise above — that a stuck stdin write could block an interrupt — was removed by the
+single-writer queue (§ resident runtime): handing a frame over never touches the pipe, so the
+control request cannot be blocked by whatever is in front of it. What replaced SIGINT is not
+just a different transport but a different guarantee.
+
+- **Asked, and answered.** The runner writes
+  `control_request{request_id, request:{subtype:'interrupt'}}` through the same single writer
+  every other frame goes through, and waits for the `control_response` carrying **that**
+  `request_id`. Only a `subtype:'success'` for that id makes the operation succeed. A refusal, a
+  deadline (30 s), a stdin that broke, a process that exited, or the caller giving up are all
+  reported as failures — and the request is retired on the way out, so a reply that arrives
+  afterwards resolves nothing and cannot turn a reported failure into a success.
+- **Unique, generation-stamped ids.** `req-<runtimeGeneration>-<n>`. The counter alone repeats
+  across a re-spawn, and two generations' stdout can overlap while one is torn down; naming the
+  generation makes a straggler recognisable instead of matching it against the new process's
+  identically numbered request. Waiters live in a table owned by their own runtime, and every
+  one of them is failed when that process goes terminal.
+- **No kill anywhere on this path.** The process, its conversation and its stdin survive an
+  interrupt — that is the entire difference from `end`. A kill would stop the turn too and look
+  identical for a second, at the cost of a resumable context, so an interrupt that cannot be
+  confirmed is *reported*, never covered up.
+- **The transcript marker costs an answer.** `interrupt{requestId}` is emitted only once the
+  engine has confirmed; a failure emits an `error` event saying the session is still running and
+  its context intact. The drain's own teardown marker (`interrupt{reason:'runner_restart'}`) is a
+  third, distinct thing: there the process really is being taken away.
+- **Asked unconditionally.** The runner does not first check whether a turn of *its own* is in
+  flight. The engine also runs turns nobody sent it (a background task reporting in, a scheduled
+  wake-up), and those are exactly the ones people reach for stop over.
+
+#### Interrupt-and-send: one transaction, never a steer
+
+"Stop, and do this instead" is one server-side operation (`POST /sessions/:id/interrupt` with a
+body), not a stop followed by a send.
+
+- **Why it cannot be two requests.** Interrupting *deletes* the `message`/`shell`/`steer` turns
+  still PENDING — stopping means stop. A client that interrupted and then sent would race its own
+  delete; one that sent and then interrupted would have its message filed as a **steer**, written
+  into the very turn being stopped. Which happened would come down to network ordering.
+- **The order inside the transaction** is: validate → drop the queue → file the `interrupt` →
+  file the follow-up. The follow-up is therefore never its own casualty, and takes a later `seq`.
+- **Filed as a `message`, deliberately not a steer.** The inbox gate then holds it until no
+  executable turn is in flight — i.e. until the interrupted turn's `result` has landed. So the new
+  frame reaches the engine only after the turn it replaces is over. **That is also the fallback**:
+  if the interrupt does not take, the message still waits for that turn to finish on its own
+  rather than being folded into it. Never early, in either case.
+- **Idempotent on the interrupt, not on the message.** The interrupt half is filed under
+  `interrupt-<clientTurnId>`; a control turn is never deleted, so its presence is the durable
+  record that the request already ran. Keying on the message would misread "a later interrupt
+  dropped it" as "never happened" and file the whole thing again.
 
 ### Per-turn `result` = end-of-turn, not terminal
 `msg["type"]=="result"` → emit `turn_end{turnSeq,subtype,usage}`, POST `/turn-complete`, set run `AWAITING_INPUT`, park. The process dies only on EOF / idle reap / crash / cancel / **per-turn timeout**. If `result.subtype` indicates the process hit its own `--max-turns`/`--max-budget-usd`, the runner marks the **session terminal** (not `AWAITING_INPUT`) and `/complete`s, because those limits are process-wide for a long-lived process (RT: hang high).

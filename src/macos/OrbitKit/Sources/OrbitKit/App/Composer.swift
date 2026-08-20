@@ -154,6 +154,23 @@ public enum ComposerLogic {
         return (session ?? stream) == .running
     }
 
+    /// Whether to offer "Stop & send" beside Send. A 1:1 port of web's `offersInterruptAndSend`.
+    ///
+    /// While a turn generates, Send steers — the message joins the turn that is running. "Stop this
+    /// and do THIS instead" is the other intent people have at that moment, and there is no way to
+    /// express it by typing, so it needs its own control. Offered BESIDE Send, never instead of it.
+    ///
+    /// It offers nothing Send itself would refuse (`canSend` carries an empty composer, a mid-flight
+    /// upload, an offline runner), and it stays out of the way of a reply to a blocking question. A
+    /// `!cmd` runs on the runner beside the engine, so it is not something the engine is stopped
+    /// for — and this path can only send message text.
+    public static func offersInterruptAndSend(session: RunStatus?, stream: RunStatus,
+                                              canSend: Bool, ordinaryDraft: Bool,
+                                              replying: Bool, busy: Bool) -> Bool {
+        guard canSend, ordinaryDraft, !replying, !busy else { return false }
+        return (session ?? stream) == .running
+    }
+
     /// Whether an outgoing send will be **queued** behind an in-flight turn (→ a "Queued" bubble the
     /// user can withdraw) rather than delivered immediately (→ "Sending…"). Reads the AUTHORITATIVE
     /// control-plane status when the session record is loaded — the same source and precedence as

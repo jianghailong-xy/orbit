@@ -10,6 +10,7 @@ import {
   MD,
   type RunEvent,
   Transcript,
+  UndeliveredCtx,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
 
@@ -235,6 +236,216 @@ describe('spent quota card', () => {
 
     expect(html).not.toContain('chat-quota');
     expect(html).toContain('All 27 failed');
+  });
+});
+
+describe('message delivery', () => {
+  const userEvent = (seq: number, turnId: string, text: string, delivery?: string): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: delivery ? { text, delivery } : { text },
+  });
+  const deliveryEvent = (
+    seq: number,
+    turnId: string,
+    delivery: string,
+    reason?: string,
+  ): RunEvent => ({
+    seq,
+    type: 'user_delivery',
+    payload: { turnId, delivery, ...(reason ? { reason, retryable: true } : {}) },
+  });
+
+  it('marks a message the engine never received', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          userEvent(1, 't1', 'rename the widget', 'enqueued'),
+          deliveryEvent(2, 't1', 'failed', 'claude stdin is closed'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Not delivered');
+    expect(html).toContain('claude stdin is closed');
+  });
+
+  it('says nothing about a message that arrived', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          userEvent(1, 't1', 'rename the widget', 'enqueued'),
+          deliveryEvent(2, 't1', 'written'),
+          deliveryEvent(3, 't1', 'acknowledged'),
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain('Not delivered');
+  });
+
+  it('marks only the message that failed, not the one before it', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          userEvent(1, 't1', 'first', 'enqueued'),
+          deliveryEvent(2, 't1', 'acknowledged'),
+          userEvent(3, 't2', 'second', 'enqueued'),
+          deliveryEvent(4, 't2', 'failed', 'claude process has exited'),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-undelivered').length - 1).toBe(1);
+    expect(html.indexOf('second')).toBeLessThan(html.indexOf('Not delivered'));
+  });
+
+  it('leaves a transcript recorded before delivery was reported alone', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[userEvent(1, 't1', 'rename the widget')]} />,
+    );
+
+    expect(html).not.toContain('chat-undelivered');
+    expect(html).toContain('rename the widget');
+  });
+});
+
+describe('a message steered into the running turn', () => {
+  // The events the runner publishes for a steer: its own `user` event (filed against its own
+  // turn, carrying the kind and the first delivery state), then one `user_delivery` per
+  // transition. Rebuilding the bubble from these alone is exactly what a reload does.
+  const steerEvent = (seq: number, turnId: string, text: string, delivery = 'enqueued'): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: { text, delivery, steer: true },
+  });
+  const messageEvent = (seq: number, turnId: string, text: string): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: { text, delivery: 'enqueued' },
+  });
+  const deliveryEvent = (seq: number, turnId: string, delivery: string, reason?: string): RunEvent => ({
+    seq,
+    type: 'user_delivery',
+    payload: { turnId, delivery, ...(reason ? { reason, retryable: true } : {}) },
+  });
+
+  it('shows it on its way while the engine has not taken it yet', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[steerEvent(1, 't1', 'use the other endpoint')]} />,
+    );
+
+    expect(html).toContain('Sending…');
+    expect(html).not.toContain('Sent into this turn');
+  });
+
+  it('moves to delivering once its bytes are in the engine', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[steerEvent(1, 't1', 'use the other endpoint'), deliveryEvent(2, 't1', 'written')]}
+      />,
+    );
+
+    expect(html).toContain('Delivering…');
+    expect(html).not.toContain('Sending…');
+  });
+
+  it('says it landed only once the engine echoed it back', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          steerEvent(1, 't1', 'use the other endpoint'),
+          deliveryEvent(2, 't1', 'written'),
+          deliveryEvent(3, 't1', 'acknowledged'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Sent into this turn');
+    expect(html).not.toContain('Delivering…');
+  });
+
+  it('replaces the progress with the failure, not both', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          steerEvent(1, 't1', 'use the other endpoint'),
+          deliveryEvent(2, 't1', 'failed', 'no turn is running'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Not delivered');
+    expect(html).toContain('no turn is running');
+    expect(html).not.toContain('Sending…');
+    expect(html).not.toContain('chat-steer-state');
+  });
+
+  it('restores the whole state from the durable events alone', () => {
+    // What a refresh or a reconnect replays. Nothing here comes from the send that made it:
+    // the local bubble is long gone, and the state has to survive in the transcript itself.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          messageEvent(1, 't0', 'refactor the parser'),
+          steerEvent(2, 't1', 'use the other endpoint'),
+          deliveryEvent(3, 't1', 'acknowledged'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('use the other endpoint');
+    expect(html).toContain('Sent into this turn');
+    // …and says nothing about the ordinary message it was steering, whose own reply reports it.
+    expect(html.split('chat-steer-state').length - 1).toBe(1);
+  });
+
+  it('narrates nothing for an ordinary message', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          messageEvent(1, 't1', 'refactor the parser'),
+          deliveryEvent(2, 't1', 'written'),
+          deliveryEvent(3, 't1', 'acknowledged'),
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain('chat-steer-state');
+    expect(html).not.toContain('Sent into this turn');
+  });
+
+  it('offers an undelivered message back to the composer', () => {
+    const html = renderToStaticMarkup(
+      <UndeliveredCtx.Provider value={() => {}}>
+        <Transcript
+          events={[
+            steerEvent(1, 't1', 'use the other endpoint'),
+            deliveryEvent(2, 't1', 'failed', 'claude stdin is closed'),
+          ]}
+        />
+      </UndeliveredCtx.Provider>,
+    );
+
+    expect(html).toContain('Put back in the composer');
+  });
+
+  it('offers nothing where the reader could not send it anyway', () => {
+    // The shared/public page and the static export leave the context null.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          steerEvent(1, 't1', 'use the other endpoint'),
+          deliveryEvent(2, 't1', 'failed', 'claude stdin is closed'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Not delivered');
+    expect(html).not.toContain('Put back in the composer');
   });
 });
 
