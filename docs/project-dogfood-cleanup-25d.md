@@ -182,15 +182,83 @@ canary#2 的工作任务 `autoRunWhenReady=true`、`dispatchAuthority=COORDINATO
 - `project-reconcile.service.ts` 类头也写着「Semantic planning is added by later units」。
 
 因此项目验收标准 AC3（OPEN 且未等待人工时必须在规定时间内启动合法下一任务）在生产上不可能成立。
-在该缺陷修复并重新部署、重跑 dispatch canary 之前，**25D 不置 DONE**。
+该缺陷已由 `34AuihrV8lUqHepiC3bNI` 修复并上线，第五节是重跑后的证据。
 
-## 残留
+## 五、第二次 canary：控制环真的自己起了活（0129 / `53eb1b11`）
 
-- 容器 / 网络 / 卷：**零**。canary 全程没有创建任何 docker 资源，容器数停在清理后的 33。
-- canary 的两个工作分支已合入本分支后删除，SHA 钉在各自的 merge receipt 里。
-- `orbit/25d-canary-coordinator-289122` 及其工作树保留：它属于协调 Session `34AuO7SuMUOc2G2JshIfm`，
-  该 Session 仍 `AWAITING_INPUT`，而本轮硬约束禁止 `session complete/end/cancel`，故不动它。
-- runner 二进制交付缺口（版本未 bump）如上，需要一次版本号 bump 才能把新 CLI 送到 runner。
+第四节那个阻塞缺陷已由 `34AuihrV8lUqHepiC3bNI` 修复，落地为 `ProjectDispatchPassService`
+（提交 `53eb1b11`，迁移 `0129`，10:48 上线）。它没有去改 `plannedActions()` / `runStateOf()`
+那两个不变量密集的纯函数，而是新增了「提出 DISPATCH_TASK 的那个单元」，
+从一次 `RECONCILED` 投递的 post-commit 回调里跑（不是第二个 timer —— §10.2 把唤醒路径冻在三条）。
+
+它还正面回答了我上一轮提出的那个语义问题，写成 **DP6**：
+`run_state` **不是**准入闸门 —— `AWAITING_VERIFICATION` 从校验任务一存在就成立，
+早于它的被验对象被派发过；拿它当闸门会同时卡住被验对象与校验本身，谁也解不开这个状态。
+另加 **DP7**：同一任务每 60 秒窗口至多一次尝试，避免 REFUSED 自己喂自己下一次尝试。
+
+### 这次怎么摆的
+
+全新隔离 canary `34AxI6osiAq6qspHLrMg2`，仍走产品合法路径（在专开的 Claude Session 里
+`project_create`），coordinator 的 agent / session / workspace 在同一次写入原子绑定，
+`GUARDED_AUTO` + `coordinatorEnabled=true`。
+
+为了让 DP6 真的被走到，工作任务先**不带 assignee** 建出来（`WHO_UNRESOLVED`，还不可派发），
+随后建它的校验任务，**最后**才补上 assignee。于是任务变得可派发的那一刻，
+项目里正好存在一个未 DONE 的校验、`run_state` 正是 `AWAITING_VERIFICATION`。
+
+**从补上 assignee 那一刻起，没有任何手工动作** —— 没有 `task execute`，没有 `task_start`。
+
+### 结果
+
+| | |
+|---|---|
+| 补 assignee | `10:54:47Z` |
+| `DISPATCH_TASK` 落库 | `10:54:48.133Z`（**1.1 秒**） |
+| action | `status=APPLIED`，`reasonCode=POLICY_ALLOWED` |
+| 幂等键 | `pc:v1:…:dispatch:…:0`（attempt 0） |
+| `result_session_id` | `330ab7eb-abd6-4dd2-99b7-c4263be5ebd7`，真 Session |
+| `dispatch_attempt` | **0 → 1** |
+| 手工启动次数 | **0** |
+
+被派发的 Session 自然收口：`SUCCEEDED` / `endReason=task_done` / 10 turns，
+分支 `orbit/canary-work-write-one-line-the-control-l-f0b415`，只改了一个文件、只有一行。
+
+最直接的一条证据是 `session.project_action_id` **非空** —— 这个 Session 是被一条 `project_action`
+建出来的，不是被谁 execute 出来的。手工 execute 的 Session 这一列为空（对比第三节那两个）。
+
+### 重放不会起第二个
+
+同一个 canary 上前后 **21 次 decision**、多次唤醒之后：`DISPATCH_TASK` 仍然只有 **1** 条，
+Session 仍然只有 **1** 个，`dispatch_attempt` 仍然是 **1**。幂等键复用即命中，不会二次派发。
+
+### 其余各项
+
+| 证据 | 实测 |
+|---|---|
+| `project_decision` | 21 条 |
+| `project_action` | 3 条全 `APPLIED`：`DISPATCH_TASK` + `RAISE_BLOCKER` + `CLEAR_BLOCKER` |
+| blocker open→resolved | 1 条完整生命周期（`AWAITING_USER_INPUT`，控制环自己升起、`AUTO` 消解） |
+| verification | 2 条 PASS |
+| merge receipt | 1 条，`ed110b5a` → `orbit/25d-guarded-auto-dogfood-20aa12` `53eb1b11` ⇒ `629b517b`，rebase 基线 `54744005` |
+| acceptance run | 1 条 `PASS`，`decidedBy=COORDINATOR_AGENT` |
+| 父阶段聚合 | `VERIFICATION_PASSED` 6 秒内自动完成 |
+| 项目 DONE | 通过验收门，`acceptedRunId` 钉在那次 PASS 上 |
+
+这一次的校验判的是 `PASS` 而不是像第三节那样先 `FAIL` 再 `PASS`：文件确实是对的
+（`dispatched-by-loop 54744005$`，单行、单文件），照实判。open→resolved 的 blocker 由控制环
+自己产生，不需要我去诱发一个。
+
+### 残留
+
+- 容器 / 网络 / 卷：**零**。两次 canary 全程都没有创建任何 docker 资源。
+  本机另有 `pac02b-pg`、`pac02b-matrix-pg`，属于并发跑着的另一个 Session 的 pg 夹具，未触碰。
+- 三个 canary 工作分支都已合入本分支后删除，SHA 各自钉在对应 merge receipt 里。
+- 保留：`orbit/25d-canary-coordinator-289122`、`orbit/25d-dispatch-canary-coordinator-c3272c`
+  及其工作树 —— 它们属于两个仍 `AWAITING_INPUT` 的协调 Session，本轮禁止
+  `session complete/end/cancel`，故不动。
+- **runner 二进制交付缺口仍在**：新 web 镜像里的 `orbit` 含 `merge-receipt`，
+  跑着的那份不含，而两者版本号相同（`package.json` 未 bump），runner 自更新取不到。
+  本次两轮 dogfood 全程走 HTTP 门而非 CLI。这一条不属于 25D 的验收范围，单独记在这里。
 
 ## 机器可读证据
 
@@ -198,9 +266,12 @@ canary#2 的工作任务 `autoRunWhenReady=true`、`dispatchAuthority=COORDINATO
 docs/evidence/25d/pcc-teardown-manifest.json      删除前的容器身份/卷/端口/库清单
 docs/evidence/25d/pcc-container-logs-tail.txt     删除前的日志尾部
 docs/evidence/25d/pcc-teardown-verification.json  删除后的逐项核对与受保护资源未受影响的证明
-docs/evidence/25d/canary-ledger.json              canary 的 decision/action/blocker/receipt/acceptance/task 全量账
-docs/evidence/25d/canary-coordinator-status.json  控制环终态快照
-docs/evidence/25d/canary-verifications.json       校验视图终态
+docs/evidence/25d/canary-ledger.json              第一次 canary 的全量账（0128，未含自派发）
+docs/evidence/25d/canary-coordinator-status.json  第一次 canary 的控制环终态快照
+docs/evidence/25d/canary-verifications.json       第一次 canary 的校验视图终态
+docs/evidence/25d/canary-dispatch-ledger.json     第二次 canary 的全量账（0129，含 APPLIED DISPATCH_TASK）
+docs/evidence/25d/canary-dispatch-status.json     第二次 canary 的控制环终态快照
 docs/evidence/25d/canary-note.md                  canary#1 工作 Session 的产物
 docs/evidence/25d/canary-note-bound.md            canary#2 工作 Session 的产物
+docs/evidence/25d/canary-note-dispatch.md         被控制环派发的 Session 的产物
 ```
