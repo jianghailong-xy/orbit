@@ -1275,8 +1275,14 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     // pre-selected value here would be the copy that turns inheriting into pinning.
     const inherited = renderForm({ title: 'x', assigneeId: 'w-codex' });
     expect(inherited).toContain("Assignee's (codex)");
-    expect(inherited).toContain('ant-select-selection-placeholder');
     expect(inherited).not.toContain('>Codex<');
+    // Named as a hint, never announced as what the box holds. A box holding a real choice reports
+    // it through `title` — the tooltip a user reads off it — as the Assignee box beside it does
+    // with the name it really is holding; a box showing only a placeholder reports nothing. That
+    // is the same distinction antd's private placeholder class draws, read off the accessible
+    // surface instead, so a renamed internal class cannot quietly turn this green.
+    expect(inherited).toContain('title="Builder"');
+    expect(inherited).not.toMatch(/title="[^"]*codex[^"]*"/i);
 
     // An assignee with no provider of its own inherits the server's own claude fallback...
     expect(renderForm({ title: 'x', assigneeId: 'w-plain' })).toContain("Assignee's (claude)");
