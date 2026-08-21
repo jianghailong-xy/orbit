@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +8,7 @@ import {
   ProjectActionEffectRefusal,
   ProjectReconcileLease,
   ProjectReconcileService,
+  ProjectVerdictExecutor,
 } from './project-reconcile.service';
 import {
   PlannedVerificationVerdict,
@@ -65,13 +66,79 @@ interface SubjectRow {
  *
  * It changes no downstream task's status (V3). Blocking is a dispatch precondition read from the
  * condition row, because a task that was quietly moved is a task whose reason has to be excavated.
+ *
+ * **Who calls it.** The reconcile pass, through `ProjectVerdictExecutor` — registered here at
+ * startup on the terms §7.5's rotation is registered on. That wiring is the whole of AC6 and it did
+ * not exist until now: `verificationVerdictPlan` computed these consequences on every pass, handed
+ * them to §11.4's condition detector, and the detector raised a `VERIFICATION_FAILED` blocker and
+ * discarded the rest. Everything below was reachable only from a test. A production FAIL left its
+ * subject DONE, filed no defect, and wrote no row into `task_verification_failure` — which is the
+ * table `ProjectAuthorizationService` reads before it lets a dependent task run, so a task whose
+ * upstream check had failed dispatched anyway. `apply` stays public beside the executor because the
+ * e2e rig and the pg specs drive exactly one conclusion and assert on what it did.
  */
 @Injectable()
-export class ProjectVerificationVerdictService {
+export class ProjectVerificationVerdictService
+implements ProjectVerdictExecutor, OnModuleInit, OnModuleDestroy {
+  private unregister?: () => void;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly reconciler: ProjectReconcileService,
   ) {}
+
+  onModuleInit(): void {
+    this.unregister = this.reconciler.registerVerdictExecutor(this);
+  }
+
+  onModuleDestroy(): void {
+    this.unregister?.();
+    this.unregister = undefined;
+  }
+
+  /** §8.2's permanent key for one conclusion, in the ledger's spelling. */
+  idempotencyKey(projectId: string, verifierTaskId: string, verdictRevision: string): string {
+    return verificationVerdictActionKey(projectId, verifierTaskId, verdictRevision);
+  }
+
+  /**
+   * What the ledger row records about this conclusion.
+   *
+   * Base62 throughout and structured, because `project_action.detail` is read back over the audit
+   * API: it is the row somebody lines up against `GET /projects/:id/verifications` when they want
+   * to know which conclusion caused which consequence.
+   */
+  actionDetail(planned: PlannedVerificationVerdict): Prisma.InputJsonValue {
+    return {
+      v: 1,
+      verdict: planned.verdict,
+      verdictRevision: planned.verdictRevision,
+      verifierTaskId: planned.verifierTaskId,
+      subjectTaskId: planned.subjectTaskId,
+      consequences: { ...planned.consequences },
+      evidence: { ...planned.evidence, session: planned.evidence.session ?? null },
+    } as unknown as Prisma.InputJsonValue;
+  }
+
+  /**
+   * The effect, for a caller that already holds the ledger's transaction — the reconcile pass.
+   *
+   * One body, two entry points, exactly as `applyDecisionAction` and its in-transaction twin are
+   * one body: a conclusion applied from inside the loop and one applied by a lease holder outside
+   * it must write the same rows under the same key, or the two paths would eventually disagree
+   * about what a FAIL did.
+   */
+  async applyVerdictInTransaction(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    command: { decisionId: string; planned: PlannedVerificationVerdict },
+    actionId: string,
+    now: Date,
+  ): Promise<void | ProjectActionEffectRefusal> {
+    return this.applyInTransaction(tx, lease, command.planned, actionId, now, {
+      defectTaskId: null, failureId: null, subjectReverted: false, conditionsResolved: 0,
+    });
+  }
 
   async apply(
     lease: ProjectReconcileLease,
@@ -91,7 +158,7 @@ export class ProjectVerificationVerdictService {
       command.decisionId,
       {
         type: 'APPLY_VERIFICATION_VERDICT',
-        idempotencyKey: verificationVerdictActionKey(
+        idempotencyKey: this.idempotencyKey(
           lease.projectId,
           verifierId,
           planned.verdictRevision,
@@ -99,15 +166,7 @@ export class ProjectVerificationVerdictService {
         // The verifier, not the subject: the action is about a conclusion, and a subject with two
         // checks would otherwise have two actions claiming the same subject id.
         subject: { type: 'TASK', id: verifierId },
-        detail: {
-          v: 1,
-          verdict: planned.verdict,
-          verdictRevision: planned.verdictRevision,
-          verifierTaskId: planned.verifierTaskId,
-          subjectTaskId: planned.subjectTaskId,
-          consequences: { ...planned.consequences },
-          evidence: { ...planned.evidence, session: planned.evidence.session ?? null },
-        } as unknown as Prisma.InputJsonValue,
+        detail: this.actionDetail(planned),
       },
       async (tx, actionId) => this.applyInTransaction(tx, lease, planned, actionId, now, outcome),
       now,

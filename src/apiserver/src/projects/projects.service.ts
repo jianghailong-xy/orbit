@@ -728,7 +728,12 @@ export class ProjectsService {
         resolvedByTaskId: row.resolvedByTaskId,
         createdAt: row.createdAt,
       })),
-      blockedTasks,
+      // `failureId` is the one id in this response the interceptor cannot reach: it is not a
+      // column name it knows, so it arrived here as a raw uuid beside a `failures[].id` that had
+      // been encoded — the same row, addressed two ways, only one of which any other endpoint
+      // accepts. `ProjectAuthorizationService` publicizes it by hand for its own copy of this
+      // read; this is the other half of that.
+      blockedTasks: blockedTasks.map((row) => ({ ...row, failureId: uuidToBase62(row.failureId) })),
     };
   }
 
