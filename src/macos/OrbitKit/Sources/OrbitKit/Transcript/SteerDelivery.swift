@@ -14,10 +14,13 @@ import Foundation
 ///   message that was dropped, which is why every stage has a word for it.
 ///
 /// The stages are the runner's, not invented here (`RunEventType.userDelivery`): a message is
-/// accepted, then written into the engine's stdin, then echoed back by the engine, which is the
-/// only moment it is really in the conversation. `enqueued` reads as "accepted" rather than as
-/// its own stage — the runner taking it and the control plane taking it are the same promise to
-/// the person waiting, and splitting them would be a distinction only the implementation can see.
+/// accepted, then handed to the engine, then echoed back by it, which is the only moment it is
+/// really in the conversation. How each engine takes one differs — claude reads a frame off a
+/// stdin that stays open, codex is asked to write it into the turn (`turn/steer`) — but the
+/// stages mean the same thing on both, which is why there is one vocabulary and not two.
+/// `enqueued` reads as "accepted" rather than as its own stage — the runner taking it and the
+/// control plane taking it are the same promise to the person waiting, and splitting them would
+/// be a distinction only the implementation can see.
 ///
 /// The web twin is `web/src/lib/steerDelivery.ts`; the labels are deliberately identical, so the
 /// same message reads the same on every client watching it.
@@ -52,11 +55,13 @@ public enum SteerDelivery {
     public static func state(_ delivery: String?) -> SteerDeliveryState {
         switch delivery {
         case "written":
-            // In the engine's stdin, unread: `claude` inside a tool call reads nothing until that
-            // tool finishes, so this can sit for as long as the tool runs. On its way, but past us.
+            // The engine has it and the model has not read it yet: `claude` inside a tool call
+            // reads nothing off stdin until that tool finishes, and codex buffers a steer until
+            // its next model request — measured at 31 seconds. On its way, but past us.
             return SteerDeliveryState(label: "Delivering…", tone: .progress)
         case "acknowledged":
-            // The engine echoed it back (--replay-user-messages). It is in the conversation.
+            // The engine echoed it back (claude's --replay-user-messages, codex's userMessage
+            // item). It is in the conversation.
             return SteerDeliveryState(label: "Sent into this turn", tone: .delivered)
         case "failed":
             return SteerDeliveryState(label: "Not delivered", tone: .failed)

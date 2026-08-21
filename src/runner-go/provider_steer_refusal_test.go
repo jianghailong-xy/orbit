@@ -88,7 +88,11 @@ func TestRefusingASteerSettlesItInsteadOfDroppingIt(t *testing.T) {
 // a kind that had just been invented, in three loops at once. A fourth engine added tomorrow
 // would land the same way, and the failure is silent by construction: the turn is leased and
 // never comes back, so nothing anywhere says a message went missing.
-func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
+//
+// Whether an engine CAN take one is providerRuntime.steers, not its transport: codex and kimi are
+// both json-rpc and only codex has a method for it. So the requirement here is not "refuse" — it
+// is that every loop ANSWERS a steer, either by delivering it or by refusing it.
+func TestEverySessionLoopAnswersASteer(t *testing.T) {
 	loops := map[string][]string{
 		// provider → the source files its inbox dispatch lives in.
 		providerCodex:    {"codex_appserver.go"},
@@ -104,8 +108,8 @@ func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
 		checked++
 		files, known := loops[provider]
 		if !known {
-			t.Errorf("provider %q cannot take a steer and no session loop is listed for it; "+
-				"add its file here and give its inbox switch a `case \"steer\"`", provider)
+			t.Errorf("no session loop is listed for provider %q; add its file here and give its "+
+				"inbox switch a `case \"steer\"`", provider)
 			continue
 		}
 		for _, file := range files {
@@ -117,12 +121,50 @@ func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
 				t.Errorf("%s has no `case \"steer\"`: a steer handed to %s would be dropped silently",
 					file, provider)
 			}
-			if !strings.Contains(string(src), "refuseUnsupportedSteer(") {
-				t.Errorf("%s does not refuse the steer it matches", file)
+			// A loop that cannot deliver one must still settle it where the sender can see it.
+			if !runtime.steers && !strings.Contains(string(src), "refuseUnsupportedSteer(") {
+				t.Errorf("%s cannot deliver a steer and does not refuse the one it matches", file)
 			}
 		}
 	}
 	if checked == 0 {
 		t.Fatal("no non-stream-json provider was checked; this test proved nothing")
+	}
+}
+
+// providerRuntime.steers is what the control plane's own answer has to agree with: it decides
+// whether a message becomes a steer BEFORE the runner ever sees it, so a provider marked as
+// steering here whose loop cannot actually deliver one turns every mid-turn message on that
+// engine into a visible failure instead of a quiet queue.
+func TestOnlyEnginesWithAMidTurnMethodClaimToSteer(t *testing.T) {
+	// The method each steering engine writes a mid-turn message with. An engine reaching this
+	// list is a deliberate act: there is no transport-shaped rule that would put it here.
+	methods := map[string]string{
+		providerClaude: "userFrame(", // a `user` frame on a stdin that stays open (session.go)
+		providerCodex:  "turn/steer", // written into the turn in progress (codex_steer.go)
+	}
+	for provider, runtime := range providerRuntimes {
+		if !runtime.steers {
+			continue
+		}
+		method, known := methods[provider]
+		if !known {
+			t.Errorf("provider %q claims to steer; name the call it delivers a mid-turn message "+
+				"with here, so this stays a fact about the code rather than a flag", provider)
+			continue
+		}
+		found := false
+		for _, file := range []string{"session.go", "codex_steer.go"} {
+			src, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatalf("read %s: %v", file, err)
+			}
+			found = found || strings.Contains(string(src), method)
+		}
+		if !found {
+			t.Errorf("provider %q claims to steer via %q, which no longer appears in the runner: "+
+				"the control plane would keep filing mid-turn messages nothing can deliver",
+				provider, method)
+		}
 	}
 }

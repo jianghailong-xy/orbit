@@ -13,10 +13,13 @@
  *   message that was dropped, which is why every stage has a word for it.
  *
  * The stages are the runner's, not invented here (see RunEventType.USER_DELIVERY): a message is
- * accepted, then written into the engine's stdin, then echoed back by the engine, which is the
- * only moment it is really in the conversation. `enqueued` reads as "accepted" rather than as its
- * own stage — the runner taking it and the control plane taking it are the same promise to the
- * person waiting, and splitting them would be a distinction only the implementation can see.
+ * accepted, then handed to the engine, then echoed back by it, which is the only moment it is
+ * really in the conversation. How each engine takes one differs — claude reads a frame off a
+ * stdin that stays open, codex is asked to write it into the turn (`turn/steer`) — but the stages
+ * mean the same thing on both, which is why there is one vocabulary and not two. `enqueued` reads
+ * as "accepted" rather than as its own stage — the runner taking it and the control plane taking
+ * it are the same promise to the person waiting, and splitting them would be a distinction only
+ * the implementation can see.
  */
 export type SteerDeliveryTone = 'progress' | 'delivered' | 'failed';
 
@@ -38,11 +41,13 @@ export const isSteerKind = (kind?: string | null): boolean => kind === 'steer';
 export function steerDeliveryState(delivery?: string | null): SteerDeliveryState {
   switch (delivery) {
     case 'written':
-      // In the engine's stdin, unread: `claude` inside a tool call reads nothing until that tool
-      // finishes, so this can sit for as long as the tool runs. Still "on its way", but past us.
+      // The engine has it and the model has not read it yet: `claude` inside a tool call reads
+      // nothing off stdin until that tool finishes, and codex buffers a steer until its next model
+      // request — measured at 31 seconds. Still "on its way", but past us.
       return { label: 'Delivering…', tone: 'progress' };
     case 'acknowledged':
-      // The engine echoed it back (--replay-user-messages). The message is in the conversation.
+      // The engine echoed it back (claude's --replay-user-messages, codex's userMessage item).
+      // The message is in the conversation.
       return { label: 'Sent into this turn', tone: 'delivered' };
     case 'failed':
       return { label: 'Not delivered', tone: 'failed' };

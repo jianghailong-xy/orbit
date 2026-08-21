@@ -53,7 +53,13 @@ type sessionProcessArgs struct {
 
 type providerRuntime struct {
 	transport providerTransport
-	run       func(sessionProcessArgs) (string, bool, bool)
+	// steers: this engine can be handed a user message while a turn is running, and fold it into
+	// that turn. NOT derivable from the transport — codex and kimi are both json-rpc and only
+	// codex has a method for it (docs/codex-turn-steer-contract.md §5.4) — so each engine says so
+	// for itself. A session loop whose provider is false here must refuse a steer rather than
+	// drop it (refuseUnsupportedSteer).
+	steers bool
+	run    func(sessionProcessArgs) (string, bool, bool)
 }
 
 // providerRuntimes is the set of engines this runner can drive: a name absent from it is
@@ -61,6 +67,7 @@ type providerRuntime struct {
 var providerRuntimes = map[string]providerRuntime{
 	providerClaude: {
 		transport: transportStreamJSON,
+		steers:    true, // a `user` frame on a stdin that stays open across the turn
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runClaudeSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
 				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
@@ -69,6 +76,7 @@ var providerRuntimes = map[string]providerRuntime{
 	},
 	providerCodex: {
 		transport: transportJSONRPC,
+		steers:    true, // turn/steer, written into the turn in progress (codex_steer.go)
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runCodexSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
 				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
@@ -108,11 +116,11 @@ func providerRuntimeFor(provider string) providerRuntime {
 // re-leased, so a message dropped here would simply be gone.
 var errSteerUnsupported = errors.New("this engine cannot be given a message while a turn is running; send it again once the turn ends")
 
-// refuseUnsupportedSteer settles a steer that arrived at a non-stream-json engine. It
-// settles only that message: the turn it was meant to join is still running, and failing
-// the session over a side-channel message that never reached the engine would take a
-// working run down with it. Mirrors the claude loop's own refusal (errNoTurnToSteer) so a
-// message refused by any provider reads the same on every client.
+// refuseUnsupportedSteer settles a steer that arrived at an engine with no way to take one
+// (providerRuntime.steers). It settles only that message: the turn it was meant to join is
+// still running, and failing the session over a side-channel message that never reached the
+// engine would take a working run down with it. Mirrors the claude loop's own refusal
+// (errNoTurnToSteer) so a message refused by any provider reads the same on every client.
 func refuseUnsupportedSteer(turnID, content, provider string, job *ClaimedSession, emitFor emitTurnFn, completeTurn turnCompleter) {
 	cause := fmt.Errorf("%s: %w", provider, errSteerUnsupported)
 	logln("refusing a steer for", job.SessionID+":", cause.Error())
