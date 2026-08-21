@@ -29,6 +29,16 @@ public struct ModelSelectionRevision: Equatable, Sendable {
     public mutating func markUserEdit() { value &+= 1 }
 }
 
+/// The same explicit edit marker for an effort seed. A value comparison is not enough: the user
+/// may intentionally re-select the legacy value while the account preference is still loading,
+/// and that action must still prevent the late seed from overwriting their choice.
+public struct EffortSelectionRevision: Equatable, Sendable {
+    public private(set) var value: UInt = 0
+    public init() {}
+    public var isPristine: Bool { value == 0 }
+    public mutating func markUserEdit() { value &+= 1 }
+}
+
 /// Reasoning-effort / OpenCode-variant value offered in the composer. OpenCode variants are
 /// model-defined and can add values without an Orbit release, so this is string-backed rather
 /// than a closed enum. `allCases` remains the common built-in superset used by static pickers.
@@ -440,6 +450,18 @@ public enum AgentDefaults {
                 ? mapped : .default
         }
         return efforts(for: provider).contains(mapped) ? mapped : .default
+    }
+
+    /// Resolve the effort shown by an interactive new-session composer. Picking an effort writes
+    /// the account preference as a last-picked default, so that value wins over the per-workspace
+    /// default which predates the account preference. A missing account key falls back to the
+    /// workspace value for older accounts; an explicit account `""` deliberately stays Default.
+    public static func newSessionEffort(accountDefault: String?, legacyWorkspaceDefault: String?,
+                                        for provider: String, model: String,
+                                        catalog: RunnerModelCatalog?) -> Effort {
+        let raw = accountDefault ?? legacyWorkspaceDefault ?? Effort.default.rawValue
+        let candidate = Effort(rawValue: raw) ?? .default
+        return normalizedEffort(candidate, for: provider, model: model, catalog: catalog)
     }
 
     /// Last-resort context windows for the composer's gauge, for a runner too old to report one of

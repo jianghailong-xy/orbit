@@ -121,6 +121,10 @@ final class ConsoleModel {
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
     var effort: Effort = .default
+    /// Account preferences can arrive after a restored-token launch has already presented the
+    /// draft. They may refine the legacy workspace seed only until the user touches the picker;
+    /// tracking the edit explicitly also catches re-selecting the value already on screen.
+    private var effortSelectionRevision = EffortSelectionRevision()
     private(set) var pendingAttachments: [PendingAttachment] = []
     /// The in-flight `attach` uploads, keyed by their chip's local id, so a send that lands while
     /// the bytes are still going up can wait for them instead of leaving them behind. Each upload
@@ -236,7 +240,8 @@ final class ConsoleModel {
     init(draftFor agent: Agent, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
-         modelCatalog: RunnerModelCatalog? = nil, baseURL: URL, tokenStore: TokenStore,
+         modelCatalog: RunnerModelCatalog? = nil, accountDefaultEffort: String? = nil,
+         baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
         self.sessionID = ""
         self.agentID = agent.id
@@ -271,11 +276,12 @@ final class ConsoleModel {
                 seed, for: defaultModel, provider: provider,
                 configured: configuredProviders)
             : seed
-        // Seed the effort pill from the agent's default too (web parity), so a new session shows —
-        // and starts at — the agent's configured effort unless the user overrides it.
-        if let ef = agent.effort, let e = Effort(rawValue: ef) {
-            self.effort = AgentDefaults.normalizeEffort(e, for: provider)
-        }
+        // The account's last-picked effort is the interactive default. `agent.effort` is the legacy
+        // workspace default retained for accounts that have never written that preference. `??` in
+        // the resolver deliberately preserves an explicit account "" (Default).
+        self.effort = AgentDefaults.newSessionEffort(
+            accountDefault: accountDefaultEffort, legacyWorkspaceDefault: agent.effort,
+            for: provider, model: defaultModel, catalog: modelCatalog)
         wireWorktree()
     }
 
@@ -957,6 +963,24 @@ final class ConsoleModel {
         } catch {
             statusMessage = "Couldn't apply change — \(error)"
         }
+    }
+
+    /// Record a real picker action separately from seed/refill assignments. A late account payload
+    /// must never overwrite a choice made while it was loading, even when the user selected the same
+    /// value that the legacy workspace happened to seed.
+    func selectEffort(_ value: Effort) {
+        effort = value
+        effortSelectionRevision.markUserEdit()
+    }
+
+    /// Re-resolve a draft when the async `me.preferences.defaultEffort` value arrives. This is a no-op
+    /// after the picker has been touched; otherwise account last-picked wins and the workspace value
+    /// remains only the compatibility fallback.
+    func adoptDraftDefaultEffort(_ accountDefault: String?, legacyWorkspaceDefault: String?) {
+        guard isDraft, effortSelectionRevision.isPristine else { return }
+        effort = AgentDefaults.newSessionEffort(
+            accountDefault: accountDefault, legacyWorkspaceDefault: legacyWorkspaceDefault,
+            for: provider, model: modelID, catalog: modelCatalog)
     }
 
     // MARK: `/` autocomplete
