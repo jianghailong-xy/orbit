@@ -1198,7 +1198,11 @@ private struct PlanUsageDetailPresentation: ViewModifier {
         }
         #else
         if horizontalSizeClass == .regular {
-            content.popover(isPresented: $isPresented, arrowEdge: .top) {
+            // Let iPadOS choose the arrow edge. This control lives against the bottom-trailing
+            // safe area: forcing `.top` places the popover below the control on current iPadOS,
+            // leaving most of the panel outside the screen. The unconstrained overload selects
+            // the viable edge (above here) and keeps the fixed-width panel inside the viewport.
+            content.popover(isPresented: $isPresented) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
                     PlanUsageDetailRows(rows: usage.rows)
