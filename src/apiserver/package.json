@@ -23,7 +23,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/platform-express": "^11.2.1",
     "@orbit/shared": "*",
-    "@prisma/client": "^5.20.0",
+    "@prisma/client": "^7.9.1",
     "@types/pg": "^8.20.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
