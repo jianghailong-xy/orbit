@@ -1,4 +1,4 @@
-# Project · Agent · Workspace 领域契约 v1.2
+# Project · Agent · Workspace 领域契约 v1.3
 
 > **状态**：已冻结（frozen）。本文件是 `Project 多 Agent 协作与 Agent 级 Provider 调度` 的**单一权威契约**。
 > 02–06 阶段的每个实现任务都必须与本文件一致；实现与本文件冲突时，先改本文件并说明理由，再改代码。
@@ -39,6 +39,20 @@ v1.1 被独立复验（01V，被审 `b810be89`）判为 FAIL，四组阻断。v1
 | 3 | 新错误码与 PCC / 数据库的 blocker 集合不闭合；PCC 的决策投影仍读 `task.provider` / `task.model`，也没有 `executionContract` | §12 给每一行标注**派发 / 写入**路径：派发路径的码**必须**同时是 PCC §11.2 的 kind、数据库 CHECK 的取值与实现里的成员，两个方向都自检；PCC 同步加 `executionContract`，把 task pin 收进 LEGACY 分支 | §7.4 AU-F2 · §12 E4 |
 | 4 | AC1 只证明"不是 UUID 形状"、AC3 没有 Coordinator 建树、AC6 没引用任何 API 用例、AC8 没有旧客户端写请求兼容 | 四条各补一条指名用例：`04A.20` 三个 id 的 base62 等值 round-trip、`03C.15` Coordinator 建 parent+child 任务树、AC6 引用 03A/03B/03C/04A、`06B.8` 旧客户端创建 Project Task | §11.1 L5 · §11.4 · §13 · §14 |
 
+### 0.2 v1.3 修订说明（相对 v1.2）
+
+v1.2 被独立复核（01V，被审 `47cfc22a`）判为 FAIL，三项阻断。三项是同一个形状：**契约里已经写对的那句话，
+没有被推到它自己声称能证明它的那个可执行位置**。v1.3 逐项给出**唯一**结论：
+
+| # | v1.2 的阻断 | v1.3 的唯一结论 | 落在 |
+|---|---|---|---|
+| 1 | 同一个旧端请求（带 `projectId`、没有 `assigneeAgentId`）按 §3.4 字段表 / K3 / L3 / `02C.2` 得 `V1`，按 L5 / §11.4 / `06B.8` 得 `LEGACY`，两个答案都能引用契约 | `execution_contract` 的写入规则**只有一处**：§11.1 L5 的三行请求形状表。其余五处改为引用它；正文里再出现"带 `projectId` 就写 `V1`"即为缺陷，由 `00.17` 扫描，并对两种录制的旧端载荷各断言一个唯一结果 | §2 · §3.4 K3 · §11.1 L3 · L5 · §13 `02C.2` |
+| 2 | §7.1 H4 已经把成员资格排在可用性之前，而**可执行的** WHO 模型仍先判 `enabled`/`deletedAt`，`member=null` 且 disabled 的输入返回 `WHO_DISABLED`；`00.13` 只读表格顺序，没有调用那个 resolver | 可执行模型按 H4 的顺序判，`member=null ∩ disabled` 与 `member=null ∩ deleted` 两个交集**直接跑 resolver**，各断言唯一 `WHO_NOT_IN_TEAM`；`00.18` 断言这两条反例确实存在于反例测试里 | §7.1 H4 · §13.0 `00.18` |
+| 3 | PCC 文档已带 `executionContract`、EC1-b 也已分支，而可执行的 `Db33` / fixture / resolver / `world` 投影 / `S10_FIELDS` 一个都没有它：那份模型对一份漏字段的投影自洽地全绿 | 分流判据进入可执行模型：V1 分支只读 Agent 的 provider/model/fallback，LEGACY 分支才读 Task pin；`S10_FIELDS` 增加 `tasks[].executionContract` 并配一对**只差这一列**的 mutation，删掉该字段必须红 | §16 O7 · §13.0 `00.19` |
+
+v1.3 **不改变**任何生产行为，也不提前实现 PCC §12.1 步骤 6j —— 那条仍然由 04C 承担，`00.14` 的 landed/pending
+双向断言与"唯一一条落地步骤"逐字不变。
+
 ---
 
 ## 1. 分层原则
@@ -66,8 +80,8 @@ v1.1 被独立复验（01V，被审 `b810be89`）判为 FAIL，四组阻断。v1
 |---|---|---|
 | **Project** | 一组为同一目标服务的工作。业务层实体，持有 goal / acceptanceCriteria / instructions / team / 候选 Workspace 集合。 | 表 `project` |
 | **Task** | 一件要做的事。业务层实体，持有 assignee **Agent**、可选 WHERE pin、可选 runtime requirement。**V1 Task 不持有 Provider/Model**（§3.4 K1）。 | 表 `task` |
-| **Execution Contract** | 一个 Task 按哪一版规则解析执行上下文：`LEGACY`（v1 之前的行为，逐字节不变）或 `V1`（本契约的三条解析链）。**这是唯一的分流判据**，不是 `projectId` 是否为空，也不是创建时间。 | `task.execution_contract` |
-| **Legacy Project Task** | `execution_contract = 'LEGACY'` 且 `project_id IS NOT NULL` 的 Task：v1 迁移之前就已经归属某个 Project 的历史任务。**它按 LEGACY 规则运行，直到有人显式给它指派 Agent**（§11.1 L4）。 | `task` 的一行 |
+| **Execution Contract** | 一个 Task 按哪一版规则解析执行上下文：`LEGACY`（v1 之前的行为，逐字节不变）或 `V1`（本契约的三条解析链）。**这是唯一的分流判据**，不是 `projectId` 是否为空，也不是创建时间。**它被写成 `V1` 的唯一规则在 §11.1 L5**（请求既带 `projectId` 又显式带 `assigneeAgentId`）。 | `task.execution_contract` |
+| **Legacy Project Task** | `execution_contract = 'LEGACY'` 且 `project_id IS NOT NULL` 的 Task：v1 迁移之前就已经归属某个 Project 的历史任务，**以及迁移之后由旧客户端创建、请求里没有 `assigneeAgentId` 的那些**（§11.1 L5）。**它按 LEGACY 规则运行，直到有人显式给它指派 Agent**（§11.1 L4）。 | `task` 的一行 |
 | **Agent** | **"谁做"**：一个可复用的执行身份（角色、系统提示词、默认 Provider/Model/effort、能力与权限、runtime requirement 基线）。**Agent 不持有任何位置信息**（无 runnerId、无 workDir）。 | 表 `agent`（v1 新增） |
 | **Legacy agent alias** | 历史遗留的**线上别名**：今天 MCP `agent_list/agent_create/agent_update`、CLI `orbit agent`、iOS/macOS/web 的 "Agent" 指的都是 `workspace` 行，**不是** 上一行的 Agent。v1 保留该别名并标记 deprecated（§9.2）。 | 表 `workspace` |
 | **Workspace** | **"在哪里做"**：一台机器上的一个项目目录。持有 runnerId、workDir、worktree 隔离开关、env、默认 merge target。**Workspace 不持有身份信息**（v1 后不再被解析链读取 systemPrompt/model）。 | 表 `workspace` |
@@ -173,7 +187,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 | 字段 | 类型 | 语义与约束 |
 |---|---|---|
 | `assigneeAgentId` | `String? @db.Uuid` | **WHO 链的唯一输入**。`onDelete: Restrict`。取值必须是本 Task 所属 Project 的 Team 成员（§8.4） |
-| `executionContract` | `TaskExecutionContract @default(LEGACY)` | 枚举 `LEGACY` / `V1`（SQL 类型 `task_execution_contract`）。**解析链的唯一分流判据**（§11.1）。**列默认 `LEGACY`**，因此加列这一步就把所有既有行放进 legacy 路径；服务层在创建**属于某个 Project** 的 Task 时显式写 `V1`（同 0111 给 `coordinator_enabled` 的做法：默认值是老行保留的值，新行的值由服务显式写）|
+| `executionContract` | `TaskExecutionContract @default(LEGACY)` | 枚举 `LEGACY` / `V1`（SQL 类型 `task_execution_contract`）。**解析链的唯一分流判据**（§11.1）。**列默认 `LEGACY`**，因此加列这一步就把所有既有行放进 legacy 路径；服务层**当且仅当**创建请求既带 `projectId`、**又显式携带 `assigneeAgentId`** 时才写 `V1`，唯一规则在 §11.1 L5（同 0111 给 `coordinator_enabled` 的做法：默认值是老行保留的值，新行的值由服务显式写）|
 | `workspaceId` | `String? @db.Uuid` | WHERE 链的**显式 pin**（罕用逃生口）。`onDelete: SetNull`。null = 走 §7.3 解析 |
 | `requiredCapabilities` | `String[] @default([])` | 本 Task 的 **Runtime Requirement** |
 | `provider` / `model` | `String?`（既有） | **冻结为 legacy**。只有 `execution_contract = 'LEGACY'` 的行才允许非空，也只有那条路径读它。V1 行上恒为 NULL，由数据库 CHECK 保证（K1） |
@@ -187,7 +201,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
   ```
   这是一条**数据库约束**而不是服务层检查，理由与 T2 相同：四个写路径 + MCP + CLI + 未来的任何 raw SQL 都绕不过它。写入被拒时服务层翻译成 `TASK_PROVIDER_PIN_REFUSED`（§12）。
 - **K2**：`assigneeAgentId` 与 `projectId` 的一致性由服务层在**写路径**校验（create / update / batch-create / batch-assign 四处），并由 03C 的测试逐处覆盖。不做数据库级跨表 check —— Postgres 表达不了，且 Project 变更时会把校验变成 migration。
-- **K3**：Task 可以没有 `projectId`（今天 11 万行都没有）。**无 Project 的 Task 恒为 LEGACY** —— 列默认值就是它，服务层也只在 Task 有 `projectId` 时才写 `V1`。把一条没有 Project 的 Task 置成 `V1` 被拒（`TASK_CONTRACT_NEEDS_PROJECT`，§12）：V1 路径的每一条规则都要求一个 Project。
+- **K3**：Task 可以没有 `projectId`（今天 11 万行都没有）。**无 Project 的 Task 恒为 LEGACY** —— 列默认值就是它。**`projectId` 只是写 `V1` 的必要条件，不是充分条件**：充分条件由 §11.1 L5 唯一给出（创建请求里还必须显式带 `assigneeAgentId`），本条只说没有 Project 的那一半。把一条没有 Project 的 Task 置成 `V1` 被拒（`TASK_CONTRACT_NEEDS_PROJECT`，§12）：V1 路径的每一条规则都要求一个 Project。
 - **K4（晋升是单向的）**：`LEGACY → V1` 由 §11.1 L4 的显式动作触发；**`V1 → LEGACY` 永远不允许**。降级回去等于把一条已经解耦的任务重新交给"位置决定引擎"，而这正是本项目要消灭的东西。
 
 ### 3.5 `Runner`（既有表 `runner`，新增列）
@@ -617,7 +631,7 @@ workspaceIds
 |---|---|---|
 | 历史的无 Project Task | `execution_contract = 'LEGACY'` 且 `project_id IS NULL` | legacy |
 | **Legacy Project Task** | `execution_contract = 'LEGACY'` 且 `project_id IS NOT NULL` | legacy |
-| 迁移后新建的 Project Task | `execution_contract = 'V1'` | §7 三条链 |
+| 迁移后新建、且**创建请求显式带 `assigneeAgentId`** 的 Project Task（L5） | `execution_contract = 'V1'` | §7 三条链 |
 
 **规则 L1**：`execution_contract = 'LEGACY'` 的 Task 走 **legacy 路径**，行为与 v1 之前**逐字节相同**：
 
@@ -636,7 +650,8 @@ workspaceIds
 - **L3（迁移 stamp = 列默认值）**：`execution_contract` 的列默认是 `'LEGACY'`，所以**加列这一个动作**就把迁移时刻
   已存在的每一行 stamp 成 LEGACY —— 不需要 `UPDATE`，也就不存在“更新一半失败”的中间态。这是 0111 给
   `coordinator_enabled` 用的同一手法：默认值是**老行要保留的值**，新行的值由服务显式写。
-  迁移之后新建的 Task 里，只有带 `projectId` 的那些被服务写成 `V1`（§3.4 K3）；
+  迁移之后新建的 Task 里，只有**既带 `projectId`、创建请求里又显式带 `assigneeAgentId`** 的那些被服务写成 `V1`
+  （唯一规则 §11.1 L5；`projectId` 只是必要条件，§3.4 K3）；
   在迁移落地与新代码上线之间的窗口里，老代码建的行照样是 LEGACY，行为不变。
 - **L4（晋升：唯一的 LEGACY → V1 通道）**：给一条 Legacy Project Task 写入 `assigneeAgentId` 时，服务层在**同一个事务**里
   把 `execution_contract` 置为 `'V1'`。晋升必须同时满足 §8.4 的五条（含 K1：写入后 provider/model 为 NULL），
@@ -651,6 +666,17 @@ workspaceIds
   直接冲突：旧端根本不知道有这个字段，于是要么被 400 拒（旧端崩），要么建出一条第一次派发必然 `WHO_UNRESOLVED`
   的任务。**用"请求里有没有这个字段"分流**是唯一不需要旧端改一行代码的答案，也与 K3、L3 是同一条纪律：
   **默认值是老行为，新行为由一次显式写入触发。** `06B.8` 用录制的旧端载荷跑这条。
+  **本条是 `execution_contract` 写入规则的唯一规范来源**，三种请求形状各有且只有一个结论：
+
+  | 创建请求的形状 | 落到 `execution_contract` | 条款 |
+  |---|---|---|
+  | 没有 `projectId` | `LEGACY` | §3.4 K3（列默认值） |
+  | 有 `projectId`，**显式**带 `assigneeAgentId` | `V1` | 本条 |
+  | 有 `projectId`，**省略** `assigneeAgentId` | `LEGACY` | 本条 · §11.4 · `06B.8` |
+
+  §3.4 的字段表、K3、L3、`02C.2`、§11.4 与 `06B.8` 都只是本表的引用；**正文里任何一句"带 `projectId` 就写 `V1`"
+  都是缺陷** —— v1.2 恰好留了四句，于是同一个旧端请求按不同段落得到 `V1` 与 `LEGACY` 两个答案（`00.17` 扫描它，
+  并对两种录制的旧端载荷各断言一个唯一结果）。
 - **L6**：`task.assigneeId`（workspace）**不删列、不改语义**。在 V1 路径下它不参与解析，但仍被写入与展示，供旧客户端与历史查询使用。
 
 ### 11.2 迁移 `0128_project_agent_identity`（02A–02E 合并为一次迁移）
@@ -802,6 +828,9 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 - `00.14` `-` §12 里 `路径 = 派发` 的每一个码都是 PCC §11.2 的一行；反过来 PCC 标注来自 PAC §12 的 kind 都在 §12 里；且 PCC §11.2 里尚未落地的 kind 恰好由 PCC §12.1 的**唯一一条**迁移步骤指名（E4 的三条断言）
 - `00.15` `-` PCC 的决策输入投影带 `executionContract`，且 PCC §7.4 EC1 的 V1 读集里没有 `task.provider` / `task.model`（O7 的可执行形式）
 - `00.16` `-` §0.1 的四行索引与它指向的小节一致（同 `00.11`，对 v1.2 那一轮）
+- `00.17` `-` `execution_contract` 的写入规则全文只有一个答案：§11.1 L5 的三行请求形状表存在且封闭，正文里没有任何一句"带 `projectId`（而不问 `assigneeAgentId`）就写 `V1`"，并把**两种录制的旧端载荷**（`POST /tasks` 与 `POST /tasks/batch-create`，都带 `projectId`、都没有 `assigneeAgentId`）各跑一遍，唯一结果必须是 `LEGACY`（v1.2 的四句残留会让这条红）
+- `00.18` `-` §7.1 H4 的顺序被**执行**过：`coordinator-counterexample.spec.ts` 里有一条直接调用 WHO 解析模型、对 `member=null ∩ disabled` 与 `member=null ∩ deleted` 各断言唯一 `WHO_NOT_IN_TEAM` 的测试（`00.13` 只读表格顺序，看不见模型的实际分支）
+- `00.19` `-` `00.15` 的可执行那一半：反例模型的 `Db33` / fixture / resolver / `world` 投影 / `S10_FIELDS` 都带 `executionContract`，且 V1 分支不读 `task.provider` / `task.model`（只有文档带、模型不带时这条红）
 
 ### 13.1 02A `agent` 数据模型与迁移
 - `02A.1` `+` 建 Agent：只带 name 也能建；provider/model/fallback/权限位/requiredCapabilities 各字段可读回
@@ -829,7 +858,7 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 
 ### 13.3 02C `task` 新列
 - `02C.1` `+` `assigneeAgentId` / `workspaceId` / `requiredCapabilities` 可写可读
-- `02C.2` `+` 迁移之后新建的 Task：带 `projectId` 的显式落 `V1`，不带 `projectId` 的落 `LEGACY`（K3；列默认就是 `LEGACY`）
+- `02C.2` `+` 迁移之后新建的 Task 按**创建请求的形状**分流，L5 那张表的三行各一条断言：带 `projectId` **且显式带** `assigneeAgentId` → `V1`；带 `projectId` **省略** `assigneeAgentId` → `LEGACY`；不带 `projectId` → `LEGACY`（K3；后两行都是列默认值，服务层一个字都不写）
 - `02C.3` `-` 给 V1 Task 写 `provider` / `model` → `TASK_PROVIDER_PIN_REFUSED`，且**绕过服务层直接 SQL 写入被 CHECK 约束挡住**（K1）
 - `02C.4` `-` 给无 `projectId` 的 Task 写 `assigneeAgentId` 或置 V1 → `TASK_CONTRACT_NEEDS_PROJECT`（K3、§8.4 第 1 条）
 - `02C.5` `-` 写非 Team 成员的 Agent → `WHO_NOT_IN_TEAM`
@@ -978,13 +1007,13 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 | # | 项目验收标准 | 落地条款 | 证明它的用例（§13 编号） |
 |---|---|---|---|
 | 1 | Project 可配 Coordinator + 多成员 Agent，公开 ID 均 Base62 | §3.2, §10 | `+` `02B.1` · `+` `03B.1` · `+` `04A.20` · `-` `02B.3` · `-` `04A.12` · `M` `02A.8` |
-| 2 | Agent 可配 Provider/Model/提示词/能力/权限；Provider 不再由普通 Task 直接配置 | §3.1, §3.4 K1, §7.2 P1 | `+` `02A.1` · `+` `03A.1` · `+` `06A.4` · `-` `02C.3` · `-` `04A.6` · `-` `04A.8` · `-` `03C.14` · `-` `00.15` |
-| 3 | Task 只从 Project Team 选 assigneeAgent；Coordinator 建树，执行 Agent 在权限内建子任务 | §8.1, §8.2, §8.4 | `+` `03C.1` · `+` `03C.2` · `+` `03C.11` · `+` `03C.13` · `+` `03C.15` · `-` `03C.3` · `-` `03C.4` · `-` `03C.5` · `-` `03C.6` · `-` `03C.7` · `-` `03C.10` · `-` `03C.12` · `-` `04A.19` |
+| 2 | Agent 可配 Provider/Model/提示词/能力/权限；Provider 不再由普通 Task 直接配置 | §3.1, §3.4 K1, §7.2 P1 | `+` `02A.1` · `+` `03A.1` · `+` `06A.4` · `-` `02C.3` · `-` `04A.6` · `-` `04A.8` · `-` `03C.14` · `-` `00.15` · `-` `00.19` |
+| 3 | Task 只从 Project Team 选 assigneeAgent；Coordinator 建树，执行 Agent 在权限内建子任务 | §8.1, §8.2, §8.4 | `+` `03C.1` · `+` `03C.2` · `+` `03C.11` · `+` `03C.13` · `+` `03C.15` · `-` `03C.3` · `-` `03C.4` · `-` `03C.5` · `-` `03C.6` · `-` `03C.7` · `-` `03C.10` · `-` `03C.12` · `-` `04A.19` · `-` `00.18` |
 | 4 | Task Session 默认用 Project 当前 Workspace + Agent 的 Provider/Model；Session 存不可变快照 | §6, §7.2, §7.3 | `+` `04A.1` · `+` `04A.2` · `+` `04A.10` · `+` `04C.2` · `+` `02D.3` · `-` `02D.2` · `-` `02D.4` |
 | 5 | macOS/Xcode/GPU 经独立 runtime capability 选 Runner，不再由 Agent 身份隐式决定 | §7.3, §3.5 | `+` `04C.1` · `+` `04C.4` · `+` `04B.1` · `-` `04A.9` · `-` `04C.5` · `-` `04C.10` · `-` `04C.11` |
 | 6 | Web/API/CLI 对 Team、Agent 配置、指派与调度结果有完整可独立运行的测试，并覆盖迁移 | §13 全表 | `+` `03A.1` · `+` `03B.1` · `+` `03C.1` · `+` `04A.1` · `+` `05A.2` · `+` `05B.1` · `+` `05C.1` · `+` `05D.1` · `-` `03A.3` · `-` `03B.2` · `-` `03C.3` · `-` `04C.5` · `-` `00.7` · `-` `05A.3` · `M` `06B.1` |
 | 7 | UI 能管理团队，并在任务树里清晰展示 Assignee Agent 及其 Provider | §11.4, §13.13–13.15 | `+` `05B.1` · `+` `05B.2` · `+` `05C.1` · `+` `05D.2` · `-` `05B.3` · `-` `05C.3` · `-` `05D.5` |
-| 8 | 既有行为兼容，且**可验证**普通开发 Task 不会再被错调度到 Mac Runner | §11, §7.3 | `+` `06A.1` · `+` `06A.2` · `+` `06A.6` · `+` `06B.8` · `+` `04A.11` · `+` `06B.5` · `-` `06A.5` · `-` `00.12` · `M` `02C.8` · `M` `02B.7` · `M` `06B.1` · `M` `06B.3` |
+| 8 | 既有行为兼容，且**可验证**普通开发 Task 不会再被错调度到 Mac Runner | §11, §7.3 | `+` `06A.1` · `+` `06A.2` · `+` `06A.6` · `+` `06B.8` · `+` `04A.11` · `+` `06B.5` · `-` `06A.5` · `-` `00.12` · `-` `00.17` · `M` `02C.8` · `M` `02B.7` · `M` `06B.1` · `M` `06B.3` |
 
 > 第 8 条是本项目的**根因验收**，因此在单元层（`04A.11`，参数化跑遍 Agent）与端到端层（`06B.5`，跑 N 次派发）各有一条独立测试；
 > 只有其中之一都不算通过。v1.1 又补了 `06A.2` —— 既有 Project Task 在迁移后必须**仍然照旧跑得动**，
@@ -1004,6 +1033,11 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 > 第 8 条在 v1.2 又补了两条：`06B.8`（旧客户端建 Project Task 的写请求兼容）与 `02B.7`（重指向在真实 0111
 > 外键形状上跑得过）。前者是 §11.4 那一行的反例，后者是 M7 那条顺序的反例 —— 一条迁移在空库上绿、
 > 在生产快照上红，等于 AC8 从未被证明过。
+>
+> v1.3 又各补一条**可执行**的自检：第 8 条的 `00.17`（`06B.8` 要到 06 单元才跑得起来，而它证明的那条规则
+> 在契约里当场就可以有唯一答案）、第 3 条的 `00.18`（H4 的顺序被真的执行一次）、第 2 条的 `00.19`
+> （`00.15` 证明文档不读 task pin，`00.19` 证明那份可执行模型也不读）。三条都是同一条纪律：
+> **一句写对了的规范，只有在它声称能证明它的那个位置被执行过，才算被证明。**
 
 ---
 
@@ -1051,3 +1085,4 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 | v1 | 2026-08-19 | 任务 01（`349a520RyB4Nviq80LGQq`） | 冻结初版，代码基线 `b5fe1b2e` |
 | v1.1 | 2026-08-21 | 01V 独立审查 FAIL（评论 `34AqK7dEuWvR1Fwj7JawE`，被审 `a4adabf9`） | 见 §0 的七项结论；§13 全部用例编号化；§14 8 条映射重写；新增契约自检 spec |
 | v1.2 | 2026-08-21 | 01V 对 v1.1 的独立复验 FAIL（评论 `34ArzVefRCxRrqdDh1cEi`，被审 `b810be89`） | 见 §0.1 的四项结论：§11.2 步骤 4 的语句顺序（M7）、两组拒绝谓词的唯一优先级（H4 / C8 / E3）、PAC↔PCC 与数据库 CHECK 的双向闭合（E4，含 PCC 同步）、AC1/3/6/8 的四条指名用例（`04A.20` / `03C.15` / AC6 的 API 引用 / `06B.8`）。同批新增自检 `00.12`–`00.16` |
+| v1.3 | 2026-08-21 | 01V 对 v1.2 的第三轮独立复核 FAIL（评论 `34AtY6AGHMBfp1FH7v9eQ` + 补充 `34AtZerHln1UBUWZDnw4h`，被审 `47cfc22a`） | 见 §0.2 的三项结论：`execution_contract` 写入规则统一到 §11.1 L5 的三行请求形状表（§2 / §3.4 / K3 / L3 / `02C.2` 改为引用）、WHO 交集在可执行模型上按 H4 定序并直接跑两个反例、`executionContract` 进入反例模型的 `Db33` / fixture / resolver / `world` 投影 / `S10_FIELDS`。同批新增自检 `00.17`–`00.19`；不改生产代码，不提前实现 PCC §12.1 步骤 6j |
