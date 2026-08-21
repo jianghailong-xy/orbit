@@ -92,6 +92,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'sourceTaskId',
   'targetTaskId',
   'verifiesTaskId',
+  // §13.5's supersession link: the later attempt that took a cancelled one's place. An address a
+  // reader hands straight to task_get, exactly like `parentTaskId` beside it.
+  'supersededByTaskId',
   // §13.2's verification-failure record names four rows a caller reads and looks up: the check
   // that concluded, the task it concluded about, the defect subtask filed to fix it, and the
   // later check that cleared it. Every one of them is an address somebody hands to task_get.

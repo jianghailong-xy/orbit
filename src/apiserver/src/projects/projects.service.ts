@@ -19,6 +19,7 @@ import {
 } from '@prisma/client';
 import { toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { SessionsService } from '../sessions/sessions.service';
 import { withSessionState } from '../sessions/session-state';
 import {
@@ -1041,9 +1042,19 @@ export class ProjectsService {
     const pendingActions = pendingActionRows.map(ProjectsService.actionSummary);
     // §13.4's native record, and the gate as a read. Two round trips rather than a join: the gate
     // needs one consistent snapshot of four projections, which is a transaction, not a SELECT.
-    const [acceptanceRun, doneGate] = await Promise.all([
+    const [acceptanceRun, doneGate, mergeReceipts] = await Promise.all([
       this.acceptance.summary(projectId),
       this.acceptance.evaluateGate(projectId),
+      // §13.7 MR5: which of this project's task branches actually landed, into what, at which
+      // commit. Read here rather than through the sessions module because it is one indexed query
+      // on a denormalised column — and because a status read that could not answer it was the gap:
+      // `session.merge_status` is cleared on resume and was never written at all for a branch
+      // merged outside Orbit, so "did the work land" had no durable answer anywhere.
+      this.prisma.sessionMergeReceipt.findMany({
+        where: { projectId, ownerId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 100,
+      }),
     ]);
 
     return {
@@ -1175,6 +1186,12 @@ export class ProjectsService {
           ? null
           : ProjectsService.actionSummary(acceptanceRow),
         lastRunAbsentReason: reasonIfAbsent(acceptanceRow, 'ACCEPTANCE_NOT_ATTEMPTED'),
+        // Every merge this project's work was recorded on. Capped at 100 and said out loud when it
+        // is: a truncated list that reads as complete is how an audit concludes that something did
+        // not happen.
+        mergeReceipts: mergeReceipts.map((r) => mergeReceiptRow(r as unknown as MergeReceiptRow)),
+        mergeReceiptsEmptyReason: mergeReceipts.length > 0 ? null : ('NO_MERGE_RECEIPT' as const),
+        mergeReceiptsTruncated: mergeReceipts.length === 100,
         evidence: {
           verifications: {
             total: verdicts.total,

@@ -260,6 +260,7 @@ model User {
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   clientVersions   ClientVersion[] // which build of each client this user is running
+  mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
 
   @@map("user")
 }
@@ -958,6 +959,8 @@ model Session {
   // Personal colored labels applied to this session (many-to-many via the join table).
   tagLinks              SessionTagLink[]
   resultOfProjectAction ProjectAction? @relation("ProjectActionResultSession")
+  // Append-only record of every merge attempted for this session's branch, however it was made.
+  mergeReceipts         SessionMergeReceipt[]
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -994,6 +997,91 @@ model InboxLeaseGeneration {
 // list payload — it's fetched only when the user opens a file's diff (GET /sessions/:id/diff).
 // The runner upserts it each turn (live, uncommitted) and at completion (committed). `patches`
 // is a FilePatch[] ({ path, patch?, truncated? }) — see @orbit/shared.
+/// One merge of one session's branch, as it actually happened (§13.7 MR1).
+///
+/// The row exists because `Session.merge_status` could not be the answer and was being asked to be
+/// one. That column is LIVE UI state for the "Merge to main" button: it is written when a merge is
+/// queued, and deliberately cleared again when the session is resumed or takes another turn. It is
+/// also only ever written by the one path that goes through Orbit — so a branch merged the way
+/// these branches are actually merged, by an agent running `git merge --ff-only` in its own
+/// worktree, left `merge_status` NULL and `branch_merged` false FOREVER, and the control plane's
+/// honest answer to "did this task's work land" was "no idea".
+///
+/// So this table records the merge and that column keeps showing it. A receipt is APPEND-ONLY
+/// (migration 0128 refuses UPDATE) because it is a statement about a moment: the target moves
+/// afterwards, and a receipt that were kept current would stop being evidence of anything.
+///
+/// It names every address the audit needs to join on — the session, its task, its project — and
+/// every SHA the claim can be checked against: what was merged, what it was merged into before and
+/// after, and which base the source had been rebased onto when the merge was computed. `rebaseBase`
+/// is the one people leave out and the one that decides whether "the tests passed" was about this
+/// world: a branch merged clean onto a target it was never rebased against tested a different tree.
+model SessionMergeReceipt {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  /// Tenant scope. Denormalized from the session on purpose: every read of this table filters by
+  /// it, and a receipt whose reachability depends on joining a row that may be soft-deleted is a
+  /// receipt that can go quiet exactly when somebody is auditing it.
+  ownerId   String  @map("owner_id") @db.Uuid
+  owner     User    @relation(fields: [ownerId], references: [id])
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// The work this merge was FOR. Optional because a session need not be task-bound; SetNull
+  /// because deleting a task must not delete the evidence that its branch landed.
+  taskId    String? @map("task_id") @db.Uuid
+  task      Task?   @relation("TaskMergeReceipt", fields: [taskId], references: [id], onDelete: SetNull)
+  /// Denormalized from the task at write time, so "which merges does this project's acceptance get
+  /// to stand on" is one indexed read and stays answerable after the task is re-filed.
+  projectId String?  @map("project_id") @db.Uuid
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// What happened. Closed set, frozen by a CHECK in migration 0128:
+  /// `MERGED` (the target moved and now contains this source), `ALREADY_MERGED` (it was already
+  /// there — the external-ff-only and re-run cases, which are a RESULT and not a no-op), `CONFLICT`
+  /// (git refused, `conflicts` names the paths) and `ERROR` (everything else, `detail` says what).
+  result String
+
+  sourceBranch String  @map("source_branch")
+  /// The exact source tip this receipt is about. Full 40-hex, lowercase, checked: an abbreviated
+  /// SHA is ambiguous by construction and this row's whole purpose is to be checkable later.
+  sourceSha    String  @map("source_sha") @db.Char(40)
+  targetBranch String  @map("target_branch")
+  /// The target before and after. `targetShaAfter` is NOT NULL for `MERGED` (0128's CHECK): a
+  /// merge that cannot say where the target ended up is a claim, not a receipt.
+  targetShaBefore String? @map("target_sha_before") @db.Char(40)
+  targetShaAfter  String? @map("target_sha_after") @db.Char(40)
+  /// The base `sourceSha` was rebased onto before the merge was computed, when it was rebased at
+  /// all. NULL means "not rebased", which is a different statement from "unknown" only because
+  /// `detail` is where an unknown goes.
+  rebaseBaseSha   String? @map("rebase_base_sha") @db.Char(40)
+
+  /// Paths git reported as conflicting. Empty for every non-CONFLICT result.
+  conflicts String[] @default([])
+
+  /// WHO recorded it: `RUNNER` (Orbit's own merge path reporting its outcome), `AGENT` (a worker
+  /// recording a merge it made itself, which is the external-ff-only case) or `USER`. Closed set,
+  /// frozen by a CHECK. It is provenance, never an input to a decision.
+  recordedBy String @map("recorded_by")
+
+  /// The raw observation: the command, its output, the refs read. Display and diagnosis only.
+  detail Json @default("{}")
+
+  /// What makes re-recording the same merge a no-op rather than a second row. Supplied by the
+  /// caller when it has a natural one, otherwise derived from
+  /// `(sessionId, sourceSha, targetBranch, result)` — the four facts that make two reports the
+  /// same report. Unique WITHIN a session, not globally: two sessions merging the same commit into
+  /// the same branch is two merges and deserves two receipts.
+  idempotencyKey String @map("idempotency_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([sessionId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([ownerId, createdAt])
+  @@map("session_merge_receipt")
+}
+
 model SessionDiff {
   sessionId String   @id @map("session_id") @db.Uuid
   patches   Json
@@ -1359,6 +1447,7 @@ model Project {
   acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
   acceptanceAudit ProjectAcceptanceAudit[]
   mergeEvidence   ProjectMergeEvidence[]
+  mergeReceipts   SessionMergeReceipt[]
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -2198,6 +2287,38 @@ model Task {
   verifiesTaskId   String?     @map("verifies_task_id") @db.Uuid
   verifies         Task?       @relation("TaskVerification", fields: [verifiesTaskId], references: [id], onDelete: Cascade)
   verifiedBy       Task[]      @relation("TaskVerification")
+  /// The later attempt that took this one's place (§13.6 SU1).
+  ///
+  /// It exists because the alternative was in production and did not work: a review that was
+  /// re-run from scratch left its earlier attempts CANCELLED with the reason in a free-text
+  /// comment, so "was this dropped, or is it being done again over there" was a question only a
+  /// person reading prose could answer — and the answer was invisible to every query, every list
+  /// and every acceptance read.
+  ///
+  /// Only a task that has already stopped may be linked (`CANCELLED` or `FAILED`, enforced by
+  /// migration 0128's trigger), and linking writes nothing to `status`: the original failure is
+  /// the fact being preserved, not the one being cleaned up. The successor must belong to the same
+  /// owner and the same project, and the chain it forms is acyclic — all three checked by the same
+  /// trigger, because a supersession that crosses a tenant or closes a loop is not a weaker version
+  /// of the same claim, it is a different one. A task naming ITSELF is the acyclicity rule's
+  /// zero-hop case rather than a rule of its own.
+  ///
+  /// SetNull on delete, like `parentTaskId` and for the same reason: deleting the successor must
+  /// not refuse the delete or destroy the row that points at it. What survives is
+  /// `terminalReason = 'SUPERSEDED'` with nothing to name, which reads back as
+  /// `supersededByTaskIdAbsentReason = 'SUCCESSOR_DELETED'` rather than as "never superseded".
+  supersededByTaskId String?  @map("superseded_by_task_id") @db.Uuid
+  supersededBy       Task?    @relation("TaskSupersession", fields: [supersededByTaskId], references: [id], onDelete: SetNull)
+  supersedes         Task[]   @relation("TaskSupersession")
+  supersededAt       DateTime? @map("superseded_at")
+  /// WHY this task stopped, when its status alone does not say. Closed set, frozen by a CHECK in
+  /// migration 0128: `SUPERSEDED` (a successor is doing it instead) and `ABANDONED` (nobody is).
+  ///
+  /// Two values rather than four: `FAILED` and `CANCELLED` are already `status`, and a column that
+  /// restates its neighbour is a column that can disagree with it. This one answers only the
+  /// question `status` cannot — a CANCELLED task that was replaced and a CANCELLED task that was
+  /// dropped are the same status and opposite facts.
+  terminalReason     String?  @map("terminal_reason")
   // Best-effort dedup of a redelivered turn's re-created tasks: a hash of (session, turn, title,
   // description), set only when the create happens inside a live turn (see TasksService). @unique
   // gives a Postgres unique index, which by default treats NULLs as distinct — so the many tasks
@@ -2217,6 +2338,8 @@ model Task {
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
   verdictFailuresAbout    TaskVerificationFailure[] @relation("VerificationFailureSubject")
   verdictFailuresRepaired TaskVerificationFailure[] @relation("VerificationFailureDefect")
+  /// Merges recorded against this task's branches (§13.7 MR1).
+  mergeReceipts           SessionMergeReceipt[]    @relation("TaskMergeReceipt")
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -2250,6 +2373,11 @@ model Task {
   /// Both dispatcher questions about a verification — "is one already in flight for this
   /// subject" and "how many has it had" — key on this column.
   @@index([verifiesTaskId])
+  /// "what replaced this" is the column; "what did this replace" is the index. The successor chain
+  /// is walked in both directions — forward by a reader following one task to the attempt that is
+  /// actually running, backward by the acyclicity trigger and by every list that wants to show a
+  /// live task's abandoned predecessors.
+  @@index([supersededByTaskId])
   @@map("task")
 }
 

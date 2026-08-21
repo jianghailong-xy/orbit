@@ -262,6 +262,51 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_blockers":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectBlockers(id, getBool(args, "history"))
+		if err != nil {
+			return toolResult("get project blockers failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "merge_receipt":
+		id := getString(args, "sessionId")
+		if id == "" {
+			id = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+		}
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "result", "sourceSha", "targetBranch", "sourceBranch",
+			"targetShaBefore", "targetShaAfter", "rebaseBaseSha", "conflicts")
+		if message := getString(args, "message"); message != "" {
+			body["detail"] = map[string]interface{}{"message": message}
+		}
+		raw, err := s.t.recordMergeReceipt(id, body)
+		if err != nil {
+			return toolResult("record merge receipt failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "merge_receipts":
+		id := getString(args, "sessionId")
+		if id == "" {
+			id = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+		}
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.listMergeReceipts(id, int(getNumber(args, "limit")))
+		if err != nil {
+			return toolResult("list merge receipts failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_verifications":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -482,7 +527,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1373,6 +1418,84 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId"),
 		},
 		{
+			"name": "project_blockers",
+			"description": "Read what is stopping one project, and — with `history` — what used to. " +
+				"Each open blocker answers four questions a status column cannot: what kind of stop " +
+				"it is, WHO can clear it (owner), WHAT would clear it (recovery: a clock, an event, " +
+				"or a person), and the one executable sentence that would resolve it, plus when it " +
+				"is next rechecked and which action raised it. Read it when a project is OPEN and " +
+				"nothing is running: an open blocker is a dispatch precondition rather than a status " +
+				"anybody rewrote, so nothing else about the project looks unusual. `history` adds the " +
+				"episodes that are already over, with who or what ended them and when — those rows " +
+				"are never deleted, because the next episode on the same key takes its lifecycle " +
+				"generation from the whole history, which is also what makes \"what was blocking this " +
+				"last Tuesday\" a question the audit can still answer rather than one that needed " +
+				"somebody to have written a comment at the time.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+				"history": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Include the episodes that are already resolved. Default false — the open ones only.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "merge_receipt",
+			"description": "Record that a session's branch was merged, for a merge Orbit did not " +
+				"perform — the `git merge --ff-only` an agent runs in its own worktree, which is how " +
+				"branches actually land. Without it the control plane has nothing: merge status blank " +
+				"and \"already in main\" false, permanently, because the only code that ever writes " +
+				"those is Orbit's own Merge button. The receipt is append-only and names the session, " +
+				"its task, its project, and every SHA the claim can be re-checked against. Recording " +
+				"the same merge twice is a no-op: the second call returns the first receipt. Give " +
+				"FULL 40-character object names — an abbreviated SHA is refused, because it resolves " +
+				"against a repository that has since gained objects and can silently come to mean a " +
+				"different commit. `rebaseBaseSha` is the field people skip and the one that decides " +
+				"whether the tests that passed were about this tree: omit it only if the source was " +
+				"genuinely not rebased. This is not an orchestration power and needs no orchestration " +
+				"grant: it records work that already happened, inside your own tenant.",
+			"inputSchema": obj(map[string]interface{}{
+				"sessionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The session whose branch was merged; defaults to the current session.",
+				},
+				"result": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"MERGED", "ALREADY_MERGED", "CONFLICT", "ERROR"},
+					"description": "MERGED moved the target. ALREADY_MERGED is a RESULT, not a no-op — it is the answer when the target already contained this work, which is the external fast-forward case and every re-run. CONFLICT names the paths in `conflicts`; ERROR is everything else.",
+				},
+				"sourceSha":       map[string]interface{}{"type": "string", "description": "The full 40-character tip that was merged."},
+				"targetBranch":    map[string]interface{}{"type": "string", "description": "The branch it was merged into."},
+				"sourceBranch":    map[string]interface{}{"type": "string", "description": "Defaults to the session's own recorded branch."},
+				"targetShaBefore": map[string]interface{}{"type": "string", "description": "The target tip before the merge."},
+				"targetShaAfter":  map[string]interface{}{"type": "string", "description": "The target tip after it. REQUIRED for result MERGED: a merge that cannot say where the target ended up is a claim, not a receipt."},
+				"rebaseBaseSha":   map[string]interface{}{"type": "string", "description": "The base the source was rebased onto before this merge was computed. Omitted means it was not rebased."},
+				"conflicts": map[string]interface{}{
+					"type": "array", "items": map[string]interface{}{"type": "string"},
+					"description": "Paths git reported as conflicting. Only for result CONFLICT.",
+				},
+				"message": map[string]interface{}{"type": "string", "description": "Git's message, for a conflict or an error."},
+			}, "result", "sourceSha", "targetBranch"),
+		},
+		{
+			"name": "merge_receipts",
+			"description": "List the merges recorded against a session's branch, newest first: what " +
+				"was merged, into what, the target tip before and after, the base the source was " +
+				"rebased onto, the result and any conflicting paths. The durable answer to \"did this " +
+				"session's work land\", which the session's own merge status cannot give — that column " +
+				"is the Merge button's live state and is deliberately cleared when a session resumes.",
+			"inputSchema": obj(map[string]interface{}{
+				"sessionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The session to read; defaults to the current session.",
+				},
+				"limit": map[string]interface{}{"type": "integer", "description": "Maximum receipts to return (default 50, cap 200)."},
+			}),
+		},
+		{
 			"name": "project_verifications",
 			"description": "Read what every verification in one project concluded, and what those " +
 				"conclusions are still holding up. Three things nothing else tells you: each " +
@@ -1687,6 +1810,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"items":       str,
 					"maxItems":    maxTaskLabels,
 					"description": "Complete replacement for this task's labels. Omit to leave them unchanged; pass [] to clear them all.",
+				},
+				"supersededByTaskId": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "The later attempt that took this one's place. This is what makes \"we re-ran it from scratch\" a relation instead of a sentence in a comment: it names the successor, so a reader of the cancelled attempt can follow the chain to whoever ended up doing the work, and a list can tell an attempt that was REPLACED from one that was simply dropped. Only a CANCELLED or FAILED task may name one, the successor must be owned by you and in the SAME project, and the chain may not close a loop. It writes nothing to `status` — the original outcome is the fact being preserved, not the one being tidied away. Omit to leave the link alone, null to unlink.",
+				},
+				"terminalReason": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"enum":        []interface{}{"SUPERSEDED", "ABANDONED", nil},
+					"description": "Why this task stopped, when its status alone does not say. Setting supersededByTaskId implies SUPERSEDED and needs no second spelling; ABANDONED is the other case — dropped on purpose, with nothing replacing it. FAILED and CANCELLED are not values here because they are already `status`.",
 				},
 			}),
 		},

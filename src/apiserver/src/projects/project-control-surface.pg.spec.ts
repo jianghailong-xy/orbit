@@ -151,6 +151,26 @@ function prisma(client: Client): PrismaService {
           WHERE "project_id" = $1::uuid GROUP BY 1`, [where.projectId],
       )).map((row) => ({ status: row.status, _count: { _all: row.count } })),
     },
+    // §13.7's merge receipts, the same way: the production read is a query-builder call, and here
+    // it is the same SQL against the same table — which is exactly the agreement this spec checks.
+    sessionMergeReceipt: {
+      findMany: async ({ where, take }: { where: { projectId: string; ownerId: string }; take: number }) =>
+        rows(await client.query(
+          `SELECT "id", "session_id" AS "sessionId", "task_id" AS "taskId",
+                  "project_id" AS "projectId", "result",
+                  "source_branch" AS "sourceBranch", "source_sha" AS "sourceSha",
+                  "target_branch" AS "targetBranch",
+                  "target_sha_before" AS "targetShaBefore", "target_sha_after" AS "targetShaAfter",
+                  "rebase_base_sha" AS "rebaseBaseSha", "conflicts",
+                  "recorded_by" AS "recordedBy", "detail",
+                  "idempotency_key" AS "idempotencyKey", "created_at" AS "createdAt"
+             FROM "session_merge_receipt"
+            WHERE "project_id" = $1::uuid AND "owner_id" = $2::uuid
+            ORDER BY "created_at" DESC, "id" DESC
+            LIMIT $3`,
+          [where.projectId, where.ownerId, take],
+        )),
+    },
     project: {
       findFirst: async ({ where }: { where: { id: string; ownerId: string } }) => {
         const found = rows(await client.query(

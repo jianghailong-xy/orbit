@@ -226,6 +226,8 @@ interface Ledger {
   /** §13.4's native acceptance record (unit 25A). Absent means this project has never run one,
    *  which is the state every scenario in this file is written against. */
   runs?: unknown[];
+  /** §13.7's merge receipts, the evidence a project's branches actually landed. */
+  mergeReceipts?: unknown[];
 }
 
 /** Both spellings a raw query arrives in: `Prisma.sql` (a Sql) and a tagged template. */
@@ -252,6 +254,9 @@ function service(ledger: Ledger = {}): ProjectsService {
     // `taskVerificationFailure` are the gate's own counts — the raw-SQL tallies above are the
     // status page's, and they are deliberately not the same read.
     projectAcceptanceRun: { findFirst: async () => (ledger.runs ?? [])[0] ?? null },
+    // §13.7's merge evidence. Empty here for the same reason `task.findMany` is: this file is
+    // about the control-loop sections, and merge-receipt.pg.spec owns the receipts themselves.
+    sessionMergeReceipt: { findMany: async () => ledger.mergeReceipts ?? [] },
     projectBlocker: { count: async () => 0 },
     taskVerificationFailure: { count: async () => 0 },
     $queryRaw: async (arg: unknown) => {
@@ -482,6 +487,7 @@ test('the status read is scoped by owner in the query, not after it', async () =
     },
     task: { groupBy: async () => [], findMany: async () => [] },
     projectAcceptanceRun: { findFirst: async () => null },
+    sessionMergeReceipt: { findMany: async () => [] },
     projectBlocker: { count: async () => 0 },
     taskVerificationFailure: { count: async () => 0 },
     $queryRaw: async (arg: any) => {

@@ -836,6 +836,22 @@ func (t *Transport) getProjectCoordinatorStatus(id string) (json.RawMessage, err
 	return out, err
 }
 
+// getProjectBlockers reads what is stopping a project (contract §11), and with history the episodes
+// that are already over. Blocker rows are never deleted on resolution, so "what was blocking this
+// yesterday, and what ended it" stays answerable — this is the terminal's way of asking.
+func (t *Transport) getProjectBlockers(id string, history bool) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	path := "/runner/projects/" + url.PathEscape(id) + "/blockers"
+	if history {
+		path += "?history=1"
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
+	return out, err
+}
+
 // getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
 // as the server decomposes them, the digest of the facts a DONE would be checked against, every
 // attempt with its per-criterion conclusions and evidence, the newest merge observation per
@@ -1171,6 +1187,32 @@ func (t *Transport) mergeSession(callerSessionID, orchestrationToken, id string,
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// recordMergeReceipt files one merge of a session's branch (§13.7). Plain runner credential, no
+// orchestration header: it records work that already happened rather than asking another session's
+// runner to do anything, so requiring an orchestration grant would mean the deployments that most
+// need the audit are the ones that cannot write it.
+func (t *Transport) recordMergeReceipt(id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/merge-receipts", body, &out, 20*time.Second)
+	return out, err
+}
+
+func (t *Transport) listMergeReceipts(id string, limit int) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	path := "/runner/sessions/" + url.PathEscape(id) + "/merge-receipts"
+	if limit > 0 {
+		path += "?limit=" + strconv.Itoa(limit)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", path, nil, &out, 20*time.Second)
 	return out, err
 }
 

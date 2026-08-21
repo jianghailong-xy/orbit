@@ -40,7 +40,12 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 29 {
+	// Three joined in 25C, all ungated reads/writes about the caller's own work: project_blockers
+	// (a blocker episode is never deleted, so "what was blocking this, and what ended it" is a
+	// question the audit answers — and the terminal was the one caller that could not ask it), and
+	// merge_receipt / merge_receipts (recording that a branch was merged is evidence about your own
+	// work, not a power over somebody else's session).
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 32 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script

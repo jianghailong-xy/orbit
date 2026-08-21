@@ -33,6 +33,7 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 Usage:
   orbit project get PROJECT_ID [--json]
   orbit project status PROJECT_ID [--json]
+  orbit project blockers PROJECT_ID [--history] [--json]
   orbit project verifications PROJECT_ID [--json]
   orbit project acceptance PROJECT_ID [--json]
   orbit project acceptance-run PROJECT_ID [--json]
@@ -45,6 +46,25 @@ Run 'orbit project <command> --help' for options.
 `
 
 var projectActionHelp = map[string]string{
+	"blockers": `orbit project blockers — what is stopping this project, and what used to
+
+Usage:
+  orbit project blockers PROJECT_ID [--history] [--json]
+
+Each open blocker says four things: what kind of stop it is, who can clear it, what would clear
+it, and when it is next rechecked — plus one executable sentence rather than a restated error.
+
+--history adds the episodes that are already over, with what ended them and when. Those rows are
+never deleted on resolution: the next episode on the same key takes its lifecycle generation from
+the whole history, so "what was blocking this last Tuesday" stays a question the audit answers.
+
+Read it when a project is OPEN and nothing is running. An open blocker is a precondition, not a
+status somebody rewrote, so nothing else about the project looks unusual.
+
+Options:
+  --history                Include resolved episodes
+  --json
+`,
 	"get": `orbit project get — one project's goal, acceptance criteria and instructions
 
 Usage:
@@ -287,6 +307,7 @@ Only one --*-file flag per invocation: they all read the same stdin.
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_status", Argv: []string{"orbit", "project", "status"}, Usage: "orbit project status PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read everything the control loop knows about one project — the answer to \"why is this project not moving\", which is otherwise spread over seven tables and usually misread as \"it is broken\". Returns its run state and lifecycle; which agent coordinates it, where, and the coordination session and generation; whether the coordinator is switched on and how far it may go (MANUAL / GUARDED_AUTO / AUTO) with the configRevision a control write states back; tasks in flight against the cap and coordinator sessions against the daily budget, counted exactly as the admission gates count them; whether a pass holds the lease; when it next wakes, why, and which candidates lost; the last few decisions with the actions and idempotency keys they produced; actions claimed but not yet published; what is blocking it, who can fix it, what would clear it and when it is rechecked; durable signals still pending with their attempts and backoff; and the acceptance evidence — stated criteria, last acceptance run, verdict tallies and per-branch merge state. Every absent fact is null beside a reason, so \"nothing is blocking this\" and \"this cannot be reported\" are different answers."},
+	{Tool: "project_blockers", Argv: []string{"orbit", "project", "blockers"}, Usage: "orbit project blockers PROJECT_ID [--history] [--json]", Arguments: []string{"[project-id] (required)", "--history (include the episodes that are already resolved)", "--json"}, Description: "Read what is stopping one project: each open blocker's kind, who can clear it (owner), what would clear it (recovery), what it is about, the one executable sentence that would resolve it, when it is next rechecked, and which action raised it. --history adds the episodes that are already over, with what ended them and when — those rows are never deleted, because the lifecycle generation of the next episode on the same key is allocated over the whole history, so \"what was blocking this yesterday\" stays a question the audit can answer. Read it when a project is OPEN and nothing is running: an open blocker is a precondition rather than a status anybody rewrote, so nothing else on the project looks unusual."},
 	{Tool: "project_verifications", Argv: []string{"orbit", "project", "verifications"}, Usage: "orbit project verifications PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what every verification in one project concluded and what those conclusions are still holding up: each check's verdict and verdictRevision, the defect subtask each FAIL filed under its subject, the action that raised it, whether a later PASS resolved it, and blockedTasks — the exact tasks that cannot be dispatched because of an unresolved failure, with the reason. Read it when a task looks ready and is not running: a blocked task looks like an ordinary OPEN task on purpose, because the block is a dispatch precondition rather than a status anybody rewrote."},
 	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the evidence a project's DONE would be checked against, and whether it would be allowed right now. Returns the stated acceptance criteria decomposed one per line (the checklist an acceptance run has to answer item for item), acceptanceDigest — the digest of the criteria text, every task with its status and completion policy, every verification verdict and the newest merge observation per requirement — every attempt with its per-criterion conclusions and evidence, what each target branch was last observed to contain, the append-only audit of runs, bindings, refusals and reopens, and doneGate: allowed, or the code and sentence the write would be refused with (ACCEPTANCE_MISSING, ACCEPTANCE_EVIDENCE_STALE, ACCEPTANCE_BLOCKED). Read it before claiming a project is finished: a comment saying the tests passed is not evidence the server can check."},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Open a project acceptance attempt: the acceptance criteria are frozen with their digest and one empty row per stated criterion is created — the checklist project_acceptance_verdict then has to fill. Open it when you are about to CHECK the project, not when you are about to report on it: the digest of the facts is taken now, and a task, verdict, criteria or branch-content change afterwards makes this attempt stale rather than wrong. Opening an attempt supersedes any earlier live one, so there is never a choice of which conclusion to believe. A project stating no acceptance criteria is refused, because an acceptance with nothing to check would pass by having nothing to fail.", Mutates: true},
@@ -329,6 +350,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectUpdate(args[1:], in, out)
 	case "status":
 		return cliProjectCoordinatorStatus(args[1:], out)
+	case "blockers":
+		return cliProjectBlockers(args[1:], out)
 	case "verifications":
 		return cliProjectVerifications(args[1:], out)
 	case "acceptance":
@@ -373,6 +396,31 @@ func cliProjectGet(args []string, out io.Writer) error {
 // cliProjectCoordinatorStatus is the control loop's own state at a terminal: one GET, one raw body
 // through. Same shape as the two reads either side of it — the server decides what the sections
 // are, and a second opinion formatted here would be one that drifts from the API and the web UI.
+func cliProjectBlockers(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project blockers")
+	history := fs.Bool("history", false, "include the episodes that are already resolved")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getProjectBlockers(id, *history)
+	if err != nil {
+		return fmt.Errorf("get project blockers: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliProjectCoordinatorStatus(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit project status")

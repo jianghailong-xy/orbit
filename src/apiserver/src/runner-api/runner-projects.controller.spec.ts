@@ -344,6 +344,10 @@ test('the runner project bridge exposes exactly create, the reads, and update', 
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
+    // §11's blocker read, through the machine door (unit 25C). A read, and the one a headless
+    // auditor needs most: an open blocker is a dispatch precondition rather than a status anybody
+    // rewrote, so a project stopped by one looks entirely ordinary from every other endpoint.
+    'blockers',
     'createProject',
     // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
     // three writes are here. Listing, deletion, opening a coordinator and the manual trigger are
@@ -364,6 +368,7 @@ test('the runner project bridge exposes exactly create, the reads, and update', 
     ]),
   );
   assert.deepEqual(verbs, {
+    blockers: RequestMethod.GET,
     createProject: RequestMethod.POST,
     finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,

@@ -51,6 +51,14 @@ import {
   UpdateTaskDto,
 } from './dto';
 import {
+  TASK_SUPERSEDABLE_STATUSES,
+  TASK_SUPERSESSION_MAX_HOPS,
+  successorChain,
+  supersededByAbsentReason,
+  supersessionRefusal,
+  taskOutcome,
+} from './task-supersession';
+import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
@@ -167,6 +175,12 @@ export const TASK_LIST_SELECT = {
   completionPolicy: true,
   verdict: true,
   verifiesTaskId: true,
+  // §13.6's three supersession columns, in for the same reason: a reader looking at a project's
+  // history needs "this one was replaced, and by that one" without one GET per cancelled row —
+  // otherwise the only way to tell a replaced attempt from a dropped one is to read the comments.
+  supersededByTaskId: true,
+  supersededAt: true,
+  terminalReason: true,
   assignee: {
     select: {
       id: true,
@@ -3296,18 +3310,100 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependedOnBy: {
           include: { task: { select: { id: true, title: true, status: true } } },
         },
+        // §13.6, the backward direction: the attempts this task replaced. Part of THIS query
+        // rather than a second one — it is an indexed lookup either way, and `get` is on the path
+        // of every task page.
+        supersedes: {
+          select: { id: true, title: true, status: true, terminalReason: true, supersededAt: true },
+          orderBy: [{ supersededAt: 'asc' }, { id: 'asc' }],
+        },
       },
     });
     if (!task) throw new NotFoundException('task not found');
     const dependencyState = computeDependencyState(
       task.dependsOn.map((d) => d.dependsOnTask.status as unknown as TaskStatus),
     );
+    const supersession = await this.supersession(ownerId, task);
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => withSessionState(session)),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
+      ...supersession,
+    };
+  }
+
+  /**
+   * §13.6, both directions, for one task.
+   *
+   * `outcome` is the word a client shows — the one place "failed", "cancelled" and "superseded"
+   * are told apart, derived rather than stored so three clients cannot each derive it differently.
+   *
+   * `supersedes` is what this task replaced (its direct predecessors) and `successorChain` is what
+   * replaced it, followed to the attempt that is actually live. The chain is the read the audit
+   * wants: a cancelled attempt three replacements deep still answers "so who ended up doing this",
+   * and answers it with rows rather than with a comment somebody wrote.
+   *
+   * One recursive query rather than a loop of finds: the walk is bounded by the same 256 hops the
+   * database refuses to exceed, and a per-hop round trip on a page of tasks is the shape that turns
+   * an audit read into a timeout.
+   */
+  private async supersession(
+    ownerId: string,
+    task: {
+      id: string;
+      status: string;
+      supersededByTaskId: string | null;
+      terminalReason: string | null;
+      supersedes?: Array<{ id: string; title: string; status: string; terminalReason: string | null }>;
+    },
+  ) {
+    const predecessors = task.supersedes ?? [];
+    const forward =
+      task.supersededByTaskId == null
+        ? []
+        : await this.prisma.$queryRaw<Array<{
+            id: string; title: string; status: string;
+            supersededByTaskId: string | null; terminalReason: string | null; depth: number;
+          }>>(Prisma.sql`
+            WITH RECURSIVE walk AS (
+              SELECT t."id", t."title", t."status"::text, t."superseded_by_task_id", t."terminal_reason", 1 AS depth
+                FROM "task" t
+               WHERE t."id" = ${task.supersededByTaskId}::uuid AND t."owner_id" = ${ownerId}::uuid
+              UNION ALL
+              SELECT n."id", n."title", n."status"::text, n."superseded_by_task_id", n."terminal_reason", w.depth + 1
+                FROM walk w
+                JOIN "task" n ON n."id" = w."superseded_by_task_id" AND n."owner_id" = ${ownerId}::uuid
+               WHERE w.depth < ${TASK_SUPERSESSION_MAX_HOPS}
+            )
+            SELECT "id", "title", "status",
+                   "superseded_by_task_id" AS "supersededByTaskId",
+                   "terminal_reason" AS "terminalReason",
+                   depth
+              FROM walk ORDER BY depth`);
+    // The chain the pure function would build from the same edges, used to bound what the query
+    // returned: a cycle is unwritable (0128's trigger), so if one is ever read it is reported as a
+    // truncation rather than followed.
+    const edges = new Map<string, string | null>([[task.id, task.supersededByTaskId]]);
+    for (const row of forward) edges.set(row.id, row.supersededByTaskId);
+    const { chain, truncated } = successorChain(task.id, edges);
+    const byId = new Map(forward.map((row) => [row.id, row]));
+    return {
+      outcome: taskOutcome(task),
+      supersededByTaskIdAbsentReason: supersededByAbsentReason(task),
+      supersedes: predecessors,
+      supersedesEmptyReason: predecessors.length > 0 ? null : ('SUPERSEDES_NOTHING' as const),
+      successorChain: chain
+        .map((id) => byId.get(id))
+        .filter((row): row is NonNullable<typeof row> => row !== undefined)
+        .map((row) => ({
+          id: row.id,
+          title: row.title,
+          status: row.status,
+          terminalReason: row.terminalReason,
+        })),
+      successorChainTruncated: truncated,
     };
   }
 
@@ -3360,6 +3456,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dependsOnTaskIds?.length) {
       await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
     }
+    // Set when this write touches §13.6's three supersession columns; applied as one statement
+    // inside the transaction below (see where it is filled in for why it cannot go in `data`).
+    let supersession: { successorId: string | null; at: Date | null; reason: string | null } | null =
+      null;
     const data: Prisma.TaskUpdateInput = {
       title: dto.title,
       description: dto.description,
@@ -3468,6 +3568,77 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
       }
     }
+    // §13.6: record that this attempt was replaced, without touching how it ended.
+    //
+    // The status this is judged against is the one AFTER the write, because the natural call is one
+    // PATCH that cancels the attempt and names its successor — judging SU4 against the old status
+    // would refuse the second half of a write whose first half made it legal. Migration 0128's
+    // trigger checks every one of these again (and the acyclicity this cannot see); these refusals
+    // exist so the caller is told which rule it broke instead of being handed a constraint name.
+    if (dto.supersededByTaskId !== undefined || dto.terminalReason !== undefined) {
+      const statusAfter = dto.status ?? before.status;
+      const projectAfter =
+        dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
+      const successorId =
+        dto.supersededByTaskId === undefined
+          ? before.supersededByTaskId
+          : (dto.supersededByTaskId ?? null);
+      const successor = successorId
+        ? await this.prisma.task.findFirst({
+            where: { id: successorId },
+            select: { id: true, ownerId: true, projectId: true },
+          })
+        : null;
+      if (successorId && !successor) throw new NotFoundException('successor task not found');
+      const refusal = supersessionRefusal({
+        taskId: id,
+        status: statusAfter,
+        successor,
+        ownerId,
+        projectId: projectAfter,
+      });
+      if (refusal) throw new BadRequestException(refusal);
+      // A successor IS the reason, so it never has to be spelled twice — and it may not be
+      // contradicted: 'ABANDONED' means nothing replaced this, which is the opposite claim.
+      if (successorId && dto.terminalReason != null && dto.terminalReason !== 'SUPERSEDED') {
+        throw new BadRequestException(
+          `A task with a successor is SUPERSEDED, not ${dto.terminalReason} — pass one or the other`,
+        );
+      }
+      if (dto.terminalReason === 'SUPERSEDED' && !successorId) {
+        throw new BadRequestException(
+          'SUPERSEDED names the attempt that took over — pass supersededByTaskId, or use ' +
+            'ABANDONED for a task nothing replaced',
+        );
+      }
+      if (dto.terminalReason != null && !TASK_SUPERSEDABLE_STATUSES.has(statusAfter)) {
+        throw new BadRequestException(
+          `A terminal reason belongs to a task that has stopped — this one is ${statusAfter}`,
+        );
+      }
+      // All THREE columns move together, in one statement, because 0128's link CHECK is about the
+      // three of them at once and PostgreSQL evaluates a CHECK per statement. Prisma cannot write
+      // them together: `supersededBy: { disconnect: true }` is issued as a SECOND statement after
+      // the scalar update, so unlinking cleared the reason while the successor id was still set —
+      // exactly the state the CHECK exists to refuse — and every unlink failed with a constraint
+      // name. Raw SQL here is one statement, and it still goes through 0128's trigger, so the
+      // tenant, project, terminal-status and acyclicity rules are unchanged.
+      supersession = {
+        successorId,
+        // The instant it was replaced. Kept where it was on a re-statement of the same link, so
+        // re-recording a supersession does not quietly move when it happened.
+        at: successorId
+          ? (before.supersededByTaskId === successorId && before.supersededAt
+              ? before.supersededAt
+              : new Date())
+          : (dto.terminalReason ? (before.supersededAt ?? new Date()) : null),
+        reason: successorId
+          ? 'SUPERSEDED'
+          : dto.terminalReason === undefined
+            ? (before.terminalReason === 'SUPERSEDED' ? null : before.terminalReason)
+            : dto.terminalReason,
+      };
+    }
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
       data.assignee = dto.assigneeId ? { connect: { id: dto.assigneeId } } : { disconnect: true };
@@ -3503,7 +3674,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // lock exists to close. An update that touches neither still takes no lock at all: renaming a
     // task must not queue behind another owner's DAG rewrite.
     const updated = await (
-      dependsOnTaskIds === undefined && !touchesHierarchy && !concludesVerdict
+      dependsOnTaskIds === undefined && !touchesHierarchy && !concludesVerdict && !supersession
         ? this.prisma.task.update({ where: { id }, data })
         : this.prisma.$transaction(async (tx) => {
             await this.lockDependencyGraph(tx, ownerId);
@@ -3538,10 +3709,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 throw new BadRequestException('These dependencies would create a cycle');
               }
             }
+            // WHICH SIDE of the status write this goes on is not a style choice: one PATCH
+            // routinely does both, and 0128's trigger judges every statement on its own.
+            //
+            //   linking   → cancel first, then link. Linking a task that is still OPEN is refused,
+            //               so the status has to have moved already.
+            //   unlinking → unlink first, then reopen. Reopening a task that still names a
+            //               successor is refused, so the link has to be gone already.
+            //
+            // Either order taken for both cases leaves one legal request failing on an
+            // intermediate state that no committed row would ever have held.
+            const writeSupersession = async () => {
+              if (!supersession) return;
+              await tx.$executeRaw`
+                UPDATE "task"
+                   SET "superseded_by_task_id" = ${supersession.successorId}::uuid,
+                       "superseded_at"         = ${supersession.at},
+                       "terminal_reason"       = ${supersession.reason}
+                 WHERE "id" = ${id}::uuid`;
+            };
+            if (supersession?.successorId == null) await writeSupersession();
             // Delete before re-inserting so a retained prerequisite cannot collide with the
             // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
             // full dependency replacement atomic; [] intentionally stops after the delete.
-            const task = await tx.task.update({ where: { id }, data });
+            let task = await tx.task.update({ where: { id }, data });
+            if (supersession?.successorId != null) {
+              await writeSupersession();
+              task = await tx.task.findUniqueOrThrow({ where: { id } });
+            }
             if (dependsOnTaskIds !== undefined) {
               await tx.taskDependency.deleteMany({ where: { taskId: id } });
               if (dependsOnTaskIds.length) {

@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
+import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
   TASK_COMPLETION_POLICIES,
   TASK_VERDICTS,
@@ -28,6 +29,7 @@ import {
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
 const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
+const TASK_TERMINAL_REASON_VALUES = [...TASK_TERMINAL_REASONS];
 
 /**
  * Bounds on one task's labels. Not a taxonomy — a stop on a caller that has confused the label
@@ -220,6 +222,18 @@ export class UpdateTaskDto {
   // name the subject they were about, so re-pointing afterwards would leave the ledger asserting
   // a conclusion about a task the verifier no longer checks. File a new verification instead.
   @IsOptional() @IsPublicId() verifiesTaskId?: string | null;
+  // The later attempt that replaced this one (§13.6). Three-state like the links above: omit to
+  // leave it alone, null to unlink, an id to record that this attempt was superseded. Only a
+  // CANCELLED or FAILED task may name one, the successor must be in the same project, and linking
+  // writes nothing to `status` — the original outcome is the fact being kept.
+  @IsOptional() @IsPublicId() supersededByTaskId?: string | null;
+  // Why this task stopped, when its status alone does not say. Setting a successor implies
+  // 'SUPERSEDED' and needs no explicit value; 'ABANDONED' is for the other case, a task dropped
+  // with nothing replacing it.
+  @ValidateIf((_dto, value) => value !== null)
+  @IsOptional()
+  @IsIn(TASK_TERMINAL_REASON_VALUES)
+  terminalReason?: TaskTerminalReason | null;
   // This verification task's conclusion about its subject. Three-state like the pins above: omit
   // to leave it alone, null to revoke it, a value to record it. Only a task that names a subject
   // (verifiesTaskId) can carry one, and a revoked PASS reopens whatever it had completed.

@@ -129,7 +129,7 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 // project_status joined in unit 20 (contract AC10) and is a READ. The manual trigger that shipped
 // beside it deliberately did not: enqueuing a signal attributed to USER is how a person drives a
 // MANUAL project, so an agent able to do it would be driving its own coordinator.
-func TestMCPExposesExactlyTheNineProjectTools(t *testing.T) {
+func TestMCPExposesExactlyTheTenProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
@@ -144,6 +144,9 @@ func TestMCPExposesExactlyTheNineProjectTools(t *testing.T) {
 		for _, want := range []string{
 			"project_get", "project_status", "project_verifications", "project_create",
 			"project_update",
+			// Unit 25C: the blocker read, open and resolved. Ungated for the reason the rest are —
+			// the session that most needs to know why a project is not moving is its coordinator.
+			"project_blockers",
 			// Unit 25A: native acceptance. Three of the four are writes, and they are here rather
 			// than behind the orchestration gate for the reason project_create is — the session
 			// that most needs to run a project's acceptance is a coordinator, which has no

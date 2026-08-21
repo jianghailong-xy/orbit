@@ -195,7 +195,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
 		specs[spec.Tool] = spec
 	}
-	if len(specs) != 9 {
+	// One per read/write the project family exposes. `project_blockers` joined them in 25C: the
+	// blocker history was already served to the web and the user API, and the terminal was the one
+	// caller that could not ask what had been stopping a project.
+	if len(specs) != 10 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

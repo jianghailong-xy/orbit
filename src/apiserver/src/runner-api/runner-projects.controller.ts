@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { Runner } from '@prisma/client';
@@ -130,6 +131,24 @@ export class RunnerProjectsController {
    * its per-criterion conclusions, the merge observations, the audit, and `doneGate` — what is
    * still missing, in the same words the write path would refuse with.
    */
+  /**
+   * One project's blockers (contract §11), open by default and with the resolved episodes when
+   * `history=1`.
+   *
+   * The terminal door onto a read the web and the user API have had since §11 landed. It is here
+   * because a blocker episode is never deleted — `lifecycleGeneration` is allocated over the key's
+   * whole history — so "what was blocking this yesterday, and what ended it" is a question the
+   * audit is supposed to answer, and a headless auditor was the one caller that could not ask it.
+   */
+  @Get('projects/:id/blockers')
+  blockers(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('history') history?: string,
+  ) {
+    return this.projects.blockers(runner.ownerId, id, history === '1' || history === 'true');
+  }
+
   @Get('projects/:id/acceptance')
   projectAcceptance(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.acceptance.overview(runner.ownerId, id);
