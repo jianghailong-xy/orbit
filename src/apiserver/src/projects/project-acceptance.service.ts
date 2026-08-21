@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProjectAcceptanceVerdict, ProjectStatus } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ACCEPTANCE_BLOCKED,
@@ -48,7 +49,12 @@ export interface RecordMergeEvidenceInput {
 }
 
 /** A DONE that was refused, with the code the caller switches on. Thrown as a 409 because it is a
- *  statement about the world's current state, not about the request being malformed. */
+ *  statement about the world's current state, not about the request being malformed.
+ *
+ *  Ids in `detail` are spelled by `PublicIdExceptionFilter`, which runs the allowlist over a THROWN
+ *  body exactly as `PublicIdInterceptor` runs it over a returned one: put the row's UUID in `runId`
+ *  and base62 is what reaches the wire. A `message` is prose, and nothing maps prose — an id named
+ *  inside one is spelled base62 here, by hand. */
 export class AcceptanceRefusal extends ConflictException {
   constructor(
     readonly code: AcceptanceRefusalCode,
@@ -333,7 +339,8 @@ export class ProjectAcceptanceService {
       if (!run) throw new NotFoundException('acceptance run not found');
       if (run.verdict !== null) {
         throw new ConflictException(
-          `acceptance run ${runId} already concluded ${run.verdict} — open a new attempt instead`,
+          `acceptance run ${uuidToBase62(runId)} already concluded ${run.verdict} — open a new ` +
+            'attempt instead',
         );
       }
 
@@ -556,7 +563,7 @@ export class ProjectAcceptanceService {
         ACCEPTANCE_MISSING,
         live === null
           ? 'no project acceptance has been run — DONE is a claim about evidence, and there is none'
-          : `acceptance run ${live.id} has not concluded yet`,
+          : `acceptance run ${uuidToBase62(live.id)} has not concluded yet`,
         {
           requiredAction: 'run project acceptance and record a conclusion for every criterion',
           acceptanceDigest: digest,
@@ -597,8 +604,8 @@ export class ProjectAcceptanceService {
     if (live.inputDigest !== digest) {
       throw new AcceptanceRefusal(
         ACCEPTANCE_EVIDENCE_STALE,
-        `acceptance run ${live.id} passed against a different set of facts — a task, a verdict, ` +
-          'the acceptance criteria or the merge evidence has changed since it ran',
+        `acceptance run ${uuidToBase62(live.id)} passed against a different set of facts — a ` +
+          'task, a verdict, the acceptance criteria or the merge evidence has changed since it ran',
         {
           requiredAction: 'run acceptance again against the current facts',
           runId: live.id,

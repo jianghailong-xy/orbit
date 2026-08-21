@@ -75,14 +75,25 @@ async function passing(services: E2eServices, ownerId: string, projectId: string
   );
 }
 
-/** The refusal a DONE produced, or `null` if it was allowed. */
+/**
+ * The refusal a DONE produced, or `null` if it was allowed.
+ *
+ * Served through the id mapping first, because a refusal body leaves by the same door a success
+ * body does — `PublicIdExceptionFilter` runs exactly this over what a handler throws — and then
+ * asserted to carry no raw UUID ANYWHERE, prose included. A refusal that names the acceptance run
+ * in the way is only actionable if the name is one the caller can hand back, and this is the
+ * assertion that covers the throw sites a mapper cannot reach: the ones that write an id into a
+ * sentence.
+ */
 async function refusalOf(fn: () => Promise<unknown>): Promise<{ code: string; message: string } | null> {
   try {
     await fn();
     return null;
   } catch (error) {
     if (!(error instanceof AcceptanceRefusal)) throw error;
-    const body = error.getResponse() as { code: string; message: string };
+    const body = (await servePublicIds(error.getResponse())) as { code: string; message: string };
+    const leaked = rawUuidPaths(body, '$.refusal');
+    assert.deepEqual(leaked, [], `a refusal must name rows in Base62 — leaked ${leaked.join(', ')}`);
     return { code: body.code, message: body.message };
   }
 }

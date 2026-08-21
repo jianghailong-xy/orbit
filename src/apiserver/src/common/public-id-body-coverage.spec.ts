@@ -214,3 +214,26 @@ test('every public id a free-form @Body() names is guarded against a blank value
     'register the new free-form body id here, with the spec that pins its blank case',
   );
 });
+
+/**
+ * And the exit the body leaves BY, which is two exits and not one.
+ *
+ * Everything above is about ids arriving. This is about them leaving: `PublicIdInterceptor` maps
+ * what a handler returns and `PublicIdExceptionFilter` maps what it throws, and for a long time
+ * only the first was registered — so a 409 that named a row named it by raw UUID while the 200 on
+ * the same route did not. Neither half is reachable from the other's tests, and dropping the
+ * filter from `main.ts` breaks nothing that anything else asserts, so the wiring is pinned here.
+ */
+test('both exits map the body: the interceptor for returns, the filter for throws', () => {
+  const main = readFileSync(path.resolve(SRC, 'main.ts'), 'utf8');
+  assert.match(
+    main,
+    /useGlobalInterceptors\(.*new PublicIdInterceptor\(\)/,
+    'the success path stopped mapping ids',
+  );
+  assert.match(
+    main,
+    /useGlobalFilters\(new PublicIdExceptionFilter\(/,
+    'a refusal body leaves unmapped again — see public-id.filter.ts for what that cost',
+  );
+});

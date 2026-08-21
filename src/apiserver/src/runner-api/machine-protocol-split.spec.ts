@@ -7,6 +7,7 @@ import { MACHINE_PROTOCOL } from '../common/machine-protocol';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
@@ -16,9 +17,11 @@ import { RunnerTasksController } from './runner-tasks.controller';
  *
  * The prefix is shared and the credential is shared; the only thing that differs is whether a
  * runner KEYS anything by the ids in the response. `RunnerApiController` does — scratch dirs,
- * `refs/orbit-base/<id>`, lease fences compared byte-for-byte — so it keeps UUIDs. The other four
- * are read by a model (via `orbit mcp`) or a person (via the `orbit` CLI), which hand the body
- * through verbatim, so they are spelled base62 like the rest of the API.
+ * `refs/orbit-base/<id>`, lease fences compared byte-for-byte — so it keeps UUIDs. The others are
+ * read by a model (via `orbit mcp`) or a person (via the `orbit` CLI), which hand the body
+ * through verbatim, so they are spelled base62 like the rest of the API — in the body they RETURN
+ * and, since `PublicIdExceptionFilter`, in the body they THROW: 25E clause 1 is asserted against
+ * `PATCH /runner/projects/:id`'s 409 as much as against its 200.
  *
  * Asserted as a closed list because both mistakes are silent. Marking an agent-facing controller
  * puts raw UUIDs back in front of the model with nothing failing. Failing to mark a new machine
@@ -36,6 +39,7 @@ test('only the machine protocol keeps UUIDs', () => {
     RunnerTasksController,
     RunnerSessionsController,
     RunnerAgentsController,
+    RunnerProjectsController,
     RunnerServiceTokensController,
   ]) {
     assert.equal(

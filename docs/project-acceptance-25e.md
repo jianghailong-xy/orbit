@@ -233,6 +233,25 @@ forgets. Filed as `34Ayhblo6xg8lPt6dOOWf`.
 Found after the independent verification had already concluded, so unlike the clause 6 finding it
 carries one session's evidence rather than two.
 
+**Fixed.** `PublicIdExceptionFilter` (`src/apiserver/src/common/public-id.filter.ts`, registered in
+`main.ts` beside the interceptor) runs the same allowlist over a body a handler THROWS that
+`PublicIdInterceptor` runs over one it returns. The mapping itself moved to
+`common/public-id-body.ts` so there is one implementation and two exits rather than a copy. The
+machine-protocol boundary is honoured on both: an exception filter's host is built with no
+constructorRef, so `getClass()` there is `null`, and the interceptor — the last stage that knows
+the controller class — parks the decision on the request for the filter to read back. A refusal
+raised before any interceptor ran (a guard, a 404) resolves to the conservative half: add the twin,
+rewrite nothing.
+
+What a filter cannot fix is an id written into PROSE, and three refusals in
+`project-acceptance.service.ts` did that (`acceptance run <uuid> has not concluded yet`, and two
+more). Those spell Base62 at the throw site, because a uuid inside a sentence may be a
+`refs/orbit-base/<id>` path rather than an address and no mapper can tell — which is the same
+reason both directions of this migration are keyed on field names. `refusalOf` in
+`project-acceptance.pg.spec.ts` now asserts `rawUuidPaths` is empty for every refusal it produces,
+prose included, so the next sentence that names a row is caught by the suite rather than by the
+next acceptance.
+
 ## Residue
 
 `pcc25e-matrix-pg16` and `pcc25e-tail-pg16` were provisioned and destroyed; **zero** `pcc25e-*`
