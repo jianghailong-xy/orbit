@@ -2617,6 +2617,44 @@ v1.12 的 D19-c 曾写成**默认延迟**的那一版（`PC-CX-58`），那半�
 
 ---
 
+### 7.8 派发 pass —— 谁提出 `DISPATCH_TASK`（v1.17 新增，单元 25D）
+
+§7.3 的动作表由**应用它的那个单元自己提出**，`plannedActions` 只自己规划 §7.5 的轮换。v1.16 之前**没有任何单元提出 `DISPATCH_TASK`**：`ProjectTaskDispatcherService` 全仓库唯一的 non-spec 调用方是端到端夹具，而那段夹具的注释写的正是「exactly as a pass that chose to would」—— 那个 pass 不存在。线上实测的后果是一个 `OPEN`、`coordinatorEnabled`、无 blocker、有就绪任务、Runner 在线、并发额度 3/3 空闲的 canary 项目，连续 23 次 decision，`dispatch_attempt` 恒为 0，两次工作 Session 都靠人手动 `POST /tasks/:id/execute` 起的。**AC3 在生产上不可能成立**，因为没有人会去启动下一步。本节冻结那个缺失的单元。
+
+**DP1（分工，本节的全部）**：**pass 负责「选」，dispatcher 负责「审」。**
+
+| | 谁 | 读什么 | 何时 |
+|---|---|---|---|
+| 选 | §7.8 的 pass | 冻结快照（§6.1），纯函数 | 提交前 |
+| 审 | §7.4 第 6–8 条 · §9.2 · §9.4 · §11 BL1 | 当前世界，project 行锁之后 | 提交点 |
+
+pass 判定的谓词**只有**「这压根不是下一步」那一类：不 OPEN、派发权不是 `COORDINATOR`（§12.3）、`dispatchHold`、未到 `runAt`、退避未过、已有在飞 Session、前置未 DONE、`verifiesTaskId` 的被验证任务未 DONE、被 §11 BL1 的 blocker 拦住。「现在不行」那一类 —— Runner 离线、Provider 不可用、需要审批 —— **一律放行到 dispatcher**，因为 dispatcher 的拒绝是一条带 `refusalCode` 与 `retryAt` 的可查审计，而 pass 悄悄丢掉的候选在任何地方都看不见；更要紧的是 §11.2 前七个 kind **只有**在「派了、被拒了」之后才会开，§11.4 也**只有**在「又派了一次、没被拒」之后才会解 —— pass 预先过滤掉它们，等于让这些 blocker 既开不了也解不了。
+
+**DP2（唤醒路径不增加，W1）**：pass **没有自己的定时器**。它在一次 `disposition = RECONCILED` 的投递**提交之后**、针对那一个项目运行（§8.3 定义的 post-commit 位置）。§10.2 的三条唤醒路径因此逐字不变，「多加一个 `setInterval` 就是一次生产事故」也不因本节松动。这不只是省一个定时器：**派发重试的节奏因此就是 §10.4 的唤醒表**。
+
+**DP3（选择是快照的纯函数）**：同一份 `decisionInput` 必须给出逐字节相同的候选表。不读时钟（到期与退避由 §6.1 S5 的 `evaluation.dueTasks` 回答）、不掷随机数、不再查一次库。候选按 Base62 id 的**字节序**排（与 §10.4 W5-2a 同一条规矩；Orbit 的 task id 解出来是 UUIDv7，因此这也是先来先服务），一次 pass 至多提出 `PROJECT_DISPATCH_PASS_MAX_PER_WAKE` 条。
+
+**DP4（一次派发一份 decision）**：§7.7 的陈旧闸门会在提交点重新 capture 世界并比对 hash。一次成功的派发建出 Session、世界就变了，因此**同一份 decision 上的第二次派发必然被判 `STALE_SNAPSHOT`**。pass 每选一个候选就在同一个 `REPEATABLE READ` 事务里重新 capture、重新选、规划并持久化一份新的 decision。这不是开销而是唯一正确的形状，还顺带让 §9.4 的空位数从事实里重新算出来，而不是在内存里递减。
+
+**DP5（幂等键）**：`pc:v1:{projectId}:dispatch:{taskId}:{attempt}`，`attempt` 取**快照读到的** `task.dispatch_attempt`。§8.3 每claim一行动作就推进那一列且重放不推进，因此对一个没变的世界重跑同一个 pass 会铸出同一把键并落在 `ALREADY_APPLIED` 上 —— 尝试次数的账**只在数据库里**。
+
+**DP6（`run_state` 不是准入门，本任务冻结）**：§4.2 的 `run_state` 是**给人看的一行摘要**，按守卫序对整个项目首个命中即止；准入是**逐任务**的，写在 §7.4 / §9.2 / §9.4 里。pass **不读** `run_state`，两个方向都会错，其中一个还是死锁：
+
+- `AWAITING_VERIFICATION` 的触发条件是「项目里存在任何 `verifiesTaskId` 非空且未 DONE 的 task」。一个验证任务**从被建出来那一刻**就满足它 —— 那时被验证的任务甚至还没派发过。若拿它当门，被验证的任务永远不会跑、验证任务本身也永远不会跑，而**只有它跑完才能解除这个状态**。§10.3 本来就把 `AWAITING_VERIFICATION` 列在「必须持续证明自己没有空转」的状态里，不在豁免的 `{AWAITING_HUMAN, SETTLED}` 中。
+- `EXECUTING` 的触发条件是「有任务在跑」，而这恰恰是 `maxConcurrentTasks = 3` 的第二个空位**应该**被填上的世界。并行度由 §9.4 的上限决定，标签不是互斥锁。
+- `BLOCKED` / `AWAITING_HUMAN` 确实会停下派发 —— 但停下它的是**产生这两个状态的那些 open blocker**，§11 BL1 已经直接读它们（提交点是 `openBlockersStoppingDispatch`，快照侧是 pass 的同一条谓词）。再按标签判一次不多挡住任何东西，只会把一条规则写在两个地方。
+- `SETTLED` 意味着项目不是 OPEN，而不是 OPEN 的项目根本拿不到租约（§8.1）。
+
+**DP7（同一个 task 的两次尝试之间有下限）**：§8.3 对 **REFUSED 的动作也推进** `task.dispatch_attempt`，而迁移 0117 的 `project_task_event_source` 会把 task 上任何标量写变成一条 `task.updated` 信号 —— 于是**一次被拒的派发会自己产出唤醒自己的那条事件**，只要拒绝的成因还在，每一次唤醒就再铸一把永久键。APPLIED 的那次能自己收敛（任务随即持有在飞 Session，§7.4 第 4 条），被拒的那次没有任何东西能停下它。
+
+§11 的行**不能**充当这个刹车，两条都堵死：§11.4 解一条 resolution-chain 的行**只**靠放一次尝试过去且不被拒，因此任何「有 open blocker 就不派」的规则都会把它自己等的那一行锁死；而 `recovery = EVENT` 的行每次 touch 都把 `nextCheckAt` 重算成 `now + pollMs`（§11.3），一个每十秒被 reconcile 一次的项目会把那个时刻推得比它到来还快。
+
+所以刹车是一个**下限**，形状与 §7.6 TR2 给另一个可重复动作定的窗口完全一样：**每个 task 每窗口至多一次尝试**。窗口取 60s —— TR2 的窗口，也是 dispatcher 自己给 `NO_MATCHING_RUNNER` 写的 `retryAt`，远在 §10.4 给 `L` 的 5min 硬上限之内。
+
+**DP8（`autoRunWhenReady` 与本节无关）**：§12.3 D4 已经冻结「`task.autoRunWhenReady` 对 `COORDINATOR` 权的任务无效」，§2 B3 禁止把「所有任务 autoRun」当作 Coordinator 的替代方案。pass **不读**这一列：读了就等于用户清掉那个勾选框会静默失去控制环派发，而 D4 要求 UI 承诺这不可能发生。
+
+---
+
 ## 8. 幂等、租约与恢复
 
 ### 8.1 Reconcile Lease
@@ -3660,7 +3698,7 @@ SU2–SU5 全部由 `task_supersession_guard` 执行，理由与 §7.7 D5/D6 相
 |---|---|---|---|---|---|
 | **AC1** | Project 绑定稳定 coordinatorAgent 与默认协调 Workspace；Coordinator Session 可轮换可恢复；公开 ID 全 Base62 | §1.2 · §7.5 · §2.2 | **复用**（Coordinator Agent = PAC §3.2 `project_member`；协调 Workspace = 既有 `coordinatorWorkspaceId`）+ **基础设施**（`coordinator_generation`） | 03 · 04 · 19 | 03 `+`轮换后 Agent 不变、generation+1 · 03 `-`第二个 Coordinator（PAC T2 并发写）· 04 `-`轮换到不同 workspace → 409 · `public-id-coverage.spec.ts` |
 | **AC2** | 六类来源经事务 outbox 唤醒 reconcile；重复/乱序/重启不重复执行 | §5 全节（含 §5.5 EV1–EV6）· §8.3 | **基础设施**（`project_event`） | 05 · 06 · 07 · 08 | 05 `+`业务写与 outbox 原子提交/回滚 · 06 `-`事务回滚无孤儿事件 · 06 `+`batch 只产一条（N3）· 07 `+`多播只扇给相关项目（N2）· 08 故障注入：重复投递副作用恰好一次、乱序收敛、重启恢复 · 05 `+`出环项目（disabled / `SETTLED`）的事件被丢弃而非 reconcile，`disposition` 三值封闭且不产生任何动作/唤醒/WARN（EV1–EV6，v1.7）|
-| **AC3** | 活性：OPEN 且不等人工时按时启动下一步，或持久化完整 blocker，不静默空转 | §10 全节（含 W5 全序与冻结时钟）· I5 · I15 · I18-A/B/C · I19-a/b/c · §5.5 | **基础设施**（`project_runtime.next_wake_at`、`project_blocker`、`project_event.next_attempt_at`） | 09 · 10 · 17 · 22 | 09 `+`SLO 内进入合法状态 · 10 §10.3 四条断言对故障注入全程成立（(a) 用 I11-A 的恒成立形式）· 10 `-`无 busy loop（W3）· 09 `-`只注册一个定时器（W1）· 09 `+`32 个原因组合各至多一条语义 turn（TU4/TU5）· 17 `+`限频窗内的第二个 manual trigger 不被消费、`nextWakeAt ≤ 窗口边界 + 5s`、到点恰好一次 turn（TR2-a–e / I18-C）· 17 `+``remaining ∈ {0,1,2,4,5,6,59}s` 与多 wake 组合下 `(nextWakeAt, nextWakeReason)` 唯一（W5，v1.6）· 10 `+`事件提交到 reconcile 的间隙落在 I18-B，躺过 5min 由 W4 第 (iv) 支命中（I19，v1.6）· 17 `+`同 source 同刻多候选的全排列给出同一对 `(nextWakeAt, nextWakeReason)` 与同一张 `wakeCandidates`（W5 第 2 条，v1.7）· 11 `+`同一份序列化 `decisionInput` 延迟 0/1/4 秒执行得到同一个 `nextWakeAt`（W5 第 3 条 · S5，v1.7）· 10 `+`每一条未消费事件恰好命中 I19 的一支（v1.7）|
+| **AC3** | 活性：OPEN 且不等人工时按时启动下一步，或持久化完整 blocker，不静默空转 | §10 全节（含 W5 全序与冻结时钟）· §7.8 · I5 · I15 · I18-A/B/C · I19-a/b/c · §5.5 | **基础设施**（`project_runtime.next_wake_at`、`project_blocker`、`project_event.next_attempt_at`） | 09 · 10 · 17 · 22 · 25D | 09 `+`SLO 内进入合法状态 · 10 §10.3 四条断言对故障注入全程成立（(a) 用 I11-A 的恒成立形式）· 10 `-`无 busy loop（W3）· 09 `-`只注册一个定时器（W1）· 09 `+`32 个原因组合各至多一条语义 turn（TU4/TU5）· 17 `+`限频窗内的第二个 manual trigger 不被消费、`nextWakeAt ≤ 窗口边界 + 5s`、到点恰好一次 turn（TR2-a–e / I18-C）· 17 `+``remaining ∈ {0,1,2,4,5,6,59}s` 与多 wake 组合下 `(nextWakeAt, nextWakeReason)` 唯一（W5，v1.6）· 10 `+`事件提交到 reconcile 的间隙落在 I18-B，躺过 5min 由 W4 第 (iv) 支命中（I19，v1.6）· 17 `+`同 source 同刻多候选的全排列给出同一对 `(nextWakeAt, nextWakeReason)` 与同一张 `wakeCandidates`（W5 第 2 条，v1.7）· 11 `+`同一份序列化 `decisionInput` 延迟 0/1/4 秒执行得到同一个 `nextWakeAt`（W5 第 3 条 · S5，v1.7）· 10 `+`每一条未消费事件恰好命中 I19 的一支（v1.7）· 25D `+`一个 GUARDED_AUTO 项目在无人 execute 的情况下自己产出 APPLIED 的 `DISPATCH_TASK` 并建出 Session、`dispatch_attempt` 0→1，第一个任务 DONE 后自己接着派第二个（§7.8 DP1/DP2）· 25D `-`一次被拒的派发不会自己喂出下一次尝试（DP7）|
 | **AC4** | manual/guarded-auto/auto + 权限/并发/预算/重试/退避/审批边界；默认 guarded-auto | §9 全节（含 §9.6 CAP0/CAP4） | **业务**（`automationPolicy`/`coordinatorEnabled`/`maxConcurrentTasks`/`sessionBudgetPerDay`）+ **基础设施**（策略求值、`config_revision`） | 12 · 13 · 14 | 12 表驱动逐格覆盖 §9.2 · 12 `+`新建 Project 为 GUARDED_AUTO 且存量为 MANUAL（G1）· 14 `-`越权/竞态 fail closed · 14 `-`撤权后旧决策记 `AUTHORITY_REVOKED` 且不产生 Session（AU1，PG）· 14 `+`八格（四 mutator × USER_FIRST/COORDINATOR_FIRST）每条占位都满足 I16-A，无豁免（CAP3，PG）· 14 `+`调低 cap 永不被拒、在飞不动、over-cap 有界可见且自排空（CAP0/CAP4，PG）· 13 `-`执行上下文被撤销时记 `EXECUTION_CONTEXT_REVOKED` 且不产生 Session（EC3/D14，PG）· 14 `-`空 fallback 绝不换 Provider |
 | **AC5** | 一致快照 + 记录每次判断的输入/决策/动作/幂等键 | §6.1（含 S9 · S10）· §6.2 · §8.2 | **基础设施**（`project_decision`、`decisionInputHash`） | 11 | 11 `+`输入内部一致且带租户边界 · 11 `+`同 hash ⇒ 同机械决策（S3，含时钟折成的到期事实与 manual 信号）· 11 `+`字段集由**六处读集**反推、双向比对（S8，含 §4.2 守卫、§7.6 TR1–TR3 与 §7.4 第 8 条的 PAC 解析链）· 11 `+`只差 Agent 默认引擎 / `workspace.enabled` 的两份状态得到不同 hash，删任一 S10 字段即回到同 hash 两结果（S10，v1.6）· 11 `+`两份只差一条未收敛验收动作的状态得到不同 hash 与不同 `run_state`（S9）· 11 `-`陈旧 token 提交被拒并触发新 reconcile · 11 `+`同 `decisionInputHash` ⇒ 同 `nextWakeAt`，且 `next_wake_at` 的写只来自 W5 或它列出的两处例外（S5 · W5 第 3/7 条，v1.7）· 11 `-``resolution`/输入出站为 base62（S2 / PAC B3） |
 | **AC6** | 验证失败可原生退回、建缺陷子任务、阻断下游；不靠提示词 | §13.2 | **业务**（既有 `verifiesTaskId` 的语义扩展，**无新实体**） | 16 · 18 | 16 `+`FAIL 三件事都发生 · 16 `-`重复 verdict 不重复退回（V2）· 16 `-`下游未修复前不可派发（V3）· 18 属性测试固定 seed 可复现 |
@@ -3856,6 +3894,7 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | 21 | Web 状态与控制界面 | §4.1 · §9.2 · §11.1 | `*.test.tsx` |
 | 22 | 端到端迁移、恢复与故障注入 | §15 全表 | 端到端套件 |
 | 23 | 项目级验收与合并审计 | §13.4 · §14 | 验收产物 |
+| 25D | 派发 pass：控制环自己启动下一个任务 | §7.8 · §7.4 · §10.2 W1 | `src/apiserver/src/projects/project-dispatch-pass.spec.ts`（选择函数）+ `project-dispatch-pass.pg.spec.ts`（真实 Postgres：自派发、重放幂等、超并发、blocker、MANUAL、恢复） |
 
 ---
 

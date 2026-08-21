@@ -30,6 +30,7 @@ import {
   planProjectDecision,
   publicIdempotencyKey,
 } from './project-decision.service';
+import { ProjectDispatchPassService } from './project-dispatch-pass.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
@@ -58,6 +59,8 @@ export interface E2eServices {
   reconciler: ProjectReconcileService;
   coordinatorSessions: ProjectCoordinatorSessionService;
   dispatcher: ProjectTaskDispatcherService;
+  /** §7.8's pass — the production caller of `dispatcher`, driven by `reconciler.afterCommit`. */
+  dispatchPass: ProjectDispatchPassService;
   verdicts: ProjectVerificationVerdictService;
   reaper: ProjectAvailabilityReaperService;
   acceptance: ProjectAcceptanceService;
@@ -106,7 +109,10 @@ export async function emptyWorld(client: Client): Promise<void> {
  * that record rather than transmit. Both are post-commit announcement sinks by contract (§8.3), so
  * recording them keeps every gate intact while making "the runner was told" an assertion.
  */
-export function servicesOn(url: string, options: { registerHandler?: boolean } = {}): E2eServices {
+export function servicesOn(
+  url: string,
+  options: { registerHandler?: boolean; registerDispatchPass?: boolean } = {},
+): E2eServices {
   const db = new PrismaClient({ datasources: { db: { url } } });
   const prisma = db as unknown as PrismaService;
   const announced = { queued: 0, sessions: [] as string[] };
@@ -132,6 +138,7 @@ export function servicesOn(url: string, options: { registerHandler?: boolean } =
   const dispatcher = new ProjectTaskDispatcherService(
     prisma, reconciler, authorization, queue, realtime,
   );
+  const dispatchPass = new ProjectDispatchPassService(prisma, reconciler, decisions, dispatcher);
   const verdicts = new ProjectVerificationVerdictService(prisma, reconciler);
   const reaper = new ProjectAvailabilityReaperService(prisma);
   const sessions = new SessionsService(prisma, queue, realtime);
@@ -146,11 +153,19 @@ export function servicesOn(url: string, options: { registerHandler?: boolean } =
     ? () => undefined
     : events.registerHandler(reconciler);
   const unregisterRotation = reconciler.registerRotationExecutor(coordinatorSessions);
+  // §7.8's production wiring. `registerDispatchPass: false` is for the scenarios that predate the
+  // pass and count decisions by hand — with it installed, a drain that reconciles a project with a
+  // ready task also dispatches it, which is the point of the unit and a surprise to a rig that was
+  // written when nothing did.
+  const unregisterDispatchPass = options.registerDispatchPass === false
+    ? () => undefined
+    : reconciler.registerDispatchPass(dispatchPass);
 
   return {
-    db, events, decisions, reconciler, coordinatorSessions, dispatcher, verdicts, reaper,
-    acceptance, projects, sessions, announced,
+    db, events, decisions, reconciler, coordinatorSessions, dispatcher, dispatchPass, verdicts,
+    reaper, acceptance, projects, sessions, announced,
     dispose: async () => {
+      unregisterDispatchPass();
       unregisterRotation();
       unregisterHandler();
       events.onModuleDestroy();
@@ -265,6 +280,10 @@ export interface TaskOptions {
   completionPolicy?: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'VERIFICATION_PASSED';
   dependsOn?: string[];
   requiredCapabilities?: string[];
+  /** §12.3 D4's legacy switch. Off by default, and deliberately irrelevant to §7.8's pass. */
+  autoRunWhenReady?: boolean;
+  /** §7.4 precondition 1's park brake, for a scenario that needs a task nothing may dispatch. */
+  dispatchHold?: boolean;
 }
 
 export async function task(
@@ -288,6 +307,8 @@ export async function task(
       parentTaskId: options.parentTaskId ?? null,
       verifiesTaskId: options.verifiesTaskId ?? null,
       requiredCapabilities: options.requiredCapabilities ?? [],
+      ...(options.autoRunWhenReady === undefined ? {} : { autoRunWhenReady: options.autoRunWhenReady }),
+      ...(options.dispatchHold === undefined ? {} : { dispatchHold: options.dispatchHold }),
       ...(options.completionPolicy ? { completionPolicy: options.completionPolicy } : {}),
     },
   });

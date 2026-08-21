@@ -14,6 +14,7 @@ import {
   publicIdempotencyKey,
 } from './project-decision.service';
 import {
+  ProjectEventDeliveryResult,
   ProjectEventEnvelope,
   ProjectEventHandleResult,
   ProjectEventHandler,
@@ -153,6 +154,18 @@ export interface ProjectRotationExecutor {
   announce(sessionId: string): void;
 }
 
+/**
+ * What the ledger needs from §7.8's dispatch pass, and nothing else.
+ *
+ * Stated here rather than imported for the reason `ProjectRotationExecutor` is: the ledger must not
+ * depend on the services that use it. The pass registers itself at startup, the way the rotation
+ * executor and the event consumer do.
+ */
+export interface ProjectDispatchPassExecutor {
+  /** One pass over one project. Post-commit only: it takes its own lease and its own transactions. */
+  runFor(projectId: string): Promise<unknown>;
+}
+
 export class ProjectLeaseLostError extends Error {
   constructor(projectId: string) {
     super(`Project reconcile lease lost for ${projectId}`);
@@ -178,6 +191,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private lastBackstopAt = 0;
   private _backstopHits = 0;
   private rotationExecutor?: ProjectRotationExecutor;
+  private dispatchPass?: ProjectDispatchPassExecutor;
   private readonly pendingRotations: string[] = [];
 
   constructor(
@@ -204,6 +218,23 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     this.rotationExecutor = executor;
     return () => {
       if (this.rotationExecutor === executor) this.rotationExecutor = undefined;
+    };
+  }
+
+  /**
+   * Install the sole §7.8 dispatch pass, on the terms every other collaborator is installed on.
+   *
+   * One, because two passes proposing dispatches for one project would be two clocks; replacing a
+   * different live one is refused; and the unregister function makes an isolated test's teardown
+   * explicit.
+   */
+  registerDispatchPass(executor: ProjectDispatchPassExecutor): () => void {
+    if (this.dispatchPass && this.dispatchPass !== executor) {
+      throw new Error('a Project dispatch pass is already registered');
+    }
+    this.dispatchPass = executor;
+    return () => {
+      if (this.dispatchPass === executor) this.dispatchPass = undefined;
     };
   }
 
@@ -348,9 +379,25 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
    * §8.3's commit has happened; now the rest of the system can be told about it. Nothing here is
    * allowed to be load-bearing — a lost notification costs latency, and the Session it announces is
    * already committed PENDING where the runner's own poll will find it.
+   *
+   * §7.8's dispatch pass runs from here, and this is the only place it runs from. It needs the
+   * lease that `handle` has just released and transactions of its own, so it cannot be inside the
+   * delivery; and giving it a timer would make §10.2's "exactly three wake paths" four, which W1
+   * calls a production incident by name. Running it per RECONCILED delivery instead means the
+   * cadence of dispatch attempts is §10.4's wake schedule — a blocker's `nextCheckAt`, a backoff,
+   * the in-flight fallback, the backstop — which is what paces a task that keeps being refused.
+   *
+   * `DISCARDED` is excluded deliberately: that disposition is §5.5's terminal/inert cleanup for a
+   * project that is not OPEN or has the coordinator switched off, and I6 forbids reconciling one.
    */
-  async afterCommit(): Promise<void> {
+  async afterCommit(result?: ProjectEventDeliveryResult): Promise<void> {
     await this.flushPendingRotations();
+    if (!this.dispatchPass || result?.status !== 'CONSUMED') return;
+    // Never load-bearing, exactly as above: the delivery has committed, and a pass that threw must
+    // not turn a durable reconcile into a retried one. The next wake runs it again.
+    await this.dispatchPass.runFor(result.projectId).catch((cause: unknown) => {
+      this.log.error(`Project dispatch pass failed after commit: ${errorText(cause)}`);
+    });
   }
 
   /**
