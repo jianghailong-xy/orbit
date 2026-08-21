@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { ValidationPipe } from '@nestjs/common';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
+import { uuidToBase62 } from '@orbit/shared';
 import {
   AddDependencyDto,
   BatchDeleteDto,
@@ -107,6 +108,27 @@ test('dependency node refresh DTO accepts duplicate UUIDs and caps request paylo
   assert.notEqual((await validate(tooMany)).length, 0);
 });
 
+test('task update takes a parent as a base62 public id, and null to detach', async () => {
+  // The id an agent actually holds is the short form (task_get, the web URL), and the column is
+  // a uuid — so the decode has to happen at the DTO or the parent link is unaddressable from
+  // everywhere except a raw uuid.
+  const linked = plainToInstance(UpdateTaskDto, { parentTaskId: uuidToBase62(TASK_A) });
+  assert.equal((await validate(linked)).length, 0);
+  assert.equal(linked.parentTaskId, TASK_A);
+
+  // Three-state, like every other nullable FK on this DTO: omitted keeps the current parent,
+  // an id (re)links, null detaches. @IsOptional() is what lets the null through to mean it.
+  const detached = plainToInstance(UpdateTaskDto, { parentTaskId: null });
+  assert.equal((await validate(detached)).length, 0);
+  assert.equal(detached.parentTaskId, null);
+  assert.equal((await validate(plainToInstance(UpdateTaskDto, {}))).length, 0);
+
+  assert.notEqual(
+    (await validate(plainToInstance(UpdateTaskDto, { parentTaskId: 'not an id' }))).length,
+    0,
+  );
+});
+
 test('batch-create DTO validates each item and caps the batch size', async () => {
   const batch = (tasks: unknown[]) => plainToInstance(CreateTasksBatchDto, { tasks });
 
@@ -133,7 +155,13 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
   const payload = {
     tasks: [
       { title: 'S0', ref: 's0', description: 'first', autoRunWhenReady: false, unknown: 'drop me' },
-      { title: 'S1', dependsOnRefs: ['s0'], dependsOnTaskIds: [TASK_A], assigneeId: null },
+      {
+        title: 'S1',
+        dependsOnRefs: ['s0'],
+        parentRef: 's0',
+        dependsOnTaskIds: [TASK_A],
+        assigneeId: null,
+      },
     ],
   };
 
@@ -155,6 +183,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
   assert.deepEqual(kept(1), {
     title: 'S1',
     dependsOnRefs: ['s0'],
+    parentRef: 's0',
     dependsOnTaskIds: [TASK_A],
     assigneeId: null,
   });

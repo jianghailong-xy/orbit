@@ -147,6 +147,25 @@ test('enableOrchestration and enabled are still dropped (human-only, web UI)', a
   assert.equal('enabled' in (seen.create ?? {}), false);
 });
 
+test('authorization posture and provider fallback remain human-only', async () => {
+  const { controller, seen } = makeController();
+  await controller.createWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, {
+    name: 'child',
+    providerFallbacks: [{ provider: 'codex' }],
+    canCreateTasks: true,
+    canDelegate: true,
+    maxConcurrentTasks: 99,
+  } as never);
+  for (const field of [
+    'providerFallbacks',
+    'canCreateTasks',
+    'canDelegate',
+    'maxConcurrentTasks',
+  ]) {
+    assert.equal(field in (seen.create ?? {}), false, `${field} escaped the runner whitelist`);
+  }
+});
+
 test('an orchestrator that names no value still cannot inherit the account default', async () => {
   const { controller, seen } = makeController();
   await controller.createWorkspace(RUNNER, 's1', ORCHESTRATION_TOKEN, { name: 'child' });

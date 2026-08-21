@@ -195,6 +195,11 @@ const maxTaskBatchCreate = 50
 // states the bound the write would be rejected against anyway.
 const maxTaskLabels = 16
 
+// How long a task's acceptance criteria may be. Mirrors the server's
+// MAX_TASK_ACCEPTANCE_CRITERIA_CHARS, for the same reason as the bounds above: the schema states
+// the cap the write would be rejected against, rather than letting a model discover it by 400.
+const maxTaskAcceptanceCriteriaChars = 4000
+
 // callTool dispatches one tool. A tool's own failure (bad args, transport error) is
 // reported as a result with isError=true — NOT a JSON-RPC protocol error — per MCP.
 func (s *mcpServer) callTool(name string, args map[string]interface{}) map[string]interface{} {
@@ -207,13 +212,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if limit == 0 {
 			limit = defaultTaskListLimit
 		}
-		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getStringSlice(args, "labels"), limit)
+		raw, err := s.t.listTasks(getString(args, "status"), getString(args, "listId"), getString(args, "projectId"), getStringSlice(args, "labels"), limit)
 		if err != nil {
 			return toolResult("list tasks failed: "+err.Error(), true)
 		}
 		body := prettyJSON(raw)
 		if countJSONArray(raw) >= limit {
-			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/labels or raise limit.\n%s", limit, body)
+			body = fmt.Sprintf("Showing the newest %d tasks; narrow with status/listId/projectId/labels or raise limit.\n%s", limit, body)
 		}
 		return toolResult(body, false)
 
@@ -232,6 +237,79 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.getTask(id)
 		if err != nil {
 			return toolResult("get task failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_get":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProject(id)
+		if err != nil {
+			return toolResult("get project failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_status":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectCoordinatorStatus(id)
+		if err != nil {
+			return toolResult("get project status failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_verifications":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectVerifications(id)
+		if err != nil {
+			return toolResult("get project verifications failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_create":
+		title := getString(args, "title")
+		if title == "" {
+			return toolResult("title is required", true)
+		}
+		body := map[string]interface{}{"title": title}
+		copyIfPresent(body, args, "goal", "acceptanceCriteria", "instructions")
+		// The calling session goes with it, the same as it does on task_create — here so the
+		// server can bind THIS session as the new project's coordinator, which is what makes
+		// opening the project later come back to this conversation instead of starting another.
+		raw, err := s.t.createProject(s.sessionID, body)
+		if err != nil {
+			return toolResult("create project failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_update":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		body := map[string]interface{}{}
+		// The same present-only copy task_update uses, and it is what gives each prose field all
+		// three outcomes for free: absent stays absent (the project keeps what it states), a string
+		// is forwarded as given, and an explicit null survives as null rather than being mistaken
+		// for "not supplied" — that last one is the whole clear path.
+		copyIfPresent(body, args, "title", "goal", "acceptanceCriteria", "instructions", "status")
+		// The fence, counted separately: it names no field to write, so an update carrying only it
+		// would be a request that changes nothing while claiming to have gone through.
+		fields := len(body)
+		copyIfPresent(body, args, "expectedConfigRevision")
+		if fields == 0 {
+			return toolResult("no fields to update", true)
+		}
+		raw, err := s.t.updateProject(id, body)
+		if err != nil {
+			return toolResult("update project failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -290,7 +368,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -321,7 +399,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels", "ref", "dependsOnRefs")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "ref", "dependsOnRefs", "parentRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -336,7 +414,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult(noTaskMsg, true)
 		}
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "labels")
+		// acceptanceCriteria rides the same present-only copy as every other field, which is what
+		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
+		// a string is forwarded as given, and an explicit null survives as null rather than being
+		// mistaken for "not supplied" — that last one is the whole clear path.
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -984,6 +1066,96 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to use the provider's own default. An id the provider doesn't have will fail at run time, not here.",
 	}
+	// Files a new task under a project, on task_create and every task_create_batch item alike.
+	// Not nullable, unlike listId: on a create there is nothing to clear, and null would be an id
+	// the server rejects rather than a shorthand for "no project".
+	projectIDProp := map[string]interface{}{
+		"type": "string",
+		"description": "File this task under a project you own — what to pass when the work is part of a " +
+			"goal you were given (project_get names it). Orthogonal to listId: the project says what the " +
+			"work is FOR, the list decides how it is dispatched, so a task may have one of each, either, " +
+			"or neither. Omit it when the work belongs to no project; a project that does not exist, or " +
+			"belongs to somebody else, is rejected rather than filed nowhere.",
+	}
+	// Makes the new task a subtask of one that already exists, on task_create and every
+	// task_create_batch item alike. Not nullable for the same reason as projectId: on a create
+	// there is no existing link to clear.
+	parentTaskIDProp := map[string]interface{}{
+		"type": "string",
+		"description": "Make this task a subtask of an EXISTING task you own — how to break a piece of " +
+			"work into steps that stay attached to it. The parent must be in the SAME project as this " +
+			"task, so a subtask of a project's task normally passes both parentTaskId and that same " +
+			"projectId; a parent filed under no project needs projectId omitted here too. The project " +
+			"is NOT inherited from the parent — a mismatch (or a parent that does not exist, or belongs " +
+			"to somebody else) is rejected rather than filed loose. Names a task that already exists: " +
+			"to hang an item under another item of this same task_create_batch call, whose id does not " +
+			"exist yet, use `parentRef` instead. Either spelling is membership, not ordering — when a " +
+			"task RUNS is dependsOnTaskIds/dependsOnRefs, a separate question.",
+	}
+	// The same link on the edit door, where it also has to be removable. A decomposition is
+	// usually understood after the tasks exist — a step turns out to belong under a different
+	// piece of work, or under none — so re-parenting has to be expressible without deleting and
+	// recreating the task, which would lose its comments, its sessions and its edges. Nullable,
+	// unlike the create prop above: on a create there is no existing link to clear.
+	updateParentTaskIDProp := map[string]interface{}{
+		"type": []string{"string", "null"},
+		"description": "Make this task a subtask of another task you own, or pass null to detach it " +
+			"and leave it standing on its own; omit it to leave the current parent alone. The parent " +
+			"must be in the SAME project as this task — re-file one of them first if they differ. " +
+			"Refused when it would make a task its own parent, or name one of its own subtasks as its " +
+			"parent (that closes a loop). Membership, not ordering: this says what the task is PART OF " +
+			"and changes nothing about when it runs — that is dependsOnTaskIds.",
+	}
+	// Both task write doors have a field of their own for what proves the work is done, so their
+	// `description` must stop asking for one: promptDesc above tells the caller to put acceptance
+	// criteria inside the prompt, and next to acceptanceCriteria that is an instruction to write the
+	// same thing twice — two copies that drift, with nothing saying which one settles the task.
+	// Shared by task_create, every task_create_batch item and task_update, because a prompt edited
+	// through the update door must not reintroduce the copy the create door just gave up.
+	// session_create deliberately keeps promptDesc: it takes no acceptanceCriteria, so for it the
+	// prompt really is the only place the criteria can live.
+	taskDescriptionProp := map[string]interface{}{
+		"type": "string",
+		"description": "Write this as a self-contained, executable prompt for the task — background, " +
+			"files involved, and concrete steps — so an agent with no prior conversation context can " +
+			"pick it up and act on it directly. Say what to DO here; what would PROVE it done belongs " +
+			"in `acceptanceCriteria`, not repeated here.",
+	}
+	// States what would settle this one task, on task_create and every task_create_batch item alike.
+	// Capped here at the server's own limit so an over-long value is caught before the round trip.
+	acceptanceCriteriaProp := map[string]interface{}{
+		"type":      "string",
+		"maxLength": maxTaskAcceptanceCriteriaChars,
+		"description": fmt.Sprintf("What would settle that THIS task is done: the observable, "+
+			"independently verifiable result — a command that passes, a file that exists, a number "+
+			"that moved — stated so somebody who did not watch the work can check it. Distinct from "+
+			"`description`, which says what work to PERFORM, and from the project's own "+
+			"acceptanceCriteria (project_get), which settles the whole goal rather than this one "+
+			"step. Coexists with projectId and parentTaskId: a subtask filed under a project still "+
+			"states what would settle itself, not what would settle its parent or its project. Up "+
+			"to %d characters.", maxTaskAcceptanceCriteriaChars),
+	}
+	// The same field on the edit door, where it also has to be removable. Criteria are usually
+	// written before the work is understood, so what settles a task is whatever it says at the end,
+	// not what it was created with — an agent that discovers the real test has to be able to record
+	// it, and one that finds the recorded test was wrong has to be able to take it back. Nullable,
+	// unlike the create prop above: on a create there is no existing value to clear.
+	updateAcceptanceCriteriaProp := map[string]interface{}{
+		"type":      []string{"string", "null"},
+		"maxLength": maxTaskAcceptanceCriteriaChars,
+		"description": fmt.Sprintf("What would settle that THIS task is done: the observable, "+
+			"independently verifiable result — a command that passes, a file that exists, a number "+
+			"that moved — stated so somebody who did not watch the work can check it. Whole-field "+
+			"replacement, not an append: OMIT it to leave the task's current criteria exactly as they "+
+			"are, pass a string to REPLACE them (the empty string records that the task has none "+
+			"worth stating), pass null to CLEAR them. Expect to use it after creation — what proves a "+
+			"task done is often only knowable once the work is understood. Distinct from "+
+			"`description`, which says what work to PERFORM, and from the project's own "+
+			"acceptanceCriteria (project_get), which settles the whole goal rather than this one "+
+			"step: editing a task's criteria never touches its project's, and copying the project's "+
+			"onto a task claims one step settles everything. Up to %d characters.",
+			maxTaskAcceptanceCriteriaChars),
+	}
 	labelsProp := map[string]interface{}{
 		"type":        "array",
 		"items":       str,
@@ -1001,13 +1173,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
 		return map[string]interface{}{
-			"title":       str,
-			"description": promptDesc,
-			"listId":      map[string]interface{}{"type": []string{"string", "null"}},
-			"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
-			"dueDate":     str,
-			"provider":    providerProp,
-			"model":       modelProp,
+			"title":              str,
+			"description":        taskDescriptionProp,
+			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
+			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
+			"projectId":          projectIDProp,
+			"parentTaskId":       parentTaskIDProp,
+			"acceptanceCriteria": acceptanceCriteriaProp,
+			"dueDate":            str,
+			"provider":           providerProp,
+			"model":              modelProp,
 			"dependsOnTaskIds": map[string]interface{}{
 				"type":        "array",
 				"items":       str,
@@ -1016,6 +1191,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
 				"description": "Once all prerequisites are DONE, auto-run this task without a manual start (default true). Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. Ignored when there are no prerequisites.",
+			},
+			"completionPolicy": map[string]interface{}{
+				"type":        "string",
+				"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
+				"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks.",
 			},
 			"labels": labelsProp,
 		}
@@ -1031,15 +1211,27 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"items":       str,
 			"description": "Refs of EARLIER items in this same batch that must finish before this one runs. Use this for prerequisites created by this call (their ids don't exist yet) and dependsOnTaskIds for tasks that already exist.",
 		}
+		props["parentRef"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Ref of an EARLIER item in this same batch that this item is a PART OF — how a plan lands as a tree in one call, since the parent it names is being created by this very batch and has no id yet. Use parentTaskId instead for a parent that already exists; naming both is rejected, because it names two parents. The item it points at must carry the same projectId as this one (the project is never inherited). Membership, not ordering: dependsOnRefs decides when this item may run, parentRef only says what it is part of.",
+		}
 		return props
 	}
 	tools := []map[string]interface{}{
 		{
 			"name":        "task_list",
-			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId or labels.",
+			"description": "List the caller's newest tasks, without their descriptions (task_get returns one task in full). Optionally filter by status, listId, projectId or labels. Rows carry projectId, parentTaskId and acceptanceCriteria, so which project a task belongs to, what it is part of, and what would settle it are readable without fetching each task.",
 			"inputSchema": obj(map[string]interface{}{
 				"status": status,
 				"listId": str,
+				"projectId": map[string]interface{}{
+					"type": "string",
+					"description": "Only tasks filed under this project — the read a project coordinator " +
+						"wants, since every other filter here answers across all projects. Use project_get " +
+						"for what the project is FOR (goal, acceptanceCriteria, instructions); this returns " +
+						"the work filed under it. A project that does not exist, or belongs to somebody " +
+						"else, lists as empty, exactly like any other filter matching nothing.",
+				},
 				"labels": map[string]interface{}{
 					"type":        "array",
 					"items":       str,
@@ -1059,6 +1251,166 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"name":        "task_get",
 			"description": "Get one task with its comments and linked sessions.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
+			"name": "project_get",
+			"description": "Read one project's durable context: its goal, what would settle that " +
+				"the goal was reached (acceptanceCriteria), how the work is to be done " +
+				"(instructions), its status, the session and workspace it is coordinated from, and " +
+				"how its tasks are distributed (_count and tasksByStatus). This is what a project " +
+				"coordinator works FROM — read it before deciding what to file or whether the work " +
+				"is finished, because none of it is repeated in a task's description. Returns the " +
+				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
+				"of the account this runner belongs to; write these same fields with " +
+				"project_create and project_update.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_status",
+			"description": "Read everything the control loop knows about one project — the answer " +
+				"to \"why is this project not moving\", which nothing else gives you: the state is " +
+				"spread over seven tables and the usual conclusion, that the project is broken, is " +
+				"usually wrong. It returns its run state and lifecycle; which agent coordinates it, " +
+				"where it runs, and the coordination session with its generation (the agent " +
+				"outlives every session); whether the coordinator is switched on at all and how " +
+				"far it may go when it runs — MANUAL, GUARDED_AUTO or AUTO — with the " +
+				"configRevision a control write states back; tasks in flight against the " +
+				"concurrency cap and coordinator sessions against the daily budget, counted exactly " +
+				"as the admission gates count them; whether a pass currently holds the lease; when " +
+				"it next wakes, why, and which candidates lost; the last few decisions with the " +
+				"actions and idempotency keys each produced; actions claimed but not yet published; " +
+				"what is blocking it, who can fix it, what would clear it and when it is rechecked; " +
+				"durable signals still pending with their attempts and backoff; and the acceptance " +
+				"evidence — stated criteria, last acceptance run, verdict tallies and per-branch " +
+				"merge state. Read it before concluding a project is stuck, and before filing work " +
+				"to unstick it. Every absent fact is null beside a reason (agentIdAbsentReason, " +
+				"leaseAbsentReason, candidatesAbsentReason), so \"nothing is blocking this\" and " +
+				"\"this cannot be reported\" are different answers rather than the same empty one. " +
+				"Read only: asking the coordinator to run now is the account owner's, through the " +
+				"web app or the user API.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_verifications",
+			"description": "Read what every verification in one project concluded, and what those " +
+				"conclusions are still holding up. Three things nothing else tells you: each " +
+				"check's verdict and which conclusion it is (verdictRevision — a re-run gets a new " +
+				"one, so the same verdict twice is two findings, not one); what each FAIL or " +
+				"INCONCLUSIVE left behind (the defect subtask filed under the subject, the action " +
+				"that raised it, and whether a later PASS has resolved it); and blockedTasks — the " +
+				"exact tasks that cannot be dispatched because of one, with the reason. Read this " +
+				"when a task looks ready and is not running: a blocked task looks like an ordinary " +
+				"OPEN task on purpose, because the block is a precondition rather than a status " +
+				"anybody rewrote, so this is the only place the reason is written down. A FAIL " +
+				"sends its subject back to OPEN and files the defect by itself — you do not have " +
+				"to do either, and fixing the defect is what makes the subject runnable again " +
+				"(the check still has to run again before the work downstream is released).",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_create",
+			"description": "Create a project in the account this runner belongs to — the durable " +
+				"context a whole body of work is carried out from, as opposed to a task, which is " +
+				"one piece of that work. Use it when you are asked to set up or plan out a body of " +
+				"work: state what it is trying to achieve (goal), what would settle that the goal " +
+				"was reached (acceptanceCriteria), and how the work is to be done (instructions). " +
+				"You have the authority to write these fields — record what you were asked for " +
+				"rather than waiting for somebody to type it in. The " +
+				"project starts OPEN and holds no tasks — file them afterwards with task_create / " +
+				"task_create_batch passing its projectId, which is what connects the work to what " +
+				"it is for. Created from inside a session, the project is bound to THIS session " +
+				"as its coordinator, in the same write that creates it, along with the workspace " +
+				"this session runs in — so opening the project's coordinator later comes back to " +
+				"this conversation rather than starting a fresh one that knows none of it. There " +
+				"is nothing to pass and nothing to choose; created outside a session there is no " +
+				"such binding. One session coordinates at most one project: recording a second " +
+				"one from this same conversation is refused, and nothing is created.",
+			"inputSchema": obj(map[string]interface{}{
+				"title": map[string]interface{}{
+					"type":        "string",
+					"description": "What this body of work is called.",
+				},
+				"goal": map[string]interface{}{
+					"type":        "string",
+					"description": "What this project is trying to achieve, in at most 4,000 characters.",
+				},
+				"acceptanceCriteria": map[string]interface{}{
+					"type": "string",
+					"description": "What would settle that the goal was reached — the observable " +
+						"result a reader can verify for the whole project, as opposed to a task's " +
+						"own acceptanceCriteria, which settles one piece of it. Max 4,000 characters.",
+				},
+				"instructions": map[string]interface{}{
+					"type":        "string",
+					"description": "How this project's work is to be done: standing guidance that applies across its tasks. Max 10,000 characters.",
+				},
+			}, "title"),
+		},
+		{
+			"name": "project_update",
+			"description": "Update a project in the account this runner belongs to: rename it, " +
+				"revise what it is trying to achieve (goal), what would settle that the goal was " +
+				"reached (acceptanceCriteria) or how the work is to be done (instructions), and " +
+				"record where the work stands (status). You have the authority to write these " +
+				"fields — say so when the work actually lands rather " +
+				"than leaving a finished project OPEN. Only the fields you pass are sent, so " +
+				"revising the goal never blanks the instructions: omit a field to leave it " +
+				"untouched, pass a string to replace it, pass null to clear it. status DONE means " +
+				"the goal was reached and CANCELLED that it will not be; neither is a way to file " +
+				"a project out of sight. Read project_get first when the current context is not " +
+				"already known — each prose field is a whole-field replacement, not an append.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to update, as shown in its web UI URL (/projects/<id>).",
+				},
+				"title": str,
+				"goal": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "Replace what this project is trying to achieve (max 4,000 characters), or null to leave it with no stated goal.",
+				},
+				"acceptanceCriteria": map[string]interface{}{
+					"type": []string{"string", "null"},
+					"description": "Replace what would settle that the goal was reached (max 4,000 " +
+						"characters), or null to leave it with none stated. This settles the whole " +
+						"project, not one task.",
+				},
+				"instructions": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "Replace how this project's work is to be done (max 10,000 characters), or null to leave it with no standing instructions.",
+				},
+				"status": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"OPEN", "DONE", "CANCELLED"},
+					"description": "Where the work stands: OPEN, DONE (the goal was reached) or CANCELLED (it will not be).",
+				},
+				"expectedConfigRevision": map[string]interface{}{
+					"type": "string",
+					"description": "The configRevision you read from project_status, as a " +
+						"compare-and-swap: the write commits only if the project is still at that " +
+						"revision, and is refused with STALE_CONFIG_REVISION otherwise, with " +
+						"nothing written. Pass it when you read the project first and are acting " +
+						"on what you read — the owner may have changed its coordination settings " +
+						"since, and being told beats silently overwriting a decision you did not " +
+						"see. Omit it if you did not read one; the write then behaves as it always " +
+						"has.",
+				},
+			}, "projectId"),
 		},
 		{
 			"name":        "task_dependency_graph",
@@ -1093,12 +1445,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId must be owned by the caller; dueDate is an ISO date string. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
+			"description": "Create ONE task (attributed to this agent). Creating several related tasks? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Pass `acceptanceCriteria` to state what would settle that this task is done — the observable result a reader can verify, as opposed to `description`, which says what work to perform. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions.",
 			"inputSchema": obj(taskCreateProps(), "title"),
 		},
 		{
 			"name":        "task_create_batch",
-			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
+			"description": fmt.Sprintf("Create up to %d tasks in one atomic call (attributed to this agent) — the batch form of task_create, and the right tool whenever a plan produces more than one task. Nothing is written unless every item is valid. Items are created in order, and a later item can depend on an earlier one WITHOUT knowing its id: give the earlier item a `ref` and list that ref in the later item's `dependsOnRefs` (e.g. [{ref:\"s0\",…},{ref:\"s1\",dependsOnRefs:[\"s0\"]}]). `dependsOnTaskIds` still takes ids of tasks that already exist; the two combine. Each item takes the same fields as task_create, `projectId` and `acceptanceCriteria` included, so a plan for one project files every task it produces under that project in the same call, each carrying what would settle it. Items nest the same way they order: `parentRef` names an EARLIER item's ref as this item's PARENT, so a plan lands as a tree — its steps written as parts of the piece of work being planned, in the same call that creates it. `parentTaskId` stays for hanging items under a task that ALREADY exists (same project as the item); one item cannot carry both. The two ref fields answer different questions: `dependsOnRefs` is when an item may run, `parentRef` is what it is a part of. Returns the created tasks in input order, each echoing its `ref`. Tasks are only recorded — call task_start for one that should run now. This BLOCKS until a human approves the batch: they see what would be created and, above all, how many of it starts running within the minute. Send the batch you actually mean — a rejected one costs the whole call, not one item.", maxTaskBatchCreate),
 			"inputSchema": obj(map[string]interface{}{
 				"tasks": map[string]interface{}{
 					"type":        "array",
@@ -1111,17 +1463,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps, acceptance criteria). Pass null for assigneeId/listId/dueDate/provider/model to clear them.",
+			"description": "Update a task's fields. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. Pass null for assigneeId/listId/parentTaskId/dueDate/provider/model to clear them.",
 			"inputSchema": obj(map[string]interface{}{
-				"taskId":      taskIDProp,
-				"title":       str,
-				"description": promptDesc,
-				"status":      status,
-				"listId":      map[string]interface{}{"type": []string{"string", "null"}},
-				"assigneeId":  map[string]interface{}{"type": []string{"string", "null"}},
-				"dueDate":     map[string]interface{}{"type": []string{"string", "null"}},
-				"provider":    providerProp,
-				"model":       modelProp,
+				"taskId":             taskIDProp,
+				"title":              str,
+				"description":        taskDescriptionProp,
+				"status":             status,
+				"listId":             map[string]interface{}{"type": []string{"string", "null"}},
+				"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
+				"parentTaskId":       updateParentTaskIDProp,
+				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
+				"provider":           providerProp,
+				"model":              modelProp,
+				"acceptanceCriteria": updateAcceptanceCriteriaProp,
 				"dependsOnTaskIds": map[string]interface{}{
 					"type":        "array",
 					"items":       str,
@@ -1130,6 +1484,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
 					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+				},
+				"completionPolicy": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
+					"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks. Switching back to MANUAL stops the recomputation without undoing what it last concluded.",
+				},
+				"verdict": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"enum":        []interface{}{"PASS", "FAIL", "INCONCLUSIVE", nil},
+					"description": "This VERIFICATION task's conclusion about the task it verifies. Only a task with verifiesTaskId set can carry one. Omit to leave it alone, null to revoke it — revoking a PASS reopens a subject that VERIFICATION_PASSED had completed.",
 				},
 				"labels": map[string]interface{}{
 					"type":        "array",

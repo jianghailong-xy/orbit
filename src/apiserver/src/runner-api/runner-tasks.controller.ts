@@ -71,9 +71,9 @@ export class RunnerTasksController {
   }
 
   /**
-   * Filtered/paged when the caller asks (`status`, `listId`, `limit`), because the unfiltered
-   * list is every task the owner ever created, description included — tens of megabytes for a
-   * heavy account, which the CLI has to buffer whole before it can filter client-side. The
+   * Filtered/paged when the caller asks (`status`, `listId`, `projectId`, `limit`), because the
+   * unfiltered list is every task the owner ever created, description included — tens of megabytes
+   * for a heavy account, which the CLI has to buffer whole before it can filter client-side. The
    * filtered form answers from the same page query the browser uses, so the rows carry no
    * description (that is what `task get` is for).
    *
@@ -90,14 +90,21 @@ export class RunnerTasksController {
     // runtime, but the controller's own tests call the method positionally, so inserting one in
     // the middle silently reassigns every argument after it.
     @Query('labels') labels?: string | string[],
+    @Query('projectId', PublicIdPipe) projectId?: string,
   ) {
     // `labels` joins the other filters in this test, not just in the call below: the unfiltered
     // branch answers from tasks.list, which has no label filter, so leaving it out would make a
-    // label-only request return every task while looking like it had filtered.
-    if (!status && !listId && !limit && !labels) return this.tasks.list(runner.ownerId);
+    // label-only request return every task while looking like it had filtered. `projectId` is in
+    // for the identical reason — tasks.list has no project filter either, so a project-only
+    // request routed there would answer with every task the owner has and read as "this project
+    // is the whole account".
+    if (!status && !listId && !limit && !labels && !projectId) {
+      return this.tasks.list(runner.ownerId);
+    }
     const page = await this.tasks.listPage(runner.ownerId, {
       status,
       listId,
+      projectId,
       labels,
       limit,
       counts: 'none',
@@ -136,11 +143,14 @@ export class RunnerTasksController {
     @Query('listId', PublicIdPipe) listId?: string,
     @Query('limit') limit?: string,
     @Query('labels') labels?: string | string[],
+    // Appended for the reason `listTasks` above records: positional callers in the specs.
+    @Query('projectId', PublicIdPipe) projectId?: string,
   ) {
     return this.tasks.listPage(runner.ownerId, {
       cursor,
       status,
       listId,
+      projectId,
       labels,
       limit,
       // The tallies describe the scope, not the page, so re-deriving them once per page is

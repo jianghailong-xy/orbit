@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": "./build-project-blocker",
+    "incremental": false
+  },
+  "include": [
+    "src/prisma/prisma.service.ts",
+    "src/projects/coordinator-pg-test-safety.ts",
+    "src/projects/project-blocker.ts",
+    "src/projects/project-blocker.spec.ts",
+    "src/projects/project-blocker.pg.spec.ts",
+    "src/projects/project-blocker-conditions.ts",
+    "src/projects/project-next-wake.ts",
+    "src/projects/project-next-wake.spec.ts",
+    "src/projects/project-decision.service.ts",
+    "src/projects/project-events.service.ts",
+    "src/projects/project-reconcile.service.ts",
+    "src/projects/project-blocker-guard.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "build-project-blocker"
+  ]
+}
