@@ -32,6 +32,8 @@ function makeService(
 ) {
   const created: Record<string, unknown>[] = [];
   const countFilters: Record<string, unknown>[] = [];
+  /** Sessions the other clients were told to re-read the queue for. */
+  const queueChanges: string[] = [];
   const session = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
@@ -86,9 +88,12 @@ function makeService(
   const service = new SessionsService(
     prisma,
     { notifySessionQueued: () => undefined } as never,
-    { notifyInbox: () => undefined, publishQueuedTurnsChanged: () => undefined } as never,
+    {
+      notifyInbox: () => undefined,
+      publishQueuedTurnsChanged: (id: string) => queueChanges.push(id),
+    } as never,
   );
-  return { service, created, countFilters };
+  return { service, created, countFilters, queueChanges };
 }
 
 const send = (h: ReturnType<typeof makeService>, kind?: 'shell') =>
@@ -217,6 +222,19 @@ test('codex steers only once the runner holding the session says it can deliver 
   const older = makeService(1, RunStatus.RUNNING, CODEX, ['session-worktree-ops-v1']);
   await send(older);
   assert.equal(older.created[0].kind, 'message');
+});
+
+test('a filed steer is announced to the other clients, which is how one appears on a second device', async () => {
+  // A turn has no transcript event until the runner leases it, so until then the only thing a
+  // second browser/phone can learn a steer from is the durable queue — and the only thing that
+  // tells it to go and re-read that list is this nudge. Without it the message is visible on the
+  // device that sent it and nowhere else, and a codex steer can sit PENDING for a whole poll.
+  const h = makeService(1, RunStatus.RUNNING, CODEX, DECLARES_CODEX_STEER);
+
+  const res = await send(h);
+
+  assert.equal(res.kind, 'steer');
+  assert.deepEqual(h.queueChanges, [SESSION_ID]);
 });
 
 test('a runner that has declared nothing is never read as declaring this', async () => {

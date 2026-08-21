@@ -7,6 +7,10 @@
 §4.4 的 `E-DROPPED` 归档保持"不确定"档,新增 §4.8「Runner 死掉留下的 steer」,§8 待办表已结案。
 本次只**补**竞态与恢复,§1–§3 的线上格式和 §5–§6 的门控一个字未动。
 
+**v1.2([5/7],2026-08-21)**:新增 §4.9「客户端展示与操作」—— 复审 §4.6 那句"三端行为不需要改",
+结论是**代码不需要改、用例需要补**(Codex 的气泡可以生在任意 delivery 状态上,Claude 不会),
+并记录"IN_FLIGHT 的 steer 不进排队列表"这一**已知且接受**的空窗及其理由。§1–§3、§5–§6 未动。
+
 **范围**:只描述"Orbit 把一条用户消息塞进 Codex 正在跑的 turn"这件事的线上格式、事件相关性、
 失败语义和混合版本行为。**不含**业务实现。
 
@@ -289,6 +293,54 @@ v1 没有覆盖这一格,而它是一个**真的死角**:steer 只投递一次�
 - **`announced`**:该 turn 是否已经有 `user` 事件(apiserver 查 `run_event`)。接管进程**不可能知道**
   ——前一个 generation 的记录跟它一起死了——而多发一个 `user` 会把同一条消息显示两次。
 - **归"不确定"档,retryable:true。** 消息有没有被 Codex 读到,两边都不知道;重投是双发,所以不重投、不重排。
+
+### 4.9 客户端展示与操作(**[5/7] 结案**)
+
+§4.6 说"三端行为不需要改",这条经审查成立 —— **但只对稳态成立**。Codex 与 Claude 在**事件顺序**上不一样,
+这才是客户端真正需要被钉住的地方:
+
+| | Claude | Codex |
+| --- | --- | --- |
+| `user` 事件何时发 | **接受消息时**(§`session.go` `deliveries.accept` 之后),必然从 `enqueued` 起步 | **第一个已知结果时**(§4.7 补充 2),气泡**直接生在** `written` / `acknowledged` / `failed` 上 |
+| 谁可能先说话 | 只有写入 goroutine | 响应 goroutine 或读通知 goroutine,谁先知道谁开(`announce` 单飞) |
+| `enqueued` 会出现在 transcript 吗 | 会 | **不会**。Codex 的 "Sending…" 只出现在**排队列表**里(leased 之前),不出现在气泡上 |
+
+所以"四个状态"在两端的**入口**不同,而**词表相同**。客户端不需要新代码,但需要各自的用例把
+"气泡可以生在任意状态上"钉住 —— 这正是本任务补的:web `Transcript.test.tsx`(`a codex steer, whose
+bubble opens at whatever happened first`)、Swift `SteerDeliveryTests`(`// MARK: - the same steer,
+delivered by codex`)。反向验证:把"读 `user` 事件自带的 delivery"这一行去掉,**只有新用例红**(web 3 条),
+既有的 Claude 顺序用例全绿 —— 这个死角原本没有人看着。
+
+**kind 的权威性(四扇门)**:`kind` 由服务端在 Session 行锁下决定,四扇门都原样透传、都不自造:
+
+- **Web**:`sendTurn` 的 `res.kind` 覆盖本地 `idle` 猜测(`WorkspaceView`),排队列表按 `r.kind` 重算;
+- **iOS/macOS**:`ConsoleModel` 用 `SteerDelivery.isSteerKind(accepted.kind)`,`reconcileQueuedTurns` 每次
+  按服务端 `kind` **重写** `bubble.steer`(不是"只置真不置假"——见下条 `steer_requeue`);
+- **API**:`POST /turns` 返回 `kind`;`GET /sessions/:id/turns` 每行带 `kind`;
+- **CLI / MCP**:`orbit session send` 与 `session_send` 都是 raw JSON 透传,旧服务端不带 `kind` 时也**不补默认值**。
+
+**Cancel 的唯一规则**:`kind='steer'` 不给 Cancel,`message`/`shell` 照旧给。三层都已闭合 ——
+服务端 `cancelQueuedTurn` 只删 `message`/`shell`,steer 命中专门的 409("being written into the running
+turn");web 由 `QueuedTurnMeta` 渲染,steer 分支不渲染 Cancel;macOS/iOS 的 `MessageBubbles.meta` 里
+Cancel 嵌在 `else if bubble.pending` 分支内,而 `bubble.steer` 分支排在它**前面**,结构上不可达。
+(OrbitApp 不在 Linux 可测范围内,所以 Swift 侧钉的是视图分支所读的 `bubble.steer`/`queued` 状态本身。)
+
+**`steer_requeue` 的客户端结局**:重排不发任何事件,**排队列表就是公告** —— 同一 `turnId` 以
+`kind='message'` 重新出现,Cancel 必须跟着回来。两端都验了;Swift 侧把
+`bubble.steer = isSteerKind(kind)` 改成 `||=`(即"只置真不置假")会直接红。
+
+**已知且接受的空窗(不修)**:一条 codex steer 从被 lease(行转 `IN_FLIGHT`,离开 `listQueuedTurns`)
+到第一次 `announce` 之间(实测 6ms~520ms,上限 10s 即 RPC 超时),对**刷新/第三方视角**不可见;
+发送方自己有乐观气泡。**不把 `IN_FLIGHT` 的 steer 列进 `listQueuedTurns` 的理由**:
+
+1. 那个列表的语义是"还没有人读过、可以撤回的行",把已投递的行混进去会让 Cancel 的判据从 `kind` 变成
+   `kind + status`,而 `status` 客户端根本看不到;
+2. 要正确实现必须再查 `run_event` 排除"已经有 `user` 事件"的行 —— 每个 focused 客户端都会打这个接口;
+3. 真正无界的那一格是 §4.8(runner 死掉),而那一格**列出来更糟**:会变成一条永远停在 "Sending…"、
+   永远不能取消、也永远不会有结果的行;不列出来则用户看到消息没发出去、重发一次即可,这是安全的一侧。
+
+若后续要改,做法仍是 [4/7] 交接里写的那条:列 `kind='steer' AND status='IN_FLIGHT' 且尚无 user 事件` 的行
+(两端 reducer 已经会按 `user` 事件去重,见 Swift `deliveredTurnIDs` 与 web 的 `user` 分支)。
 
 ## 5. 能力信号:provider-specific + 版本感知
 

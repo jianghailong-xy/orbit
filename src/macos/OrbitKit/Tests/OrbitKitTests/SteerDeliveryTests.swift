@@ -242,6 +242,107 @@ final class SteerDeliveryTests: XCTestCase {
         XCTAssertFalse(r.state.queued[1].steer, "a queued message is still withdrawable")
     }
 
+    // MARK: - the same steer, delivered by codex
+
+    // Nothing about the bubble changes — one vocabulary, both engines — but the ORDER the events
+    // arrive in does. claude's runner opens the bubble the moment it accepts the message, so it
+    // always starts at `enqueued` and walks forward. codex cannot: its steer is an RPC whose
+    // answer and whose echo are read by different goroutines, and un-filing a message the engine
+    // provably never read has to leave no bubble behind at all. So the `user` event is held back
+    // until the FIRST KNOWN OUTCOME, and a codex steer's bubble is born at whatever that turned
+    // out to be — including, for one that never landed, at the failure itself.
+
+    func testACodexSteersBubbleOpensAtWhateverHappenedFirst() {
+        // `turn/steer` returned OK before anything else was known: codex has the message and the
+        // model has not read it yet. There was never an `enqueued` event for this one.
+        var written = TranscriptReducer()
+        written.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
+                                delivery: "written", steer: true))
+
+        XCTAssertEqual(SteerDelivery.state(bubbles(written)[0].delivery).label, "Delivering…")
+        XCTAssertFalse(bubbles(written)[0].undelivered)
+
+        // …and the other way round: codex has been seen echoing a steer back before the response
+        // to the request was observed, so `acknowledged` can be the first word about it.
+        var echoed = TranscriptReducer()
+        echoed.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
+                               delivery: "acknowledged", steer: true))
+
+        XCTAssertEqual(SteerDelivery.state(bubbles(echoed)[0].delivery).label, "Sent into this turn")
+        XCTAssertFalse(bubbles(echoed)[0].undelivered)
+    }
+
+    func testACodexSteerStrandedByADeadRunnerOpensAsTheFailureItIs() {
+        // A steer is delivered once and never re-delivered, so a runner killed while holding one
+        // leaves a row nothing else will ever come back for. The process taking the session over
+        // answers for it on the event stream: the bubble it was never given, then the report.
+        // Both say failed, and the second must not read as a message that is still on its way.
+        var r = TranscriptReducer()
+        r.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
+                          delivery: "failed", steer: true))
+        r.apply(deliveryEvent(2, turn: "t1", "failed",
+                              reason: "the runner stopped while this message was on its way"))
+
+        XCTAssertEqual(bubbles(r).count, 1, "the report opened a second bubble")
+        XCTAssertTrue(bubbles(r)[0].undelivered)
+        XCTAssertEqual(SteerDelivery.state(bubbles(r)[0].delivery).label, "Not delivered")
+    }
+
+    func testACodexSteerCarriesItsAttachmentsIntoTheBubbleItOpens() {
+        // The bubble is opened from the runner's own record of the message, long after the send:
+        // whatever it does not carry there is lost, and an image-only steer would open empty.
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, turnId: "t1", payload: .object([
+            "text": .string("like this one"), "steer": .bool(true),
+            "delivery": .string("written"),
+            "attachments": .array([.object(["id": .string("att-1"), "mime": .string("image/png")])]),
+        ])))
+
+        XCTAssertEqual(bubbles(r)[0].attachments.map(\.id), ["att-1"])
+        XCTAssertTrue(bubbles(r)[0].steer)
+    }
+
+    func testARefiledSteerComesBackAsAWithdrawableQueuedMessage() {
+        // A codex steer the engine provably never read is un-filed onto the same row — same seq,
+        // same clientTurnId — and runs as the ordinary message it would have been had it been
+        // sent a moment later. That path publishes nothing at all, so the queued list IS the
+        // announcement: the row reappears as kind `message`, and the withdraw has to come back
+        // with it or the message is stuck un-cancellable for the rest of the session.
+        var r = TranscriptReducer()
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "steer", content: "use the other endpoint",
+                           attachments: nil),
+        ], knownBefore: [])
+        XCTAssertTrue(r.state.queued[0].steer)
+
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "message", content: "use the other endpoint",
+                           attachments: nil),
+        ], knownBefore: ["t1"])
+
+        XCTAssertEqual(r.state.queued.count, 1, "the same row, not a second copy of the message")
+        XCTAssertFalse(r.state.queued[0].steer, "it is a queued message again — it can be withdrawn")
+        XCTAssertTrue(r.state.queued[0].queued)
+        XCTAssertEqual(r.state.queued[0].turnId, "t1")
+    }
+
+    func testAQueueSnapshotTakenBeforeTheLeaseDoesNotResurrectASteer() {
+        // The REST list only holds a steer while it is still PENDING; the moment the runner takes
+        // it, it leaves. A snapshot read just before that can arrive after the steer's own `user`
+        // event, and re-adding the row would put the same message on screen twice — once in the
+        // transcript where it landed, once below it still saying "Sending…".
+        var r = TranscriptReducer()
+        r.apply(userEvent(1, turn: "t1", text: "use the other endpoint",
+                          delivery: "written", steer: true))
+        r.reconcileQueuedTurns([
+            QueuedTurnInfo(turnId: "t1", kind: "steer", content: "use the other endpoint",
+                           attachments: nil),
+        ], knownBefore: [])
+
+        XCTAssertTrue(r.state.queued.isEmpty)
+        XCTAssertEqual(bubbles(r).count, 1)
+    }
+
     func testAPendingSteerCanFailBeforeItEverHasATranscriptRow() {
         // The refusal can arrive while the bubble is still in the queued tail. It must settle
         // there rather than sit on "Sending…" for the life of the session.
