@@ -13,6 +13,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
+import { ProjectsModule } from './projects/projects.module';
 import { RunnersModule } from './runners/runners.module';
 import { RunnerApiModule } from './runner-api/runner-api.module';
 import { AttachmentsModule } from './attachments/attachments.module';
@@ -34,6 +35,7 @@ import { ProvidersModule } from './providers/providers.module';
     SessionTagsModule,
     TasksModule,
     TaskListsModule,
+    ProjectsModule,
     RunnersModule,
     RunnerApiModule,
     AttachmentsModule,

@@ -195,6 +195,19 @@ export function runnerSupportsCapability(
   );
 }
 
+/** A heartbeat capability header is a declarative machine report, never an authorization token. */
+export function parseRunnerCapabilities(
+  header: string | string[] | undefined,
+): string[] | undefined {
+  if (header === undefined) return undefined;
+  const values = Array.isArray(header) ? header : [header];
+  return [...new Set(values.flatMap((value) => value.split(','))
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0 && value.length <= 120))]
+    .sort()
+    .slice(0, 128);
+}
+
 function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
@@ -258,7 +271,7 @@ export class RunnerApiController {
     private readonly push: PushService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly references: ReferenceExpansionService,
-    private readonly listEvents: ListEventsService,
+    private readonly listEvents?: ListEventsService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -450,6 +463,7 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    const reportedCapabilities = parseRunnerCapabilities(capabilities);
     const supportsWorktreeOps = runnerSupportsCapability(capabilities, SESSION_WORKTREE_OPS_V1);
     if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
       throw new BadRequestException('too many supervised session IDs');
@@ -489,6 +503,10 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
+        // Capabilities are reported by this authenticated runner process. Omission means an old
+        // binary and preserves the last snapshot; an explicit empty header retires it.
+        capabilities: reportedCapabilities,
+        capabilitiesReportedAt: reportedCapabilities === undefined ? undefined : new Date(),
         // Per-engine health for the Providers page. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -1800,7 +1818,7 @@ export class RunnerApiController {
           // Not on a steer: this consumes a delivered-stamp and reads as the opening context of
           // a turn, and a steer joins a turn that is already under way.
           if (t.kind !== 'steer') {
-            content = (await this.listEvents.appendFor(tx, sessionId, content)) ?? content;
+            content = (await this.listEvents?.appendFor(tx, sessionId, content)) ?? content;
           }
         }
       } else if (t.kind !== 'shell') {

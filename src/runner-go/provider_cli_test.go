@@ -62,6 +62,7 @@ func TestEveryFamilyWithPerActionHelpOwnsItsLeafHelp(t *testing.T) {
 	for family, actions := range map[string]map[string]string{
 		"provider": providerActionHelp,
 		"agent":    agentActionHelp,
+		"project":  projectActionHelp,
 	} {
 		if len(actions) == 0 {
 			t.Fatalf("%s has no per-action help to route", family)

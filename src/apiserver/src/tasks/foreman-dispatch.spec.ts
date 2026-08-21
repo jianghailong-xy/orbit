@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
+import { uuidToBase62 } from '@orbit/shared';
 import {
   FOREMAN_RETRY_BACKOFF_MS,
   MAX_CONSECUTIVE_FOREMEN,
@@ -8,18 +9,30 @@ import {
 } from './tasks.service';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 
+/** Real uuids throughout: the note now encodes the task id, and the codec rejects anything else. */
+const TASK_IDS = ['550e8400-e29b-41d4-a716-446655440000', '6ba7b810-9dad-11d1-80b4-00c04fd430c8'];
+/** What those tasks are called everywhere their reader can see them, `task_get` included. */
+const TASK_PUBLIC_IDS = TASK_IDS.map((id) => uuidToBase62(id));
+
 const LIST = {
-  id: 'list-1',
+  id: '9f4d7c62-2f4a-4a1e-9a3f-0a5f1c2d3e4b',
   ownerId: 'owner-1',
   title: 'FineWeb CC-MAIN-2025-26',
   workspaceId: 'workspace-1',
   minutes: 30,
 };
 
+interface ListEventWrite {
+  listId: string;
+  kind: string;
+  detail: string;
+}
+
 /**
  * Runs the foreman sweep against a stub that returns `stalled` from the candidate scan, and
- * records the task it files plus the run it dispatches. The scan's own SQL is asserted
- * separately — a stub cannot evaluate it, so the predicate is pinned as text.
+ * records the task it files, the run it dispatches, and the note it leaves on the list. The
+ * scan's own SQL is asserted separately — a stub cannot evaluate it, so the predicate is
+ * pinned as text.
  */
 function makeService(
   stalled: (typeof LIST)[] = [LIST],
@@ -27,6 +40,7 @@ function makeService(
 ) {
   const created: any[] = [];
   const executed: string[] = [];
+  const events: ListEventWrite[] = [];
   let sql = '';
   let historySql = '';
   const prisma = {
@@ -51,7 +65,13 @@ function makeService(
     task: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
-        return { id: `task-${created.length}` };
+        return { id: TASK_IDS[created.length - 1] };
+      },
+    },
+    taskListEvent: {
+      upsert: async ({ create }: { create: ListEventWrite }) => {
+        events.push(create);
+        return create;
       },
     },
   } as never;
@@ -63,6 +83,7 @@ function makeService(
   return {
     created,
     executed,
+    events,
     sweep: () =>
       (
         service as unknown as { dispatchStalledListForemen(): Promise<void> }
@@ -81,7 +102,7 @@ test('a stalled list gets a foreman task, filed and dispatched', async () => {
   assert.equal(f.created[0].isForeman, true);
   assert.equal(f.created[0].listId, LIST.id);
   assert.equal(f.created[0].assigneeId, LIST.workspaceId);
-  assert.deepEqual(f.executed, ['task-1']);
+  assert.deepEqual(f.executed, [TASK_IDS[0]]);
 });
 
 test('the foreman brief names the stall and stays a one-shot', async () => {
@@ -118,15 +139,46 @@ test('nothing is filed when no list is stalled', async () => {
 test('a failed dispatch does not stop the remaining lists', async () => {
   // One bad list must not cost every other list its coordinator — the sweep is the only thing
   // that will notice those stalls, and it runs once a minute.
-  const second = { ...LIST, id: 'list-2', title: 'Second' };
+  const second = { ...LIST, id: 'c9b1f0de-4a77-4d6c-bf3a-1e2d3c4b5a69', title: 'Second' };
   const f = makeService([LIST, second], {
-    failExecuteFor: ['task-1'],
+    failExecuteFor: [TASK_IDS[0]],
   });
 
   await f.sweep();
 
   assert.equal(f.created.length, 2);
-  assert.deepEqual(f.executed, ['task-2']);
+  assert.deepEqual(f.executed, [TASK_IDS[1]]);
+});
+
+test('the note that stall leaves on the list names the foreman by its public id', async () => {
+  // The detail is persisted and later replayed into agent-visible prose — `describeList` prints
+  // it verbatim, right beside the list's own base62 id — which is the boundary
+  // PublicIdInterceptor does not cover: it rewrites response *fields*, and a stored event detail
+  // is not one. Left as a uuid, the id naming *which* coordinator was dispatched is the one part
+  // of the note its reader cannot hand back to `task_get`.
+  const f = makeService();
+
+  await f.sweep();
+
+  assert.equal(f.events.length, 1);
+  assert.equal(f.events[0].kind, 'foreman_filed');
+  const detail = f.events[0].detail;
+  assert.ok(detail.includes(TASK_PUBLIC_IDS[0]), detail);
+  assert.equal(detail.includes(TASK_IDS[0]), false, 'the raw uuid reached the stored event');
+  // The rest of the note is unchanged — the encoding is the id's alone.
+  assert.match(detail, /停滞约 30 分钟，已自动派出协调任务 .+ 去诊断/);
+});
+
+test('the ids the dispatch itself uses stay uuids', async () => {
+  // Only the rendering boundary is encoded. execute() takes the id the database holds, and so
+  // does the list this is filed under — a base62 id in either matches no row. This is the
+  // control that says the fix moved the codec to the text and not into the plumbing.
+  const f = makeService();
+
+  await f.sweep();
+
+  assert.deepEqual(f.executed, [TASK_IDS[0]]);
+  assert.equal(f.events[0].listId, LIST.id);
 });
 
 // The scan is where every one of this feature's decisions actually lives, and a stub cannot

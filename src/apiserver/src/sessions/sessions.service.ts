@@ -7,7 +7,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma, RunStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -314,6 +314,8 @@ export class SessionsService {
        *  server-capped, a batch run is a closed set with a user-chosen cap. */
       tree?: { rootSessionId: string; depth: number };
       parentSessionId?: string;
+      dispatchOrigin?: SessionDispatchOrigin;
+      runSource?: SessionRunSource;
     },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
@@ -524,6 +526,8 @@ export class SessionsService {
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
+        dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
+        runSource: opts?.runSource ?? SessionRunSource.MANUAL,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
         source: dto.taskId ? 'user' : (opts?.source ?? 'user'),

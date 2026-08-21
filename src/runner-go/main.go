@@ -61,6 +61,7 @@ Usage:
   orbit resume [session-id]         Resume a session in its coding runtime
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
+  orbit project <command>           Read an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
   orbit provider <command>          List the providers a session or task may run on
@@ -173,6 +174,7 @@ running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGIN
 `,
 	"task":      taskHelp,
 	"task-list": taskListHelp,
+	"project":   projectHelp,
 	"session":   sessionHelp,
 	"agent":     agentHelp,
 	"provider":  providerHelp,
@@ -206,6 +208,7 @@ the session context (ORBIT_SESSION_ID / ORBIT_AGENT_ID / ORBIT_TASK_ID) from the
 var leafHelpFamilies = map[string]bool{
 	"task":      true,
 	"task-list": true,
+	"project":   true,
 	"session":   true,
 	"provider":  true,
 	// `agent` has had per-action help since it shipped and has never been able to print it —
@@ -278,6 +281,11 @@ func main() {
 	case "task-list":
 		if err := cmdTaskListCLI(args[1:], os.Stdin, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit task-list:", err)
+			os.Exit(1)
+		}
+	case "project":
+		if err := cmdProjectCLI(args[1:], os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit project:", err)
 			os.Exit(1)
 		}
 	case "session":

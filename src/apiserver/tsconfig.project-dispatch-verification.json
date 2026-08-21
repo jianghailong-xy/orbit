@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": { "outDir": "./build/pcc14", "incremental": false },
+  "include": [
+    "src/projects/project-dispatch-boundary-verification.spec.ts",
+    "src/projects/project-dispatch-boundary-verification.pg.spec.ts"
+  ],
+  "exclude": ["node_modules", "dist", "build"]
+}

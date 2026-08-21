@@ -24,11 +24,13 @@ import { RunnersController } from '../runners/runners.controller';
 import { SessionTagsController } from '../session-tags/session-tags.controller';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SharedController } from '../shared/shared.controller';
+import { ProjectsController } from '../projects/projects.controller';
 import { TaskListsController } from '../task-lists/task-lists.controller';
 import { TasksController } from '../tasks/tasks.controller';
 import { AdminController } from '../users/admin.controller';
 import { RunnerAgentsController } from '../runner-api/runner-agents.controller';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { RunnerServiceTokensController } from '../runner-api/runner-service-tokens.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
@@ -62,11 +64,13 @@ const CONTROLLERS = [
   SessionTagsController,
   SessionsController,
   SharedController,
+  ProjectsController,
   TaskListsController,
   TasksController,
   AdminController,
   RunnerAgentsController,
   RunnerApiController,
+  RunnerProjectsController,
   RunnerServiceTokensController,
   RunnerSessionsController,
   RunnerTasksController,

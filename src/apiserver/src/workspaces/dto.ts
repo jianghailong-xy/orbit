@@ -1,12 +1,22 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsInt,
   IsObject,
   IsOptional,
   IsString,
+  Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
+
+export class ProviderFallbackDto {
+  @IsString() @MinLength(1) provider!: string;
+  @IsOptional() @IsString() @MinLength(1) model?: string;
+}
 
 export class CreateWorkspaceDto {
   @IsString()
@@ -22,6 +32,12 @@ export class CreateWorkspaceDto {
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) disallowedTools?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20)
+  @ValidateNested({ each: true }) @Type(() => ProviderFallbackDto)
+  providerFallbacks?: ProviderFallbackDto[];
+  @IsOptional() @IsBoolean() canCreateTasks?: boolean;
+  @IsOptional() @IsBoolean() canDelegate?: boolean;
+  @IsOptional() @IsInt() @Min(1) maxConcurrentTasks?: number;
   // Default reasoning effort a new session inherits ('' = model default). Kept a plain string
   // (like the session DTO) so provider-specific values pass — codex adds 'minimal'.
   @IsOptional() @IsString() effort?: string;
@@ -52,6 +68,12 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsString() appendSystemPrompt?: string;
   @IsOptional() @IsString() systemPrompt?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) disallowedTools?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(20)
+  @ValidateNested({ each: true }) @Type(() => ProviderFallbackDto)
+  providerFallbacks?: ProviderFallbackDto[];
+  @IsOptional() @IsBoolean() canCreateTasks?: boolean;
+  @IsOptional() @IsBoolean() canDelegate?: boolean;
+  @IsOptional() @IsInt() @Min(1) maxConcurrentTasks?: number;
   @IsOptional() @IsString() effort?: string;
   @IsOptional() @IsPublicId() targetRunnerId?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) targetLabels?: string[];

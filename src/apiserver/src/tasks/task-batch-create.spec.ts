@@ -5,6 +5,8 @@ import { TASK_BATCH_CREATE_MAX, type CreateTaskBatchItemDto } from './dto';
 
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const EXISTING_TASK = '22222222-2222-4222-8222-222222222222';
+const PROJECT = '33333333-3333-4333-8333-333333333333';
+const OTHER_PROJECT = '44444444-4444-4444-8444-444444444444';
 
 type Written = { id: string; data: Record<string, unknown> };
 
@@ -13,8 +15,14 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
   const created: Written[] = [];
   const edges: Array<{ taskId: string; dependsOnTaskId: string }> = [];
   const owned = new Set(options.ownedTasks ?? [EXISTING_TASK]);
+  const locks: string[] = [];
   const tx = {
-    $queryRaw: async () => [],
+    $queryRaw: async (strings: TemplateStringsArray) => {
+      // The owner lock is the only raw statement this path issues; recorded so a test can assert
+      // whether a batch took it at all.
+      if (/FOR UPDATE/i.test(strings.join(''))) locks.push('lock');
+      return [];
+    },
     task: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         const row = { id: `task-${created.length}`, ...data };
@@ -38,6 +46,7 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
         where.id.in.filter((id) => paused.has(id)).map((id) => ({ id })),
     },
     modelProvider: { findFirst: async () => ({ slug: 'custom' }) },
+    project: { findFirst: async ({ where }: { where: { id: string } }) => ({ id: where.id }) },
     session: { findFirst: async () => null },
     task: {
       count: async ({ where }: { where: { id: { in: string[] } } }) =>
@@ -47,7 +56,7 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
   const service = new TasksService(prisma, {} as never, {
     publishTaskChanged: () => {},
   } as never);
-  return { service, created, edges };
+  return { service, created, edges, locks };
 }
 
 const item = (over: Partial<CreateTaskBatchItemDto>): CreateTaskBatchItemDto =>
@@ -167,4 +176,111 @@ test('a task filed into a paused list is born held', async () => {
     created.map((row) => row.data.dispatchHold),
     [true, false, false],
   );
+});
+
+// A parent named inside the batch. `ref` already lets a batch express ordering between items it
+// creates; `parentRef` is the other axis — what a decomposition needs, since a plan's steps are
+// parts of the thing being planned and their parent's id does not exist until this same call
+// writes it. Ordering (dependsOnRefs) and membership (parentRef) stay separate: one says when a
+// task may run, the other says what it is a part of.
+
+test('parentRef hangs an item under an earlier item of the same batch', async () => {
+  const { service, created } = makeService();
+  const tasks = await service.createMany(OWNER, {
+    tasks: [
+      item({ title: 'epic', ref: 'epic' }),
+      item({ title: 'step', parentRef: 'epic' }),
+      item({ title: 'substep', ref: 'step', parentRef: 'epic' }),
+    ],
+  });
+
+  // Three levels in one call is the shape this exists for: the tree is written top-down, so every
+  // parent id is known by the time the row naming it is created.
+  assert.deepEqual(
+    created.map((row) => row.data.parentTaskId),
+    [undefined, tasks[0].id, tasks[0].id],
+  );
+});
+
+test('parentRef and dependsOnRefs are separate axes on the same batch', async () => {
+  const { service, created, edges } = makeService();
+  const tasks = await service.createMany(OWNER, {
+    tasks: [
+      item({ title: 'epic', ref: 'epic' }),
+      item({ title: 'first', ref: 's0', parentRef: 'epic' }),
+      item({ title: 'second', parentRef: 'epic', dependsOnRefs: ['s0'] }),
+    ],
+  });
+
+  // Being part of something is not waiting for it: the parent link writes no dependency edge, and
+  // the one edge here is the one the caller actually asked for.
+  assert.deepEqual(edges, [{ taskId: tasks[2].id, dependsOnTaskId: tasks[1].id }]);
+  assert.deepEqual(
+    created.map((row) => row.data.parentTaskId),
+    [undefined, tasks[0].id, tasks[0].id],
+  );
+});
+
+test('a forward or unknown parentRef is rejected before anything is written', async () => {
+  const { service, created } = makeService();
+  await assert.rejects(
+    service.createMany(OWNER, {
+      tasks: [item({ title: 'step', parentRef: 'epic' }), item({ title: 'epic', ref: 'epic' })],
+    }),
+    /parentRef "epic" must name an earlier task in this batch/,
+  );
+  await assert.rejects(
+    service.createMany(OWNER, { tasks: [item({ parentRef: 'nope' })] }),
+    /parentRef "nope" must name an earlier task in this batch/,
+  );
+  assert.deepEqual(created, []);
+});
+
+test('naming both parentRef and parentTaskId is naming two parents', async () => {
+  const { service, created } = makeService();
+  await assert.rejects(
+    service.createMany(OWNER, {
+      tasks: [item({ ref: 'epic' }), item({ parentRef: 'epic', parentTaskId: EXISTING_TASK })],
+    }),
+    /parentRef and parentTaskId name two different parents/,
+  );
+  assert.deepEqual(created, []);
+});
+
+test('an item cannot be filed under a parent in another project', async () => {
+  const { service, created } = makeService();
+  await assert.rejects(
+    service.createMany(OWNER, {
+      tasks: [
+        item({ title: 'epic', ref: 'epic', projectId: PROJECT }),
+        item({ title: 'step', parentRef: 'epic', projectId: OTHER_PROJECT }),
+      ],
+    }),
+    /must be in the same project as its parent task/,
+  );
+  // The same rule read the other way: a subtask that names no project at all is not in its
+  // parent's project either, and inheriting one silently is how a project's task tree comes to
+  // contain work the project never claimed.
+  await assert.rejects(
+    service.createMany(OWNER, {
+      tasks: [
+        item({ title: 'epic', ref: 'epic', projectId: PROJECT }),
+        item({ title: 'step', parentRef: 'epic' }),
+      ],
+    }),
+    /must be in the same project as its parent task/,
+  );
+  assert.deepEqual(created, []);
+});
+
+test('a batch whose parents are all internal refs takes no owner lock', async () => {
+  const { service, locks } = makeService();
+  await service.createMany(OWNER, {
+    tasks: [item({ ref: 'epic' }), item({ parentRef: 'epic' })],
+  });
+
+  // The lock exists so a parent read here cannot be moved into another project before the child
+  // referencing it is written. A parent this transaction is itself creating is invisible to every
+  // other request until it commits, so there is no such race to serialize against.
+  assert.deepEqual(locks, []);
 });
