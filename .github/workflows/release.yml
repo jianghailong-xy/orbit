@@ -59,7 +59,7 @@ jobs:
       # build-dmg.sh compiles the `orbit` runner from source and freezes it into the .app (its
       # self-update is disabled, so the bundled version must match the app), which needs Go.
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
 
