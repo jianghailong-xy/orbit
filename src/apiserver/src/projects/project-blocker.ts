@@ -288,8 +288,8 @@ export const PROJECT_BLOCKER_TURN_KINDS: readonly ProjectBlockerKind[] = PROJECT
   .filter((kind) => PROJECT_BLOCKER_POLICY[kind].opensTurn);
 
 /**
- * §11.2's first seven rows: the kinds the RESOLUTION CHAIN itself produces (§7.4 re-answers every
- * one of them, from the current world, on every attempt).
+ * The kinds the RESOLUTION CHAIN itself produces (§7.4 re-answers every one of them, from the
+ * current world, on every attempt).
  *
  * They are singled out because a row of this kind is a DESCRIPTION of the last attempt, not an
  * additional gate on the next one — and treating it as a gate makes its own condition impossible to
@@ -309,6 +309,11 @@ export const PROJECT_BLOCKER_RESOLUTION_CHAIN_KINDS: readonly ProjectBlockerKind
   'RUNTIME_REQUIREMENT_UNMET',
   'NO_PROJECT_WORKSPACE',
   'NO_MATCHING_RUNNER',
+  // A missing coordinator is also re-answered by the dispatcher. Once a coordinator is assigned,
+  // the next attempt is the evidence that resolves the historical task-scoped refusal. Actual
+  // coordinator unavailability is separately observed as a PROJECT-scoped blocker and remains a
+  // hard gate through `openBlockersStoppingDispatch`.
+  'COORDINATOR_UNAVAILABLE',
 ];
 
 /**

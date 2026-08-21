@@ -395,6 +395,57 @@ test('unit 25D: the control loop dispatches the next task by itself', { skip, ti
             where: { projectId: target.projectId, resolvedAt: null } }), 0);
         });
 
+      await scenario('§11.4: assigning a coordinator unseals a task refused before assignment',
+        async () => {
+          const target = await world(services.db, 'pass-coordinator-recover',
+            { policy: ProjectAutomationPolicy.GUARDED_AUTO });
+          const work = await readyTask(services, target, 'work');
+          await services.db.projectMember.deleteMany({
+            where: { projectId: target.projectId, role: 'COORDINATOR' },
+          });
+
+          // Reproduce the historical refusal through the real dispatcher. The ordinary pass does
+          // not propose while the current snapshot has a project-wide coordinator outage; this
+          // action is the earlier generation that was already persisted before assignment.
+          const initial = await dispatch(services, target, work, 0);
+          assert.equal(initial.status, 'REFUSED');
+          assert.ok([
+            'COORDINATOR_NOT_ASSIGNED',
+            'COORDINATOR_NOT_PROJECT_MEMBER',
+          ].includes(initial.refusalCode ?? ''), initial.refusalCode ?? 'no refusal code');
+          assert.equal(await services.db.session.count({ where: { taskId: work } }), 0);
+
+          await services.db.projectMember.create({
+            data: { projectId: target.projectId, agentId: target.agentId, role: 'COORDINATOR' },
+          });
+          await deliver(services, target.projectId, 'user.project_updated', 'coordinator-assigned');
+          await drainToIdle(services);
+          const blocker = await services.db.projectBlocker.findFirstOrThrow({
+            where: {
+              projectId: target.projectId,
+              resolvedAt: null,
+              kind: 'COORDINATOR_UNAVAILABLE',
+              subjectType: 'TASK',
+              subjectId: work,
+            },
+          });
+          assert.equal(blocker.subjectId, work);
+
+          await ageRefusals(services, target.projectId);
+          await deliver(services, target.projectId, 'user.project_run_requested', 'run-now');
+          await drainToIdle(services);
+
+          const after = await dispatchActions(services, target.projectId);
+          assert.equal(after.at(-1)!.status, 'APPLIED',
+            'the restored coordinator can supersede the historical refusal');
+          assert.equal(await services.db.session.count({
+            where: { taskId: work, status: RunStatus.PENDING },
+          }), 1);
+          assert.equal(await services.db.projectBlocker.count({
+            where: { projectId: target.projectId, resolvedAt: null },
+          }), 0, 'the successful attempt resolves the task-scoped coordinator blocker');
+        });
+
       await scenario('§12.3 D1: a LEGACY-authority task is not the control loop’s to start',
         async () => {
           const target = await world(services.db, 'pass-legacy',

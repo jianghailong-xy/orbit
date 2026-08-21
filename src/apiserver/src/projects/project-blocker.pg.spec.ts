@@ -721,6 +721,19 @@ test('the guard stops the right dispatches and only those', { skip }, async () =
     assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['MERGE_CONFLICT'],
       'a chain-derived task row must not stop the attempt that recomputes it');
 
+    await raw('COORDINATOR_UNAVAILABLE', 'TASK', TASK);
+    assert.deepEqual((await guard(TASK)).map((r) => r.kind), ['MERGE_CONFLICT'],
+      'a historical missing-coordinator refusal must not block its recovery attempt');
+
+    await raw('COORDINATOR_UNAVAILABLE', 'PROJECT', PROJECT);
+    assert.deepEqual((await guard(OTHER_TASK)).map((r) => r.kind), ['COORDINATOR_UNAVAILABLE'],
+      'current project-wide coordinator unavailability remains a hard gate');
+    await client.query(`
+      DELETE FROM "project_blocker"
+       WHERE "project_id" = $1 AND "kind" = 'COORDINATOR_UNAVAILABLE'
+         AND "subject_type" = 'PROJECT'
+    `, [PROJECT]);
+
     // Somebody is being waited on inside one conversation. That stops that conversation, not the
     // rest of the project — otherwise one unanswered question freezes every other task.
     await raw('AWAITING_USER_INPUT', 'SESSION', SESSION);

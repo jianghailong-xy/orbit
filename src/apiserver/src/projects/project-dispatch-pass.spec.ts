@@ -371,7 +371,12 @@ test('§11 BL1: a PROJECT blocker stops everything; a TASK blocker stops its own
 });
 
 test('§11.4: a resolution-chain blocker must NOT stop the attempt that could clear it', () => {
-  for (const kind of ['WHO_UNRESOLVED', 'NO_MATCHING_RUNNER', 'PROVIDER_UNAVAILABLE'] as const) {
+  for (const kind of [
+    'WHO_UNRESOLVED',
+    'NO_MATCHING_RUNNER',
+    'PROVIDER_UNAVAILABLE',
+    'COORDINATOR_UNAVAILABLE',
+  ] as const) {
     const snapshot = input({ blockers: [blocker({ kind, subjectId: taskId(1) })] });
     assert.deepEqual(chosen(snapshot), [taskId(1)], kind);
   }
