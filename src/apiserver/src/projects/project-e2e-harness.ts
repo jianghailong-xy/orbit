@@ -20,6 +20,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
@@ -29,6 +30,7 @@ import {
   planProjectDecision,
   publicIdempotencyKey,
 } from './project-decision.service';
+import { ProjectDispatchPassService } from './project-dispatch-pass.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
@@ -57,8 +59,11 @@ export interface E2eServices {
   reconciler: ProjectReconcileService;
   coordinatorSessions: ProjectCoordinatorSessionService;
   dispatcher: ProjectTaskDispatcherService;
+  /** §7.8's pass — the production caller of `dispatcher`, driven by `reconciler.afterCommit`. */
+  dispatchPass: ProjectDispatchPassService;
   verdicts: ProjectVerificationVerdictService;
   reaper: ProjectAvailabilityReaperService;
+  acceptance: ProjectAcceptanceService;
   projects: ProjectsService;
   sessions: SessionsService;
   /** Post-commit announcements the loop made, so "it told the runner" is observable. */
@@ -68,7 +73,10 @@ export interface E2eServices {
 
 /** Every table the control loop can write, in dependency order. */
 const WORLD_TABLES = [
-  'project_blocker', 'project_event', 'project_decision', 'project_action', 'project_runtime',
+  'project_acceptance_audit', 'project_acceptance_criterion', 'project_merge_evidence',
+  'project_blocker', 'project_event', 'project_decision', 'project_action',
+  // Before `project`, because `project.accepted_run_id` references it (migration 0127).
+  'project_acceptance_run', 'project_runtime',
   'project_member', 'task_verification_failure', 'task_dependency', 'task_comment', 'task',
   'task_list', 'session', 'workspace', 'runner', 'model_provider', 'project', 'user',
 ];
@@ -101,7 +109,10 @@ export async function emptyWorld(client: Client): Promise<void> {
  * that record rather than transmit. Both are post-commit announcement sinks by contract (§8.3), so
  * recording them keeps every gate intact while making "the runner was told" an assertion.
  */
-export function servicesOn(url: string, options: { registerHandler?: boolean } = {}): E2eServices {
+export function servicesOn(
+  url: string,
+  options: { registerHandler?: boolean; registerDispatchPass?: boolean } = {},
+): E2eServices {
   const db = new PrismaClient({ datasources: { db: { url } } });
   const prisma = db as unknown as PrismaService;
   const announced = { queued: 0, sessions: [] as string[] };
@@ -127,10 +138,12 @@ export function servicesOn(url: string, options: { registerHandler?: boolean } =
   const dispatcher = new ProjectTaskDispatcherService(
     prisma, reconciler, authorization, queue, realtime,
   );
+  const dispatchPass = new ProjectDispatchPassService(prisma, reconciler, decisions, dispatcher);
   const verdicts = new ProjectVerificationVerdictService(prisma, reconciler);
   const reaper = new ProjectAvailabilityReaperService(prisma);
   const sessions = new SessionsService(prisma, queue, realtime);
-  const projects = new ProjectsService(prisma, sessions);
+  const acceptance = new ProjectAcceptanceService(prisma);
+  const projects = new ProjectsService(prisma, sessions, acceptance);
 
   // The production wiring, minus the timers: `onModuleInit` would also start §10.2's clock, and a
   // suite that asserts on exact pass counts cannot share the world with a background ticker.
@@ -140,11 +153,19 @@ export function servicesOn(url: string, options: { registerHandler?: boolean } =
     ? () => undefined
     : events.registerHandler(reconciler);
   const unregisterRotation = reconciler.registerRotationExecutor(coordinatorSessions);
+  // §7.8's production wiring. `registerDispatchPass: false` is for the scenarios that predate the
+  // pass and count decisions by hand — with it installed, a drain that reconciles a project with a
+  // ready task also dispatches it, which is the point of the unit and a surprise to a rig that was
+  // written when nothing did.
+  const unregisterDispatchPass = options.registerDispatchPass === false
+    ? () => undefined
+    : reconciler.registerDispatchPass(dispatchPass);
 
   return {
-    db, events, decisions, reconciler, coordinatorSessions, dispatcher, verdicts, reaper,
-    projects, sessions, announced,
+    db, events, decisions, reconciler, coordinatorSessions, dispatcher, dispatchPass, verdicts,
+    reaper, acceptance, projects, sessions, announced,
     dispose: async () => {
+      unregisterDispatchPass();
       unregisterRotation();
       unregisterHandler();
       events.onModuleDestroy();
@@ -164,6 +185,9 @@ export interface WorldOptions {
   /** Register a `model_provider` row for this slug, so a dispatch of it can be authorized. */
   providers?: Array<{ slug: string; runtime: string; enabled?: boolean; defaultModel?: string }>;
   coordinatorEnabled?: boolean;
+  /** What this project's DONE has to be checked against (§13.4). One criterion per non-blank
+   *  line, which is what `parseCriteria` decides and what an acceptance run is a checklist of. */
+  acceptanceCriteria?: string;
 }
 
 export interface World {
@@ -217,6 +241,7 @@ export async function world(
       automationPolicy: options.policy ?? ProjectAutomationPolicy.AUTO,
       maxConcurrentTasks: options.maxConcurrentTasks ?? 3,
       sessionBudgetPerDay: options.sessionBudgetPerDay ?? null,
+      acceptanceCriteria: options.acceptanceCriteria ?? null,
       coordinatorWorkspaceId: agentId,
     },
   });
@@ -255,6 +280,10 @@ export interface TaskOptions {
   completionPolicy?: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'VERIFICATION_PASSED';
   dependsOn?: string[];
   requiredCapabilities?: string[];
+  /** §12.3 D4's legacy switch. Off by default, and deliberately irrelevant to §7.8's pass. */
+  autoRunWhenReady?: boolean;
+  /** §7.4 precondition 1's park brake, for a scenario that needs a task nothing may dispatch. */
+  dispatchHold?: boolean;
 }
 
 export async function task(
@@ -278,6 +307,8 @@ export async function task(
       parentTaskId: options.parentTaskId ?? null,
       verifiesTaskId: options.verifiesTaskId ?? null,
       requiredCapabilities: options.requiredCapabilities ?? [],
+      ...(options.autoRunWhenReady === undefined ? {} : { autoRunWhenReady: options.autoRunWhenReady }),
+      ...(options.dispatchHold === undefined ? {} : { dispatchHold: options.dispatchHold }),
       ...(options.completionPolicy ? { completionPolicy: options.completionPolicy } : {}),
     },
   });

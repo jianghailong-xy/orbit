@@ -139,6 +139,33 @@ final class AgentDefaultsTests: XCTestCase {
                                                       model: "gpt-5.6-sol", catalog: catalog), .default)
     }
 
+    func testNewSessionEffortPrefersAccountLastPickOverLegacyWorkspaceDefault() {
+        let catalog = RunnerModelCatalog(codex: [
+            RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6-Sol", priority: nil,
+                            contextWindow: nil,
+                            reasoningLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+                            defaultReasoningLevel: "low", serviceTiers: nil),
+        ])
+
+        XCTAssertEqual(
+            AgentDefaults.newSessionEffort(
+                accountDefault: "ultra", legacyWorkspaceDefault: "max",
+                for: "codex", model: "gpt-5.6-sol", catalog: catalog),
+            .ultra)
+        XCTAssertEqual(
+            AgentDefaults.newSessionEffort(
+                accountDefault: "", legacyWorkspaceDefault: "max",
+                for: "codex", model: "gpt-5.6-sol", catalog: catalog),
+            .default,
+            "an explicit account Default must not fall through to the legacy workspace Max")
+        XCTAssertEqual(
+            AgentDefaults.newSessionEffort(
+                accountDefault: nil, legacyWorkspaceDefault: "max",
+                for: "codex", model: "gpt-5.6-sol", catalog: catalog),
+            .max,
+            "accounts without the preference retain the legacy workspace default")
+    }
+
     /// The seed a session runs under when nobody said. Mirrors the server's `resolvePermissionMode`
     /// (apiserver/src/common/permission-mode.ts): session intent, else the ACCOUNT default, else
     /// Auto. Never the workspace — migration 0094 dropped that column, and reading the field the
@@ -508,6 +535,14 @@ final class AgentDefaultsTests: XCTestCase {
         revision.markUserEdit() // pick the original model again
         XCTAssertFalse(revision.isPristine)
         XCTAssertEqual(revision.value, 2)
+    }
+
+    func testEffortSelectionRevisionRecordsReselectingTheSeed() {
+        var revision = EffortSelectionRevision()
+        XCTAssertTrue(revision.isPristine)
+        revision.markUserEdit() // explicitly re-select the legacy value already on screen
+        XCTAssertFalse(revision.isPristine)
+        XCTAssertEqual(revision.value, 1)
     }
 
     func testFriendlyNameFromConfiguredProvider() {

@@ -38,7 +38,7 @@ function controllerOver(rows: ReturnType<typeof row>[]): SessionsController {
   };
   // No live events: the test is about the replay half, and an endless live stream would hang it.
   const realtime = { streamForRun: () => EMPTY };
-  return new SessionsController({} as never, prisma as never, realtime as never, {} as never);
+  return new SessionsController({} as never, prisma as never, realtime as never, {} as never, {} as never);
 }
 
 const collect = async (c: SessionsController, sinceSeq: string, n: number): Promise<any[]> =>

@@ -452,6 +452,26 @@ export const normalizeEffortForProvider = (
   return allowed ? normalized : '';
 };
 
+/** Resolve the effort shown by an interactive new-session composer.
+ *
+ * Picking an effort in any session writes the account preference as a last-picked default. Some
+ * older workspaces still carry the per-workspace default that predated that preference; keep it as
+ * a compatibility fallback only. Letting that stale value win would make a freshly picked effort
+ * appear to revert the next time the composer opens. An explicit account Default ('') still wins. */
+export const newSessionEffortForProvider = (
+  provider: string | null | undefined,
+  accountEffort?: string | null,
+  workspaceEffort?: string | null,
+  model?: string | null,
+  modelCatalog?: RunnerModelCatalog | null,
+): string =>
+  normalizeEffortForProvider(
+    provider,
+    accountEffort ?? workspaceEffort ?? '',
+    model,
+    modelCatalog,
+  );
+
 // The permission mode a new session of the workspace starts in.
 export const MODE_OPTIONS = [
   { value: 'default', label: 'Default' },

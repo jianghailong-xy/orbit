@@ -87,6 +87,11 @@ function busy(patch: Partial<CoordinatorStatus> = {}): CoordinatorStatus {
     events: { pending: [], pendingEmptyReason: 'NO_PENDING_EVENT', recent: [] },
     acceptance: {
       criteria: 'It builds and the tests pass.', criteriaAbsentReason: null, attempt: '0',
+      run: null, runAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
+      doneGate: {
+        allowed: false, runId: null, refusalCode: 'ACCEPTANCE_MISSING', reason: null,
+        acceptanceDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      },
       lastRun: null, lastRunAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
       evidence: {
         verifications: { total: 0, pending: 0, pass: 0, fail: 0, inconclusive: 0, unresolvedFailures: 0 },
@@ -129,6 +134,11 @@ function legacy(): CoordinatorStatus {
     },
     acceptance: {
       criteria: null, criteriaAbsentReason: 'NO_ACCEPTANCE_CRITERIA', attempt: '0',
+      run: null, runAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
+      doneGate: {
+        allowed: false, runId: null, refusalCode: 'ACCEPTANCE_MISSING', reason: null,
+        acceptanceDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      },
       lastRun: null, lastRunAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
       evidence: {
         verifications: { total: 0, pending: 0, pass: 0, fail: 0, inconclusive: 0, unresolvedFailures: 0 },
@@ -554,6 +564,27 @@ describe('acceptance evidence is evidence, never a verdict', () => {
     const html = paint(<CoordinatorAcceptance status={busy({
       acceptance: {
         criteria: 'All checks pass.', criteriaAbsentReason: null, attempt: '2',
+        // A run that DID pass, against facts that have since moved. Both halves matter on screen:
+        // the conclusion is shown as the conclusion it was, and the gate is shown refusing — a
+        // screen that hid either would be answering "can this be closed" by itself.
+        run: {
+          id: 'ar1', attempt: '1', verdict: 'PASS', decidedBy: 'COORDINATOR_AGENT',
+          criteriaRevision: 'c'.repeat(64), inputDigest: 'a'.repeat(64), resultDigest: 'b'.repeat(64),
+          supersededAt: null, supersededReason: null,
+          startedAt: '2026-08-20T09:00:00.000Z', completedAt: '2026-08-20T09:04:00.000Z',
+          criteria: [
+            {
+              id: 'ac1', ordinal: 1, criterionKey: 'k1', criterionText: 'All checks pass.',
+              verdict: 'PASS', summary: '28/28 on a disposable database', evidence: {},
+              evidenceTaskId: null, evidenceSessionId: null, decidedAt: '2026-08-20T09:04:00.000Z',
+            },
+          ],
+        },
+        runAbsentReason: null,
+        doneGate: {
+          allowed: false, runId: null, refusalCode: 'ACCEPTANCE_EVIDENCE_STALE',
+          reason: 'a task changed after that run', acceptanceDigest: 'd'.repeat(64),
+        },
         lastRun: {
           id: 'ac9', decisionId: 'd9', type: 'RUN_PROJECT_ACCEPTANCE', status: 'APPLIED',
           subjectType: 'PROJECT', subjectId: 'p1', idempotencyKey: 'pc:v1:p:acceptance:2',
@@ -588,6 +619,15 @@ describe('acceptance evidence is evidence, never a verdict', () => {
     expect(html).toContain('merge state not reported');
     expect(html).toContain('worktree dirty');
     expect(html).toContain('RUN_PROJECT_ACCEPTANCE');
+    // The native record: what it concluded, criterion by criterion, and who concluded it.
+    expect(html).toContain('attempt 1');
+    expect(html).toContain('by COORDINATOR_AGENT');
+    expect(html).toContain('1. All checks pass.');
+    expect(html).toContain('28/28 on a disposable database');
+    // ...and the gate, reported rather than re-decided: the code the write path would refuse with,
+    // and the sentence that says what to do about it.
+    expect(html).toContain('ACCEPTANCE_EVIDENCE_STALE');
+    expect(html).toContain('Run acceptance again');
   });
 });
 

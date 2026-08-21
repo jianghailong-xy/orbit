@@ -1,0 +1,73 @@
+{
+  "verifiedAt": "2026-08-21T08:42:12Z",
+  "command": "docker rm -f -v <five exact container ids>",
+  "removed": [
+    {
+      "name": "pcc14-34amsq-pg16",
+      "containerId": "4bb687e82de289ef0ab4128dc72e8cc2e57bb160f821a0ee5f6e7b0169b2d462",
+      "byIdInspect": "absent",
+      "byNameInspect": "absent",
+      "anonymousVolume": "41274b66edcaf93307151d1b9c016912d993e9ae10e7c7a4f1ba7def5fcea06d",
+      "volumeInspect": "absent"
+    },
+    {
+      "name": "pcc15-34AOqoHF-pg16",
+      "containerId": "c1c760f68ca914f53187103cb83b0553e9571caa5290c7930ee490df2c3b1755",
+      "byIdInspect": "absent",
+      "byNameInspect": "absent",
+      "anonymousVolume": "211984ad8632ad3712b4598bac9b086bb598db09fb95cac0e880c55db09afba9",
+      "volumeInspect": "absent"
+    },
+    {
+      "name": "pcc16-34AQDd-pg16",
+      "containerId": "3b1cc2b8cfdfffc2abcd78d197ccf8829ab9b0f34eb812174fbbc21a47bf9a37",
+      "byIdInspect": "absent",
+      "byNameInspect": "absent",
+      "anonymousVolume": "901b56bc6bbefc6fa03ded406819a3381196e2ddec7960394ae570c93043f155",
+      "volumeInspect": "absent"
+    },
+    {
+      "name": "pcc17-34ASQ-pg16",
+      "containerId": "79f7f2de83f2ca5c63291503dae3a52ca16b489c29b00eef38b963f129c92f63",
+      "byIdInspect": "absent",
+      "byNameInspect": "absent",
+      "anonymousVolume": "c21db49d41f4a2b4a967f18595ae6b30eb96741c87e126529ad8d53c13bfc0a0",
+      "volumeInspect": "absent"
+    },
+    {
+      "name": "pcc18-34AUU-pg16",
+      "containerId": "0dd527d331735ab8414fd1f5529bd7c1eb15421e46be51c65e187d56774315af",
+      "byIdInspect": "absent",
+      "byNameInspect": "absent",
+      "anonymousVolume": "dc799c6b6570f6f345df6b09f0bbe912b087fc9167fa04432168b112b11cd743",
+      "volumeInspect": "absent"
+    }
+  ],
+  "protectedUnaffected": {
+    "orbit-postgres": {
+      "expectedId": "272e3999362c897618d01da5c244dfa007b77e418b85e6bf783e9fe4ad2a223a",
+      "actualId": "272e3999362c897618d01da5c244dfa007b77e418b85e6bf783e9fe4ad2a223a",
+      "expectedStartedAt": "2026-08-19T15:15:24.477443791Z",
+      "actualStartedAt": "2026-08-19T15:15:24.477443791Z",
+      "health": "healthy",
+      "note": "identical id AND StartedAt proves it was never restarted, let alone recreated"
+    },
+    "orbitVolumes": [
+      "orbit_orbit_pg",
+      "orbit_pg-socket"
+    ],
+    "orbitServices": [
+      "orbit-web=Up 8 hours (healthy)",
+      "orbit-apiserver=Up 8 hours (healthy)",
+      "orbit-gateway=Up 9 hours (healthy)",
+      "orbit-pgbackup=Up 41 hours",
+      "orbit-postgres=Up 41 hours (healthy)"
+    ]
+  },
+  "residue": {
+    "containersMatchingPcc": "none",
+    "portsStillListening": "none",
+    "containerCountBefore": 38,
+    "containerCountAfter": 33
+  }
+}

@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import {
-  normalizeBuiltinPermissionMode,
-  normalizeRuntimeProvider,
-} from '../common/runtime-provider';
+  AgentProvider,
+  ROOT_FALLBACK_PERMISSION_MODE,
+  base62ToUuid,
+  permissionModeAvailableOnRunner,
+  uuidToBase62,
+} from '@orbit/shared';
+import { normalizeRuntimeProvider } from '../common/runtime-provider';
 import { resolvePermissionMode } from '../common/permission-mode';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -294,13 +297,18 @@ implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
     const [runner] = await tx.$queryRaw<Array<{ runsAsRoot: boolean | null }>>(Prisma.sql`
       SELECT "runs_as_root" AS "runsAsRoot" FROM "runner" WHERE "id" = ${row.runnerId}::uuid
     `);
-    const permissionMode = normalizeBuiltinPermissionMode(
-      runtime,
-      '',
-      resolvePermissionMode(null, { preferences: row.ownerPreferences }),
-      !providerBuiltin,
+    // Freeze the owner's permission INTENT, not a model-dependent effective mode. Rotations use
+    // the runtime default model, so no model exists at this boundary; Queue resolves that model
+    // and performs the Auto -> Default compatibility fallback immediately before dispatch. The
+    // root-runner Bypass fallback is the deliberate exception: that runner can never honour the
+    // mode, so (as in SessionsService) persist the safe narrowing that the run will actually use.
+    const permissionIntent = resolvePermissionMode(null, { preferences: row.ownerPreferences });
+    const permissionMode = permissionModeAvailableOnRunner(
+      permissionIntent,
       runner?.runsAsRoot ?? null,
-    );
+    )
+      ? permissionIntent
+      : ROOT_FALLBACK_PERMISSION_MODE;
 
     const title = coordinatorSessionTitle(row.title);
     const resolution = {

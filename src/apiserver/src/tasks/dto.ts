@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { TaskStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
+import { TASK_TERMINAL_REASONS, type TaskTerminalReason } from './task-supersession';
 import {
   TASK_COMPLETION_POLICIES,
   TASK_VERDICTS,
@@ -28,6 +29,7 @@ import {
 const TASK_STATUSES = Object.values(TaskStatus);
 const TASK_COMPLETION_POLICY_VALUES = [...TASK_COMPLETION_POLICIES];
 const TASK_VERDICT_VALUES = [...TASK_VERDICTS];
+const TASK_TERMINAL_REASON_VALUES = [...TASK_TERMINAL_REASONS];
 
 /**
  * Bounds on one task's labels. Not a taxonomy — a stop on a caller that has confused the label
@@ -63,6 +65,15 @@ export class CreateTaskDto {
   // How this task's own completion is decided once it has subtasks. Omitted is MANUAL, which is
   // what every task has always been: nothing completes it but a status write. See §13.1.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
+  // The task this one exists to check (§13.2). Naming it here is what makes a verification
+  // filable on purpose rather than only by the automatic verifyOnDone path — and it is the
+  // precondition for everything the verdict does, since `verdict` is refused on a task that
+  // verifies nothing and `VERIFICATION_PASSED` counts only checks pointed at the subject.
+  //
+  // The subject must be owned by the caller, must not be this task, must not itself be a
+  // verification, and must be in the same project — aggregation reads one project's tasks, so a
+  // check filed across that line would be one nothing can ever count.
+  @IsOptional() @IsPublicId() verifiesTaskId?: string;
   @IsOptional() @IsDateString() dueDate?: string;
   // The earliest time this task may start automatically (ISO 8601, stored and returned UTC).
   // Omitted means unscheduled, which is what every task has always been. Distinct from dueDate on
@@ -124,6 +135,15 @@ export class CreateTaskBatchItemDto extends CreateTaskDto {
   // parentTaskId, which stays reserved for a parent that already exists: naming both is naming
   // two parents.
   @IsOptional() @IsString() @MinLength(1) @MaxLength(64) parentRef?: string;
+
+  // The subject this item verifies, created by this same batch and addressed by its `ref`. Same
+  // backward-only rule as the two above, and mutually exclusive with verifiesTaskId for the same
+  // reason parentRef is with parentTaskId: naming both names two subjects.
+  //
+  // It exists so a phase and the check on that phase land in ONE all-or-nothing write. Filed as
+  // two calls instead, the window between them is a phase whose completion policy is
+  // VERIFICATION_PASSED with nothing pointed at it — a parent that can never complete.
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(64) verifiesRef?: string;
 }
 
 export class CreateTasksBatchDto {
@@ -196,6 +216,24 @@ export class UpdateTaskDto {
   // How this task's completion is decided. Switching to MANUAL stops aggregation without undoing
   // whatever it last concluded; switching away from it hands the status to the subtasks.
   @IsOptional() @IsIn(TASK_COMPLETION_POLICY_VALUES) completionPolicy?: TaskCompletionPolicyValue;
+  // The task this one exists to check. Three-state: omit to leave the relation alone, null to
+  // detach it, an id to point this task at that subject. Refused once this task has concluded
+  // anything (§13.2 V7): the consequences already applied are keyed on (verifier, revision) and
+  // name the subject they were about, so re-pointing afterwards would leave the ledger asserting
+  // a conclusion about a task the verifier no longer checks. File a new verification instead.
+  @IsOptional() @IsPublicId() verifiesTaskId?: string | null;
+  // The later attempt that replaced this one (§13.6). Three-state like the links above: omit to
+  // leave it alone, null to unlink, an id to record that this attempt was superseded. Only a
+  // CANCELLED or FAILED task may name one, the successor must be in the same project, and linking
+  // writes nothing to `status` — the original outcome is the fact being kept.
+  @IsOptional() @IsPublicId() supersededByTaskId?: string | null;
+  // Why this task stopped, when its status alone does not say. Setting a successor implies
+  // 'SUPERSEDED' and needs no explicit value; 'ABANDONED' is for the other case, a task dropped
+  // with nothing replacing it.
+  @ValidateIf((_dto, value) => value !== null)
+  @IsOptional()
+  @IsIn(TASK_TERMINAL_REASON_VALUES)
+  terminalReason?: TaskTerminalReason | null;
   // This verification task's conclusion about its subject. Three-state like the pins above: omit
   // to leave it alone, null to revoke it, a value to record it. Only a task that names a subject
   // (verifiesTaskId) can carry one, and a revoked PASS reopens whatever it had completed.

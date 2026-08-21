@@ -216,6 +216,22 @@ export interface CoordinatorStatus {
     criteria: string | null;
     criteriaAbsentReason: AbsentReason | null;
     attempt: string;
+    /** §13.4's native acceptance record: the latest attempt, its per-criterion conclusions and the
+     *  digest of the facts it judged. Null until one has been run — and "never attempted" is
+     *  rendered as itself, because a screen that drew it as a clean slate would be claiming a pass
+     *  nobody ran. */
+    run: AcceptanceRun | null;
+    runAbsentReason: AbsentReason | null;
+    /** Whether a DONE would be allowed right now, decided by the same code the write path runs
+     *  (§13.4 AE2). Served so this screen can say what is missing BEFORE somebody presses a button
+     *  and gets a 409 — it is a report of the gate, never a second opinion about it. */
+    doneGate: {
+      allowed: boolean;
+      runId: string | null;
+      refusalCode: string | null;
+      reason: string | null;
+      acceptanceDigest: string;
+    };
     lastRun: CoordinatorAction | null;
     lastRunAbsentReason: AbsentReason | null;
     evidence: {
@@ -232,6 +248,52 @@ export interface CoordinatorStatus {
     };
   };
 }
+
+/** One stated criterion and what the attempt concluded about it (§13.4 clause 3). */
+export interface AcceptanceCriterion {
+  id: string;
+  ordinal: number;
+  criterionKey: string;
+  criterionText: string;
+  verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
+  summary: string | null;
+  evidence: unknown;
+  evidenceTaskId: string | null;
+  evidenceSessionId: string | null;
+  decidedAt: string | null;
+}
+
+/** One attempt at project-level acceptance. */
+export interface AcceptanceRun {
+  id: string;
+  attempt: string;
+  verdict: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
+  decidedBy: string;
+  criteriaRevision: string;
+  inputDigest: string;
+  resultDigest: string | null;
+  supersededAt: string | null;
+  supersededReason: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  criteria: AcceptanceCriterion[];
+}
+
+/**
+ * What each DONE refusal means, in the words somebody can act on.
+ *
+ * The codes are the server's closed set; an unknown one is NAMED rather than dropped, for the same
+ * reason `ABSENT_REASON_TEXT` names one — a refusal this build cannot explain is still a refusal,
+ * and hiding it would read as "nothing is wrong".
+ */
+export const DONE_REFUSAL_TEXT: Readonly<Record<string, string>> = {
+  ACCEPTANCE_MISSING:
+    'No usable acceptance PASS stands behind this project: none has been run, the latest has not concluded, it concluded FAIL or INCONCLUSIVE, or it was recorded by a person rather than the coordinator agent.',
+  ACCEPTANCE_EVIDENCE_STALE:
+    'An acceptance did pass, but not against these facts — a task, a verdict, the acceptance criteria or the target branch content has changed since it ran. Run acceptance again.',
+  ACCEPTANCE_BLOCKED:
+    'Something this project already knows about is unfinished: an open blocker, or a verification failure nobody has resolved.',
+};
 
 /**
  * One sentence per closed-set absent reason (`COORDINATOR_STATUS_ABSENT_REASONS`).

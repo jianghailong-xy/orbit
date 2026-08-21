@@ -223,6 +223,11 @@ interface Ledger {
   merges?: unknown[];
   blockers?: unknown[];
   groups?: Array<{ status: string; _count: { _all: number } }>;
+  /** §13.4's native acceptance record (unit 25A). Absent means this project has never run one,
+   *  which is the state every scenario in this file is written against. */
+  runs?: unknown[];
+  /** §13.7's merge receipts, the evidence a project's branches actually landed. */
+  mergeReceipts?: unknown[];
 }
 
 /** Both spellings a raw query arrives in: `Prisma.sql` (a Sql) and a tagged template. */
@@ -233,8 +238,27 @@ function sqlText(arg: unknown): string {
 
 function service(ledger: Ledger = {}): ProjectsService {
   const prisma = {
-    project: { findFirst: async () => ({ id: PROJECT }) },
-    task: { groupBy: async () => ledger.groups ?? [] },
+    project: {
+      findFirst: async () => ({ id: PROJECT }),
+      // The acceptance digest reads the criteria off the project row (§13.4 AE1).
+      findUnique: async () => ({ acceptanceCriteria: null }),
+    },
+    task: {
+      groupBy: async () => ledger.groups ?? [],
+      // The digest's `taskSet` / `verdicts` projections. Empty here: this file is about the
+      // control-loop sections, and a scenario that needed a populated digest would say so by
+      // setting `runs` as well.
+      findMany: async () => [],
+    },
+    // The two reads the acceptance summary and the DONE gate make. `projectBlocker` and
+    // `taskVerificationFailure` are the gate's own counts — the raw-SQL tallies above are the
+    // status page's, and they are deliberately not the same read.
+    projectAcceptanceRun: { findFirst: async () => (ledger.runs ?? [])[0] ?? null },
+    // §13.7's merge evidence. Empty here for the same reason `task.findMany` is: this file is
+    // about the control-loop sections, and merge-receipt.pg.spec owns the receipts themselves.
+    sessionMergeReceipt: { findMany: async () => ledger.mergeReceipts ?? [] },
+    projectBlocker: { count: async () => 0 },
+    taskVerificationFailure: { count: async () => 0 },
     $queryRaw: async (arg: unknown) => {
       const sql = sqlText(arg);
       // Most specific first: four of these read `project_action`, and the consumption query
@@ -243,6 +267,8 @@ function service(ledger: Ledger = {}): ProjectsService {
         return [{ tasksInFlight: 2, coordinatorSessionsLast24h: 4 }];
       }
       if (sql.includes('RUN_PROJECT_ACCEPTANCE')) return ledger.acceptance ?? [];
+      // The digest's `mergeEvidence` projection: newest generation per (requirement, branch).
+      if (sql.includes('FROM "project_merge_evidence"')) return [];
       if (sql.includes('a."decision_id" IN')) return ledger.decisionActions ?? [];
       if (sql.includes(`a."status"::text = 'CLAIMED'`)) return ledger.pendingActions ?? [];
       if (sql.includes('FROM "project_decision"')) return ledger.decisions ?? [];
@@ -256,6 +282,10 @@ function service(ledger: Ledger = {}): ProjectsService {
       if (sql.includes('LEFT JOIN "project_runtime"')) return ledger.head ?? [];
       throw new Error(`unexpected query: ${sql.slice(0, 120)}`);
     },
+    // The gate is evaluated in one transaction so its four projections come from one snapshot; the
+    // double hands the same client straight through, which is what every other transaction in this
+    // file's scenarios does.
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
   };
   return new ProjectsService(prisma as never, {} as never);
 }
@@ -450,9 +480,16 @@ test('another account’s project is the same 404 every project read gives', asy
 
 test('the status read is scoped by owner in the query, not after it', async () => {
   const seen: unknown[][] = [];
-  const prisma = {
-    project: { findFirst: async () => ({ id: PROJECT }) },
-    task: { groupBy: async () => [] },
+  const prisma: Record<string, unknown> = {
+    project: {
+      findFirst: async () => ({ id: PROJECT }),
+      findUnique: async () => ({ acceptanceCriteria: null }),
+    },
+    task: { groupBy: async () => [], findMany: async () => [] },
+    projectAcceptanceRun: { findFirst: async () => null },
+    sessionMergeReceipt: { findMany: async () => [] },
+    projectBlocker: { count: async () => 0 },
+    taskVerificationFailure: { count: async () => 0 },
     $queryRaw: async (arg: any) => {
       const sql = sqlText(arg);
       seen.push(arg.values ?? []);
@@ -469,6 +506,7 @@ test('the status read is scoped by owner in the query, not after it', async () =
       return [];
     },
   };
+  prisma.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma);
   await new ProjectsService(prisma as never, {} as never).coordinatorStatus(OWNER, PROJECT);
   assert.ok(seen[0].includes(OWNER), 'the head query must carry the owner');
 });

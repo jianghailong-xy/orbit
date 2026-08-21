@@ -870,6 +870,8 @@ func runLoop(cfg *RunnerConfig) bool {
 					if err := t.mergeResult(req.SessionID, MergeResultRequest{
 						OperationID: req.OperationID, LeaseOwner: req.LeaseOwner,
 						Status: res.Status, MergedSha: res.MergedSha, SourceSha: res.SourceSha, Message: res.Message,
+						TargetBranch: res.TargetBranch, TargetShaBefore: res.TargetShaBefore,
+						RebaseBaseSha: res.RebaseBase, Conflicts: res.Conflicts,
 					}); err != nil {
 						logln("merge-result POST failed for", req.SessionID+":", err)
 						if !isRetryableTransportError(err) {

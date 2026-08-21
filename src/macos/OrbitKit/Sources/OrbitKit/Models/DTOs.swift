@@ -58,7 +58,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
-    /// The agent's default reasoning effort ('' = model default, else low/medium/high/xhigh/max).
+    /// The workspace's legacy default reasoning effort ('' = model default; otherwise a
+    /// provider/model-defined raw value such as low/medium/high/xhigh/max/ultra).
     /// A new session seeds its effort from this — see the composer.
     public let effort: String?
     public let workDir: String?
