@@ -35,7 +35,7 @@
     "@nestjs/cli": "^11.0.24",
     "@nestjs/schematics": "^11.1.0",
     "@types/express": "^4.17.21",
-    "@types/node": "^20.16.5",
+    "@types/node": "^26.2.0",
     "prisma": "^5.20.0",
     "typescript": "^5.5.4"
   }
