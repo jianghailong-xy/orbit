@@ -357,3 +357,128 @@ test('an id in neither spelling is a 400 that names the field', () => {
     );
   }
 });
+
+// The second half of that, and the one the pipe cannot reach: a runnerId that is present but
+// BLANK. `PublicIdPipe` only decodes values that pass its trim test, so `""` and `"   "` are
+// skipped and arrive at the controller verbatim — and there they became two different bugs.
+// On create the blank went into `workspace.create`'s `@db.Uuid` column as a bare P2023 500
+// (`"   "` didn't even get that far: `assertOwnedRunner` queried `runner.findFirst` with it).
+// On PATCH `""` is falsy, so WorkspacesService.update read it as `{ disconnect: true }` and
+// answered 200 having quietly unbound the runner the caller was trying to name.
+const BLANK_SPELLINGS = { 'empty string': '', spaces: '   ', 'tab and newline': '\t\n' };
+
+test('a blank runnerId is a 400 on both routes, not a 500 and not an unbind', async () => {
+  for (const [label, runnerId] of Object.entries(BLANK_SPELLINGS)) {
+    const create = makeController();
+    await assert.rejects(
+      () =>
+        create.controller.createWorkspace(
+          RUNNER,
+          's1',
+          ORCHESTRATION_TOKEN,
+          asRouteReceivesIt('createWorkspace', { name: 'ux', runnerId }),
+        ),
+      { message: 'invalid runnerId' },
+      `create ${label}`,
+    );
+    // The point of the check is WHERE it fires: nothing reached the service, so no uuid column
+    // and no `runner.findFirst` ever saw the blank.
+    assert.equal(create.seen.create, undefined, `create ${label} reached WorkspacesService`);
+
+    const update = makeController();
+    await assert.rejects(
+      () =>
+        update.controller.updateWorkspace(
+          RUNNER,
+          's1',
+          ORCHESTRATION_TOKEN,
+          'a1',
+          asRouteReceivesIt('updateWorkspace', { runnerId }),
+        ),
+      { message: 'invalid runnerId' },
+      `update ${label}`,
+    );
+    assert.equal(update.seen.update, undefined, `update ${label} reached WorkspacesService`);
+    assert.equal(update.seen.published, undefined, `update ${label} published a phantom change`);
+  }
+});
+
+// Not a blank, and deliberately kept apart from one: `null` is already refused by the body's own
+// type check, and that is this route's whole contract for it — there is no in-band way to unbind
+// a runner here, which is exactly why `""` must not become one by accident.
+test('an explicit null runnerId stays the typed 400 it already was', async () => {
+  for (const [label, call] of [
+    [
+      'create',
+      (c: RunnerAgentsController) =>
+        c.createWorkspace(
+          RUNNER,
+          's1',
+          ORCHESTRATION_TOKEN,
+          asRouteReceivesIt('createWorkspace', { name: 'ux', runnerId: null }),
+        ),
+    ],
+    [
+      'update',
+      (c: RunnerAgentsController) =>
+        c.updateWorkspace(
+          RUNNER,
+          's1',
+          ORCHESTRATION_TOKEN,
+          'a1',
+          asRouteReceivesIt('updateWorkspace', { runnerId: null }),
+        ),
+    ],
+  ] as const) {
+    const { controller, seen } = makeController();
+    await assert.rejects(() => call(controller), { message: 'runnerId must be a string' }, label);
+    assert.equal(seen.create ?? seen.update, undefined, `${label} reached WorkspacesService`);
+  }
+});
+
+// Whatever a blank does, the spellings that work have to go on working — and identically on both
+// routes, since "create and update agree" is the property the blank case broke.
+test('the spellings that bind a runner are unchanged, and agree across create and update', async () => {
+  for (const [label, runnerId, expected] of [
+    ['base62', OTHER_RUNNER_B62, OTHER_RUNNER_UUID],
+    ['raw uuid', OTHER_RUNNER_UUID, OTHER_RUNNER_UUID],
+  ] as const) {
+    const create = makeController();
+    await create.controller.createWorkspace(
+      RUNNER,
+      's1',
+      ORCHESTRATION_TOKEN,
+      asRouteReceivesIt('createWorkspace', { name: 'ux', runnerId }),
+    );
+    assert.equal(create.seen.create?.runnerId, expected, `create ${label}`);
+
+    const update = makeController();
+    await update.controller.updateWorkspace(
+      RUNNER,
+      's1',
+      ORCHESTRATION_TOKEN,
+      'a1',
+      asRouteReceivesIt('updateWorkspace', { runnerId }),
+    );
+    assert.equal(update.seen.update?.runnerId, expected, `update ${label}`);
+  }
+  // And an omitted field still means what it meant: bind the caller's own runner on create,
+  // touch nothing on update.
+  const create = makeController();
+  await create.controller.createWorkspace(
+    RUNNER,
+    's1',
+    ORCHESTRATION_TOKEN,
+    asRouteReceivesIt('createWorkspace', { name: 'ux' }),
+  );
+  assert.equal(create.seen.create?.runnerId, 'r1');
+  const update = makeController();
+  await update.controller.updateWorkspace(
+    RUNNER,
+    's1',
+    ORCHESTRATION_TOKEN,
+    'a1',
+    asRouteReceivesIt('updateWorkspace', { name: 'renamed' }),
+  );
+  assert.equal(update.seen.update?.runnerId, undefined);
+});

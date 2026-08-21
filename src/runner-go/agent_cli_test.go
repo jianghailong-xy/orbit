@@ -215,6 +215,11 @@ func TestAgentCLIValidatesArguments(t *testing.T) {
 	}{
 		{name: "missing name", args: []string{"create"}, wantError: "--name is required"},
 		{name: "blank field", args: []string{"create", "--name", "x", "--work-dir", " "}, wantError: "--work-dir cannot be empty"},
+		// The client half of the runnerId blank boundary. A blank is not a spelling of an id, and
+		// the API refuses it with a 400 either way — but it never has to, because the request is
+		// not made: `requests` below asserts every case here stopped in the CLI.
+		{name: "blank runner id", args: []string{"create", "--name", "x", "--runner-id", ""}, wantError: "--runner-id cannot be empty"},
+		{name: "whitespace runner id", args: []string{"update", "343dlzsYWKo5z8l2M8tsD", "--runner-id", "  "}, wantError: "--runner-id cannot be empty"},
 		{name: "env without value", args: []string{"create", "--name", "x", "--env", "TOKEN"}, wantError: "KEY=VALUE"},
 		{name: "missing agent id", args: []string{"update", "--name", "x"}, wantError: "agent id is required"},
 		{name: "nothing to update", args: []string{"update", "agent-9"}, wantError: "no fields to update"},

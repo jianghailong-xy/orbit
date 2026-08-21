@@ -164,6 +164,16 @@ export class RunnerAgentsController {
     if (name !== undefined && name.length === 0) {
       throw new BadRequestException('name cannot be empty');
     }
+    // The pipe above only decodes ids that are PRESENT — `""` and `"   "` fail its trim test, so
+    // it skips them and they arrive here verbatim. Neither is a spelling of an id, and left alone
+    // each one is a different bug: on create the blank reaches a `@db.Uuid` column as a bare P2023
+    // 500, and on update `""` is falsy, which WorkspacesService reads as `{ disconnect: true }` and
+    // silently unbinds the runner the caller was trying to name. Same 400 as any other undecodable
+    // spelling, on both routes — detaching a runner is not something an empty string may say.
+    const runnerId = this.optionalString(input, 'runnerId');
+    if (runnerId !== undefined && runnerId.trim() === '') {
+      throw new BadRequestException('invalid runnerId');
+    }
     if (input.enableWorktree !== undefined && typeof input.enableWorktree !== 'boolean') {
       throw new BadRequestException('enableWorktree must be a boolean');
     }
@@ -174,7 +184,7 @@ export class RunnerAgentsController {
       systemPrompt: this.optionalString(input, 'systemPrompt'),
       appendSystemPrompt: this.optionalString(input, 'appendSystemPrompt'),
       workDir: this.optionalString(input, 'workDir'),
-      runnerId: this.optionalString(input, 'runnerId') ?? defaultRunnerId,
+      runnerId: runnerId ?? defaultRunnerId,
       enableWorktree: input.enableWorktree as boolean | undefined,
       env: this.normalizeEnv(input.env),
       defaultMergeTarget: this.optionalString(input, 'defaultMergeTarget'),
