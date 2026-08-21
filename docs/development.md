@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- Node.js 20 or newer and npm
+- Node.js 26 or newer and npm
 - PostgreSQL 16, or Docker with Compose for the local database
-- Go 1.23 or newer for the runner
+- Go 1.27 or newer for the runner
 - Swift 6.1 for OrbitKit; current Xcode for macOS and iOS app builds
 
 ## Local web and API setup

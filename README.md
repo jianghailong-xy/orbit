@@ -88,7 +88,7 @@ hardening guide](docs/self-hosting.md), including TLS and off-host backups.
 
 ### Develop locally
 
-Requirements: Node.js 20+, Docker or PostgreSQL 16, and Go 1.23+ when working on the runner.
+Requirements: Node.js 26+, Docker or PostgreSQL 16, and Go 1.27+ when working on the runner.
 
 ```bash
 npm install
