@@ -14,7 +14,10 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY src/shared/package.json ./src/shared/
 COPY src/apiserver/package.json ./src/apiserver/
 COPY src/web/package.json ./src/web/
-RUN npm ci --omit=optional
+# NOTE: plain `npm ci` (no --omit=optional) — TypeScript 7 is a native binary shipped in a
+# platform-specific optional package (@typescript/typescript-linux-*), which --omit=optional
+# would drop, leaving `tsc` unable to resolve its executable.
+RUN npm ci
 
 # Sources needed to build the control plane
 COPY src/shared ./src/shared

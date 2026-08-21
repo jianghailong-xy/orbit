@@ -680,7 +680,7 @@ test('migration 0123 is compatible with tasks that predate it', { skip: !URL, ti
           delete task.completionPolicy;
           delete task.verdict;
         }
-        const { hashDecisionInput } = await import('./project-decision.service');
+        const { hashDecisionInput } = await import('./project-decision.service.js');
         legacy.decisionInputHash = hashDecisionInput(legacy);
         const outcome = planProjectDecision(legacy, { decisionId });
         assert.deepEqual(outcome.aggregations, [],

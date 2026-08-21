@@ -66,6 +66,29 @@ npm test -w @orbit/apiserver
 npm test -w @orbit/web
 ```
 
+### TypeScript
+
+All three JavaScript workspaces compile with TypeScript 7, the native compiler. Two resolution modes are in play
+and they are not interchangeable:
+
+- `tsconfig.base.json` (shared, apiserver) sets `module` and `moduleResolution` to `nodenext`, because that output
+  is `require`d by Node. TypeScript 7 removed `node10` and `classic`; `nodenext` is the mode that models what Node
+  itself does with a package's `exports`, so a dependency Node could not load no longer typechecks clean. The one
+  thing it asks of source: a relative dynamic `import()` has to name the emitted `.js` file.
+- `src/web/tsconfig.json` stays on `module: ESNext` with `moduleResolution: Bundler`, which is what Vite resolves.
+
+`baseUrl` was removed in TypeScript 7 as well. The apiserver declared it without any `paths`, so it is simply gone.
+
+The apiserver builds with `tsc`, not `nest build`: TypeScript 7.0 ships the `tsc` executable without the
+programmatic compiler API, and `@nestjs/cli` refuses to run without it (the API is expected back in 7.1). Until
+then `nest build` and `nest start` are unavailable, `npm run build -w @orbit/apiserver` calls `tsc` directly, and
+`npm run dev:apiserver` runs `tsc --watch` beside `node --watch`. The emitted JavaScript is the same either way —
+`nest build` was a plain `tsc` invocation here, with no plugins or assets configured in `nest-cli.json`.
+
+`@nestjs/cli` still pins typescript 5.9.3, and npm hoists that copy to the repo root, so `node_modules/.bin/tsc`
+is 5.9.3 while each workspace's own `node_modules/.bin/tsc` is 7.x. Invoke `tsc` from a workspace, never from the
+repo root.
+
 Run the Go runner tests:
 
 ```bash
