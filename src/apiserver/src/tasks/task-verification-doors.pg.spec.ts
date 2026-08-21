@@ -39,6 +39,7 @@ import {
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectsService } from '../projects/projects.service';
 import { TasksService } from './tasks.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -124,7 +125,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
   assertCoordinatorPgUrlIsIsolated(URL);
   const client = new Client({ connectionString: URL });
   await client.connect();
-  const db = new PrismaClient({ datasources: { db: { url: URL } } });
+  const db = prismaClientFor(URL);
   t.after(async () => {
     await db.$disconnect();
     await client.end();

@@ -9,6 +9,9 @@
     "src/apiserver",
     "src/web"
   ],
+  "overrides": {
+    "deepmerge-ts": "^8.0.2"
+  },
   "scripts": {
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
     "build:runner": "bash scripts/build-binaries.sh dist-bin",

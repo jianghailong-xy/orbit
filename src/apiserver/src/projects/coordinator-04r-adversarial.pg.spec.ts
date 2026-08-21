@@ -7,6 +7,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * Fresh validation 04R counterexamples for the database companions introduced by 0112.
@@ -29,7 +30,6 @@ const PROJECT_OLD_WRITER = '00000000-0000-7000-8000-0000000004d2';
 const PROJECT_EPHEMERAL = '00000000-0000-7000-8000-0000000004d3';
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
-type PrismaCtor = new (config: { datasources: { db: { url: string } } }) => any;
 
 async function open() {
   assertCoordinatorPgUrlIsIsolated(URL);
@@ -38,8 +38,7 @@ async function open() {
   await probe.connect();
   await verifyCoordinatorPgIdentity(probe);
 
-  const { PrismaClient } = (await import('@prisma/client')) as unknown as { PrismaClient: PrismaCtor };
-  const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
+  const prisma = prismaClientFor(URL!);
 
   const wipe = async () => {
     await prisma.project.deleteMany({ where: { ownerId: OWNER } });

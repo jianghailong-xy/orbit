@@ -46,6 +46,7 @@ import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
 import { ProjectsService } from './projects.service';
 import { verificationVerdictActionKey } from './task-verification-verdict';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -219,7 +220,7 @@ test('a verification verdict reaches production through the reconcile pass',
     await verifyCoordinatorPgIdentity(identity);
     await emptyWorld(identity);
 
-    const db = new PrismaClient({ datasources: { db: { url: URL } } });
+    const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
     const events = new ProjectEventsService(prisma);
     const decisions = new ProjectDecisionService(prisma);

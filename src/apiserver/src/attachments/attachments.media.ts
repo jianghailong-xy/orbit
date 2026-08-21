@@ -21,6 +21,15 @@ export interface UploadedFile {
 }
 
 /**
+ * Re-view a Node `Buffer` as the `Uint8Array<ArrayBuffer>` Prisma 7 types a `Bytes` column
+ * as. A `Buffer` already *is* a `Uint8Array`, but it is typed over `ArrayBufferLike`, which
+ * TypeScript will not narrow on its own. The view shares the bytes — no copy.
+ */
+export function toBytes(buffer: Buffer): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(buffer.buffer as ArrayBuffer, buffer.byteOffset, buffer.byteLength);
+}
+
+/**
  * Validate an incoming upload, throwing the HTTP-mapped exception on rejection. Any MIME
  * type is accepted — the runner dispatches on it (image/PDF inlined as content blocks,
  * everything else written to the worktree). Pure (no I/O, no DI) so it can be unit-tested

@@ -35,15 +35,20 @@ ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
  && rm -rf /var/lib/apt/lists/*
 
-# node_modules carries the generated Prisma client + the prisma CLI used at boot.
+# node_modules carries the generated Prisma client + the prisma CLI used at boot. npm keeps
+# `prisma` and `@prisma/client` in the workspace's own node_modules rather than hoisting them,
+# so that tree ships too — without it neither the boot migration nor the server can resolve them.
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/src/apiserver/node_modules ./src/apiserver/node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/src/shared/package.json ./src/shared/package.json
 COPY --from=build /app/src/shared/dist ./src/shared/dist
 COPY --from=build /app/src/apiserver/package.json ./src/apiserver/package.json
+COPY --from=build /app/src/apiserver/prisma.config.ts ./src/apiserver/prisma.config.ts
 COPY --from=build /app/src/apiserver/dist ./src/apiserver/dist
 COPY --from=build /app/src/apiserver/prisma ./src/apiserver/prisma
 
 EXPOSE 3000
-# Apply migrations, then start the API.
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy --schema src/apiserver/prisma/schema.prisma && node src/apiserver/dist/main.js"]
+# Apply migrations, then start the API. Prisma 7 takes the connection URL from prisma.config.ts
+# instead of the schema, and finds that file relative to the working directory — hence the `cd`.
+CMD ["sh", "-c", "cd src/apiserver && node node_modules/prisma/build/index.js migrate deploy && cd /app && node src/apiserver/dist/main.js"]

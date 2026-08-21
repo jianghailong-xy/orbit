@@ -38,6 +38,7 @@ import {
   PlannedCoordinatorRotation,
   rotateCoordinatorSessionIdempotencyKey,
 } from './project-coordinator-session';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 // §7.5 · §8.4 · §12.4 on a real PostgreSQL server, against a DISPOSABLE one.
 //
@@ -231,7 +232,7 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
     `);
     assert.equal(migrated.rows[0]?.count, '1', 'the isolated database must have migration 0126');
 
-    const db = new PrismaClient({ datasources: { db: { url: URL } } });
+    const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
     const events = new ProjectEventsService(prisma);
     const decisions = new ProjectDecisionService(prisma);

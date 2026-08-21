@@ -16,6 +16,7 @@ import {
   PROJECT_SETTLED_CODE,
   STALE_CONFIG_REVISION_CODE,
 } from './project-coordinator-status';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * The unit-20 control/observability surface on real PostgreSQL, against a DISPOSABLE server.
@@ -57,7 +58,6 @@ const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
 
 type ClientCtor = new (config: { connectionString?: string; connectionTimeoutMillis?: number }) => Client;
-type PrismaCtor = new (config: { datasources: { db: { url: string } } }) => unknown;
 type Tx = Prisma.TransactionClient;
 
 async function connect(): Promise<Client> {
@@ -243,8 +243,7 @@ async function fixture(client: Client): Promise<Fixture> {
      VALUES ($1::uuid, $2::uuid, 'control surface', 'all merged', true, 'GUARDED_AUTO', 0, now())`,
     [project, owner],
   );
-  const { PrismaClient } = (await import('@prisma/client')) as unknown as { PrismaClient: PrismaCtor };
-  const acceptancePrisma = new PrismaClient({ datasources: { db: { url: URL! } } }) as {
+  const acceptancePrisma = prismaClientFor(URL!) as {
     $disconnect(): Promise<void>;
   };
   openPrismaClients.push(acceptancePrisma);

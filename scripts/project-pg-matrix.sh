@@ -43,7 +43,9 @@ NODE="${NODE:-node}"
 # @nestjs/cli pins, so take the apiserver copy when it is there.
 TSC="$API/node_modules/.bin/tsc"
 [ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
-PRISMA="$REPO/node_modules/.bin/prisma"
+# Prisma 7 is installed per workspace too — npm no longer hoists it to the repo root.
+PRISMA="$API/node_modules/.bin/prisma"
+[ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
 

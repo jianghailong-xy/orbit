@@ -115,7 +115,9 @@ npm run build:runner
 ## Database changes
 
 Edit `src/apiserver/prisma/schema.prisma`, generate a named development migration, and include the migration in
-the pull request. Do not edit a migration that may already have run in another environment.
+the pull request. Do not edit a migration that may already have run in another environment. The schema declares
+only the provider: Prisma reads the connection URL from `src/apiserver/prisma.config.ts`, which takes it from
+`DATABASE_URL` in the environment or in `.env`.
 
 ```bash
 npm run prisma:migrate -w @orbit/apiserver -- --name describe_the_change

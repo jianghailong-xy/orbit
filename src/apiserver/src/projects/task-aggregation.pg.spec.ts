@@ -27,6 +27,7 @@ import {
 } from './project-decision.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -178,7 +179,7 @@ test('parent aggregation converges on PostgreSQL', { skip: !URL, timeout: 180_00
   assert.equal(migrated.rows[0]?.count, '1', 'the isolated database must have migration 0123');
   await emptyWorld(identity);
 
-  const db = new PrismaClient({ datasources: { db: { url: URL } } });
+  const db = prismaClientFor(URL);
   const prisma = db as unknown as PrismaService;
   const events = new ProjectEventsService(prisma);
   const decisions = new ProjectDecisionService(prisma);
@@ -603,7 +604,7 @@ test('migration 0123 is compatible with tasks that predate it', { skip: !URL, ti
     const identity = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
     await identity.connect();
     await emptyWorld(identity);
-    const db = new PrismaClient({ datasources: { db: { url: URL } } });
+    const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
     const events = new ProjectEventsService(prisma);
     const decisions = new ProjectDecisionService(prisma);

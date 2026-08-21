@@ -86,7 +86,7 @@ import {
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
-import { assertValidUpload, MAX_UPLOAD_BYTES, UploadedFile } from '../attachments/attachments.media';
+import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -1597,7 +1597,7 @@ export class RunnerApiController {
         mimeType: f.mimetype,
         sizeBytes: f.size,
         fileName: f.originalname || null,
-        data: f.buffer,
+        data: toBytes(f.buffer),
       },
       select: { id: true },
     });

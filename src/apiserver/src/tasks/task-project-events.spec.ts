@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Sql } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
 import { TasksService } from './tasks.service';
 
 const OWNER = '00000000-0000-7000-8000-000000000801';
@@ -27,10 +27,10 @@ function runnableTask(id: string, projectId: string) {
 }
 
 function eventFixture(tasks: ReturnType<typeof runnableTask>[]) {
-  const eventWrites: Sql[] = [];
+  const eventWrites: Prisma.Sql[] = [];
   let transactions = 0;
   const tx = {
-    $executeRaw: async (query: Sql) => {
+    $executeRaw: async (query: Prisma.Sql) => {
       eventWrites.push(query);
       return 1;
     },

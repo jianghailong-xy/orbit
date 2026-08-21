@@ -36,6 +36,7 @@ import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
 import { ProjectsService } from './projects.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * Unit 22's shared rig: the production service graph, wired the way `ProjectsModule` wires it, over
@@ -113,7 +114,7 @@ export function servicesOn(
   url: string,
   options: { registerHandler?: boolean; registerDispatchPass?: boolean } = {},
 ): E2eServices {
-  const db = new PrismaClient({ datasources: { db: { url } } });
+  const db = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
   const announced = { queued: 0, sessions: [] as string[] };
   const queue = {

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertValidUpload, UploadedFile } from './attachments.media';
+import { assertValidUpload, toBytes, UploadedFile } from './attachments.media';
 
 @Injectable()
 export class AttachmentsService {
@@ -32,7 +32,7 @@ export class AttachmentsService {
         mimeType: f.mimetype,
         sizeBytes: f.size,
         fileName: f.originalname || null,
-        data: f.buffer,
+        data: toBytes(f.buffer),
       },
       select: { id: true },
     });
