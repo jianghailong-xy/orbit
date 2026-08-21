@@ -9,7 +9,11 @@
 
 ## 裁决
 
-**NOT ALL PASS — Project 保持 OPEN。**
+> **本节是第一轮（`1144099c`）的裁决，保留原样作为审计留痕。**
+> 单元 24 已修掉标准 8 的 F-22-02 与 F-22-04，第二轮验收在 `feat/project@3bd874e0` 上重做，
+> **现行裁决在[附录 C](#附录-c--在修复后的基线-3bd874e0-上重做验收)：11 PASS / 1 FAIL（仅标准 12），Project 仍保持 OPEN。**
+
+**第一轮（`1144099c`）：NOT ALL PASS — Project 保持 OPEN。**
 
 12 条项目级验收标准中 **10 条 PASS、2 条 FAIL**（标准 8、标准 12）。
 两条 FAIL 各自有一条可证伪的判据，写在下面 §3。
@@ -369,3 +373,155 @@ git diff --stat 1144099c 0e4fc164
 
 **无。** 两次独立运行、两套一次性数据库、两棵工作树，数字逐项一致。
 §3 的 **10 PASS / 2 FAIL** 与三条 blocker（BLK-23-01 / 02 / 03）维持原判。
+
+---
+
+## 附录 C — 在修复后的基线 `3bd874e0` 上重做验收
+
+单元 24（`34AeXHc…`，Task DONE，其 task-linked Session `34Aep3wUaiDAfscdrkMMh` 自然收口为
+`SUCCEEDED / task_done`，0 次重试）修掉了本报告 §6 交回的 BLK-23-01 与 BLK-23-02。
+本附录是在 **`feat/project@3bd874e0`**（唯一父提交 `1a358663`）上做的第二轮独立验收。
+
+`1a358663 → 3bd874e0` 一个提交，9 个文件、+981 −93：`project-reconcile.service.ts`（dead letter 写 blocker）、
+`project-blocker.ts` / `project-blocker-conditions.ts`（条件与 §11.4 重算）、`project-decision.service.ts`（快照投影
+`deadLetters`）、`project-e2e-recovery.pg.spec.ts`（+2 场景）、`project-coordinator-session.spec.ts`（契约核对）、
+契约 §7.3 一行、以及修复报告。**prisma schema 与迁移 0 改动。**
+
+### C.0 环境事故（如实记录）
+
+两件事影响了本轮的跑法，都不改变结论，但必须写下来：
+
+1. **runner 重启**打断了第一次 `project-e2e.sh`（日志停在 acceptance 第 11 条），其一次性容器
+   `pcc23d-e2e-pg16` 因 trap 未触发而成为孤儿；已手动删除后重跑。
+2. **专用审计工作树被环境清理掉了。** 本轮先按指令新建了
+   `/root/.orbit/worktrees/pcc23d-349bQHCJ-20260821`（`-b orbit/23-acceptance-r2-349bQHCJ 3bd874e0`），
+   跑到一半时它连同 `pcc16` / `pcc23` 等**全部非 session worktree** 被一次仓库级清理抹掉（`.git` 与
+   `node_modules` 均消失，`git worktree list` 里已无残留，分支 ref 全部幸存）。因此第二轮改在
+   **协调者指定的 session worktree** `/root/.orbit/worktrees/01a0211a-…723ab3` 上做，
+   分支 `orbit/23-project-acceptance-correct` 从 `1a358663` 合法快进到 `3bd874e0`（未 `reset`、未 `update-ref`）。
+   数据库仍然是全新的一次性容器（`pcc23e_*` / `pcc23f_*`）。
+3. **一次我自己造成的假红。** 变异探针脚本每轮重编译，却在最后一次还原 `.ts` 后**没有重新编译**，
+   于是紧接着的全量单测跑在带 M2 变异的 `build/` 上，报出 1 条失败
+   （`F22: an unacknowledged dead letter is a condition the recomputation keeps observing`）。
+   删掉 `build/` 重编译后复跑为 **0 fail**。记在这里是因为它恰好是一条真实的反向对照：那条断言确实会因该变异变红。
+
+### C.1 BLK-23-01 / F-22-02 逐条复验（协调者点名的六项）
+
+| 要求 | 实现处 | 证据 |
+| --- | --- | --- |
+| **DEAD 与 UNKNOWN_FAILURE 原子** | `deadLetter()` 在投递事务 `tx` 内写 blocker；调用点在同一事务里标 DEAD，异常则整体回滚 | 场景 `AC2: a dead letter that cannot record its blocker discards nothing`：在 blocker 写完之后注入失败 → `project_blocker` 为空、事件 `consumed_at` 仍 NULL、`disposition` NULL、`attempts` 停在 9（**那次没记成的尝试不计数**）；换成正常投递则 DEAD 与 blocker 同时出现。**两个方向都断言了** |
+| **detail 里没有 UUID** | `uuidToBase62(event.id)`、`publicIdempotencyKey(event.dedupeKey)`、`uuidToBase62(projectId)` | 场景 4 逐字断言 `deadEvents = [{eventId: <Base62>, kind, dedupeKey: 'task.updated:<Base62>', attempts: 10}]`；变异 **M3** 把 `eventId` 换成裸 uuid → 立刻变红 |
+| **重复 / 并发 / 重启不重复、不削弱** | `projectBlockerDedupeKey('UNKNOWN_FAILURE','PROJECT',…)` + `planProjectBlockers` 的 raise-or-touch；`lifecycle_generation` 由 `MAX+1` 在 INSERT 内分配 | 场景 `AC2: repeated, concurrent and post-restart dead letters are one episode` 通过；场景 4 复验同一 episode（`lifecycleGeneration = 1`，只动两列展示字段） |
+| **owner / requiredAction / recovery / nextCheckAt / escalation 可观测** | `PROJECT_BLOCKER_POLICY.UNKNOWN_FAILURE`：`owner=USER`、`recovery=HUMAN`、`severity=CRITICAL`、`escalateMs` | 场景 4 断言五项齐全 + `nextCheckAt = firstSeenAt + 30min`（BL5 的升级闹钟）+ `escalatedAt=null`；并且**从控制面读得到**：`projects.blockers()` 返回 1 条，`raisedByActionId` 指回那条 `RAISE_BLOCKER` 动作 |
+| **派发 / 授权 fail-closed** | PROJECT-subject 的开放 blocker 命中 `openBlockersStoppingDispatch()`；`blockerRunState()` 使 run_state 成为 `AWAITING_HUMAN` | 场景 4 **走生产授权路径**断言 `REFUSED / PROJECT_BLOCKED`、`session` 计数为 0；随后一次健康 pass 之后再派发**仍然** `PROJECT_BLOCKED` |
+| **健康 pass 不会把它悄悄清掉** | §11.4 从快照投影 `world.deadLetters` 重算；`capture()` 查 `disposition='DEAD'` 且晚于最近一次**人工**（`resolved_by <> 'AUTO'`）解除 | 场景 4：`settle()` 之后仍是**同一条** blocker（同 id、同 generation、occurrences 增加）；变异 **M2** 让重算看不见 dead letter → 立刻变红 |
+
+### C.2 反向对照（我自己的三个变异探针，独立于单元 24 自带的测试）
+
+每次只改一处、类型安全、跑 `project-e2e-recovery.pg.spec`（基线 **18/18**），跑完即还原：
+
+| 变异 | 改法 | 结果 |
+| --- | --- | --- |
+| 基线 | 不改 | **18 / 18 pass** |
+| **M1** 退回修复前行为 | `deadLetter` 的 `observed: [condition]` → 空集，于是不写任何 blocker | **14/18**，红 3 条（场景 4、5、6），`expected: 1 actual: 0` |
+| **M2** 重算看不见 dead letter | `deadLetterConditions` 的 `dead` 取空 | **15/18**，红 2 条（场景 4、5） |
+| **M3** 裸 UUID 落进 detail | `eventId: uuidToBase62(event.id)` → `event.id` | **16/18**，红 1 条（场景 4） |
+
+三条都证明：这套断言不是恒真的，修复是被测试**承重**的。
+
+### C.3 BLK-23-02 / F-22-04 复验
+
+- 契约 §7.3 的模板已改为 `pc:v1:<projectId>:rotate:<generation+1>`（`docs/project-coordinator-contract.md` 一行）。
+- **实现未动**：`project-coordinator-session.ts:121` 仍是 `pc:v1:${projectId}:rotate:${generation}`，
+  `git diff 1a358663 3bd874e0 -- project-coordinator-session.ts` 为空 —— **没有重写任何历史键**，正是本报告 §3.2 要求的方向。
+- 代码里 `coord-session` 仅剩一处注释（解释这段历史）。
+- 更好的是它不会再漂：新增测试 `the contract names this rotation key the way the ledger spells it`
+  **直接解析** `docs/project-coordinator-contract.md` §7.3 的表格，把模板代入 generation 后与 builder 的输出逐字比较。
+
+### C.4 全量矩阵（`3bd874e0`，全新一次性数据库）
+
+| 命令 | 结果 |
+| --- | --- |
+| `scripts/project-e2e.sh`（空库 141 迁移 → 两套件 → §10.3 审计） | acceptance **28/28**、recovery **18/18**（+2 新场景）、审计**零行**、`EXIT=0` |
+| 26 个 `.pg.spec`（模板库 + 每 spec 独立库） | **238 tests / 237 pass / 0 fail / 1 skip — ALL GREEN** |
+| `node --test "build/**/*.spec.js"` | **2149 / pass 1933 / fail 0 / skip 216**（单元 24 新增 6 条） |
+| `src/web` `vitest run` | **54 文件 / 797 通过** |
+| `go test -v -run Project ./...` | **87 PASS / 1 FAIL** —— 仍是 `TestKimiFindProjectRootFallsBackToCWD`，main 上逐字复现的既有环境红 |
+| `tsc -p tsconfig.test.json` / `tsconfig.project-reconcile-faults.json` | 均 exit 0 |
+
+### C.5 生产入口（本轮的新事实：**控制环已经上线了**）
+
+上一轮报告 §4 记的是"控制面尚未部署"。本轮复核发现**已经部署**，因此这次可以从真正的生产入口取证：
+
+| 检查 | 结果 |
+| --- | --- |
+| `orbit-apiserver` 镜像 | 建于 **2026-08-21T00:13**，`dist/projects/` 由 12 个文件涨到 **50 个** |
+| 部署的代码含单元 24 修复吗 | 含：`dist/projects/project-reconcile.service.js` 有 `projectDeadLetterCondition`，`project-blocker-conditions.js` 有 `deadLetterConditions` |
+| 共享库迁移 | **141 条**（上一轮是 124），`project_action / project_blocker / project_decision / project_event / project_member / project_runtime` 六张表全部存在 |
+| **§10.3 活性审计跑在真实生产库上**（只读） | **0 行违约** |
+| **标准 11 在真实存量数据上** | 6 个既有 Project 全部是 `coordinator_enabled=false` / `automation_policy=MANUAL` —— 迁移没有把任何一个既有项目意外打开。**这比夹具证据强** |
+| 生产现存 blocker / DEAD 事件 | 0 / 0 |
+
+### C.6 合并审计（本轮的第二个新事实）
+
+`main` 上出现了 **`0a684004 feat(projects): integrate project coordinator with 0.1.128 (#52)`** —— Project Coordinator 已经以 PR 的形式进入 main。
+
+| 检查 | 结果 |
+| --- | --- |
+| `feat/project` vs main | merge-base `7074270a`；**领先 100 / 落后 12** |
+| `git merge-tree --write-tree main feat/project` | **rc=1**，5 处冲突：`README.md`、`runner-api.controller.ts`（content），以及 `project-e2e-acceptance.pg.spec.ts`、`project-coordinator-validation-04.md`、`project-coordinator-contract-review-02-v1.3.md`（**add/add**） |
+| 冲突是内容分歧还是历史产物？ | **历史产物。** `git diff 3bd874e0 main -- src/apiserver/src/projects` 只有 **−2 行**（一个 spec 的空行），迁移目录 0 差异，契约 §7.3 在 main 上同样是 `rotate`。main 是把这份工作**复制**进去而非 merge 进去，所以同名文件两边各"新增"了一次 |
+| 结论 | 被验的实现**已经在 main 上、也已经在生产上**；`feat/project` 与 main 的差异是历史形状与本报告等文档，不是控制环代码 |
+
+### C.7 12 条逐条（`3bd874e0`）
+
+标准 1–7、9–11 的证据与 §3 相同，且本轮全部重跑复现；**标准 8 由 FAIL 转 PASS**，标准 12 仍 FAIL。
+
+| # | 上一轮 | 本轮 | 变化依据 |
+| --- | --- | --- | --- |
+| 1–7、9、11 | PASS | **PASS** | 全量矩阵复现；标准 11 另有生产存量数据佐证（C.5） |
+| **8** | **FAIL** | **PASS** | C.1 六项全部满足，C.2 三个变异探针证明其承重；`AC8×6` 之外新增两个 dead-letter 场景 |
+| 10 | PASS（仅代码与测试） | **PASS（含生产入口）** | 控制面已部署，`coordinator/status` 在线上 dist 里；C.5 |
+| **12** | **FAIL** | **FAIL** | 合并状态这一半已核对且良好（C.6），但"全部任务完成"这一半仍不成立 —— 见 C.8 |
+
+**现行裁决：11 PASS / 1 FAIL。Project 保持 OPEN。**
+
+### C.8 标准 12：被取代的历史尝试 vs 仍在进行的工作
+
+协调者要求把两者分开，这里分开写。**本单元全程只读这三条，未 restart / update / archive / cancel / complete 任何一条 Task 或 Session。**
+
+Project 现有 47 个 Task：**43 DONE / 1 FAILED / 3 IN_PROGRESS**（含本任务）。
+
+**A. 被取代的历史尝试（技术内容已修复并被独立复审 PASS）——3 条**
+
+| Task | 持久状态 | Session | 为什么说它被取代 |
+| --- | --- | --- | --- |
+| `34A8FPCBxkJsgE1vpBtJe` 04R | **FAILED** | FAILED，08-20 04:34 已归档 | 身份迁移复审失败；后续 03A 修复 |
+| `34A9hr8j41AsVajr3Uo8j` 04R2 | **IN_PROGRESS** | AWAITING_INPUT，未归档 | 钉在被验 SHA `e2e426c6` 的历史 FAIL（P1-04R2-01）；03C 已修 |
+| `34ABi44CV2Iun9MoSFPgz` 04R3 | **IN_PROGRESS** | AWAITING_INPUT，未归档 | 钉在被验 SHA `f2883075` 的历史 FAIL（P1-04R3-01）；03D 已修 |
+
+三者的技术结论都已被 **04R4 `34AE0NtfR02I92WqYFxqD`（DONE，PASS）** 在 `d4392b28` 上独立复审推翻/闭环，证据提交 `c6e21de5`。本轮核对：`d4392b28` 与 `c6e21de5` 均为 `3bd874e0` 的祖先。
+
+**B. 仍在进行的工作——0 条**（除本验收任务 23 自身外，没有任何一条真正未完成的工作）。
+
+**因此标准 12 的失败是"记录未收口"，不是"工作未做完"。** 但标准 12 写的是"全部任务完成后"，
+而持久状态里确实还有 1 个 FAILED、2 个 IN_PROGRESS（各带一条未归档的 AWAITING_INPUT Session）。
+按用户的硬性约束，这段历史必须保持为真实审计证据，**不得**为了凑 PASS 去改写它 —— 所以本单元不改，
+判 FAIL，并把收口动作交回外部控制台/协调者。
+
+### C.9 blocker 状态
+
+| id | 状态 | 说明 |
+| --- | --- | --- |
+| **BLK-23-01**（标准 8，dead letter 未 fail-closed） | **已关闭** | 单元 24 修复；C.1 六项复验 + C.2 三个反向对照 |
+| **BLK-23-02**（F-22-04，契约 §7.3 拼写） | **已关闭** | 文档已改、实现未动、并加了解析契约的守卫测试（C.3） |
+| **BLK-23-03**（标准 12，记录未收口） | **仍开放** | owner = **外部控制台 / Coordinator**（执行 Agent 被明确禁止改写这段历史）。所需动作：为 04R / 04R2 / 04R3 做终态归档决策，指向 04R4 作为后继裁决；**不得**把历史 FAIL 改判 DONE。`nextCheckAt`：归档动作完成后立即复验，建议 **2026-08-22** 前 |
+
+### C.10 收尾
+
+一次性容器 `pcc23d-e2e-pg16`（孤儿，已手动删）/ `pcc23e-e2e-pg16` / `pcc23e-mut-pg16` / `pcc23e-mut2-pg16` /
+`pcc23e-pgspec-pg16` / `pcc23f-pgspec-pg16` 及其全部库均已删除；三个变异探针已还原且**已重新编译验证**
+（`build/` 中 `const dead = input.world.deadLetters ?? []`、`eventId: uuidToBase62(event.id)`、`observed: [condition]` 均为原值）；
+共享 `orbit-postgres` 本轮**只读**（只跑了活性审计与状态查询）；任务工作树除本报告外 clean。
+部署工作树暂存状态全程未动：`M README.md` / `D docs/project-agent-contract.md`，
+staged binary diff SHA-256 恒为 `966c46d48ff68e27f9a479eca869e92a8f203d6c2a4466eaa8d48a2d9fcf8105`，unstaged 0 字节。
