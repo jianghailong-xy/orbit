@@ -1,4 +1,4 @@
-# Project Coordinator 控制环契约 v1.16
+# Project Coordinator 控制环契约 v1.17
 
 > **状态**：已冻结（frozen）。本文件是 `Project Coordinator 持续推进控制环` 的**单一权威契约**。
 > 03–23 阶段的每个实现与验证任务都必须与本文件一致；实现与本文件冲突时，先改本文件并说明理由，再改代码。
@@ -39,6 +39,8 @@
 > 写成 §12.1 的**唯一一条待落地步骤 6j**。前两处是"同一件事两个读集"，第三处是"一条拒绝在数据库上写不进去"。
 > **v1.16 只动契约文档与契约自检**：新 kind 的 CHECK 迁移、策略表、condition/dedupe 与 required action 由步骤 6j
 > 那个最小实现任务落地；在那之前 §11.2 的 `落地` 列如实写着它还没落地，三条闭合断言（PAC `00.14`）逐条看着它。
+>
+> **v1.17 修订**：**不是**一轮对本文的审查闭环 —— 与 v1.15 / v1.16 一样，这一轮关闭的是**本文与它自己所描述的那个部署之间**的缺口，由这套控制环在真实项目上的一次静默停摆提出，记为 `PC-CX-63`，逐项闭环在 **§33**。缺陷是这样发生的：一次真实的失败运行把 Task 落到 `FAILED`（runner 回报与 reaper 两条路径都是 `reclaimStalledTask(..., FAILED)`），§7.4 第 1 条对 `FAILED` 恒答 `TASK_NOT_OPEN`，于是 §9.5 Q3 中间那三行**一行都到不了**；`failureCount = 1` 又远低于最后一行的阈值，`TEST_FAILED` blocker 也不会开；§7.2 TU2 当年写的是"任务失败永不开 turn"。三条**各自都正确**的规则叠起来的结果是：没有派发、没有 blocker、没有 turn，`runStateOf` 落到守卫 7 的 `PLANNING`，项目每 60 秒醒一次、什么都决定不了，协调器直到有人手动发一条消息才参与 —— 契约的每一条都被满足，而 §10.1 AC3 要禁止的那件事从内部发生了。规范条款落在 §6.2 · §7.2（TU2 重写、TU4 扩到六条、新增 TU6 / TU7 / TU8 / TF6、TF4 补一行）· §9.5 Q3-d · §11.2 BL9 · §18 · §22.8。v1.17 同样**不是措辞修订** —— 它给控制环加了一个**新的语义 turn 原因** `TASK_FAILURE`，把它按"原因优先于后果"排进 TU4 的全序（`MANUAL ≻ VERDICT ≻ TASK_FAILURE ≻ BLOCKER_DECISION ≻ ACCEPTANCE ≻ REPLAN`），把一次失败的身份冻结成 **`(taskId, dispatchAttempt)`**（TF6：DA1 已经保证它单调、不清零、不复用，因此重复/乱序投递同键、人修复后的再次失败换键），并把"协调器不是重试机制"这条 TU2 真正要保护的性质**原封不动地交给已冻结的 TR1 / TR2 / TR3** —— 一个失败 episode 恰好一次 turn，用不掉就按 TR3 变成一条 `owner = USER` 的 `COORDINATOR_NO_PROGRESS`。本轮**只动契约与纯决策**（§7.2 / §7.6 的判定）；把这条决策变成一次真正投递出去的 turn（原子投递、事件消费、TR2 窗口落库、唤醒）是下一个单元的事，在那之前 §18 单元 26 的 `测试位置` 列如实写着它覆盖的是判定。
 >
 > **适用分支**：`feat/project`（`main` 里没有 `Project`）。
 > **代码基线**：`b810be89 docs(project): close the seven contradictions the contract review found`。
@@ -583,8 +585,17 @@ v1.4 的答案是**把输入说全，并把它命名为 `decisionInput`**：三�
   "blockersCleared": [ "<blockerId>" ],
   "nextWakeAt": "2026-08-19T01:02:00.000Z",
   "nextWakeReason": "in-flight session may end",
-  "turnReason": "REPLAN",                 // §7.2 TU4 选中的那一个；无 turn 时为 null
-  "suppressedTurnReasons": [ "ACCEPTANCE" ],   // TU4 里同时为真但被全序压下去的（审计用，v1.4）
+  "turnReason": "TASK_FAILURE",           // §7.2 TU4 选中的那一个；无 turn 时为 null
+  "suppressedTurnReasons": [ "BLOCKER_DECISION" ],  // TU4 里同时为真但被全序压下去的（审计用，v1.4）
+  "turn": {                               // §7.6 对选中原因的完整答复（v1.17）
+    "reasonCode": "TASK_FAILURE",
+    "reasonDigest": "<sha256>",           // TR1
+    "turnFacts": [ "<taskId>#<dispatchAttempt>" ],  // TF6，摘要就是对它取的
+    "verdict": "OPEN",                    // OPEN | RATE_LIMITED | NO_PROGRESS | IN_FLIGHT | NO_LIVE_RUN（TU8）
+    "idempotencyKey": "pc:v1:…:turn:<generation>:<reasonDigest>",
+    "windowEndsAt": null,                 // TR2-b ③，被限频时才有
+    "lastTurnSessionId": null             // TR3 的 detail，判定 NO_PROGRESS 时才有
+  },
   "consumedEventIds": [ "<eventId>" ]
 }
 ```
@@ -639,13 +650,14 @@ v1.1 把触发条件改成一张**表**，每条有一个 `reasonCode`，并且�
 |---:|---|---|---|
 | 1 | `MANUAL` | 用户显式要求（`signals` 里有 `user.manual_trigger`，§6.1 S7） | **全部未消费** `user.manual_trigger` 信号的 `dedupeKey` 排序摘要（TF5，v1.5） |
 | 2 | `VERDICT` | 出现 FAIL / INCONCLUSIVE 的验证 verdict，且 §13.2 的机械退回已完成 | `(verifierTaskId, verdictRevision, verdict)` 排序摘要（TF4） |
-| 3 | `BLOCKER_DECISION` | 存在一条 open blocker，其 kind ∈ **`{WHO_UNRESOLVED, MERGE_CONFLICT, VERIFICATION_FAILED, DEPENDENCY_CYCLE}`**（§11.2 中 `opensTurn = ✔` 的全部行），**且该 blocker `escalated_at IS NULL`**（§11.2 BL6，v1.2 新增） | 触发的那些 blocker 的 `(kind, subjectId, lifecycleGeneration, conditionVersion)` 排序摘要（TF2 / TF4） |
-| 4 | `ACCEPTANCE` | 全部 Task 收敛，准备进入 `ACCEPTANCE`（§13.4） | `(acceptanceDigest, acceptanceAttempt)`（TF4） |
-| 5 | `REPLAN` | `runStateOf` = `PLANNING` 且没有任何可派发任务，且没有 open blocker（"图不够，需要重规划"） | 全部 Task 的 `(id, status, parentTaskId, dependsOnTaskIds, verifiesTaskId)` 排序摘要 |
+| 3 | `TASK_FAILURE` | 存在至少一个 Task，`status = FAILED` 且它没有 live Session —— 那次运行已经结束，没有人在跑它，而控制环**没有任何机械动作**能推进它（§7.4 第 1 条的 `TASK_NOT_OPEN` 让它不再被派发，§9.5 Q3 的退避阶梯对一个已经 `FAILED` 的 Task 不再适用）。v1.17 新增，见 TU2 与 TF6 | 触发的那些 Task 的 `(taskId, dispatchAttempt)` 排序摘要（TF6 / TF4） |
+| 4 | `BLOCKER_DECISION` | 存在一条 open blocker，其 kind ∈ **`{WHO_UNRESOLVED, MERGE_CONFLICT, VERIFICATION_FAILED, DEPENDENCY_CYCLE}`**（§11.2 中 `opensTurn = ✔` 的全部行），**且该 blocker `escalated_at IS NULL`**（§11.2 BL6，v1.2 新增） | 触发的那些 blocker 的 `(kind, subjectId, lifecycleGeneration, conditionVersion)` 排序摘要（TF2 / TF4） |
+| 5 | `ACCEPTANCE` | 全部 Task 收敛，准备进入 `ACCEPTANCE`（§13.4） | `(acceptanceDigest, acceptanceAttempt)`（TF4） |
+| 6 | `REPLAN` | `runStateOf` = `PLANNING` 且没有任何可派发任务，且没有 open blocker（"图不够，需要重规划"） | 全部 Task 的 `(id, status, parentTaskId, dependsOnTaskIds, verifiesTaskId)` 排序摘要 |
 
-**TU1（唯一规则）**：**是否开 turn 只由上表决定，不由 blocker 的 `owner` 决定。** `owner` 回答"谁能解决"，`opensTurn` 回答"控制环要不要为它叫醒协调器"，两者是两个问题。为防止它们各自漂移，§11.2 冻结一条可机械核对的双向约束 **BL4**：`opensTurn = ✔` ⟺ `owner = COORDINATOR`。上表第 3 行的四个 kind 因此**恰好**是 §11.2 中 `owner = COORDINATOR` 的全部行 —— 契约测试逐字比对这两处。
+**TU1（唯一规则）**：**是否开 turn 只由上表决定，不由 blocker 的 `owner` 决定。** `owner` 回答"谁能解决"，`opensTurn` 回答"控制环要不要为它叫醒协调器"，两者是两个问题。为防止它们各自漂移，§11.2 冻结一条可机械核对的双向约束 **BL4**：`opensTurn = ✔` ⟺ `owner = COORDINATOR`。上表第 4 行的四个 kind 因此**恰好**是 §11.2 中 `owner = COORDINATOR` 的全部行 —— 契约测试逐字比对这两处。
 
-**TU4（唯一裁决：首个为真者胜，v1.4 冻结，PC-CX-23）**：v1.1–v1.3 把上表当成五条**各自独立**的触发条件，既没有互斥守卫也没有优先级，而它们**确实会同时为真**：
+**TU4（唯一裁决：首个为真者胜，v1.4 冻结，v1.17 扩到六条，PC-CX-23 / PC-CX-63）**：v1.1–v1.3 把上表当成五条**各自独立**的触发条件，既没有互斥守卫也没有优先级，而它们**确实会同时为真**：
 
 - 全部 Task 收敛、验证全 PASS、无 blocker、无 live Session、无未收敛的验收动作 ⇒ `runStateOf = PLANNING` 且无可派发任务且无 open blocker ⇒ **`REPLAN` 为真**；同一份事实又满足"全部 Task 收敛，准备进入 `ACCEPTANCE`" ⇒ **`ACCEPTANCE` 也为真**。
 - 验证 FAIL 的机械退回完成 ⇒ **`VERDICT` 为真**；同一次退回按 §13.2 必然开一条 `VERIFICATION_FAILED` blocker，它在 `opensTurn = ✔` 的列表里 ⇒ **`BLOCKER_DECISION` 也为真**。
@@ -654,21 +666,54 @@ v1.1 把触发条件改成一张**表**，每条有一个 `reasonCode`，并且�
 
 v1.4 用与 §4.2 RS0 **完全相同**的手法解决：不补互斥守卫（手写的互斥在下一个组合上必然漏），而是给上表一个**总序**，**按序求值、首个为真者胜**。上表的"序"列即是该全序：
 
-> `MANUAL ≻ VERDICT ≻ BLOCKER_DECISION ≻ ACCEPTANCE ≻ REPLAN`
+> `MANUAL ≻ VERDICT ≻ TASK_FAILURE ≻ BLOCKER_DECISION ≻ ACCEPTANCE ≻ REPLAN`
 
 **为什么是这个顺序**，每一格都能从已冻结的条款读出来，不是新发明：
 
 - **人优先于机器**（1 最高）：`user.manual_trigger` 是一个人的显式请求；§9.3 与项目 instructions 都把最终控制权留给人，而一个被别的原因顶掉的显式请求就是一次静默忽略。
-- **原因优先于后果**（2 ≻ 3）：`VERIFICATION_FAILED` blocker **是** verdict 的产物（§13.2 的 FAIL 第 ④ 条）。选后果就丢掉了 `(verifierTaskId, verdict)` 这组事实，而协调器需要的正是它。
-- **阻塞优先于验收**（3 ≻ 4）：§4.2 守卫 3 ≻ 4 已经冻结了"阻塞优先于验收"，turn 的顺序不得与状态的顺序相反。
-- **验收优先于重规划**（4 ≻ 5）：§4.2 守卫 4 ≻ 7（`ACCEPTANCE ≻ PLANNING`）的同一句话。"全部 Task 收敛"意味着图已经走完，此时叫协调器"重规划"正是 foreman 事故的形状。
-- **`REPLAN` 是兜底而不是一个条件**：与 `PLANNING` 之于状态一样，它的含义就是"其余四条都不成立"。
+- **原因优先于后果**（2 ≻ 3 ≻ 4）：这一格出现两次，理由逐字相同。`VERIFICATION_FAILED` blocker **是** verdict 的产物（§13.2 的 FAIL 第 ④ 条）；`TEST_FAILED` / `UNKNOWN_FAILURE` blocker **是** 任务失败的产物（§9.5 Q3 的最后两行）。选后果就丢掉了产生它的那组事实 —— `(verifierTaskId, verdict)` 或 `(taskId, dispatchAttempt)` —— 而协调器需要的正是它。
+- **结论优先于中断**（2 ≻ 3）：一个 FAIL 的 verdict 是**对一段跑完了的工作下的判断**，而一次任务失败是**一段没有跑完的工作**；§13.2 的机械退回会改写 Task 状态（退回被验证任务、建缺陷子任务、阻断下游），因此同一份快照里的失败可能正是那次退回的产物。上游先说话。
+- **阻塞优先于验收**（4 ≻ 5）：§4.2 守卫 3 ≻ 4 已经冻结了"阻塞优先于验收"，turn 的顺序不得与状态的顺序相反。
+- **验收优先于重规划**（5 ≻ 6）：§4.2 守卫 4 ≻ 7（`ACCEPTANCE ≻ PLANNING`）的同一句话。"全部 Task 收敛"意味着图已经走完，此时叫协调器"重规划"正是 foreman 事故的形状。
+- **`REPLAN` 是兜底而不是一个条件**：与 `PLANNING` 之于状态一样，它的含义就是"其余五条都不成立"。
 
-**TU5（一次 reconcile 至多一条语义 turn，v1.4 冻结）**：§6.3 第 5 步产生的 `OPEN_COORDINATOR_TURN` **至多一条**（I15）。同时为真的其余原因写进 `project_decision.suppressedTurnReasons`（§6.2）—— 它们不是被丢掉了，是被记下来了：如果被压下去的那个原因下一次仍然为真，它自然会在下一次 reconcile 胜出。可测形式：枚举五个谓词的全部 32 个组合，每一组断言 `|actions ∩ {OPEN_COORDINATOR_TURN}| ≤ 1` 且选中的 reasonCode 唯一、与遍历顺序无关。
+**TU5（一次 reconcile 至多一条语义 turn，v1.4 冻结）**：§6.3 第 5 步产生的 `OPEN_COORDINATOR_TURN` **至多一条**（I15）。同时为真的其余原因写进 `project_decision.suppressedTurnReasons`（§6.2）—— 它们不是被丢掉了，是被记下来了：如果被压下去的那个原因下一次仍然为真，它自然会在下一次 reconcile 胜出。可测形式：枚举**六**个谓词的全部 **64** 个组合（v1.17；v1.4–v1.16 是五个谓词 32 个组合），每一组断言 `|actions ∩ {OPEN_COORDINATOR_TURN}| ≤ 1` 且选中的 reasonCode 唯一、与遍历顺序无关。
 
-**TU2（任务失败永不开 turn）**：`TEST_FAILED` 在 v1.1 中 `owner = USER`、`opensTurn = ✘`，且**只在 `failureCount ≥ MAX_AUTO_RUN_FAILURES` 时才被创建**（§9.5 Q3 的表）。退避期内根本没有 blocker，只有一条写明理由的 `NOOP` 审计行和一个指向退避到期时刻的 `nextWakeAt`。于是 v1 的两条规则在 v1.1 里指向同一个动作：**不开 turn**。失败有既有的退避与重试（§9.5），协调器不是重试机制。这是对既有 foreman 事故的直接吸取：一个"停滞就派一个协调者"的规则在停滞无法被协调者解决时会永远重派。
+**TU2（失败什么时候必须、什么时候不得开 turn，v1.17 重写，`PC-CX-63`）**：v1.1–v1.16 这一条的标题是"任务失败永不开 turn"，正文写的是"失败有既有的退避与重试（§9.5），协调器不是重试机制"。**前半句在真实状态上不成立，后半句仍然成立**，v1.17 只改前半句。
+
+**它挡住的那件事仍然要挡住**：控制环不是重试机制，一个"停滞就派一个协调者"的规则在停滞无法被协调者解决时会永远重派 —— 这是既有 foreman 事故的形状。
+
+**它同时挡掉了一件必须发生的事**。一次真实的失败运行不会把 Task 留在 `OPEN`：它把 Task 落到 `FAILED`（runner 回报与 reaper 两条路径都是 `reclaimStalledTask(..., FAILED)`）。而 §7.4 的第 1 条前置只放 `OPEN` 的 Task 过（`TASK_NOT_OPEN`），于是 §9.5 Q3 中间那三行 —— 退避未到期、退避已到期、再次派发 —— 在一个 `FAILED` 的 Task 上**一行都到不了**；`failureCount = 1` 又远低于最后一行的阈值，`TEST_FAILED` blocker 也不会开。结果是：**没有派发、没有 blocker、没有 turn**，`runStateOf` 落到守卫 7 的 `PLANNING`，`nextWakeAt` 每 60 秒把项目叫醒一次，每一次都决定不了任何事。契约的每一条都被满足了，而项目静默停住 —— 这正是 §10.1 AC3 要禁止的那件事，从内部发生。
+
+因此 v1.17 把这一条拆成**两种状态，判据是"控制环自己还能不能动它"**：
+
+| 情形（判据只读快照） | 开 turn？ | 为什么 |
+|---|:---:|---|
+| `status ∈ {OPEN, IN_PROGRESS}`，退避未到期（§9.5 Q3 第 2 行） | **不得** | 控制环并没有停，它安排了一次确定的重试；没有任何人需要做任何事。Q3-a 的 `NOOP` + `nextWakeAt` 逐字不变 |
+| `status ∈ {OPEN, IN_PROGRESS}`，退避已到期（§9.5 Q3 第 3 行） | **不得** | 下一步是**派发**，是一个机械动作；叫协调器来决定一件控制环自己就能做的事就是 foreman 事故 |
+| 该 Task 有 live Session | **不得** | 有人在跑它，这次失败还没有结束（§4.2 守卫 5 读的是同一个谓词） |
+| `status = FAILED` 且没有 live Session | **必须**（`TASK_FAILURE`） | 没有任何机械动作能推进它。此时"不开 turn"不是克制，是静默 |
+| 同一个失败 episode 已经开过一次 turn 且那次 turn 已结束 | **不得** | §7.6 TR3：改开 `COORDINATOR_NO_PROGRESS`（`owner = USER`），交给人 |
+
+**协调器仍然不是重试机制**，这一点由三条**已冻结**的机制保证，v1.17 没有为它新增任何东西：TR1 让**一个失败 episode 只换来一次 turn**（键含 TF6 的 `dispatchAttempt`，不含投递次数）、TR2 让同一 `reasonCode` 60 秒内至多一次、TR3 让"看了第二眼、世界没变"变成一条有责任人的 blocker。协调器在一个失败上**恰好有一次**机会；用不掉，它就归人。
+
+**`TEST_FAILED` 这一行一个字没改**：它的 `owner` 仍是 `USER`、`opensTurn` 仍是 ✘、仍只在 `failureCount ≥ MAX_AUTO_RUN_FAILURES` 时创建（§9.5 Q3），因此 §11.2 BL4 的逐字比对照常成立。`TASK_FAILURE` 是一个 **turn 的原因**，不是一个 blocker 的 kind —— 两张表不相交，`PC-CX-06` 的歧义不会以另一种写法回来。
 
 **TU3（同一原因不重复开 turn，PC-CX-07）**：见 §7.6 与 §7.3 的 `OPEN_COORDINATOR_TURN` 前置条件与 §10.4 的限频。要害是**限频与幂等是两个概念**：限频看粗粒度的 `reasonCode`，幂等看细粒度的 `reasonDigest`。
+
+**TU6（策略边界：原因由 TU4 定，执行由 §9.2 定，v1.17 冻结）**：`TASK_FAILURE` **不新增** §9.2 的策略行，它走那张矩阵里**已有**的 `OPEN_COORDINATOR_TURN` 行 —— `MANUAL` = ⚠、`GUARDED_AUTO` = ✔、`AUTO` = ✔。理由是这一行本来就在回答的问题：开一次 turn 是**开始一次对话**，它不改代码、不派任务、不动 Task 状态；协调器在 turn 里能做什么，由它自己的鉴权按 §9.3 与 I7 判定，与它为什么被叫醒无关。给失败单开一行会让同一个动作在两处有两个风险等级。三条推论都是要的：
+
+1. **`MANUAL` 下不会静默**：按 §9.2 P2，⚠ 的实现是一条 `owner = USER` 的 blocker 加一条 `REQUEST_APPROVAL`，用户在 Web/API/CLI 上看得见"控制环想为这次失败开一次协调，等你点头"。§9.1 P1 说的"`MANUAL` 不是关掉控制环"在这里是字面成立的：决策照常产生，`turnReason` 照常落 `project_decision`。
+2. **策略不改判定**：TU4 选哪一个 `reasonCode`、TR1 算出哪一个 `reasonDigest`、§8.2 算出哪一个键，三者都**只读快照**，与 `automationPolicy` 无关。策略只决定这个动作**执行不执行**，且按 §9.2 P4 在提交点再判一次。
+3. **关掉控制环仍然是另一个字段**：`coordinatorEnabled = false` 的项目按 §5.5 EV3 出环，本表一条都不求值。
+
+**TU7（turn 要有落点，v1.17 冻结）**：`OPEN_COORDINATOR_TURN` 是**往一条协调运行里投一条消息**，因此它多一条前置：§7.5 的协调运行必须是 `HEALTHY`（存在、未删除、`runStatus` 是 §7.5 的 live 之一）。不是的时候，本次 reconcile 先走 `ROTATE_COORDINATOR_SESSION`，**不开 turn、不消费任何信号**（TR2-c 已经逐字写了这一条）。这不会丢掉那个原因：原因是**事实**不是事件（§5.1 E1），轮换之后的下一次 reconcile 重新求值，它仍然为真，自然重新胜出。
+
+**TU8（TR1 / TR2 / TR3 的求值次序，v1.17 冻结）**：§7.6 把三条前置写成"互不重叠"，但它们**可以同时命中**（同一个键既在窗口里、又已经被应用过），因此次序必须是确定的。冻结为：
+
+> **TR1（键是否已存在）≻ TR3（那次 turn 是否已结束）≻ TR2（窗口是否已过）≻ 开 turn**
+
+理由与 TU4 的第一格同型：**先问最细的那个问题**。键的身份是 `(generation, reasonDigest)`，是这三条里唯一能区分"同一件事"与"另一件事"的；`reasonCode` 的窗口比它粗一格。反过来先问窗口，会让一次 TR3 已经判定不该开的 turn 白白占掉一个它永远不会用的 60 秒窗口，而 TR2-a 的窗口锚点是**已落库的动作行**，占掉就回不来了。键已存在时的两支照 §7.6 原文分：上一次 turn 还在飞 ⇒ `ALREADY_APPLIED`，**不开** `COORDINATOR_NO_PROGRESS`；已经结束 ⇒ TR3。
 
 **TF1（`turnFacts` 的排除集，v1.2 冻结，PC-CX-10）**：`turnFacts` 只能由快照里的**当前事实**构成。下列各项**一律不得**出现在 `turnFacts`（因而不得出现在 `reasonDigest` 里）：
 
@@ -686,6 +731,7 @@ v1.4 用与 §4.2 RS0 **完全相同**的手法解决：不补互斥守卫（手
 |---|---|---|
 | `BLOCKER_DECISION` | `lifecycle_generation` | `project_blocker`（§11.3 BE1） |
 | `VERDICT` | `verdict_revision` | `task`（§13.2 V7） |
+| `TASK_FAILURE` | `dispatch_attempt` | `task`（§8.2 DA1，v1.17） |
 | `ACCEPTANCE` | `acceptance_attempt` | `project_runtime`（§13.4 AE11） |
 
   **最小反例（本条要挡住的东西）**：`MERGE_CONFLICT` episode 1 的 `condition_version = A`，协调器开 turn、解决冲突、blocker clear。一小时后同一文件集再次冲突，episode 2 的 `condition_version` 仍然是 `A` —— 因为 TF2 定义它是"产生这条 blocker 的那些快照事实"的摘要，而那些事实**真的**一模一样。于是 `reasonDigest` 与 episode 1 逐字节相同，而 episode 1 的那一次 turn 早已结束 ⇒ §7.6 TR3 判定"上一次 turn 没有改变它自己被叫醒的那些事实" ⇒ **不开 turn，直接开 `COORDINATOR_NO_PROGRESS` 交给人**。协调器连一次处理这个**新故障**的机会都没有。审查记为 `PC-CX-24`。
@@ -708,6 +754,15 @@ v1.1 这一格里的第三项是 `occurrences`，v1.2 换成 `conditionVersion`�
 **TF5（`MANUAL` 的 `turnFacts` 是全部 pending 请求，不是触发那一条，v1.5 冻结，PC-CX-31）**：v1.1–v1.4 这一格写的是"触发信号的 `dedupeKey`"（单数）。配上 TR2 的 60 秒限频，它有一个直接后果：窗口里到达的第二个请求有**不同的** `dedupeKey`，因此有**不同的** `reasonDigest`；窗口一过它就是一次**新的** turn，两个人在一分钟内各点一次"现在跑一下"会得到两次相隔 60 秒的协调运行，而它们看到的是同一份图。窗口里到达 N 个请求就排 N 次 —— 一条被限频保护着的路径，反而成了一个可以被人手排出来的队列。
 
 v1.5 把这一格改成**全部未消费 `user.manual_trigger` 信号的 `dedupeKey` 排序摘要**：一次 turn **回答掉当时所有 pending 的请求**，并在同一事务里把它们**一起消费**（TR2-c）。三个后果都是要的：`reasonDigest` 由一组确定的事实算出（TR1 逐字不变）；N 个 pending 请求塌成**一次** turn（不再有排队式的 turn 风暴）；每一个请求都被**回答过**，因此 I18 不需要为"部分回答"再造一个中间态。**这与 TF1 不冲突** —— 摘要里进的是请求的**身份集合**，不是它被投递过几次：同一个 `dedupeKey` 投十次，§5.4 的 partial unique index 已经把它收敛成一行，集合不变，digest 不变（I14 逐字不变）。
+
+**TF6（一次失败 episode 的身份，v1.17 冻结，`PC-CX-63`）**：`TASK_FAILURE` 的 `turnFacts` 是触发的那些 Task 的 **`(taskId, dispatchAttempt)`** 排序摘要，`dispatchAttempt` 取自 `task.dispatch_attempt`。选它是因为 §8.2 DA1 已经把它冻结成**持久化、单调递增、任何路径都不得清零或回退**的计数 —— 包括 §19.6 那条"人处理之后清零失败计数"的恢复路径。于是 TF4 要的"周期身份"与 GE2 要的"A → B → A 必须换键"在同一个字段上同时成立：**同一次失败**无论被投递、重放、乱序或重启后重看多少次都算出同一个键（TR1 逐字不变），而**人修好之后重新派发、又失败一次**是一个更晚的 `dispatch_attempt`，算出的是一个新键、一次新的 turn。
+
+两个字段**刻意不在**里面，各有一条已冻结的理由：
+
+- **`failureCount`**：§8.2 DA3 已经把它逐出全部幂等键 —— 它是**策略**的输入（§9.2 的三条派发分档、§9.5 的退避与阈值），而 §19.6 允许人把它清零。一个会被清零的计数进了键，就会重新算出一个早已 `APPLIED` 的键，§8.5 C2 跳过副作用，这次失败从此不可能再被看见（`PC-CX-11` 的形状）。
+- **`failureAttributable`**：它**归类**一次 episode，不**开始**一次 episode。让它进来意味着同一次失败运行的归因从"不明"翻成"可归因"就能再换一次 turn，而世界里什么都没有发生。
+
+`lastFailureAt` 与任何 `now()` 由 TF1 第 2 项排除；被消费的事件条数、`project_event.attempts` 与 blocker 的 `occurrences` 由 TF1 第 1 项排除。判据仍然是 TF1 那一句可测的话：**把同一份世界状态重复投递 N 次、乱序投递、或重启后重投，`turnFacts` 必须逐字节相同。**
 
 **除此之外不开 turn。**
 
@@ -2946,6 +3001,8 @@ v1 把 `BUDGET_EXHAUSTED` 的 owner 写成 `USER`。那是一处**内部矛盾**
 
 **Q3-a**：`TEST_FAILED` blocker **只在最后一行被创建**。退避期内**不开 blocker** —— 因为没有任何人需要做任何事，而且控制环并没有停：它安排了一次确定的重试。用一条 `NOOP` 审计行 + `nextWakeAt` 表达它，正是 BL1 给出的另一条合法出口。
 **Q3-b**：`TEST_FAILED` 的 `owner` 因此恒为 `USER`，**不再是** `COORDINATOR`，`opensTurn` 恒为 ✘。§7.2 的两条规则由此指向同一个动作，`PC-CX-06` 的歧义消失。
+
+**Q3-d（这张表量的是可派发的 Task，v1.17 新增，`PC-CX-63`）**：本表第 2、3 行说的"退避"只对 §7.4 放得过去的 Task 成立，也就是 `status = OPEN` 的那些。一次**真实的失败运行**不会留下这样的 Task —— 它把 Task 落到 `FAILED`（runner 回报与 reaper 两条路径都是 `reclaimStalledTask(..., FAILED)`），而 §7.4 第 1 条对 `FAILED` 恒答 `TASK_NOT_OPEN`。因此在一个 `FAILED` 的 Task 上，本表**只有第 1 行与最后两行可达**，中间那两行是空的。这不是本表的缺陷（它描述的是策略，不是状态机），但它有一个必须写下来的后果：`0 < failureCount < MAX` 且 Task 已 `FAILED` 的那一格，本表**不产生任何动作**，`TEST_FAILED` 也不会开。填上这一格的是 §7.2 的 `TASK_FAILURE`（TU2 的表），不是这里再加一档退避 —— 本节开头那句"控制环不新增第二套重试阶梯"逐字不变。
 **Q3-c**：这张表必须**表驱动实现并逐行测试**（同 P3）。首次失败、退避期内、退避到期、阈值失败、归因不明五行各一格，不允许写成一串 if。
 
 **Q4（退避期的唯一权威状态，v1.2 新增，PC-CX-11）**：Q3 的"`run_state` 贡献"列写的是**这一个 Task 的贡献**（"无"），它**不是**项目的状态。项目的状态永远只有一个来源 —— §4.2 的 `runStateOf`。因此"一个任务正在退避"这件事本身**不决定**任何状态，最小场景的答案必须由守卫算出来：
@@ -3229,6 +3286,8 @@ SELECT p.id
 1. **`kind` → `opensTurn`**（本表的常量列）：控制环要不要为它叫醒协调器。**升级不改 kind，因此不改这一列。**
 2. **行上的 `owner`**（`project_blocker.owner`）：现在归谁 ⇒ `run_state`（§4.2 守卫 2/3）。**升级时变**（ES3）。
 3. **行上的 `recovery`**（`project_blocker.recovery`）：什么能解除它 ⇒ 时钟（§10.4）。**升级不改**（ES1）。
+
+**BL9（`TASK_FAILURE` 不是本表的一行，v1.17 写明，`PC-CX-63`）**：§7.2 v1.17 新增的 `TASK_FAILURE` 是一个 **turn 的 `reasonCode`**，本表量的是 **blocker 的 kind**，两个集合不相交。`TEST_FAILED` 这一行的 `owner`、`recovery`、`opensTurn` 与创建条件一个字都没改，因此 BL4 的双向等价与它对 §7.2 `BLOCKER_DECISION` 那一行的逐字比对**照常成立**。`PC-CX-06` 当年的错误是把"要不要叫醒协调器"寄生在 `owner` 上；把失败唤醒写成一个**独立的 turn 原因**而不是把 `TEST_FAILED` 的 `opensTurn` 翻成 ✔，正是为了不让那个错误换一种写法回来。
 
 **BL6（升级即交棒，v1.2 新增）**：§7.2 `BLOCKER_DECISION` 的触发条件除了 kind 在列表里，还要求 **`escalated_at IS NULL`**。含义很直白：升级到 `USER` 是"协调器这条路已经走过且没走通，现在归人"，此后再为同一条 blocker 叫醒协调器就是 foreman 事故的形状。于是"等着人"与"继续叫醒协调器"不可能同时为真 —— 不是靠优先级猜，是靠触发条件里多一个合取项。反过来，**升级不改 `opensTurn`**：kind 仍在列表里，这一行的 `opensTurn` 仍是 ✔，BL4 的逐字比对照常成立。
 
@@ -3895,6 +3954,7 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | 22 | 端到端迁移、恢复与故障注入 | §15 全表 | 端到端套件 |
 | 23 | 项目级验收与合并审计 | §13.4 · §14 | 验收产物 |
 | 25D | 派发 pass：控制环自己启动下一个任务 | §7.8 · §7.4 · §10.2 W1 | `src/apiserver/src/projects/project-dispatch-pass.spec.ts`（选择函数）+ `project-dispatch-pass.pg.spec.ts`（真实 Postgres：自派发、重放幂等、超并发、blocker、MANUAL、恢复） |
+| 26 | 失败唤醒：`TASK_FAILURE` 的原因、优先级与幂等（纯决策） | §7.2 TU2 · TU4 · TU6 · TU7 · TU8 · TF6 · §7.6 · §9.5 Q3-d · §11.2 BL9 | `src/apiserver/src/projects/project-turn-reason.spec.ts`（全序 64 组合 + TR1 摘要性质）+ `project-failure-turn.spec.ts`（生产同构夹具：Task=FAILED / Session=FAILED / 下游 BLOCKED_FAILED / Coordinator=AWAITING_INPUT） |
 
 ---
 
@@ -4633,6 +4693,7 @@ cap 那一半同理：两个入口在同一把锁之后各数一次占位（CAP1
 | `仍然只由 I17-A 的审计查询发现，而不是被拒绝` | §7.7 D17（提交点重算，伪造得到 `EXECUTION_DIGEST_MISMATCH`）· §4.3 I17-A | `PC-CX-48` |
 | `Session 上的值与它逐字相同` | §4.3 I17-A2 代次 1 行 · §7.4 EC6-c（冻结分量是具体值或 `DEFERRED_TO_CLAIM` 的两支，各只有一种合法组合） | `PC-CX-47` |
 | `代次 1 ⇒ 有 claimResolution、retiredPins 恰好 0 条` | §7.7 D16-b（闭合形状 + 折叠回 Session 此刻的 pin）· §7.4 EC6-e | `PC-CX-49` |
+| `失败有既有的退避与重试` | §7.2 TU2 的两态表（`FAILED` 且无 live Session ⇒ 必须开 `TASK_FAILURE`）· §9.5 Q3-d | `PC-CX-63` |
 | `每条含被换掉的值、换成的值与时刻` | §7.4 EC6-c（`retiredPins[k]` 恰好六个键）· EC6-e（链与代次） | `PC-CX-49` |
 | `ARRAY['where','who','with']` | §7.4 EC2-b3 · §7.7 D17 的 ⓪（PAC §7.5 的四个顶层 key，含必写的 `v`）· D17-g | `PC-CX-53` |
 | `resolution is not PAC 7.5's who/with/where` | §7.7 D17 的 ⓪（消息改成 `closed v/who/with/where` 并报出 offending 键）· §7.4 EC2-b3 | `PC-CX-53` |
@@ -5606,3 +5667,49 @@ v1.8 的答案在四处：**一个按 `OLD.status` 分档、并给 `CLAIMED` 一
 - **没有改任何一份独立审查报告**。十四份文档逐字不变（§26–§31 的同一条纪律）。
 - **02 在 v1.13 轮留下的 `coordinator-v113-adversarial.spec.ts` 被翻转，不是被删**。理由与 §22.9 / §23.5 / §24.6 / §25.7 / §26.5 / §27.4 / §28.4 / §29.4 / §30.4 / §31.6 逐字相同；翻转后两条 v1.13 witness（函数删除 / 裸入口保留、外部 Project 留存 / 外部 Session 丢失）与那两条 I11-A 正控制一条不少地留在同一个测试里。
 - **仍然不含实现**。03–23 单元一行业务代码都没写；`coordinator_purge_ledger_pairs()` 目前只存在于契约与四份 spec 的 fixture 里，真正的 Prisma 迁移（步骤 6g2 / 6h）要到 04 单元才跑。
+
+---
+
+## 33. `PC-CX-63` 修订闭环（v1.17）
+
+**本节是非规范的**：它记录 v1.17 关闭的那一条缺口"当时是什么样"，规范条款在 §6.2 · §7.2 · §9.5 · §11.2 · §18 · §22.8。与 §19–§32 的唯一不同是**谁提出的** —— 前十四轮由单元 02 的独立审查提出，这一条由这套控制环**自己在一个真实项目上停住**提出，因此没有对应的复审文档。
+
+| 编号 | 级别 | 涉及条款 | 一句话 |
+|---|---|---|---|
+| `PC-CX-63` | **P0** | §7.2 TU2 · §9.5 Q3 · §7.4 第 1 条 | 三条各自正确的规则叠起来，让一次普通的任务失败**既不派发、也不开 blocker、也不开 turn**，项目每 60 秒醒一次决定不了任何事 |
+
+### 33.1 `PC-CX-63` 一次失败之后没有任何一条规则会说话
+
+**最小场景**（不需要并发，不需要故障注入，一次普通失败就够）：项目里一个 Task 被派发（`dispatch_attempt` 0 → 1），Session 跑挂，runner 回报 `FAILED`。
+
+1. `reclaimStalledTask(tx, taskId, TaskStatus.FAILED)` 把 Task 落到 **`FAILED`**（`runner-api.controller.ts` 的 `session.ended` 路径；`reaper.service.ts` 的超时路径同理）。下游 Task 因此进 `BLOCKED_FAILED`（`task-dependencies.ts`：任一前置 `FAILED` ⇒ 终态阻塞）。
+2. 下一次 reconcile 读到的快照里：`task.status = FAILED`、`failureCount = 1`、没有 live Session、Coordinator Session 停在 `AWAITING_INPUT`（**live**，因此 §7.5 判 `HEALTHY`，不轮换）。
+3. §7.4 第 1 条：`task.status !== 'OPEN'` ⇒ `TASK_NOT_OPEN`，**不派发**。§9.5 Q3 第 2、3 行说的"退避"因此永远到不了。
+4. §9.5 Q3 最后一行要求 `failureCount ≥ MAX_AUTO_RUN_FAILURES`（5）。`1 < 5`，**不开 `TEST_FAILED`**。
+5. §7.2 TU2（v1.1–v1.16）：任务失败**永不开 turn**。
+6. §4.2：无 open blocker、无 live Session、无未出 verdict 的验证任务 ⇒ 守卫 7 ⇒ **`PLANNING`**。§10.4 兜底 ⇒ `nextWakeAt = epoch + 60s`。
+
+**观测到的结果**：每 60 秒一条 `NOOP`，`actions = []`，协调器在 `AWAITING_INPUT` 上一直等着，直到**有人手动发一条消息**。事件被正常消费（§5.4），因此队列上看不出任何异常；`project_decision` 每一行都是合法的。**没有一条不变量被违反** —— 这正是它躲过了 32 个 pg spec 与两千条单测的原因，也是它必须由契约而不是由补丁来关闭的原因。
+
+**为什么既有夹具看不见它**：本目录此前每一处"失败"夹具都写成"`status: 'OPEN'` + `failureCount: n`"。那个组合在生产里不存在（真实失败必落 `FAILED`），而它恰好落在 §9.5 Q3 中间两行——一读就是"控制环正在退避，安静是对的"。夹具替系统回答了那个它本该被问到的问题。
+
+**权威状态**：§7.2 TU2 重写成一张**两态表**，判据是一句可以只读快照回答的话 —— **控制环自己还能不能动它**：还能（`OPEN`，退避中或退避到期）⇒ **不得**开 turn，理由与 v1.1 逐字相同；不能了（`FAILED` 且无 live Session）⇒ **必须**开 `TASK_FAILURE`，因为此时"不开 turn"不是克制，是静默。`TEST_FAILED` 这一行**一个字没改**（§11.2 BL9），`TASK_FAILURE` 是 turn 的 `reasonCode` 而不是 blocker 的 kind，因此 BL4 的逐字比对与 `PC-CX-06` 的答案都不受影响。
+
+**动作键**：`pc:v1:<projectId>:turn:<generation>:<reasonDigest>`（`<generation>` 即 `coordinator_generation`，§8.2 GE1），`reasonDigest = sha256(TASK_FAILURE ‖ canonical((taskId, dispatchAttempt) 的排序集合))`（TF6）。`dispatch_attempt` 是 §8.2 DA1 已经冻结的单调、不清零、不复用的计数，因此 GE2 的"A → B → A 必须换键"在它上面成立：人清零 `failureCount`、重开 Task、再次派发再次失败，算出的是一个更晚的 epoch 与一个新键。
+
+**恢复路径**：协调器在那一次 turn 里做它该做的事（拆任务、改方案、建修复任务、或判定这条路走不通）。它做不到时，事实不变 ⇒ 下一次 reconcile 算出同一个 `reasonDigest` ⇒ §7.6 TR3 **不再开第二次 turn**，改开 `COORDINATOR_NO_PROGRESS`（`owner = USER` / `recovery = HUMAN` / `opensTurn = ✘`），项目进 `AWAITING_HUMAN`，人看得见。**协调器在一个失败上恰好有一次机会** —— 这就是 TU2 当年要保护的那条性质，一字未减。
+
+**求值次序**：TU8 把 TR1 ≻ TR3 ≻ TR2 冻结下来。先问粗的那个（窗口）会让一次 TR3 已经否掉的 turn 白占一个它永远不会用的 60 秒窗口，而 TR2-a 的窗口锚点是已落库的动作行，占掉就回不来。
+
+**策略边界**：TU6。`TASK_FAILURE` 不新增 §9.2 的行，走已有的 `OPEN_COORDINATOR_TURN` 行（⚠ / ✔ / ✔）。`MANUAL` 下不是静默跳过，是 §9.2 P2 的 `REQUEST_APPROVAL` + `owner = USER` blocker；判定本身（`reasonCode` / `reasonDigest` / 键）只读快照，与策略无关。
+
+**可执行断言**：
+- `src/apiserver/src/projects/project-turn-reason.spec.ts` —— 六个谓词的**全部 64 个组合**各断言"至多一条 turn、赢家是全序里第一个为真的、答案与遍历顺序无关"（`PC-CX-23` 的同一手法，量化域从 32 扩到 64）；外加 TR1 摘要的三条性质与 §8.2 键的构成。
+- `src/apiserver/src/projects/project-failure-turn.spec.ts` —— **生产同构夹具**：`Task = FAILED`、`Session = FAILED`、下游 `BLOCKED_FAILED`、Coordinator Session = `AWAITING_INPUT`。断言这份快照产生**恰好一条** `OPEN_COORDINATOR_TURN`；重复与乱序投递同 digest 同键；`dispatch_attempt` 前进一格换键；TR3 / TR1-in-flight / TR2 / TU7 四个分支各不开 turn；三档策略下判定都在。**反向对照**同在这个文件里：同一份世界把 Task 写回 `OPEN`（既有夹具的形状）⇒ 一条 turn 都不开 —— 这就是这个缺陷藏了这么久的地方。
+
+### 33.2 本次修订**没有**做的事
+
+- **没有**把这条决策真正投递出去。`OPEN_COORDINATOR_TURN` 的原子投递、`user.manual_trigger` 的消费、TR2 窗口锚点落库、TR2-b 的 `NOOP` 与 `next_attempt_at`、TR3 的 `COORDINATOR_NO_PROGRESS` 落库、以及 §10.4 第 7 条的唤醒候选，都还没有实现 —— 本轮只冻结**判定**，纯决策函数返回 `verdict`（`OPEN` / `RATE_LIMITED` / `NO_PROGRESS` / `IN_FLIGHT` / `NO_LIVE_RUN`），投递是下一个单元。
+- **没有**实现 `ACCEPTANCE` 与 `REPLAN` 两个谓词。它们的输入（§13.4 的验收摘要与 attempt、§7.8 的可派发集合）由别的 pass 计算，不在 `planProjectDecision` 手上。全序对它们照常成立：**一个没有被求值的原因不可能获胜**，而这正是今天的行为（一条 turn 都不开），因此本轮没有让任何项目开始收到 `REPLAN` turn。
+- **没有**改动 §9.5 的退避阶梯、`TEST_FAILED` 的任何一列、或 §7.4 的任何一条前置。
+- **没有**改写任何历史失败 Session，也没有用任何形式的"完成"覆盖真实运行结果。
