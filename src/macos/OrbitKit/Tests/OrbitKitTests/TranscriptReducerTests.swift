@@ -282,7 +282,42 @@ final class TranscriptReducerTests: XCTestCase {
         let tool = r.state.items.first?.asTool
         XCTAssertEqual(tool?.status, .ok)
         XCTAssertEqual(tool?.resultImages, [pngBytes], "image block base64 should decode into resultImages")
+        XCTAssertTrue(tool?.resultHasImage == true, "an image block is an image block, decoded or not")
         XCTAssertNil(tool?.result, "an image-only result carries no text → result stays nil")
+    }
+
+    /// A screenshot too big to ship inline arrives as an image block the server emptied of its bytes
+    /// (apiserver `MAX_IMAGE_PAYLOAD` drops `source.data`, keeps the block). Nothing decodes, so the
+    /// card must learn from the block itself that a picture is here — it opens on that, and opening
+    /// is what refetches the bytes. Judged by `resultImages` alone the card folds, is not even
+    /// expandable, and the picture is gone rather than deferred. Web parity: `hasResultImage`.
+    func testClippedImageResultStillReportsAnImage() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("img2"), "name": .string("Read"),
+            "input": .object(["file_path": .string("/tmp/shot.png")])])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("img2"),
+            "content": .array([.object([
+                "type": .string("image"),
+                "source": .object(["type": .string("base64"),
+                                   "media_type": .string("image/png")])])])]), truncated: true))
+        let tool = r.state.items.first?.asTool
+        XCTAssertEqual(tool?.resultImages, [], "no bytes arrived, so nothing decodes")
+        XCTAssertTrue(tool?.resultHasImage == true, "the dataless block still says an image belongs here")
+        XCTAssertTrue(tool?.resultTruncated == true, "and the card needs the seq to fetch it back")
+    }
+
+    /// The flag is about images, not about arrays: a text-only result must not claim one, or every
+    /// such card would open itself and ask the server for a payload it already has.
+    func testTextResultReportsNoImage() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("Read"),
+            "input": .object(["file_path": .string("/a.ts")])])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("t1"), "content": .string("plain output")])))
+        XCTAssertFalse(r.state.items.first?.asTool?.resultHasImage == true)
     }
 
     /// The tray row keeps the launch wall-clock (the surfacing tool_result's `ts`) so it can render

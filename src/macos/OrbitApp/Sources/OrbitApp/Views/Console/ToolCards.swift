@@ -22,19 +22,30 @@ struct ToolCardView: View {
     // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
     @State private var fullDisplay: ToolDisplay?
     @State private var fullResult: String?
+    /// Images decoded from the untrimmed result. Distinct from `fullResult`: an oversized screenshot
+    /// arrives as an image block with no `data`, so the preview has the block and none of the bytes.
+    @State private var fullImages: [Data]?
+    /// Whether the untrimmed result has been fetched. Tracked apart from the two fields it fills so
+    /// a result that yields neither (a picture whose bytes failed to decode) still resolves once.
+    @State private var resultResolved = false
 
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.card = card
         self.fullPayload = fullPayload
         let display = ToolDisplay.describe(name: card.name, input: card.input, status: card.status, id: card.id)
         self.previewDisplay = display
-        let hasResult = (card.result?.isEmpty == false) || !card.resultImages.isEmpty
-        _expanded = State(initialValue: display.autoOpen && (display.hasBody || hasResult))
+        let hasResult = (card.result?.isEmpty == false) || !card.resultImages.isEmpty || card.resultHasImage
+        // A result carrying an image (a screenshot the workspace produced for the user) opens so the
+        // picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
+        // Keyed on the block, not the decoded bytes: a clipped image has none until the open card
+        // fetches them back.
+        _expanded = State(initialValue: (display.autoOpen || card.resultHasImage) && (display.hasBody || hasResult))
     }
 
     private var d: ToolDisplay { fullDisplay ?? previewDisplay }
     private var result: String? { fullResult ?? card.result }
-    private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty }
+    private var images: [Data] { fullImages ?? card.resultImages }
+    private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
     private var hasDetail: Bool { d.hasBody || hasResult }
     private var isOpen: Bool { expanded && hasDetail }
 
@@ -73,9 +84,13 @@ struct ToolCardView: View {
             let input = p["input"] ?? .null
             fullDisplay = ToolDisplay.describe(name: card.name, input: input, status: card.status, id: card.id)
         }
-        if expanded || needsWholeResult, card.resultTruncated, fullResult == nil,
+        if expanded || needsWholeResult, card.resultTruncated, !resultResolved,
            let seq = card.resultSeq, let p = await fullPayload(seq) {
+            // Set before the payload is read: an image-only result yields no text, and keying the
+            // guard on `fullResult` would refetch the whole screenshot on every re-open.
+            resultResolved = true
             fullResult = p["content"]?.stringValue ?? p["content"]?.asString
+            fullImages = ToolResultContent.images(p["content"])
         }
     }
 
@@ -174,9 +189,9 @@ struct ToolCardView: View {
             ToolBodyView(kind: d.body)
             // Inline tool-result images (Read on a .png, an MCP screenshot) — above any text output,
             // mirroring web's `ToolResult`, which renders images before the monospace panel.
-            if !card.resultImages.isEmpty {
+            if !images.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(card.resultImages.enumerated()), id: \.offset) { _, data in
+                    ForEach(Array(images.enumerated()), id: \.offset) { _, data in
                         ToolResultImageView(data: data)
                     }
                 }

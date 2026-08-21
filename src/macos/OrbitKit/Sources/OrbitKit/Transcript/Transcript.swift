@@ -207,6 +207,10 @@ public struct ToolCard: Equatable, Sendable, Codable {
     /// the view turns them into a `PlatformImage`. Empty for the common text-only result. Web parity:
     /// the web transcript renders the same blocks inline via `resultImages()`.
     public var resultImages: [Data]
+    /// Whether the result carried an image block at all — true even when `resultImages` is empty
+    /// because the server dropped an oversized image's bytes (`MAX_IMAGE_PAYLOAD`). The card opens
+    /// on this, and opening is what refetches the picture. Web parity: `hasResultImage`.
+    public var resultHasImage: Bool
     public var status: ToolStatus
     /// seq of the `tool_use` event, and whether the server clipped its `input` to a preview.
     /// Expanding the card refetches the call whole (`APIClient.eventFull`).
@@ -217,7 +221,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
     public var resultTruncated: Bool
 
     public init(id: String, name: String, input: JSONValue, result: String?,
-                resultImages: [Data] = [], status: ToolStatus,
+                resultImages: [Data] = [], resultHasImage: Bool = false, status: ToolStatus,
                 inputSeq: Int = 0, inputTruncated: Bool = false,
                 resultSeq: Int? = nil, resultTruncated: Bool = false) {
         self.id = id
@@ -225,6 +229,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
         self.input = input
         self.result = result
         self.resultImages = resultImages
+        self.resultHasImage = resultHasImage
         self.status = status
         self.inputSeq = inputSeq
         self.inputTruncated = inputTruncated
@@ -235,7 +240,7 @@ public struct ToolCard: Equatable, Sendable, Codable {
     // Tolerant decode so transcript snapshots written before `resultImages` existed still rehydrate
     // (the key just defaults to empty) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
-        case id, name, input, result, resultImages, status, inputSeq, inputTruncated, resultSeq, resultTruncated
+        case id, name, input, result, resultImages, resultHasImage, status, inputSeq, inputTruncated, resultSeq, resultTruncated
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -244,6 +249,9 @@ public struct ToolCard: Equatable, Sendable, Codable {
         input = try c.decode(JSONValue.self, forKey: .input)
         result = try c.decodeIfPresent(String.self, forKey: .result)
         resultImages = (try? c.decodeIfPresent([Data].self, forKey: .resultImages)) ?? []
+        // A snapshot written before this key existed falls back to what it can still see: bytes
+        // present ⇒ an image was there.
+        resultHasImage = (try? c.decodeIfPresent(Bool.self, forKey: .resultHasImage)) ?? !resultImages.isEmpty
         status = try c.decode(ToolStatus.self, forKey: .status)
         inputSeq = (try? c.decodeIfPresent(Int.self, forKey: .inputSeq)) ?? 0
         inputTruncated = (try? c.decodeIfPresent(Bool.self, forKey: .inputTruncated)) ?? false
