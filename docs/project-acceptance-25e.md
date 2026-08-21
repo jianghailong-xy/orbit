@@ -137,11 +137,14 @@ downstream, because nothing in production applies the plan.**
 controller, service or reconcile pass injects it.
 
 `ProjectDecisionService` *does* compute the plan — `verificationVerdicts: verificationVerdictPlan(input)`
-at `project-decision.service.ts:1394` — and it is persisted with the decision. But
+at `project-decision.service.ts:1394` — but it is not an outcome field and is not persisted
+anywhere. That line is a local argument inside `planBlockers()`, handed to
+`detectProjectBlockerConditions`, whose `verificationConditions` turns it into the blocker and
+discards the rest; `verificationVerdicts` appears exactly once in the whole file. Meanwhile
 `ProjectReconcileService` applies only `outcome.coordinator`, `outcome.aggregations` and
-`outcome.blockers` (`project-reconcile.service.ts:346-348`). `outcome.verificationVerdicts` is read
-by exactly one thing, `verificationConditions` in `project-blocker-conditions.ts`, which raises the
-blocker. The revert, the defect and the downstream block are computed, stored, and dropped.
+`outcome.blockers` (`project-reconcile.service.ts:346-348`), and there is no
+`outcome.verificationVerdicts` for it to apply. The revert, the defect and the downstream block are
+computed, used to raise one blocker, and dropped without a trace.
 
 Observed live, end to end:
 
@@ -177,11 +180,32 @@ coordinator is supposed to read before dispatching cannot report an unresolved f
 downstream task whose upstream check failed dispatches anyway.
 
 Not fixed here: this is an acceptance run, and the audit branch may not carry the change it is
-judging. Filed as a defect subtask under this task.
+judging. Filed as defect subtask `34AyFvkPcP9vYPo1Kqg8C`.
+
+### Independently re-checked
+
+This finding was not left resting on one session's reading. A separate Claude session, filed as a
+native verification task (`34AyGjwev1PF0t6AqlPvW`, `verifiesTaskId` → the 25E task) and run on its
+own worktree, reached **verdict PASS** — meaning the "11 PASS + AC6 FAIL" conclusion holds. It
+reproduced the finding three independent ways: the same absence of a production caller, this time
+also read out of the **running container's `dist/`** rather than only from source; its own canary,
+where a FAIL again left the subject DONE with no defect and empty `failures`/`blockedTasks`; and
+the production table still at zero across what is now eleven concluded verdicts. It went one step
+further on the "block downstream" limb: the real dispatch gate in
+`project-authorization.service.ts` reads `task_verification_failure` and nothing else, and the
+`VERIFICATION_FAILED` blocker cannot stand in for it, because `project-dispatch-pass.ts:282` matches
+a task-level blocker on `blocker.subjectId === task.id` — the blocker's subject is the *verified*
+task, not the dependants that should be held back.
+
+It also corrected two statements in an earlier draft of this file: the plan is not persisted with
+the decision (fixed above — the corrected version is worse for the product, not better), and this
+canary was still OPEN when the residue section first claimed otherwise (now closed). Its own
+declared limit: it re-ran the source, database and live-canary evidence, not the test suites.
 
 ## Residue
 
 `pcc25e-matrix-pg16` and `pcc25e-tail-pg16` were provisioned and destroyed; **zero** `pcc25e-*`
 containers, networks or volumes remain. The `pcc02b-pg` container still running belongs to a
 different session working concurrently in another worktree and was deliberately left alone. The
-canary project and its tasks are left in terminal states as the evidence for this report.
+canary project `34Axukmp27kqR6IcbAXCu` and all ten of its tasks were left in terminal states
+(project CANCELLED) as the evidence for this report.
