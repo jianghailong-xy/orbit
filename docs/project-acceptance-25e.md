@@ -259,3 +259,53 @@ containers, networks or volumes remain. The `pcc02b-pg` container still running 
 different session working concurrently in another worktree and was deliberately left alone. The
 canary project `34Axukmp27kqR6IcbAXCu` and all ten of its tasks were left in terminal states
 (project CANCELLED) as the evidence for this report.
+
+## Closed — both findings repaired and re-verified
+
+This report concluded FAIL at `288fe19d`. Both findings were then fixed and the fixes independently
+re-verified; this section records the outcome so the verdict above is read as a moment rather than
+as the current state.
+
+| | |
+|---|---|
+| Repairs | `c7f5f39f` (AC6 executor), `a8114436` (AC1 filter), `8fb90d34` (publicize `failureId`), `ca6d1332` (evidence), merged as `3465300f` |
+| Independent re-verification | task `34B0hEaq9Ibrb8O68Tyyf` ("25F"), `verifiesTaskId` → the 25E task, a fresh Claude session — **verdict PASS, 12/12**, closed naturally (`SUCCEEDED` / `endReason: task_done`) |
+
+Re-checked here directly, on the deployed system, using the same two measurements that established
+the defects in the first place:
+
+**Clause 6.** `ProjectVerificationVerdictService` no longer waits for a caller — it implements an
+executor interface and registers itself with the reconcile pass at startup
+(`reconciler.registerVerdictExecutor(this)`), and `APPLY_VERIFICATION_VERDICT` is now a real action
+type the loop applies. The table that had never held a row does now:
+
+```
+task_verification_failure   ->  3 rows, unresolved 0, blocks_downstream 3, distinct defects 3
+project_action              ->  APPLY_VERIFICATION_VERDICT / APPLIED  9      (previously: no such action, ever)
+task WHERE title LIKE '[DEFECT]%'  ->  3                                     (previously: 0 filed by the loop)
+```
+
+**Clause 1.** The same call that produced the raw UUID now answers in Base62, with the twin field
+beside it:
+
+```
+"runId":"34Ayi6Q5HgJEciWRIIYRH","runPublicId":"34Ayi6Q5HgJEciWRIIYRH"
+```
+
+### What this task did not do
+
+Three clauses of this task's own acceptance criteria are deliberately left to the coordinator, and
+are recorded here rather than quietly satisfied:
+
+* **The project acceptance run still reads FAIL** — attempt 2, `34Ayi6Q5HgJEciWRIIYRH`, concluded
+  against `288fe19d`, before the repairs existed. `doneGate.allowed` is false and says so. A fresh
+  attempt has to be opened against the repaired baseline; a verification task's PASS is not a
+  substitute for it, which is the whole point of clause 12.
+* **The merge receipts stop at `288fe19d`.** They are session-scoped and this session's merges are
+  the only ones it may attest to. The repairs' receipts belong to the sessions that merged them.
+  What is recorded instead is *merge evidence*, by content, for both branches.
+* **`main` and `feat/project` are diverged** (`a12075e7` vs `3465300f`, 6 and 33 commits). The main
+  merge was explicitly withheld from this task. Merge evidence rows now state the gap in content
+  terms: on `main` the two new files are simply absent.
+
+None of the three is a defect. They are the ordering the coordinator owns.
