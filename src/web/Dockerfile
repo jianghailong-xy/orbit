@@ -2,7 +2,7 @@
 # Build context is the repo root: docker build -f src/web/Dockerfile .
 
 # ───────────────────────────────── build ─────────────────────────────────
-FROM node:20-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json tsconfig.base.json ./

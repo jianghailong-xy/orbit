@@ -42,7 +42,7 @@ jobs:
     permissions:
       contents: write          # create the GitHub Release + push the gh-pages appcast
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0       # full history so build-dmg.sh's commit-count CFBundleVersion is monotonic
 
@@ -59,7 +59,7 @@ jobs:
       # build-dmg.sh compiles the `orbit` runner from source and freezes it into the .app (its
       # self-update is disabled, so the bundled version must match the app), which needs Go.
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v7
         with:
           go-version: 'stable'
 
@@ -135,7 +135,7 @@ jobs:
           # Prerelease tags (vX.Y.Z-…) publish to the beta channel; stable tags reach everyone.
           channel=""; case "$GITHUB_REF_NAME" in *-*) channel="--channel beta";; esac
           curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
-            https://github.com/sparkle-project/Sparkle/releases/download/2.9.3/Sparkle-2.9.3.tar.xz
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
           mkdir -p "$RUNNER_TEMP/sparkle"; tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
           work="$RUNNER_TEMP/updates"; mkdir -p "$work/out"
           cp "src/macos/build/Orbit-v$ver-arm64.zip" "$work/"
@@ -162,7 +162,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch' || inputs.platform != 'macos'
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0        # full history → commit-count build number is monotonic
       - name: Select latest Xcode
