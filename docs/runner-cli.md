@@ -1,6 +1,6 @@
 # Runner CLI and automation
 
-The static `orbit` runner binary also exposes task and session commands for scripts and agent orchestration.
+The static `orbit` runner binary also exposes task, project, and session commands for scripts and agent orchestration.
 Human-readable output is the default; use `--json` for stable machine parsing. Discover the commands available
 to the current credential and execution context before using them:
 
@@ -21,6 +21,17 @@ orbit task-list create --title "Release" --json
 Inside a task-backed Orbit session, task commands may omit the task ID and use `ORBIT_TASK_ID`. In-session
 CLI mutations are attributed to the current agent and session. Headless mutations that use only a runner
 credential fall back to the runner owner.
+
+## Projects
+
+```bash
+orbit project get <project-id> --json
+orbit project update <project-id> --status CANCELLED --json
+orbit project delete <project-id> --json
+```
+
+Project deletion is permanent and only succeeds while the project is empty. It never deletes or detaches tasks;
+move them to another project or delete them first.
 
 ## Sessions
 

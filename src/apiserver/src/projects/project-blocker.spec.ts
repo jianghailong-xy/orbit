@@ -52,9 +52,37 @@ function contractKindTable(): string[][] {
   return table;
 }
 
+/**
+ * The rows §11.2 says are LANDED — the ones whose `落地` column reads `已落地`.
+ *
+ * BL8 (v1.16) is why this is not simply every row. PAC §12 can mint a dispatch refusal, and PAC
+ * §7.4 AU-F says it has to become a blocker kind; the contract records that immediately, while the
+ * CHECK constraint and this module's policy table move with the migration step §12.1 declares for
+ * it. Without the column there were only two possible rules and both are wrong: "equal to the
+ * implementation" refuses to let a new refusal into the contract at all, and "unconstrained" stops
+ * seeing drift. So the column carries the distinction, and PAC's own self-check (`00.14`) is what
+ * stops it being used to park a kind in the contract forever: an unlanded kind must be named by
+ * exactly one declared migration step, and a landed one by none.
+ */
+function landedKinds(): string[] {
+  const rows = contractKindTable();
+  const kinds = column(rows, 'kind').map(bare);
+  const landed = column(rows, '落地').map(bare);
+  return kinds.filter((_, i) => landed[i] === '已落地');
+}
+
 test('§11.2: the implemented kind set IS the document\'s, in the document\'s order', () => {
-  const kinds = column(contractKindTable(), 'kind').map(bare);
-  assert.deepEqual([...PROJECT_BLOCKER_KINDS], kinds);
+  assert.deepEqual([...PROJECT_BLOCKER_KINDS], landedKinds());
+  // …and the rest of the table is not free-floating: every unlanded kind is one PAC §12 refuses a
+  // dispatch with, so BL8's first direction still holds over the WHOLE table.
+  const rows = contractKindTable();
+  const kinds = column(rows, 'kind').map(bare);
+  const pending = kinds.filter((k) => !landedKinds().includes(k));
+  const sources = column(rows, '来源').map(bare);
+  for (const kind of pending) {
+    assert.equal(sources[kinds.indexOf(kind)], 'PAC §12',
+      `§11.2 leaves \`${kind}\` unlanded without it being a PAC refusal code — nothing would ever land it`);
+  }
 });
 
 test('§11.2: the migration CHECK freezes exactly the same closed set', () => {
@@ -70,6 +98,7 @@ test('§11.2: every kind carries the document\'s owner and recovery', () => {
   const owners = column(rows, '默认 owner').map(bare);
   const recoveries = column(rows, 'recovery').map(bare);
   for (const [at, kind] of kinds.entries()) {
+    if (!landedKinds().includes(kind)) continue;
     const policy = PROJECT_BLOCKER_POLICY[kind as ProjectBlockerKind];
     assert.equal(policy.owner, owners[at], `${kind} owner`);
     assert.equal(policy.recovery, recoveries[at], `${kind} recovery`);
@@ -81,6 +110,7 @@ test('BL4: opensTurn is true for exactly the kinds whose default owner is COORDI
   const kinds = column(rows, 'kind').map(bare);
   const opens = column(rows, 'opensTurn').map(bare);
   for (const [at, kind] of kinds.entries()) {
+    if (!landedKinds().includes(kind)) continue;
     const policy = PROJECT_BLOCKER_POLICY[kind as ProjectBlockerKind];
     assert.equal(policy.opensTurn, opens[at] === '✔', `${kind} opensTurn`);
     // Both directions, which is the whole of BL4: v1 hung "wake the coordinator" on `owner`, then

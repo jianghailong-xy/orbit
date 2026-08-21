@@ -1152,6 +1152,15 @@ export interface SessionMergeResultRequest {
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
    *  detect new commits without relying on ancestry or patch-id equivalence. */
   sourceSha?: string;
+  /** The branch this merge advanced, the tip it had before, and the base the source was replayed
+   *  onto. Together with `sourceSha`/`mergedSha` they are what makes the merge RECEIPT the control
+   *  plane records (§13.5) checkable against the repository afterwards. Omitted by older runners:
+   *  the receipt is still written, naming what it knows. */
+  targetBranch?: string;
+  targetShaBefore?: string;
+  rebaseBaseSha?: string;
+  /** Paths git reported as conflicting, for `status: 'conflict'`. */
+  conflicts?: string[];
   message?: string;
 }
 

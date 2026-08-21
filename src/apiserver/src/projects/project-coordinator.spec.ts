@@ -1021,9 +1021,9 @@ test('the opening message tells the coordinator it may act when asked to', async
 });
 
 test('the opening message still promises no tool a runner cannot reach', async () => {
-  // Listing or deleting projects, opening another coordinator and driving a runner directly are
-  // none of them exposed. Naming one would spend the first turn hunting for it, and then report
-  // confidently from whatever it found instead.
+  // Listing projects, opening another coordinator and driving a runner directly are not exposed.
+  // Project deletion is reachable now but intentionally stays out of the opening message: it is a
+  // destructive operation for an explicit cleanup request, not normal coordinator startup work.
   const f = makeService({ assignees: [{ id: WORKSPACE_TASKS, count: 1 }] });
 
   await f.open();

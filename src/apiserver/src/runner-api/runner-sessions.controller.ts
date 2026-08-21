@@ -13,6 +13,8 @@ import { PublicIdPipe } from '../common/public-id';
 import { randomUUID } from 'crypto';
 import { Runner, RunStatus } from '@prisma/client';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { RecordMergeReceiptDto } from '../sessions/dto';
 import { CurrentRunner } from './current-runner.decorator';
 import { CurrentServiceGrant, RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -58,6 +60,7 @@ export class RunnerSessionsController {
   constructor(
     private readonly sessions: SessionsService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
+    private readonly mergeReceipts: MergeReceiptService,
   ) {}
 
   /**
@@ -261,6 +264,40 @@ export class RunnerSessionsController {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     return this.sessions.mergeToMain(runner.ownerId, id, dto.targetBranch);
+  }
+
+  /**
+   * Record that a session's branch was merged (contract §13.7), for a merge Orbit did not perform.
+   *
+   * This is the door the fast-forward case needs. An agent that merges its own worktree branch —
+   * which is how these branches actually land — leaves `merge_status` NULL and `branch_merged`
+   * false forever, because the only code that ever wrote them is Orbit's own Merge button. One
+   * `orbit session merge-receipt` after the merge is what makes the control plane able to answer
+   * "did this task's work land" with a SHA instead of a shrug.
+   *
+   * Deliberately NOT behind the orchestration assert that guards `sessions/:id/merge` above. That
+   * one asks another session's runner to mutate a repository; this one records a fact about work
+   * that already happened, is append-only, and is scoped to the caller's own tenant. Requiring an
+   * orchestration grant to file evidence would mean the deployments that most need the audit — the
+   * ones where orchestration is off — are exactly the ones that cannot produce it.
+   */
+  @Post('sessions/:id/merge-receipts')
+  async recordMergeReceipt(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RecordMergeReceiptDto,
+  ) {
+    return this.mergeReceipts.record(runner.ownerId, id, dto, 'AGENT');
+  }
+
+  /** Every merge recorded against this session's branch, newest first. */
+  @Get('sessions/:id/merge-receipts')
+  async listMergeReceipts(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.mergeReceipts.list(runner.ownerId, id, limit ? Number(limit) : undefined);
   }
 
   @Post('sessions/:id/end')

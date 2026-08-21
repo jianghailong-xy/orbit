@@ -84,7 +84,7 @@ export class RunnerAgentsController {
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Body() body: unknown,
+    @Body(PublicIdPipe.forFields('runnerId')) body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);
     const sanitized = this.sanitize(body, runner.id);
@@ -110,7 +110,7 @@ export class RunnerAgentsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
-    @Body() body: unknown,
+    @Body(PublicIdPipe.forFields('runnerId')) body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);
     const workspace = await this.workspaces.update(
@@ -148,7 +148,13 @@ export class RunnerAgentsController {
   /** Whitelist the caller's fields (drops enableOrchestration/enabled etc. a workspace must not
    *  control). On create, default runnerId to the calling runner so the workspace can run.
    *  This body is a plain type, not a DTO class, so the global ValidationPipe has no metatype
-   *  to check — the free-form fields are validated here instead. */
+   *  to check — the free-form fields are validated here instead.
+   *
+   *  `runnerId` arrives already decoded: for that same reason `@IsPublicId` cannot reach it, so
+   *  both routes bind `@Body(PublicIdPipe.forFields('runnerId'))`. The CLI and MCP hand back the
+   *  base62 id this API gave them (`PublicIdInterceptor` — this controller is agent-facing, not
+   *  machine protocol), and unconverted that string reached `prisma.runner.findFirst` as a bare
+   *  P2023 500. `defaultRunnerId` is the calling runner's own UUID, so it needs no decoding. */
   private sanitize(body: unknown, defaultRunnerId?: string): OrchestratorWorkspaceInput {
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {
       throw new BadRequestException('workspace body must be an object');
@@ -157,6 +163,16 @@ export class RunnerAgentsController {
     const name = this.optionalString(input, 'name');
     if (name !== undefined && name.length === 0) {
       throw new BadRequestException('name cannot be empty');
+    }
+    // The pipe above only decodes ids that are PRESENT — `""` and `"   "` fail its trim test, so
+    // it skips them and they arrive here verbatim. Neither is a spelling of an id, and left alone
+    // each one is a different bug: on create the blank reaches a `@db.Uuid` column as a bare P2023
+    // 500, and on update `""` is falsy, which WorkspacesService reads as `{ disconnect: true }` and
+    // silently unbinds the runner the caller was trying to name. Same 400 as any other undecodable
+    // spelling, on both routes — detaching a runner is not something an empty string may say.
+    const runnerId = this.optionalString(input, 'runnerId');
+    if (runnerId !== undefined && runnerId.trim() === '') {
+      throw new BadRequestException('invalid runnerId');
     }
     if (input.enableWorktree !== undefined && typeof input.enableWorktree !== 'boolean') {
       throw new BadRequestException('enableWorktree must be a boolean');
@@ -168,7 +184,7 @@ export class RunnerAgentsController {
       systemPrompt: this.optionalString(input, 'systemPrompt'),
       appendSystemPrompt: this.optionalString(input, 'appendSystemPrompt'),
       workDir: this.optionalString(input, 'workDir'),
-      runnerId: this.optionalString(input, 'runnerId') ?? defaultRunnerId,
+      runnerId: runnerId ?? defaultRunnerId,
       enableWorktree: input.enableWorktree as boolean | undefined,
       env: this.normalizeEnv(input.env),
       defaultMergeTarget: this.optionalString(input, 'defaultMergeTarget'),

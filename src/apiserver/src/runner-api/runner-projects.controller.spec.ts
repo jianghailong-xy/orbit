@@ -8,6 +8,19 @@ import { PublicIdPipe } from '../common/public-id';
 import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
 import { RunnerProjectsController } from './runner-projects.controller';
 
+/** The acceptance service this controller also takes. A double rather than a real one: every
+ *  scenario in this file is about the project routes, and a scenario that reached acceptance would
+ *  say so by failing here. */
+function acceptanceDouble(): never {
+  return {
+    overview: async () => assert.fail('this scenario does not read acceptance'),
+    openRun: async () => assert.fail('this scenario does not open an acceptance run'),
+    finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
+    recordMergeEvidence: async () => assert.fail('this scenario does not record merge evidence'),
+  } as never;
+}
+
+
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 
 /** The session the runner injects into an in-session call, already decoded by `publicIdHeaders`. */
@@ -34,7 +47,7 @@ test('getProject reads the project through ProjectsService, scoped to the runner
       return expected;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
 
   const result = await controller.getProject(RUNNER, 'project-1');
 
@@ -50,7 +63,7 @@ test('a project belonging to another owner stays a 404 from the service', async 
       throw new Error('project not found');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
 
   await assert.rejects(() => controller.getProject(RUNNER, 'someone-elses-project'), /not found/);
 });
@@ -65,7 +78,7 @@ test('getProject is exposed as GET projects/:id', () => {
 // the param has to decode before it reaches a `@db.Uuid` column — the same gate the user-facing
 // ProjectsController puts on the same id. Both id-bearing routes, not just the read: a write that
 // skipped it would hand Prisma a base62 string and answer a legitimate id with a 500.
-for (const method of ['getProject', 'updateProject'] as const) {
+for (const method of ['getProject', 'updateProject', 'removeProject'] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown; pipes?: unknown[] }>
@@ -91,6 +104,12 @@ test('updateProject is exposed as PATCH projects/:id', () => {
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.PATCH);
 });
 
+test('removeProject is exposed as DELETE projects/:id', () => {
+  const handler = RunnerProjectsController.prototype.removeProject;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.DELETE);
+});
+
 // An agent's project write is the runner owner's project, exactly as its task writes are — the
 // credential names a machine, and the only tenant a machine can write into is the one that owns
 // it. If this ever reads an id off the body instead, a runner becomes able to file work into
@@ -105,7 +124,7 @@ test('createProject writes into the runner owner, with the body untouched', asyn
       return created;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
   const dto: CreateProjectDto = {
     title: 'Crawl',
     goal: 'Index the corpus',
@@ -135,7 +154,7 @@ function createSpy() {
       return { id: 'project-1' };
     },
   } as never;
-  return { calls, controller: new RunnerProjectsController(projects) };
+  return { calls, controller: new RunnerProjectsController(projects, acceptanceDouble()) };
 }
 
 // The whole point of the header: a project an agent records while working on it should be
@@ -218,7 +237,7 @@ test('a session the service refuses is not quietly downgraded to a headless crea
       throw new ForbiddenException('no workspace');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
 
   await assert.rejects(
     () => controller.createProject(RUNNER, SESSION_ID, { title: 'Crawl' }),
@@ -243,7 +262,7 @@ test('createProject reads the session from x-orbit-session-id', () => {
 
 // Reading a project and revising one are not "where am I" questions: neither has a coordinator
 // default to seed, so neither may grow a dependence on the caller's session.
-for (const method of ['getProject', 'updateProject'] as const) {
+for (const method of ['getProject', 'updateProject', 'removeProject'] as const) {
   test(`${method} takes no session context`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown }>
@@ -265,7 +284,7 @@ test('updateProject writes into the runner owner, with the id and body untouched
       return updated;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
   const dto: UpdateProjectDto = { title: 'Crawl the archive', status: ProjectStatus.DONE };
 
   const result = await controller.updateProject(RUNNER, 'project-1', dto);
@@ -289,7 +308,7 @@ test('updateProject forwards an explicit null clear rather than dropping it', as
       return {};
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
 
   await controller.updateProject(RUNNER, 'project-1', {
     goal: null,
@@ -309,7 +328,7 @@ test("updating another owner's project stays a 404 from the service", async () =
       throw new Error('project not found');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects);
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
 
   await assert.rejects(
     () => controller.updateProject(RUNNER, 'someone-elses-project', { status: ProjectStatus.DONE }),
@@ -317,8 +336,37 @@ test("updating another owner's project stays a 404 from the service", async () =
   );
 });
 
-// The whole surface, named. Growing a list or a delete here is a decision, not a side effect of
-// adding a route — and `getProject` staying a GET is what keeps the read working for the
+test('removeProject deletes through ProjectsService in the runner owner scope', async () => {
+  const seen: { ownerId?: string; projectId?: string } = {};
+  const expected = { ok: true };
+  const projects = {
+    remove: async (ownerId: string, projectId: string) => {
+      seen.ownerId = ownerId;
+      seen.projectId = projectId;
+      return expected;
+    },
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+
+  const result = await controller.removeProject(RUNNER, 'project-1');
+
+  assert.deepEqual(seen, { ownerId: 'owner-1', projectId: 'project-1' });
+  assert.equal(result, expected);
+});
+
+test('removeProject preserves the service refusal for a non-empty project', async () => {
+  const projects = {
+    remove: async () => {
+      throw new Error('This project still holds 2 task(s) and cannot be deleted');
+    },
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+
+  await assert.rejects(() => controller.removeProject(RUNNER, 'project-1'), /still holds 2 task/);
+});
+
+// The whole surface, named. Growing a list or another destructive verb here is a decision, not a
+// side effect of adding a route — and `getProject` staying a GET is what keeps the read working for the
 // coordinators that already depend on it.
 //
 // `projectCoordinatorStatus` joined it in unit 20 (contract AC10) and is a GET for the reason the
@@ -326,15 +374,27 @@ test("updating another owner's project stays a 404 from the service", async () =
 // that unit added — the manual trigger — deliberately did NOT join it. Enqueuing a signal
 // attributed to USER is how a person drives a MANUAL project, so an agent able to do it would be
 // driving its own coordinator; that one stays on the door a person signs in to.
-test('the runner project bridge exposes exactly create, the reads, and update', () => {
+test('the runner project bridge exposes exactly create, the reads, update, and guarded delete', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
+    // §11's blocker read, through the machine door (unit 25C). A read, and the one a headless
+    // auditor needs most: an open blocker is a dispatch precondition rather than a status anybody
+    // rewrote, so a project stopped by one looks entirely ordinary from every other endpoint.
+    'blockers',
     'createProject',
+    // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
+    // three writes are here. Listing, opening a coordinator and the manual trigger are still
+    // absent, which is the line this test exists to hold.
+    'finalizeAcceptanceRun',
     'getProject',
+    'openAcceptanceRun',
+    'projectAcceptance',
     'projectCoordinatorStatus',
     'projectVerifications',
+    'recordMergeEvidence',
+    'removeProject',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -344,10 +404,16 @@ test('the runner project bridge exposes exactly create, the reads, and update', 
     ]),
   );
   assert.deepEqual(verbs, {
+    blockers: RequestMethod.GET,
     createProject: RequestMethod.POST,
+    finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,
+    openAcceptanceRun: RequestMethod.POST,
+    projectAcceptance: RequestMethod.GET,
     projectCoordinatorStatus: RequestMethod.GET,
     projectVerifications: RequestMethod.GET,
+    recordMergeEvidence: RequestMethod.POST,
+    removeProject: RequestMethod.DELETE,
     updateProject: RequestMethod.PATCH,
   });
 });

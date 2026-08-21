@@ -13,6 +13,7 @@ import {
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
 import { encodeId } from '../lib/idCodec';
+import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
@@ -52,15 +53,6 @@ const TDP_WIDTH_KEY = 'orbit.taskDetailWidth';
 const TDP_WIDTH_MIN = 440;
 const TDP_WIDTH_MAX = 1000;
 const TDP_WIDTH_DEFAULT = 600;
-
-// TaskStatus (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED) -> header badge label + tone.
-const STATUS_META: Record<string, { label: string; tone: string }> = {
-  OPEN: { label: 'Open', tone: 'muted' },
-  IN_PROGRESS: { label: 'In progress', tone: 'blue' },
-  DONE: { label: 'Done', tone: 'green' },
-  CANCELLED: { label: 'Cancelled', tone: 'muted' },
-  FAILED: { label: 'Failed', tone: 'red' },
-};
 
 // A run's outcome badge is independent of whether its session is Open, Completed or in Trash.
 const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
@@ -638,7 +630,10 @@ export function TaskDetailPanel({
   );
   const mentionPlugin = useMemo(() => rehypeMentions(mentionNames), [mentionNames]);
 
-  const status = STATUS_META[task?.status as string] ?? { label: task?.status ?? '', tone: 'muted' };
+  // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
+  // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
+  const status = taskOutcomeChip(task);
+  const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
 
@@ -757,6 +752,7 @@ export function TaskDetailPanel({
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">
             <span className={`tdp-badge tone-${status.tone}`}>{status.label}</span>
+            {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
             {task?.assignee && (
               <span className="tdp-meta-item">
                 <Avatar size={18} style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10 }}>

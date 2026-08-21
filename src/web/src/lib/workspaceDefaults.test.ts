@@ -12,6 +12,7 @@ import {
   livePinnedModel,
   mergedProviderOptions,
   modelOptionsForProvider,
+  newSessionEffortForProvider,
   normalizeEffortForProvider,
   OPENCODE_EFFORT_OPTIONS,
   providerIdentityResolved,
@@ -71,6 +72,16 @@ describe('Codex model efforts', () => {
     expect(effortOptionsForProvider('codex')).toEqual(CODEX_EFFORT_OPTIONS);
     expect(normalizeEffortForProvider('codex', 'ultra')).toBe('ultra');
     expect(normalizeEffortForProvider('codex', 'project-custom')).toBe('');
+  });
+
+  it('keeps the account last-picked Ultra over a stale workspace Max', () => {
+    expect(
+      newSessionEffortForProvider('codex', 'ultra', 'max', 'gpt-5.6-sol', catalog),
+    ).toBe('ultra');
+    expect(newSessionEffortForProvider('codex', '', 'max', 'gpt-5.6-sol', catalog)).toBe('');
+    expect(
+      newSessionEffortForProvider('codex', undefined, 'max', 'gpt-5.6-sol', catalog),
+    ).toBe('max');
   });
 });
 

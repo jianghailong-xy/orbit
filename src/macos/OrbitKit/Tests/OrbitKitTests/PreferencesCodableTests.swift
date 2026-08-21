@@ -64,12 +64,15 @@ final class PreferencesCodableTests: XCTestCase {
         XCTAssertFalse(obj.keys.contains("defaultPermissionMode"))
     }
 
-    /// Sending only defaultEffort must emit just that key (so the shallow-merge keeps theme/model)
-    /// and must include "" (Default), which the composer sends to clear the effort override.
+    /// Sending only defaultEffort must emit just that key (so the shallow-merge keeps theme/model),
+    /// preserve Ultra verbatim, and include "" when the composer clears the effort override.
     func testUpdatePreferencesEffortOnly() throws {
-        let obj = try jsonObject(UpdatePreferencesRequest(defaultEffort: ""))
-        XCTAssertEqual(obj["defaultEffort"] as? String, "")
-        XCTAssertFalse(obj.keys.contains("theme"))
-        XCTAssertFalse(obj.keys.contains("defaultModel"))
+        let selected = try jsonObject(UpdatePreferencesRequest(defaultEffort: "ultra"))
+        XCTAssertEqual(selected["defaultEffort"] as? String, "ultra")
+        XCTAssertFalse(selected.keys.contains("theme"))
+        XCTAssertFalse(selected.keys.contains("defaultModel"))
+
+        let cleared = try jsonObject(UpdatePreferencesRequest(defaultEffort: ""))
+        XCTAssertEqual(cleared["defaultEffort"] as? String, "")
     }
 }

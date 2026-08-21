@@ -52,6 +52,20 @@ function turnReasonTable(): string[][] {
   return found;
 }
 
+/**
+ * 一 … 九十九, as the contract writes them. The count outgrew a single digit at v1.15 (eight columns
+ * became ten), and a one-character lookup would have read 十 as "not found" — i.e. as zero — which
+ * is the failure mode where a consistency check quietly stops checking.
+ */
+function chineseNumeral(word: string): number {
+  const digits = '零一二三四五六七八九';
+  const ten = word.indexOf('十');
+  if (ten === -1) return digits.indexOf(word);
+  const tens = ten === 0 ? 1 : digits.indexOf(word.slice(0, ten));
+  const ones = ten === word.length - 1 ? 0 : digits.indexOf(word.slice(ten + 1));
+  return tens * 10 + ones;
+}
+
 test('every cross-reference into the frozen Project/Agent contract resolves', () => {
   const pacHeadings = headingNumbers(PAC);
   const refs = new Set(Array.from(PCC.matchAll(/PAC §(\d+(?:\.\d+)?)/g), (m) => m[1]));
@@ -188,9 +202,9 @@ test('the business/infrastructure split matches the totals the contract states',
   assert.equal(Number(total[3]), infraTables, '§2.4 and the §14 total disagree on infrastructure tables');
   // The column count is the one that moved in v1.1 (session.dispatch_origin), and it is the number
   // a reviewer checks the migration against, so it has to be stated in one place only.
-  const columns = /以及(.)列：/.exec(section(PCC, '2.4'));
+  const columns = /以及([一二三四五六七八九十]+)列：/.exec(section(PCC, '2.4'));
   assert.ok(columns, '§2.4 no longer states how many columns it adds');
-  assert.equal('一二三四五六七八九'.indexOf(columns[1]) + 1, Number(total[4]), '§2.4 and §14 disagree on new columns');
+  assert.equal(chineseNumeral(columns[1]), Number(total[4]), '§2.4 and §14 disagree on new columns');
 });
 
 test('no infrastructure table is a business entity in disguise', () => {

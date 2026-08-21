@@ -122,14 +122,14 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 	}
 }
 
-// The project surface is exactly these five. Listing projects, deleting one, opening its
-// coordinator and triggering a coordination run all stay the human's door, so a sixth appearing
-// here is a decision somebody makes rather than something a refactor adds.
+// The project surface is closed over these eleven tools. Listing projects, opening a coordinator
+// and triggering a coordination run stay the human's door, so another tool appearing here is a
+// decision somebody makes rather than something a refactor adds.
 //
 // project_status joined in unit 20 (contract AC10) and is a READ. The manual trigger that shipped
 // beside it deliberately did not: enqueuing a signal attributed to USER is how a person drives a
 // MANUAL project, so an agent able to do it would be driving its own coordinator.
-func TestMCPExposesExactlyTheFiveProjectTools(t *testing.T) {
+func TestMCPExposesExactlyTheElevenProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
@@ -143,7 +143,16 @@ func TestMCPExposesExactlyTheFiveProjectTools(t *testing.T) {
 		}
 		for _, want := range []string{
 			"project_get", "project_status", "project_verifications", "project_create",
-			"project_update",
+			"project_update", "project_delete",
+			// Unit 25C: the blocker read, open and resolved. Ungated for the reason the rest are —
+			// the session that most needs to know why a project is not moving is its coordinator.
+			"project_blockers",
+			// Unit 25A: native acceptance. Three of the four are writes, and they are here rather
+			// than behind the orchestration gate for the reason project_create is — the session
+			// that most needs to run a project's acceptance is a coordinator, which has no
+			// session_* tools at all.
+			"project_acceptance", "project_acceptance_run", "project_acceptance_verdict",
+			"project_merge_evidence",
 		} {
 			if !seen[want] {
 				t.Fatalf("%s missing from the tools", want)
@@ -203,12 +212,25 @@ func TestMCPProjectWritesArePartOfTheBaseTools(t *testing.T) {
 	if got := mcpToolRequired(t, tools, "project_update"); len(got) != 1 || got[0] != "projectId" {
 		t.Fatalf("project_update required = %#v", got)
 	}
+	deleteProps := mcpToolProps(tools, "project_delete")
+	if len(deleteProps) != 1 {
+		t.Fatalf("project_delete properties = %#v", deleteProps)
+	}
+	if got := mcpToolRequired(t, tools, "project_delete"); len(got) != 1 || got[0] != "projectId" {
+		t.Fatalf("project_delete required = %#v", got)
+	}
+	deleteDescription := mcpToolDescription(tools, "project_delete")
+	for _, want := range []string{"Permanently", "cannot be undone", "holds tasks", "refused"} {
+		if !strings.Contains(deleteDescription, want) {
+			t.Fatalf("project_delete description does not mention %q: %q", want, deleteDescription)
+		}
+	}
 
 	// The descriptions are what a model decides from, so they have to state the scope it writes
 	// into and that writing is its call to make — the old wording said these fields were the
 	// owner's alone, which is exactly the belief that would stop it recording a goal it was asked
 	// for. Nothing may claim they are human-only.
-	for _, name := range []string{"project_get", "project_create", "project_update"} {
+	for _, name := range []string{"project_get", "project_create", "project_update", "project_delete"} {
 		description := mcpToolDescription(tools, name)
 		if !strings.Contains(description, "account this runner belongs to") {
 			t.Fatalf("%s description does not state its owner scope: %q", name, description)
@@ -334,6 +356,38 @@ func TestMCPProjectCreateRequiresATitle(t *testing.T) {
 	}
 }
 
+func TestMCPProjectDeleteUsesTheGuardedRunnerRoute(t *testing.T) {
+	var method, path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_delete", map[string]interface{}{"projectId": "proj-1"})
+	if res["isError"] == true {
+		t.Fatalf("project_delete returned an error: %#v", res["content"])
+	}
+	if method != http.MethodDelete || path != "/api/runner/projects/proj-1" {
+		t.Fatalf("project_delete hit %s %s", method, path)
+	}
+	content, _ := res["content"].([]map[string]interface{})
+	if text, _ := content[0]["text"].(string); !strings.Contains(text, `"ok": true`) {
+		t.Fatalf("project_delete result = %q", text)
+	}
+}
+
+func TestMCPProjectDeleteRequiresASafeProjectID(t *testing.T) {
+	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
+	for _, args := range []map[string]interface{}{{}, {"projectId": "../tasks"}} {
+		res := mcp.callTool("project_delete", args)
+		if res["isError"] != true {
+			t.Fatalf("project_delete(%#v) isError = %#v", args, res["isError"])
+		}
+	}
+}
+
 // Omitted, replaced and cleared are three different instructions, and the difference only survives
 // if the handler copies keys rather than reading values: a `goal` read as a string turns an
 // explicit null into "", and a nil-skipping copy turns it into "leave the goal alone".
@@ -424,6 +478,7 @@ func TestMCPProjectWriteFailuresDoNotRetry(t *testing.T) {
 	}{
 		{"project_create", map[string]interface{}{"title": "Crawl"}, http.StatusBadRequest, "create project failed"},
 		{"project_update", map[string]interface{}{"projectId": "proj-1", "status": "DONE"}, http.StatusNotFound, "update project failed"},
+		{"project_delete", map[string]interface{}{"projectId": "proj-1"}, http.StatusConflict, "delete project failed"},
 	} {
 		calls := 0
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
