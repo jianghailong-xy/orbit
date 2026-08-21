@@ -248,7 +248,31 @@ Session 仍然只有 **1** 个，`dispatch_attempt` 仍然是 **1**。幂等键�
 （`dispatched-by-loop 54744005$`，单行、单文件），照实判。open→resolved 的 blocker 由控制环
 自己产生，不需要我去诱发一个。
 
-### 残留
+## 六、Coordinator Session 轮换
+
+轮换只在协调 Session 进入终态时触发（`COORDINATOR_SESSION_ENDED` / `COORDINATOR_SESSION_FAILED`），
+而本轮硬约束禁止 `session complete/end/cancel`。前两个 canary 的协调 Session 都停在 `AWAITING_INPUT`，
+所以它们身上永远看不到轮换。
+
+自然的走法是让协调 Session 本身**是一个任务 Session**：任务做完、`task_done` 收口为 `SUCCEEDED`，
+协调 Session 就自己进了终态，谁也没有去 end 它。于是建了一个任务，让它的 Session 在自己内部
+`project_create` 出 canary `25D rotation canary`，然后评论、置 DONE、停手。
+
+观察到的：
+
+| 时刻 | |
+|---|---|
+| t+27s | 协调 Session `AWAITING_INPUT` → 项目 `AWAITING_HUMAN`，升起 `AWAITING_USER_INPUT` blocker |
+| t+54s | 协调 Session `SUCCEEDED` / `endReason=task_done`（**自然收口**） |
+| 同时 | `ROTATE_COORDINATOR_SESSION` **APPLIED** |
+| 同时 | `coordinator_generation` **0 → 1** |
+| 同时 | 协调 Session 换成新的一个：`01a023fc-d14b…` → `85d4e218-a6a5…` |
+| 同时 | `run_state` 从 `AWAITING_HUMAN` 回到 `PLANNING`，blocker `AUTO` 消解 |
+
+也就是说：协调者死了，项目没有跟着停摆，而是换了一个协调者继续。证据在
+`docs/evidence/25d/canary-rotation-ledger.json`。
+
+## 残留
 
 - 容器 / 网络 / 卷：**零**。两次 canary 全程都没有创建任何 docker 资源。
   本机另有 `pac02b-pg`、`pac02b-matrix-pg`，属于并发跑着的另一个 Session 的 pg 夹具，未触碰。
@@ -274,4 +298,5 @@ docs/evidence/25d/canary-dispatch-status.json     第二次 canary 的控制环�
 docs/evidence/25d/canary-note.md                  canary#1 工作 Session 的产物
 docs/evidence/25d/canary-note-bound.md            canary#2 工作 Session 的产物
 docs/evidence/25d/canary-note-dispatch.md         被控制环派发的 Session 的产物
+docs/evidence/25d/canary-rotation-ledger.json     协调 Session 自然终态触发轮换的全量账
 ```
