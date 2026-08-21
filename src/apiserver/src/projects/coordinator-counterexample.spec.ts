@@ -4071,7 +4071,8 @@ interface Db33 {
   };
   member: { projectMemberId: string; agentId: string; role: string } | null;
   task: {
-    id: string; assigneeAgentId: string; provider: string | null; model: string | null;
+    id: string; executionContract: 'V1' | 'LEGACY'; assigneeAgentId: string | null;
+    provider: string | null; model: string | null;
     workspaceId: string | null; requiredCapabilities: string[]; status: string;
   };
   workspaces: {
@@ -4090,7 +4091,10 @@ function db33(): Db33 {
       defaultEffort: 'high', providerFallbacks: [], requiredCapabilities: [],
     },
     member: { projectMemberId: 'm1', agentId: 'a1', role: 'MEMBER' },
-    task: { id: 't1', assigneeAgentId: 'a1', provider: null, model: null, workspaceId: null, requiredCapabilities: [], status: 'OPEN' },
+    task: {
+      id: 't1', executionContract: 'V1', assigneeAgentId: 'a1', provider: null, model: null,
+      workspaceId: null, requiredCapabilities: [], status: 'OPEN',
+    },
     workspaces: [{
       workspaceId: 'w1', enabled: true, deletedAt: null, isDefault: true, position: 0, runnerId: 'r1',
       runnerStatus: 'ONLINE', capabilities: ['linux'], capabilitiesReportedAt: '2026-08-19T00:00:00.000Z',
@@ -4106,21 +4110,47 @@ function db33(): Db33 {
 const clone33 = (db: Db33): Db33 => JSON.parse(JSON.stringify(db)) as Db33;
 
 /**
- * PAC §5 step 3–5, as far as this file needs it: WHO, then WITH (with §7.4's explicit fallback),
- * then WHERE. Every branch below reads a column; S10's table is exactly the list of those columns.
+ * PAC §5 step 2–5, as far as this file needs it: the contract branch, then WHO, then WITH (with
+ * §7.4's explicit fallback), then WHERE. Every branch below reads a column; S10's table is exactly
+ * the list of those columns.
+ *
+ * `reads` is an optional sink for the columns whose OWNERSHIP is the claim EC1-b makes: the
+ * contract selector itself, the three Agent columns the V1 chain starts from, and the two task
+ * columns only the LEGACY bridge may touch. It is not a general tracer — it exists so "V1 reads the
+ * Agent, LEGACY reads the task pin" can be asserted by running the resolver instead of by reading
+ * the branch and believing it.
  */
-function resolveExecutionContext33(db: Db33): Resolution33 | { refuse: string } {
-  // WHO — PAC §7.1 (+ H1)
-  if (db.task.assigneeAgentId !== db.agent.id) return { refuse: 'WHO_UNRESOLVED' };
-  if (!db.agent.enabled || db.agent.deletedAt !== null) return { refuse: 'WHO_DISABLED' };
+function resolveExecutionContext33(db: Db33, reads?: string[]): Resolution33 | LegacyResolution33 | { refuse: string } {
+  const read = <T>(column: string, value: T): T => { reads?.push(column); return value; };
+
+  // PAC §5 step 2 — the split. `execution_contract` is the ONLY criterion (PAC §2, §11.1): not
+  // `project_id IS NULL`, not the creation time. A LEGACY row leaves §7 entirely (PAC §7 preamble),
+  // so none of the three chains below runs on it.
+  if (read('task.execution_contract', db.task.executionContract) === 'LEGACY') {
+    return {
+      legacy: true,
+      taskId: db.task.id,
+      pinnedProvider: read('task.provider', db.task.provider),
+      pinnedModel: read('task.model', db.task.model),
+    };
+  }
+
+  // WHO — PAC §7.1. Priority 2 first (no assignee at all → `WHO_UNRESOLVED`), then priority 1's two
+  // checks in the order H4 fixes: ① team membership, ② enabled / not soft-deleted. Both predicates
+  // can hold of one input, and H4's answer is `WHO_NOT_IN_TEAM` — membership is the authorization
+  // boundary, availability is only a state inside it. v1.2 stated that and this model still judged
+  // availability first, which is the third-round finding: an off-team, disabled Agent got
+  // `WHO_DISABLED`, whose required action ("enable it") does not make the dispatch possible.
+  if (db.task.assigneeAgentId === null || db.task.assigneeAgentId !== db.agent.id) return { refuse: 'WHO_UNRESOLVED' };
   if (db.member === null) return { refuse: 'WHO_NOT_IN_TEAM' };
+  if (!db.agent.enabled || db.agent.deletedAt !== null) return { refuse: 'WHO_DISABLED' };
 
   // WITH — PAC §7.2 priorities 1–2, then §7.4's ordered fallback chain. A V1 task carries no
   // provider/model pin at all (PAC §7.2 P1, enforced by the §3.4 K1 CHECK), so the chain starts at
-  // the agent default and `task.provider` / `task.model` are read only on the LEGACY branch, which
-  // the control loop distinguishes by `execution_contract` (PCC §7.4 EC1-b).
-  const wanted = db.agent.defaultProvider ?? 'claude';
-  const wantedModel = db.agent.defaultModel;
+  // the agent default and `task.provider` / `task.model` are read only on the LEGACY branch above,
+  // which the control loop distinguishes by `execution_contract` (PCC §7.4 EC1-b).
+  const wanted = read('agent.default_provider', db.agent.defaultProvider) ?? 'claude';
+  const wantedModel = read('agent.default_model', db.agent.defaultModel);
   const usable = (slug: string, model: string | null): boolean => {
     const p = db.providers.find((x) => x.slug === slug);
     return p !== undefined && p.available && (model === null || p.models.includes(model));
@@ -4128,7 +4158,7 @@ function resolveExecutionContext33(db: Db33): Resolution33 | { refuse: string } 
   let provider: string | null = usable(wanted, wantedModel) ? wanted : null;
   let model = wantedModel;
   if (provider === null) {
-    for (const hop of db.agent.providerFallbacks) {
+    for (const hop of read('agent.provider_fallbacks', db.agent.providerFallbacks)) {
       const hopModel = hop.model ?? null;
       if (usable(hop.provider, hopModel)) { provider = hop.provider; model = hopModel; break; }
     }
@@ -4171,9 +4201,27 @@ function resolveExecutionContext33(db: Db33): Resolution33 | { refuse: string } 
   };
 }
 
+/**
+ * PAC §11.1 L1's legacy bridge. It is a DIFFERENT shape, not a `Resolution33` with holes: there is
+ * no Agent and no `project_member` on this path at all, which is the whole content of the split.
+ *
+ * The model carries the bridge exactly as far as `world` carries it — the task pin (PCC §6.1 S10-f:
+ * `tasks[].provider` / `tasks[].model` are in `world` *because* the LEGACY branch reads them). The
+ * rest of L1's bridge (`agentProviderSeed(workspace)`, `workspace.model`, `task.assignee_id`) is not
+ * a column of `world`, so this model does not invent an answer for it and does not claim to.
+ */
+interface LegacyResolution33 {
+  legacy: true;
+  taskId: string;
+  /** What the LEGACY branch reads and the V1 branch cannot even carry (PAC §3.4 K1). */
+  pinnedProvider: string | null;
+  pinnedModel: string | null;
+}
+
 /** EC2: the digest摘 nine identities, not the whole resolution (S10-e says why effort is not in it). */
-function ec2Digest33(r: Resolution33 | { refuse: string }): string {
+function ec2Digest33(r: Resolution33 | LegacyResolution33 | { refuse: string }): string {
   if ('refuse' in r) return `REFUSE:${r.refuse}`;
+  if ('legacy' in r) return `LEGACY:${r.taskId}:${r.pinnedProvider ?? ''}:${r.pinnedModel ?? ''}`;
   return sha256([r.agentId, r.projectMemberId, r.taskId, r.taskAssigneeAgentId, r.provider, r.model ?? '',
     r.workspaceId, r.runnerId, r.coordinatorWorkspaceId].join('|'));
 }
@@ -4181,11 +4229,11 @@ function ec2Digest33(r: Resolution33 | { refuse: string }): string {
 /** What a dispatch has to produce, in the sense S3 means it: the resolution PAC §6 freezes. */
 const requiredOutcome33 = (db: Db33): string => JSON.stringify(resolveExecutionContext33(db));
 
-/** The nine fields S10 adds to `world`, each with the PAC clause that reads it. */
+/** The ten fields S10 adds to `world`, each with the PAC clause that reads it. */
 const S10_FIELDS = [
   'team[].projectMemberId', 'team[].defaultProvider', 'team[].defaultModel', 'team[].defaultEffort',
   'team[].providerFallbacks', 'team[].requiredCapabilities', 'workspaces[].enabled',
-  'tasks[].workspaceId', 'providers[].models',
+  'tasks[].executionContract', 'tasks[].workspaceId', 'providers[].models',
 ] as const;
 type S10Field = (typeof S10_FIELDS)[number];
 
@@ -4208,6 +4256,7 @@ function worldProjection33(db: Db33, version: Version16, omit?: S10Field): unkno
     tasks: [{
       id: db.task.id, status: db.task.status, assigneeAgentId: db.task.assigneeAgentId,
       provider: db.task.provider, model: db.task.model, requiredCapabilities: db.task.requiredCapabilities,
+      ...(has('tasks[].executionContract') ? { executionContract: db.task.executionContract } : {}),
       ...(has('tasks[].workspaceId') ? { workspaceId: db.task.workspaceId } : {}),
     }],
     workspaces: db.workspaces.map((w) => ({
@@ -4270,6 +4319,23 @@ const S10_MUTATIONS: { field: S10Field; left: () => Db33; right: () => Db33 }[] 
     field: 'workspaces[].enabled',
     left: db33,
     right: () => { const d = db33(); d.workspaces[0].enabled = false; return d; },
+  },
+  {
+    // S10-f in its executable form, and the pair is legal on BOTH sides — which is the only way this
+    // one can be built. A V1 row cannot carry a pin (PAC §3.4 K1's CHECK), so "same row, two
+    // contracts, one pin" is not a database state and would prove nothing. What IS reachable on both
+    // sides is a Project task with no assignee and no pin: as V1 it is PAC §7.1 priority 2
+    // (`WHO_UNRESOLVED`, and PAC H3 says that refusal exists precisely for V1 rows); as LEGACY it is
+    // the shape §11.4 / L5 hands to every old client, and it dispatches over the old bridge. One
+    // column apart, one REFUSE and one DISPATCH — S10-f's "strongest form of the deletion criterion".
+    field: 'tasks[].executionContract',
+    left: () => { const d = db33(); d.task.assigneeAgentId = null; return d; },
+    right: () => {
+      const d = db33();
+      d.task.assigneeAgentId = null;
+      d.task.executionContract = 'LEGACY';
+      return d;
+    },
   },
   {
     field: 'tasks[].workspaceId',
@@ -4393,6 +4459,23 @@ test('PC-CX-33 the declared decision input carries the PAC resolver read set', (
   assert.notEqual(ec2Digest33(resolveExecutionContext33(claude)), ec2Digest33(resolveExecutionContext33(member2)));
   assert.notEqual(inputHash33(claude, 'v16'), inputHash33(member2, 'v16'));
 
+  // D — the split itself (S10-f). Two Project tasks with no assignee and no pin, one column apart:
+  // the V1 one cannot dispatch at all, the LEGACY one leaves §7 and goes over the old bridge. Both
+  // states are reachable in the database, which is what makes this a counterexample rather than an
+  // illustration — see the `tasks[].executionContract` mutation for why the "same row with a pin,
+  // two contracts" version is not.
+  const unassigned = clone33(claude);
+  unassigned.task.assigneeAgentId = null;
+  const legacy = clone33(unassigned);
+  legacy.task.executionContract = 'LEGACY';
+  assert.deepEqual(resolveExecutionContext33(unassigned), { refuse: 'WHO_UNRESOLVED' },
+    'D: a V1 task with no assignee is PAC §7.1 priority 2');
+  assert.deepEqual(resolveExecutionContext33(legacy), { legacy: true, taskId: 't1', pinnedProvider: null, pinnedModel: null },
+    'D: the same row as LEGACY never enters the WHO chain at all (PAC §11.1 L1)');
+  assert.notEqual(requiredOutcome33(unassigned), requiredOutcome33(legacy), 'D: …so the two require different runs');
+  assert.equal(inputHash33(unassigned, 'v15'), inputHash33(legacy, 'v15'), 'D: the v1.5 projection cannot tell them apart');
+  assert.notEqual(inputHash33(unassigned, 'v16'), inputHash33(legacy, 'v16'), 'D: v1.6 gives them different hashes');
+
   // S10-c: every field the table adds is load-bearing, one deletion mutation each. Removing it
   // collapses a pair the resolver has to distinguish; keeping it separates them.
   for (const { field, left, right } of S10_MUTATIONS) {
@@ -4429,6 +4512,91 @@ test('PC-CX-33 S8 harvests from the PAC resolution chain too, and §6.1 carries 
   }
   // …and EC1 points back, so the two read sets cannot drift apart silently.
   assert.match(section(PCC, '7.4'), /这八行读到的每一列同时必须进 `decisionInput\.world`/, '§7.4 EC1 does not point at S10');
+});
+
+test('PC-CX-33 the execution contract picks the read set: V1 reads the Agent, LEGACY reads the task pin', () => {
+  // PCC §7.4 EC1-b and PAC §16 O7, as something that RUNS. `00.15` proves both documents say it;
+  // this proves the model obeys it. The third review round found the model ignoring the pin on both
+  // branches and having no branch at all — a state in which a projection missing `executionContract`
+  // is indistinguishable from one carrying it, so `PC-CX-33`'s own green was self-consistent and
+  // proved nothing.
+  const v1: string[] = [];
+  resolveExecutionContext33(db33(), v1);
+  assert.ok(v1.includes('task.execution_contract'), 'the resolver must read the selector before anything else');
+  assert.equal(v1[0], 'task.execution_contract', 'PAC §5 step 2 is the FIRST read, not a late filter');
+  for (const agentColumn of ['agent.default_provider', 'agent.default_model']) {
+    assert.ok(v1.includes(agentColumn), `the V1 WITH chain must read \`${agentColumn}\` (PAC §7.2 priority 2)`);
+  }
+  for (const pin of ['task.provider', 'task.model']) {
+    assert.ok(!v1.includes(pin), `the V1 chain read \`${pin}\`, which PAC §3.4 K1 makes NULL on every V1 row`);
+  }
+
+  // The fallback chain is the third Agent column, and it is only reached when the default fails —
+  // asserting it on the happy path would be asserting nothing.
+  const exhausted = db33();
+  exhausted.providers[0].available = false;
+  const fallbackReads: string[] = [];
+  resolveExecutionContext33(exhausted, fallbackReads);
+  assert.ok(fallbackReads.includes('agent.provider_fallbacks'), 'PAC §7.4 reads the Agent’s ordered fallback chain');
+
+  // LEGACY is the other half: the pin is read, and no Agent column is.
+  const legacyDb = db33();
+  legacyDb.task.executionContract = 'LEGACY';
+  legacyDb.task.provider = 'codex';
+  legacyDb.task.model = 'gpt-5.6-sol';
+  const legacyReads: string[] = [];
+  const resolved = resolveExecutionContext33(legacyDb, legacyReads);
+  assert.deepEqual(resolved, { legacy: true, taskId: 't1', pinnedProvider: 'codex', pinnedModel: 'gpt-5.6-sol' },
+    'the LEGACY bridge reads the task pin (PAC §11.1 L1)');
+  assert.deepEqual(legacyReads, ['task.execution_contract', 'task.provider', 'task.model'],
+    'the LEGACY branch must read the pin and none of the Agent columns');
+
+  // And the same pin on a V1 row is not a state to model: PAC §3.4 K1 is a CHECK constraint, so the
+  // V1 branch cannot be tested "ignoring" a pin — it can only be tested never reading one, above.
+  assert.match(section(PAC, '3.4'), /CHECK \("execution_contract" = 'LEGACY' OR \("provider" IS NULL AND "model" IS NULL\)\)/,
+    'PAC §3.4 K1 no longer makes a V1 row with a pin unrepresentable');
+});
+
+test('PC-CX-33 H4 on the executable WHO chain: off-team beats disabled, and beats soft-deleted', () => {
+  // PAC §7.1 H4. The two predicates can hold of one input, and until the third review round the
+  // contract said `WHO_NOT_IN_TEAM` wins while this model answered `WHO_DISABLED`. `00.13` read the
+  // clause's word order and the case ids and stayed green through all of it, because reading a
+  // sentence is not running it.
+  const offTeamAndDisabled = db33();
+  offTeamAndDisabled.member = null;
+  offTeamAndDisabled.agent.enabled = false;
+  assert.deepEqual(resolveExecutionContext33(offTeamAndDisabled), { refuse: 'WHO_NOT_IN_TEAM' },
+    'member = null ∩ enabled = false must have exactly one answer, and H4 says it is WHO_NOT_IN_TEAM');
+
+  const offTeamAndDeleted = db33();
+  offTeamAndDeleted.member = null;
+  offTeamAndDeleted.agent.deletedAt = '2026-08-20T00:00:00.000Z';
+  assert.deepEqual(resolveExecutionContext33(offTeamAndDeleted), { refuse: 'WHO_NOT_IN_TEAM' },
+    'member = null ∩ deletedAt ≠ null must give the same one answer');
+
+  // Neither refusal has been swallowed: each still fires on the input it alone describes.
+  const offTeamOnly = db33();
+  offTeamOnly.member = null;
+  assert.deepEqual(resolveExecutionContext33(offTeamOnly), { refuse: 'WHO_NOT_IN_TEAM' });
+  const disabledOnly = db33();
+  disabledOnly.agent.enabled = false;
+  assert.deepEqual(resolveExecutionContext33(disabledOnly), { refuse: 'WHO_DISABLED' },
+    'an Agent inside the Team but disabled is still WHO_DISABLED (§12 keeps both rows)');
+  const deletedOnly = db33();
+  deletedOnly.agent.deletedAt = '2026-08-20T00:00:00.000Z';
+  assert.deepEqual(resolveExecutionContext33(deletedOnly), { refuse: 'WHO_DISABLED' });
+
+  // …and the clause the order comes from, so the model and the contract cannot drift apart.
+  const h4 = section(PAC, '7.1');
+  assert.match(h4.slice(h4.indexOf('- **H4')), /`WHO_NOT_IN_TEAM` 胜/, 'PAC §7.1 H4 no longer names the winner');
+
+  // The reverse order is what the defect was, stated as the thing that must stay impossible: judging
+  // availability first hands an off-team Agent a required action ("enable it") that does not make
+  // the dispatch possible.
+  const availabilityFirst = (db: Db33): string =>
+    (!db.agent.enabled || db.agent.deletedAt !== null) ? 'WHO_DISABLED' : db.member === null ? 'WHO_NOT_IN_TEAM' : 'DISPATCH';
+  assert.equal(availabilityFirst(offTeamAndDisabled), 'WHO_DISABLED', 'the superseded order is what this test forbids');
+  assert.notDeepEqual(resolveExecutionContext33(offTeamAndDisabled), { refuse: availabilityFirst(offTeamAndDisabled) });
 });
 
 /**

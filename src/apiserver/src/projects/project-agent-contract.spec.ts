@@ -26,6 +26,9 @@ const PAC = readFileSync(path.join(REPO, 'docs/project-agent-contract.md'), 'utf
 /** The downstream control-loop contract. PAC's dispatch refusals have to land somewhere, and this
  *  is where §7.4 AU-F says they land, so half of PAC's closure is a property of this file. */
 const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
+/** The executable model of the two contracts. Clauses `00.18` and `00.19` are about whether a rule
+ *  this document states is actually RUN somewhere, and this is the somewhere. */
+const MODEL = readFileSync(path.join(REPO, 'src/apiserver/src/projects/coordinator-counterexample.spec.ts'), 'utf8');
 
 /** A section body with fenced code blocks removed — SQL and JSON samples are not normative prose. */
 function prose(number: string): string {
@@ -445,4 +448,98 @@ test('00.16: the four blocking findings of v1.1 each have a single answer', () =
   assert.match(section(PAC, '7.1'), /\*\*H4（两条拒绝的唯一优先级，v1\.2）\*\*/, '§7.1 has no order for the WHO intersection');
   assert.match(section(PAC, '7.3'), /\*\*C8（交集的唯一优先级，v1\.2）\*\*/, '§7.3 has no order for the WHERE intersection');
   assert.match(section(PAC, '11.1'), /\*\*L5（新建 Project Task 的分流由请求形状决定/, '§11.1 has no rule for an old client’s create');
+});
+
+test('00.17: one create request has one execution contract, and the old client’s has exactly one', () => {
+  // The third review round's first blocker. §11.1 L5 already said "V1 only when the request carries
+  // `assigneeAgentId`", and four other places still said "a Task with a `projectId` is written V1" —
+  // so one recorded old-client payload had two legal answers, each citing the frozen contract.
+  // `00.16` only asserted that L5's TITLE exists, which is why the four survived a whole round.
+  const l5 = section(PAC, '11.1');
+  const shapes = tables(l5).find((t) => t[0].some((h) => bare(h) === '创建请求的形状'));
+  assert.ok(shapes, '§11.1 L5 no longer states the request-shape table, which is the only write rule');
+  assert.equal(shapes.length - 1, 3, 'a create either has no projectId, or carries the agent, or omits it — three shapes');
+
+  // The table, read as the function it is. Two recorded old-client payloads and one new-client one
+  // go through it; each has to come out with exactly one answer.
+  const rule = new Map(shapes.slice(1).map((row) => [bare(row[0]), bare(row[1])]));
+  const contractFor = (body: Record<string, unknown>): string[] => {
+    const has = (k: string): boolean => Object.prototype.hasOwnProperty.call(body, k);
+    return [...rule.entries()]
+      .filter(([shape]) => (/没有 projectId/.test(shape) ? !has('projectId')
+        : /显式带 assigneeAgentId/.test(shape) ? has('projectId') && has('assigneeAgentId')
+        : /省略 assigneeAgentId/.test(shape) ? has('projectId') && !has('assigneeAgentId')
+        : false))
+      .map(([, contract]) => contract);
+  };
+
+  // Recorded from what the clients on 0.1.129 actually send: neither knows the field exists.
+  const recordedOldPost = { title: 'ship it', projectId: 'P', assigneeId: 'W' };
+  const recordedOldBatch = { tasks: [{ title: 'a', projectId: 'P' }, { title: 'b', projectId: 'P' }] };
+  assert.deepEqual(contractFor(recordedOldPost), ['LEGACY'], 'the recorded POST /tasks payload has one answer, and it is LEGACY');
+  for (const item of recordedOldBatch.tasks) {
+    assert.deepEqual(contractFor(item), ['LEGACY'], 'each recorded batch-create item has one answer, and it is LEGACY');
+  }
+  assert.deepEqual(contractFor({ title: 'ship it', projectId: 'P', assigneeAgentId: 'A' }), ['V1'], 'the new client’s create is V1');
+  assert.deepEqual(contractFor({ title: 'a chore' }), ['LEGACY'], 'no project, no V1 (K3)');
+
+  // And nothing else in the document may answer the same question. A line that decides what a
+  // create writes has to name `assigneeAgentId` or defer to L5; §0 (the revision index) and §17
+  // (the revision log) are excluded because they quote superseded rules on purpose, and `00.11` /
+  // `00.16` already police them.
+  const historical = [section(PAC, '0'), section(PAC, '17')];
+  const residual = PAC.split('\n')
+    .map((line) => bare(line))
+    .filter((line) => /V1/.test(line) && /(新建|创建)/.test(line))
+    .filter((line) => !/assigneeAgentId/.test(line) && !/L5/.test(line))
+    .filter((line) => !historical.some((h) => h.includes(line)));
+  assert.deepEqual(residual, [], 'a line still decides the execution contract from `projectId` alone');
+
+  // The two clauses that used to be the other answer now point at L5 by name.
+  assert.match(section(PAC, '3.4'), /唯一规则在 §11\.1 L5/, '§3.4’s field table no longer defers to the single rule');
+  assert.match(l5, /本条是 `execution_contract` 写入规则的唯一规范来源/, 'L5 does not claim to be the only source');
+  assert.ok(cases().some((c) => c.id === '06B.8'), '§13 lost the recorded-payload case this rule is proved by');
+});
+
+test('00.18: H4’s order is executed against the resolver, not just written down', () => {
+  // `00.13` compares the clause's word order and checks that case ids exist. Both stayed green for a
+  // full round while the executable WHO chain judged availability before membership and answered
+  // `WHO_DISABLED` to an off-team, disabled Agent. A rule is proved where it runs.
+  const named = 'PC-CX-33 H4 on the executable WHO chain: off-team beats disabled, and beats soft-deleted';
+  assert.ok(MODEL.includes(`test('${named}'`), `${named} is not a test in coordinator-counterexample.spec.ts`);
+  for (const intersection of ['offTeamAndDisabled', 'offTeamAndDeleted']) {
+    assert.ok(MODEL.includes(intersection), `the model runs no ${intersection} counterexample`);
+  }
+  // Both intersections must assert the SAME single code, or "one winner" is only a claim.
+  const body = MODEL.slice(MODEL.indexOf(`test('${named}'`));
+  const asserted = body.slice(0, body.indexOf('\n});'));
+  assert.equal((asserted.match(/refuse: 'WHO_NOT_IN_TEAM'/g) ?? []).length >= 3, true,
+    'the two intersections and the off-team-only case must each land on WHO_NOT_IN_TEAM');
+  assert.ok(asserted.includes("refuse: 'WHO_DISABLED'"),
+    'reordering must not swallow WHO_DISABLED — it still fires on an in-team, disabled Agent');
+});
+
+test('00.19: the executable model carries the contract selector, and its V1 branch reads no pin', () => {
+  // The repo-level other half of `00.15`. The documents agreed; the model had no `executionContract`
+  // anywhere — not in its row type, its fixture, its resolver, its `world` projection or its S10
+  // field list — so it was self-consistently green against a projection that could not tell a V1
+  // task from a legacy one.
+  for (const site of [
+    "executionContract: 'V1' | 'LEGACY'",           // Db33: the column exists
+    "executionContract: 'V1'",                       // the fixture states which branch it is on
+    "read('task.execution_contract'",                // the resolver branches on it, first
+    "has('tasks[].executionContract')",              // the world projection carries it
+    "'tasks[].executionContract'",                   // …and S10_FIELDS declares it
+  ]) {
+    assert.ok(MODEL.includes(site), `the executable model is missing: ${site}`);
+  }
+  const named = 'PC-CX-33 the execution contract picks the read set: V1 reads the Agent, LEGACY reads the task pin';
+  assert.ok(MODEL.includes(`test('${named}'`), `${named} is not a test in coordinator-counterexample.spec.ts`);
+
+  // S10-c on this field: the pair must be one column apart, so the deletion mutation really is a
+  // deletion and not a second difference doing the work.
+  assert.match(MODEL, /field: 'tasks\[\]\.executionContract',/, 'S10_MUTATIONS has no pair for the selector');
+
+  // §16 O7 stays closed on the document side; this case is the executable half of the same clause.
+  assert.match(section(PAC, '16'), /- \*\*O7\*\*：~~/, '§16 reopened O7');
 });
