@@ -24,7 +24,7 @@ test('runner restart reclaims every open session so cold checkouts remain protec
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
 
   assert.deepEqual(
@@ -94,7 +94,7 @@ test('reclaim preserves lease state and snapshots an inherited runtime model onc
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
 
   const first = await controller.reclaim({
@@ -156,7 +156,7 @@ test('a concurrent Session model edit wins reclaim materialization', async () =>
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
 
   const result = await controller.reclaim({
@@ -190,7 +190,7 @@ test('session meta preserves the OpenCode runtime provider', async () => {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
 
   assert.deepEqual(await controller.getSessionMeta({ id: runnerId }, sessionId), {

@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -195,6 +196,19 @@ export function runnerSupportsCapability(
   );
 }
 
+/** A heartbeat capability header is a declarative machine report, never an authorization token. */
+export function parseRunnerCapabilities(
+  header: string | string[] | undefined,
+): string[] | undefined {
+  if (header === undefined) return undefined;
+  const values = Array.isArray(header) ? header : [header];
+  return [...new Set(values.flatMap((value) => value.split(','))
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0 && value.length <= 120))]
+    .sort()
+    .slice(0, 128);
+}
+
 function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
@@ -258,7 +272,7 @@ export class RunnerApiController {
     private readonly push: PushService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly references: ReferenceExpansionService,
-    private readonly listEvents: ListEventsService,
+    private readonly listEvents?: ListEventsService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -450,6 +464,7 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
+    const reportedCapabilities = parseRunnerCapabilities(capabilities);
     const supportsWorktreeOps = runnerSupportsCapability(capabilities, SESSION_WORKTREE_OPS_V1);
     if ((dto?.supervisedSessionIds?.length ?? 0) > 10_000) {
       throw new BadRequestException('too many supervised session IDs');
@@ -489,6 +504,10 @@ export class RunnerApiController {
         planUsage: (dto?.planUsage ?? undefined) as Prisma.InputJsonValue | undefined,
         // Runtime model catalog; older runners omit it (leave as-is).
         modelCatalog: (dto?.modelCatalog ?? undefined) as Prisma.InputJsonValue | undefined,
+        // Capabilities are reported by this authenticated runner process. Omission means an old
+        // binary and preserves the last snapshot; an explicit empty header retires it.
+        capabilities: reportedCapabilities,
+        capabilitiesReportedAt: reportedCapabilities === undefined ? undefined : new Date(),
         // Per-engine health for the Providers page. Sanitized on the way in as well as out, so a
         // malformed report can't be stored as a claim about this machine; an older runner omits
         // the field entirely and keeps whatever was last known.
@@ -1508,11 +1527,19 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Query('leaseGeneration') leaseGeneration?: string,
+    /** This poller understands `steer` — a message written into the turn already running.
+     *  A runner that predates the kind does not send it, and must not be handed one: its
+     *  inbox switch has no case for it, so the turn would be leased and then ignored, and a
+     *  steer's lease is never reclaimed. Left unclaimed it is not lost — turn-complete
+     *  re-files a still-PENDING steer as an ordinary message once its turn ends — so the
+     *  message runs a turn later instead of vanishing. This is what makes the control plane
+     *  safe to deploy ahead of the runners rather than only after them. */
+    @Query('acceptsSteer') acceptsSteer?: string,
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
     for (;;) {
-      const turn = await this.dequeueTurn(sessionId, runner.id, generation);
+      const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1');
       if (turn) return turn;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { turnId: '', seq: 0, kind: 'message' };
@@ -1602,6 +1629,8 @@ export class RunnerApiController {
     sessionId: string,
     runnerId: string,
     leaseGeneration: string | null,
+    /** Whether this poller can act on a steer at all — see the inbox route. */
+    acceptsSteer = false,
   ): Promise<RunInboxResponse | null> {
     return this.prisma.$transaction(async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
@@ -1675,6 +1704,33 @@ export class RunnerApiController {
                   AND inflight."kind" IN ('message', 'shell')
                   AND inflight."status" = 'IN_FLIGHT'
               ))
+              -- A steer is the mirror image of an executable turn: it is deliverable
+              -- BECAUSE one is already running, and it is written into that turn instead of
+              -- waiting for its result. It neither occupies the single in-flight slot (the
+              -- NOT EXISTS below counts message/shell only) nor is gated by it. Only a live
+              -- lease counts as running — an expired one belongs to an engine that stopped
+              -- answering, and there is nothing resident to steer.
+              --
+              -- Delivered once and never re-leased: an expired steer lease means the runner
+              -- died holding it, and re-writing a message the engine may already have acted
+              -- on is the one thing mid-turn delivery must not do. A steer left PENDING when
+              -- its turn ends is not stranded either — turn-complete files it as an ordinary
+              -- message, which is what it becomes once there is nothing to steer.
+              OR (turn."kind" = 'steer' AND turn."status" = 'PENDING'
+                AND ${acceptsSteer}::boolean
+                AND EXISTS (
+                  SELECT 1 FROM "session" active
+                  WHERE active.id = ${sessionId}::uuid
+                    AND active.status = 'RUNNING'
+                    AND active."cancel_requested_at" IS NULL
+                )
+                AND EXISTS (
+                  SELECT 1 FROM "conversation_turn" inflight
+                  WHERE inflight."session_id" = ${sessionId}::uuid
+                    AND inflight."kind" = 'message'
+                    AND inflight."status" = 'IN_FLIGHT'
+                    AND inflight."lease_deadline_at" > now()
+                ))
               -- User executable turns are deliverable only after claim changed the Session
               -- to RUNNING. An AWAITING_INPUT process may remain warm, but its inbox cannot
               -- bypass maxConcurrent merely because it is already resident.
@@ -1695,7 +1751,7 @@ export class RunnerApiController {
                   ))
                 ))
             )
-          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" = 'reload' THEN 1 ELSE 2 END), turn."seq" ASC
+          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" IN ('reload', 'steer') THEN 1 ELSE 2 END), turn."seq" ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )
@@ -1705,10 +1761,11 @@ export class RunnerApiController {
       const t = rows[0];
       let attachments: TurnAttachment[] | undefined;
       let content = t.content ?? undefined;
-      if (t.kind === 'message') {
+      if (t.kind === 'message' || t.kind === 'steer') {
         // A message turn that already produced runtime output is a lease re-delivery.
-        // Resume with a continuation nudge instead of replaying its side effects.
-        const started = await tx.runEvent.findFirst({
+        // Resume with a continuation nudge instead of replaying its side effects. A steer is
+        // never re-delivered (its lease is not reclaimable above), so it never takes this.
+        const started = t.kind !== 'steer' && (await tx.runEvent.findFirst({
           where: {
             turnId: t.id,
             OR: [
@@ -1723,7 +1780,7 @@ export class RunnerApiController {
             ],
           },
           select: { id: true },
-        });
+        }));
         if (started) {
           content = buildResumeContinuation(t.content);
         } else {
@@ -1758,7 +1815,12 @@ export class RunnerApiController {
           // A list's console also carries back what the control plane noticed while nobody was
           // talking to it. Piggybacked here rather than pushed as its own turn — see
           // ListEventsService for why a second waking path is the thing being avoided.
-          content = (await this.listEvents.appendFor(tx, sessionId, content)) ?? content;
+          //
+          // Not on a steer: this consumes a delivered-stamp and reads as the opening context of
+          // a turn, and a steer joins a turn that is already under way.
+          if (t.kind !== 'steer') {
+            content = (await this.listEvents?.appendFor(tx, sessionId, content)) ?? content;
+          }
         }
       } else if (t.kind !== 'shell') {
         // Control turns are fire-and-forget: ack on delivery so a stale one cannot
@@ -1997,6 +2059,29 @@ export class RunnerApiController {
           retryAt: true,
         },
       });
+      // A steer settles only itself. It joined a turn that is still running — the `result`
+      // that ends that turn belongs to the message it was folded into, and the slot, the
+      // billing and the session's status all belong there too. So this acks the steer's own
+      // row and stops: no numTurns, no parking, no terminal transition, and in particular no
+      // FAILED session when a steer merely failed to reach the engine (the runner reports
+      // that as a user_delivery event, which is where a person can act on it).
+      const steering = await tx.conversationTurn.findFirst({
+        where: { id: dto.turnId, sessionId, kind: 'steer' },
+        select: { id: true },
+      });
+      if (steering) {
+        const acked = await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
+          data: { status: 'ANSWERED', answeredAt: new Date() },
+        });
+        return {
+          applied: acked.count > 0,
+          steer: true,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
+      }
       // A turn that failed mid-run (e.g. an API/content-filter error the workspace couldn't
       // recover from — the runner reports such turns as FAILED) would otherwise park at
       // AWAITING_INPUT, which is indistinguishable from an ordinary idle session: the list
@@ -2043,7 +2128,7 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
-        return { applied: false, status: current.status, failSession, retryAt: current.retryAt };
+        return { applied: false, steer: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -2054,6 +2139,14 @@ export class RunnerApiController {
         select: { kind: true },
       });
       const turnInc = completed?.kind === 'shell' ? 0 : (dto.numTurns ?? 1);
+      // A steer still queued when its turn ends has nothing left to steer, so it becomes
+      // what it would have been had it arrived a moment later: the next ordinary message.
+      // Same row, same seq, same clientTurnId — the kind is the only thing that was ever
+      // about timing. Done before the count below so it is counted as the follow-up it now is.
+      await tx.conversationTurn.updateMany({
+        where: { sessionId, kind: 'steer', status: 'PENDING' },
+        data: { kind: 'message' },
+      });
       // If a follow-up arrived before this completion acquired the Session lock, the
       // current active slot passes directly to it and the inbox may deliver it next. With
       // no executable follow-up, release the slot while the runtime remains warm.
@@ -2122,6 +2215,7 @@ export class RunnerApiController {
         });
         return {
           applied: false,
+          steer: false,
           status: latest?.status ?? current.status,
           failSession,
           retryAt: current.retryAt,
@@ -2168,8 +2262,14 @@ export class RunnerApiController {
         await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, status: nextStatus, failSession, retryAt: current.retryAt };
+      return { applied: true, steer: false, status: nextStatus, failSession, retryAt: current.retryAt };
     });
+    if (finalized.steer) {
+      // Nothing about the session changed, so nothing about it is announced. The queue view
+      // did change — a steer left it — and the clients read that from the durable list.
+      if (finalized.applied) this.realtime.publishQueuedTurnsChanged(sessionId);
+      return { ok: true, status: finalized.status };
+    }
     if (finalized.failSession) {
       // Only announce the terminal status if this call actually finalized the session
       // (a late/duplicate turn-complete for an already-ended session is a no-op).
@@ -2790,12 +2890,18 @@ export class RunnerApiController {
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
+          ownerId: string;
+          taskId: string | null;
+          branch: string | null;
+          mergeTarget: string | null;
         }>
       >`
         SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
-               "merge_operation_owner" AS "mergeOperationOwner"
+               "merge_operation_owner" AS "mergeOperationOwner",
+               "owner_id" AS "ownerId", "task_id" AS "taskId",
+               "branch", "merge_target" AS "mergeTarget"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -2849,6 +2955,52 @@ export class RunnerApiController {
           ...(merged && dto.mergedSha ? { baseSha: dto.mergedSha } : {}),
         },
       });
+
+      // §13.7 MR3: Orbit's own merge leaves a receipt too.
+      //
+      // Written in THIS transaction so a recorded merge and the session state it produced commit
+      // together — a receipt that survives a rolled-back merge would be the worst row in the table.
+      // Skipped only when the runner named no source tip: a receipt whose `sourceSha` is a guess
+      // cannot be re-checked, and this table's whole value is that its rows can be.
+      const sha = (value: string | undefined) => {
+        const v = (value ?? '').trim().toLowerCase();
+        return /^[0-9a-f]{40}$/.test(v) ? v : null;
+      };
+      const sourceSha = sha(dto.sourceSha);
+      const mergedSha = sha(dto.mergedSha);
+      const targetBranch = (dto.targetBranch ?? current.mergeTarget ?? '').trim();
+      const sourceBranch = (current.branch ?? '').trim();
+      // A success that cannot say where the target ended up is refused by 0128's CHECK, and
+      // failing the merge-result write over it would turn a completed merge into an error the
+      // runner retries forever. It is the same rule as the missing source tip: no checkable row,
+      // no receipt.
+      const checkable = sourceSha !== null && targetBranch !== '' && sourceBranch !== ''
+        && (!merged || mergedSha !== null);
+      if (checkable && sourceSha) {
+        const task = current.taskId
+          ? await tx.task.findUnique({
+              where: { id: current.taskId },
+              select: { projectId: true },
+            })
+          : null;
+        await MergeReceiptService.fromRunnerMergeResult(tx, {
+          ownerId: current.ownerId,
+          sessionId,
+          taskId: current.taskId,
+          projectId: task?.projectId ?? null,
+          result: merged ? 'MERGED' : dto.status === 'conflict' ? 'CONFLICT' : 'ERROR',
+          sourceBranch,
+          sourceSha,
+          targetBranch,
+          targetShaBefore: sha(dto.targetShaBefore),
+          // A merge that did not happen moved no target, so only a success names one.
+          targetShaAfter: merged ? mergedSha : null,
+          rebaseBaseSha: sha(dto.rebaseBaseSha),
+          conflicts: dto.status === 'conflict' ? (dto.conflicts ?? []) : [],
+          message: dto.message ?? null,
+          operationId: dto.operationId ?? null,
+        });
+      }
     });
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it

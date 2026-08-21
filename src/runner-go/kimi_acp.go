@@ -1146,7 +1146,7 @@ type kimiPromptResult struct {
 	err    error
 }
 
-func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
+func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
 	setTurn("")
 	if err := guardKimiProjectMCP(execDir); err != nil {
 		emit(evError, map[string]interface{}{"message": err.Error()})
@@ -1390,6 +1390,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				continue
 			}
 			switch resp.Kind {
+			case "steer":
+				// A message meant to join the turn already running. This engine's turn call is
+				// outstanding until the turn ends, so there is nothing to hand it to — refuse it
+				// where the sender can see it rather than let a leased turn go quiet.
+				refuseUnsupportedSteer(resp.TurnID, resp.Content, providerKimi, job, emitFor, completeTurn)
+
 			case "message":
 				if !waitTurnPermit(ctx) {
 					return stCancelled, true, false

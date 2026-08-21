@@ -58,7 +58,8 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let provider: String?
     public let model: String?
     public let permissionMode: String?
-    /// The agent's default reasoning effort ('' = model default, else low/medium/high/xhigh/max).
+    /// The workspace's legacy default reasoning effort ('' = model default; otherwise a
+    /// provider/model-defined raw value such as low/medium/high/xhigh/max/ultra).
     /// A new session seeds its effort from this — see the composer.
     public let effort: String?
     public let workDir: String?
@@ -470,10 +471,35 @@ public struct SessionTurnRequest: Codable, Sendable {
     }
 }
 
+/// POST /sessions/:id/interrupt WITH a body — stop the turn that is running and queue what to
+/// do instead, in one request.
+///
+/// The two halves cannot be two requests. Interrupting drops the follow-ups queued behind the
+/// running turn (stopping means stop), so a client that interrupted and then sent would be racing
+/// its own delete; and a message sent while the turn still runs is filed as a steer — written INTO
+/// the turn being stopped, the opposite of what was asked. Sent together, the follow-up is filed
+/// after the drop and delivered as the next turn.
+public struct SessionInterruptRequest: Codable, Sendable {
+    /// Idempotency key for the follow-up; it also keys the interrupt, so a retry re-files neither.
+    public let clientTurnId: String
+    public let content: String
+    public let attachmentIds: [String]?
+    public init(clientTurnId: String, content: String, attachmentIds: [String]? = nil) {
+        self.clientTurnId = clientTurnId
+        self.content = content
+        self.attachmentIds = attachmentIds
+    }
+}
+
 public struct TurnAccepted: Codable, Sendable {
     public let turnId: String?
     public let seq: Int?
     public let status: String?
+    /// What the server filed this message as — `message`, `shell`, or `steer` — which is not what
+    /// was asked for: a message sent while a turn is running becomes a steer, written into that
+    /// turn instead of queued behind it (`SteerDelivery`). Nil from a server that predates the
+    /// kind, which is the pre-steer behaviour: queued.
+    public let kind: String?
 }
 
 /// One still-PENDING user turn from GET /sessions/:id/turns. These rows have not entered the

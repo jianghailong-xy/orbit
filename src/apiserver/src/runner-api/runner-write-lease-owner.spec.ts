@@ -80,6 +80,7 @@ function harness(options: HarnessOptions = {}) {
       },
       findUnique: async () => ({ kind: 'message' }),
       count: async () => 0,
+      findFirst: async () => null,
     },
   };
   const prisma = {
@@ -100,7 +101,7 @@ function harness(options: HarnessOptions = {}) {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
+      { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
     ),
     rawCalls,
     transactions: () => transactions,

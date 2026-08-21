@@ -39,6 +39,7 @@ test('end linearizes after a concurrent send and finalizes the now-PENDING sessi
         drained++;
         return { count: 1 };
       },
+      findFirst: async () => null,
     },
   };
   const prisma = {

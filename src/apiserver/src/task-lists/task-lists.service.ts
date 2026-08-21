@@ -5,6 +5,7 @@ import {
   FailureCause,
   RunEventType,
   TaskStatus as SharedTaskStatus,
+  uuidToBase62,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -574,10 +575,16 @@ export class TaskListsService {
    * console is a thing. It names the list, points at the two read tools, and — the part that
    * matters — states the standing instructions lever explicitly, since editing task descriptions
    * one at a time is the obvious move and the wrong one at this scale.
+   *
+   * The id is spelled base62, the same as the `id` the agent gets back from `tasklist_get`. Prose
+   * is the one boundary `PublicIdInterceptor` cannot reach — it rewrites response *fields*, and a
+   * message body is not one — so the encode happens here, where the id becomes text. An id worth
+   * carrying is an id meant to be used, and a console told one spelling and shown another has no
+   * way to tell it is looking at its own list.
    */
   private buildConsoleOpening(title: string, listId: string): string {
     return (
-      `你是任务列表「${title}」（id: ${listId}）的调度会话。\n\n` +
+      `你是任务列表「${title}」（id: ${uuidToBase62(listId)}）的调度会话。\n\n` +
       `这里用来观察和调整这个列表怎么跑，不是用来替它干活的。请先用 tasklist_get 读一遍它当前的策略与进度，` +
       `再用 task_list 看任务分布，然后简短汇报现状即可，不要自行改动任何东西。\n\n` +
       `之后我会用自然语言提要求，你用 tasklist_update 落到策略上。可调的有：\n` +

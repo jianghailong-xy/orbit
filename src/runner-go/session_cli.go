@@ -17,9 +17,11 @@ Usage:
   orbit session list [--status STATUS] [--parent-session-id ID] [--json]
   orbit session search --query TEXT [--limit N] [--json]
   orbit session get SESSION_ID [--json]
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--json]
-  orbit session interrupt SESSION_ID [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
+  orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--json]
+  orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
+  orbit session merge-receipts SESSION_ID [--limit N] [--json]
   orbit session end SESSION_ID [--json]
   orbit session complete SESSION_ID [--json]
 
@@ -36,6 +38,41 @@ Run 'orbit session <command> --help' for options.
 // offeredPermissionModes), and help that names a mode the runner will refuse is how an agent picks
 // it. Package-level init order resolves runsAsRoot first — it is a dependency of this expression.
 var sessionActionHelp = map[string]string{
+	"merge-receipt": `orbit session merge-receipt — record a merge Orbit did not perform
+
+Usage:
+  orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
+
+A branch merged by hand — the ` + "`git merge --ff-only`" + ` an agent runs in its own worktree — leaves
+the control plane with nothing: merge status blank, "in main" false, forever, because the only
+code that ever wrote those is Orbit's own Merge button. This files the receipt instead: an
+append-only row naming the session, its task, the commits on both sides and the base the source
+was rebased onto, so "did this task's work land" is answerable with a SHA.
+
+Recording the same merge twice is a no-op — the second call returns the first receipt.
+
+Options:
+  --result RESULT          MERGED | ALREADY_MERGED | CONFLICT | ERROR.
+                           ALREADY_MERGED is a result, not a no-op: it is the answer when the
+                           target already contained this work
+  --source-sha SHA         Full 40-character tip that was merged (abbreviations are refused —
+                           they cannot be re-checked against a repository that has moved on)
+  --target-branch BRANCH   The branch it was merged into
+  --source-branch BRANCH   Defaults to the session's own recorded branch
+  --target-sha-before SHA  The target tip before the merge
+  --target-sha-after SHA   The target tip after it. Required for --result MERGED
+  --rebase-base-sha SHA    The base the source was rebased onto before the merge was computed.
+                           Omitted means it was not rebased — which is what decides whether the
+                           tests that passed were about this tree
+  --conflict PATH          A conflicting path (repeatable); only for --result CONFLICT
+  --message TEXT           Git's message, for a conflict or an error
+  --json
+`,
+	"merge-receipts": `orbit session merge-receipts — list the merges recorded for a session
+
+Usage:
+  orbit session merge-receipts SESSION_ID [--limit N] [--json]
+`,
 	"create": fmt.Sprintf(`orbit session create — spawn an agent session
 
 Usage:
@@ -80,14 +117,24 @@ long-lived session has finished the turn it was given.
 	"send": `orbit session send — send a follow-up message to a session
 
 Usage:
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]
 
 --message-file accepts only '-' (stdin), so the CLI never opens an arbitrary path.
+
+The reply's "kind" says what the server did with the message: "steer" means it is being
+written into the turn already running (no reply of its own, and not withdrawable), while
+"message" means it is queued behind that turn. --client-turn-id makes the send idempotent:
+repeating a key returns the turn already filed instead of queueing a second message.
 `,
 	"interrupt": `orbit session interrupt — interrupt a session's current turn
 
 Usage:
-  orbit session interrupt SESSION_ID [--json]
+  orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
+
+Interrupting drops whatever was queued behind the running turn — stopping means stop. With
+--message the follow-up is filed in the SAME operation, after that drop, so it survives and
+runs as the next turn; without one, nothing takes the stopped turn's place. Accepting the
+request is not a promise the engine stopped: the transcript's "interrupt" event is.
 `,
 	"merge": `orbit session merge — merge a session's worktree branch
 
@@ -111,11 +158,20 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_list", Argv: []string{"orbit", "session", "list"}, Usage: "orbit session list [--status STATUS] [--parent-session-id ID] [--json]", Arguments: []string{"--status <PENDING|RUNNING|AWAITING_INPUT|SUCCEEDED|FAILED|CANCELLED|INTERRUPTED>", "--parent-session-id <id>", "--json"}},
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
-	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--json"}, Mutates: true},
-	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
+	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--json"}, Mutates: true},
+	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
 	{Tool: "session_complete", Argv: []string{"orbit", "session", "complete"}, Usage: "orbit session complete SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
+}
+
+// mergeReceiptCLICapabilities are advertised UNGATED, beside the project reads and for the same
+// reason they are: recording that a merge happened, and reading what was recorded, is not an
+// orchestration power over another session — it is evidence about the caller's own work, and the
+// agent most likely to need it is the plain single-session one with no session_* tools at all.
+var mergeReceiptCLICapabilities = []cliCapabilitySpec{
+	{Tool: "merge_receipt", Argv: []string{"orbit", "session", "merge-receipt"}, Usage: "orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]", Arguments: []string{"[session-id] (required)", "--result <MERGED|ALREADY_MERGED|CONFLICT|ERROR> (required)", "--source-sha <sha> (required)", "--target-branch <branch> (required)", "--source-branch <branch>", "--target-sha-before <sha>", "--target-sha-after <sha> (required for MERGED)", "--rebase-base-sha <sha>", "--conflict <path> (repeatable)", "--message <text>", "--json"}, Mutates: true},
+	{Tool: "merge_receipts", Argv: []string{"orbit", "session", "merge-receipts"}, Usage: "orbit session merge-receipts SESSION_ID [--limit N] [--json]", Arguments: []string{"[session-id] (required)", "--limit <n>", "--json"}},
 }
 
 // headlessSessionCLICapabilities is what `orbit capabilities` advertises outside a session: the
@@ -165,9 +221,17 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
-	ctx, err := requireCLIOrchestrationContext(action)
-	if err != nil {
-		return err
+	// §13.7's two receipt verbs are NOT orchestration and take no grant: they record and read a
+	// fact about work that already happened, inside the caller's own tenant. Gating them the way
+	// `merge` is gated would mean the deployments that most need the audit — the ordinary ones,
+	// with orchestration switched off — are exactly the ones that cannot write it.
+	ctx := cliOrchestrationContext{serviceToken: currentServiceToken()}
+	if action != "merge-receipt" && action != "merge-receipts" {
+		var err error
+		ctx, err = requireCLIOrchestrationContext(action)
+		if err != nil {
+			return err
+		}
 	}
 
 	switch action {
@@ -182,9 +246,13 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 	case "send":
 		return cliSessionSend(args[1:], in, out, ctx)
 	case "interrupt":
-		return cliSessionInterrupt(args[1:], out, ctx)
+		return cliSessionInterrupt(args[1:], in, out, ctx)
 	case "merge":
 		return cliSessionMerge(args[1:], out, ctx)
+	case "merge-receipt":
+		return cliSessionMergeReceipt(args[1:], out, ctx)
+	case "merge-receipts":
+		return cliSessionMergeReceipts(args[1:], out, ctx)
 	case "end":
 		return cliSessionEnd(args[1:], out, ctx)
 	case "complete":
@@ -541,6 +609,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	fs := newCLIFlagSet("orbit session send")
 	message := fs.String("message", "", "follow-up message")
 	messageFile := fs.String("message-file", "", "read message from stdin (-)")
+	clientTurnID := fs.String("client-turn-id", "", "idempotency key for this message")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -560,15 +629,32 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	if err != nil {
 		return err
 	}
-	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, map[string]interface{}{"message": messageText})
+	body := map[string]interface{}{"message": messageText}
+	if key := strings.TrimSpace(*clientTurnID); key != "" {
+		body["clientTurnId"] = key
+	}
+	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("send session message: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
-func cliSessionInterrupt(args []string, out io.Writer, ctx cliOrchestrationContext) error {
-	id, jsonOut, err := parseSessionTargetArgs("orbit session interrupt", args)
+func cliSessionInterrupt(args []string, in io.Reader, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit session interrupt")
+	message := fs.String("message", "", "what to do instead, sent with the stop")
+	messageFile := fs.String("message-file", "", "read the follow-up from stdin (-)")
+	clientTurnID := fs.String("client-turn-id", "", "idempotency key for the follow-up")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveSessionCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	messageText, _, err := readCLIText(in, *message, flagWasSet(fs, "message"), *messageFile, flagWasSet(fs, "message-file"), "message")
 	if err != nil {
 		return err
 	}
@@ -576,11 +662,21 @@ func cliSessionInterrupt(args []string, out io.Writer, ctx cliOrchestrationConte
 	if err != nil {
 		return err
 	}
-	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id)
+	// A plain interrupt stays a bodyless POST, exactly as it was; the follow-up only rides
+	// along when there is one.
+	var body interface{}
+	if follow := strings.TrimSpace(messageText); follow != "" {
+		req := map[string]interface{}{"message": follow}
+		if key := strings.TrimSpace(*clientTurnID); key != "" {
+			req["clientTurnId"] = key
+		}
+		body = req
+	}
+	raw, err := t.interruptSession(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("interrupt session: %w", err)
 	}
-	return writeCLIRawJSON(out, raw, jsonOut)
+	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
 func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) error {
@@ -609,6 +705,123 @@ func cliSessionMerge(args []string, out io.Writer, ctx cliOrchestrationContext) 
 	raw, err := t.mergeSession(ctx.sessionID, ctx.token, id, body)
 	if err != nil {
 		return fmt.Errorf("merge session: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// stringList collects a repeatable flag. One --conflict per path rather than a comma-joined
+// string: a path may contain a comma, and a separator that can appear in the value is a parser
+// that silently splits a filename in half.
+type stringList []string
+
+func (l *stringList) String() string { return strings.Join(*l, ",") }
+
+func (l *stringList) Set(v string) error {
+	*l = append(*l, v)
+	return nil
+}
+
+func cliSessionMergeReceipt(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit session merge-receipt")
+	result := fs.String("result", "", "MERGED | ALREADY_MERGED | CONFLICT | ERROR")
+	sourceBranch := fs.String("source-branch", "", "source branch (defaults to the session's own)")
+	sourceSha := fs.String("source-sha", "", "the tip that was merged")
+	targetBranch := fs.String("target-branch", "", "the branch it was merged into")
+	targetShaBefore := fs.String("target-sha-before", "", "target tip before the merge")
+	targetShaAfter := fs.String("target-sha-after", "", "target tip after the merge")
+	rebaseBase := fs.String("rebase-base-sha", "", "the base the source was rebased onto")
+	message := fs.String("message", "", "git's message, for a conflict or an error")
+	var conflicts stringList
+	fs.Var(&conflicts, "conflict", "a conflicting path (repeatable)")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveSessionCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	res := strings.ToUpper(strings.TrimSpace(*result))
+	switch res {
+	case "MERGED", "ALREADY_MERGED", "CONFLICT", "ERROR":
+	case "":
+		return fmt.Errorf("--result is required (MERGED | ALREADY_MERGED | CONFLICT | ERROR)")
+	default:
+		return fmt.Errorf("--result %q is not one of MERGED, ALREADY_MERGED, CONFLICT, ERROR", *result)
+	}
+	if strings.TrimSpace(*sourceSha) == "" {
+		return fmt.Errorf("--source-sha is required")
+	}
+	if strings.TrimSpace(*targetBranch) == "" {
+		return fmt.Errorf("--target-branch is required")
+	}
+	// Said here as well as server-side so the operator is corrected before the round trip: a
+	// MERGED receipt that cannot name where the target ended up is a claim, not a receipt.
+	if res == "MERGED" && strings.TrimSpace(*targetShaAfter) == "" {
+		return fmt.Errorf("--target-sha-after is required for --result MERGED")
+	}
+	body := map[string]interface{}{
+		"result":       res,
+		"sourceSha":    strings.TrimSpace(*sourceSha),
+		"targetBranch": strings.TrimSpace(*targetBranch),
+	}
+	for flag, value := range map[string]string{
+		"source-branch":     strings.TrimSpace(*sourceBranch),
+		"target-sha-before": strings.TrimSpace(*targetShaBefore),
+		"target-sha-after":  strings.TrimSpace(*targetShaAfter),
+		"rebase-base-sha":   strings.TrimSpace(*rebaseBase),
+	} {
+		if value == "" {
+			continue
+		}
+		switch flag {
+		case "source-branch":
+			body["sourceBranch"] = value
+		case "target-sha-before":
+			body["targetShaBefore"] = value
+		case "target-sha-after":
+			body["targetShaAfter"] = value
+		case "rebase-base-sha":
+			body["rebaseBaseSha"] = value
+		}
+	}
+	if len(conflicts) > 0 {
+		body["conflicts"] = []string(conflicts)
+	}
+	if strings.TrimSpace(*message) != "" {
+		body["detail"] = map[string]interface{}{"message": strings.TrimSpace(*message)}
+	}
+	t, err := cliSessionTransport(ctx)
+	if err != nil {
+		return err
+	}
+	raw, err := t.recordMergeReceipt(id, body)
+	if err != nil {
+		return fmt.Errorf("record merge receipt: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+func cliSessionMergeReceipts(args []string, out io.Writer, ctx cliOrchestrationContext) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit session merge-receipts")
+	limit := fs.Int("limit", 0, "maximum receipts to return")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveSessionCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	t, err := cliSessionTransport(ctx)
+	if err != nil {
+		return err
+	}
+	raw, err := t.listMergeReceipts(id, *limit)
+	if err != nil {
+		return fmt.Errorf("list merge receipts: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

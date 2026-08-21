@@ -111,7 +111,7 @@ function makeController(orchestrationEnabled: boolean) {
     },
   };
   return {
-    controller: new RunnerSessionsController(sessions as never, authorizer as never),
+    controller: new RunnerSessionsController(sessions as never, authorizer as never, {} as never),
     serviceCalls,
     authorizationCalls,
   };
@@ -218,7 +218,7 @@ test('headless callers reach the read and send routes scoped to the runner that 
       throw new Error('a headless call must not go through the orchestration authorizer');
     },
   };
-  const controller = new RunnerSessionsController(sessions as never, authorizer as never);
+  const controller = new RunnerSessionsController(sessions as never, authorizer as never, {} as never);
 
   assert.deepEqual(await controller.listSessions(RUNNER, undefined, undefined, undefined, 'RUNNING', undefined), {
     route: 'listForOrchestration',

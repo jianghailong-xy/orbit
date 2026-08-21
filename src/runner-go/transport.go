@@ -259,11 +259,18 @@ func (t *Transport) worktreesRemovable(ids []string) ([]string, error) {
 
 // inbox long-polls for the next user turn of an interactive session; returns nil
 // when the server holds then yields nothing (turnId == "").
+//
+// `acceptsSteer` says this binary knows the `steer` kind — a message written into the turn
+// already running. It is a property of the runner, not of the session: every session loop
+// here either folds a steer into the running turn (claude) or refuses it where the sender
+// can see it (refuseUnsupportedSteer). A runner that predates the kind sends no such flag
+// and is handed no steer, so the message waits and becomes an ordinary turn when the
+// running one ends, instead of being leased by a poller with no case for it.
 func (t *Transport) inbox(ctx context.Context, sessionID, leaseGeneration string) (*RunInboxResponse, error) {
 	var r RunInboxResponse
-	path := "/runner/sessions/" + sessionID + "/inbox"
+	path := "/runner/sessions/" + sessionID + "/inbox?acceptsSteer=1"
 	if leaseGeneration != "" {
-		path += "?leaseGeneration=" + url.QueryEscape(leaseGeneration)
+		path += "&leaseGeneration=" + url.QueryEscape(leaseGeneration)
 	}
 	if err := t.do(ctx, "GET", path, nil, &r, 35*time.Second); err != nil {
 		return nil, err
@@ -651,13 +658,16 @@ func (t *Transport) sessionEvents(ctx context.Context, sessionID string, after, 
 // listTasks filters and caps server-side. Fetching every task to filter here means downloading
 // the owner's whole task history — descriptions included — on each call, which is slow enough to
 // time out mid-body on a large account and lands in an agent's context as tens of megabytes.
-func (t *Transport) listTasks(status, listID string, labels []string, limit int) (json.RawMessage, error) {
+func (t *Transport) listTasks(status, listID, projectID string, labels []string, limit int) (json.RawMessage, error) {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
 	}
 	if listID != "" {
 		q.Set("listId", listID)
+	}
+	if projectID != "" {
+		q.Set("projectId", projectID)
 	}
 	// Repeated rather than comma-joined: a label may legitimately contain a comma, and the
 	// server accepts both forms.
@@ -718,13 +728,18 @@ func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
 // listTaskPage returns one page of tasks plus the cursor that continues it — an empty cursor
 // means this was the last page. listTasks above can only ever answer with the newest `limit`
 // rows, so this is what makes walking an entire account possible.
-func (t *Transport) listTaskPage(status, listID string, labels []string, limit int, cursor string) (json.RawMessage, string, error) {
+func (t *Transport) listTaskPage(status, listID, projectID string, labels []string, limit int, cursor string) (json.RawMessage, string, error) {
 	q := url.Values{}
 	if status != "" {
 		q.Set("status", status)
 	}
 	if listID != "" {
 		q.Set("listId", listID)
+	}
+	// Every filter has to ride every page, not just the first: a scope dropped after page one
+	// silently widens a walk to the whole account, which reads as "the project has 27k tasks".
+	if projectID != "" {
+		q.Set("projectId", projectID)
 	}
 	for _, label := range labels {
 		q.Add("labels", label)
@@ -766,6 +781,186 @@ func (t *Transport) getTask(id string) (json.RawMessage, error) {
 	}
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProject reads one project's durable context: its goal, acceptance criteria, instructions,
+// status, coordinator ids and task tallies. Tallies rather than task rows — the tasks themselves
+// are what the task routes above are for.
+//
+// Ids arrive in whichever spelling the caller holds (base62 short form or raw UUID); the server
+// decodes both, and an id belonging to somebody else is its 404, not a check made here.
+func (t *Transport) getProject(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProjectVerifications reads what every verification in one project concluded, and what those
+// conclusions are still holding up: each check's verdict and verdictRevision, each non-PASS
+// conclusion's defect subtask and the action that raised it, and the tasks the dispatch guard is
+// currently holding back with the reason for each.
+//
+// The question it answers is the one a coordinator cannot answer from the task list: a blocked
+// task looks exactly like an ordinary OPEN task, deliberately — the block is a precondition, not a
+// status somebody rewrote — so "why is this not running" has to be read from here.
+func (t *Transport) getProjectVerifications(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/verifications", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProjectCoordinatorStatus reads everything the control loop knows about one project: its run
+// state, who coordinates it and where, the coordination session and generation, the automation
+// policy and whether it is switched on, the concurrency and budget it is spending against, the last
+// few decisions and the actions they produced, what is claimed and unpublished right now, what is
+// blocking it, when it next wakes and which candidates lost, and the acceptance evidence.
+//
+// The question it answers is "why is this project not moving", which otherwise has no answer a
+// caller can fetch — the state is spread over seven tables and the most common conclusion, that the
+// project is broken, is usually wrong: it is at its cap, out of budget, MANUAL, or waiting.
+//
+// Read only. Asking the coordinator to run now is the user API's door, deliberately not this one.
+func (t *Transport) getProjectCoordinatorStatus(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/coordinator/status", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProjectBlockers reads what is stopping a project (contract §11), and with history the episodes
+// that are already over. Blocker rows are never deleted on resolution, so "what was blocking this
+// yesterday, and what ended it" stays answerable — this is the terminal's way of asking.
+func (t *Transport) getProjectBlockers(id string, history bool) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	path := "/runner/projects/" + url.PathEscape(id) + "/blockers"
+	if history {
+		path += "?history=1"
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
+// as the server decomposes them, the digest of the facts a DONE would be checked against, every
+// attempt with its per-criterion conclusions and evidence, the newest merge observation per
+// requirement, the append-only audit, and doneGate — whether a DONE would be allowed right now and,
+// if not, the code and the sentence the write path would refuse with.
+//
+// The read to make BEFORE claiming a project is finished. "The tests passed" written in a comment
+// is not evidence the server can check; a run in this table is.
+func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/acceptance", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// openProjectAcceptanceRun starts an acceptance attempt: the criteria are frozen with their digest
+// and one empty row per stated criterion is created — the checklist the verdict has to fill.
+//
+// Who concluded is the server's to decide from this credential (COORDINATOR_AGENT), not this
+// process's to claim.
+func (t *Transport) openProjectAcceptanceRun(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/acceptance/runs", body, &out, taskOpTimeout)
+	return out, err
+}
+
+// finalizeProjectAcceptanceRun concludes an attempt: one verdict per stated criterion, with the
+// evidence for it. The run's own verdict is derived from those and cannot be supplied — all PASS is
+// PASS, any FAIL is FAIL, anything else is INCONCLUSIVE.
+func (t *Transport) finalizeProjectAcceptanceRun(id, runID string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(runID); err != nil {
+		return nil, fmt.Errorf("run id: %w", err)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/acceptance/runs/"+url.PathEscape(runID)+"/verdict",
+		body, &out, taskOpTimeout)
+	return out, err
+}
+
+// recordProjectMergeEvidence records what a target branch was observed to CONTAIN (§13.4 AE9-b).
+//
+// The runner is the side that can actually look — it has the checkout. contentHash is a sha256 of
+// the content, never `git branch --contains`: after a squash that answer is a guaranteed false
+// negative, which is the lesson the contract carries in clause 6.
+func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/acceptance/merge-evidence", body, &out, taskOpTimeout)
+	return out, err
+}
+
+// createProject records a new project under the runner's owner — the same tenant every task write
+// here lands in, since the credential names a machine rather than a person.
+//
+// The body goes as the caller built it. Length bounds, the blank-is-null rule and which fields
+// exist at all are the server's CreateProjectDto to decide; a second opinion held here would be
+// one that drifts.
+//
+// sessionID travels in the header rather than the body, exactly as it does for a created task —
+// and for a stronger reason: the server reads it to bind the calling session as this project's
+// coordinator, along with the workspace that session runs in. A session or workspace in the BODY
+// would be this process's claim about which conversation coordinates the project; the header is a
+// claim about which session is calling, which the server checks against the session it has. Empty
+// (headless) sends no header at all, and the project is created bound to nothing — see
+// sessionHeader.
+func (t *Transport) createProject(sessionID string, body map[string]interface{}) (json.RawMessage, error) {
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// updateProject changes a project's title, goal, acceptance criteria, instructions or status.
+//
+// Only the keys the caller put in `body` are sent, and a key holding nil is sent AS null — that is
+// how a field gets cleared, so nothing here may prune it. Deciding locally which fields are worth
+// forwarding is the one thing that would turn "clear the goal" into "leave the goal alone".
+//
+// No session header, unlike createProject: a project's coordinator is settled when the project is
+// created, and an update sent from wherever the agent happens to be running now is not a request
+// to move it. Moving a coordinator is a decision someone makes on purpose.
+func (t *Transport) updateProject(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "PATCH", "/runner/projects/"+url.PathEscape(id), body, &out, taskOpTimeout)
+	return out, err
+}
+
+// deleteProject permanently removes one empty project. The server owns the destructive guard:
+// a project with any tasks is refused atomically rather than having those tasks deleted or
+// detached. Keeping the rule there makes the CLI, MCP and user-facing doors identical.
+func (t *Transport) deleteProject(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "DELETE", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
 	return out, err
 }
 
@@ -827,12 +1022,17 @@ func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}
 	return out, err
 }
 
-func (t *Transport) updateTask(id string, body interface{}) (json.RawMessage, error) {
+// updateTask carries the acting session, which the server reads for exactly one decision: a
+// verification cannot be concluded from the session that ran the task it verifies (§13.2). Without
+// the header the server cannot tell an independent check from the developer's own run grading
+// itself, and the rule silently never fires.
+func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "PATCH", "/runner/tasks/"+url.PathEscape(id), body, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "PATCH", "/runner/tasks/"+url.PathEscape(id), body, &out, taskOpTimeout,
+		sessionHeader(sessionID))
 	return out, err
 }
 
@@ -981,12 +1181,15 @@ func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id s
 	return out, err
 }
 
-func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id string) (json.RawMessage, error) {
+// interruptSession stops a session's current turn. A non-nil body carrying `message` makes
+// it the atomic "stop that and do this instead" the browser sends: one transaction, so the
+// follow-up cannot be deleted by the interrupt it travels with. nil is a plain interrupt.
+func (t *Transport) interruptSession(callerSessionID, orchestrationToken, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", nil, &out, callerSessionID, orchestrationToken)
+	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/interrupt", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 
@@ -996,6 +1199,32 @@ func (t *Transport) mergeSession(callerSessionID, orchestrationToken, id string,
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/merge", body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// recordMergeReceipt files one merge of a session's branch (§13.7). Plain runner credential, no
+// orchestration header: it records work that already happened rather than asking another session's
+// runner to do anything, so requiring an orchestration grant would mean the deployments that most
+// need the audit are the ones that cannot write it.
+func (t *Transport) recordMergeReceipt(id string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/sessions/"+url.PathEscape(id)+"/merge-receipts", body, &out, 20*time.Second)
+	return out, err
+}
+
+func (t *Transport) listMergeReceipts(id string, limit int) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	path := "/runner/sessions/" + url.PathEscape(id) + "/merge-receipts"
+	if limit > 0 {
+		path += "?limit=" + strconv.Itoa(limit)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", path, nil, &out, 20*time.Second)
 	return out, err
 }
 

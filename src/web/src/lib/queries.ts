@@ -5,6 +5,7 @@ import {
   sessionLifecycleStateOf,
   type SessionLifecycleView,
 } from './sessionState';
+import type { CoordinatorStatus } from './coordinatorStatus';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
@@ -323,4 +324,25 @@ export const taskCountsQuery = (listId?: string, labels: string[] = []) =>
     queryKey: ['tasks', 'counts', listId ?? null, labels] as const,
     queryFn: () => api<TaskCounts>(taskCountsPath(listId, labels)),
     staleTime: 10_000,
+  });
+
+/**
+ * Everything the control loop knows about one project, in the one read that answers it
+ * (`GET /projects/:id/coordinator/status`, contract AC10).
+ *
+ * Keyed UNDER `['project', projectId]` so the invalidation a control write already fires for the
+ * project document refreshes this too — a trigger or a settings edit changes both, and two keys
+ * that had to be invalidated in step would eventually not be.
+ *
+ * Polled, because most of what it reports moves without this tab doing anything: a lease is taken
+ * and released between passes, a wake fires, a blocker clears itself. At the cadence the runner
+ * and task side panels watch their own live state with — this is a status page, not a transcript,
+ * and a control write refreshes it immediately rather than waiting for the next tick.
+ */
+export const projectCoordinatorStatusQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'coordinator-status'] as const,
+    queryFn: () =>
+      api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
+    refetchInterval: 15_000,
   });

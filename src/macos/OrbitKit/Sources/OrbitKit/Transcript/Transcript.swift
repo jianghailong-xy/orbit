@@ -116,10 +116,22 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// this separation Orbit's own generated context sits inside the person's bubble as if they
     /// had typed it. Named on one line by the view; see `splitDeliveredMessage`.
     public var injected: [String]
+    /// Filed by the server as a steer: written into the turn that was already running rather than
+    /// queued behind it. Not a variety of `queued` — the opposite of it: this message is not
+    /// waiting for anything and cannot be withdrawn. Since it is answered by the turn it joined
+    /// rather than by one of its own, `delivery` below is the only report it ever gets, so the
+    /// indicator is shown for a steer where an ordinary message shows nothing. Learned from the
+    /// POST response, and re-learned from the durable `user` event after a reload.
+    public var steer: Bool
+    /// How far this message got into the engine's conversation: the state its `user` event opened
+    /// with, amended by each `user_delivery` after it (`SteerDelivery`). Nil for a transcript
+    /// recorded before the runner reported delivery at all, and on every runtime that does not.
+    public var delivery: String?
 
     public init(id: String, text: String, attachments: [TurnAttachment] = [], ts: String? = nil,
                 clientTurnId: String? = nil, turnId: String? = nil, pending: Bool, queued: Bool = false,
-                undelivered: Bool = false, injected: [String] = []) {
+                undelivered: Bool = false, injected: [String] = [], steer: Bool = false,
+                delivery: String? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -130,12 +142,15 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.queued = queued
         self.undelivered = undelivered
         self.injected = injected
+        self.steer = steer
+        self.delivery = delivery
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered, injected
+        case steer, delivery
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -149,6 +164,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         queued = (try? c.decodeIfPresent(Bool.self, forKey: .queued)) ?? false
         undelivered = (try? c.decodeIfPresent(Bool.self, forKey: .undelivered)) ?? false
         injected = (try? c.decodeIfPresent([String].self, forKey: .injected)) ?? []
+        steer = (try? c.decodeIfPresent(Bool.self, forKey: .steer)) ?? false
+        delivery = try? c.decodeIfPresent(String.self, forKey: .delivery)
     }
 }
 

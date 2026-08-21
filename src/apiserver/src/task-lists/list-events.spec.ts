@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { uuidToBase62 } from '@orbit/shared';
 import { ListEventsService } from './list-events.service';
 
 const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+/** What that list is called everywhere the agent can see it, `tasklist_get` included. */
+const LIST_PUBLIC_ID = uuidToBase62(LIST_ID);
 const CONSOLE_SESSION = '5ccdf9b9-6871-49a6-8595-839c6a1f79d2';
 const OTHER_SESSION = '9f2a1c44-1111-4bbb-9ccc-0123456789ab';
 
@@ -70,9 +73,23 @@ test('a list console gets the conditions appended to its next message', async ()
   const out = await svc().appendFor(tx, CONSOLE_SESSION, '这个列表现在什么情况？');
 
   assert.match(out!, /^这个列表现在什么情况？/);
-  assert.match(out!, /<list-conditions list="6ba7b810-9dad-11d1-80b4-00c04fd430c8"/);
+  assert.ok(out!.includes(`<list-conditions list="${LIST_PUBLIC_ID}"`), out!);
   assert.match(out!, /配额挡住派发/);
   assert.match(out!, /累计 47 次/);
+});
+
+test('the id in the tag is the public one, not the uuid the column holds', async () => {
+  // Prose is the boundary PublicIdInterceptor does not cover: it rewrites response fields, and
+  // this id lives in a replayed message body. Left as a uuid it is the one id in the conversation
+  // spelled differently from every other — `tasklist_get` answers base62 — so a console cannot
+  // tell the board it is being shown from the list it just read.
+  const { tx } = makeTx();
+
+  const out = await svc().appendFor(tx, CONSOLE_SESSION, '继续');
+
+  const block = out!.slice(out!.indexOf('<list-conditions'), out!.indexOf('</list-conditions>'));
+  assert.ok(block.includes(`<list-conditions list="${LIST_PUBLIC_ID}"`), block);
+  assert.equal(block.includes(LIST_ID), false, 'the raw uuid reached the agent');
 });
 
 test('an ordinary session is left completely alone', async () => {

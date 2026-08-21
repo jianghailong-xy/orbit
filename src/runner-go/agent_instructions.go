@@ -105,6 +105,13 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		for _, action := range []string{"list", "create", "get", "update", "delete"} {
 			rules = append(rules, "Bash("+command+" task-list "+action+" *)")
 		}
+		// Every project verb the CLI has. An action missing here is pre-approved for nobody: the
+		// agent hits a permission prompt for a command `capabilities --json` just told it to run.
+		// Still enumerated rather than `project *`, so a verb added later is a decision somebody
+		// makes here rather than one it inherits.
+		for _, action := range []string{"get", "create", "update", "delete"} {
+			rules = append(rules, "Bash("+command+" project "+action+" *)")
+		}
 		if allowOrchestration {
 			for _, action := range []string{"create", "list", "search", "get", "send", "interrupt", "merge", "end", "complete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")

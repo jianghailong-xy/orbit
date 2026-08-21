@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -888,5 +890,68 @@ func TestMCPTaskCreateBatchHeadlessDoesNotAsk(t *testing.T) {
 	}
 	if asked {
 		t.Fatal("headless batch tried to raise an approval")
+	}
+}
+
+// The MCP tools and the CLI are two doors onto one API, so what they put on the wire has to be
+// the same request. `orbit session send/interrupt` is pinned by TestSessionCLIExactRoutes…; this
+// is the other door, checked against the same expectations.
+func TestMCPSessionSendAndInterruptPutTheSameRequestOnTheWire(t *testing.T) {
+	type call struct {
+		path string
+		body map[string]interface{}
+	}
+	var calls []call
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		raw, _ := io.ReadAll(r.Body)
+		if len(raw) > 0 {
+			_ = json.Unmarshal(raw, &body)
+		}
+		calls = append(calls, call{r.URL.Path, body})
+		w.Write([]byte(`{"ok":true,"turnId":"turn-1","seq":7,"kind":"steer"}`))
+	}))
+	defer srv.Close()
+	mcp := &mcpServer{
+		sessionID: "parent", orchestrationToken: "tok", allowOrchestration: true,
+		t: NewTransport(srv.URL, "runner-secret"),
+	}
+
+	// A send with the caller's own idempotency key: a retried tool call returns the turn already
+	// filed rather than queueing the message a second time.
+	if res := mcp.callTool("session_send", map[string]interface{}{
+		"sessionId": "child", "message": "adjust the tests", "clientTurnId": "key-1",
+	}); res["isError"] == true {
+		t.Fatalf("session_send errored: %#v", res["content"])
+	}
+	// …and without one, which is what every caller sent before: the server mints it.
+	if res := mcp.callTool("session_send", map[string]interface{}{
+		"sessionId": "child", "message": "adjust the tests",
+	}); res["isError"] == true {
+		t.Fatalf("session_send errored: %#v", res["content"])
+	}
+	// A plain stop stays a bodyless POST…
+	if res := mcp.callTool("session_interrupt", map[string]interface{}{
+		"sessionId": "child",
+	}); res["isError"] == true {
+		t.Fatalf("session_interrupt errored: %#v", res["content"])
+	}
+	// …and "stop that and do THIS instead" is one request, never a stop followed by a send: the
+	// interrupt drops what was queued behind the running turn, so a separate send would be racing
+	// that delete, and one arriving just after would be steered INTO the turn being stopped.
+	if res := mcp.callTool("session_interrupt", map[string]interface{}{
+		"sessionId": "child", "message": "do this instead", "clientTurnId": "key-2",
+	}); res["isError"] == true {
+		t.Fatalf("session_interrupt errored: %#v", res["content"])
+	}
+
+	want := []call{
+		{"/api/runner/sessions/child/turns", map[string]interface{}{"message": "adjust the tests", "clientTurnId": "key-1"}},
+		{"/api/runner/sessions/child/turns", map[string]interface{}{"message": "adjust the tests"}},
+		{"/api/runner/sessions/child/interrupt", nil},
+		{"/api/runner/sessions/child/interrupt", map[string]interface{}{"message": "do this instead", "clientTurnId": "key-2"}},
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("requests =\n%#v\nwant\n%#v", calls, want)
 	}
 }

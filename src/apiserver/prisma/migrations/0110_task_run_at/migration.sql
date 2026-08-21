@@ -1,0 +1,48 @@
+-- One-shot scheduling for a task: the earliest time it may start automatically.
+--
+-- Additive, nullable and defaulted to nothing: every existing row reads NULL, which means
+-- "unscheduled" — exactly what all 110k of them are today, and exactly how the previous build
+-- behaved. A deployment that applies this and then rolls back to the previous image keeps
+-- working; a column nothing reads costs writes, not correctness.
+--
+-- WHAT THIS IS NOT. Migration 0001 put a `scheduledAt` on the original `Task`, which at that point
+-- was an *execution* — a queued run of something. That table and that meaning are long gone. This
+-- column is a property of the human-facing task: a trigger policy on the work item, not a
+-- timestamp on a run. Reviving the old name would have made two unrelated ideas share one word.
+--
+-- WHY NOT `due_date`. A deadline says when work is wanted BY; nothing dispatches on it, and
+-- nothing should start work merely because someone recorded when it is needed. Making the two one
+-- column would mean every due date ever set silently became a start command.
+--
+-- Semantics enforced in TasksService, stated here because the column is meaningless without them:
+--   * a FUTURE run_at holds the task back from the dependency auto-run and the reconcile sweep,
+--     so a scheduled task cannot be started early by a prerequisite finishing;
+--   * a DUE run_at makes the task a candidate for the scheduled sweep, which dispatches it
+--     through the ordinary execute() path — assignment, provider/model, dependencies, the list's
+--     pause, session dedup and the runner's capacity all stay authoritative;
+--   * a run that is actually accepted consumes it back to NULL, once, via a compare-and-set on
+--     the observed instant, so a concurrent reschedule is not swallowed by the dispatch it raced;
+--   * a schedule that is due but cannot run — no assignee, its list paused, a prerequisite
+--     outstanding — is left untouched, and the next sweep reconsiders it. Missing the moment must
+--     not lose the appointment.
+--
+-- One-shot by construction. There is no cron expression, no recurrence and no occurrence rows:
+-- the only way a task runs twice on a schedule is for someone to schedule it twice.
+ALTER TABLE "task" ADD COLUMN "run_at" TIMESTAMP(3);
+
+-- The scheduled sweep's only way in:
+--
+--   WHERE run_at IS NOT NULL AND run_at <= now() ...  ORDER BY run_at, id  LIMIT $n
+--
+-- PARTIAL on `run_at IS NOT NULL`, which is the same trade `session_quota_retry_at_idx` has
+-- carried since 0081 and migration 0108's pair since it shipped: Prisma's schema language cannot
+-- express a WHERE on an index, so schema.prisma declares this one without its predicate and
+-- `migrate diff` reports it as drift. The predicate is what makes the index worth having at all —
+-- a schedule is rare, so without it this indexes six figures of NULLs, maintained on every task
+-- write, to answer a query that can never return one of them.
+--
+-- `run_at` alone, ascending: the sweep's other clauses (status, the hold, the assignee's runner,
+-- outstanding prerequisites, a session already in flight) are re-checks over the handful of rows
+-- that are actually due, and the ordering is what makes a capped sweep take the longest-overdue
+-- work first rather than an arbitrary slice of it.
+CREATE INDEX "task_run_at_idx" ON "task"("run_at") WHERE "run_at" IS NOT NULL;

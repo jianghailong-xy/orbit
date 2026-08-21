@@ -957,6 +957,14 @@ type mergeOutcome struct {
 	MergedSha string
 	SourceSha string
 	Message   string
+	// What the control plane's merge RECEIPT (§13.7) needs in order to be re-checkable later: the
+	// branch this advanced, the tip it had before, the base the source was replayed onto, and the
+	// paths git refused on. Empty on the precondition failures that return before a target is even
+	// resolved — the receipt then names what it knows rather than guessing.
+	TargetBranch    string
+	TargetShaBefore string
+	RebaseBase      string
+	Conflicts       []string
 }
 
 // mergeToMain brings a session's branch into a target branch on the runner's local repo by
@@ -1051,8 +1059,20 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return *out
 	}
 
-	return rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot,
+	// The target tip the replay is computed against, read AFTER the origin reconcile above so it
+	// is the base the rebase actually used rather than the one this process started with.
+	targetBefore, _ := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+target)
+
+	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot,
 		replayAnchor(repoRoot, req.SessionID, sourceSha, req.BaseSha))
+	out.TargetBranch = target
+	out.TargetShaBefore = targetBefore
+	// The base the source was replayed ONTO. For this merge that is the target tip: the rebase puts
+	// the target underneath, which is what makes the fast-forward afterwards a fast-forward.
+	if out.RebaseBase == "" {
+		out.RebaseBase = targetBefore
+	}
+	return out
 }
 
 // replayAnchor picks the commit the merge replays FROM: the session's fork point, so only the
@@ -1158,8 +1178,17 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 		// (git writes "CONFLICT ..." to stdout, returned as `out`).
 		if out, err := git(tmp, rebase...); err != nil {
 			msg := strings.TrimSpace(out + "\n" + gitStderr(err))
+			// The paths git stopped on, read BEFORE the abort clears the index. They go on the
+			// receipt: "it conflicted" and "it conflicted in these three files" are answers to
+			// different questions, and only the second one tells anybody where to start.
+			unmerged, _ := git(tmp, "diff", "--name-only", "--diff-filter=U")
 			_, _ = git(tmp, "rebase", "--abort")
-			return mergeOutcome{Status: "conflict", Message: clip(msg, 1000)}
+			return mergeOutcome{
+				Status:    "conflict",
+				Message:   clip(msg, 1000),
+				SourceSha: sourceSha,
+				Conflicts: splitLines(unmerged),
+			}
 		}
 		// The local fast-forward at the end writes exactly the paths this replay changed, and git
 		// refuses it if any of them is modified in that checkout. Finding that out AFTER the push

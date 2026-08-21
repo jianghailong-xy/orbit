@@ -154,3 +154,59 @@ test('the repair queue matches a runner that has never been asked', async () => 
   );
   assert.equal(where?.ownerId, 'owner-1'); // still owner-scoped: the runner is a separate row
 });
+
+/**
+ * The delete path's own stub: a row that can be locked, a membership count, and a record of
+ * whether the soft delete actually ran. `$queryRaw` answers the lock, so a service that stopped
+ * taking it would read as "already deleted" here rather than quietly working.
+ */
+function deleteStub(coordinating: number, locked = true) {
+  const deleted: Record<string, unknown>[] = [];
+  const prisma = {
+    workspace: {
+      findFirst: async () => ({ id: 'workspace-1' }),
+      update: async (args: { data: Record<string, unknown> }) => {
+        deleted.push(args.data);
+        return { id: 'workspace-1' };
+      },
+    },
+    projectMember: { count: async () => coordinating },
+    $queryRaw: async () => (locked ? [{ id: 'workspace-1' }] : []),
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
+  } as unknown as PrismaService;
+  return { prisma, deleted };
+}
+
+test('an agent that coordinates a project is not soft-deleted either', async () => {
+  // The foreign key's RESTRICT only refuses a HARD delete; Orbit deletes agents by stamping
+  // `deleted_at`, which the key cannot see. Without this the project keeps naming an agent that is
+  // gone, and the identity behind its coordinator is a deleted row (validation 04, P1-03).
+  const { prisma, deleted } = deleteStub(1);
+
+  await assert.rejects(
+    () => new WorkspacesService(prisma).remove('owner-1', 'workspace-1'),
+    (e: { status?: number }) => e.status === 409,
+  );
+  assert.deepEqual(deleted, []);
+});
+
+test('an agent no project coordinates with is deleted as before', async () => {
+  const { prisma, deleted } = deleteStub(0);
+
+  const result = await new WorkspacesService(prisma).remove('owner-1', 'workspace-1');
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(deleted.length, 1);
+  assert.ok(deleted[0].deletedAt instanceof Date);
+});
+
+test('deleting an agent that is already deleted is a no-op, not a second stamp', async () => {
+  // The lock found no live row: another request got here first, and the caller asked for a state
+  // this row is already in.
+  const { prisma, deleted } = deleteStub(0, false);
+
+  assert.deepEqual(await new WorkspacesService(prisma).remove('owner-1', 'workspace-1'), {
+    ok: true,
+  });
+  assert.deepEqual(deleted, []);
+});

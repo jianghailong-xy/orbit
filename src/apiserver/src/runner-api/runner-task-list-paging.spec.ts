@@ -37,7 +37,14 @@ test('a filtered list is answered by the page query, not by loading every task',
   assert.deepEqual(filtered, [{ id: 'page' }]);
   assert.equal(calls.list, 0);
   assert.deepEqual(calls.page, [
-    { status: 'OPEN', listId: 'list-1', labels: undefined, limit: '50', counts: 'none' },
+    {
+      status: 'OPEN',
+      listId: 'list-1',
+      projectId: undefined,
+      labels: undefined,
+      limit: '50',
+      counts: 'none',
+    },
   ]);
 });
 
@@ -63,6 +70,7 @@ test('a label alone is enough to take the page query', async () => {
     {
       status: undefined,
       listId: undefined,
+      projectId: undefined,
       labels: 'CC-MAIN-2017-34',
       limit: undefined,
       counts: 'none',
@@ -82,7 +90,15 @@ test('the paged route carries the cursor through and answers with the envelope',
   assert.deepEqual(page, { items: [{ id: 'page' }], nextCursor: null });
   assert.equal(calls.list, 0);
   assert.deepEqual(calls.page, [
-    { cursor: 'cursor-2', status: 'OPEN', listId: 'list-1', labels: undefined, limit: '200', counts: 'none' },
+    {
+      cursor: 'cursor-2',
+      status: 'OPEN',
+      listId: 'list-1',
+      projectId: undefined,
+      labels: undefined,
+      limit: '200',
+      counts: 'none',
+    },
   ]);
 });
 
@@ -92,7 +108,15 @@ test('the first page of a walk asks with no cursor', async () => {
   await controller.listTaskPage(runner);
 
   assert.deepEqual(calls.page, [
-    { cursor: undefined, status: undefined, listId: undefined, labels: undefined, limit: undefined, counts: 'none' },
+    {
+      cursor: undefined,
+      status: undefined,
+      listId: undefined,
+      projectId: undefined,
+      labels: undefined,
+      limit: undefined,
+      counts: 'none',
+    },
   ]);
 });
 
@@ -106,4 +130,66 @@ test('a caller that asks for nothing still gets the full list', async () => {
   assert.deepEqual(all, [{ id: 'everything' }]);
   assert.equal(calls.list, 1);
   assert.equal(calls.page.length, 0);
+});
+
+// ── Scoping a list to one project ─────────────────────────────────────────────────────────────
+
+// `tasks.list` has no project filter at all, so a project-only request routed to the unfiltered
+// branch would answer with every task the owner has — and read, to a coordinator, as "this
+// project is the whole account". Same failure the label filter had, same fix.
+test('a project id alone is enough to take the page query', async () => {
+  const { controller, calls } = harness();
+
+  const args = [undefined, undefined, undefined, undefined, 'proj-1'] as const;
+  const scoped = await controller.listTasks(runner, ...args);
+
+  assert.deepEqual(scoped, [{ id: 'page' }]);
+  assert.equal(calls.list, 0);
+  assert.deepEqual(calls.page, [
+    {
+      status: undefined,
+      listId: undefined,
+      projectId: 'proj-1',
+      labels: undefined,
+      limit: undefined,
+      counts: 'none',
+    },
+  ]);
+});
+
+test('the project reaches the page query alongside every other filter', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTasks(runner, 'OPEN', 'list-1', '50', 'shard-3', 'proj-1');
+
+  assert.deepEqual(calls.page, [
+    {
+      status: 'OPEN',
+      listId: 'list-1',
+      projectId: 'proj-1',
+      labels: 'shard-3',
+      limit: '50',
+      counts: 'none',
+    },
+  ]);
+});
+
+// A walk is the read a coordinator uses to enumerate its project; the scope has to reach the paged
+// route too, or `--all` widens to the account after page one.
+test('the paged route carries the project with the cursor', async () => {
+  const { controller, calls } = harness();
+
+  await controller.listTaskPage(runner, 'cursor-2', 'OPEN', undefined, '200', undefined, 'proj-1');
+
+  assert.deepEqual(calls.page, [
+    {
+      cursor: 'cursor-2',
+      status: 'OPEN',
+      listId: undefined,
+      projectId: 'proj-1',
+      labels: undefined,
+      limit: '200',
+      counts: 'none',
+    },
+  ]);
 });

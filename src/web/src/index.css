@@ -2244,6 +2244,31 @@ body {
 .task-title:hover {
   color: var(--brand);
 }
+/* A one-shot scheduled start, on the few rows that carry one. Secondary to the title in size and
+   colour, and never shrunk: `flex: none` hands the whole cell's shrink to the title beside it, so
+   a long title ellipses while the instant stays readable. Inline text, so the 44px row keeps its
+   height and the windowing arithmetic above it stays arithmetic. */
+.task-run-at {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* The half of that marker only a screen reader reads: ", once, in your own time zone", clipped
+   out of the pixels because there is no room on a 44px row for a sentence the visible text can
+   imply. CLIPPED, not `display: none` or `visibility: hidden` — those take it out of the
+   accessibility tree along with the pixels, which is the whole thing it exists to stay in. Out of
+   flow, so it costs the title cell no width and the row no height. Scoped to this one class
+   rather than added as a general utility: nothing else here needs it yet. */
+.task-run-at-note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 @keyframes tp-queued-fade {
   0%,
   100% {
@@ -4602,6 +4627,38 @@ html[data-theme='dark'] .session-tag-chip {
   line-height: 1;
   color: var(--text-3);
 }
+/* A message the engine never received. Always visible (unlike the hover-only meta row):
+   the whole point is that nobody has to hover to find out their message did not land. */
+.chat-undelivered {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--error-solid);
+}
+/* Send it again without retyping it. A link, not a button: the message is already gone, and
+   the weight of a real button next to a failure reads as the fix rather than as an offer. */
+.chat-undelivered-retry {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  cursor: pointer;
+}
+.chat-undelivered-retry:hover {
+  text-decoration: underline;
+}
+/* How far a mid-turn message (a steer) got into the turn it joined. Muted and in the bubble's
+   own column: it is the only report that message gets — the running turn's reply answers
+   something else — but it is a progress note, not a problem, so it never competes with the
+   failure mark above, which owns the error colour. */
+.chat-steer-state {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
 .chat-copy {
   display: inline-flex;
   align-items: center;
@@ -6671,6 +6728,31 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--bg-hover);
   border-radius: 4px;
 }
+/* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
+   input, its two actions, and the line under them — stacks in the remaining column. */
+.tdp-schedule {
+  align-items: flex-start;
+}
+.tdp-schedule-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tdp-schedule-actions {
+  display: flex;
+  gap: 8px;
+}
+.tdp-schedule-hint,
+.tdp-schedule-error {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.tdp-schedule-error {
+  color: var(--error);
+}
+
 /* Wrapper around the description's Markdown render — no pre-wrap here, the `.md`
    child is real HTML. Description markdown inherits the 13px panel size rather
    than .md's 14px, same as .tdp-comment-text. */

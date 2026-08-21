@@ -21,7 +21,7 @@ const (
 const taskHelp = `orbit task — manage Orbit tasks
 
 Usage:
-  orbit task list [--status STATUS] [--list-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
   orbit task labels [--list-id ID] [--json]
   orbit task get [task-id] [--json]
   orbit task create --title TITLE [options]
@@ -52,18 +52,26 @@ var taskActionHelp = map[string]string{
 	"list": `orbit task list — list tasks
 
 Usage:
-  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
+  orbit task list [--status OPEN|IN_PROGRESS|DONE|CANCELLED] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
 
 Returns the newest tasks first, without their descriptions (use ` + "`orbit task get`" + ` for one
 task in full). --limit defaults to 100 and may not exceed 200.
 
+--project-id narrows to the tasks filed under one project — the read a project coordinator
+wants, since every other filter here answers across all of them. The id is the one in the web UI
+URL (/projects/<id>); a raw UUID works too. A project that does not exist, or belongs to somebody
+else, lists as empty like any other filter that matches nothing. Read ` + "`orbit project get`" + ` for what
+the project is for; this is the work filed under it.
+
 --label filters to tasks carrying ALL of the labels given (repeat the flag or comma-separate).
 Labels are matched exactly, case included; ` + "`orbit task labels`" + ` lists the ones in use.
 
+Filters combine: --project-id with --status OPEN answers "what is still open in this project".
+
 --all returns every matching task instead of the newest page, walking the list one page at a
 time — what you need to enumerate a list of thousands (to diff it against something else, say),
-which no --limit can do. It can be a lot of output: scope it with --status/--list-id, and send it
-to a file or a pipe rather than into a conversation.
+which no --limit can do. It can be a lot of output: scope it with --status/--list-id/--project-id,
+and send it to a file or a pipe rather than into a conversation.
 
 With --all the output is line-delimited JSON — one compact task per line, written as each page
 arrives (--json is implied). A walk of tens of thousands is hundreds of requests over minutes, so
@@ -102,13 +110,45 @@ Options:
   --assignee-id ID            Defaults to ORBIT_AGENT_ID inside an agent session
   --unassigned                Explicitly leave the task unassigned
   --list-id ID
+  --project-id ID             File the task under this project, orthogonal to --list-id
+  --parent-task-id TASK_ID    Create it as a subtask of this existing task
+  --verifies-task-id TASK_ID  File it as a VERIFICATION of that existing task
+  --acceptance-criteria TEXT  What would settle that this task is done (max 4,000 characters)
+  --acceptance-criteria-file -
+                              Read the acceptance criteria from stdin; paths are rejected
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
   --depends-on ID[,ID...]     Repeatable prerequisite task ids
   --label L[,L...]            Repeatable grouping label, orthogonal to --list-id
   --auto-run-when-ready[=BOOL]
+  --completion-policy MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED
+                              How this task's own completion is decided once it has subtasks
   --json
+
+--project-id files the new task under a project you own — what a coordinator wants when the
+work it is creating belongs to the goal it was given. It is orthogonal to --list-id: the
+project says what the work is FOR, the list decides how it is dispatched, and a task can have
+one of each, either, or neither. The id is the one in the web UI URL (/projects/<id>); a raw
+UUID works too. Unlike ` + "`orbit task list --project-id`" + `, which narrows a read and answers empty
+for an id nobody owns, this writes — an unknown project, or one belonging to somebody else, is
+rejected by the server rather than silently filed nowhere.
+
+--parent-task-id creates the task as a subtask of a task that ALREADY exists, which is how a
+piece of work is broken into steps that stay attached to it. The parent must be yours and must
+be in the SAME project as the new task, and the project is never inherited from it: a subtask
+under a project's task normally passes both --project-id and --parent-task-id naming that same
+project, while a parent filed under no project needs --project-id omitted here too. A parent
+that is missing, somebody else's, or in another project is rejected by the server.
+
+--acceptance-criteria records what would settle that this task is done: the observable,
+verifiable result — a command that passes, a file that exists, a number that moved — stated so
+somebody who did not do the work can check it. It answers a different question from
+--description, which says what work to PERFORM, and from a project's own acceptance criteria
+(` + "`orbit project get`" + `), which settles the whole goal rather than this one task. The server
+accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin, accepting only
+'-'; since --description-file reads the same stdin, the two file flags cannot be used together,
+but passing one field inline and the other on stdin is fine.
 `,
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
 
@@ -116,9 +156,13 @@ Usage:
   orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
-as 'orbit task create': title (required), description, assigneeId, listId, dueDate,
-provider, model, dependsOnTaskIds, autoRunWhenReady. Nothing is written unless every
-item is valid.
+as 'orbit task create': title (required), description, assigneeId, listId, projectId,
+parentTaskId, verifiesTaskId, acceptanceCriteria, dueDate, provider, model, dependsOnTaskIds,
+autoRunWhenReady, completionPolicy. Nothing is written unless every item is valid.
+
+"acceptanceCriteria" states per item what would settle that THAT task is done — the
+observable result somebody else can check — where "description" says what work to
+perform; the server accepts up to 4,000 characters each.
 
 To make one item depend on another item of the same batch — whose id does not exist
 yet — give the earlier item a "ref" and list it in the later item's "dependsOnRefs":
@@ -127,8 +171,33 @@ yet — give the earlier item a "ref" and list it in the later item's "dependsOn
    {"title":"Deploy","dependsOnRefs":["build"]}]
 
 A ref must name an EARLIER item; "dependsOnTaskIds" still takes ids of tasks that
-already exist. assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave an
-item unassigned). --tasks-file accepts only '-' (stdin).
+already exist.
+
+To make one item a PART OF another item of the same batch, name the earlier item's
+ref in the later item's "parentRef" — how a plan lands as a tree in one call:
+
+  [{"title":"Ship the importer","ref":"epic"},
+   {"title":"Parse the feed","ref":"parse","parentRef":"epic"},
+   {"title":"Backfill","parentRef":"epic","dependsOnRefs":["parse"]}]
+
+The two ref fields answer different questions: "dependsOnRefs" is when an item may
+run, "parentRef" is what it is a part of. "parentTaskId" is the same link to a task
+that already exists, in the same project as the item carrying it; one item cannot
+carry both, and a parentRef item must carry the same "projectId" as the item it
+points at (the project is never inherited).
+
+"verifiesRef" is the third ref, and the one that makes a phase and its check land in
+ONE call — the later item VERIFIES the earlier one, which is what a
+VERIFICATION_PASSED parent counts:
+
+  [{"title":"Phase 1","ref":"p1","completionPolicy":"VERIFICATION_PASSED"},
+   {"title":"Implement","parentRef":"p1"},
+   {"title":"[VERIFY] Phase 1","verifiesRef":"p1"}]
+
+"verifiesTaskId" is the same link to a subject that already exists; naming both is
+rejected. Filed as two calls instead, the window between them is a parent that can
+never complete. assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave
+an item unassigned). --tasks-file accepts only '-' (stdin).
 `,
 	"update": `orbit task update — update a task
 
@@ -142,17 +211,64 @@ Options:
   --status OPEN|IN_PROGRESS|DONE|CANCELLED
   --assignee-id ID | --clear-assignee
   --list-id ID | --clear-list
+  --parent-task-id TASK_ID | --clear-parent
+                              Move this task under that task, or detach it
+  --verifies-task-id TASK_ID | --clear-verifies
+                              Point this task at the task it verifies, or detach it
   --due-date ISO_DATE | --clear-due-date
   --provider SLUG | --clear-provider
   --model MODEL | --clear-model
+  --acceptance-criteria TEXT  Replace what would settle that this task is done (max 4,000
+                              characters)
+  --acceptance-criteria-file -
+                              Read the replacement criteria from stdin; paths are rejected
+  --clear-acceptance-criteria Leave the task with no acceptance criteria
   --depends-on ID[,ID...]     Replace all prerequisites; repeatable
   --clear-dependencies        Remove all prerequisites
   --label L[,L...]            Replace all labels; repeatable
   --clear-labels              Remove all labels
   --auto-run-when-ready[=BOOL]
+  --completion-policy MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED
+                              How this task's completion is decided once it has subtasks
+  --verdict PASS|FAIL|INCONCLUSIVE | --clear-verdict
+                              This VERIFICATION task's conclusion about the task it verifies
+  --superseded-by-task-id TASK_ID | --clear-superseded
+                              Record that a later attempt replaced this one, or unlink it. Only a
+                              CANCELLED or FAILED task may name a successor, and the successor must
+                              be in the same project. It writes nothing to --status: what the
+                              attempt did is the fact being kept, not the one being tidied away
+  --terminal-reason SUPERSEDED|ABANDONED | --clear-terminal-reason
+                              Why this task stopped, when its status alone does not say. A
+                              successor IS SUPERSEDED and needs no second spelling; ABANDONED is
+                              for the other case, a task dropped with nothing replacing it
   --json
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+
+--acceptance-criteria records what would settle that this task is done: the observable,
+verifiable result — a command that passes, a file that exists, a number that moved — stated so
+somebody who did not do the work can check it. It answers a different question from
+--description, which says what work to PERFORM, and from a project's own acceptance criteria
+(` + "`orbit project get`" + `), which settle the whole goal rather than this one task; updating a task's
+criteria never touches its project's. Expect to use it after the task was created — what proves
+a task done is often only clear once the work is understood.
+
+It replaces the whole field rather than appending to it. Omitting the flag leaves the criteria
+the task already has untouched, passing text replaces them (` + "`--acceptance-criteria \"\"`" + ` records
+that there are none worth stating), and --clear-acceptance-criteria removes them, so it cannot
+be combined with either form. The server accepts up to 4,000 characters.
+--acceptance-criteria-file reads the replacement from stdin, accepting only '-'; since
+--description-file reads the same stdin, the two file flags cannot be used together, but passing
+one field inline and the other on stdin is fine.
+
+--parent-task-id moves this task under another task you own, and --clear-parent detaches it and
+leaves it standing on its own; omitting both leaves the parent it already has alone. A
+decomposition is usually understood after the tasks exist — a step turns out to belong under a
+different piece of work — so this is how it is corrected, rather than deleting the task and
+recreating it. The parent must be in the SAME project as this task (re-file one of them first if
+they differ), and a task can be neither its own parent nor a subtask of one of its own subtasks:
+both close a loop and are rejected. It says what this task is PART OF and nothing about when it
+runs — that is --depends-on.
 `,
 	"delete": `orbit task delete — permanently delete a task
 
@@ -500,6 +616,24 @@ func validateTaskCLIStatus(status string) error {
 	}
 }
 
+func validateTaskCLICompletionPolicy(policy string) error {
+	switch policy {
+	case "MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED":
+		return nil
+	default:
+		return fmt.Errorf("completion-policy must be one of MANUAL, ALL_CHILDREN_DONE, VERIFICATION_PASSED")
+	}
+}
+
+func validateTaskCLIVerdict(verdict string) error {
+	switch verdict {
+	case "PASS", "FAIL", "INCONCLUSIVE":
+		return nil
+	default:
+		return fmt.Errorf("verdict must be one of PASS, FAIL, INCONCLUSIVE")
+	}
+}
+
 func writeCLIRawJSON(out io.Writer, raw json.RawMessage, compact bool) error {
 	if len(raw) == 0 {
 		_, err := fmt.Fprintln(out, "null")
@@ -571,13 +705,13 @@ const (
 	taskListRetryInitialWait = 2 * time.Second
 )
 
-func listTaskPageWithRetry(t *Transport, status, listID string, labels []string, cursor string) (json.RawMessage, string, error) {
+func listTaskPageWithRetry(t *Transport, status, listID, projectID string, labels []string, cursor string) (json.RawMessage, string, error) {
 	wait := taskListRetryInitialWait
 	var err error
 	for attempt := 1; ; attempt++ {
 		var page json.RawMessage
 		var next string
-		page, next, err = t.listTaskPage(status, listID, labels, maxTaskListLimit, cursor)
+		page, next, err = t.listTaskPage(status, listID, projectID, labels, maxTaskListLimit, cursor)
 		if err == nil {
 			return page, next, nil
 		}
@@ -598,10 +732,10 @@ func listTaskPageWithRetry(t *Transport, status, listID string, labels []string,
 // `jq -s` puts them back into an array for anyone who wants one.
 //
 // Returns the cursor the walk died on, so the caller can tell the user where to resume.
-func streamAllTasks(t *Transport, status, listID string, labels []string, cursor string, out io.Writer) (written int, failedAt string, err error) {
+func streamAllTasks(t *Transport, status, listID, projectID string, labels []string, cursor string, out io.Writer) (written int, failedAt string, err error) {
 	encoder := json.NewEncoder(out)
 	for {
-		page, next, pageErr := listTaskPageWithRetry(t, status, listID, labels, cursor)
+		page, next, pageErr := listTaskPageWithRetry(t, status, listID, projectID, labels, cursor)
 		if pageErr != nil {
 			return written, cursor, pageErr
 		}
@@ -627,6 +761,7 @@ func cliTaskList(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task list")
 	status := fs.String("status", "", "task status")
 	listID := fs.String("list-id", "", "task list id")
+	projectID := fs.String("project-id", "", "only tasks filed under this project")
 	var labels csvFlag
 	fs.Var(&labels, "label", "only tasks carrying ALL of these labels (comma-separated, repeatable)")
 	limit := fs.Int("limit", defaultTaskListLimit, "maximum tasks to return")
@@ -662,7 +797,7 @@ func cliTaskList(args []string, out io.Writer) error {
 		return err
 	}
 	if *all {
-		written, failedAt, err := streamAllTasks(t, *status, *listID, labels, *cursor, out)
+		written, failedAt, err := streamAllTasks(t, *status, *listID, *projectID, labels, *cursor, out)
 		if err != nil {
 			// Whatever was already printed is on stdout and stays valid; stderr carries the one
 			// thing needed to continue rather than start over.
@@ -675,14 +810,14 @@ func cliTaskList(args []string, out io.Writer) error {
 		}
 		return nil
 	}
-	raw, err := t.listTasks(*status, *listID, labels, *limit)
+	raw, err := t.listTasks(*status, *listID, *projectID, labels, *limit)
 	if err != nil {
 		return fmt.Errorf("list tasks: %w", err)
 	}
 	// A full page is the one case where the answer is silently partial, and stdout has to stay
 	// parseable — so say so on stderr instead.
 	if countJSONArray(raw) >= *limit {
-		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id/--label, raise --limit, or pass --all for every match\n", *limit)
+		fmt.Fprintf(os.Stderr, "orbit task list: showing the newest %d tasks; narrow with --status/--list-id/--project-id/--label, raise --limit, or pass --all for every match\n", *limit)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
@@ -741,6 +876,11 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	assigneeID := fs.String("assignee-id", "", "assignee agent id")
 	unassigned := fs.Bool("unassigned", false, "leave task unassigned")
 	listID := fs.String("list-id", "", "task list id")
+	projectID := fs.String("project-id", "", "file the task under this project, orthogonal to --list-id")
+	parentTaskID := fs.String("parent-task-id", "", "make the new task a subtask of this existing task")
+	verifiesTaskID := fs.String("verifies-task-id", "", "file the new task as a verification of this existing task")
+	acceptanceCriteria := fs.String("acceptance-criteria", "", "what would settle that this task is done")
+	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the acceptance criteria from stdin (-)")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
@@ -749,6 +889,7 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	var labels csvFlag
 	fs.Var(&labels, "label", "grouping label, orthogonal to --list-id (comma-separated, repeatable)")
 	autoRun := fs.Bool("auto-run-when-ready", false, "auto-run after dependencies complete")
+	completionPolicy := fs.String("completion-policy", "", "how this task's completion is decided (MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED)")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -762,7 +903,19 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	if *unassigned && flagWasSet(fs, "assignee-id") {
 		return fmt.Errorf("--unassigned and --assignee-id cannot be used together")
 	}
+	// Two fields, one stdin. readCLIText sees a single field at a time, so nothing downstream can
+	// notice that the first read drains the stream and the second gets an empty string — a create
+	// that silently files blank criteria. Caught here, before either read and before any request:
+	// one of the pair has to be passed inline. A direct value for one and stdin for the other is
+	// unambiguous and stays legal.
+	if flagWasSet(fs, "description-file") && flagWasSet(fs, "acceptance-criteria-file") {
+		return fmt.Errorf("--description-file and --acceptance-criteria-file both read stdin and cannot be used together; pass one of them inline")
+	}
 	desc, descSet, err := readCLIText(in, *description, flagWasSet(fs, "description"), *descriptionFile, flagWasSet(fs, "description-file"), "description")
+	if err != nil {
+		return err
+	}
+	criteria, criteriaSet, err := readCLIText(in, *acceptanceCriteria, flagWasSet(fs, "acceptance-criteria"), *acceptanceCriteriaFile, flagWasSet(fs, "acceptance-criteria-file"), "acceptance-criteria")
 	if err != nil {
 		return err
 	}
@@ -785,6 +938,39 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--list-id cannot be empty")
 		}
 		body["listId"] = *listID
+	}
+	// Orthogonal to listId: the project states what the work is for, the list decides how it is
+	// dispatched. Only sent when asked for, so a create that names no project is byte-for-byte the
+	// request it was before this flag existed.
+	if flagWasSet(fs, "project-id") {
+		if strings.TrimSpace(*projectID) == "" {
+			return fmt.Errorf("--project-id cannot be empty")
+		}
+		body["projectId"] = *projectID
+	}
+	// The server checks the parent against the projectId sent on THIS request and never infers one
+	// from the parent, so a subtask of a project's task has to name both. Same present-only rule as
+	// the flags above: absent leaves the body untouched, blank is caught before the round trip.
+	if flagWasSet(fs, "parent-task-id") {
+		if strings.TrimSpace(*parentTaskID) == "" {
+			return fmt.Errorf("--parent-task-id cannot be empty")
+		}
+		body["parentTaskId"] = *parentTaskID
+	}
+	// What this task exists to CHECK. Distinct from --parent-task-id in the same way membership is
+	// distinct from ordering: a verification is not part of its subject, it is a second opinion
+	// about it, and the server refuses the shapes where that stops being true.
+	if flagWasSet(fs, "verifies-task-id") {
+		if strings.TrimSpace(*verifiesTaskID) == "" {
+			return fmt.Errorf("--verifies-task-id cannot be empty")
+		}
+		body["verifiesTaskId"] = *verifiesTaskID
+	}
+	// Free text, not an id, so the blank-is-a-typo rule above does not apply: the server's DTO has
+	// no MinLength, and `--acceptance-criteria ""` is a caller deliberately recording none. Sent
+	// exactly as given; only omitting the flag omits the field.
+	if criteriaSet {
+		body["acceptanceCriteria"] = criteria
 	}
 	if flagWasSet(fs, "due-date") {
 		if strings.TrimSpace(*dueDate) == "" {
@@ -812,6 +998,12 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if flagWasSet(fs, "auto-run-when-ready") {
 		body["autoRunWhenReady"] = *autoRun
+	}
+	if flagWasSet(fs, "completion-policy") {
+		if err := validateTaskCLICompletionPolicy(*completionPolicy); err != nil {
+			return err
+		}
+		body["completionPolicy"] = *completionPolicy
 	}
 	t, err := cliTransport()
 	if err != nil {
@@ -941,12 +1133,19 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearAssignee := fs.Bool("clear-assignee", false, "clear assignee")
 	listID := fs.String("list-id", "", "task list id")
 	clearList := fs.Bool("clear-list", false, "clear task list")
+	parentTaskID := fs.String("parent-task-id", "", "make this task a subtask of that task")
+	clearParent := fs.Bool("clear-parent", false, "detach this task from its parent task")
+	verifiesTaskID := fs.String("verifies-task-id", "", "point this task at the task it verifies")
+	clearVerifies := fs.Bool("clear-verifies", false, "detach this task from the task it verifies")
 	dueDate := fs.String("due-date", "", "ISO due date")
 	clearDueDate := fs.Bool("clear-due-date", false, "clear due date")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	clearProvider := fs.Bool("clear-provider", false, "inherit the assignee's provider again")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
 	clearModel := fs.Bool("clear-model", false, "inherit the assignee's model again")
+	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
+	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
+	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "replace all prerequisite task ids (comma-separated, repeatable)")
 	clearDependencies := fs.Bool("clear-dependencies", false, "clear all prerequisite task ids")
@@ -954,6 +1153,13 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	fs.Var(&labels, "label", "replace all labels (comma-separated, repeatable)")
 	clearLabels := fs.Bool("clear-labels", false, "clear all labels")
 	autoRun := fs.Bool("auto-run-when-ready", false, "auto-run after dependencies complete")
+	completionPolicy := fs.String("completion-policy", "", "how this task's completion is decided (MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED)")
+	verdict := fs.String("verdict", "", "this verification task's conclusion (PASS|FAIL|INCONCLUSIVE)")
+	clearVerdict := fs.Bool("clear-verdict", false, "revoke this verification task's conclusion")
+	supersededBy := fs.String("superseded-by-task-id", "", "the later attempt that replaced this one")
+	clearSuperseded := fs.Bool("clear-superseded", false, "unlink the successor recorded for this task")
+	terminalReason := fs.String("terminal-reason", "", "why this task stopped (SUPERSEDED|ABANDONED)")
+	clearTerminalReason := fs.Bool("clear-terminal-reason", false, "leave this task with no terminal reason")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -974,8 +1180,20 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if *clearList && flagWasSet(fs, "list-id") {
 		return fmt.Errorf("--clear-list and --list-id cannot be used together")
 	}
+	if *clearParent && flagWasSet(fs, "parent-task-id") {
+		return fmt.Errorf("--clear-parent and --parent-task-id cannot be used together")
+	}
+	if *clearVerifies && flagWasSet(fs, "verifies-task-id") {
+		return fmt.Errorf("--clear-verifies and --verifies-task-id cannot be used together")
+	}
 	if *clearDueDate && flagWasSet(fs, "due-date") {
 		return fmt.Errorf("--clear-due-date and --due-date cannot be used together")
+	}
+	if *clearSuperseded && flagWasSet(fs, "superseded-by-task-id") {
+		return fmt.Errorf("--clear-superseded and --superseded-by-task-id cannot be used together")
+	}
+	if *clearTerminalReason && flagWasSet(fs, "terminal-reason") {
+		return fmt.Errorf("--clear-terminal-reason and --terminal-reason cannot be used together")
 	}
 	if *clearProvider && flagWasSet(fs, "provider") {
 		return fmt.Errorf("--clear-provider and --provider cannot be used together")
@@ -995,7 +1213,28 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if flagWasSet(fs, "label") && len(labels) == 0 {
 		return fmt.Errorf("--label cannot be empty; use --clear-labels")
 	}
+	// Clearing and replacing are opposite instructions about the same field, so naming both is not a
+	// preference order to resolve — including when the replacement is on stdin, which is why this is
+	// caught before anything reads it.
+	if *clearAcceptanceCriteria && flagWasSet(fs, "acceptance-criteria") {
+		return fmt.Errorf("--clear-acceptance-criteria and --acceptance-criteria cannot be used together")
+	}
+	if *clearAcceptanceCriteria && flagWasSet(fs, "acceptance-criteria-file") {
+		return fmt.Errorf("--clear-acceptance-criteria and --acceptance-criteria-file cannot be used together")
+	}
+	// Two fields, one stdin — the same collision `orbit task create` has. readCLIText sees a single
+	// field at a time, so nothing downstream can notice that the first read drains the stream and the
+	// second gets an empty string: an update that silently blanks a task's criteria (or its
+	// description) and reports success. Caught here, before either read and before any request; a
+	// direct value for one and stdin for the other is unambiguous and stays legal.
+	if flagWasSet(fs, "description-file") && flagWasSet(fs, "acceptance-criteria-file") {
+		return fmt.Errorf("--description-file and --acceptance-criteria-file both read stdin and cannot be used together; pass one of them inline")
+	}
 	desc, descSet, err := readCLIText(in, *description, flagWasSet(fs, "description"), *descriptionFile, flagWasSet(fs, "description-file"), "description")
+	if err != nil {
+		return err
+	}
+	criteria, criteriaSet, err := readCLIText(in, *acceptanceCriteria, flagWasSet(fs, "acceptance-criteria"), *acceptanceCriteriaFile, flagWasSet(fs, "acceptance-criteria-file"), "acceptance-criteria")
 	if err != nil {
 		return err
 	}
@@ -1028,6 +1267,28 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["listId"] = *listID
 	}
+	// Membership, not ordering: this moves the task within the subtask tree and says nothing about
+	// when it runs (--depends-on below is that). Blank is a typo or an unset shell variable, the
+	// same rule the id flags above use — detaching is what --clear-parent says out loud.
+	if *clearParent {
+		body["parentTaskId"] = nil
+	} else if flagWasSet(fs, "parent-task-id") {
+		if strings.TrimSpace(*parentTaskID) == "" {
+			return fmt.Errorf("--parent-task-id cannot be empty; use --clear-parent")
+		}
+		body["parentTaskId"] = *parentTaskID
+	}
+	// Three-state like --parent-task-id above, and refused outright by the server once this
+	// verification has concluded anything: the consequences a verdict already caused name the
+	// subject they were about.
+	if *clearVerifies {
+		body["verifiesTaskId"] = nil
+	} else if flagWasSet(fs, "verifies-task-id") {
+		if strings.TrimSpace(*verifiesTaskID) == "" {
+			return fmt.Errorf("--verifies-task-id cannot be empty; use --clear-verifies")
+		}
+		body["verifiesTaskId"] = *verifiesTaskID
+	}
 	if *clearDueDate {
 		body["dueDate"] = nil
 	} else if flagWasSet(fs, "due-date") {
@@ -1052,6 +1313,15 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 		}
 		body["model"] = *model
 	}
+	// Whole-field replacement with an explicit way to remove it: null clears, a string replaces, and
+	// an absent flag sends nothing so the task keeps what it already states. Free text rather than an
+	// id, so the blank-is-a-typo rule the id flags above use does not apply — `--acceptance-criteria
+	// ""` is a caller deliberately recording none, and the server's DTO has no MinLength either.
+	if *clearAcceptanceCriteria {
+		body["acceptanceCriteria"] = nil
+	} else if criteriaSet {
+		body["acceptanceCriteria"] = criteria
+	}
 	if *clearDependencies {
 		body["dependsOnTaskIds"] = []string{}
 	} else if flagWasSet(fs, "depends-on") {
@@ -1067,6 +1337,46 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if flagWasSet(fs, "auto-run-when-ready") {
 		body["autoRunWhenReady"] = *autoRun
 	}
+	if flagWasSet(fs, "completion-policy") {
+		if err := validateTaskCLICompletionPolicy(*completionPolicy); err != nil {
+			return err
+		}
+		body["completionPolicy"] = *completionPolicy
+	}
+	// Three-state, like --provider above: revoking a verdict is a real edit — it reopens a subject
+	// that VERIFICATION_PASSED had completed — so it needs its own flag rather than an empty string.
+	if *clearVerdict {
+		if flagWasSet(fs, "verdict") {
+			return fmt.Errorf("--verdict and --clear-verdict cannot be combined")
+		}
+		body["verdict"] = nil
+	} else if flagWasSet(fs, "verdict") {
+		if err := validateTaskCLIVerdict(*verdict); err != nil {
+			return err
+		}
+		body["verdict"] = *verdict
+	}
+	// Three-state like the verdict above. Unlinking is a real edit rather than an empty string: it
+	// says the replacement is no longer the story, which is a different claim from never having
+	// recorded one.
+	if *clearSuperseded {
+		body["supersededByTaskId"] = nil
+	} else if flagWasSet(fs, "superseded-by-task-id") {
+		if strings.TrimSpace(*supersededBy) == "" {
+			return fmt.Errorf("--superseded-by-task-id cannot be empty; use --clear-superseded")
+		}
+		body["supersededByTaskId"] = *supersededBy
+	}
+	if *clearTerminalReason {
+		body["terminalReason"] = nil
+	} else if flagWasSet(fs, "terminal-reason") {
+		switch strings.ToUpper(strings.TrimSpace(*terminalReason)) {
+		case "SUPERSEDED", "ABANDONED":
+			body["terminalReason"] = strings.ToUpper(strings.TrimSpace(*terminalReason))
+		default:
+			return fmt.Errorf("--terminal-reason must be one of SUPERSEDED, ABANDONED")
+		}
+	}
 	if len(body) == 0 {
 		return fmt.Errorf("no fields to update")
 	}
@@ -1074,7 +1384,10 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.updateTask(id, body)
+	// The acting session, for the same reason create passes it: the server's independence rule
+	// (§13.2) needs to know which run is writing, and a terminal outside a session simply has none.
+	_, sessionID := cliTaskAttribution()
+	raw, err := t.updateTask(sessionID, id, body)
 	if err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
@@ -1436,12 +1749,12 @@ type cliCapabilitySpec struct {
 }
 
 var baseCLICapabilities = []cliCapabilitySpec{
-	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
+	{Tool: "task_list", Argv: []string{"orbit", "task", "list"}, Usage: "orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]", Arguments: []string{"--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--list-id <id>", "--project-id <id> (only tasks filed under this project; unknown or another owner's lists empty)", "--label <labels[,labels...]> (repeatable; matches tasks carrying ALL of them)", "--limit <n> (default 100, max 200)", "--all (every match as NDJSON, paged; excludes --limit)", "--cursor <c> (resume an interrupted --all)", "--json"}},
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
-	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately.", Mutates: true},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
-	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--json"}, Mutates: true},
+	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
+	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
@@ -1520,10 +1833,16 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	specs := append([]cliCapabilitySpec{}, baseCLICapabilities...)
 	// Ungated like the task commands, whose `provider` field it answers for.
 	specs = append(specs, providerCLICapabilities...)
+	// Also ungated: it only reads, and the agent that needs a project's goal and acceptance
+	// criteria is the plain coordinator session that has no session_* tools at all.
+	specs = append(specs, projectCLICapabilities...)
 	// Also ungated, and for the same kind of reason: asking your own owner for a human is not an
 	// orchestration power, and the agents most likely to need one are the plain single-session
 	// ones this document is usually read by.
 	specs = append(specs, notifyCLICapabilities...)
+	// Same argument again (§13.7): recording that a merge happened is evidence about the caller's
+	// own work, not a power over somebody else's session.
+	specs = append(specs, mergeReceiptCLICapabilities...)
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)
 		// The agent verbs ride the same gate as the session ones and have no headless form:

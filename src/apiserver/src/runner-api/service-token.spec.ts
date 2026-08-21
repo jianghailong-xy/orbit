@@ -201,7 +201,7 @@ function makeController() {
     },
   };
   return {
-    controller: new RunnerSessionsController(sessions as never, authorizer as never),
+    controller: new RunnerSessionsController(sessions as never, authorizer as never, {} as never),
     calls,
   };
 }

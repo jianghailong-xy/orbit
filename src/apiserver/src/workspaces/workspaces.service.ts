@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -68,6 +69,10 @@ export class WorkspacesService {
         appendSystemPrompt: dto.appendSystemPrompt,
         systemPrompt: dto.systemPrompt,
         disallowedTools: (dto.disallowedTools ?? []) as Prisma.InputJsonValue,
+        providerFallbacks: (dto.providerFallbacks ?? []) as unknown as Prisma.InputJsonValue,
+        canCreateTasks: dto.canCreateTasks ?? false,
+        canDelegate: dto.canDelegate ?? false,
+        maxConcurrentTasks: dto.maxConcurrentTasks,
         effort: dto.effort,
         targetRunnerId: dto.targetRunnerId,
         targetLabels: dto.targetLabels ?? [],
@@ -234,9 +239,15 @@ export class WorkspacesService {
       autoInitGit: dto.autoInitGit,
       enableWorktree: dto.enableWorktree,
       enableOrchestration: dto.enableOrchestration,
+      canCreateTasks: dto.canCreateTasks,
+      canDelegate: dto.canDelegate,
+      maxConcurrentTasks: dto.maxConcurrentTasks,
       defaultMergeTarget: dto.defaultMergeTarget,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
+    if (dto.providerFallbacks) {
+      data.providerFallbacks = dto.providerFallbacks as unknown as Prisma.InputJsonValue;
+    }
     if (dto.env) data.env = dto.env as Prisma.InputJsonValue;
     if (dto.targetLabels) data.targetLabels = dto.targetLabels;
     // runnerId is a relation FK: connect to (re)bind, disconnect to detach.
@@ -264,13 +275,45 @@ export class WorkspacesService {
     return { updated: count };
   }
 
+  /**
+   * Delete an agent — unless a project is coordinated by it.
+   *
+   * The refusal is the soft-delete half of the `project_member` foreign key's RESTRICT, which
+   * cannot fire here: this is an UPDATE, and the row it points at goes on existing. Without it, an
+   * agent a project coordinates with can be deleted and the project keeps naming it — the identity
+   * behind its coordinator is a deleted agent, and every later read has to decide what that means.
+   *
+   * The lock is what makes the answer independent of timing. `FOR UPDATE` conflicts with the
+   * `FOR SHARE` that `ProjectsService.writeCoordinatorAgent` takes on this same row, so a delete
+   * and a "make this agent the coordinator" are two orderings and never an interleaving: whichever
+   * takes the row first, the other sees the outcome and is refused. Taking it BEFORE counting is
+   * the whole of it — counting first would read a number that another transaction is already
+   * making wrong. This path never locks a project row, which is why it cannot deadlock against
+   * that one (project first, then agent).
+   */
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
     // Soft delete: stamp `deletedAt` rather than dropping the row. The workspace's sessions and
     // tasks stay linked (no FK SET NULL orphaning) and it stays restorable; every user-facing
     // listing filters on `deletedAt: null`, while runtime lookups by a live session's workspaceId
     // deliberately don't — so in-flight sessions keep resolving their workspace's config.
-    await this.prisma.workspace.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.$transaction(async (tx) => {
+      const held = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "workspace"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL
+        FOR UPDATE`;
+      // Already deleted, by a request that got here first. Deleting is idempotent — the caller
+      // asked for a state this row is already in.
+      if (held.length === 0) return;
+      const coordinating = await tx.projectMember.count({ where: { agentId: id } });
+      if (coordinating > 0) {
+        throw new ConflictException(
+          `This agent still coordinates ${coordinating} project(s) and cannot be deleted — ` +
+            'point those projects at another coordinator first',
+        );
+      }
+      await tx.workspace.update({ where: { id }, data: { deletedAt: new Date() } });
+    });
     return { ok: true };
   }
 

@@ -34,8 +34,11 @@ import {
   SessionConfigDto,
   SessionRenameDto,
   SessionResumeDto,
+  SessionInterruptDto,
   SessionTurnDto,
+  RecordMergeReceiptDto,
 } from './dto';
+import { MergeReceiptService } from './merge-receipt.service';
 import { SessionsService } from './sessions.service';
 import { parseMaxPayload, truncatePayload } from './truncate-payload';
 import { coalesceDeltas, isStreamingDelta } from './coalesce-deltas';
@@ -78,6 +81,7 @@ export class SessionsController {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeService,
     private readonly tags: SessionTagsService,
+    private readonly mergeReceipts: MergeReceiptService,
   ) {}
 
   // CreateSessionDto is an interface, so the global ValidationPipe never sees it and its ids
@@ -224,9 +228,16 @@ export class SessionsController {
     return this.sessions.rename(user.userId, id, dto.title);
   }
 
+  /** Stop the running turn. With a body carrying `content`, the follow-up is queued in
+   *  the same transaction — see SessionsService.interrupt for why the two cannot be two
+   *  requests. A bodyless POST stays exactly what it was. */
   @Post(':id/interrupt')
-  interrupt(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.sessions.interrupt(user.userId, id);
+  interrupt(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body(PublicIdPipe.forFields('attachmentIds')) dto?: SessionInterruptDto,
+  ) {
+    return this.sessions.interrupt(user.userId, id, dto);
   }
 
   @Post(':id/end')
@@ -243,6 +254,32 @@ export class SessionsController {
     @Body() dto: MergeToMainDto,
   ) {
     return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch);
+  }
+
+  /**
+   * Record that this session's branch was merged (contract §13.7).
+   *
+   * The door for a merge Orbit did not perform — the ff-only an agent runs in its own worktree,
+   * which is how these branches actually land. Idempotent: the same merge posted twice returns the
+   * first receipt with `created: false`.
+   */
+  @Post(':id/merge-receipts')
+  recordMergeReceipt(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RecordMergeReceiptDto,
+  ) {
+    return this.mergeReceipts.record(user.userId, id, dto, 'USER');
+  }
+
+  /** Every merge recorded against this session's branch, newest first. */
+  @Get(':id/merge-receipts')
+  listMergeReceipts(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.mergeReceipts.list(user.userId, id, limit ? Number(limit) : undefined);
   }
 
   /** Ask the runner to commit this live session's uncommitted worktree changes onto its branch. */

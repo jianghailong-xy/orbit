@@ -25,6 +25,7 @@ function makeService(status: RunStatus, executableAfterDelete: number) {
     conversationTurn: {
       deleteMany: async () => ({ count: 1 }),
       count: async () => executableAfterDelete,
+      findFirst: async () => null,
     },
   };
   const prisma = {

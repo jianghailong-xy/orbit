@@ -33,7 +33,7 @@ enable a separate git worktree for every session on an agent.
 
 | Need | What Orbit provides |
 | --- | --- |
-| Work that outlives a chat | Durable tasks, task lists, dependencies, comments, and resumable sessions |
+| Work that outlives a chat | Durable projects, tasks, task lists, dependencies, comments, and resumable sessions |
 | Parallel agents without checkout collisions | Optional per-session git worktree isolation |
 | Access to private infrastructure | Self-hosted runners that use the tools and credentials already on your machines |
 | Human control over risky actions | Live allow/deny approval cards and scoped permission modes |
@@ -52,14 +52,15 @@ Web / macOS / iOS ──REST + SSE──▶ Control plane + Postgres ◀──ou
                                                                                optional worktree
 ```
 
-- **Control plane** — NestJS, Prisma, and PostgreSQL own users, workspaces, sessions, tasks, approvals,
-  runners, attachments, and usage.
+- **Control plane** — NestJS, Prisma, and PostgreSQL own users, workspaces, sessions, projects, tasks,
+  approvals, runners, attachments, and usage.
 - **Runner** — a small static Go CLI registers a machine, claims work, drives the selected agent runtime,
   and manages optional worktree isolation and recovery.
 - **Clients** — Vite/React on the web and shared SwiftUI clients for macOS and iOS.
 - **Gateway** — nginx serves the web app and `/api` from one origin in the Docker Compose deployment.
 
-See the [architecture overview](docs/architecture.md) for trust boundaries, protocols, and component details.
+See the [architecture overview](docs/architecture.md) for trust boundaries, protocols, and component details,
+and [the project/agent domain contract](docs/project-agent-contract.md) for project coordination.
 
 ## Quick start
 
@@ -110,8 +111,8 @@ guide](docs/development.md) for tests, repository layout, and native-client setu
 ## Project status
 
 Orbit is under active development and should currently be treated as **pre-1.0**. Core functionality is in
-place: distributed runners, interactive sessions, task graphs, approvals, worktree isolation, multi-runtime
-support, web and native clients, runner recovery, backups, and usage reporting.
+place: distributed runners, interactive sessions, project coordination, task graphs, approvals, worktree
+isolation, multi-runtime support, web and native clients, runner recovery, backups, and usage reporting.
 
 Before relying on Orbit for critical production work, review the [security policy](SECURITY.md), deployment
 hardening guidance, backup runbook, and release notes. Recurring schedules and inbound task sources are not

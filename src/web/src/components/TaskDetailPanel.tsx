@@ -1,5 +1,5 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
 import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -13,6 +13,7 @@ import {
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
 import { encodeId } from '../lib/idCodec';
+import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
 import { providersQuery, runnersQuery } from '../lib/queries';
 import { taskPagePath, type TaskPage } from '../lib/taskPages';
 import { useToast } from '../lib/toast';
@@ -34,8 +35,10 @@ import {
   type SessionRunState,
 } from '../lib/sessionState';
 import { PENDING_SLOT_LABEL } from '../lib/runnerSlots';
+import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
 import { TaskDependencyList } from './TaskDependencyList';
+import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -50,15 +53,6 @@ const TDP_WIDTH_KEY = 'orbit.taskDetailWidth';
 const TDP_WIDTH_MIN = 440;
 const TDP_WIDTH_MAX = 1000;
 const TDP_WIDTH_DEFAULT = 600;
-
-// TaskStatus (OPEN/IN_PROGRESS/DONE/CANCELLED/FAILED) -> header badge label + tone.
-const STATUS_META: Record<string, { label: string; tone: string }> = {
-  OPEN: { label: 'Open', tone: 'muted' },
-  IN_PROGRESS: { label: 'In progress', tone: 'blue' },
-  DONE: { label: 'Done', tone: 'green' },
-  CANCELLED: { label: 'Cancelled', tone: 'muted' },
-  FAILED: { label: 'Failed', tone: 'red' },
-};
 
 // A run's outcome badge is independent of whether its session is Open, Completed or in Trash.
 const SESSION_STATE_META: Record<SessionRunState, { label: string; tone: string }> = {
@@ -129,6 +123,83 @@ const rehypeMentions = (names: string[]) => () => (tree: any) => {
   };
   walk(tree);
 };
+
+/**
+ * What the header's Run now button says on hover, in the order the reasons matter.
+ *
+ * The first three are the existing gates and are unchanged: each one is a reason the button is
+ * also DISABLED, so the tooltip is the only place the reader is told why. They come first because
+ * a schedule is irrelevant to a task that cannot start at all.
+ *
+ * The fourth is not a gate — the task can run, and running it is exactly what the button does. It
+ * is here because doing so is destructive in a way the label alone does not admit: the server
+ * consumes `runAt` on the first accepted run, so a reader who presses Run now to "see it work"
+ * loses the appointment they set. Saying so is cheaper than a confirmation dialog, and it is the
+ * same sentence the Start at editor carries, so the two cannot disagree.
+ *
+ * '' means no tooltip at all — antd renders nothing for an empty title, which is right for an
+ * unscheduled task with nothing standing in its way.
+ *
+ * Pure and exported: the hint lives inside a Tooltip, which a static render reduces to an
+ * `aria-describedby` pointing at markup that does not exist until the pointer arrives.
+ */
+export function runNowHint({
+  blocked,
+  dependencyState,
+  canExecute,
+  running,
+  scheduledLocal,
+}: {
+  blocked: boolean;
+  dependencyState?: string | null;
+  canExecute: boolean;
+  running: boolean;
+  /** The scheduled start in the viewer's own wall clock, absent on an unscheduled task. */
+  scheduledLocal?: string | null;
+}): string {
+  if (blocked) {
+    return dependencyState === 'BLOCKED_FAILED'
+      ? 'Prerequisite cancelled — resolve it first'
+      : 'Waiting for prerequisites';
+  }
+  if (!canExecute) return 'Assign a workspace first';
+  if (running) return 'Task running…';
+  if (scheduledLocal) return `Starts immediately and clears the start scheduled for ${scheduledLocal}.`;
+  return '';
+}
+
+/**
+ * "Run now": tell the task's responsible workspace to start (or continue) a session on it, as
+ * options a `useMutation` — or a test's `MutationObserver` — can be handed directly.
+ *
+ * The backend validates assignee + runner. A run that is accepted also CONSUMES any scheduled
+ * start — the server sets `runAt` back to NULL, one-shot by construction — so this refreshes the
+ * task's project as well as the task views. Without that a Project row goes on advertising a start
+ * that has already been spent.
+ *
+ * Nothing at all is refreshed when the run is refused: the schedule never moved, and a row
+ * redrawn as though it had is the one report that would be wrong. The refresh is RETURNED from
+ * `onSuccess`, so the button stays in its loading state until those views have caught up rather
+ * than re-enabling itself over the schedule the run just spent.
+ *
+ * Built as a function for the same reason the schedule's own writes are: everything here happens
+ * after the server answers, behind a button no static render can press.
+ */
+export function runNowMutationOptions(
+  qc: QueryClient,
+  message: WriteToast,
+  taskId: string,
+  projectId?: string | null,
+) {
+  return {
+    mutationFn: () => api(`/tasks/${taskId}/execute`, { method: 'POST' }),
+    onSuccess: () => {
+      message.success('Assignee workspace triggered');
+      return refreshTaskScheduleViews(qc, taskId, projectId);
+    },
+    onError: (e: Error) => message.error(e.message),
+  };
+}
 
 // The list row passed in for an instant header render before /tasks/:id resolves.
 export interface TaskSummary {
@@ -372,17 +443,7 @@ export function TaskDetailPanel({
     onError: (e: Error) => message.error(e.message),
   });
 
-  // "开始执行": tell the task's responsible workspace to start (or continue) a session on it.
-  // The backend validates assignee + runner; refresh the panel so the new run shows up.
-  const execute = useMutation({
-    mutationFn: () => api(`/tasks/${taskId}/execute`, { method: 'POST' }),
-    onSuccess: () => {
-      message.success('Assignee workspace triggered');
-      qc.invalidateQueries({ queryKey: ['task', taskId] });
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-    },
-    onError: (e: Error) => message.error(e.message),
-  });
+  const execute = useMutation(runNowMutationOptions(qc, message, taskId, q.data?.projectId));
 
   // Search prerequisite candidates server-side. Loading every task made this picker and
   // the surrounding panel unusable for large task sets; the first 50 recent matches are
@@ -569,7 +630,10 @@ export function TaskDetailPanel({
   );
   const mentionPlugin = useMemo(() => rehypeMentions(mentionNames), [mentionNames]);
 
-  const status = STATUS_META[task?.status as string] ?? { label: task?.status ?? '', tone: 'muted' };
+  // §13.6: the chip says how the task ENDED, not only what its status column holds. A cancelled
+  // attempt that was re-run reads as Superseded, in amber, because the work is still happening.
+  const status = taskOutcomeChip(task);
+  const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
 
@@ -636,15 +700,16 @@ export function TaskDetailPanel({
   const running = execute.isPending || sessions.some((s: any) => isSessionBusy(s));
   // Blocked tasks can't run until prerequisites clear; mirror the backend's execute gate.
   const executeDisabled = !canExecute || running || blocked;
-  const executeHint = blocked
-    ? dependencyState === 'BLOCKED_FAILED'
-      ? 'Prerequisite cancelled — resolve it first'
-      : 'Waiting for prerequisites'
-    : !canExecute
-      ? 'Assign a workspace first'
-      : running
-        ? 'Task running…'
-        : '';
+  // The schedule the server holds, if any — read here as well as in the editor below, because
+  // pressing Run now is how a reader loses one and the button is where they need to be told.
+  const scheduled = scheduledStart(q.data?.runAt);
+  const executeHint = runNowHint({
+    blocked,
+    dependencyState,
+    canExecute,
+    running,
+    scheduledLocal: scheduled?.local,
+  });
 
   // Drag the panel's left edge to resize; it sits on the right, so dragging left widens it.
   // Listeners live on document so a fast drag keeps tracking past the 1px handle.
@@ -687,6 +752,7 @@ export function TaskDetailPanel({
           <div className="tdp-title">{task?.title ?? 'Loading…'}</div>
           <div className="tdp-meta">
             <span className={`tdp-badge tone-${status.tone}`}>{status.label}</span>
+            {supersession && <span className="tdp-meta-item muted">· {supersession}</span>}
             {task?.assignee && (
               <span className="tdp-meta-item">
                 <Avatar size={18} style={{ background: 'var(--brand-tint-hover)', color: 'var(--brand)', fontSize: 10 }}>
@@ -709,7 +775,7 @@ export function TaskDetailPanel({
                 onClick={() => execute.mutate()}
                 style={executeDisabled ? { pointerEvents: 'none' } : undefined}
               >
-                {running ? 'Running' : 'Run'}
+                {running ? 'Running' : 'Run now'}
               </Button>
             </span>
           </Tooltip>
@@ -835,6 +901,10 @@ export function TaskDetailPanel({
                 onChange={(val) => updateList.mutate(val ?? null)}
               />
             </div>
+            {/* Last of the fields that can be changed, before the read-only provenance below.
+                Reads the server's own answer rather than the list-row summary, like every other
+                editable field here: the summary carries neither a schedule nor a project. */}
+            <TaskScheduleEditor taskId={taskId} runAt={q.data?.runAt} projectId={q.data?.projectId} />
             <div className="tdp-field">
               <span className="tdp-field-label">Created by</span>
               <span className="tdp-field-value">{summary?.creatorName ?? '—'}</span>

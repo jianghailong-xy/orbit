@@ -282,6 +282,13 @@ export enum RunEventType {
   RESULT = 'result',
   /** Interactive sessions (Route B). */
   USER = 'user', // a user turn entered the transcript
+  // How far a user message got on its way into the engine's conversation. The runner
+  // publishes one per transition after the `user` event that opens the turn (which carries
+  // the first state itself): enqueued -> written -> acknowledged, or failed with a reason
+  // and whether re-sending is safe. Payload: { turnId, delivery, reason?, retryable? }.
+  // A message is only shown as sent once the engine's writer has accepted it, and only
+  // `acknowledged` — the engine echoing it back — means it entered the conversation.
+  USER_DELIVERY = 'user_delivery',
   TURN_END = 'turn_end', // one turn finished; session parks for the next input
   INTERRUPT = 'interrupt', // a turn was interrupted by the user
   // Tool-permission approvals (live-only SSE nudges; the durable record is the
@@ -360,6 +367,40 @@ export enum TaskStatus {
    *  couldn't recover from) and the work needs a human — distinct from OPEN, which the
    *  reclaim backstop uses for retryable infra hiccups / user cancels. */
   FAILED = 'FAILED',
+}
+
+/** Where a project stands as a piece of work: still pursued, achieved, or abandoned. The same
+ *  vocabulary as {@link TaskStatus} on purpose — a project and its tasks are the same kind of
+ *  claim at different scales. Filing (archive/hide) is a separate concern and does not belong
+ *  in this enum. */
+export enum ProjectStatus {
+  OPEN = 'OPEN',
+  DONE = 'DONE',
+  CANCELLED = 'CANCELLED',
+}
+
+/**
+ * How far a project's coordinator may act on its own.
+ *
+ * MANUAL is not "off": the loop still works out what the next step would be and records it, it
+ * just turns every step that would change something into a request for approval — so "I paused
+ * automation" and "it is broken" stay distinguishable. Off is `coordinatorEnabled`, a separate
+ * field, so that pausing cannot overwrite the level chosen to come back to.
+ *
+ * The stored default for an EXISTING project is MANUAL and a newly created one is written
+ * GUARDED_AUTO explicitly — two different values on purpose.
+ */
+export enum ProjectAutomationPolicy {
+  MANUAL = 'MANUAL',
+  GUARDED_AUTO = 'GUARDED_AUTO',
+  AUTO = 'AUTO',
+}
+
+/** What an agent is to a project's team: the identity that decides what the project does next,
+ *  or one that identity may hand work to. */
+export enum ProjectRole {
+  COORDINATOR = 'COORDINATOR',
+  MEMBER = 'MEMBER',
 }
 
 /** Who/what authored a Task (polymorphic creator). */

@@ -77,11 +77,12 @@ final class ConsoleRegistry {
                     configuredProviders: [ConfiguredProvider] = [],
                     configuredProvidersLoaded: Bool = false,
                     modelCatalog: RunnerModelCatalog? = nil,
+                    accountDefaultEffort: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
         let model = ConsoleModel(draftFor: agent, defaultModel: defaultModel,
                                  configuredProviders: configuredProviders,
                                  configuredProvidersLoaded: configuredProvidersLoaded,
-                                 modelCatalog: modelCatalog,
+                                 modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated
         model.onToast = { [weak self] request in self?.onToast(request, nil) }

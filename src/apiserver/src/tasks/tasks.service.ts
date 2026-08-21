@@ -8,7 +8,15 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { CreatorType, Prisma, RunStatus, Task, TaskComment } from '@prisma/client';
+import {
+  CreatorType,
+  Prisma,
+  RunStatus,
+  SessionDispatchOrigin,
+  SessionRunSource,
+  Task,
+  TaskComment,
+} from '@prisma/client';
 import {
   AgentProvider,
   planUsageBlockedUntil,
@@ -17,15 +25,23 @@ import {
   SessionEndReason,
   TaskStatus,
   USAGE_LIMIT_ERROR_MARKERS,
+  uuidToBase62,
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
 import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
+import { planTaskAggregation } from '../projects/task-aggregation';
+import {
+  AGGREGATION_SCOPE_MAX_TASKS,
+  applyTaskAggregations,
+  collectAggregationScope,
+} from '../projects/task-aggregation-writer';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { withSessionState } from '../sessions/session-state';
 import {
+  CreateTaskBatchItemDto,
   CreateTaskCommentDto,
   CreateTaskDto,
   CreateTasksBatchDto,
@@ -34,6 +50,25 @@ import {
   TASK_BATCH_CREATE_MAX,
   UpdateTaskDto,
 } from './dto';
+import {
+  TASK_SUPERSEDABLE_STATUSES,
+  TASK_SUPERSESSION_MAX_HOPS,
+  successorChain,
+  supersededByAbsentReason,
+  supersessionRefusal,
+  taskOutcome,
+} from './task-supersession';
+import {
+  AUTO_RUN_RETRY_BACKOFF_MS,
+  MAX_AUTO_RUN_FAILURES,
+  QUOTA_BLIND_RETRY_BACKOFF_MS,
+} from './task-retry-policy';
+
+export {
+  AUTO_RUN_RETRY_BACKOFF_MS,
+  MAX_AUTO_RUN_FAILURES,
+  QUOTA_BLIND_RETRY_BACKOFF_MS,
+} from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
   canRun,
@@ -56,6 +91,28 @@ type TaskRunTarget = {
   model?: string | null;
 };
 
+export function buildTaskExecutionPrompt(task: {
+  title: string;
+  description?: string | null;
+  isForeman?: boolean;
+  verifiesTaskId?: string | null;
+  list?: { instructions?: string | null } | null;
+}): string {
+  const systemRun = task.isForeman === true || task.verifiesTaskId != null;
+  const instructions = systemRun ? undefined : task.list?.instructions?.trim();
+  return (
+    `请开始执行任务「${task.title}」。\n\n` +
+    (task.description ? `任务描述：\n${task.description}\n\n` : '') +
+    (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
+    `请按以下步骤进行：\n` +
+    `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
+    `2. 执行任务。\n` +
+    `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
+    `再用 task_update 将该任务状态（status）置为 DONE。\n` +
+    `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
+  );
+}
+
 // Version-agnostic (UUIDv7-safe) shape check. A non-UUID id would otherwise reach
 // Postgres and surface as a 500; we treat it like any unknown task instead.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -68,11 +125,27 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
 
 /**
+ * How far `assertNoParentCycle` walks up a subtask chain before it refuses to judge.
+ *
+ * A bound, not a product rule: the walk is one query per level, and a decomposition fifty levels
+ * deep is a mistake rather than a plan. It also guarantees the loop ends even if the stored tree
+ * is somehow malformed.
+ */
+const MAX_TASK_PARENT_DEPTH = 50;
+
+/**
  * What a task LIST row needs: every scalar column except `description`, plus the assignee
  * (with its runner, for the batch-run modal) and the comment tally. No client renders a
  * description in a list row — the detail panel fetches `GET /tasks/:id` for that — and it
  * averages ~500 bytes per task, so including it here inflated a 200-row page by ~46% and a
  * 701-task list view by ~440KB for bytes that were parsed and thrown away.
+ *
+ * `projectId`, `parentTaskId` and `acceptanceCriteria` are in for the same reason the rest of the
+ * scalars are, and the same reason `description` stays out. They are what a row is filed under,
+ * what it is part of, and what would settle it — a coordinator listing its project's tasks reads
+ * all three off the page it already has, where without them the only way to learn that a row is a
+ * subtask is one `GET /tasks/:id` per row, description included. They are three small columns, not
+ * a relation: no join, no fan-out, and `children`/`comments` stay out for exactly that reason.
  */
 export const TASK_LIST_SELECT = {
   id: true,
@@ -83,14 +156,31 @@ export const TASK_LIST_SELECT = {
   creatorId: true,
   assigneeId: true,
   dueDate: true,
+  runAt: true,
   createdAt: true,
   updatedAt: true,
   listId: true,
+  projectId: true,
+  parentTaskId: true,
+  acceptanceCriteria: true,
   labels: true,
   creatorSessionId: true,
   autoRunWhenReady: true,
   provider: true,
   model: true,
+  // Two enum columns and the relation they are about, in for the same reason parentTaskId is: a
+  // reader looking at a project's tree needs to know which rows complete themselves, which rows
+  // are checks and of what, and what those checks concluded — and the only alternative is one GET
+  // per row. `verifiesTaskId` is spelled base62 on the way out, like every other id here.
+  completionPolicy: true,
+  verdict: true,
+  verifiesTaskId: true,
+  // §13.6's three supersession columns, in for the same reason: a reader looking at a project's
+  // history needs "this one was replaced, and by that one" without one GET per cancelled row —
+  // otherwise the only way to tell a replaced attempt from a dropped one is to read the comments.
+  supersededByTaskId: true,
+  supersededAt: true,
+  terminalReason: true,
   assignee: {
     select: {
       id: true,
@@ -152,6 +242,7 @@ const RUNNABLE_TASK_SQL = Prisma.sql`
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
+  AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
   AND t.auto_run_when_ready = true
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- A held task is out of the sweep entirely: pausing a list is the stop for a campaign
@@ -164,6 +255,13 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- permission: deleting 112 paused-able lists released 55,513 tasks that then ran for a
   -- fortnight. Every clause here that permits must be positive and read off the task itself.
   AND t.dispatch_hold = false
+  -- A schedule that has not come due yet is a veto, and it has to be one HERE as well as on the
+  -- instant path (see triggerDependents): a task scheduled for Sunday whose last prerequisite
+  -- lands on Friday is ready in every other sense, and without this clause the sweep would start
+  -- it on Friday. "Earliest automatic start" has to hold against every automatic starter, not
+  -- just the one that motivated it. NULL — no schedule at all — permits, which is what every
+  -- task that predates the column is.
+  AND (t.run_at IS NULL OR t.run_at <= now())
   AND EXISTS (
     SELECT 1 FROM task_dependency d
     JOIN task p ON p.id = d.depends_on_task_id
@@ -184,8 +282,55 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   )`;
 
 /**
- * SQL mirror of the `{ ownerId, listId?, assigneeId? }` scope the Prisma queries are built
- * from. Derived from that same object rather than re-read from the query string, so the two
+ * The scheduled sweep's candidate predicate (see dispatchDueScheduledTasks), correlated to an
+ * outer `task t`. Anchored on `run_at`, which is the one selective thing about it: a schedule is
+ * rare, the partial index (migration 0110) holds only the tasks that have one, and every other
+ * clause here is a re-check over the handful that are actually due.
+ *
+ * Deliberately NOT AUTO_RUN_READY_SQL with a date bolted on, and the differences are the whole
+ * point of the feature:
+ *
+ *   * `auto_run_when_ready` is not required. That flag answers "should finishing a prerequisite
+ *     start this", which is a question about dependencies; a clock is a different trigger, and a
+ *     task with no dependencies at all is the ordinary case for one.
+ *   * Prerequisites are not required to EXIST, only to be finished. The auto-run sweep insists a
+ *     candidate have them because "all zero prerequisites are done" is not a reason to start
+ *     anything. Here the reason to start is the time, and the dependencies are only a veto.
+ *
+ * What it shares with the auto-run sweep it shares exactly, because these are the standing rules
+ * about dispatching a task rather than anything to do with scheduling: OPEN, not held by a paused
+ * list, an assignee bound to a runner, no prerequisite outstanding, and nothing already occupying
+ * it (TASK_OCCUPYING, so an idle-but-live session counts — a scheduled run must not barge in on a
+ * session that is merely waiting for a human).
+ *
+ * Every one of those is filtered here rather than left for execute() to reject, and not only for
+ * speed: a schedule whose task is unassigned or paused is retained, not consumed, so letting it
+ * reach execute() would log one rejection per task per minute for as long as the condition lasts.
+ */
+const SCHEDULED_DUE_SQL = Prisma.sql`
+  t.run_at IS NOT NULL
+  AND t.run_at <= now()
+  AND t.status = 'OPEN'::task_status
+  AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
+  AND t.dispatch_hold = false
+  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
+  AND NOT EXISTS (
+    SELECT 1 FROM task_dependency d
+    JOIN task p ON p.id = d.depends_on_task_id
+    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM session s
+    WHERE s.task_id = t.id
+      AND s.status IN (${Prisma.join(
+        TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+        ', ',
+      )})
+  )`;
+
+/**
+ * SQL mirror of the `{ ownerId, listId?, projectId?, assigneeId? }` scope the Prisma queries are
+ * built from. Derived from that same object rather than re-read from the query string, so the two
  * spellings of the scope cannot drift.
  */
 function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
@@ -193,6 +338,9 @@ function taskScopeSql(scope: Prisma.TaskWhereInput): Prisma.Sql {
   if (scope.listId === null) clauses.push(Prisma.sql`t.list_id IS NULL`);
   else if (typeof scope.listId === 'string') {
     clauses.push(Prisma.sql`t.list_id = ${scope.listId}::uuid`);
+  }
+  if (typeof scope.projectId === 'string') {
+    clauses.push(Prisma.sql`t.project_id = ${scope.projectId}::uuid`);
   }
   if (typeof scope.assigneeId === 'string') {
     clauses.push(Prisma.sql`t.assignee_id = ${scope.assigneeId}::uuid`);
@@ -246,9 +394,6 @@ const RECONCILE_INTERVAL_MS = 60_000;
 // stop auto-running it: past MAX_AUTO_RUN_FAILURES only an explicit trigger ("开始执行",
 // an @-mention, a prerequisite reaching DONE) starts it again. Indexed by failure count,
 // so entry [0] is the wait after the first failed run.
-export const AUTO_RUN_RETRY_BACKOFF_MS = [2 * 60_000, 8 * 60_000, 30 * 60_000, 120 * 60_000];
-export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
-
 // Flat brake for runs killed by a provider usage limit that the quota gate could not put a
 // resume time on. Those failures are excluded from the budget above on purpose (see
 // autoRunHoldOff) — one quota outage must not permanently retire a fleet — and
@@ -258,7 +403,53 @@ export const MAX_AUTO_RUN_FAILURES = AUTO_RUN_RETRY_BACKOFF_MS.length + 1;
 // backoff exists to stop. This is that missing brake, and it is flat rather than escalating
 // because a quota is not evidence the task is broken — it recovers on its own schedule, and
 // the only job here is to stop burning a session a minute while waiting for it.
-export const QUOTA_BLIND_RETRY_BACKOFF_MS = 15 * 60_000;
+// How many due tasks one scheduled sweep will look at (see dispatchDueScheduledTasks). A bound on
+// the pass, not a quota on the schedule: what it does not take this minute it takes the next, in
+// the same order, because the tasks it left keep their `run_at` and stay due. It exists so that
+// somebody scheduling ten thousand tasks for one instant produces a series of ordinary sweeps
+// rather than one that holds the timer for minutes and starves the two sweeps behind it.
+export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
+
+/**
+ * What an automatic trigger saw when it picked a task, carried into the dispatch so the dispatch
+ * can tell whether it is still acting on the same facts.
+ *
+ * Every automatic path is a scan followed by a re-read: the sweep (or triggerDependents) selects
+ * candidates, then `execute` loads each one again to dispatch it. A user editing the schedule in
+ * that window is not an exotic race — it is somebody looking at the task and changing their mind,
+ * which is most likely precisely when the task is about to run. Without this the automatic call is
+ * indistinguishable from a person pressing Run, and `execute` treats a future `runAt` as something
+ * a person may override: it would start the task early AND consume the schedule they had just set.
+ *
+ * `observedRunAt` is deliberately nullable rather than optional, and `null` is a real assertion
+ * rather than "no opinion": an unscheduled task that acquires a schedule mid-flight is the same
+ * race, and reconcileReadyTasks/triggerDependents select unscheduled tasks all day.
+ */
+export interface AutoDispatch {
+  /** The task's `runAt` as the candidate scan saw it. `null` means it was unscheduled. */
+  observedRunAt: Date | null;
+}
+
+/**
+ * Whether an automatic trigger may still act, given what the dispatch's own read found.
+ *
+ * Two ways to lose the right: the value moved (rescheduled, cancelled, or newly scheduled under an
+ * unscheduled candidate), or it now points into the future. The second is implied by the first for
+ * every caller in this file — they all select `run_at IS NULL OR run_at <= now()` — and is stated
+ * anyway, because "an automatic trigger never starts a task before its time" should be checkable
+ * where the decision is made rather than by auditing three candidate scans.
+ *
+ * Comparison is by instant, not identity: these are two different Date objects for the same row.
+ */
+export function autoDispatchStillValid(
+  current: Date | null,
+  observed: Date | null,
+  now: number = Date.now(),
+): boolean {
+  if ((current?.getTime() ?? null) !== (observed?.getTime() ?? null)) return false;
+  if (current !== null && current.getTime() > now) return false;
+  return true;
+}
 
 // Brake on repeat foremen for the same stall.
 //
@@ -341,8 +532,8 @@ export function diskBelowFloor(
 // by the legacy unpaged endpoint, so keep every generated IN (...) comfortably below
 // that ceiling even when an owner has tens of thousands of tasks.
 const TASK_ID_QUERY_CHUNK = 5_000;
-const DEFAULT_TASK_PAGE_SIZE = 100;
-const MAX_TASK_PAGE_SIZE = 200;
+export const DEFAULT_TASK_PAGE_SIZE = 100;
+export const MAX_TASK_PAGE_SIZE = 200;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_DEPTH = 8;
 const MAX_DEPENDENCY_GRAPH_MAX_DEPTH = 32;
 const DEFAULT_DEPENDENCY_GRAPH_MAX_NODES = 100;
@@ -369,6 +560,14 @@ export interface ListTasksPageQuery {
   limit?: string | number;
   status?: string;
   listId?: string;
+  /**
+   * Tasks filed under exactly this project. A scope like `listId`, not a lookup: it is applied
+   * alongside the owner filter and never checked against the project table, so an id that does not
+   * exist — or exists under another owner — narrows to nothing and answers as an empty list. That
+   * is deliberate. Answering 404 here would make this endpoint report whether a project id exists
+   * to a caller who is not allowed to read it, which is a question about somebody else's account.
+   */
+  projectId?: string;
   assigneeId?: string;
   /** Tasks carrying ALL of these labels. Comma-separated, or repeated. */
   labels?: string | string[];
@@ -469,13 +668,16 @@ interface TaskPageCursor {
   id: string;
 }
 
-function encodeTaskPageCursor(task: { createdAt: Date; id: string }): string {
+/** Exported so a second paged task read cannot invent a second cursor format: a cursor is part of
+ *  the wire contract, and two encodings of "where the last page stopped" would be one client
+ *  upgrade away from being handed to the wrong decoder. */
+export function encodeTaskPageCursor(task: { createdAt: Date; id: string }): string {
   return Buffer.from(
     JSON.stringify({ createdAt: task.createdAt.toISOString(), id: task.id } satisfies TaskPageCursor),
   ).toString('base64url');
 }
 
-function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
+export function decodeTaskPageCursor(cursor: string): { createdAt: Date; id: string } {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as TaskPageCursor;
     const createdAt = new Date(parsed.createdAt);
@@ -574,13 +776,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Periodic backstop for auto-run edges triggerDependents can't catch (see
     // reconcileReadyTasks). Single-replica assumption, same as ReaperService.
     this.reconcileTimer = setInterval(() => {
-      // Both sweeps ride this one timer. A second setInterval is how the reconciler once ended
-      // up running twice a minute (TasksService was provided by two modules), and the symptom —
-      // duplicate dispatch — took a production incident to spot. Sequential, not concurrent, so
-      // the foreman sees the dispatch decisions this same tick already made.
+      // All three sweeps ride this one timer. A second setInterval is how the reconciler once
+      // ended up running twice a minute (TasksService was provided by two modules), and the
+      // symptom — duplicate dispatch — took a production incident to spot. Sequential, not
+      // concurrent, so the foreman sees the dispatch decisions this same tick already made.
       this.reconcileReadyTasks()
         .catch((e) =>
           this.logger.error(`reconcile sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        // The clock trigger rides the same timer, for the reason above and one of its own: a task
+        // can be both due and dependency-ready, and running the two sweeps sequentially means the
+        // second sees what the first already dispatched. A schedule is therefore honoured within
+        // one RECONCILE_INTERVAL_MS of coming due, which is the resolution the field promises —
+        // `run_at` is the earliest start, not an alarm.
+        .then(() => this.dispatchDueScheduledTasks())
+        .catch((e) =>
+          this.logger.error(`scheduled sweep failed: ${e instanceof Error ? e.message : e}`),
         )
         .then(() => this.dispatchStalledListForemen())
         .catch((e) =>
@@ -632,6 +843,300 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     if (!list) throw new ForbiddenException('task list not found');
+  }
+
+  /** A task may only be filed under a project the same user owns (cf. assertOwnedList). */
+  private async assertOwnedProject(ownerId: string, projectId?: string | null): Promise<void> {
+    if (!projectId) return;
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { id: true },
+    });
+    if (!project) throw new ForbiddenException('project not found');
+  }
+
+  /**
+   * The error to raise when a write that named a project failed on a foreign key.
+   *
+   * `assertOwnedProject` answers "is this project yours" before the write; a project deleted in the
+   * moment between that answer and the write itself makes the database answer instead, in its own
+   * language. The outcome is correct either way — `ON DELETE RESTRICT` and the delete's row lock
+   * mean a task is never left holding a project that is gone — but "Foreign key constraint
+   * violated: task_project_id_fkey" surfaces as a 500, and a 500 says the server is broken when in
+   * fact the rule worked. The caller asked to file work into a project that no longer exists, and
+   * that is a 403 whether they lost the race by a millisecond or by a day.
+   *
+   * Two codes, because the same race is caught by two different guards depending on when the
+   * delete commits: PostgreSQL's constraint refuses the write with P2003, while a `connect:` that
+   * Prisma resolves first fails earlier with P2025 ("No 'Project' record(s) ... for a nested
+   * connect"). `create` writes the column directly and raises P2003; `update` connects the
+   * relation and raised whichever won the millisecond, which is exactly how this surfaced as an
+   * intermittent 500 in the concurrency test rather than a consistent one.
+   *
+   * Narrow on purpose, in three ways. It runs only when THIS request named a project, so a failure
+   * on a task that merely happens to have one is untouched. It re-reads the named projects rather
+   * than parsing the constraint out of the message, so a concurrent list, assignee or parent-task
+   * deletion — which raises the identical codes — is not silently relabelled: if the projects are
+   * all still there, the original error is returned unchanged for whatever it was really about.
+   * That re-read is what makes P2025 safe to include, since P2025 on an update can equally mean
+   * the task itself is gone. And it returns the error rather than throwing it, so every call site
+   * stays an explicit `throw`.
+   */
+  private async translateProjectFk(
+    e: unknown,
+    ownerId: string,
+    projectIds: Array<string | null | undefined>,
+  ): Promise<unknown> {
+    const raced =
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      (e.code === 'P2003' || e.code === 'P2025');
+    if (!raced) return e;
+    const named = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (named.length === 0) return e;
+    const live = await this.prisma.project.count({ where: { id: { in: named }, ownerId } });
+    if (live === named.length) return e;
+    // Deliberately the same status and wording as the pre-write check, so losing the race is
+    // indistinguishable to a caller from having asked a moment later.
+    return new ForbiddenException('project not found');
+  }
+
+  /**
+   * The parent this task may be made part of: owned by the same user, and in the same project the
+   * child will be in.
+   *
+   * The project rule is what keeps "part of" meaningful. A subtask belongs to the whole its parent
+   * belongs to; if the two could sit in different projects, then "everything in project A" and
+   * "everything under task P" would describe overlapping but disagreeing sets, and neither could
+   * be used to decide whether A is finished.
+   *
+   * Both sides are compared as `?? null`, so "no project" is one value rather than two — a task
+   * with no project may parent another task with no project, which is the shape every task in this
+   * deployment has today.
+   *
+   * `db` is the transaction the caller is writing in, so the parent read here and the write that
+   * follows see the same snapshot under the same lock. The preview path passes the plain client:
+   * it writes nothing, so there is nothing to serialize.
+   */
+  private async assertParentEligible(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    parentTaskId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    const parent = await db.task.findFirst({
+      where: { id: parentTaskId, ownerId },
+      select: { id: true, projectId: true },
+    });
+    if (!parent) throw new NotFoundException('parent task not found');
+    if ((parent.projectId ?? null) !== projectId) {
+      throw new BadRequestException(
+        'A subtask must be in the same project as its parent task — file both under the same ' +
+          'project (or neither) before linking them',
+      );
+    }
+  }
+
+  /**
+   * Everything that must be true of the task a verification is being pointed AT (§13.2).
+   *
+   * Four refusals, and each of them is a silence somewhere else if it is skipped. A subject the
+   * caller does not own is a cross-tenant read. A subject that is the verifier itself is a task
+   * grading its own claim. A subject that is ITSELF a verification has nothing left to check —
+   * the automatic path has declined that shape since it existed, and a deliberate door should not
+   * be the one that allows it. And a subject in a different project is the quiet one: aggregation
+   * plans over one project's tasks, so a check filed across that line is counted by nobody,
+   * `VERIFICATION_PASSED` reads it as "zero checks" and the parent it was supposed to gate
+   * completes without it.
+   *
+   * `db` is the caller's transaction under the owner lock, so what is read here is still true
+   * when the row that relies on it is written.
+   */
+  private async assertVerificationEligible(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    verifierTaskId: string | null,
+    verifiesTaskId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    if (verifierTaskId && verifiesTaskId === verifierTaskId) {
+      throw new BadRequestException('A task cannot verify itself');
+    }
+    const subject = await db.task.findFirst({
+      where: { id: verifiesTaskId, ownerId },
+      select: { id: true, projectId: true, verifiesTaskId: true },
+    });
+    if (!subject) throw new NotFoundException('verified task not found');
+    if (subject.verifiesTaskId) {
+      throw new BadRequestException(
+        'That task is itself a verification — a check of a check has nothing left to verify',
+      );
+    }
+    if ((subject.projectId ?? null) !== projectId) {
+      throw new BadRequestException(
+        'A verification must be in the same project as the task it verifies — file both under ' +
+          'the same project (or neither) before linking them',
+      );
+    }
+  }
+
+  /**
+   * Recompute §13.1's parent aggregation over everything the write just touched.
+   *
+   * Called after the writes that can change an input to it — a status, a parent link, a policy, a
+   * verdict, a task appearing or disappearing — and never before: the plan is a recomputation
+   * over CURRENT children, so reading them before the write would answer the previous question.
+   *
+   * Best-effort, like `triggerDependents` beside it and for the same reason. A parent that could
+   * not be recomputed is a parent whose status is stale, which the next write over that tree
+   * fixes; failing the caller's status update to protect a derived column would lose the fact to
+   * protect the summary of it.
+   */
+  private async recomputeAggregates(ownerId: string, seedTaskIds: string[]): Promise<string[]> {
+    const seeds = [...new Set(seedTaskIds.filter((id): id is string => !!id))];
+    if (!seeds.length) return [];
+    const scope = await collectAggregationScope(this.prisma, ownerId, seeds);
+    if (scope.truncated) {
+      this.logger.warn(
+        `aggregation skipped for ${seeds.length} task(s): scope exceeded ` +
+          `${AGGREGATION_SCOPE_MAX_TASKS} tasks`,
+      );
+      return [];
+    }
+    const plan = planTaskAggregation(scope.facts);
+    if (plan.cycleTaskIds.length) {
+      // AG2. A cycle has no bottom to recompute from, so the planner returns nothing rather than
+      // guessing — this only says so out loud, since a silently skipped tree looks like one that
+      // had nothing to do.
+      this.logger.warn(
+        `aggregation skipped: ${plan.cycleTaskIds.length} task(s) lie on a parentTaskId cycle`,
+      );
+      return [];
+    }
+    if (!plan.aggregations.length) return [];
+    const moved = await applyTaskAggregations(this.prisma, ownerId, plan.aggregations, new Date());
+    for (const taskId of moved) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
+    return moved;
+  }
+
+  /**
+   * Walk up from `parentTaskId` and refuse the link if it comes back to `taskId`.
+   *
+   * One indexed lookup per level rather than loading the owner's edges wholesale, which is what
+   * the dependency cycle check does: dependencies are a graph that has to be examined as a whole,
+   * while parents form a forest where the only path that can close a loop is the one directly
+   * above the proposed parent. On an account with six figures of tasks the difference is a handful
+   * of primary-key reads against a full scan.
+   *
+   * The walk is bounded twice over — by `seen` and by the depth cap — so a cycle already stored by
+   * some other means cannot make this loop forever. A cycle it meets on the way up is not one this
+   * write is creating, so it stops rather than blaming the caller for it.
+   *
+   * Every step reads through `db`, the caller's transaction, which is holding the owner lock
+   * (`lockDependencyGraph`). That is what makes the answer still true when the write lands:
+   * unlocked, two simultaneous requests — one making A a child of B, the other B a child of A —
+   * each pass against a graph that does not yet contain the other, and commit a cycle between
+   * them. It is the same write skew the dependency edges take the same lock to prevent.
+   */
+  private async assertNoParentCycle(
+    db: Prisma.TransactionClient,
+    taskId: string,
+    parentTaskId: string,
+  ): Promise<void> {
+    const seen = new Set<string>();
+    let cursor: string | null = parentTaskId;
+    for (let depth = 0; depth < MAX_TASK_PARENT_DEPTH && cursor; depth += 1) {
+      if (cursor === taskId) {
+        throw new BadRequestException('That parent task is already one of this task’s subtasks');
+      }
+      if (seen.has(cursor)) return;
+      seen.add(cursor);
+      const above: { parentTaskId: string | null } | null = await db.task.findUnique({
+        where: { id: cursor },
+        select: { parentTaskId: true },
+      });
+      cursor = above?.parentTaskId ?? null;
+    }
+    if (cursor) {
+      throw new BadRequestException(
+        `Subtask chains are limited to ${MAX_TASK_PARENT_DEPTH} levels`,
+      );
+    }
+  }
+
+  /**
+   * Everything that must still hold about where this task sits, once `dto` is applied.
+   *
+   * Both columns are checked together because either one can break the same rule: re-filing a task
+   * under a different project can orphan it from its parent just as surely as pointing it at a
+   * parent in another project can.
+   *
+   * Moving a task that has subtasks is refused rather than cascaded. Cascading would mean a single
+   * PATCH silently rewriting an unbounded number of rows the caller never named, and there is no
+   * reader of this column yet to make that convenience worth the surprise; the error says how to
+   * do it explicitly instead.
+   *
+   * Runs inside the caller's transaction, under the owner lock, against `current` as re-read there
+   * — never against a copy loaded before the lock was taken. Both halves need it and for the same
+   * reason: moving a parent into another project and linking a child to that parent are the two
+   * writes that break the shared-project rule together, and each is invisible to the other until
+   * one of them commits. Serialized, whichever arrives second sees the first and is refused.
+   */
+  private async assertHierarchyConsistent(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+    current: { projectId: string | null; parentTaskId: string | null; verifiesTaskId: string | null },
+    dto: UpdateTaskDto,
+  ): Promise<void> {
+    if (
+      dto.projectId === undefined &&
+      dto.parentTaskId === undefined &&
+      dto.verifiesTaskId === undefined
+    ) {
+      return;
+    }
+    const projectId = dto.projectId === undefined ? current.projectId : (dto.projectId ?? null);
+    const parentTaskId =
+      dto.parentTaskId === undefined ? current.parentTaskId : (dto.parentTaskId ?? null);
+    const verifiesTaskId =
+      dto.verifiesTaskId === undefined ? current.verifiesTaskId : (dto.verifiesTaskId ?? null);
+
+    if (parentTaskId) {
+      if (parentTaskId === taskId) {
+        throw new BadRequestException('A task cannot be its own parent');
+      }
+      await this.assertParentEligible(db, ownerId, parentTaskId, projectId);
+      await this.assertNoParentCycle(db, taskId, parentTaskId);
+    }
+
+    // Re-asked on a project move as well as on a re-point, and that is the half that matters: a
+    // check and its subject sharing a project is a fact this write can break from EITHER side, and
+    // a verification that has drifted out of its subject's project is counted by nobody.
+    if (verifiesTaskId) {
+      await this.assertVerificationEligible(db, ownerId, taskId, verifiesTaskId, projectId);
+    }
+
+    if (projectId !== current.projectId) {
+      const subtasks = await db.task.count({ where: { ownerId, parentTaskId: taskId } });
+      if (subtasks > 0) {
+        throw new BadRequestException(
+          `This task has ${subtasks} subtask(s) that would be left in a different project — ` +
+            'detach them (parentTaskId: null), move them, and link them again',
+        );
+      }
+      // The same statement from the other side of the relation. Left unchecked, moving a subject
+      // out from under its checks is the quietest way to make `VERIFICATION_PASSED` complete a
+      // parent over verifications that no longer count towards it.
+      const checks = await db.task.count({ where: { ownerId, verifiesTaskId: taskId } });
+      if (checks > 0) {
+        throw new BadRequestException(
+          `This task has ${checks} verification(s) that would be left in a different project — ` +
+            'move or detach them before moving it',
+        );
+      }
+    }
   }
 
   /** Assert every id is a task this user owns (dependency endpoints both sides). */
@@ -845,6 +1350,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     await this.assertOwnedList(ownerId, dto.listId);
+    await this.assertOwnedProject(ownerId, dto.projectId);
     await this.assertUsableProvider(ownerId, dto.provider);
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
@@ -875,21 +1381,51 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
     // before its prerequisites and closing a cycle. Any FK/write failure rolls the task back too.
+    //
+    // A parent link takes the same lock, and for the same shape of reason: the parent's project is
+    // read here and relied on by the row written next, so a concurrent move of that parent into
+    // another project has to be either wholly before or wholly after this. No cycle check is
+    // needed, though — a task that does not exist yet has no subtasks, so nothing can close a loop
+    // through it.
     let task: Task;
     try {
-      task = dependsOnTaskIds.length
-        ? await this.prisma.$transaction(async (tx) => {
-            await this.lockDependencyGraph(tx, ownerId);
-            const created = await tx.task.create({ data });
-            await tx.taskDependency.createMany({
-              data: dependsOnTaskIds.map((dependsOnTaskId) => ({
-                taskId: created.id,
-                dependsOnTaskId,
-              })),
-            });
-            return created;
-          })
-        : await this.prisma.task.create({ data });
+      task =
+        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId
+          ? await this.prisma.$transaction(async (tx) => {
+              await this.lockDependencyGraph(tx, ownerId);
+              if (dto.parentTaskId) {
+                await this.assertParentEligible(
+                  tx,
+                  ownerId,
+                  dto.parentTaskId,
+                  dto.projectId ?? null,
+                );
+              }
+              // Same lock and the same reason as the parent above: the subject's project is read
+              // here and relied on by the row written next, so a concurrent move of that subject
+              // into another project has to be wholly before or wholly after this. No self-check
+              // is possible — the verifier does not exist yet.
+              if (dto.verifiesTaskId) {
+                await this.assertVerificationEligible(
+                  tx,
+                  ownerId,
+                  null,
+                  dto.verifiesTaskId,
+                  dto.projectId ?? null,
+                );
+              }
+              const created = await tx.task.create({ data });
+              if (dependsOnTaskIds.length) {
+                await tx.taskDependency.createMany({
+                  data: dependsOnTaskIds.map((dependsOnTaskId) => ({
+                    taskId: created.id,
+                    dependsOnTaskId,
+                  })),
+                });
+              }
+              return created;
+            })
+          : await this.prisma.task.create({ data });
     } catch (e) {
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
@@ -897,7 +1433,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
         if (existing) return existing;
       }
-      throw e;
+      // And the project's own pre-check has the same shape of gap — see translateProjectFk.
+      throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     }
     // Push the new task to the owner's control-plane stream (GET /api/events) so their task
     // list refreshes live instead of on the next poll — the fix for "MCP-created tasks only
@@ -905,6 +1442,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // sends one); a task created without an owned session just falls back to the poll. Mirrors
     // SessionsService.create's publishSessionCreated.
     if (sessionId) this.realtime.publishTaskChanged(sessionId, task.id);
+    // AG3 in the direction that is easy to forget: a task ARRIVING is as much a change to its
+    // parent's children as one completing. Without this, filing a subtask under a parent that
+    // ALL_CHILDREN_DONE had already completed leaves the parent DONE over work that has not
+    // started, and a verification filed at a VERIFICATION_PASSED parent leaves it DONE over a
+    // check that has not run.
+    if (task.parentTaskId || task.verifiesTaskId) {
+      await this.recomputeAggregates(
+        ownerId,
+        [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
+      ).catch((e) =>
+        this.logger.warn(`aggregation after create of ${task.id} failed: ${e?.message ?? e}`),
+      );
+    }
     return task;
   }
 
@@ -948,11 +1498,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       idempotencyKey,
       assigneeId: dto.assigneeId,
       listId: dto.listId,
+      projectId: dto.projectId,
+      parentTaskId: dto.parentTaskId,
+      // §13.2's relation, and the only column here that decides what another task's completion
+      // means. Omitted leaves it NULL, which is every task that is not a check of something.
+      verifiesTaskId: dto.verifiesTaskId,
+      acceptanceCriteria: dto.acceptanceCriteria,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      // Omitted means unscheduled. The `undefined` is what makes that true without a default:
+      // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
+      // created before this column was born NULL.
+      runAt: dto.runAt ? new Date(dto.runAt) : undefined,
       labels: dto.labels ? normalizeTaskLabels(dto.labels) : undefined,
       provider: dto.provider,
       model: dto.model,
       autoRunWhenReady: dto.autoRunWhenReady,
+      // Omitted leaves the column default, MANUAL — the behaviour every task created before
+      // migration 0123 has, and the one that never completes anything on its own.
+      completionPolicy: dto.completionPolicy,
     };
   }
 
@@ -989,6 +1552,63 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           );
       }
     });
+    // A parent named inside the batch, judged here rather than in assertBatchHierarchy: both
+    // sides of the pair are in this request, so the same rules the DB check asks of an existing
+    // parent are answerable without a query — and answerable before any row is written, which is
+    // what keeps a batch all-or-nothing.
+    //
+    // Backward-only again, for one more reason than dependsOnRefs has: items are created in
+    // order, so an earlier ref is also the only one whose id exists by the time this row is
+    // written. That ordering is what makes a cycle unconstructible here, so — unlike `update`,
+    // where a parent can be any task in the account — no ancestor walk is needed.
+    items.forEach((item, index) => {
+      if (item.parentRef === undefined) return;
+      if (item.parentTaskId)
+        throw new BadRequestException(
+          `tasks[${index}]: parentRef and parentTaskId name two different parents — pass one`,
+        );
+      const position = positionByRef.get(item.parentRef);
+      if (position === undefined || position >= index)
+        throw new BadRequestException(
+          `tasks[${index}]: parentRef "${item.parentRef}" must name an earlier task in this batch`,
+        );
+      // The shared-project rule, same as assertParentEligible states it for a parent that already
+      // exists: a subtask belongs to the whole its parent belongs to. Both sides `?? null`, so
+      // "no project" is one value rather than two.
+      if ((items[position].projectId ?? null) !== (item.projectId ?? null))
+        throw new BadRequestException(
+          `tasks[${index}]: a subtask must be in the same project as its parent task — file both ` +
+            'under the same project (or neither) before linking them',
+        );
+    });
+    // A subject named inside the batch, judged here for the same reasons parentRef is: both sides
+    // are in the request, so every rule `assertVerificationEligible` asks of an existing subject
+    // is answerable without a query and before any row is written. Backward-only makes "verifies
+    // itself" unconstructible rather than something to check for, and an earlier item is also the
+    // only one whose id exists by the time this row is written.
+    items.forEach((item, index) => {
+      if (item.verifiesRef === undefined) return;
+      if (item.verifiesTaskId)
+        throw new BadRequestException(
+          `tasks[${index}]: verifiesRef and verifiesTaskId name two different subjects — pass one`,
+        );
+      const position = positionByRef.get(item.verifiesRef);
+      if (position === undefined || position >= index)
+        throw new BadRequestException(
+          `tasks[${index}]: verifiesRef "${item.verifiesRef}" must name an earlier task in this batch`,
+        );
+      const subject = items[position];
+      if (subject.verifiesTaskId || subject.verifiesRef)
+        throw new BadRequestException(
+          `tasks[${index}]: that task is itself a verification — a check of a check has nothing ` +
+            'left to verify',
+        );
+      if ((subject.projectId ?? null) !== (item.projectId ?? null))
+        throw new BadRequestException(
+          `tasks[${index}]: a verification must be in the same project as the task it verifies — ` +
+            'file both under the same project (or neither) before linking them',
+        );
+    });
 
     // Validate every referenced entity before writing anything, once per distinct value.
     const distinct = (values: Array<string | null | undefined>) => [
@@ -998,11 +1618,47 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertOwnedWorkspace(ownerId, assigneeId);
     for (const listId of distinct(items.map((item) => item.listId)))
       await this.assertOwnedList(ownerId, listId);
+    for (const projectId of distinct(items.map((item) => item.projectId)))
+      await this.assertOwnedProject(ownerId, projectId);
     for (const provider of distinct(items.map((item) => item.provider)))
       await this.assertUsableProvider(ownerId, provider);
     const existingPrerequisites = distinct(items.flatMap((item) => item.dependsOnTaskIds ?? []));
     if (existingPrerequisites.length) await this.assertOwnedTasks(ownerId, existingPrerequisites);
     return items;
+  }
+
+  /**
+   * Every item's parent, judged against the project that item will be in.
+   *
+   * Per item rather than per distinct value: eligibility is a fact about the pair (parent,
+   * project), so two items naming the same parent from different projects are two questions. A
+   * batch cannot name one of its own items as a parent — `ref` wires up dependencies only — so
+   * every parent here already exists and no cycle can be formed.
+   *
+   * Kept out of `assertBatchValid` because the two callers need it at different moments: the write
+   * runs it inside its transaction under the owner lock, where the answer stays true long enough
+   * to be written, while the preview runs it on the plain client because it writes nothing. Both
+   * still run it, so a card cannot promise a batch the write would refuse.
+   */
+  private async assertBatchHierarchy(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    items: CreateTaskBatchItemDto[],
+  ): Promise<void> {
+    for (const item of items) {
+      if (item.parentTaskId) {
+        await this.assertParentEligible(db, ownerId, item.parentTaskId, item.projectId ?? null);
+      }
+      if (item.verifiesTaskId) {
+        await this.assertVerificationEligible(
+          db,
+          ownerId,
+          null,
+          item.verifiesTaskId,
+          item.projectId ?? null,
+        );
+      }
+    }
   }
 
   /**
@@ -1021,6 +1677,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
     const items = await this.assertBatchValid(ownerId, dto);
+    // Unlocked: a preview writes nothing, so there is nothing for a lock to protect. It is asked
+    // at all so the card cannot promise a batch the write would then refuse.
+    await this.assertBatchHierarchy(this.prisma, ownerId, items);
     const assigneeIds = [...new Set(items.map((i) => i.assigneeId).filter((v): v is string => !!v))];
     const externalIds = [...new Set(items.flatMap((i) => i.dependsOnTaskIds ?? []))];
     const listIds = [...new Set(items.map((i) => i.listId).filter((v): v is string => !!v))];
@@ -1051,11 +1710,47 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let blocked = 0;
     let needsManualStart = 0;
     let notDispatchable = 0;
+    let scheduled = 0;
     let internalEdges = 0;
     let externalEdges = 0;
+    const now = Date.now();
     for (const item of items) {
       internalEdges += item.dependsOnRefs?.length ?? 0;
       externalEdges += item.dependsOnTaskIds?.length ?? 0;
+      // `CreateTaskBatchItemDto` extends `CreateTaskDto`, so a batch item can carry a schedule,
+      // and a schedule is a SECOND trigger with rules of its own (SCHEDULED_DUE_SQL).
+      const runAt = item.runAt ? new Date(item.runAt) : null;
+      // A prerequisite created by this same batch is OPEN the moment it exists, so anything
+      // naming one waits — no need to consult the graph for it.
+      const waitsOnBatch = (item.dependsOnRefs?.length ?? 0) > 0;
+      const waitsOnExisting = (item.dependsOnTaskIds ?? []).some(
+        (id) => statusOf.get(id) !== TaskStatus.DONE,
+      );
+      // What both sweeps require of a task before they will dispatch it at all.
+      const runnable =
+        !!item.assigneeId &&
+        !!runnerOf.get(item.assigneeId) &&
+        !(item.listId && pausedLists.has(item.listId));
+      // A scheduled item is classified by what is ACTUALLY standing between it and a run, in the
+      // order the sweep would hit them — not by its schedule alone. The clock is the last of the
+      // conditions to be checked, never the first, because `scheduled` is the strongest claim on
+      // this card: it says nobody has to do anything and nothing has to finish. An item that is
+      // also unassigned, or in a paused list, or waiting on a prerequisite does not meet that
+      // description, and filing it under `scheduled` would promise a run that never comes.
+      //
+      // `autoRunWhenReady` is deliberately not consulted here, and a prerequisite is not required
+      // to exist: both are answers to the dependency question, and this trigger is the clock.
+      if (runAt) {
+        if (waitsOnBatch || waitsOnExisting) blocked += 1;
+        else if (!runnable) notDispatchable += 1;
+        // Everything is in place and the only thing left is the time.
+        else if (runAt.getTime() > now) scheduled += 1;
+        // Already due on arrival. Without this branch a batch scheduled for "now" reported fifty
+        // tasks that "wait for a person" and then started all fifty within the minute — the same
+        // class of wrong as the case below, in the direction the card exists to prevent.
+        else startingNow += 1;
+        continue;
+      }
       // A task with no prerequisites is never auto-run, however runnable it looks: the sweep's
       // predicate requires a prerequisite that is DONE (AUTO_RUN_READY_SQL), because auto-run
       // means "start when what you were waiting for finishes" — not "start because nothing is in
@@ -1070,22 +1765,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         needsManualStart += 1;
         continue;
       }
-      // A prerequisite created by this same batch is OPEN the moment it exists, so anything
-      // naming one waits — no need to consult the graph for it.
-      const waitsOnBatch = (item.dependsOnRefs?.length ?? 0) > 0;
-      const waitsOnExisting = (item.dependsOnTaskIds ?? []).some(
-        (id) => statusOf.get(id) !== TaskStatus.DONE,
-      );
       if (waitsOnBatch || waitsOnExisting) {
         blocked += 1;
         continue;
       }
-      const dispatchable =
-        item.autoRunWhenReady !== false &&
-        !!item.assigneeId &&
-        !!runnerOf.get(item.assigneeId) &&
-        !(item.listId && pausedLists.has(item.listId));
-      if (dispatchable) startingNow += 1;
+      if (item.autoRunWhenReady !== false && runnable) startingNow += 1;
       else notDispatchable += 1;
     }
     return {
@@ -1099,6 +1783,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Worth separating from `blocked`, because these do not start when something finishes —
       // they wait for a person, and a batch that is silently all of these did nothing.
       notDispatchable,
+      // Ready in every respect except the time: assigned, on a live runner, not held by a paused
+      // list, nothing outstanding to wait for. Nobody has to do anything and nothing has to
+      // finish — these start on their own, later. An item that is scheduled AND missing one of
+      // those is counted by what is actually stopping it, above, because this bucket is a promise
+      // that the run will arrive unattended. Named rather than folded into any of the four, all
+      // of which would misdescribe it; a client that predates the field ignores it and simply
+      // does not count these as starting now, which is the true statement.
+      scheduled,
       internalEdges,
       externalEdges,
       lists: lists.map((l) => ({ id: l.id, title: l.title })),
@@ -1139,11 +1831,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const hasDependencies = items.some(
       (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
     );
+    // Only parents that already exist. A parentRef points at a row this very transaction writes,
+    // which no other request can see — let alone move into another project — so there is nothing
+    // for the lock or the DB check below to protect; its rules were settled in assertBatchValid,
+    // where both sides of the pair were in the request.
+    const hasParents = items.some((item) => !!item.parentTaskId || !!item.verifiesTaskId);
     const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
     const created = await this.prisma.$transaction(async (tx) => {
       // Same owner lock as create: the tasks and their edges must become visible together, or a
       // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
-      if (hasDependencies) await this.lockDependencyGraph(tx, ownerId);
+      // A batch naming parents takes it for the matching reason — each parent's project is read
+      // here and relied on by the rows written next.
+      if (hasDependencies || hasParents) await this.lockDependencyGraph(tx, ownerId);
+      // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
+      // parent in item 40 must not leave items 1-39 written.
+      if (hasParents) await this.assertBatchHierarchy(tx, ownerId, items);
       const idByRef = new Map<string, string>();
       const rows: Array<Task & { ref?: string }> = [];
       for (const item of items) {
@@ -1155,12 +1857,33 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const existing = idempotencyKey
           ? await tx.task.findUnique({ where: { idempotencyKey } })
           : null;
+        // A parentRef names an item of this same batch, so the id it stands for only exists now.
+        // Resolved into the field an already-existing parent would have used, so one write path
+        // serves both and nothing downstream has to know which spelling the caller used.
+        // Non-null: every parentRef was proven to belong to an earlier, already-created item.
+        // A parentRef or a verifiesRef names an item of this same batch, so the id it stands for
+        // only exists now. Both are resolved into the field an already-existing link would have
+        // used, so one write path serves either spelling and nothing downstream has to know which
+        // the caller passed. Non-null: both were proven to belong to earlier, already-created
+        // items.
+        const row =
+          item.parentRef === undefined && item.verifiesRef === undefined
+            ? item
+            : {
+                ...item,
+                ...(item.parentRef === undefined
+                  ? {}
+                  : { parentTaskId: idByRef.get(item.parentRef)! }),
+                ...(item.verifiesRef === undefined
+                  ? {}
+                  : { verifiesTaskId: idByRef.get(item.verifiesRef)! }),
+              };
         const task =
           existing ??
           (await tx.task.create({
             data: this.taskCreateData(
               ownerId,
-              item,
+              row,
               creator,
               sessionId,
               idempotencyKey,
@@ -1187,9 +1910,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
       return rows;
+    }).catch(async (e) => {
+      // A batch is all-or-nothing, so one item's project vanishing mid-write fails the whole call —
+      // and it should say so in the language of the request, not as a 500 (see translateProjectFk).
+      throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
     });
     // One control-plane nudge per task, exactly as create does (see its comment).
     if (sessionId) for (const task of created) this.realtime.publishTaskChanged(sessionId, task.id);
+    // Same as create: rows arriving under a parent, or pointed at one, are a change to what that
+    // parent's status is allowed to claim. Seeded from the links rather than from the new rows —
+    // the parents and subjects are what get recomputed, and half of them are in this batch.
+    const touched = created.flatMap((task) =>
+      [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
+    );
+    if (touched.length) {
+      await this.recomputeAggregates(ownerId, touched).catch((e) =>
+        this.logger.warn(`aggregation after batch create failed: ${e?.message ?? e}`),
+      );
+    }
     return created;
   }
 
@@ -1305,6 +2043,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     else if (query.listId) {
       if (!UUID_RE.test(query.listId)) throw new BadRequestException('invalid task list id');
       scopedWhere.listId = query.listId;
+    }
+    // Scope, not filter, for the same reason a label is: the tallies have to describe the project
+    // being asked about, or a coordinator reads its own progress off the whole account's numbers.
+    if (query.projectId) {
+      if (!UUID_RE.test(query.projectId)) throw new BadRequestException('invalid project id');
+      scopedWhere.projectId = query.projectId;
     }
     if (query.assigneeId) {
       if (!UUID_RE.test(query.assigneeId)) throw new BadRequestException('invalid assignee id');
@@ -2566,18 +3310,100 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependedOnBy: {
           include: { task: { select: { id: true, title: true, status: true } } },
         },
+        // §13.6, the backward direction: the attempts this task replaced. Part of THIS query
+        // rather than a second one — it is an indexed lookup either way, and `get` is on the path
+        // of every task page.
+        supersedes: {
+          select: { id: true, title: true, status: true, terminalReason: true, supersededAt: true },
+          orderBy: [{ supersededAt: 'asc' }, { id: 'asc' }],
+        },
       },
     });
     if (!task) throw new NotFoundException('task not found');
     const dependencyState = computeDependencyState(
       task.dependsOn.map((d) => d.dependsOnTask.status as unknown as TaskStatus),
     );
+    const supersession = await this.supersession(ownerId, task);
     return {
       ...task,
       sessions: (task.sessions ?? []).map((session) => withSessionState(session)),
       creatorSession: task.creatorSession ? withSessionState(task.creatorSession) : null,
       comments: await this.resolveCommentAuthors(task.comments),
       dependencyState,
+      ...supersession,
+    };
+  }
+
+  /**
+   * §13.6, both directions, for one task.
+   *
+   * `outcome` is the word a client shows — the one place "failed", "cancelled" and "superseded"
+   * are told apart, derived rather than stored so three clients cannot each derive it differently.
+   *
+   * `supersedes` is what this task replaced (its direct predecessors) and `successorChain` is what
+   * replaced it, followed to the attempt that is actually live. The chain is the read the audit
+   * wants: a cancelled attempt three replacements deep still answers "so who ended up doing this",
+   * and answers it with rows rather than with a comment somebody wrote.
+   *
+   * One recursive query rather than a loop of finds: the walk is bounded by the same 256 hops the
+   * database refuses to exceed, and a per-hop round trip on a page of tasks is the shape that turns
+   * an audit read into a timeout.
+   */
+  private async supersession(
+    ownerId: string,
+    task: {
+      id: string;
+      status: string;
+      supersededByTaskId: string | null;
+      terminalReason: string | null;
+      supersedes?: Array<{ id: string; title: string; status: string; terminalReason: string | null }>;
+    },
+  ) {
+    const predecessors = task.supersedes ?? [];
+    const forward =
+      task.supersededByTaskId == null
+        ? []
+        : await this.prisma.$queryRaw<Array<{
+            id: string; title: string; status: string;
+            supersededByTaskId: string | null; terminalReason: string | null; depth: number;
+          }>>(Prisma.sql`
+            WITH RECURSIVE walk AS (
+              SELECT t."id", t."title", t."status"::text, t."superseded_by_task_id", t."terminal_reason", 1 AS depth
+                FROM "task" t
+               WHERE t."id" = ${task.supersededByTaskId}::uuid AND t."owner_id" = ${ownerId}::uuid
+              UNION ALL
+              SELECT n."id", n."title", n."status"::text, n."superseded_by_task_id", n."terminal_reason", w.depth + 1
+                FROM walk w
+                JOIN "task" n ON n."id" = w."superseded_by_task_id" AND n."owner_id" = ${ownerId}::uuid
+               WHERE w.depth < ${TASK_SUPERSESSION_MAX_HOPS}
+            )
+            SELECT "id", "title", "status",
+                   "superseded_by_task_id" AS "supersededByTaskId",
+                   "terminal_reason" AS "terminalReason",
+                   depth
+              FROM walk ORDER BY depth`);
+    // The chain the pure function would build from the same edges, used to bound what the query
+    // returned: a cycle is unwritable (0128's trigger), so if one is ever read it is reported as a
+    // truncation rather than followed.
+    const edges = new Map<string, string | null>([[task.id, task.supersededByTaskId]]);
+    for (const row of forward) edges.set(row.id, row.supersededByTaskId);
+    const { chain, truncated } = successorChain(task.id, edges);
+    const byId = new Map(forward.map((row) => [row.id, row]));
+    return {
+      outcome: taskOutcome(task),
+      supersededByTaskIdAbsentReason: supersededByAbsentReason(task),
+      supersedes: predecessors,
+      supersedesEmptyReason: predecessors.length > 0 ? null : ('SUPERSEDES_NOTHING' as const),
+      successorChain: chain
+        .map((id) => byId.get(id))
+        .filter((row): row is NonNullable<typeof row> => row !== undefined)
+        .map((row) => ({
+          id: row.id,
+          title: row.title,
+          status: row.status,
+          terminalReason: row.terminalReason,
+        })),
+      successorChainTruncated: truncated,
     };
   }
 
@@ -2603,11 +3429,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return comments.map((c) => ({ ...c, authorName: names.get(c.authorId) ?? null }));
   }
 
-  async update(ownerId: string, id: string, dto: UpdateTaskDto) {
+  /**
+   * `actingSessionId` is the run this edit is being made FROM, when there is one — the runner
+   * sends it on every task write an agent makes. It is used for exactly one decision, §13.2's
+   * independence rule below, and is otherwise ignored: a task edit is authorised by the owner,
+   * not by which run happened to make it.
+   */
+  async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
     const before = await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
+    if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
     if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
+    // Whether this write can move the task within the project/subtask structure. It decides both
+    // that the hierarchy rules are checked at all and that the write takes the owner lock: the
+    // check and the update it authorises have to be one serialized step, not two.
+    const touchesHierarchy =
+      dto.projectId !== undefined ||
+      dto.parentTaskId !== undefined ||
+      dto.verifiesTaskId !== undefined;
     const dependsOnTaskIds =
       dto.dependsOnTaskIds === undefined ? undefined : [...new Set(dto.dependsOnTaskIds)];
     if (dependsOnTaskIds?.includes(id)) {
@@ -2616,11 +3456,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dependsOnTaskIds?.length) {
       await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
     }
+    // Set when this write touches §13.6's three supersession columns; applied as one statement
+    // inside the transaction below (see where it is filled in for why it cannot go in `data`).
+    let supersession: { successorId: string | null; at: Date | null; reason: string | null } | null =
+      null;
     const data: Prisma.TaskUpdateInput = {
       title: dto.title,
       description: dto.description,
       status: dto.status,
       dueDate: dto.dueDate === null ? null : dto.dueDate ? new Date(dto.dueDate) : undefined,
+      // Three-state, same as dueDate: omitted preserves the schedule, null cancels it, an instant
+      // (re)schedules. Cancelling is a plain write with no dispatch consequence — nothing has been
+      // consumed, so there is nothing to put back.
+      runAt: dto.runAt === null ? null : dto.runAt ? new Date(dto.runAt) : undefined,
       // Whole-set replacement, not a merge: omitted keeps the current labels, [] clears them.
       // A merge would leave no way to remove one.
       labels: dto.labels === undefined ? undefined : normalizeTaskLabels(dto.labels),
@@ -2628,8 +3476,169 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // pin, null goes back to inheriting the assignee's provider/model.
       provider: dto.provider === undefined ? undefined : (dto.provider ?? null),
       model: dto.model === undefined ? undefined : (dto.model ?? null),
+      acceptanceCriteria:
+        dto.acceptanceCriteria === undefined ? undefined : (dto.acceptanceCriteria ?? null),
       autoRunWhenReady: dto.autoRunWhenReady,
+      completionPolicy: dto.completionPolicy,
+      // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
+      // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
+      // to OPEN on the next reconcile, which is the point of storing the verdict rather than
+      // reading "the verification finished" as a pass.
+      verdict: dto.verdict === undefined ? undefined : (dto.verdict ?? null),
     };
+    // What this task verifies AFTER the write, not before it: one call may both point a task at a
+    // subject and conclude about it, and judging the verdict against the old column would refuse
+    // the second half of a write whose first half made it legal.
+    const verifiesTaskId =
+      dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
+    // The column is only meaningful on a row that names what it verifies, and the database says so
+    // too (0123's task_verdict_requires_subject). Checked here as well so the caller gets the
+    // reason rather than a constraint name.
+    if (dto.verdict != null && !verifiesTaskId) {
+      throw new BadRequestException(
+        'Only a verification task can carry a verdict — this task does not verify anything',
+      );
+    }
+    // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,
+    // a defect subtask, a downstream block — is recorded against the subject this task named at
+    // the time. Re-pointing it afterwards would leave the ledger asserting conclusions about a
+    // task this verifier no longer checks, and there is no write that repairs that, because the
+    // consequences were correct when they were applied. A new check is one task create.
+    if (
+      dto.verifiesTaskId !== undefined &&
+      (dto.verifiesTaskId ?? null) !== (before.verifiesTaskId ?? null) &&
+      (before.verdict != null || BigInt(before.verdictRevision ?? 0) > 0n)
+    ) {
+      throw new BadRequestException(
+        'This verification has already concluded — its subject can no longer be changed. File a ' +
+          'new verification task for the other subject instead',
+      );
+    }
+    // Does this write REACH a verdict? That is a narrower thing than "the verdict column was in
+    // the request" — writing FAIL onto a row that already says FAIL concluded nothing — and it is
+    // what §13.2 V7's revision counts.
+    //
+    // The counter itself, and the revocation that pairs with it, are migration 0124's triggers:
+    // both rules have to hold for every write path including raw SQL, and a rule each writer is
+    // trusted to remember is one the next writer forgets. What a trigger cannot do is the reason
+    // this flag exists — take the project's acceptance-fact lock (§13.4 AE6-a) before the task
+    // row is written, since by the time a trigger runs that row is already held and taking the
+    // project lock there would reverse the loop's one lock order.
+    const concludesVerdict = dto.verdict != null && dto.verdict !== before.verdict;
+    // The independence rule, as a refusal rather than as a sentence in a brief.
+    //
+    // A verification is a SECOND opinion, and the run that produced the work is not a second
+    // opinion about it. The project instructions have said so in prose for as long as there have
+    // been verification tasks; prose is checked by whoever remembers to check it, and the case
+    // that matters — a session finishing its own task and then writing PASS on the check filed
+    // against it — is exactly the one where nobody is watching.
+    //
+    // Scoped to the one relation that makes it wrong: the acting session's own task IS the
+    // subject. A person concluding from no session, a coordinator concluding from its own, and
+    // the verifier's own run concluding about the subject are all left alone.
+    if (concludesVerdict && actingSessionId && verifiesTaskId) {
+      const actingSession = await this.prisma.session.findFirst({
+        where: { id: actingSessionId, ownerId },
+        select: { taskId: true },
+      });
+      if (actingSession?.taskId && actingSession.taskId === verifiesTaskId) {
+        throw new BadRequestException(
+          'A verification cannot be concluded from the session that ran the task it verifies — ' +
+            'the check has to be an independent run',
+        );
+      }
+    }
+    // §13.1's other half: a policy that decides a parent's completion decides it, and a status
+    // write is not a way around it. Refused rather than written-then-recomputed, because a DONE
+    // that survives for one reconcile is a DONE somebody can read, quote and act on.
+    //
+    // AG4's condition is checked as AG4 states it — the policy is inert on a childless task — so
+    // this refuses only where the policy actually answers the question.
+    if (dto.status === TaskStatus.DONE && before.status !== TaskStatus.DONE) {
+      const policy = dto.completionPolicy ?? before.completionPolicy;
+      if (policy && policy !== 'MANUAL') {
+        const children = await this.prisma.task.count({ where: { ownerId, parentTaskId: id } });
+        if (children > 0) {
+          throw new BadRequestException(
+            `This task completes by ${policy}, not by a status write — its ${children} subtask(s)` +
+              (policy === 'VERIFICATION_PASSED' ? ' and its verifications' : '') +
+              ' decide when it is DONE. Set completionPolicy to MANUAL if you mean to write it' +
+              ' by hand',
+          );
+        }
+      }
+    }
+    // §13.6: record that this attempt was replaced, without touching how it ended.
+    //
+    // The status this is judged against is the one AFTER the write, because the natural call is one
+    // PATCH that cancels the attempt and names its successor — judging SU4 against the old status
+    // would refuse the second half of a write whose first half made it legal. Migration 0128's
+    // trigger checks every one of these again (and the acyclicity this cannot see); these refusals
+    // exist so the caller is told which rule it broke instead of being handed a constraint name.
+    if (dto.supersededByTaskId !== undefined || dto.terminalReason !== undefined) {
+      const statusAfter = dto.status ?? before.status;
+      const projectAfter =
+        dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
+      const successorId =
+        dto.supersededByTaskId === undefined
+          ? before.supersededByTaskId
+          : (dto.supersededByTaskId ?? null);
+      const successor = successorId
+        ? await this.prisma.task.findFirst({
+            where: { id: successorId },
+            select: { id: true, ownerId: true, projectId: true },
+          })
+        : null;
+      if (successorId && !successor) throw new NotFoundException('successor task not found');
+      const refusal = supersessionRefusal({
+        taskId: id,
+        status: statusAfter,
+        successor,
+        ownerId,
+        projectId: projectAfter,
+      });
+      if (refusal) throw new BadRequestException(refusal);
+      // A successor IS the reason, so it never has to be spelled twice — and it may not be
+      // contradicted: 'ABANDONED' means nothing replaced this, which is the opposite claim.
+      if (successorId && dto.terminalReason != null && dto.terminalReason !== 'SUPERSEDED') {
+        throw new BadRequestException(
+          `A task with a successor is SUPERSEDED, not ${dto.terminalReason} — pass one or the other`,
+        );
+      }
+      if (dto.terminalReason === 'SUPERSEDED' && !successorId) {
+        throw new BadRequestException(
+          'SUPERSEDED names the attempt that took over — pass supersededByTaskId, or use ' +
+            'ABANDONED for a task nothing replaced',
+        );
+      }
+      if (dto.terminalReason != null && !TASK_SUPERSEDABLE_STATUSES.has(statusAfter)) {
+        throw new BadRequestException(
+          `A terminal reason belongs to a task that has stopped — this one is ${statusAfter}`,
+        );
+      }
+      // All THREE columns move together, in one statement, because 0128's link CHECK is about the
+      // three of them at once and PostgreSQL evaluates a CHECK per statement. Prisma cannot write
+      // them together: `supersededBy: { disconnect: true }` is issued as a SECOND statement after
+      // the scalar update, so unlinking cleared the reason while the successor id was still set —
+      // exactly the state the CHECK exists to refuse — and every unlink failed with a constraint
+      // name. Raw SQL here is one statement, and it still goes through 0128's trigger, so the
+      // tenant, project, terminal-status and acyclicity rules are unchanged.
+      supersession = {
+        successorId,
+        // The instant it was replaced. Kept where it was on a re-statement of the same link, so
+        // re-recording a supersession does not quietly move when it happened.
+        at: successorId
+          ? (before.supersededByTaskId === successorId && before.supersededAt
+              ? before.supersededAt
+              : new Date())
+          : (dto.terminalReason ? (before.supersededAt ?? new Date()) : null),
+        reason: successorId
+          ? 'SUPERSEDED'
+          : dto.terminalReason === undefined
+            ? (before.terminalReason === 'SUPERSEDED' ? null : before.terminalReason)
+            : dto.terminalReason,
+      };
+    }
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
       data.assignee = dto.assigneeId ? { connect: { id: dto.assigneeId } } : { disconnect: true };
@@ -2644,12 +3653,54 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? (await this.pausedListIds(ownerId, [dto.listId])).has(dto.listId)
         : false;
     }
-    const updated =
-      dependsOnTaskIds === undefined
-        ? await this.prisma.task.update({ where: { id }, data })
-        : await this.prisma.$transaction(async (tx) => {
+    // projectId and parentTaskId are relation FKs too, and unlike the list they carry nothing with
+    // them: a project holds no dispatch policy, so re-filing a task cannot hold or release it.
+    if (dto.projectId !== undefined) {
+      data.project = dto.projectId ? { connect: { id: dto.projectId } } : { disconnect: true };
+    }
+    if (dto.parentTaskId !== undefined) {
+      data.parent = dto.parentTaskId ? { connect: { id: dto.parentTaskId } } : { disconnect: true };
+    }
+    // The verification link is a relation FK like the two above: connect to point this task at a
+    // subject, disconnect to make it an ordinary task again.
+    if (dto.verifiesTaskId !== undefined) {
+      data.verifies = dto.verifiesTaskId
+        ? { connect: { id: dto.verifiesTaskId } }
+        : { disconnect: true };
+    }
+    // One owner lock covers both structures a task can be moved within — its dependency edges and
+    // its place in a project's subtask tree — because a single request can touch both and because
+    // serializing each against itself but not against the other would leave exactly the gap the
+    // lock exists to close. An update that touches neither still takes no lock at all: renaming a
+    // task must not queue behind another owner's DAG rewrite.
+    const updated = await (
+      dependsOnTaskIds === undefined && !touchesHierarchy && !concludesVerdict && !supersession
+        ? this.prisma.task.update({ where: { id }, data })
+        : this.prisma.$transaction(async (tx) => {
             await this.lockDependencyGraph(tx, ownerId);
-            if (dependsOnTaskIds.length) {
+            // §13.4 AE6-a. A verdict is one of the facts a project's acceptance is computed from,
+            // so reaching one takes the project's own row before it writes — the same lock the
+            // acceptance gate takes, which is what puts the two in an order instead of letting
+            // both commit and leave a DONE project asserting a verdict it never saw. Taken after
+            // the owner lock and before the task write, so the order here is always
+            // user -> project -> task and two of these can never wait on each other backwards.
+            if (concludesVerdict && before.projectId) {
+              await tx.$queryRaw`
+                SELECT 1 FROM "project" WHERE "id" = ${before.projectId}::uuid FOR NO KEY UPDATE`;
+            }
+            if (touchesHierarchy) {
+              // Re-read INSIDE the lock. `before` was loaded before it was held, so by now another
+              // request may have moved this task's project or given it subtasks — and judging
+              // against that stale copy is precisely how two writes that are each legal separately
+              // commit an illegal state together.
+              const current = await tx.task.findFirst({
+                where: { id, ownerId },
+                select: { projectId: true, parentTaskId: true, verifiesTaskId: true },
+              });
+              if (!current) throw new NotFoundException('task not found');
+              await this.assertHierarchyConsistent(tx, ownerId, id, current, dto);
+            }
+            if (dependsOnTaskIds?.length) {
               const edges = await tx.taskDependency.findMany({
                 where: { task: { ownerId } },
                 select: { taskId: true, dependsOnTaskId: true },
@@ -2658,18 +3709,50 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 throw new BadRequestException('These dependencies would create a cycle');
               }
             }
+            // WHICH SIDE of the status write this goes on is not a style choice: one PATCH
+            // routinely does both, and 0128's trigger judges every statement on its own.
+            //
+            //   linking   → cancel first, then link. Linking a task that is still OPEN is refused,
+            //               so the status has to have moved already.
+            //   unlinking → unlink first, then reopen. Reopening a task that still names a
+            //               successor is refused, so the link has to be gone already.
+            //
+            // Either order taken for both cases leaves one legal request failing on an
+            // intermediate state that no committed row would ever have held.
+            const writeSupersession = async () => {
+              if (!supersession) return;
+              await tx.$executeRaw`
+                UPDATE "task"
+                   SET "superseded_by_task_id" = ${supersession.successorId}::uuid,
+                       "superseded_at"         = ${supersession.at},
+                       "terminal_reason"       = ${supersession.reason}
+                 WHERE "id" = ${id}::uuid`;
+            };
+            if (supersession?.successorId == null) await writeSupersession();
             // Delete before re-inserting so a retained prerequisite cannot collide with the
             // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
             // full dependency replacement atomic; [] intentionally stops after the delete.
-            const task = await tx.task.update({ where: { id }, data });
-            await tx.taskDependency.deleteMany({ where: { taskId: id } });
-            if (dependsOnTaskIds.length) {
-              await tx.taskDependency.createMany({
-                data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: id, dependsOnTaskId })),
-              });
+            let task = await tx.task.update({ where: { id }, data });
+            if (supersession?.successorId != null) {
+              await writeSupersession();
+              task = await tx.task.findUniqueOrThrow({ where: { id } });
+            }
+            if (dependsOnTaskIds !== undefined) {
+              await tx.taskDependency.deleteMany({ where: { taskId: id } });
+              if (dependsOnTaskIds.length) {
+                await tx.taskDependency.createMany({
+                  data: dependsOnTaskIds.map((dependsOnTaskId) => ({ taskId: id, dependsOnTaskId })),
+                });
+              }
             }
             return task;
-          });
+          })
+    // Both branches share one translation: a project deleted between this request's check and its
+    // write is the caller's race to hear about, not a server fault (see translateProjectFk). Only
+    // an update that named a project can be relabelled, so every other FK failure is untouched.
+    ).catch(async (e) => {
+      throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
+    });
     // A dependency replacement may target a web-created task, which has no creator session to
     // carry the refresh. Publish it on the owner's stream so Workspace/MCP and CLI replacements
     // refresh an already-open DAG immediately. Scalar-only updates keep their existing
@@ -2700,12 +3783,35 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // observation and lets the reader infer the cause from the verification count rather than
     // asserting one. Either way it is a campaign's most consequential silent change: this
     // deployment reverted six tasks in one afternoon and nothing anywhere said so.
+    // Every input to §13.1 that this write could have moved: the task's own status, the policy
+    // that reads its children, the verdict its subject's parent may be waiting on, and either end
+    // of a re-parenting. Seeded with the task itself as well as its links, because the task can be
+    // a parent, a child, a verifier and a subject at once and the closure starts from all of them.
+    const movesAggregationInput =
+      dto.status !== undefined ||
+      dto.completionPolicy !== undefined ||
+      dto.verdict !== undefined ||
+      dto.parentTaskId !== undefined ||
+      dto.verifiesTaskId !== undefined;
+    if (movesAggregationInput) {
+      await this.recomputeAggregates(
+        ownerId,
+        [id, before.parentTaskId, before.verifiesTaskId, dto.parentTaskId, verifiesTaskId].filter(
+          (taskId): taskId is string => !!taskId,
+        ),
+      ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
+    }
     if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
       const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
+      // The id is encoded where it becomes prose. This detail is stored and replayed to agents,
+      // and `PublicIdInterceptor` rewrites response *fields* only, so an id spelled here as the
+      // raw uuid is one no reader can hand back to `task_get` / `task_update` — the id is the
+      // only part of the note that says *which* completion was reverted. The count above and the
+      // list this is filed under stay uuids: those are lookups, not text.
       await this.recordListEvent(
         before.listId,
         'completion_reverted',
-        `任务「${before.title}」(${id}) 从 DONE 被退回 ${dto.status}` +
+        `任务「${before.title}」(${uuidToBase62(id)}) 从 DONE 被退回 ${dto.status}` +
           (checks > 0 ? `，此前有 ${checks} 次验收记录` : '，此前没有验收记录'),
       );
     }
@@ -2731,6 +3837,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         listId: true,
+        projectId: true,
         isForeman: true,
         verifiesTaskId: true,
         list: { select: { verifyOnDone: true } },
@@ -2793,6 +3900,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         description: this.buildVerificationBrief(task.title, taskId, unevidenced),
         ownerId,
         listId: task.listId,
+        // The subject's project, not none. A check filed outside its subject's project is one
+        // `GET /projects/:id/verifications` cannot see (it filters on the column) and one
+        // `VERIFICATION_PASSED` cannot count — the same rule the deliberate door enforces, which
+        // this path was quietly breaking for every project task it ever checked.
+        projectId: task.projectId,
         assigneeId: task.assignee.id,
         verifiesTaskId: taskId,
         // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.
@@ -2818,10 +3930,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * It is told to reject by putting the subject back to IN_PROGRESS, which is the state a failed
    * run already lands on, so a rejected task rejoins the normal flow instead of needing one of
    * its own.
+   *
+   * The id it carries is spelled base62, the same as the `id` the verifier gets back from
+   * `task_get` — and the same one it has to pass to `task_comment` and `task_update` to land its
+   * verdict on the subject. Prose is the one boundary `PublicIdInterceptor` cannot reach, since
+   * it rewrites response *fields* and a description is not one, so the encode happens here, where
+   * the id becomes text.
    */
   private buildVerificationBrief(title: string, taskId: string, unevidenced = false): string {
     return (
-      `任务「${title}」（id: ${taskId}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
+      `任务「${title}」（id: ${uuidToBase62(taskId)}）刚刚被标记为 DONE。请独立核实它是否真的完成了，然后结束本次运行。\n\n` +
       (unevidenced
         ? `⚠️ 系统已先行检查：该任务**没有任何一次运行执行过哪怕一个 turn**。这说明"完成"背后没有执行记录支撑，` +
           `是很强的存疑信号——但它不是结论，请照下面的顺序查完再判。\n\n`
@@ -2865,16 +3983,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         status: true,
         autoRunWhenReady: true,
+        runAt: true,
         assignee: { select: { id: true, runnerId: true } },
       },
     });
+    const now = new Date();
     for (const dep of dependents) {
       if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
       if (dep.status !== 'OPEN') continue; // already running/done/cancelled — leave it
       if (!dep.autoRunWhenReady) continue; // gate kept, manual trigger only
+      // Scheduled for later: being ready is not permission to start early. The schedule is kept,
+      // not consumed — dispatchDueScheduledTasks picks the task up once it comes due, and by then
+      // this same READY state is one of the things it re-checks. Two independent triggers, and
+      // the later of the two is the one that fires.
+      if (dep.runAt && dep.runAt > now) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
       try {
-        await this.execute(ownerId, dep.id);
+        // Carrying what this scan read: between here and execute's own re-read, the user may have
+        // scheduled this task for later, and starting it now would both jump the appointment and
+        // erase it. `dep.runAt` is usually null — an unscheduled dependent — which is an assertion
+        // of exactly that, not an absence of one.
+        await this.execute(ownerId, dep.id, { observedRunAt: dep.runAt });
       } catch (e) {
         this.logger.warn(
           `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -2915,11 +4044,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
         listId: string | null;
+        runAt: Date | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId"
+             t.list_id AS "listId", t.run_at AS "runAt"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -2946,6 +4076,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
+      // Read here so the dispatch below can prove it is still acting on this row. The predicate
+      // admits `run_at IS NULL OR run_at <= now()`, so this is null for almost every candidate —
+      // and null is the assertion that matters, since scheduling a previously unscheduled task is
+      // the commonest way for this scan to be overtaken.
+      runAt: row.runAt,
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
@@ -2981,6 +4116,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let atCapacity = 0;
+    let rescheduled = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
@@ -3025,8 +4161,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       try {
-        await this.execute(t.ownerId, t.id);
-        this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
+        const res = await this.execute(t.ownerId, t.id, { observedRunAt: t.runAt });
+        // A task scheduled out from under this pass is not dispatched and must not be logged as
+        // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
+        if (res.ok) this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
+        else rescheduled += 1;
       } catch (e) {
         this.logger.warn(
           `reconcile auto-run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -3052,6 +4191,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `auto-run: ${atCapacity} ready task(s) left for a later sweep — no free slot to claim them`,
       );
     }
+    if (rescheduled > 0) {
+      this.logger.log(
+        `auto-run: ${rescheduled} ready task(s) were rescheduled mid-sweep — their new schedule stands`,
+      );
+    }
     for (const [listId, e] of perList) {
       if (e.quota > 0) {
         await this.recordListEvent(
@@ -3068,6 +4212,91 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           `${e.disk} 个就绪任务被磁盘下限挡住 —— 空间要由人来腾，不会自己恢复`,
         );
       }
+    }
+  }
+
+  /**
+   * Start the tasks whose scheduled time has arrived.
+   *
+   * The whole of the scheduling feature's runtime: a task carries an optional `run_at`, and this
+   * is what reads it. Everything a run needs to be correct — which workspace, which
+   * provider/model, whether its prerequisites are finished, whether its list is paused, whether
+   * something is already running it, whether the runner has a slot — is decided by the code that
+   * already decides it, because this dispatches through {@link execute} rather than creating a
+   * session itself. A second way to start a task is a second set of rules to keep in step, and
+   * the schedule is a trigger, not an execution model.
+   *
+   * At-least-once, and it has to be: a schedule that is due but cannot run right now — nothing
+   * assigned, its list paused, a prerequisite still open — is skipped by the predicate WITHOUT
+   * being consumed, so the next sweep reconsiders it. Missing the moment must not lose the
+   * appointment; the appointment says "not before", not "then or never". What stops that from
+   * becoming a repeat is the consumption on the other side: the first accepted run clears
+   * `run_at`, and the task leaves the candidate set for good.
+   *
+   * The double-dispatch this leaves possible — this sweep and the auto-run sweep both finding the
+   * same due, ready task — is absorbed where every other duplicate trigger in this service already
+   * is, by runWorkspaceOnTask's session dedup. Both sweeps also ride the same timer, sequentially,
+   * so in practice the second one runs after the first has already taken the task out of scope.
+   */
+  private async dispatchDueScheduledTasks(): Promise<void> {
+    // Ordered by when they came due, so a sweep that cannot dispatch everything takes the
+    // longest-overdue work first rather than an arbitrary slice; `id` only breaks ties, so the
+    // order is total and the same list twice in a row means the same decisions twice in a row.
+    const due = await this.prisma.$queryRaw<
+      { id: string; ownerId: string; runnerId: string; listId: string | null; runAt: Date }[]
+    >`
+      SELECT t.id, t.owner_id AS "ownerId", a.runner_id AS "runnerId", t.list_id AS "listId",
+             t.run_at AS "runAt"
+      FROM task t
+      JOIN workspace a ON a.id = t.assignee_id
+      WHERE ${SCHEDULED_DUE_SQL}
+      ORDER BY t.run_at ASC, t.id ASC
+      LIMIT ${SCHEDULED_DISPATCH_MAX_PER_SWEEP}`;
+    if (due.length === 0) return;
+    // Only now — the query above is one partial-index scan that finds nothing on almost every
+    // sweep, and a deployment with no schedules should pay for exactly that and no more.
+    const budget = await this.materialisationBudget();
+    let dispatched = 0;
+    let atCapacity = 0;
+    let rescheduled = 0;
+    for (const t of due) {
+      // The same brake the auto-run sweep takes, for the same reason: materialising past what the
+      // runner can claim produces sessions that sit PENDING and buy nothing. Here it is also what
+      // makes "left for a later sweep" true rather than a hope — the task keeps its `run_at`, so
+      // it is still due, and the sweep that finds a free slot is the one that starts it.
+      if (!takeBudget(budget, t.runnerId, t.listId)) {
+        atCapacity += 1;
+        continue;
+      }
+      try {
+        // The appointment this pass is keeping, carried so the dispatch can check it is still the
+        // one on the row. A user who moves a due task to next week between the scan and here has
+        // replaced the reason this loop had for starting it, and the sweep stands down: it starts
+        // nothing, consumes nothing, and the new schedule is left to fire on its own.
+        const res = await this.execute(t.ownerId, t.id, { observedRunAt: t.runAt });
+        if (res.ok) dispatched += 1;
+        else rescheduled += 1;
+      } catch (e) {
+        // The schedule is untouched on this path (execute consumes it only after a run is away),
+        // so the next sweep tries again. Warn rather than error: a task whose runner went offline
+        // between the scan and the dispatch is an ordinary race, not a fault.
+        this.logger.warn(
+          `scheduled run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+    if (dispatched > 0) this.logger.log(`scheduled: ${dispatched} due task(s) dispatched`);
+    if (rescheduled > 0) {
+      // Worth a line of its own: "the schedule fired and nothing ran" is otherwise indistinguishable
+      // from a bug, and this is the one case where it is the correct outcome.
+      this.logger.log(
+        `scheduled: ${rescheduled} due task(s) were rescheduled mid-sweep — their new schedule stands`,
+      );
+    }
+    if (atCapacity > 0) {
+      this.logger.log(
+        `scheduled: ${atCapacity} due task(s) left for a later sweep — no free slot to claim them`,
+      );
     }
   }
 
@@ -3229,10 +4458,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
         await this.execute(list.ownerId, task.id);
         this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
+        // The id is encoded where it becomes prose. This detail is stored and replayed to agents
+        // — `describeList` prints it verbatim beside the list's own base62 id — and
+        // `PublicIdInterceptor` rewrites response *fields* only, so a raw uuid here is the one
+        // part of the note nobody can hand back to `task_get`. The dispatch above, the log line
+        // and the list this is filed under stay uuids: those are lookups, not text.
         await this.recordListEvent(
           list.id,
           'foreman_filed',
-          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${task.id} 去诊断`,
+          `停滞约 ${list.minutes} 分钟，已自动派出协调任务 ${uuidToBase62(task.id)} 去诊断`,
         );
       } catch (e) {
         this.logger.warn(
@@ -3632,10 +4866,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
-    await this.deleteAndStopRuns(ownerId, [id]);
+    const { survivingLinks } = await this.deleteAndStopRuns(ownerId, [id]);
     // Cascades may remove prerequisite edges from other open DAGs, so invalidate the owner's
     // task snapshots even though the deleted focus task itself can no longer be fetched.
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
+    // A task LEAVING is the third change to a parent's children, beside arriving and completing,
+    // and it is the one that can complete a parent rather than reopen it: delete the last
+    // outstanding subtask and ALL_CHILDREN_DONE is satisfied by what remains.
+    //
+    // `verifiesTaskId` cascades, so deleting a subject takes its checks with it — which is why
+    // the seeds are the DELETED task's own links and not the checks that pointed at it.
+    if (survivingLinks.length) {
+      await this.recomputeAggregates(ownerId, survivingLinks).catch((e) =>
+        this.logger.warn(`aggregation after delete of ${id} failed: ${e?.message ?? e}`),
+      );
+    }
     return { ok: true };
   }
 
@@ -3660,13 +4905,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * fails its foreign key against the row just deleted. Unlocked it could slip in between the
    * scan and the delete and be stranded by the very code meant to prevent that.
    */
-  private async deleteAndStopRuns(ownerId: string, ids: string[]): Promise<number> {
-    const { deleted, runs } = await this.prisma.$transaction(
+  private async deleteAndStopRuns(
+    ownerId: string,
+    ids: string[],
+  ): Promise<{ deleted: number; survivingLinks: string[] }> {
+    const { deleted, runs, links } = await this.prisma.$transaction(
       async (tx) => {
         // Ordered, so two deletes over overlapping selections cannot take the same rows in
         // opposite orders and deadlock.
-        await tx.$queryRaw`
-          SELECT id FROM "task"
+        //
+        // The two links come back off the SAME locked read, which is the only moment they are both
+        // still true and no longer changeable: a parent whose last outstanding subtask this delete
+        // removes has to be recomputed, and after the DELETE there is nothing left to ask.
+        const locked = await tx.$queryRaw<
+          Array<{ parentTaskId: string | null; verifiesTaskId: string | null }>
+        >`
+          SELECT id, "parent_task_id" AS "parentTaskId", "verifies_task_id" AS "verifiesTaskId"
+          FROM "task"
           WHERE id = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
           ORDER BY id
           FOR UPDATE`;
@@ -3675,7 +4930,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true },
         });
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
-        return { deleted: res.count, runs: occupying.map((s) => s.id) };
+        return { deleted: res.count, runs: occupying.map((s) => s.id), links: locked };
       },
       // The delete used to be one implicit statement under no client deadline. Inside an
       // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
@@ -3698,7 +4953,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (runs.length > 0) {
       this.logger.log(`task delete: ended ${runs.length} in-flight run(s) across ${deleted} task(s)`);
     }
-    return deleted;
+    // Only the links that OUTLIVE this delete are worth recomputing; anything inside the same
+    // selection is gone. `links` is [] on a caller whose transaction returned nothing, which is
+    // the same as having no aggregate to recompute.
+    const doomed = new Set(ids);
+    const survivingLinks = [
+      ...new Set(
+        (links ?? [])
+          .flatMap((task) => [task.parentTaskId, task.verifiesTaskId])
+          .filter((id): id is string => !!id && !doomed.has(id)),
+      ),
+    ];
+    return { deleted, survivingLinks };
   }
 
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
@@ -3784,6 +5050,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // concurrency cap. Omitted for single runs (@-mention / 开始执行), which then
     // clears any stale batch membership so the session escapes a prior batch's cap.
     batch?: { id: string; maxConcurrent: number },
+    provenance?: {
+      dispatchOrigin: SessionDispatchOrigin;
+      runSource: SessionRunSource;
+    },
   ): Promise<string | undefined> {
     if (!workspace.runnerId) return undefined;
     // Dedup against a session already mid-flight (PENDING/RUNNING): don't spawn a
@@ -3842,9 +5112,42 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Task runs belong in Active regardless of whether they were started manually,
       // as a batch, by dependency auto-run, or from an @-mention. Keep `source`
       // explicit so a future default change cannot silently move them back to System.
-      { source: 'user', batch },
+      {
+        source: 'user',
+        batch,
+        dispatchOrigin: provenance?.dispatchOrigin ?? SessionDispatchOrigin.USER,
+        runSource: provenance?.runSource ?? SessionRunSource.MANUAL,
+      },
     );
     return session.id;
+  }
+
+  /**
+   * Persist one manual-run request for every affected Project.
+   *
+   * The outbox row is the authoritative state of this user action, so there is no second business
+   * row to coordinate with it. All Projects share one transaction and request id: the partial
+   * outbox key is Project-scoped, which makes a batch one signal per Project while preserving a
+   * distinct identity for the next click.
+   */
+  private async recordManualProjectTriggers(
+    ownerId: string,
+    projectIds: Array<string | null | undefined>,
+  ): Promise<void> {
+    const distinct = [...new Set(projectIds.filter((id): id is string => !!id))].sort();
+    if (distinct.length === 0) return;
+    const requestId = randomUUID();
+    await this.prisma.$transaction(async (tx) => {
+      for (const projectId of distinct) {
+        await tx.$executeRaw(Prisma.sql`
+          SELECT "project_event_manual_trigger"(
+            ${projectId}::uuid,
+            ${ownerId}::uuid,
+            ${requestId}::uuid
+          )
+        `);
+      }
+    });
   }
 
   /**
@@ -3852,13 +5155,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * resume-first-else-create flow as an @-mention, but as a user-facing action, so a
    * missing assignee / runner becomes a hard error instead of a silent skip.
    */
-  async execute(ownerId: string, id: string) {
+  async execute(ownerId: string, id: string, auto?: AutoDispatch) {
     const task = await this.prisma.task.findFirst({
       where: { id, ownerId },
       select: {
         id: true,
         title: true,
         description: true,
+        projectId: true,
         provider: true,
         model: true,
         status: true,
@@ -3866,11 +5170,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         isForeman: true,
         verifiesTaskId: true,
         dispatchHold: true,
+        dispatchAuthority: true,
+        runAt: true,
         list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    if (auto && task.dispatchAuthority === 'COORDINATOR') {
+      return { ok: false as const, skipped: 'coordinator-authority' as const };
+    }
+    // The schedule fence, and it comes before every other check because it decides whether this
+    // call has any business running at all. Only automatic triggers pass `auto`: an explicit Run
+    // Now is a person deciding to start the work despite the schedule, which is exactly the case
+    // the fence must NOT block (see the consumption below). A sweep that has been overtaken by a
+    // reschedule simply stands down — the task keeps whatever schedule it now has, and the sweep
+    // that runs after that instant is the one that starts it.
+    if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
+      return { ok: false as const, skipped: 'rescheduled' as const };
+    }
     const depState = (await this.dependencyStatesFor([id])).get(id) ?? 'NONE';
     if (!canRun(depState)) {
       throw new BadRequestException(
@@ -3888,6 +5206,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
     if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
+    // The click is itself a durable semantic request to the Project coordinator. Record it only
+    // after every synchronous run gate above passed, and before dispatch: if this write fails no
+    // session is started, while a later dispatch race still leaves a truthful request for the
+    // coordinator to answer. Automatic sweeps carry `auto` and deliberately produce no USER event.
+    if (!auto && task.projectId) {
+      await this.recordManualProjectTriggers(ownerId, [task.projectId]);
+    }
     const prompt = this.buildExecutePrompt(task);
     const sessionId = await this.runWorkspaceOnTask(
       ownerId,
@@ -3902,9 +5227,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       task.listId && task.list?.maxConcurrent != null
         ? { id: task.listId, maxConcurrent: task.list.maxConcurrent }
         : undefined,
+      auto
+        ? {
+            dispatchOrigin: SessionDispatchOrigin.LEGACY_SWEEP,
+            runSource: SessionRunSource.TASK_LIST_AUTO,
+          }
+        : {
+            dispatchOrigin: SessionDispatchOrigin.USER,
+            runSource: SessionRunSource.MANUAL,
+          },
     );
     if (task.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, task.id);
-    return { ok: true, sessionId };
+    // The run is away, so the appointment has been kept — including when this call IS the button
+    // that superseded it. A future run_at is deliberately not a veto on this path: "the earliest
+    // time it starts by itself" says nothing about a person deciding to start it now, and a Run
+    // button that refused would leave the only way to run a scheduled task early being to cancel
+    // its schedule first.
+    await this.consumeRunAt(ownerId, task.id, task.runAt);
+    return { ok: true as const, sessionId };
+  }
+
+  /**
+   * Spend a one-shot schedule: the task has been dispatched, so `run_at` goes back to NULL and
+   * the task will not be started by the clock again.
+   *
+   * Compare-and-set on the instant the caller read, NOT a blind `update({ runAt: null })`. A
+   * dispatch is several awaits long — the read, the dependency check, the session create — and a
+   * user rescheduling the task inside that window has stated a new intention about a run that had
+   * not happened yet. Matching on the old value makes that write win: the clear applies to the
+   * appointment that was kept, and a different one is left standing. It is also what makes the
+   * consumption exactly-once under an at-least-once sweep, since the second attempt matches
+   * nothing.
+   *
+   * Unscheduled tasks — the overwhelming majority, and every task that predates the column — cost
+   * one comparison and no query at all.
+   */
+  private async consumeRunAt(
+    ownerId: string,
+    taskId: string,
+    runAt: Date | null | undefined,
+  ): Promise<void> {
+    if (!runAt) return;
+    const res = await this.prisma.task.updateMany({
+      where: { id: taskId, ownerId, runAt },
+      data: { runAt: null },
+    });
+    // Only when it actually cleared: a lost CAS means somebody else's schedule is now on the row,
+    // and telling their clients the task changed because we failed to change it is noise.
+    if (res.count > 0) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
   }
 
   /**
@@ -3955,19 +5327,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // noise at best and misdirection at worst. For a verifier it is worse than noise: handing it
     // the work procedure is the surest way to get it to do the job itself instead of judging it,
     // which launders a failure into a pass.
-    const systemRun = task.isForeman === true || task.verifiesTaskId != null;
-    const instructions = systemRun ? undefined : task.list?.instructions?.trim();
-    return (
-      `请开始执行任务「${task.title}」。\n\n` +
-      (task.description ? `任务描述：\n${task.description}\n\n` : '') +
-      (instructions ? `作业指导（本任务列表通用）：\n${instructions}\n\n` : '') +
-      `请按以下步骤进行：\n` +
-      `1. 先用 task_get 查看该任务的完整信息与历史评论。\n` +
-      `2. 执行任务。\n` +
-      `3. 完成后，用 task_comment 在该任务下评论一段本次执行的总结（做了什么、结果如何、有无遗留），` +
-      `再用 task_update 将该任务状态（status）置为 DONE。\n` +
-      `4. 如果执行失败或未能完成，绝不要将状态置为 DONE；请先用 task_comment 在该任务下明确说明失败/未完成的原因，再将状态置为 IN_PROGRESS。`
-    );
+    return buildTaskExecutionPrompt(task);
   }
 
   /**
@@ -3988,9 +5348,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         description: true,
+        projectId: true,
         provider: true,
         model: true,
         status: true,
+        runAt: true,
         // Same inputs the single-task Run assembles its prompt from: a task must not get a
         // different prompt depending on which button started it.
         isForeman: true,
@@ -4044,6 +5406,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // One id ties this batch's sessions together; the queue counts live siblings by it.
     const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
 
+    // One explicit request per affected Project, not one per task. The helper writes every row in
+    // one transaction and one request id names the whole click, so a fifty-task batch satisfies
+    // the event contract even though the session dispatches themselves use a bounded worker pool.
+    await this.recordManualProjectTriggers(
+      ownerId,
+      runnable.map((task) => task.projectId),
+    );
+
     const dispatch = async (t: (typeof runnable)[number]) => {
       try {
         const sessionId = await this.runWorkspaceOnTask(
@@ -4055,6 +5425,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           batch,
         );
         if (t.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, t.id);
+        // A bulk Run keeps the appointment the same way the single one does. Without this a task
+        // started here would keep its schedule and be started again by the clock afterwards —
+        // "one-shot" has to mean one run, not one run per way of starting it.
+        await this.consumeRunAt(ownerId, t.id, t.runAt);
         return { id: t.id, ok: true as const, sessionId };
       } catch (e) {
         this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
@@ -4128,9 +5502,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async batchDelete(ownerId: string, taskIds: string[]) {
     const uniqueIds = [...new Set(taskIds)];
     if (uniqueIds.length === 0) return { deleted: 0 };
-    const deleted = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    const { deleted, survivingLinks } = await this.deleteAndStopRuns(ownerId, uniqueIds);
     if (deleted > 0) {
       this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, uniqueIds[0]);
+      // Same as remove, in bulk: a parent whose last outstanding subtask was in this selection is
+      // completed by what is left of it, and nothing else recomputes it.
+      if (survivingLinks.length) {
+        await this.recomputeAggregates(ownerId, survivingLinks).catch((e) =>
+          this.logger.warn(`aggregation after batch delete failed: ${e?.message ?? e}`),
+        );
+      }
     }
     return { deleted };
   }

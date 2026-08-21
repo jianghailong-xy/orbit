@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ProjectsModule } from '../projects/projects.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { TaskListsModule } from '../task-lists/task-lists.module';
 import { TasksModule } from '../tasks/tasks.module';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
+import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerTasksController } from './runner-tasks.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
@@ -35,7 +37,17 @@ import { ProvidersModule } from '../providers/providers.module';
   // a duplicate would be two objects disagreeing about which session a list is steered from.
   // PushModule provides PushService so the approval-create handler can notify the session
   // owner's iOS devices, and RunnerNotifyController can send the agent's own.
-  imports: [SessionsModule, PushModule, TasksModule, TaskListsModule, ProvidersModule],
+  // ProjectsModule for the same single-instance reason as the rest: RunnerProjectsController reads
+  // through the exported ProjectsService rather than re-providing it, so the runner door and the
+  // user door answer from one object.
+  imports: [
+    SessionsModule,
+    PushModule,
+    TasksModule,
+    TaskListsModule,
+    ProvidersModule,
+    ProjectsModule,
+  ],
   // RunnerSessionsController is listed last so its GET sessions/:id can't shadow
   // RunnerApiController's static sessions/claim | sessions/reclaim routes.
   controllers: [
@@ -46,6 +58,7 @@ import { ProvidersModule } from '../providers/providers.module';
     RunnerAgentsController,
     RunnerProvidersController,
     RunnerNotifyController,
+    RunnerProjectsController,
   ],
   providers: [
     RunnerAuthGuard,

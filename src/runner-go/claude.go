@@ -21,6 +21,10 @@ type ExecResult struct {
 
 type emitFn func(eventType string, payload map[string]interface{})
 
+// emitTurnFn files an event against a named conversation turn rather than the session's
+// current attribution. See the emitFor closure in session.go for the one case that needs it.
+type emitTurnFn func(turnID, eventType string, payload map[string]interface{})
+
 func handleMessage(msg map[string]interface{}, emit emitFn, bg *bgTailer) {
 	// A sub-agent's messages (spawned by the Task tool) carry the spawning Task's
 	// tool_use id here; stamp it onto every event so the UI can nest the sub-agent's

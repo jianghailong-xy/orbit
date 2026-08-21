@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { uuidToBase62 } from '@orbit/shared';
 import { MAX_VERIFICATIONS_PER_TASK, TasksService } from './tasks.service';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
+/** What that task is called everywhere the verifier can see it, `task_get` included. */
+const TASK_PUBLIC_ID = uuidToBase62(TASK_ID);
 
 interface Subject {
   isForeman?: boolean;
@@ -136,6 +139,21 @@ test('the brief leads with the evidence question, not the content one', async ()
   assert.match(brief, /自述一律不可采信/);
   // It must not quietly do the work itself — that would launder a failure into a success.
   assert.match(brief, /不要替它把活干了/);
+});
+
+test('the id the brief carries is the public one, not the uuid the column holds', async () => {
+  // Prose is the boundary PublicIdInterceptor does not cover: it rewrites response fields, and
+  // this id lives in a task description. Left as a uuid it is the one id in the whole run spelled
+  // differently from every other — `task_get` answers base62 — and the verifier has to hand it
+  // back to `task_comment` and `task_update` to land its verdict on the subject rather than on
+  // itself, which is the one distinction this brief spends its last paragraph on.
+  const f = makeService();
+
+  await f.fileFor();
+
+  const brief: string = f.created[0].description;
+  assert.ok(brief.includes(TASK_PUBLIC_ID), brief);
+  assert.equal(brief.includes(TASK_ID), false, 'the raw uuid reached the verifier');
 });
 
 test('a list that has not opted in files nothing', async () => {

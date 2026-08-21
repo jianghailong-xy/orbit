@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
+import { uuidToBase62 } from '@orbit/shared';
 import { TaskListsService } from './task-lists.service';
 
 const LIST_ID = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+/** What that list is called everywhere the agent can see it, `tasklist_get` included. */
+const LIST_PUBLIC_ID = uuidToBase62(LIST_ID);
 const OWNER = '5ccdf9b9-6871-49a6-8595-839c6a1f79d2';
 
 interface Bound {
@@ -193,6 +196,20 @@ test('the opening message points at the standing-instructions lever', async () =
   // And it must not start editing on its own — the console reports, the human decides.
   assert.match(prompt, /不要自行改动任何东西/);
   assert.match(prompt, /带上 note 说明原因/);
+});
+
+test('the id it carries is the public one, not the uuid the column holds', async () => {
+  // Prose is the boundary PublicIdInterceptor does not cover: it rewrites response fields, and
+  // this id lives in a message body. Left as a uuid it is the one id in the whole conversation
+  // spelled differently from every other — `tasklist_get` answers base62 — so the console cannot
+  // tell the list it was told about from the list it just read.
+  const f = makeService();
+
+  await f.open();
+
+  const prompt: string = f.created[0][1].prompt;
+  assert.ok(prompt.includes(LIST_PUBLIC_ID), prompt);
+  assert.equal(prompt.includes(LIST_ID), false, 'the raw uuid reached the agent');
 });
 
 test('the binding is written only after the session exists', async () => {

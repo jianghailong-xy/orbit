@@ -38,6 +38,7 @@ test('config update seeds the prompt before reload when claim just changed PENDI
         turns.push(data);
         return { id: `turn-${sequence}`, ...data };
       },
+      count: async () => 0,
     },
     attachment: { updateMany: async () => ({ count: 0 }) },
   };
@@ -96,6 +97,7 @@ test('a live model change persists and reloads the normalized permission pair', 
         reloads.push(data);
         return { id: '33333333-3333-4333-8333-333333333333', ...data };
       },
+      count: async () => 0,
     },
   };
   const prisma = {
@@ -155,6 +157,7 @@ test('concurrent partial config patches serialize without restoring a stale mode
         reloads.push(data);
         return { id: `turn-${sequence}`, ...data };
       },
+      count: async () => 0,
     },
   };
   // Model PostgreSQL's row lock: each interactive transaction sees the previous transaction's

@@ -25,6 +25,7 @@ for (const [taskStatus, expectedReason, movesToCompleted, runnerStatus] of [
       conversationTurn: {
         findFirst: async () => ({ seq: 4 }),
         create: async ({ data }: { data: Record<string, unknown> }) => data,
+        count: async () => 0,
       },
     };
     const prisma = {

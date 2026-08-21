@@ -39,7 +39,7 @@ function planFor(
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
   return (
     controller as unknown as {
