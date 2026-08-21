@@ -40,6 +40,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [macOS client design](macos-client-design.md) and [OrbitKit](../src/macos/OrbitKit/README.md) — native-client
   architecture.
 - [Phase 0 findings](phase0-findings.md) — empirical Claude CLI streaming-input results.
+- [Codex `turn/steer` contract](codex-turn-steer-contract.md) — the frozen wire format, failure taxonomy,
+  capability gating, and mixed-version rollout rules for steering a running Codex turn, with the
+  [engine evidence](evidence/codex-turn-steer-0.149.0/transcript.md) behind them.
 
 Design notes capture the reasoning and implementation state at the time they were written. When a design note
 conflicts with current code or a current operator guide, the code and operator guide are authoritative. Notes
