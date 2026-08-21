@@ -33,6 +33,10 @@ function harness({
   requeued = 1,
   status = RunStatus.RUNNING,
 }: { isSteer?: boolean; requeued?: number; status?: RunStatus } = {}) {
+  const turnState = {
+    kind: isSteer ? 'steer' : 'message',
+    status: 'IN_FLIGHT',
+  };
   const sessionWrites: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
   const turnWrites: { where: Record<string, unknown>; data: Record<string, unknown> }[] = [];
   const inboxWakes: string[] = [];
@@ -42,11 +46,19 @@ function harness({
     $executeRaw: async () => 1,
     conversationTurn: {
       findFirst: async ({ where }: { where: { kind?: string } }) =>
-        where.kind === 'steer' && isSteer ? { id: TURN_ID } : null,
-      findUnique: async () => ({ kind: isSteer ? 'steer' : 'message' }),
+        where.kind === 'steer' && turnState.kind === 'steer' ? { id: TURN_ID } : null,
+      findUnique: async () => ({ kind: turnState.kind }),
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         turnWrites.push(args);
-        return { count: args.data.kind === 'message' && args.where.kind === 'steer' ? requeued : 1 };
+        if (args.data.kind === 'message' && args.where.kind === 'steer') {
+          if (requeued > 0 && turnState.kind === 'steer' && turnState.status === 'IN_FLIGHT') {
+            turnState.kind = 'message';
+            turnState.status = 'PENDING';
+          }
+          return { count: requeued };
+        }
+        if (args.data.status === 'ANSWERED') turnState.status = 'ANSWERED';
+        return { count: 1 };
       },
       count: async () => 0,
     },
@@ -83,7 +95,7 @@ function harness({
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
-  return { controller, sessionWrites, turnWrites, inboxWakes, queueChanges };
+  return { controller, sessionWrites, turnWrites, inboxWakes, queueChanges, turnState };
 }
 
 const report = (h: ReturnType<typeof harness>, subtype: string) =>
@@ -147,6 +159,22 @@ test('re-filing the same steer twice changes nothing the second time', async () 
   assert.equal(h.sessionWrites.length, 0);
 });
 
+test('a lost committed requeue response cannot make its retry answer the requeued message', async () => {
+  const h = harness();
+
+  // First request commits, but model the HTTP response being lost by simply issuing the exact
+  // same idempotent report again. The row is now a normal PENDING message — and may be leased for
+  // its real execution before the retry reaches the server.
+  await report(h, TURN_COMPLETE_STEER_REQUEUE);
+  await report(h, TURN_COMPLETE_STEER_REQUEUE);
+
+  assert.deepEqual(h.turnState, { kind: 'message', status: 'PENDING' });
+  assert.equal(h.turnWrites.length, 1, 'the retry neither ACKs nor mutates the requeued message');
+  assert.equal(h.sessionWrites.length, 1, 'only the first requeue attempts its normal wake; the retry cannot settle the session');
+  assert.deepEqual(h.inboxWakes, [SESSION_ID]);
+  assert.deepEqual(h.queueChanges, [SESSION_ID]);
+});
+
 test('a re-filed steer wakes a session its turn already parked', async () => {
   // The race this exists for: the turn ended first, counted the executable turns before this row
   // became one, and parked. Without the wake the message sits PENDING behind nothing, which is
@@ -179,15 +207,16 @@ test('an ordinary steer completion still acks, so re-filing is not what any of t
   assert.deepEqual(h.inboxWakes, []);
 });
 
-test('an ordinary turn cannot be re-filed by claiming the subtype', async () => {
-  // The subtype is the runner's word for what KIND of completion this is, and the control plane
-  // does not take that word for what the row IS — it reads the kind off the row. A message turn
-  // reporting `steer_requeue` settles as the ordinary turn it is.
+test('the reserved requeue operation cannot settle an ordinary turn', async () => {
+  // This is both fail-closed validation and the idempotency fence above: after a successful
+  // requeue the row really is an ordinary message, so a retry of the reserved operation must not
+  // ACK it. No normal runner completion uses this subtype.
   const h = harness({ isSteer: false });
 
   await report(h, TURN_COMPLETE_STEER_REQUEUE);
 
   const refiled = h.turnWrites.find((w) => w.data.kind === 'message' && w.where.kind === 'steer' && w.where.id);
   assert.equal(refiled, undefined, 'a message turn was re-filed through the steer path');
-  assert.equal(h.sessionWrites.length, 1, 'and it settled the session, as an ordinary turn does');
+  assert.equal(h.turnWrites.length, 0, 'the reserved operation did not ACK the ordinary message');
+  assert.equal(h.sessionWrites.length, 0, 'the reserved operation did not settle the session');
 });

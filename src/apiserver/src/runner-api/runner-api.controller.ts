@@ -2161,6 +2161,22 @@ export class RunnerApiController {
         where: { id: dto.turnId, sessionId, kind: 'steer' },
         select: { id: true },
       });
+      // `turnComplete` is retried when the response is lost. After the first successful
+      // steer_requeue the SAME row is already a `message` (and may even have been leased for its
+      // real execution) by the time that retry arrives, so looking only at its current kind and
+      // falling through to the ordinary-turn path would ACK the requeued message without running
+      // it. The subtype is a completion *operation*, not a claim that a non-steer row completed:
+      // once there is no steer left to requeue, the only idempotent answer is a no-op.
+      if (!steering && dto.subtype === TURN_COMPLETE_STEER_REQUEUE) {
+        return {
+          applied: false,
+          steer: true,
+          requeued: false,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
+      }
       // A steer the engine PROVABLY never read is un-filed rather than acked: it becomes the
       // ordinary message it would have been had it arrived a moment later, on the same row,
       // with the same seq and the same clientTurnId — the kind was the only thing about it that
@@ -2173,10 +2189,11 @@ export class RunnerApiController {
       // TURN_COMPLETE_STEER_REQUEUE): re-filing a message Codex may already have taken is how
       // one prompt gets run twice, and Codex does not de-duplicate.
       if (steering && dto.subtype === TURN_COMPLETE_STEER_REQUEUE) {
-        // Idempotent by the kind itself: a repeat of this call — the runner retrying a lost
-        // response, or two reports for one message — finds a row that is no longer a steer and
-        // changes nothing. Which also makes it safe against the turn ending underneath it: that
-        // path only touches steers that are still PENDING, and this one only a leased one.
+        // Idempotent by the kind itself: the update changes one leased steer at most once. The
+        // guard above is the other half of that invariant — a retry which now observes the row as
+        // a message must stop here rather than settling that message as an ordinary completed turn.
+        // This is also safe against the turn ending underneath it: that path only touches steers
+        // that are still PENDING, and this one only a leased one.
         const requeued = await tx.conversationTurn.updateMany({
           where: { id: dto.turnId, sessionId, kind: 'steer', status: 'IN_FLIGHT' },
           data: {
