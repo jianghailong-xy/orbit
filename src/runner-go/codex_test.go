@@ -389,14 +389,24 @@ func TestCodexAppServerTokenUsageUpdatesActiveTurn(t *testing.T) {
 
 	handleCodexAppNotification("thread-1", codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
 
-	if active.result.ContextTokens != 91_000 {
-		t.Fatalf("ContextTokens = %d, want 91000", active.result.ContextTokens)
+	if active.result.ContextTokens != 1_500 {
+		t.Fatalf("ContextTokens = %d, want latest request's 1500, not cumulative thread total 91000", active.result.ContextTokens)
 	}
 	if active.result.Usage == nil {
 		t.Fatalf("Usage = nil")
 	}
 	if active.result.Usage.InputTokens != 1_000 || active.result.Usage.CacheReadInputTokens != 200 || active.result.Usage.OutputTokens != 300 {
 		t.Fatalf("Usage = %#v", active.result.Usage)
+	}
+}
+
+func TestCodexThreadContextTokensDoesNotUseCumulativeThreadUsage(t *testing.T) {
+	got := codexThreadContextTokens(map[string]interface{}{
+		"total": map[string]interface{}{"totalTokens": float64(15_000_000)},
+		"last":  map[string]interface{}{"totalTokens": float64(135_000)},
+	})
+	if got != 135_000 {
+		t.Fatalf("ContextTokens = %d, want latest request's 135000", got)
 	}
 }
 

@@ -1115,14 +1115,31 @@ private struct ContextWindowIndicator: View {
     }
 }
 
-/// Presents the context-window detail per platform (matches PlanUsageDetailPresentation): a tight
-/// anchored popover on macOS, a fitted bottom sheet on iOS.
+#if os(iOS)
+/// One presentation policy for the composer's two tappable footer metrics. Keeping the breakpoint
+/// and width here prevents Context and Plan usage from drifting back to different iPad behaviour.
+private enum ComposerFooterDetailLayout {
+    static let popoverWidth: CGFloat = 320
+
+    static func usesPopover(horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
+        horizontalSizeClass == .regular
+    }
+}
+#endif
+
+/// Presents the context-window detail with the same adaptive rule as plan usage: macOS and
+/// regular-width iPad layouts use a content-sized anchored popover, while compact iOS layouts use
+/// a fitted bottom sheet. The iPad popover leaves its arrow edge unconstrained because this control
+/// sits against the bottom-trailing safe area and the system must place the panel above it.
 private struct ContextWindowDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let tokens: Int
     let window: Int?
     let pct: Int
     let known: Bool
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
 
     private var sized: Bool { (window ?? 0) > 0 }
 
@@ -1155,20 +1172,31 @@ private struct ContextWindowDetailPresentation: ViewModifier {
             detail.padding(14).frame(width: 220)
         }
         #else
-        content.sheet(isPresented: $isPresented) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("Context").font(.title3.weight(.semibold))
-                    Spacer()
-                    Button("Done") { isPresented = false }
+        if ComposerFooterDetailLayout.usesPopover(horizontalSizeClass: horizontalSizeClass) {
+            content.popover(isPresented: $isPresented) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Context").font(.headline)
+                    detail
                 }
-                .padding(.bottom, 16)
-                detail
-                Spacer(minLength: 0)
+                .padding(16)
+                .frame(width: ComposerFooterDetailLayout.popoverWidth)
             }
-            .padding(20)
-            .presentationDetents([.height(160)])
-            .presentationDragIndicator(.visible)
+        } else {
+            content.sheet(isPresented: $isPresented) {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text("Context").font(.title3.weight(.semibold))
+                        Spacer()
+                        Button("Done") { isPresented = false }
+                    }
+                    .padding(.bottom, 16)
+                    detail
+                    Spacer(minLength: 0)
+                }
+                .padding(20)
+                .presentationDetents([.height(160)])
+                .presentationDragIndicator(.visible)
+            }
         }
         #endif
     }
@@ -1197,7 +1225,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
             .frame(width: 260)
         }
         #else
-        if horizontalSizeClass == .regular {
+        if ComposerFooterDetailLayout.usesPopover(horizontalSizeClass: horizontalSizeClass) {
             // Let iPadOS choose the arrow edge. This control lives against the bottom-trailing
             // safe area: forcing `.top` places the popover below the control on current iPadOS,
             // leaving most of the panel outside the screen. The unconstrained overload selects
@@ -1208,7 +1236,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                     PlanUsageDetailRows(rows: usage.rows)
                 }
                 .padding(16)
-                .frame(width: 320)
+                .frame(width: ComposerFooterDetailLayout.popoverWidth)
             }
         } else {
             content.sheet(isPresented: $isPresented) {
