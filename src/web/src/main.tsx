@@ -1,3 +1,8 @@
+// AntD v5 paints its click ripple (and its static message/notification/Modal surfaces) through
+// ReactDOM's legacy `render`, which React 19 removed — without this patch those calls silently
+// no-op and buttons stop rippling. Must be imported before antd. Drop it with the AntD 6 upgrade,
+// which renders through React 19 directly.
+import '@ant-design/v5-patch-for-react-19';
 import { App as AntApp, ConfigProvider } from 'antd';
 import 'antd/dist/reset.css';
 import './index.css';

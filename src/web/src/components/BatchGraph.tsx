@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { buildBatchGraph, describeShape, shouldDraw, type BatchTaskInput } from '../lib/batchGraph';
 
 // Geometry. Fixed in user units and scaled to the card by the viewBox, so the same numbers work
