@@ -523,5 +523,17 @@ Project 现有 47 个 Task：**43 DONE / 1 FAILED / 3 IN_PROGRESS**（含本任�
 `pcc23e-pgspec-pg16` / `pcc23f-pgspec-pg16` 及其全部库均已删除；三个变异探针已还原且**已重新编译验证**
 （`build/` 中 `const dead = input.world.deadLetters ?? []`、`eventId: uuidToBase62(event.id)`、`observed: [condition]` 均为原值）；
 共享 `orbit-postgres` 本轮**只读**（只跑了活性审计与状态查询）；任务工作树除本报告外 clean。
-部署工作树暂存状态全程未动：`M README.md` / `D docs/project-agent-contract.md`，
-staged binary diff SHA-256 恒为 `966c46d48ff68e27f9a479eca869e92a8f203d6c2a4466eaa8d48a2d9fcf8105`，unstaged 0 字节。
+**部署工作树已不存在，因此本轮无法、也不再声称核对过它的暂存状态。**
+`/root/.orbit/worktrees/feat-project-deploy` 在一次仓库级清理中随 main 集成/发版工作
+（新出现的 `project-main-integration-0128`、`runner-project-release-0129`）一并被移除，不是本单元删的；
+`feat/project` 的 ref 幸存，且已不被任何 worktree 检出。前几轮一直作为硬约束核对的那份**未提交**暂存索引
+（`M README.md` / `D docs/project-agent-contract.md`，staged binary diff SHA-256
+`966c46d48ff68e27f9a479eca869e92a8f203d6c2a4466eaa8d48a2d9fcf8105`）随该 worktree 的索引一同消失。
+本报告**不对它现在的内容作任何断言，也不去恢复或推测**；仅记录一个可核对的事实：
+`docs/project-agent-contract.md` 在 `main` 与 `feat/project` 上**都仍然存在**，即那次删除从未落地。
+
+因此"经部署工作树 ff-only"这一步无法照字面执行。本轮改用**临时的干净 worktree**：检出 `feat/project`
+（检出时 `git status` 0 行）→ `git merge --ff-only orbit/23-project-acceptance-correct` 前进到 `c6ed16a4`
+→ 立即 `git worktree remove`。未使用 `update-ref`、未 `reset`，临时 worktree 已移除，未留任何工作副本。
+本节这次的更正提交走的是同一条路径（同样是临时 clean worktree + `--ff-only` + 立即移除）；
+它只改本节文字，不触碰裁决（仍是 11 PASS / 1 FAIL）、不触碰 04R / 04R2 / 04R3。
