@@ -1381,10 +1381,13 @@ export function planProjectDecision(
 /**
  * The actions this snapshot itself proposes, for a caller that supplied none.
  *
- * Only §7.5's rotation today, and deliberately: every other action in §7.3's table is proposed by
- * the unit that applies it, which passes its own list. Planning it here is what makes the ledger's
- * `planned` gate meaningful — an action that no decision proposed may not be claimed against that
- * decision (§8.3), so the pass that decides and the pass that acts agree on one frozen list.
+ * §7.5's rotation and §7.2's semantic turn, and deliberately only those two: they are the two
+ * actions whose SUBJECT is the project itself and whose decision is this function's own (§7.5 and
+ * §7.2 TU4 are both pure functions of the snapshot). Every other action in §7.3's table is proposed
+ * by the unit that applies it, which passes its own list. Planning them here is what makes the
+ * ledger's `planned` gate meaningful — an action that no decision proposed may not be claimed
+ * against that decision (§8.3), so the pass that decides and the pass that acts agree on one
+ * frozen list.
  *
  * The key is spelled the way the AUDIT spells everything — Base62 — while the ledger stores the
  * same key with the raw project UUID, because a permanent action key is an internal identity that
