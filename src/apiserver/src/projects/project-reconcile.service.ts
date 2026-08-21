@@ -12,8 +12,10 @@ import {
   hashDecisionInput,
   planProjectDecision,
   publicIdempotencyKey,
+  verificationVerdictPlan,
 } from './project-decision.service';
 import {
+  ProjectEventDeliveryResult,
   ProjectEventEnvelope,
   ProjectEventHandleResult,
   ProjectEventHandler,
@@ -31,6 +33,10 @@ import {
   raiseBlockerIdempotencyKey,
 } from './project-blocker';
 import type { PlannedCoordinatorRotation } from './project-coordinator-session';
+import {
+  PlannedVerificationVerdict,
+  verificationVerdictActionKey,
+} from './task-verification-verdict';
 
 export const PROJECT_RECONCILE_LEASE_MS = 60_000;
 export const PROJECT_RECONCILE_HEARTBEAT_MS = 20_000;
@@ -153,6 +159,42 @@ export interface ProjectRotationExecutor {
   announce(sessionId: string): void;
 }
 
+/**
+ * What the ledger needs from §13.2's verdict unit, and nothing else.
+ *
+ * Same terms as `ProjectRotationExecutor` above, for the same reason: the ledger applies the
+ * action, the unit owns the effect, and neither may import the other.
+ * `ProjectVerificationVerdictService` registers itself at startup — and until it did, §13.2's
+ * three consequences were computed by
+ * `verificationVerdictPlan`, used to raise one blocker, and dropped. A FAIL reverted nothing, filed
+ * no defect and stopped nothing downstream in production, while the specs that cover the effect
+ * stayed green because they called it themselves. That is the same hole `task-aggregation-writer`
+ * was cut to fill for §13.1 and `ProjectDispatchPassService` for §7.8.
+ */
+export interface ProjectVerdictExecutor {
+  idempotencyKey(projectId: string, verifierTaskId: string, verdictRevision: string): string;
+  actionDetail(planned: PlannedVerificationVerdict): Prisma.InputJsonValue;
+  applyVerdictInTransaction(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    command: { decisionId: string; planned: PlannedVerificationVerdict },
+    actionId: string,
+    now: Date,
+  ): Promise<void | ProjectActionEffectRefusal>;
+}
+
+/**
+ * What the ledger needs from §7.8's dispatch pass, and nothing else.
+ *
+ * Stated here rather than imported for the reason `ProjectRotationExecutor` is: the ledger must not
+ * depend on the services that use it. The pass registers itself at startup, the way the rotation
+ * executor and the event consumer do.
+ */
+export interface ProjectDispatchPassExecutor {
+  /** One pass over one project. Post-commit only: it takes its own lease and its own transactions. */
+  runFor(projectId: string): Promise<unknown>;
+}
+
 export class ProjectLeaseLostError extends Error {
   constructor(projectId: string) {
     super(`Project reconcile lease lost for ${projectId}`);
@@ -178,6 +220,8 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private lastBackstopAt = 0;
   private _backstopHits = 0;
   private rotationExecutor?: ProjectRotationExecutor;
+  private verdictExecutor?: ProjectVerdictExecutor;
+  private dispatchPass?: ProjectDispatchPassExecutor;
   private readonly pendingRotations: string[] = [];
 
   constructor(
@@ -204,6 +248,36 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     this.rotationExecutor = executor;
     return () => {
       if (this.rotationExecutor === executor) this.rotationExecutor = undefined;
+    };
+  }
+
+  /**
+   * Install the sole §13.2 verdict executor, on the terms the rotation executor is installed on.
+   */
+  registerVerdictExecutor(executor: ProjectVerdictExecutor): () => void {
+    if (this.verdictExecutor && this.verdictExecutor !== executor) {
+      throw new Error('a Project verdict executor is already registered');
+    }
+    this.verdictExecutor = executor;
+    return () => {
+      if (this.verdictExecutor === executor) this.verdictExecutor = undefined;
+    };
+  }
+
+  /**
+   * Install the sole §7.8 dispatch pass, on the terms every other collaborator is installed on.
+   *
+   * One, because two passes proposing dispatches for one project would be two clocks; replacing a
+   * different live one is refused; and the unregister function makes an isolated test's teardown
+   * explicit.
+   */
+  registerDispatchPass(executor: ProjectDispatchPassExecutor): () => void {
+    if (this.dispatchPass && this.dispatchPass !== executor) {
+      throw new Error('a Project dispatch pass is already registered');
+    }
+    this.dispatchPass = executor;
+    return () => {
+      if (this.dispatchPass === executor) this.dispatchPass = undefined;
     };
   }
 
@@ -299,10 +373,21 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     if (this.decisions) {
       const captured = await this.decisions.capture(tx, projectId, now);
       const decisionId = createDecisionId();
-      const outcome = planProjectDecision(captured.input, {
-        decisionId,
-        consumedEventIds: _events.map((event) => uuidToBase62(event.id)),
-      });
+      const consumedEventIds = _events.map((event) => uuidToBase62(event.id));
+      const base = planProjectDecision(captured.input, { decisionId, consumedEventIds });
+      // §13.2's consequences, proposed by the unit that applies them the way §7.8's dispatch is —
+      // `plannedActions` proposes only the rotation, and every other action in §7.3's table comes
+      // from its own applier passing its own list. `base.actions` is that list, re-planned with the
+      // one verdict this pass will claim appended, so the decision that authorises the action and
+      // the pass that applies it read one snapshot.
+      const pending = await this.pendingVerificationVerdicts(tx, projectId, captured.input);
+      const outcome = pending.length
+        ? planProjectDecision(captured.input, {
+          decisionId,
+          consumedEventIds,
+          actions: [...base.actions, this.verdictAction(projectId, pending[0])],
+        })
+        : base;
       if (BigInt(outcome.fencingToken) !== lease.fencingToken) {
         throw new ProjectLeaseLostError(projectId);
       }
@@ -312,12 +397,28 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // a transaction its OWN writes. Aggregating a parent or raising a blocker first would make
       // this pass's snapshot differ from itself, and the rotation it just decided would be refused
       // `STALE_SNAPSHOT` by the very facts it produced.
-      await this.applyCoordinatorRotation(tx, lease, decisionId, outcome, now);
+      //
+      // The verdict sits between them for exactly the same reason, and it is why this pass applies
+      // at most ONE: a rotation writes the Project row and a verdict writes task rows, so the
+      // second of any two would be refused by the effects of the first. Whatever is left over is
+      // not lost, it is next: the wake below is floored to now so the loop comes straight back.
+      const rotationAttempted =
+        await this.applyCoordinatorRotation(tx, lease, decisionId, outcome, now);
+      const verdictsLeft = await this.applyVerificationVerdicts(
+        tx, lease, decisionId, pending, rotationAttempted, now,
+      );
       await this.applyAggregations(tx, projectId, outcome.aggregations, now);
       await this.applyBlockers(tx, projectId, lease, decisionId, outcome.blockers, now);
       state = outcome.runStateAfter;
       nextWakeAt = outcome.nextWakeAt ? new Date(outcome.nextWakeAt) : null;
       nextWakeReason = outcome.nextWakeReason;
+      // §10.4 chose a wake for a world that has one more thing to do in it. Floor it — never
+      // push it out — and only take the reason when this is genuinely the earlier alarm, so a
+      // blocker's own recheck keeps its explanation when it was already due.
+      if (verdictsLeft > 0 && !(nextWakeAt && nextWakeAt <= now)) {
+        nextWakeAt = now;
+        nextWakeReason = `${verdictsLeft} verification verdict(s) awaiting consequences`;
+      }
     } else {
       state = await this.runStateOf(tx, projectId);
       nextWakeAt = state === 'SETTLED' ? null : new Date(now.getTime() + 60_000);
@@ -348,9 +449,25 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
    * §8.3's commit has happened; now the rest of the system can be told about it. Nothing here is
    * allowed to be load-bearing — a lost notification costs latency, and the Session it announces is
    * already committed PENDING where the runner's own poll will find it.
+   *
+   * §7.8's dispatch pass runs from here, and this is the only place it runs from. It needs the
+   * lease that `handle` has just released and transactions of its own, so it cannot be inside the
+   * delivery; and giving it a timer would make §10.2's "exactly three wake paths" four, which W1
+   * calls a production incident by name. Running it per RECONCILED delivery instead means the
+   * cadence of dispatch attempts is §10.4's wake schedule — a blocker's `nextCheckAt`, a backoff,
+   * the in-flight fallback, the backstop — which is what paces a task that keeps being refused.
+   *
+   * `DISCARDED` is excluded deliberately: that disposition is §5.5's terminal/inert cleanup for a
+   * project that is not OPEN or has the coordinator switched off, and I6 forbids reconciling one.
    */
-  async afterCommit(): Promise<void> {
+  async afterCommit(result?: ProjectEventDeliveryResult): Promise<void> {
     await this.flushPendingRotations();
+    if (!this.dispatchPass || result?.status !== 'CONSUMED') return;
+    // Never load-bearing, exactly as above: the delivery has committed, and a pass that threw must
+    // not turn a durable reconcile into a retried one. The next wake runs it again.
+    await this.dispatchPass.runFor(result.projectId).catch((cause: unknown) => {
+      this.log.error(`Project dispatch pass failed after commit: ${errorText(cause)}`);
+    });
   }
 
   /**
@@ -922,18 +1039,18 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     decisionId: string,
     outcome: ProjectDecisionOutcome,
     now: Date,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const planned = outcome.coordinator;
-    if (planned?.status !== 'ROTATE') return;
+    if (planned?.status !== 'ROTATE') return false;
     const action = outcome.actions.find((candidate) =>
       candidate.type === 'ROTATE_COORDINATOR_SESSION');
-    if (!action) return;
+    if (!action) return false;
     if (!this.rotationExecutor) {
       // Nest always registers one. Warn rather than throw: a deployment that somehow has none must
       // still publish its run state and consume its events, and the next pass re-plans the same
       // rotation from the same facts.
       this.log.warn(`Project ${lease.projectId} planned a coordinator rotation with no executor`);
-      return;
+      return false;
     }
     const result = await this.applyDecisionActionInTransaction(
       tx,
@@ -959,6 +1076,112 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // that says nothing was applied, and no notification is sent for it.
       this.pendingRotations.push(result.actionId);
     }
+    // Whether the ledger was ENTERED, not whether the rotation succeeded. A refusal writes too — a
+    // `project_action` row and, for `STALE_SNAPSHOT`, this project's `next_wake_at`, which the
+    // snapshot hash is computed over. Reporting "no" here would hand the verdict below a snapshot
+    // that its own predecessor had already invalidated.
+    return true;
+  }
+
+  /**
+   * The verdicts whose consequences this project still owes, newest conclusion per check first
+   * in the planner's own order (§13.2).
+   *
+   * `verificationVerdictPlan` describes the CURRENT conclusion of every verification task, so it
+   * keeps describing a FAIL that was applied last week — the row still says FAIL and the revision
+   * has not moved. What separates "due" from "done" is the ledger: the action key carries the
+   * verdict revision, so one row in `project_action` is the permanent record that this conclusion's
+   * consequences have already happened (V2/V7). Filtering on it here is not a second idempotency
+   * mechanism, it is what stops every pass from re-proposing conclusions the ledger would only
+   * answer `ALREADY_APPLIED` — which, with one verdict applied per pass, would starve a project
+   * whose oldest check is settled and whose newest one is not.
+   *
+   * Empty when no executor is registered: proposing an action nobody can claim would put an
+   * unclaimable key in the audit and say the loop decided something it cannot do.
+   */
+  private async pendingVerificationVerdicts(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    input: ProjectDecisionInput,
+  ): Promise<PlannedVerificationVerdict[]> {
+    if (!this.verdictExecutor) return [];
+    const planned = verificationVerdictPlan(input);
+    if (!planned.length) return [];
+    const keys = planned.map((verdict) => this.verdictKey(projectId, verdict));
+    const spent = await tx.$queryRaw<Array<{ idempotencyKey: string }>>(Prisma.sql`
+      SELECT "idempotency_key" AS "idempotencyKey" FROM "project_action"
+       WHERE "project_id" = ${projectId}::uuid
+         AND "idempotency_key" IN (${Prisma.join(keys)})
+    `);
+    const done = new Set(spent.map((row) => row.idempotencyKey));
+    return planned.filter((verdict) => !done.has(this.verdictKey(projectId, verdict)));
+  }
+
+  /** The ledger's spelling of one verdict's permanent key (§8.2): internal ids throughout. */
+  private verdictKey(projectId: string, planned: PlannedVerificationVerdict): string {
+    return this.verdictExecutor!.idempotencyKey(
+      projectId, base62ToUuid(planned.verifierTaskId), planned.verdictRevision,
+    );
+  }
+
+  /** The audit's spelling of the same key, which is what a plan is written in (§6.2 / §8.2). */
+  private verdictAction(
+    projectId: string,
+    planned: PlannedVerificationVerdict,
+  ): ProjectDecisionOutcome['actions'][number] {
+    return {
+      type: 'APPLY_VERIFICATION_VERDICT',
+      idempotencyKey: publicIdempotencyKey(this.verdictKey(projectId, planned)),
+      // The verifier, not the subject — the action is about a conclusion, and a subject with two
+      // checks would otherwise have two actions claiming the same subject id.
+      subject: { type: 'TASK', id: planned.verifierTaskId },
+    };
+  }
+
+  /**
+   * Apply the one verdict this pass claimed, and report how many are still owed after it.
+   *
+   * A refusal is a committed audit row and not an exception, exactly as it is for the rotation
+   * above: `SUPERSEDED` is what the effect returns for a conclusion about a world that has moved
+   * (V6), and turning that into a throw would roll back a reconcile that is otherwise correct.
+   *
+   * The count that comes back is what the caller floors the wake on. It counts the verdict just
+   * applied as settled and everything else as outstanding, including the case where a rotation
+   * took this pass's one write — the loop has to come back, and `next_wake_at` is how it is told.
+   */
+  private async applyVerificationVerdicts(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    pending: readonly PlannedVerificationVerdict[],
+    rotationAttempted: boolean,
+    now: Date,
+  ): Promise<number> {
+    if (!pending.length || !this.verdictExecutor) return 0;
+    if (rotationAttempted) return pending.length;
+    const planned = pending[0];
+    const result = await this.applyDecisionActionInTransaction(
+      tx,
+      lease,
+      decisionId,
+      {
+        type: 'APPLY_VERIFICATION_VERDICT',
+        idempotencyKey: this.verdictKey(lease.projectId, planned),
+        subject: { type: 'TASK', id: base62ToUuid(planned.verifierTaskId) },
+        detail: this.verdictExecutor.actionDetail(planned),
+      },
+      async (effectTx, actionId) => this.verdictExecutor!.applyVerdictInTransaction(
+        effectTx, lease, { decisionId, planned }, actionId, now,
+      ),
+      now,
+    );
+    if (result.status === 'APPLIED') {
+      this.log.log(
+        `Project ${uuidToBase62(lease.projectId)} applied verdict ${planned.verdict} `
+        + `from ${planned.verifierTaskId} (revision ${planned.verdictRevision})`,
+      );
+    }
+    return pending.length - 1;
   }
 
   /**

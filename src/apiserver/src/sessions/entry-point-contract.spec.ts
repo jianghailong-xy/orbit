@@ -41,10 +41,10 @@ function doors() {
     },
     assertHostedByRunner: async () => undefined,
   };
-  const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never);
+  const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never);
   const runner = new RunnerSessionsController(sessions as never, {
     assert: async () => undefined,
-  } as never);
+  } as never, {} as never);
   return { turns, interrupts, browser, runner };
 }
 

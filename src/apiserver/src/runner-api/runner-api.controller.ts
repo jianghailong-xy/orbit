@@ -19,6 +19,7 @@ import {
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
+import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -2889,12 +2890,18 @@ export class RunnerApiController {
           mergeStatus: string | null;
           mergeOperationId: string | null;
           mergeOperationOwner: string | null;
+          ownerId: string;
+          taskId: string | null;
+          branch: string | null;
+          mergeTarget: string | null;
         }>
       >`
         SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
                "merge_status" AS "mergeStatus",
                "merge_operation_id" AS "mergeOperationId",
-               "merge_operation_owner" AS "mergeOperationOwner"
+               "merge_operation_owner" AS "mergeOperationOwner",
+               "owner_id" AS "ownerId", "task_id" AS "taskId",
+               "branch", "merge_target" AS "mergeTarget"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -2948,6 +2955,52 @@ export class RunnerApiController {
           ...(merged && dto.mergedSha ? { baseSha: dto.mergedSha } : {}),
         },
       });
+
+      // §13.7 MR3: Orbit's own merge leaves a receipt too.
+      //
+      // Written in THIS transaction so a recorded merge and the session state it produced commit
+      // together — a receipt that survives a rolled-back merge would be the worst row in the table.
+      // Skipped only when the runner named no source tip: a receipt whose `sourceSha` is a guess
+      // cannot be re-checked, and this table's whole value is that its rows can be.
+      const sha = (value: string | undefined) => {
+        const v = (value ?? '').trim().toLowerCase();
+        return /^[0-9a-f]{40}$/.test(v) ? v : null;
+      };
+      const sourceSha = sha(dto.sourceSha);
+      const mergedSha = sha(dto.mergedSha);
+      const targetBranch = (dto.targetBranch ?? current.mergeTarget ?? '').trim();
+      const sourceBranch = (current.branch ?? '').trim();
+      // A success that cannot say where the target ended up is refused by 0128's CHECK, and
+      // failing the merge-result write over it would turn a completed merge into an error the
+      // runner retries forever. It is the same rule as the missing source tip: no checkable row,
+      // no receipt.
+      const checkable = sourceSha !== null && targetBranch !== '' && sourceBranch !== ''
+        && (!merged || mergedSha !== null);
+      if (checkable && sourceSha) {
+        const task = current.taskId
+          ? await tx.task.findUnique({
+              where: { id: current.taskId },
+              select: { projectId: true },
+            })
+          : null;
+        await MergeReceiptService.fromRunnerMergeResult(tx, {
+          ownerId: current.ownerId,
+          sessionId,
+          taskId: current.taskId,
+          projectId: task?.projectId ?? null,
+          result: merged ? 'MERGED' : dto.status === 'conflict' ? 'CONFLICT' : 'ERROR',
+          sourceBranch,
+          sourceSha,
+          targetBranch,
+          targetShaBefore: sha(dto.targetShaBefore),
+          // A merge that did not happen moved no target, so only a success names one.
+          targetShaAfter: merged ? mergedSha : null,
+          rebaseBaseSha: sha(dto.rebaseBaseSha),
+          conflicts: dto.status === 'conflict' ? (dto.conflicts ?? []) : [],
+          message: dto.message ?? null,
+          operationId: dto.operationId ?? null,
+        });
+      }
     });
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it

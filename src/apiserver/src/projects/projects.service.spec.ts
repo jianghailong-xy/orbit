@@ -171,9 +171,11 @@ test('an update writes only the fields it was sent, and null clears one', async 
   prisma.$transaction = async (fn: any) => fn(prisma);
   const service = serviceWith(prisma);
 
-  // Settling a project must not blank the goal that says what it was for.
-  await service.update(OWNER_ID, PROJECT_ID, { status: ProjectStatus.DONE } as never);
-  assert.deepEqual(writes[0], { status: 'DONE' });
+  // Settling a project must not blank the goal that says what it was for. CANCELLED rather than
+  // DONE because DONE is no longer a field write: it goes through §13.4 AE2's acceptance gate,
+  // which is the subject of its own tests (`project-acceptance*.spec.ts`).
+  await service.update(OWNER_ID, PROJECT_ID, { status: ProjectStatus.CANCELLED } as never);
+  assert.deepEqual(writes[0], { status: 'CANCELLED' });
 
   await service.update(OWNER_ID, PROJECT_ID, { goal: null, title: 'Renamed' } as never);
   assert.deepEqual(writes[1], { title: 'Renamed', goal: null });

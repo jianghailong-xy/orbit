@@ -1428,6 +1428,11 @@ describe('ProjectDetailPage — the Coordinator surface', () => {
     events: { pending: [], pendingEmptyReason: 'NO_PENDING_EVENT', recent: [] },
     acceptance: {
       criteria: null, criteriaAbsentReason: 'NO_ACCEPTANCE_CRITERIA', attempt: '0',
+      run: null, runAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
+      doneGate: {
+        allowed: false, runId: null, refusalCode: 'ACCEPTANCE_MISSING', reason: null,
+        acceptanceDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      },
       lastRun: null, lastRunAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
       evidence: {
         verifications: { total: 0, pending: 0, pass: 0, fail: 0, inconclusive: 0, unresolvedFailures: 0 },

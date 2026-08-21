@@ -262,6 +262,51 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_blockers":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectBlockers(id, getBool(args, "history"))
+		if err != nil {
+			return toolResult("get project blockers failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "merge_receipt":
+		id := getString(args, "sessionId")
+		if id == "" {
+			id = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+		}
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		body := map[string]interface{}{}
+		copyIfPresent(body, args, "result", "sourceSha", "targetBranch", "sourceBranch",
+			"targetShaBefore", "targetShaAfter", "rebaseBaseSha", "conflicts")
+		if message := getString(args, "message"); message != "" {
+			body["detail"] = map[string]interface{}{"message": message}
+		}
+		raw, err := s.t.recordMergeReceipt(id, body)
+		if err != nil {
+			return toolResult("record merge receipt failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "merge_receipts":
+		id := getString(args, "sessionId")
+		if id == "" {
+			id = strings.TrimSpace(os.Getenv("ORBIT_SESSION_ID"))
+		}
+		if id == "" {
+			return toolResult("sessionId is required", true)
+		}
+		raw, err := s.t.listMergeReceipts(id, int(getNumber(args, "limit")))
+		if err != nil {
+			return toolResult("list merge receipts failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_verifications":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -270,6 +315,70 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.getProjectVerifications(id)
 		if err != nil {
 			return toolResult("get project verifications failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_acceptance":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectAcceptance(id)
+		if err != nil {
+			return toolResult("get project acceptance failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_acceptance_run":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		// No decidedBy: the credential is a machine's, so the server records the coordinator
+		// agent. A parameter for it would be this process claiming an identity.
+		raw, err := s.t.openProjectAcceptanceRun(id, map[string]interface{}{})
+		if err != nil {
+			return toolResult("open project acceptance run failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_acceptance_verdict":
+		id := getString(args, "projectId")
+		runID := getString(args, "runId")
+		if id == "" || runID == "" {
+			return toolResult("projectId and runId are required", true)
+		}
+		criteria, ok := args["criteria"].([]interface{})
+		if !ok || len(criteria) == 0 {
+			return toolResult("criteria must be a non-empty array with one entry per stated criterion", true)
+		}
+		raw, err := s.t.finalizeProjectAcceptanceRun(id, runID, map[string]interface{}{"criteria": criteria})
+		if err != nil {
+			return toolResult("conclude project acceptance run failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_merge_evidence":
+		id := getString(args, "projectId")
+		requirement := getString(args, "requirementId")
+		branch := getString(args, "targetBranch")
+		hash := getString(args, "contentHash")
+		if id == "" || requirement == "" || branch == "" {
+			return toolResult("projectId, requirementId and targetBranch are required", true)
+		}
+		if !isSHA256Hex(hash) {
+			return toolResult("contentHash must be 64 hex characters: a sha256 of the CONTENT you "+
+				"read, not a commit SHA and not `git branch --contains` (a squash makes both wrong)", true)
+		}
+		body := map[string]interface{}{
+			"requirementId": requirement,
+			"targetBranch":  branch,
+			"contentHash":   strings.ToLower(hash),
+		}
+		copyIfPresent(body, args, "source", "detail")
+		raw, err := s.t.recordProjectMergeEvidence(id, body)
+		if err != nil {
+			return toolResult("record project merge evidence failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -368,7 +477,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -399,7 +508,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "ref", "dependsOnRefs", "parentRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -418,11 +527,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
-		raw, err := s.t.updateTask(id, body)
+		raw, err := s.t.updateTask(s.sessionID, id, body)
 		if err != nil {
 			return toolResult("update task failed: "+err.Error(), true)
 		}
@@ -1197,6 +1306,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
 				"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks.",
 			},
+			"verifiesTaskId": map[string]interface{}{
+				"type":        "string",
+				"description": "File this task as a VERIFICATION of that task: it exists to check whether the named task actually did what it claims. This is what makes a check a structured relation instead of a naming convention — it is the precondition for task_update's `verdict`, and the only thing `completionPolicy: VERIFICATION_PASSED` counts. The subject must be owned by you, must not be this task, must not itself be a verification, and must be in the SAME project (a check filed across that line is counted by nobody). A verification is expected to run as its OWN session: concluding one from the session that ran the subject is refused.",
+			},
 			"labels": labelsProp,
 		}
 	}
@@ -1210,6 +1323,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"type":        "array",
 			"items":       str,
 			"description": "Refs of EARLIER items in this same batch that must finish before this one runs. Use this for prerequisites created by this call (their ids don't exist yet) and dependsOnTaskIds for tasks that already exist.",
+		}
+		props["verifiesRef"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Ref of an EARLIER item in this same batch that this item VERIFIES — how a phase and the check on that phase land in one atomic call. Use verifiesTaskId instead for a subject that already exists; naming both is rejected. The item it points at must carry the same projectId as this one and must not itself be a verification. This is the pairing that makes a VERIFICATION_PASSED parent expressible: filed as two calls, the window between them is a parent that can never complete.",
 		}
 		props["parentRef"] = map[string]interface{}{
 			"type":        "string",
@@ -1301,6 +1418,84 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId"),
 		},
 		{
+			"name": "project_blockers",
+			"description": "Read what is stopping one project, and — with `history` — what used to. " +
+				"Each open blocker answers four questions a status column cannot: what kind of stop " +
+				"it is, WHO can clear it (owner), WHAT would clear it (recovery: a clock, an event, " +
+				"or a person), and the one executable sentence that would resolve it, plus when it " +
+				"is next rechecked and which action raised it. Read it when a project is OPEN and " +
+				"nothing is running: an open blocker is a dispatch precondition rather than a status " +
+				"anybody rewrote, so nothing else about the project looks unusual. `history` adds the " +
+				"episodes that are already over, with who or what ended them and when — those rows " +
+				"are never deleted, because the next episode on the same key takes its lifecycle " +
+				"generation from the whole history, which is also what makes \"what was blocking this " +
+				"last Tuesday\" a question the audit can still answer rather than one that needed " +
+				"somebody to have written a comment at the time.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+				"history": map[string]interface{}{
+					"type":        "boolean",
+					"description": "Include the episodes that are already resolved. Default false — the open ones only.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "merge_receipt",
+			"description": "Record that a session's branch was merged, for a merge Orbit did not " +
+				"perform — the `git merge --ff-only` an agent runs in its own worktree, which is how " +
+				"branches actually land. Without it the control plane has nothing: merge status blank " +
+				"and \"already in main\" false, permanently, because the only code that ever writes " +
+				"those is Orbit's own Merge button. The receipt is append-only and names the session, " +
+				"its task, its project, and every SHA the claim can be re-checked against. Recording " +
+				"the same merge twice is a no-op: the second call returns the first receipt. Give " +
+				"FULL 40-character object names — an abbreviated SHA is refused, because it resolves " +
+				"against a repository that has since gained objects and can silently come to mean a " +
+				"different commit. `rebaseBaseSha` is the field people skip and the one that decides " +
+				"whether the tests that passed were about this tree: omit it only if the source was " +
+				"genuinely not rebased. This is not an orchestration power and needs no orchestration " +
+				"grant: it records work that already happened, inside your own tenant.",
+			"inputSchema": obj(map[string]interface{}{
+				"sessionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The session whose branch was merged; defaults to the current session.",
+				},
+				"result": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"MERGED", "ALREADY_MERGED", "CONFLICT", "ERROR"},
+					"description": "MERGED moved the target. ALREADY_MERGED is a RESULT, not a no-op — it is the answer when the target already contained this work, which is the external fast-forward case and every re-run. CONFLICT names the paths in `conflicts`; ERROR is everything else.",
+				},
+				"sourceSha":       map[string]interface{}{"type": "string", "description": "The full 40-character tip that was merged."},
+				"targetBranch":    map[string]interface{}{"type": "string", "description": "The branch it was merged into."},
+				"sourceBranch":    map[string]interface{}{"type": "string", "description": "Defaults to the session's own recorded branch."},
+				"targetShaBefore": map[string]interface{}{"type": "string", "description": "The target tip before the merge."},
+				"targetShaAfter":  map[string]interface{}{"type": "string", "description": "The target tip after it. REQUIRED for result MERGED: a merge that cannot say where the target ended up is a claim, not a receipt."},
+				"rebaseBaseSha":   map[string]interface{}{"type": "string", "description": "The base the source was rebased onto before this merge was computed. Omitted means it was not rebased."},
+				"conflicts": map[string]interface{}{
+					"type": "array", "items": map[string]interface{}{"type": "string"},
+					"description": "Paths git reported as conflicting. Only for result CONFLICT.",
+				},
+				"message": map[string]interface{}{"type": "string", "description": "Git's message, for a conflict or an error."},
+			}, "result", "sourceSha", "targetBranch"),
+		},
+		{
+			"name": "merge_receipts",
+			"description": "List the merges recorded against a session's branch, newest first: what " +
+				"was merged, into what, the target tip before and after, the base the source was " +
+				"rebased onto, the result and any conflicting paths. The durable answer to \"did this " +
+				"session's work land\", which the session's own merge status cannot give — that column " +
+				"is the Merge button's live state and is deliberately cleared when a session resumes.",
+			"inputSchema": obj(map[string]interface{}{
+				"sessionId": map[string]interface{}{
+					"type":        "string",
+					"description": "The session to read; defaults to the current session.",
+				},
+				"limit": map[string]interface{}{"type": "integer", "description": "Maximum receipts to return (default 50, cap 200)."},
+			}),
+		},
+		{
 			"name": "project_verifications",
 			"description": "Read what every verification in one project concluded, and what those " +
 				"conclusions are still holding up. Three things nothing else tells you: each " +
@@ -1321,6 +1516,117 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
+		},
+		{
+			"name": "project_acceptance",
+			"description": "Read the evidence a project's DONE would be checked against, and " +
+				"whether it would be allowed right now. A comment saying the tests passed is not " +
+				"evidence this server can check; a run in this record is. Returns: the stated " +
+				"acceptance criteria decomposed one per non-blank line — the checklist an " +
+				"acceptance run has to answer item for item; acceptanceDigest, the digest of the " +
+				"criteria text, every task with its status and completion policy, every " +
+				"verification verdict and the newest merge observation per requirement; every " +
+				"attempt with its per-criterion conclusions, evidence and the digest of the facts " +
+				"it judged; what each target branch was last observed to CONTAIN and at which " +
+				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
+				"and refused, and every reopen with the fact that caused it; and doneGate — " +
+				"allowed, or the code and sentence the write would be refused with " +
+				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_EVIDENCE_STALE when " +
+				"one exists but the facts have moved since, ACCEPTANCE_BLOCKED when a blocker or " +
+				"an unresolved verification failure is still open).",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_acceptance_run",
+			"description": "Open a project acceptance attempt. The acceptance criteria are frozen " +
+				"with their digest and one empty row per stated criterion is created — the " +
+				"checklist project_acceptance_verdict then has to fill, item for item. Open it " +
+				"when you are about to CHECK the project, not when you are about to report on it: " +
+				"the digest of the facts is taken now, and a task, a verdict, the criteria or the " +
+				"branch content changing afterwards makes this attempt stale rather than wrong. " +
+				"Opening an attempt supersedes any earlier live one, so there is never a choice of " +
+				"which conclusion to believe. A project that states no acceptance criteria is " +
+				"refused, because an acceptance with nothing to check would pass by having nothing " +
+				"to fail.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to run acceptance on, as shown in its web UI URL.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_acceptance_verdict",
+			"description": "Conclude a project acceptance attempt with one verdict per stated " +
+				"criterion. Address each criterion by ordinal (its position in the snapshot) or " +
+				"criterionKey (its content). EVERY criterion must be answered: a missing one is " +
+				"refused, because a project-level PASS is the conjunction of them and one nobody " +
+				"checked is not a pass. The attempt's own verdict is DERIVED and cannot be " +
+				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
+				"which is the whole difference between this and writing 'all green' in a task " +
+				"comment. Put real evidence in each entry's `evidence`: the command, its exit " +
+				"code, the key output, the SHA, the environment. Only a PASS recorded here lets " +
+				"the project be set DONE, and only while the facts it judged are still current.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project whose attempt is being concluded.",
+				},
+				"runId": map[string]interface{}{
+					"type":        "string",
+					"description": "The attempt to conclude, as returned by project_acceptance_run.",
+				},
+				"criteria": map[string]interface{}{
+					"type": "array",
+					"description": "One entry per stated criterion: {ordinal or criterionKey, " +
+						"verdict: PASS|FAIL|INCONCLUSIVE, summary, evidence, evidenceTaskId, " +
+						"evidenceSessionId}.",
+					"items": map[string]interface{}{"type": "object"},
+				},
+			}, "projectId", "runId", "criteria"),
+		},
+		{
+			"name": "project_merge_evidence",
+			"description": "Record what a target branch was observed to CONTAIN — the merge half " +
+				"of a project's acceptance evidence. Hash the content you actually read (a " +
+				"normalized `git grep` result, a blob or tree digest, a rendered diff), never " +
+				"`git branch --contains`: after a squash merge that answer is a guaranteed false " +
+				"negative while the content is plainly there. Same content as the last " +
+				"observation and only the observation time moves; different content writes a new " +
+				"row one refGeneration up, which is what makes 'the branch changed and changed " +
+				"back' visible to a database that cannot lock a git ref — and if the project was " +
+				"DONE against the old content, that same write reopens it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project this observation belongs to.",
+				},
+				"requirementId": map[string]interface{}{
+					"type":        "string",
+					"description": "What was required, in the words the acceptance criteria use.",
+				},
+				"targetBranch": map[string]interface{}{
+					"type":        "string",
+					"description": "Where it had to land, e.g. main or feat/project.",
+				},
+				"contentHash": map[string]interface{}{
+					"type":        "string",
+					"description": "sha256 of the observed content, 64 hex characters.",
+				},
+				"source": map[string]interface{}{
+					"type":        "string",
+					"description": "Who observed it. Defaults to MERGE_EVIDENCE_WRITER.",
+				},
+				"detail": map[string]interface{}{
+					"type":        "object",
+					"description": "The raw observation behind the hash: the command, its output, the blob ids.",
+				},
+			}, "projectId", "requirementId", "targetBranch", "contentHash"),
 		},
 		{
 			"name": "project_create",
@@ -1490,6 +1796,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
 					"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks. Switching back to MANUAL stops the recomputation without undoing what it last concluded.",
 				},
+				"verifiesTaskId": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "The task this one exists to check. Omit to leave the relation alone, null to detach it, an id to point this task at that subject — the same rules as on task_create. Refused once this verification has concluded anything: the consequences already applied name the subject they were about, so re-pointing it afterwards would leave them asserting something about a task this check no longer verifies. File a new verification instead.",
+				},
 				"verdict": map[string]interface{}{
 					"type":        []string{"string", "null"},
 					"enum":        []interface{}{"PASS", "FAIL", "INCONCLUSIVE", nil},
@@ -1500,6 +1810,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"items":       str,
 					"maxItems":    maxTaskLabels,
 					"description": "Complete replacement for this task's labels. Omit to leave them unchanged; pass [] to clear them all.",
+				},
+				"supersededByTaskId": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "The later attempt that took this one's place. This is what makes \"we re-ran it from scratch\" a relation instead of a sentence in a comment: it names the successor, so a reader of the cancelled attempt can follow the chain to whoever ended up doing the work, and a list can tell an attempt that was REPLACED from one that was simply dropped. Only a CANCELLED or FAILED task may name one, the successor must be owned by you and in the SAME project, and the chain may not close a loop. It writes nothing to `status` — the original outcome is the fact being preserved, not the one being tidied away. Omit to leave the link alone, null to unlink.",
+				},
+				"terminalReason": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"enum":        []interface{}{"SUPERSEDED", "ABANDONED", nil},
+					"description": "Why this task stopped, when its status alone does not say. Setting supersededByTaskId implies SUPERSEDED and needs no second spelling; ABANDONED is the other case — dropped on purpose, with nothing replacing it. FAILED and CANCELLED are not values here because they are already `status`.",
 				},
 			}),
 		},
