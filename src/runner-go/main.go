@@ -90,13 +90,13 @@ Usage:
   orbit register [options]
 
 Approve the machine in the browser (device-login), or pass --token to skip approval.
-This machine becomes one runner (named by hostname); each coding agent installed
-here is registered as an agent "<name>/<agentkey>" that runs in this directory.
+This machine becomes one runner. Its name defaults to the machine hostname and
+can be changed with --name. Workspaces are configured separately after registration.
 
 Options:
   --server <url>           Control plane base URL (default: ` + defaultServer + `)
   --token <token>          Optional one-time enrollment token (skips browser approval)
-  --name <name>            Base name for the agents (default: "<dir>@<hostname>"); the runner is named by hostname
+  --name <name>            Runner name (default: machine hostname)
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
   --max-concurrent <n>     Max concurrent jobs (default: 16)
   --workdir <path>         Project directory Claude Code runs in (default: current dir)
