@@ -93,6 +93,23 @@ async function open() {
   /** A second pool, so a transaction on one can genuinely block a transaction on the other. */
   const other = new PrismaClient({ datasources: { db: { url: URL! } } });
 
+  /**
+   * Close everything this function has opened, for the path where it never gets to return.
+   *
+   * `open()` creates three live connections and hands them to the caller inside an object whose
+   * `teardown` closes them. Everything between the last `new` and the `return` is therefore a
+   * window in which a throw leaks all three: node keeps their sockets, the test run passes, and
+   * the process simply never exits — which is what it did, for three and a half minutes, with
+   * every backend sitting idle in ClientRead and nothing to see in pg_stat_activity. The throw
+   * that opened that window was a `wipe()` against a database whose schema an earlier spec had
+   * altered; the window is the bug either way.
+   */
+  const release = async () => {
+    await probe.end().catch(() => {});
+    await prisma.$disconnect().catch(() => {});
+    await other.$disconnect().catch(() => {});
+  };
+
   const wipe = async () => {
     await prisma.task.deleteMany({ where: { ownerId: OWNER_ID } });
     await prisma.projectMember.deleteMany({ where: { project: { ownerId: OWNER_ID } } });
@@ -103,19 +120,24 @@ async function open() {
     await prisma.runner.deleteMany({ where: { ownerId: OWNER_ID } });
     await prisma.user.deleteMany({ where: { id: OWNER_ID } });
   };
-  await wipe();
-  await prisma.user.create({
-    data: { id: OWNER_ID, email: `pcc03a-${OWNER_ID}@example.test`, name: 'pcc03a', passwordHash: 'x' },
-  });
-  await prisma.runner.create({
-    data: { id: RUNNER_ID, ownerId: OWNER_ID, name: 'pcc03a runner', tokenHash: 'x' },
-  });
-  await prisma.workspace.createMany({
-    data: [
-      { id: AGENT, ownerId: OWNER_ID, runnerId: RUNNER_ID, name: 'agent' },
-      { id: AGENT_OTHER, ownerId: OWNER_ID, runnerId: RUNNER_ID, name: 'other agent' },
-    ],
-  });
+  try {
+    await wipe();
+    await prisma.user.create({
+      data: { id: OWNER_ID, email: `pcc03a-${OWNER_ID}@example.test`, name: 'pcc03a', passwordHash: 'x' },
+    });
+    await prisma.runner.create({
+      data: { id: RUNNER_ID, ownerId: OWNER_ID, name: 'pcc03a runner', tokenHash: 'x' },
+    });
+    await prisma.workspace.createMany({
+      data: [
+        { id: AGENT, ownerId: OWNER_ID, runnerId: RUNNER_ID, name: 'agent' },
+        { id: AGENT_OTHER, ownerId: OWNER_ID, runnerId: RUNNER_ID, name: 'other agent' },
+      ],
+    });
+  } catch (e) {
+    await release();
+    throw e;
+  }
 
   const sessions = sessionsFor(prisma);
   return {
@@ -128,10 +150,10 @@ async function open() {
     workspaces: new WorkspacesService(other),
     serviceOn: (client: any) => new ProjectsService(client, sessionsFor(client).service),
     teardown: async () => {
-      await wipe();
-      await probe.end();
-      await prisma.$disconnect();
-      await other.$disconnect();
+      // The wipe is best-effort and the release is not: a fixture that cannot be cleaned up is a
+      // dirty database, while a connection that is not closed is a process that never exits.
+      await wipe().catch(() => {});
+      await release();
     },
   };
 }

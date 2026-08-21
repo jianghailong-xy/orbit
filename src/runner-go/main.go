@@ -61,7 +61,7 @@ Usage:
   orbit resume [session-id]         Resume a session in its coding runtime
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
-  orbit project <command>           Read an Orbit project's durable context
+  orbit project <command>           Manage an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
   orbit provider <command>          List the providers a session or task may run on
@@ -90,13 +90,13 @@ Usage:
   orbit register [options]
 
 Approve the machine in the browser (device-login), or pass --token to skip approval.
-This machine becomes one runner (named by hostname); each coding agent installed
-here is registered as an agent "<name>/<agentkey>" that runs in this directory.
+This machine becomes one runner. Its name defaults to the machine hostname and
+can be changed with --name. Workspaces are configured separately after registration.
 
 Options:
   --server <url>           Control plane base URL (default: ` + defaultServer + `)
   --token <token>          Optional one-time enrollment token (skips browser approval)
-  --name <name>            Base name for the agents (default: "<dir>@<hostname>"); the runner is named by hostname
+  --name <name>            Runner name (default: machine hostname)
   --labels a,b,c           Routing labels (e.g. sg,hdfs)
   --max-concurrent <n>     Max concurrent jobs (default: 16)
   --workdir <path>         Project directory Claude Code runs in (default: current dir)

@@ -85,6 +85,7 @@ import {
   effortOptionsForProvider,
   livePinnedModel,
   modelOptionsForProvider,
+  newSessionEffortForProvider,
   normalizeEffortForProvider,
   providerIdentityResolved,
   supportsAuto,
@@ -962,6 +963,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     contextKey: '',
     dirty: false,
   });
+  const effortSeedState = useRef<ContextSeedState>({
+    contextKey: '',
+    dirty: false,
+  });
   // Seeded from the account default by the effect below once `me` loads (mirrors how Model/Mode
   // seed via effects); '' = model default until then.
   const [effort, setEffort] = useState('');
@@ -1812,10 +1817,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       )
     : null;
 
-  // Seed Effort from a non-live (resumable) session's stored config. Keying on id + liveness,
-  // rather than the polled object, keeps the 4s refetch from clobbering a local edit.
+  // Seed Effort from a non-live (resumable) session's stored config. The live/ended suffix gives
+  // an ended session a fresh context after its final turn, while the dirty guard keeps later async
+  // data from clobbering an effort explicitly picked for that resume.
   useEffect(() => {
     if (!selected || live) return;
+    const contextKey = `session:${selected.id}:ended`;
+    const decision = decideContextSeed(effortSeedState.current, contextKey, true);
+    effortSeedState.current = decision.state;
+    if (!decision.apply) return;
     const provider = selected.provider ?? detailForSelected?.provider ?? 'claude';
     const owningWorkspace = workspacesForRunner.find((a) => a.id === selected.workspace?.id);
     setEffort(
@@ -1892,6 +1902,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const modelContextKey = selectedId
     ? `session:${selectedId}`
     : `draft:${runner.id}:${workspaceId ?? 'none'}:${pickedProvider}`;
+  const effortContextKey = selectedId
+    ? `session:${selectedId}:${live ? 'live' : 'ended'}`
+    : modelContextKey;
   const modelSeed = selectedId ? (!live ? selectedModelDefault : null) : pickedModelDefault;
 
   // A late Runtime catalog/configured-provider response may refine the seed for an untouched
@@ -1963,15 +1976,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownProviderCapabilitiesResolved,
   ]);
 
-  // A fresh session seeds its effort with the most specific default available: the picked workspace's
-  // own effort (set on the Runner page) first, else the account-level default-effort preference
-  // (synced across devices — the iOS/macOS clients seed the same fallback). `??` treats only
-  // null/undefined as "unset", so a workspace explicitly set to Default ('') stays Default rather than
-  // falling through. Reacts to `me` loading so the pill fills once preferences arrive.
+  // A fresh interactive session starts from the account's last-picked effort. Older workspaces can
+  // still carry the per-workspace default that preceded that preference, so use it only when the
+  // account has never picked an effort. `??` preserves an explicit account Default (''). Reacts to
+  // `me` loading so an untouched pill fills once preferences arrive; the dirty guard preserves a
+  // choice made before that request finishes.
   useEffect(() => {
     if (selectedId) return;
     const provider = pickedProvider;
-    const candidate = pickedWorkspace?.effort ?? me.data?.preferences?.defaultEffort ?? '';
     // A picked provider owns its own model space, so its default model — not the workspace's, which
     // belongs to the provider being switched away from — is what the effort must be legal for.
     const selectedModel = draftProvider
@@ -1983,9 +1995,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           configuredProviders,
           runner.runtimeDefaultModels,
         ) ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
-    setEffort(normalizeEffortForProvider(provider, candidate, selectedModel, runner.modelCatalog));
+    const seed = newSessionEffortForProvider(
+      provider,
+      me.data?.preferences?.defaultEffort,
+      pickedWorkspace?.effort,
+      selectedModel,
+      runner.modelCatalog,
+    );
+    const decision = decideContextSeed(effortSeedState.current, effortContextKey, true);
+    effortSeedState.current = decision.state;
+    if (decision.apply) setEffort(seed);
   }, [
     selectedId,
+    effortContextKey,
     pickedProvider,
     draftProvider,
     pickedWorkspace?.model,
@@ -5643,7 +5665,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       modeSeedState.current = dirtyContextSeed(modelContextKey);
                       setMode('Default');
                     }
-                    if (nextEffort !== currentEffort) setEffort(nextEffort);
+                    if (nextEffort !== currentEffort) {
+                      effortSeedState.current = dirtyContextSeed(effortContextKey);
+                      setEffort(nextEffort);
+                    }
                   }}
                   options={providerSwitchChoices.map((choice) => {
                     // Carry the reason on the row itself, where it answers the question being
@@ -5710,7 +5735,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       modeSeedState.current = dirtyContextSeed(modelContextKey);
                       setMode('Default');
                     }
-                    if (resetEffort) setEffort(nextEffort);
+                    if (resetEffort) {
+                      effortSeedState.current = dirtyContextSeed(effortContextKey);
+                      setEffort(nextEffort);
+                    }
                   }
                 }}
                 options={shownModelOptions}
@@ -5727,6 +5755,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 suffixIcon={null}
                 value={shownEffort}
                 onChange={(v) => {
+                  effortSeedState.current = dirtyContextSeed(effortContextKey);
                   const normalized = normalizeEffortForProvider(
                     shownProvider,
                     v,

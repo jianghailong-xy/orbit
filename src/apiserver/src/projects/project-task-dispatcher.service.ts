@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider } from '@orbit/shared';
 import {
-  normalizeBuiltinPermissionMode,
+  AgentProvider,
+  ROOT_FALLBACK_PERMISSION_MODE,
+  permissionModeAvailableOnRunner,
+} from '@orbit/shared';
+import {
   normalizeEffortForProvider,
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
@@ -290,13 +293,15 @@ export class ProjectTaskDispatcherService {
     }
 
     const selectedModel = providerResolution?.selectedModel ?? null;
-    const permissionMode = normalizeBuiltinPermissionMode(
-      runtime,
-      selectedModel ?? '',
-      resolvePermissionMode(null, { preferences: row.ownerPreferences }),
-      !providerBuiltin,
-      row.runsAsRoot,
-    );
+    const permissionIntent = resolvePermissionMode(null, { preferences: row.ownerPreferences });
+    // The Project snapshot freezes the account's permission intent. Whether Auto is available is
+    // model-dependent and the runtime-default model is not known until Queue claim, so normalizing
+    // it here would permanently turn Auto into Default for every built-in Claude task with a null
+    // model. Bypass on a root runner is different: Claude cannot start at all, and this safe
+    // narrowing is already part of the immutable execution result.
+    const permissionMode = permissionModeAvailableOnRunner(permissionIntent, row.runsAsRoot)
+      ? permissionIntent
+      : ROOT_FALLBACK_PERMISSION_MODE;
     const selectedEffort = normalizeEffortForProvider(runtime, row.workspaceEffort) ?? null;
     const resolution = {
       v: 1,

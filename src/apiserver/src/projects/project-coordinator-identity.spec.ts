@@ -11,6 +11,19 @@ import { UpdateProjectDto } from './dto';
 import { ProjectsService } from './projects.service';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 
+/** The acceptance service this controller also takes. A double rather than a real one: every
+ *  scenario in this file is about the project routes, and a scenario that reached acceptance would
+ *  say so by failing here. */
+function acceptanceDouble(): never {
+  return {
+    overview: async () => assert.fail('this scenario does not read acceptance'),
+    openRun: async () => assert.fail('this scenario does not open an acceptance run'),
+    finalizeRun: async () => assert.fail('this scenario does not conclude an acceptance run'),
+    recordMergeEvidence: async () => assert.fail('this scenario does not record merge evidence'),
+  } as never;
+}
+
+
 const { PrismaClientKnownRequestError } = Prisma;
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -383,7 +396,7 @@ test('a project response says who coordinates it and how often that conversation
 
 test('an agent cannot widen its own authority through the runner door', async () => {
   const projects = { update: async () => assert.fail('the refusal must come before the write') };
-  const controller = new RunnerProjectsController(projects as never);
+  const controller = new RunnerProjectsController(projects as never, acceptanceDouble());
   const runner = { ownerId: OWNER_ID, id: 'runner-1' } as never;
 
   for (const field of [...ProjectsService.AUTHORIZATION_FIELDS, 'coordinatorAgentId']) {
@@ -404,7 +417,7 @@ test('the runner door still carries everything an agent may say about the work',
       return { id: PROJECT_ID };
     },
   };
-  const controller = new RunnerProjectsController(projects as never);
+  const controller = new RunnerProjectsController(projects as never, acceptanceDouble());
 
   await controller.updateProject({ ownerId: OWNER_ID, id: 'runner-1' } as never, PROJECT_ID, {
     goal: 'A goal it worked out',
@@ -503,7 +516,7 @@ test('the runner door refuses those nulls too, before anything can be written', 
   // a caller that somehow got past it still meets `refuseGovernance` — which counts a field as
   // NAMED when it is null, so nothing reaches the service either way.
   const projects = { update: async () => assert.fail('the refusal must come before the write') };
-  const controller = new RunnerProjectsController(projects as never);
+  const controller = new RunnerProjectsController(projects as never, acceptanceDouble());
   const runner = { ownerId: OWNER_ID, id: 'runner-1' } as never;
 
   for (const field of ['coordinatorEnabled', 'automationPolicy', 'maxConcurrentTasks']) {

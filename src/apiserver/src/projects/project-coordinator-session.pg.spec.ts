@@ -11,7 +11,7 @@ import {
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { PermissionMode, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -76,6 +76,8 @@ async function fixture(
     policy?: ProjectAutomationPolicy;
     coordinatorStatus?: RunStatus;
     coordinatorEnabled?: boolean;
+    defaultPermissionMode?: PermissionMode;
+    runsAsRoot?: boolean;
   } = {},
 ): Promise<Fixture> {
   const ownerId = randomUUID();
@@ -85,12 +87,21 @@ async function fixture(
   const projectId = randomUUID();
   const coordinatorSessionId = randomUUID();
   await db.user.create({
-    data: { id: ownerId, email: `${label}-${ownerId}@pcc19.invalid`, name: label, passwordHash: 'x' },
+    data: {
+      id: ownerId,
+      email: `${label}-${ownerId}@pcc19.invalid`,
+      name: label,
+      passwordHash: 'x',
+      preferences: options.defaultPermissionMode
+        ? { defaultPermissionMode: options.defaultPermissionMode }
+        : undefined,
+    },
   });
   await db.runner.create({
     data: {
       id: runnerId, ownerId, name: `${label}-runner`, tokenHash: 'x',
       status: RunnerStatus.ONLINE,
+      runsAsRoot: options.runsAsRoot ?? false,
       capabilities: ['session-orchestration-credential-v1'],
       capabilitiesReportedAt: new Date(),
     },
@@ -242,7 +253,9 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
 
     try {
       // ── §8.4 · a run that ends wakes its project, and the loop opens the next one ────────────
-      const normal = await fixture(db, 'normal');
+      const normal = await fixture(db, 'normal', {
+        defaultPermissionMode: PermissionMode.AUTO,
+      });
       await db.session.update({
         where: { id: normal.coordinatorSessionId },
         data: { status: RunStatus.SUCCEEDED, finishedAt: new Date() },
@@ -276,6 +289,16 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
       assert.equal(opened.dispatchOrigin, SessionDispatchOrigin.PROJECT_COORDINATOR);
       assert.equal(opened.runSource, SessionRunSource.PROJECT_COORDINATOR);
       assert.equal(opened.status, RunStatus.PENDING);
+      assert.equal(opened.provider, 'claude');
+      assert.equal(opened.model, null, 'the runtime default model is not resolved at rotation');
+      assert.equal(opened.usesRuntimeDefaultModel, true);
+      assert.equal(opened.permissionMode, PermissionMode.AUTO,
+        'the account Auto intent must not be frozen as Default before model resolution');
+      const executionContext = applied.executionContext as unknown as {
+        result?: { permissionMode?: string };
+      };
+      assert.equal(executionContext.result?.permissionMode, PermissionMode.AUTO,
+        'the frozen action context must carry the same Auto intent as the Session');
       assert.ok(opened.resolution && opened.snapshotFrozenAt && opened.projectActionId);
       assert.deepEqual(notifications, ['queue', opened.id]);
       notifications.length = 0;
@@ -323,6 +346,38 @@ test('Coordinator Session rotation, takeover and mixed-version compatibility on 
         where: { projectId: normal.projectId, type: 'ROTATE_COORDINATOR_SESSION' },
       }), 1);
       assert.equal(await reconciler.releaseLease(replayLease), true);
+
+      // A fleet-level Bypass default is the one safe persisted narrowing: Claude cannot start
+      // with it under root at all, independently of which model Queue later resolves.
+      const rootBypass = await fixture(db, 'root-bypass', {
+        coordinatorStatus: RunStatus.SUCCEEDED,
+        defaultPermissionMode: PermissionMode.BYPASS,
+        runsAsRoot: true,
+      });
+      const rootBypassPlan = await planUnderLease(
+        db,
+        decisions,
+        reconciler,
+        rootBypass.projectId,
+      );
+      const rootBypassResult = await rotations.rotate(rootBypassPlan.lease, {
+        decisionId: rootBypassPlan.decisionId,
+        planned: rotation(rootBypassPlan.outcome),
+      });
+      assert.equal(rootBypassResult.action.status, 'APPLIED');
+      const rootBypassSession = await db.session.findUniqueOrThrow({
+        where: { id: rootBypassResult.sessionId! },
+      });
+      assert.equal(rootBypassSession.permissionMode, PermissionMode.DONT_ASK);
+      const rootBypassAction = await db.projectAction.findUniqueOrThrow({
+        where: { id: rootBypassResult.action.actionId },
+      });
+      const rootBypassContext = rootBypassAction.executionContext as unknown as {
+        result?: { permissionMode?: string };
+      };
+      assert.equal(rootBypassContext.result?.permissionMode, PermissionMode.DONT_ASK);
+      assert.equal(await reconciler.releaseLease(rootBypassPlan.lease), true);
+      notifications.length = 0;
 
       // ── §8.4 · the replaced process cannot rotate, and leaves nothing behind ─────────────────
       const takeover = await fixture(db, 'takeover', { coordinatorStatus: RunStatus.FAILED });

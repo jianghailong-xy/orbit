@@ -260,6 +260,8 @@ model User {
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   clientVersions   ClientVersion[] // which build of each client this user is running
+  mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
+  agents           Agent[] // Agent identities this user owns (tenant scope)
 
   @@map("user")
 }
@@ -646,6 +648,77 @@ model Workspace {
   @@map("workspace")
 }
 
+/// WHO does the work — an identity, and nothing about where it runs.
+///
+/// Today an "Agent" on the wire is a `workspace` row (MCP `agent_list`, `orbit agent`,
+/// `task.assignee_id`, `project_member.agent_id` all mean that table), which is exactly the defect
+/// this project exists to remove: a workspace names a machine and a directory, so choosing WHO
+/// does a task silently chose WHICH MACHINE ran it. Splitting the identity out is what lets a
+/// task be handed to "the iOS build agent" without that also being a decision about a Mac.
+///
+/// The core constraint is therefore a NEGATIVE one (contract §3.1 A1): this table must never grow
+/// `runnerId`, `targetRunnerId`, `targetLabels`, `workDir`, `enableWorktree` or `env`. Where the
+/// work runs is resolved separately, from the Project's workspaces and the runner capabilities the
+/// task requires. `agent-schema.spec.ts` asserts the absence, because a column added "just for
+/// convenience" is how the coupling would come back.
+model Agent {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  ownerId              String    @map("owner_id") @db.Uuid
+  owner                User      @relation(fields: [ownerId], references: [id])
+  /// Display name. Unique per owner among LIVE rows only — the partial unique index
+  /// (`agent_owner_id_name_active_key`, `WHERE deleted_at IS NULL`) lives in the migration because
+  /// schema.prisma cannot express a partial index, exactly as 0108/0110/0111 do for theirs.
+  /// A plain `@@unique([ownerId, name])` would let a soft-deleted row hold a name for ever.
+  name                 String
+  description          String?
+  /// A human-facing label ("coordinator", "product", "ux", "dev", "qa", …) and nothing more.
+  /// Contract §3.1 A3: this column takes NO part in any authorization decision. The authoritative
+  /// role inside a project is `project_member.role`, which is scoped to that project and enforced
+  /// by an index; a global string on the identity would be a permission anybody can rename.
+  role                 String?
+  systemPrompt         String?   @map("system_prompt")
+  appendSystemPrompt   String?   @map("append_system_prompt")
+  /// What this identity runs on by default. NULL = inherit the owner-level default, which is the
+  /// value every mirrored legacy agent keeps: a workspace never named a provider (the provider is
+  /// derived from what it last ran), so writing one here during the migration would be inventing a
+  /// decision the user never made.
+  defaultProvider      String?   @map("default_provider")
+  defaultModel         String?   @map("default_model")
+  defaultEffort        String?   @map("default_effort")
+  /// Explicit, ordered fallback: `[{provider, model?}]`. Empty — the default — means DO NOT
+  /// downgrade: an unavailable provider fails the run and says so (contract §7.4). Silently
+  /// running somebody's task on a different engine is the failure this default exists to prevent.
+  providerFallbacks    Json      @default("[]") @map("provider_fallbacks")
+  disallowedTools      Json      @default("[]") @map("disallowed_tools")
+  /// This identity's baseline Runtime Requirement (an iOS build agent is permanently `["macos"]`).
+  /// Matched against what a runner REPORTS it can do, so the requirement is a fact about the work
+  /// rather than a pointer at one machine.
+  requiredCapabilities String[]  @default([]) @map("required_capabilities")
+  /// Project permissions, both closed by default (contract §8). A project may narrow them further
+  /// on the membership row; it may never widen them from here.
+  canCreateTasks       Boolean   @default(false) @map("can_create_tasks")
+  canDelegate          Boolean   @default(false) @map("can_delegate")
+  /// Off = cannot be assigned and cannot be dispatched. Kept distinct from `deletedAt`: disabled
+  /// is a reversible operational state, deleted is a removal that in-flight sessions survive.
+  enabled              Boolean   @default(true)
+  /// Creation order, and the deterministic tie-break the mirror backfill numbers duplicate names
+  /// by, so re-running it produces the same assignment.
+  createdAt            DateTime  @default(now()) @map("created_at")
+  /// Soft delete, same semantics as `workspace.deletedAt`: the row stays so history keeps
+  /// resolving, every user-facing listing filters on NULL, and in-flight sessions are unaffected.
+  deletedAt            DateTime? @map("deleted_at")
+  /// MIGRATION ONLY: the `workspace` row this identity was mirrored out of. Written once by
+  /// `0129_project_agent_identity` and read in exactly two places (contract §3.1 A4) — the
+  /// `workspace <-> agent` compatibility lookup, and that migration's own idempotency key. No
+  /// resolution chain and no authorization check may read it, and a hand-created Agent is always
+  /// NULL. Deliberately NOT a foreign key: the contract states no referential action for it, and
+  /// the mirror set includes soft-deleted sources whose rows this column must keep naming.
+  legacyWorkspaceId    String?   @unique @map("legacy_workspace_id") @db.Uuid
+
+  @@index([ownerId])
+  @@map("agent")
+}
+
 /// A tool call this workspace's sessions may make without asking a human again — written
 /// when someone answers an approval with "always allow", read back into every later session
 /// of the same workspace.
@@ -958,6 +1031,8 @@ model Session {
   // Personal colored labels applied to this session (many-to-many via the join table).
   tagLinks              SessionTagLink[]
   resultOfProjectAction ProjectAction? @relation("ProjectActionResultSession")
+  // Append-only record of every merge attempted for this session's branch, however it was made.
+  mergeReceipts         SessionMergeReceipt[]
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -994,6 +1069,91 @@ model InboxLeaseGeneration {
 // list payload — it's fetched only when the user opens a file's diff (GET /sessions/:id/diff).
 // The runner upserts it each turn (live, uncommitted) and at completion (committed). `patches`
 // is a FilePatch[] ({ path, patch?, truncated? }) — see @orbit/shared.
+/// One merge of one session's branch, as it actually happened (§13.7 MR1).
+///
+/// The row exists because `Session.merge_status` could not be the answer and was being asked to be
+/// one. That column is LIVE UI state for the "Merge to main" button: it is written when a merge is
+/// queued, and deliberately cleared again when the session is resumed or takes another turn. It is
+/// also only ever written by the one path that goes through Orbit — so a branch merged the way
+/// these branches are actually merged, by an agent running `git merge --ff-only` in its own
+/// worktree, left `merge_status` NULL and `branch_merged` false FOREVER, and the control plane's
+/// honest answer to "did this task's work land" was "no idea".
+///
+/// So this table records the merge and that column keeps showing it. A receipt is APPEND-ONLY
+/// (migration 0128 refuses UPDATE) because it is a statement about a moment: the target moves
+/// afterwards, and a receipt that were kept current would stop being evidence of anything.
+///
+/// It names every address the audit needs to join on — the session, its task, its project — and
+/// every SHA the claim can be checked against: what was merged, what it was merged into before and
+/// after, and which base the source had been rebased onto when the merge was computed. `rebaseBase`
+/// is the one people leave out and the one that decides whether "the tests passed" was about this
+/// world: a branch merged clean onto a target it was never rebased against tested a different tree.
+model SessionMergeReceipt {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  /// Tenant scope. Denormalized from the session on purpose: every read of this table filters by
+  /// it, and a receipt whose reachability depends on joining a row that may be soft-deleted is a
+  /// receipt that can go quiet exactly when somebody is auditing it.
+  ownerId   String  @map("owner_id") @db.Uuid
+  owner     User    @relation(fields: [ownerId], references: [id])
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  /// The work this merge was FOR. Optional because a session need not be task-bound; SetNull
+  /// because deleting a task must not delete the evidence that its branch landed.
+  taskId    String? @map("task_id") @db.Uuid
+  task      Task?   @relation("TaskMergeReceipt", fields: [taskId], references: [id], onDelete: SetNull)
+  /// Denormalized from the task at write time, so "which merges does this project's acceptance get
+  /// to stand on" is one indexed read and stays answerable after the task is re-filed.
+  projectId String?  @map("project_id") @db.Uuid
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// What happened. Closed set, frozen by a CHECK in migration 0128:
+  /// `MERGED` (the target moved and now contains this source), `ALREADY_MERGED` (it was already
+  /// there — the external-ff-only and re-run cases, which are a RESULT and not a no-op), `CONFLICT`
+  /// (git refused, `conflicts` names the paths) and `ERROR` (everything else, `detail` says what).
+  result String
+
+  sourceBranch String  @map("source_branch")
+  /// The exact source tip this receipt is about. Full 40-hex, lowercase, checked: an abbreviated
+  /// SHA is ambiguous by construction and this row's whole purpose is to be checkable later.
+  sourceSha    String  @map("source_sha") @db.Char(40)
+  targetBranch String  @map("target_branch")
+  /// The target before and after. `targetShaAfter` is NOT NULL for `MERGED` (0128's CHECK): a
+  /// merge that cannot say where the target ended up is a claim, not a receipt.
+  targetShaBefore String? @map("target_sha_before") @db.Char(40)
+  targetShaAfter  String? @map("target_sha_after") @db.Char(40)
+  /// The base `sourceSha` was rebased onto before the merge was computed, when it was rebased at
+  /// all. NULL means "not rebased", which is a different statement from "unknown" only because
+  /// `detail` is where an unknown goes.
+  rebaseBaseSha   String? @map("rebase_base_sha") @db.Char(40)
+
+  /// Paths git reported as conflicting. Empty for every non-CONFLICT result.
+  conflicts String[] @default([])
+
+  /// WHO recorded it: `RUNNER` (Orbit's own merge path reporting its outcome), `AGENT` (a worker
+  /// recording a merge it made itself, which is the external-ff-only case) or `USER`. Closed set,
+  /// frozen by a CHECK. It is provenance, never an input to a decision.
+  recordedBy String @map("recorded_by")
+
+  /// The raw observation: the command, its output, the refs read. Display and diagnosis only.
+  detail Json @default("{}")
+
+  /// What makes re-recording the same merge a no-op rather than a second row. Supplied by the
+  /// caller when it has a natural one, otherwise derived from
+  /// `(sessionId, sourceSha, targetBranch, result)` — the four facts that make two reports the
+  /// same report. Unique WITHIN a session, not globally: two sessions merging the same commit into
+  /// the same branch is two merges and deserves two receipts.
+  idempotencyKey String @map("idempotency_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([sessionId, idempotencyKey])
+  @@index([sessionId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([ownerId, createdAt])
+  @@map("session_merge_receipt")
+}
+
 model SessionDiff {
   sessionId String   @id @map("session_id") @db.Uuid
   patches   Json
@@ -1332,6 +1492,22 @@ model Project {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// The acceptance run this project's DONE is standing on (§13.4 AE2), and the only thing that
+  /// makes a DONE legal for a project that has ever been accepted natively. Written in the same
+  /// locked transaction as `status = DONE`, and cleared by the reopen path — so "DONE" and "there
+  /// is evidence for it" are one row and cannot drift apart.
+  ///
+  /// A plain column rather than a Prisma relation: `project → run → project` is a cycle Prisma
+  /// refuses to give referential actions to. The foreign key is real all the same — migration 0127
+  /// declares it `ON DELETE SET NULL`.
+  acceptedRunId String? @map("accepted_run_id") @db.Uuid
+
+  /// When this project was marked as carrying a DONE that predates native acceptance (§13.5 LG1).
+  /// Migration 0127 stamps every project that was already DONE, which is what keeps AC11's promise
+  /// here: an old DONE is not reopened, not invalidated and not silently re-labelled as evidence —
+  /// it is labelled as exactly what it is, and the label is what the next DONE has to replace.
+  legacyAcceptedAt DateTime? @map("legacy_accepted_at")
+
   tasks   Task[]
   members ProjectMember[]
   runtime ProjectRuntime?
@@ -1340,6 +1516,10 @@ model Project {
   decisions ProjectDecision[]
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
+  acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
+  acceptanceAudit ProjectAcceptanceAudit[]
+  mergeEvidence   ProjectMergeEvidence[]
+  mergeReceipts   SessionMergeReceipt[]
 
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
@@ -1516,7 +1696,8 @@ model ProjectDecision {
   reason               String
   createdAt            DateTime @default(now()) @map("created_at")
 
-  actions ProjectAction[]
+  actions        ProjectAction[]
+  acceptanceRuns ProjectAcceptanceRun[]
 
   @@unique([id, projectId])
   @@index([projectId, createdAt])
@@ -1683,6 +1864,191 @@ model ProjectEvent {
 
   @@index([projectId])
   @@map("project_event")
+}
+
+
+/// The conclusion an acceptance run — or one of its criteria — reached. Deliberately its own enum
+/// rather than a second use of `TaskVerdict`: a project-level acceptance is not a verification
+/// task, and one enum shared by two subjects is the one that grows a value only one of them means.
+enum ProjectAcceptanceVerdict {
+  PASS
+  FAIL
+  INCONCLUSIVE
+
+  @@map("project_acceptance_verdict")
+}
+
+/// One attempt at project-level acceptance (contract §13.4 AE1/AE2, §13.5).
+///
+/// This is the row that replaces "somebody wrote PASS in a task comment". A `DONE` is only ever
+/// allowed against a run in this table, and only while the run's `inputDigest` still equals the
+/// digest recomputed from the project's CURRENT facts — so the evidence is bound to the world it
+/// was gathered in rather than merely existing somewhere in the history.
+///
+/// Terminal rows are immutable: `project_acceptance_run_immutable_guard` (migration 0127) refuses
+/// every UPDATE of a run that already carries a verdict except the two lifecycle stamps
+/// (`supersededAt`, `supersededReason`). The audit is therefore append-only in the way §8.2 GE1
+/// means it — a conclusion cannot be rewritten after the fact, only superseded by a newer run.
+model ProjectAcceptanceRun {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation("ProjectAcceptanceRuns", fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// The epoch this run was claimed at — `project_runtime.acceptance_attempt` as read when the run
+  /// opened, with the `+1` committed in the same transaction (§13.4 AE11). Monotonic and never
+  /// reused, which is what makes `(projectId, attempt)` a permanent name for one attempt.
+  attempt BigInt
+
+  /// The criteria this run actually judged, frozen at open: the raw text plus its sha256. A run is
+  /// evidence about a stated condition, and a condition that can be edited afterwards is not one.
+  criteriaSnapshot String  @map("criteria_snapshot")
+  criteriaRevision String  @map("criteria_revision") @db.Char(64)
+
+  /// AE1's `acceptanceDigest` over the four projections, computed under the project row lock when
+  /// the run opened. The DONE gate recomputes it and compares; a mismatch is `ACCEPTANCE_EVIDENCE_STALE`.
+  inputDigest String @map("input_digest") @db.Char(64)
+  /// The digest of what this run CONCLUDED — the ordered per-criterion verdicts. Null until the run
+  /// is finalized. Kept separate from `inputDigest` for the reason §7.4 EC2-b keeps the action's two
+  /// digests apart: what was judged and what the judgement was are two different questions.
+  resultDigest String? @map("result_digest") @db.Char(64)
+
+  /// Null while the run is open; a value makes the run terminal and immutable.
+  verdict ProjectAcceptanceVerdict?
+
+  /// COORDINATOR_AGENT or USER — the same closed pair `project_decision.decided_by` carries, and
+  /// the reason it is recorded here too: §13.4 clause 3 requires the acceptance record itself to
+  /// say who concluded, not only which pass produced it.
+  decidedBy String @map("decided_by")
+
+  /// Historical attribution, deliberately without foreign keys (the reason `project_decision`'s
+  /// pair has none): rotating or deleting a coordinator must not rewrite who ran an acceptance.
+  coordinatorAgentId   String? @map("coordinator_agent_id") @db.Uuid
+  coordinatorSessionId String? @map("coordinator_session_id") @db.Uuid
+
+  /// Ledger lineage, when this run was produced by a `RUN_PROJECT_ACCEPTANCE` pass rather than by a
+  /// person. Both are optional: a user may run acceptance without the control loop being enabled.
+  decisionId       String?          @map("decision_id") @db.Uuid
+  decision         ProjectDecision? @relation(fields: [decisionId, projectId], references: [id, projectId], onDelete: NoAction)
+  projectActionId  String?          @map("project_action_id") @db.Uuid
+
+  /// Why this run no longer counts. Set — never cleared — when a newer run opens, or when any
+  /// acceptance fact changed after a DONE (§13.4 AE8). Superseding rather than deleting is what
+  /// keeps "what did we think last week, and what ended it" answerable.
+  supersededAt     DateTime? @map("superseded_at")
+  supersededReason String?   @map("superseded_reason")
+
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  criteria ProjectAcceptanceCriterion[]
+
+  @@unique([projectId, attempt])
+  @@index([projectId, createdAt])
+  @@map("project_acceptance_run")
+}
+
+/// One stated criterion, and what this run concluded about it (contract §13.4 clause 3).
+///
+/// The per-criterion row is the whole point: "the project passed" is not a fact anybody can check,
+/// while "criterion 7 passed, here is the command, the output and the SHA" is. A run cannot reach
+/// PASS unless every criterion parsed out of the snapshot has a row here with a PASS verdict.
+model ProjectAcceptanceCriterion {
+  id        String               @id @default(uuid(7)) @db.Uuid
+  runId     String               @map("run_id") @db.Uuid
+  run       ProjectAcceptanceRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  /// Denormalized so tenancy and the audit reads filter without joining the run. Kept in step by
+  /// the service, which only ever writes it from the run it just locked.
+  projectId String               @map("project_id") @db.Uuid
+
+  /// Position in the snapshot, 1-based, and the stable content key of the criterion line. The key
+  /// is what lets a later run be lined up against this one when the criteria text was reordered.
+  ordinal       Int
+  criterionKey  String @map("criterion_key")
+  criterionText String @map("criterion_text")
+
+  verdict ProjectAcceptanceVerdict?
+  summary String?
+  /// Commands, key output, SHAs, environment — §13.4 clause 3's evidence, as JSON so a checker can
+  /// read it without parsing prose.
+  evidence Json @default("{}")
+
+  /// What in Orbit this conclusion leans on. Historical ids without foreign keys, for the reason
+  /// the run's attribution columns have none.
+  evidenceTaskId    String? @map("evidence_task_id") @db.Uuid
+  evidenceSessionId String? @map("evidence_session_id") @db.Uuid
+
+  decidedAt DateTime? @map("decided_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([runId, ordinal])
+  @@index([projectId])
+  @@map("project_acceptance_criterion")
+}
+
+/// The database's own record of what a target branch contained when it was last observed
+/// (contract §13.4 AE9).
+///
+/// `mergeEvidence` is the one acceptance projection that describes the world OUTSIDE the database,
+/// and AE9-a is explicit about what that means: a DONE asserts "on the content observed at
+/// `refGeneration = g`, acceptance passed" — not "the branch is like this now". `contentHash` is
+/// taken BY CONTENT (AE9-b / §13.4 clause 6), never from `git branch --contains`, which is a
+/// guaranteed false negative after a squash.
+///
+/// A row is never updated in place when the content differs: the writer inserts a new row with
+/// `refGeneration + 1`, which is what makes "the branch moved and moved back" visible in a database
+/// that cannot lock a git ref.
+model ProjectMergeEvidence {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// What was required, and where it had to land. Free-form on purpose: a requirement is stated by
+  /// whoever states the acceptance criteria, and forcing it into an id would invent an entity §2.3
+  /// forbids.
+  requirementId String @map("requirement_id")
+  targetBranch  String @map("target_branch")
+
+  /// The normalized content observation, and the monotonic generation it belongs to.
+  contentHash   String @map("content_hash") @db.Char(64)
+  refGeneration BigInt @map("ref_generation")
+
+  /// How it was observed, and the raw observation behind the hash (command, output, blob ids).
+  source String @default("MERGE_EVIDENCE_WRITER")
+  detail Json   @default("{}")
+
+  observedAt DateTime @default(now()) @map("observed_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  @@unique([projectId, requirementId, targetBranch, refGeneration])
+  @@index([projectId, requirementId, targetBranch])
+  @@map("project_merge_evidence")
+}
+
+/// Append-only audit of everything that happened to a project's acceptance standing: a run opened
+/// or finalized, a DONE bound to a run, a DONE refused and why, a terminal project reopened because
+/// an acceptance fact changed underneath it (§13.4 AE8's `reopened_by_fact_change`).
+///
+/// Separate from `project_decision` because most of these rows are not decisions of the control
+/// loop at all — a user pressing DONE and being refused produces one, and it is exactly the row
+/// somebody needs when they ask why the button did nothing.
+model ProjectAcceptanceAudit {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  /// Closed set, frozen by a CHECK in migration 0127 rather than by an enum: these values are read
+  /// by the audit face and by the reopen trigger, and a CHECK is the spelling a trigger can write.
+  kind String
+
+  runId  String? @map("run_id") @db.Uuid
+  reason String?
+  detail Json    @default("{}")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([projectId, createdAt])
+  @@map("project_acceptance_audit")
 }
 
 model TaskList {
@@ -1993,6 +2359,38 @@ model Task {
   verifiesTaskId   String?     @map("verifies_task_id") @db.Uuid
   verifies         Task?       @relation("TaskVerification", fields: [verifiesTaskId], references: [id], onDelete: Cascade)
   verifiedBy       Task[]      @relation("TaskVerification")
+  /// The later attempt that took this one's place (§13.6 SU1).
+  ///
+  /// It exists because the alternative was in production and did not work: a review that was
+  /// re-run from scratch left its earlier attempts CANCELLED with the reason in a free-text
+  /// comment, so "was this dropped, or is it being done again over there" was a question only a
+  /// person reading prose could answer — and the answer was invisible to every query, every list
+  /// and every acceptance read.
+  ///
+  /// Only a task that has already stopped may be linked (`CANCELLED` or `FAILED`, enforced by
+  /// migration 0128's trigger), and linking writes nothing to `status`: the original failure is
+  /// the fact being preserved, not the one being cleaned up. The successor must belong to the same
+  /// owner and the same project, and the chain it forms is acyclic — all three checked by the same
+  /// trigger, because a supersession that crosses a tenant or closes a loop is not a weaker version
+  /// of the same claim, it is a different one. A task naming ITSELF is the acyclicity rule's
+  /// zero-hop case rather than a rule of its own.
+  ///
+  /// SetNull on delete, like `parentTaskId` and for the same reason: deleting the successor must
+  /// not refuse the delete or destroy the row that points at it. What survives is
+  /// `terminalReason = 'SUPERSEDED'` with nothing to name, which reads back as
+  /// `supersededByTaskIdAbsentReason = 'SUCCESSOR_DELETED'` rather than as "never superseded".
+  supersededByTaskId String?  @map("superseded_by_task_id") @db.Uuid
+  supersededBy       Task?    @relation("TaskSupersession", fields: [supersededByTaskId], references: [id], onDelete: SetNull)
+  supersedes         Task[]   @relation("TaskSupersession")
+  supersededAt       DateTime? @map("superseded_at")
+  /// WHY this task stopped, when its status alone does not say. Closed set, frozen by a CHECK in
+  /// migration 0128: `SUPERSEDED` (a successor is doing it instead) and `ABANDONED` (nobody is).
+  ///
+  /// Two values rather than four: `FAILED` and `CANCELLED` are already `status`, and a column that
+  /// restates its neighbour is a column that can disagree with it. This one answers only the
+  /// question `status` cannot — a CANCELLED task that was replaced and a CANCELLED task that was
+  /// dropped are the same status and opposite facts.
+  terminalReason     String?  @map("terminal_reason")
   // Best-effort dedup of a redelivered turn's re-created tasks: a hash of (session, turn, title,
   // description), set only when the create happens inside a live turn (see TasksService). @unique
   // gives a Postgres unique index, which by default treats NULLs as distinct — so the many tasks
@@ -2012,6 +2410,8 @@ model Task {
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
   verdictFailuresAbout    TaskVerificationFailure[] @relation("VerificationFailureSubject")
   verdictFailuresRepaired TaskVerificationFailure[] @relation("VerificationFailureDefect")
+  /// Merges recorded against this task's branches (§13.7 MR1).
+  mergeReceipts           SessionMergeReceipt[]    @relation("TaskMergeReceipt")
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -2045,6 +2445,11 @@ model Task {
   /// Both dispatcher questions about a verification — "is one already in flight for this
   /// subject" and "how many has it had" — key on this column.
   @@index([verifiesTaskId])
+  /// "what replaced this" is the column; "what did this replace" is the index. The successor chain
+  /// is walked in both directions — forward by a reader following one task to the attempt that is
+  /// actually running, backward by the acyclicity trigger and by every list that wants to show a
+  /// live task's abandoned predecessors.
+  @@index([supersededByTaskId])
   @@map("task")
 }
 

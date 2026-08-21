@@ -482,7 +482,8 @@ struct NewSessionView: View {
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
             configuredProvidersLoaded: configuredProvidersLoaded,
-            modelCatalog: modelCatalog, onCreated: onCreated))
+            modelCatalog: modelCatalog, accountDefaultEffort: defaultEffort,
+            onCreated: onCreated))
     }
 
     var body: some View {
@@ -604,15 +605,11 @@ struct NewSessionView: View {
             draft.adoptDraftProviderContext(
                 configuredProviders, loaded: configuredProvidersLoaded, defaultModel: model)
         }
-        // Seed the effort pill from the account default. Reactive on `defaultEffort` so a value
-        // that lands after the draft was built (async `user` prime on a restored-token launch) is
-        // still adopted. Wait for the runner catalog first so an OpenCode model-specific variant
-        // cannot leak into a different model/runtime. An explicit agent effort — including "" —
-        // is authoritative and never falls through to this account preference (web parity).
+        // Re-resolve the effort pill when the account preference lands after the draft was built
+        // (async `user` prime on a restored-token launch). The model owns the edit revision, so this
+        // account-last-picked refill cannot overwrite a picker action made while it was loading.
         .task(id: defaultEffort) {
-            if draft.effort == .default, let raw = defaultEffort, let e = Effort(rawValue: raw) {
-                draft.effort = AgentDefaults.normalizeEffort(e, for: draft.provider)
-            }
+            draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
         .sheet(isPresented: $showSwitcher) {
             AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,

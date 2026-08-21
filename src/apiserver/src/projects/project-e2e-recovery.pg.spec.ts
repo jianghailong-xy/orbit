@@ -123,7 +123,7 @@ function spawnCrashingPass(
   const script = String.raw`
     const { servicesOn } = require('./build/projects/project-e2e-harness.js');
     (async () => {
-      const services = servicesOn(process.env.PCC_CHILD_URL, { registerHandler: false });
+      const services = servicesOn(process.env.PCC_CHILD_URL, { registerHandler: false, registerDispatchPass: false });
       const reconciler = services.reconciler;
       // The production handler, wrapped rather than replaced: the pass runs in full and the only
       // thing added is where the process stops.
@@ -193,7 +193,12 @@ async function kill(child: ChildProcessWithoutNullStreams): Promise<void> {
 test('unit 22: the project control loop under injected faults', { skip, timeout: 900_000 },
   async (t) => {
     let identity = await connectIsolatedPg(URL);
-    const services = servicesOn(URL!);
+    // Every scenario below drives dispatch itself — by hand, at a chosen attempt number, and often
+    // against a world it has just broken on purpose — and several count the passes and decisions a
+    // single delivery produces. §7.8's pass would add a second dispatcher to that, so it is left
+    // out here and proved in `project-dispatch-pass.pg.spec.ts` instead, on the same rig. The rest
+    // of the production graph is wired exactly as `ProjectsModule` wires it.
+    const services = servicesOn(URL!, { registerDispatchPass: false });
 
     const scenario = async (name: string, body: () => Promise<void>): Promise<void> => {
       await t.test(name, async () => {
@@ -664,7 +669,7 @@ test('unit 22: the project control loop under injected faults', { skip, timeout:
       await scenario('AC9: two instances contend and exactly one holds the project', async () => {
         const target = await world(services.db, 'ac9-lease');
         await task(services.db, target, 'work');
-        const other = servicesOn(URL!);
+        const other = servicesOn(URL!, { registerDispatchPass: false });
         try {
           const now = new Date();
           const [a, b] = await Promise.all([

@@ -47,4 +47,19 @@ final class SessionCreateCodableTests: XCTestCase {
         XCTAssertEqual(obj["model"] as? String, "")
         XCTAssertEqual(obj["effort"] as? String, "max")
     }
+
+    /// Ultra is a real Codex wire value, not a display-only alias. Every session write path used by
+    /// the composer must preserve it verbatim rather than folding it into the adjacent Max level.
+    func testCodexUltraPassesThroughEverySessionWrite() throws {
+        let created = try jsonObject(CreateSessionRequest(
+            prompt: "do it", agentId: "ag1", model: "gpt-5.6-sol", effort: "ultra"))
+        XCTAssertEqual(created["effort"] as? String, "ultra")
+
+        let resumed = try jsonObject(ResumeRequest(
+            clientTurnId: "c1", content: "continue", model: "gpt-5.6-sol", effort: "ultra"))
+        XCTAssertEqual(resumed["effort"] as? String, "ultra")
+
+        let updated = try jsonObject(ConfigUpdateRequest(effort: "ultra"))
+        XCTAssertEqual(updated["effort"] as? String, "ultra")
+    }
 }

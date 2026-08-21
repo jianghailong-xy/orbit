@@ -2,101 +2,14 @@ import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nes
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { PUBLIC_ID_FIELDS, uuidToBase62 } from '@orbit/shared';
 import { MACHINE_PROTOCOL } from './machine-protocol';
+import { addTwins, rememberBoundary } from './public-id-body';
 
 /**
- * Serve every public id in both spellings: alongside `sessionId` (the UUID the columns key by),
- * emit `sessionPublicId` (the base62 short form the URLs carry).
+ * Serve every public id in both spellings on the value a handler RETURNS. `public-id-body.ts`
+ * holds the mapping itself and the reasoning behind it; `PublicIdExceptionFilter` applies the same
+ * mapping to the value a handler THROWS.
  *
- * Phase 1 of docs/public-id-migration-design.md. The end state is that base62 IS the id above the
- * API line; this is the step that lets clients start reading it without a flag day. Shipped
- * clients keep reading the UUID field they always have; new ones read the twin; neither has to
- * know the other exists. `WorkspaceAliasInterceptor` next to this one does the same trick for the
- * Agent → Workspace rename, and this deliberately copies its shape.
- *
- * DELETE the UUID half — not this file — once `client_version` says nothing in the field still
- * reads it. That table exists precisely so this decision is a query and not a guess; a shim with
- * no measurable expiry is a permanent one.
- *
- * WHY AN ALLOWLIST, and why it is the same list the input side decodes: the wire is full of
- * uuid-shaped values that are not addresses. Lease and fence tokens (`leaseOwner`, `operationId`,
- * `generation`) are `@db.Uuid` columns the runner echoes back byte-for-byte into raw SQL casts —
- * they are in `NEVER_PUBLIC_ID_FIELDS`, so no fence is reachable from here whatever the boundary
- * below decides —
- * translate one on the way out without decoding it on the way back in and the fence stops
- * matching, silently, forever. `PUBLIC_ID_FIELDS` is the single classification both directions
- * read, and `public-id-coverage.spec.ts` fails the build when a new column joins neither set.
- */
-
-/** `sessionId` → `sessionPublicId`, `taskIds` → `taskPublicIds`. Two names carry no `Id` suffix
- *  to rewrite, so they say what they become. */
-const IRREGULAR: Readonly<Record<string, string>> = { id: 'publicId', mentions: 'mentionPublicIds' };
-
-const TWIN: ReadonlyMap<string, string> = new Map(
-  [...PUBLIC_ID_FIELDS].map((field) => [
-    field,
-    IRREGULAR[field] ?? field.replace(/Ids$/, 'PublicIds').replace(/Id$/, 'PublicId'),
-  ]),
-);
-
-/** Same cap, and the same reason, as WorkspaceAliasInterceptor: a cycle or a pathological body
- *  must not turn one response into an unbounded walk. */
-const MAX_DEPTH = 8;
-
-/** Anything that isn't a canonical UUID is left alone rather than rejected. Response bodies carry
- *  opaque third-party JSON — a `tool_use` block's `id` is `toolu_01…`, not an address — and an
- *  interceptor that throws turns a working endpoint into a 500. */
-function encode(value: unknown): unknown {
-  if (value === null) return null;
-  if (typeof value === 'string') {
-    try {
-      return uuidToBase62(value);
-    } catch {
-      return undefined;
-    }
-  }
-  if (Array.isArray(value)) {
-    const out: string[] = [];
-    for (const item of value) {
-      if (typeof item !== 'string') return undefined;
-      try {
-        out.push(uuidToBase62(item));
-      } catch {
-        // A half-encoded array is worse than none: the caller cannot tell which half is which.
-        return undefined;
-      }
-    }
-    return out;
-  }
-  return undefined;
-}
-
-function addTwins(value: unknown, replaceSource: boolean, depth = 0): unknown {
-  if (depth > MAX_DEPTH || value === null || typeof value !== 'object') return value;
-  if (value instanceof Date || Buffer.isBuffer(value)) return value;
-  if (Array.isArray(value)) {
-    for (const item of value) addTwins(item, replaceSource, depth + 1);
-    return value;
-  }
-  const obj = value as Record<string, unknown>;
-  for (const key of Object.keys(obj)) addTwins(obj[key], replaceSource, depth + 1);
-  for (const [field, twinName] of TWIN) {
-    if (!(field in obj)) continue;
-    const encoded = encode(obj[field]);
-    if (encoded === undefined) continue;
-    // Only ever ADD, and never over a name the handler chose itself — same rule as the alias
-    // interceptor, so a route that already computes its own public id keeps what it wrote.
-    if (!(twinName in obj)) obj[twinName] = encoded;
-    // Phase 3: for a client that asked for it, `id` IS the public id. Guarded on a successful
-    // encode, so a field holding something that isn't a UUID (`id: "toolu_01…"`) is never
-    // rewritten into something the caller didn't send.
-    if (replaceSource && encoded !== null) obj[field] = encoded;
-  }
-  return obj;
-}
-
-/**
  * The one boundary that is NOT the public id's: the machine protocol.
  *
  * Everywhere else, `id` is the public id, unconditionally — no header, no negotiation, one
@@ -117,6 +30,9 @@ export class PublicIdInterceptor implements NestInterceptor {
     // getClass() only, not getHandler(): keying is a property of the whole protocol, and a
     // per-route opt-out is exactly the kind of thing that gets forgotten on the next route added.
     const replaceSource = !this.reflector.get<boolean>(MACHINE_PROTOCOL, context.getClass());
+    // This stage is the last one that knows the controller class. Write the answer down for the
+    // exception filter, which does not get one — see `rememberBoundary`.
+    rememberBoundary(context, replaceSource);
     return next.handle().pipe(map((body) => addTwins(body, replaceSource)));
   }
 }

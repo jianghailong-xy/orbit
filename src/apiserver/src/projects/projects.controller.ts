@@ -16,10 +16,14 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
+  FinalizeAcceptanceRunDto,
+  OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
+  RecordMergeEvidenceDto,
   TriggerProjectCoordinatorDto,
   UpdateProjectDto,
 } from './dto';
+import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
@@ -27,7 +31,10 @@ const PROJECT_STATUSES = Object.values(ProjectStatus);
 @UseGuards(JwtAuthGuard)
 @Controller('projects')
 export class ProjectsController {
-  constructor(private readonly projects: ProjectsService) {}
+  constructor(
+    private readonly projects: ProjectsService,
+    private readonly acceptance: ProjectAcceptanceService,
+  ) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateProjectDto) {
@@ -148,6 +155,80 @@ export class ProjectsController {
     @Body() dto: OpenProjectCoordinatorDto,
   ) {
     return this.projects.coordinator(user.userId, id, dto?.workspaceId);
+  }
+
+  /**
+   * This project's acceptance standing (contract §13.4 / AC12), in one read.
+   *
+   * The stated criteria as the parser decomposes them, the digest of the facts a DONE would be
+   * checked against, every attempt with its per-criterion conclusions and evidence, the newest
+   * merge observation per requirement, the append-only audit — and `doneGate`, which is the same
+   * decision the write path makes, evaluated as a read so a client can say what is missing before
+   * anybody presses a button. Ids are Base62.
+   *
+   * A read holds no lock and grants nothing: the gate that DECIDES runs inside the transaction that
+   * writes DONE, under `FOR UPDATE` (§13.4 AE7).
+   */
+  @Get(':id/acceptance')
+  acceptanceOverview(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    const parsed = Number(limit);
+    return this.acceptance.overview(
+      user.userId, id, Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20,
+    );
+  }
+
+  /**
+   * Open an acceptance attempt: freeze the criteria, claim the epoch (§13.4 AE11), and create the
+   * empty per-criterion checklist the conclusion has to fill.
+   *
+   * Opening one supersedes any earlier live attempt — two usable runs would let a caller choose the
+   * conclusion they prefer.
+   */
+  @Post(':id/acceptance/runs')
+  openAcceptanceRun(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: OpenAcceptanceRunDto,
+  ) {
+    return this.acceptance.openRun(user.userId, id, { ...dto, decidedBy: dto.decidedBy ?? 'USER' });
+  }
+
+  /**
+   * Conclude an attempt: one verdict per stated criterion, with its evidence.
+   *
+   * The run's own verdict is derived from the criteria — all PASS is PASS, any FAIL is FAIL, the
+   * rest is INCONCLUSIVE — and cannot be supplied, which is the difference between this and writing
+   * "all green" in a comment.
+   */
+  @Post(':id/acceptance/runs/:runId/verdict')
+  finalizeAcceptanceRun(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Body() dto: FinalizeAcceptanceRunDto,
+  ) {
+    return this.acceptance.finalizeRun(user.userId, id, runId, dto.criteria);
+  }
+
+  /**
+   * Record what a target branch was observed to contain (§13.4 AE9-b) — the only supported way a
+   * `contentHash` enters the database.
+   *
+   * Same content as the newest observation ⇒ only the observation time moves. Different content ⇒ a
+   * new row one generation up, and if this project was DONE against the old content it is reopened
+   * in the same transaction (AE9-c).
+   */
+  @Post(':id/acceptance/merge-evidence')
+  recordMergeEvidence(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RecordMergeEvidenceDto,
+  ) {
+    return this.acceptance.recordMergeEvidence(user.userId, id, dto);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

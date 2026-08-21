@@ -369,7 +369,14 @@ type MergeResultRequest struct {
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
-	Message   string `json:"message,omitempty"`
+	// The branch this merge advanced, the tip it had before, and the base the source was replayed
+	// onto — the fields the control plane's merge receipt (§13.7) is checked against afterwards.
+	// Omitted by an older runner; the receipt is still written, naming what it knows.
+	TargetBranch    string   `json:"targetBranch,omitempty"`
+	TargetShaBefore string   `json:"targetShaBefore,omitempty"`
+	RebaseBaseSha   string   `json:"rebaseBaseSha,omitempty"`
+	Conflicts       []string `json:"conflicts,omitempty"`
+	Message         string   `json:"message,omitempty"`
 }
 
 // CommitCommand mirrors @orbit/shared: a request to commit a live session's uncommitted

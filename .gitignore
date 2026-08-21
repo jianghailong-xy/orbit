@@ -5,6 +5,13 @@ node_modules
 dist/
 dist-bin/
 build/
+# Two apiserver test tsconfigs emit beside `build/` rather than into it, because their specs spawn
+# children that require a tree compiled from a DIFFERENT include set (see
+# tsconfig.project-reconcile-faults.json and tsconfig.project-event-faults.json). `build/` does not
+# match either name, so running the documented fault-injection commands used to leave a few hundred
+# untracked .js/.map files in the worktree.
+build-project-reconcile-faults/
+build-project-event-faults/
 coverage/
 tmp/
 *.log

@@ -14,7 +14,7 @@ import {
   SessionRunSource,
   TaskStatus,
 } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { PermissionMode, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
@@ -76,6 +76,8 @@ interface FixtureOptions {
   memberRole?: ProjectRole;
   requiredCapabilities?: string[];
   coordinatorEnabled?: boolean;
+  defaultPermissionMode?: PermissionMode;
+  runsAsRoot?: boolean;
   owner?: { ownerId: string; runnerId: string; agentId: string };
 }
 
@@ -127,6 +129,9 @@ async function fixture(
         email: `${label}-${ownerId}@pcc14.invalid`,
         name: label,
         passwordHash: 'x',
+        ...(options.defaultPermissionMode
+          ? { preferences: { defaultPermissionMode: options.defaultPermissionMode } }
+          : {}),
       },
     });
     await db.runner.create({
@@ -138,6 +143,7 @@ async function fixture(
         status: options.runnerStatus ?? RunnerStatus.ONLINE,
         capabilities: options.runnerCapabilities ?? ['session-orchestration-credential-v1'],
         capabilitiesReportedAt: options.capabilitiesReported === false ? null : new Date(),
+        runsAsRoot: options.runsAsRoot ?? null,
         ...(options.engines === undefined ? {} : { engines: options.engines }),
       },
     });
@@ -393,6 +399,65 @@ test('all three strategies decide dispatch the same way end to end on real Postg
         0,
         'a max-attempts refusal must not start anything',
       );
+    } finally {
+      await services.db.$disconnect();
+    }
+  });
+
+test('dispatch freezes permission intent before the runtime-default Claude model is known',
+  { skip: !URL, timeout: 180_000 }, async () => {
+    const services = connectServices();
+    try {
+      const auto = await fixture(services.db, 'permission-intent-auto', {
+        provider: 'claude',
+        model: null,
+        defaultPermissionMode: PermissionMode.AUTO,
+      });
+      const autoSessionId = await expectSession(
+        services.db,
+        services.dispatcher,
+        await plan(services, auto),
+      );
+      const autoSession = await services.db.session.findUniqueOrThrow({
+        where: { id: autoSessionId },
+      });
+      assert.equal(autoSession.model, null, 'Queue must still resolve the runtime-default model');
+      assert.equal(autoSession.usesRuntimeDefaultModel, true);
+      assert.equal(autoSession.permissionMode, PermissionMode.AUTO,
+        'a missing model must not prematurely normalize account Auto to Default');
+      const autoAction = await services.db.projectAction.findFirstOrThrow({
+        where: { resultSessionId: autoSessionId },
+      });
+      const autoContext = autoAction.executionContext as {
+        result?: { permissionMode?: string };
+      };
+      assert.equal(autoContext.result?.permissionMode, PermissionMode.AUTO,
+        'the frozen action context must preserve the same account intent as the Session');
+
+      const rootBypass = await fixture(services.db, 'permission-intent-root-bypass', {
+        provider: 'claude',
+        model: null,
+        defaultPermissionMode: PermissionMode.BYPASS,
+        runsAsRoot: true,
+      });
+      const rootSessionId = await expectSession(
+        services.db,
+        services.dispatcher,
+        await plan(services, rootBypass),
+      );
+      const rootSession = await services.db.session.findUniqueOrThrow({
+        where: { id: rootSessionId },
+      });
+      assert.equal(rootSession.permissionMode, PermissionMode.DONT_ASK,
+        'account Bypass must still narrow on a runner where Claude cannot start with it');
+      const rootAction = await services.db.projectAction.findFirstOrThrow({
+        where: { resultSessionId: rootSessionId },
+      });
+      const rootContext = rootAction.executionContext as {
+        result?: { permissionMode?: string };
+      };
+      assert.equal(rootContext.result?.permissionMode, PermissionMode.DONT_ASK,
+        'the immutable action context must match the root-safe Session mode');
     } finally {
       await services.db.$disconnect();
     }
