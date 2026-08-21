@@ -135,7 +135,7 @@ jobs:
           # Prerelease tags (vX.Y.Z-…) publish to the beta channel; stable tags reach everyone.
           channel=""; case "$GITHUB_REF_NAME" in *-*) channel="--channel beta";; esac
           curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
-            https://github.com/sparkle-project/Sparkle/releases/download/2.9.3/Sparkle-2.9.3.tar.xz
+            https://github.com/sparkle-project/Sparkle/releases/download/2.9.6/Sparkle-2.9.6.tar.xz
           mkdir -p "$RUNNER_TEMP/sparkle"; tar -xf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
           work="$RUNNER_TEMP/updates"; mkdir -p "$work/out"
           cp "src/macos/build/Orbit-v$ver-arm64.zip" "$work/"
