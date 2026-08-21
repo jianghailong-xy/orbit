@@ -719,7 +719,11 @@ func codexThreadContextTokens(v interface{}) int {
 	if u == nil {
 		return 0
 	}
-	return codexBreakdownTotalTokens(firstPresent(u, "total"))
+	// `total` is lifetime accounting for the resumed Codex thread and grows without bound across
+	// turns. `last` is the latest model request: its input + output is the reading that can be
+	// compared with modelContextWindow. Using `total` made long sessions report values such as
+	// 15M / 272k and pinned the context gauge at 100% even after compaction.
+	return codexBreakdownTotalTokens(firstPresent(u, "last"))
 }
 
 func codexThreadLastUsage(v interface{}) *TokenUsage {
