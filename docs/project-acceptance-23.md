@@ -537,3 +537,51 @@ Project 现有 47 个 Task：**43 DONE / 1 FAILED / 3 IN_PROGRESS**（含本任�
 → 立即 `git worktree remove`。未使用 `update-ref`、未 `reset`，临时 worktree 已移除，未留任何工作副本。
 本节这次的更正提交走的是同一条路径（同样是临时 clean worktree + `--ff-only` + 立即移除）；
 它只改本节文字，不触碰裁决（仍是 11 PASS / 1 FAIL）、不触碰 04R / 04R2 / 04R3。
+
+### C.11 后记 — C.10 的丢失是真事故，但已被 Coordinator 精确恢复
+
+**C.10 不作修改**：它记录的是当时真实发生的事，保留原样作为事故留痕。本节只补记后续。
+
+Coordinator 已把部署工作树按原样恢复，本单元独立核对过，**不是接受声明而是重算了指纹**。
+
+#### C.11.1 现场核对（只读）
+
+```
+git -C /root/.orbit/worktrees/feat-project-deploy status --porcelain
+M  README.md
+D  docs/project-agent-contract.md
+
+git -C … ls-files -s README.md          → 8da88cf699312bc74ed66da8f93d066ac53dc408
+git -C … diff --cached --binary | sha256sum
+                                        → b77cfe26a8d7a0340688d9efc200d086d24d2d18e9da69453bf35a337c062933
+git -C … diff | wc -c                   → 0
+```
+
+- `/root/.orbit/worktrees/feat-project-deploy` **已重新注册并检出 `feat/project`**（`43ad8551`）。
+- 暂存集合**恰好**是 `M README.md` / `D docs/project-agent-contract.md`，没有第三项。
+- README 的 staged blob 精确为 **`8da88cf699312bc74ed66da8f93d066ac53dc408`**。
+- **无 unstaged diff**（0 字节）。
+
+#### C.11.2 双基线校验：恢复的是同一份内容，不是相似的内容
+
+`feat/project` 已被外部重接到新的 main，树基不同了，所以"指纹没变"这句话必须**指明基线**才有意义。
+把同一份恢复内容分别放到新旧两个基线上重算：
+
+| 基线 | 重算方式 | staged binary diff SHA-256 |
+| --- | --- | --- |
+| **旧** `3bd874e0`（事故前那条历史） | 临时 index：`read-tree 3bd874e0` + `update-index --cacheinfo 100644,8da88cf6…,README.md` + `--force-remove docs/project-agent-contract.md` | **`966c46d48ff68e27f9a479eca869e92a8f203d6c2a4466eaa8d48a2d9fcf8105`** —— 与事故前逐字相同 |
+| **今** `43ad8551`（重接 main 之后） | 同上，基线换成 `43ad8551` | **`b77cfe26a8d7a0340688d9efc200d086d24d2d18e9da69453bf35a337c062933`** —— 与部署工作树现场读数逐字相同 |
+
+两次重算都用**独立的临时 `GIT_INDEX_FILE`**，没有碰部署工作树的真实索引，也没有碰任何工作副本。
+
+结论：**丢的那份暂存内容被完整找回来了。** 旧基线上重算出 `966c46d4…` 这一点尤其关键 ——
+它证明现在这个 blob 就是当初产生那个指纹的同一份内容，而不是一份"看起来差不多"的重建。
+两个指纹不同，只是因为基线不同（新 main 改动了树），不是内容不同。
+
+#### C.11.3 这一节没有改变什么
+
+- **裁决仍是 11 PASS / 1 FAIL。** 恢复的是审计现场，不是任何一条验收标准的证据。
+- **标准 12 仍 FAIL，BLK-23-03 仍开放** —— 04R / 04R2 / 04R3 的持久状态未变，本单元本轮**只读，未修改、未重启、未归档**。
+- **C.10 一字未改。** 事故发生过就是发生过；这里加的是"后来恢复了"，不是把它说成没发生。
+- 本节的提交从 `feat/project@43ad8551` 新建分支写就，**不把事故期那条已分叉的旧历史 merge 回来**，
+  并只在**已恢复的**部署工作树内 `git merge --ff-only`；合并前后都重新核对暂存集合、指纹与 unstaged。
