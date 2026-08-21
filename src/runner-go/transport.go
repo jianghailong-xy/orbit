@@ -952,6 +952,18 @@ func (t *Transport) updateProject(id string, body map[string]interface{}) (json.
 	return out, err
 }
 
+// deleteProject permanently removes one empty project. The server owns the destructive guard:
+// a project with any tasks is refused atomically rather than having those tasks deleted or
+// detached. Keeping the rule there makes the CLI, MCP and user-facing doors identical.
+func (t *Transport) deleteProject(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "DELETE", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err

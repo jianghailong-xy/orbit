@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Headers,
@@ -42,9 +43,10 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * out, and a project whose work is finished could not be marked DONE by the thing that finished
  * it. The fields are not owner-only prose any more.
  *
- * Listing, deletion and opening a coordinator are still not here. Nor are the project's tasks —
- * `ProjectsService.get` returns tallies rather than rows, and the runner already reaches the work
- * through the task routes.
+ * Listing and opening a coordinator are still not here. Deletion mirrors the user door and keeps
+ * its destructive guard: `ProjectsService.remove` only removes an empty project. The project's
+ * tasks are not returned here either — `ProjectsService.get` returns tallies rather than rows, and
+ * the runner already reaches the work through the task routes.
  */
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
@@ -219,6 +221,16 @@ export class RunnerProjectsController {
   ) {
     RunnerProjectsController.refuseGovernance(dto);
     return this.projects.update(runner.ownerId, id, dto);
+  }
+
+  /**
+   * Permanently remove an empty project through the same guarded service as the user door.
+   * ProjectsService owns both tenant scoping and the atomic no-tasks check, so this route cannot
+   * turn deletion into an implicit task delete or detach.
+   */
+  @Delete('projects/:id')
+  removeProject(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.remove(runner.ownerId, id);
   }
 
   /**

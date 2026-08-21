@@ -61,7 +61,7 @@ Usage:
   orbit resume [session-id]         Resume a session in its coding runtime
   orbit task <command>              Manage Orbit tasks
   orbit task-list <command>         Manage Orbit task lists
-  orbit project <command>           Read an Orbit project's durable context
+  orbit project <command>           Manage an Orbit project's durable context
   orbit session <command>           Orchestrate agent sessions (when enabled)
   orbit agent <command>             Inspect and configure agents (when enabled)
   orbit provider <command>          List the providers a session or task may run on

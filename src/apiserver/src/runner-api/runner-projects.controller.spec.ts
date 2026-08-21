@@ -78,7 +78,7 @@ test('getProject is exposed as GET projects/:id', () => {
 // the param has to decode before it reaches a `@db.Uuid` column — the same gate the user-facing
 // ProjectsController puts on the same id. Both id-bearing routes, not just the read: a write that
 // skipped it would hand Prisma a base62 string and answer a legitimate id with a 500.
-for (const method of ['getProject', 'updateProject'] as const) {
+for (const method of ['getProject', 'updateProject', 'removeProject'] as const) {
   test(`the project id is resolved through PublicIdPipe on ${method}`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown; pipes?: unknown[] }>
@@ -102,6 +102,12 @@ test('updateProject is exposed as PATCH projects/:id', () => {
   const handler = RunnerProjectsController.prototype.updateProject;
   assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id');
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.PATCH);
+});
+
+test('removeProject is exposed as DELETE projects/:id', () => {
+  const handler = RunnerProjectsController.prototype.removeProject;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.DELETE);
 });
 
 // An agent's project write is the runner owner's project, exactly as its task writes are — the
@@ -256,7 +262,7 @@ test('createProject reads the session from x-orbit-session-id', () => {
 
 // Reading a project and revising one are not "where am I" questions: neither has a coordinator
 // default to seed, so neither may grow a dependence on the caller's session.
-for (const method of ['getProject', 'updateProject'] as const) {
+for (const method of ['getProject', 'updateProject', 'removeProject'] as const) {
   test(`${method} takes no session context`, () => {
     const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, method) as
       | Record<string, { data?: unknown }>
@@ -330,8 +336,37 @@ test("updating another owner's project stays a 404 from the service", async () =
   );
 });
 
-// The whole surface, named. Growing a list or a delete here is a decision, not a side effect of
-// adding a route — and `getProject` staying a GET is what keeps the read working for the
+test('removeProject deletes through ProjectsService in the runner owner scope', async () => {
+  const seen: { ownerId?: string; projectId?: string } = {};
+  const expected = { ok: true };
+  const projects = {
+    remove: async (ownerId: string, projectId: string) => {
+      seen.ownerId = ownerId;
+      seen.projectId = projectId;
+      return expected;
+    },
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+
+  const result = await controller.removeProject(RUNNER, 'project-1');
+
+  assert.deepEqual(seen, { ownerId: 'owner-1', projectId: 'project-1' });
+  assert.equal(result, expected);
+});
+
+test('removeProject preserves the service refusal for a non-empty project', async () => {
+  const projects = {
+    remove: async () => {
+      throw new Error('This project still holds 2 task(s) and cannot be deleted');
+    },
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+
+  await assert.rejects(() => controller.removeProject(RUNNER, 'project-1'), /still holds 2 task/);
+});
+
+// The whole surface, named. Growing a list or another destructive verb here is a decision, not a
+// side effect of adding a route — and `getProject` staying a GET is what keeps the read working for the
 // coordinators that already depend on it.
 //
 // `projectCoordinatorStatus` joined it in unit 20 (contract AC10) and is a GET for the reason the
@@ -339,7 +374,7 @@ test("updating another owner's project stays a 404 from the service", async () =
 // that unit added — the manual trigger — deliberately did NOT join it. Enqueuing a signal
 // attributed to USER is how a person drives a MANUAL project, so an agent able to do it would be
 // driving its own coordinator; that one stays on the door a person signs in to.
-test('the runner project bridge exposes exactly create, the reads, and update', () => {
+test('the runner project bridge exposes exactly create, the reads, update, and guarded delete', () => {
   const handlers = Object.getOwnPropertyNames(RunnerProjectsController.prototype).filter(
     (name) => name !== 'constructor',
   );
@@ -350,8 +385,8 @@ test('the runner project bridge exposes exactly create, the reads, and update', 
     'blockers',
     'createProject',
     // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
-    // three writes are here. Listing, deletion, opening a coordinator and the manual trigger are
-    // still absent, which is the line this test exists to hold.
+    // three writes are here. Listing, opening a coordinator and the manual trigger are still
+    // absent, which is the line this test exists to hold.
     'finalizeAcceptanceRun',
     'getProject',
     'openAcceptanceRun',
@@ -359,6 +394,7 @@ test('the runner project bridge exposes exactly create, the reads, and update', 
     'projectCoordinatorStatus',
     'projectVerifications',
     'recordMergeEvidence',
+    'removeProject',
     'updateProject',
   ]);
   const verbs = Object.fromEntries(
@@ -377,6 +413,7 @@ test('the runner project bridge exposes exactly create, the reads, and update', 
     projectCoordinatorStatus: RequestMethod.GET,
     projectVerifications: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
+    removeProject: RequestMethod.DELETE,
     updateProject: RequestMethod.PATCH,
   });
 });

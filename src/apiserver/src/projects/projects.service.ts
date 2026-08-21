@@ -1814,8 +1814,10 @@ export class ProjectsService {
    * based the edit on. And coordinating is not doing: the implementation belongs to each task's
    * own session, which is what having a project full of tasks is for.
    *
-   * Still no promise of listing or deleting projects, opening another coordinator, or driving a
-   * runner directly. None of those reaches a runner, and naming one would recreate the hunt.
+   * Still no promise of listing projects, opening another coordinator, or driving a runner
+   * directly. None of those reaches a runner, and naming one would recreate the hunt. Deletion
+   * does reach the runner now, but stays out of startup guidance: it is a destructive cleanup
+   * operation for an explicit request, not part of ordinary coordination.
    */
 
   /** Each field is written only when the caller sent it, so closing a project cannot blank the goal

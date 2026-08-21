@@ -165,7 +165,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// The verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that the
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
-		"get", "status", "verifications", "create", "update",
+		"get", "status", "verifications", "create", "update", "delete",
 		"acceptance", "acceptance-run", "acceptance-verdict", "merge-evidence",
 	} {
 		out.Reset()
@@ -176,9 +176,9 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 			t.Fatalf("project %s --help = %q", action, out.String())
 		}
 	}
-	// Listing, deleting, opening a coordinator and triggering a coordination run stay the human's
-	// door — `status` reads that loop, it does not drive it.
-	for _, forbidden := range []string{"delete", "list", "coordinator", "trigger"} {
+	// Listing, opening a coordinator and triggering a coordination run stay the human's door —
+	// `status` reads that loop, it does not drive it.
+	for _, forbidden := range []string{"list", "coordinator", "trigger"} {
 		if _, exists := projectActionHelp[forbidden]; exists {
 			t.Fatalf("project family grew a %q action", forbidden)
 		}
@@ -198,7 +198,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. `project_blockers` joined them in 25C: the
 	// blocker history was already served to the web and the user API, and the terminal was the one
 	// caller that could not ask what had been stopping a project.
-	if len(specs) != 10 {
+	if len(specs) != 11 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -241,7 +241,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// The write verbs must say so: an agent reads `mutates` to decide whether a command is
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.
 	for _, tool := range []string{
-		"project_create", "project_update",
+		"project_create", "project_update", "project_delete",
 		"project_acceptance_run", "project_acceptance_verdict", "project_merge_evidence",
 	} {
 		write, ok := specs[tool]
@@ -272,9 +272,13 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
 	var found *cliCapability
+	var deleteFound *cliCapability
 	for i := range doc.Capabilities {
 		if doc.Capabilities[i].ID == "project_get" {
 			found = &doc.Capabilities[i]
+		}
+		if doc.Capabilities[i].ID == "project_delete" {
+			deleteFound = &doc.Capabilities[i]
 		}
 	}
 	if found == nil {
@@ -301,15 +305,28 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	if last := found.HelpArgv[len(found.HelpArgv)-1]; last != "--help" {
 		t.Fatalf("project_get help argv = %#v", found.HelpArgv)
 	}
+	if deleteFound == nil {
+		t.Fatalf("project_delete missing from capabilities: %#v", doc.Capabilities)
+	}
+	if !deleteFound.Mutates {
+		t.Fatal("capabilities advertises project_delete as read-only")
+	}
+	if strings.Join(deleteFound.Argv[1:], " ") != "project delete" {
+		t.Fatalf("project_delete argv = %#v", deleteFound.Argv)
+	}
+	deleteProps, _ := deleteFound.MCPInputSchema["properties"].(map[string]interface{})
+	if _, ok := deleteProps["projectId"]; !ok {
+		t.Fatalf("project_delete schema has no projectId: %#v", deleteFound.MCPInputSchema)
+	}
 }
 
 // The command capabilities advertises must also be pre-approved, or the agent hits a permission
 // prompt for something the document just told it to run.
-func TestProjectGetIsPreApprovedForAgents(t *testing.T) {
+func TestProjectCommandsArePreApprovedForAgents(t *testing.T) {
 	rules := strings.Join(orbitCLIAllowedTools("/usr/local/bin/orbit", false), "\n")
 	// Every verb capabilities advertises, individually. A write the document names but that is not
 	// pre-approved stalls on a permission prompt the agent cannot answer headless.
-	for _, action := range []string{"get", "create", "update"} {
+	for _, action := range []string{"get", "create", "update", "delete"} {
 		if !strings.Contains(rules, "Bash(/usr/local/bin/orbit project "+action+" *)") {
 			t.Fatalf("project %s is not pre-approved: %q", action, rules)
 		}
@@ -318,8 +335,71 @@ func TestProjectGetIsPreApprovedForAgents(t *testing.T) {
 	if strings.Contains(rules, " project *)") {
 		t.Fatalf("the project family is pre-approved wholesale: %q", rules)
 	}
-	if strings.Contains(rules, " project delete *)") {
-		t.Fatalf("project delete is pre-approved but has no command: %q", rules)
+}
+
+// ── delete ────────────────────────────────────────────────────────────────────────────────────
+
+func TestProjectDeleteUsesTheGuardedRunnerRoute(t *testing.T) {
+	var method, path, auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		auth = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{"delete", "343dlzsYWKo5z8l2M8tsB", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project delete: %v", err)
+	}
+	if method != http.MethodDelete || path != "/api/runner/projects/343dlzsYWKo5z8l2M8tsB" {
+		t.Fatalf("project delete hit %s %s", method, path)
+	}
+	if auth != "Bearer runner-secret" {
+		t.Fatalf("project delete sent authorization %q", auth)
+	}
+	if out.String() != "{\"ok\":true}\n" {
+		t.Fatalf("project delete output = %q", out.String())
+	}
+}
+
+func TestProjectDeleteRequiresASafeProjectID(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	for _, argv := range [][]string{{"delete", "--json"}, {"delete", "../tasks", "--json"}} {
+		var out bytes.Buffer
+		err := cmdProjectCLI(argv, strings.NewReader(""), &out)
+		if err == nil {
+			t.Fatalf("project delete accepted %#v", argv)
+		}
+	}
+	if hit {
+		t.Fatal("an invalid project delete reached the server")
+	}
+}
+
+func TestProjectDeletePropagatesANonEmptyRefusal(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte(`{"statusCode":409,"message":"This project still holds 2 task(s) and cannot be deleted"}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"delete", "proj-1", "--json"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "delete project") || !strings.Contains(err.Error(), "409") {
+		t.Fatalf("non-empty project delete = %v", err)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("failed project delete printed output: %q", out.String())
 	}
 }
 
@@ -781,16 +861,17 @@ func TestProjectCreateTrimsTheSessionFromTheEnvironment(t *testing.T) {
 	}
 }
 
-// Reading a project and revising one are not "where am I" questions. A coordinator default is
-// settled when the project is created; sending the current session on an update would be a
-// standing offer to move a coordinator as a side effect of editing a goal.
-func TestProjectReadAndUpdateCarryNoSession(t *testing.T) {
+// Reading, revising and deleting a project are not "where am I" questions. A coordinator default
+// is settled when the project is created; none of these requests may reinterpret the calling
+// session as a coordinator binding.
+func TestProjectReadUpdateAndDeleteCarryNoSession(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		argv []string
 	}{
 		{"get", []string{"get", "proj-1", "--json"}},
 		{"update", []string{"update", "proj-1", "--status", "DONE", "--json"}},
+		{"delete", []string{"delete", "proj-1", "--json"}},
 	} {
 		sawSessionHeader := true
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

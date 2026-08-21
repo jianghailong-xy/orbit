@@ -17,8 +17,9 @@ import (
 //
 // An agent may also state it. `create` records a project it was asked to set up, and `update`
 // revises the prose or settles the status when the work lands — the same fields, through the same
-// server DTOs, as the person typing them into the web UI. Everything else about a project (listing
-// them, deleting one, opening its coordinator) is still the human's door.
+// server DTOs, as the person typing them into the web UI. `delete` mirrors the user door's guarded
+// removal: only an empty project can be destroyed. Listing projects and opening a coordinator are
+// still the human's door.
 //
 // `create` is the one that carries the session it ran in, because a project recorded from inside a
 // session is bound to that session as its coordinator, together with the workspace it runs in.
@@ -41,6 +42,7 @@ Usage:
   orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]
   orbit project create --title TITLE [options]
   orbit project update PROJECT_ID [options]
+  orbit project delete PROJECT_ID [--json]
 
 Run 'orbit project <command> --help' for options.
 `
@@ -302,6 +304,17 @@ Omit it and the write behaves exactly as it always has.
 
 Only one --*-file flag per invocation: they all read the same stdin.
 `,
+	"delete": `orbit project delete — permanently delete an empty project
+
+Usage:
+  orbit project delete PROJECT_ID [--json]
+
+This cannot be undone. The project must hold no tasks: deleting a project never deletes or
+detaches its tasks, because their project records what they are for. If any remain, the server
+refuses the whole request; move them to another project or delete them first.
+
+PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
+`,
 }
 
 var projectCLICapabilities = []cliCapabilitySpec{
@@ -315,6 +328,7 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_merge_evidence", Argv: []string{"orbit", "project", "merge-evidence"}, Usage: "orbit project merge-evidence PROJECT_ID --requirement-id ID --target-branch REF --content-hash SHA256 [options]", Arguments: []string{"[project-id] (required)", "--requirement-id <text> (required)", "--target-branch <ref> (required)", "--content-hash <sha256> (required, 64 hex characters)", "--source <text>", "--detail <json>", "--json"}, Description: "Record what a target branch was observed to CONTAIN — the merge half of a project's acceptance evidence. Hash the content you actually read (a normalized `git grep` result, a blob or tree digest, a rendered diff), never `git branch --contains`: after a squash merge that answer is a guaranteed false negative while the content is plainly there. Same content as the last observation and only the observation time moves; different content writes a new row one refGeneration up, which is what makes 'the branch changed and changed back' visible to a database that cannot lock a git ref — and if the project was DONE against the old content, the same write reopens it.", Mutates: true},
 	{Tool: "project_create", Argv: []string{"orbit", "project", "create"}, Usage: "orbit project create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--goal <text> | --goal-file - (what the work is trying to achieve; max 4,000 characters)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that the goal was reached; max 4,000 characters)", "--instructions <text> | --instructions-file - (how the work is to be done; max 10,000 characters)", "--json"}, Description: "Create a project under this runner's owner — the durable context a body of work is carried out from, as opposed to a task, which is one piece of that work. Use it when you are asked to set up or plan out a body of work: --goal says what it is trying to achieve, --acceptance-criteria what would settle that the goal was reached, and --instructions how the work is to be done. The project starts OPEN and holds no tasks; file them with `orbit task create --project-id <id>` afterwards. Inside a session the project is also bound to that session as its coordinator, and to the workspace it runs in, in the same write that creates it — so opening the coordinator later returns to this conversation rather than starting another; one session coordinates at most one project, and headless there is no session and so no such binding.", Mutates: true},
 	{Tool: "project_update", Argv: []string{"orbit", "project", "update"}, Usage: "orbit project update PROJECT_ID [options]", Arguments: []string{"[project-id] (required)", "--title <text>", "--goal <text> | --goal-file - | --clear-goal", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria", "--instructions <text> | --instructions-file - | --clear-instructions", "--status <OPEN|DONE|CANCELLED>", "--expected-config-revision <n>", "--json"}, Description: "Update a project you own. Only the flags you pass are sent, so revising the goal never blanks the instructions. Each prose field is a whole-field replacement: text replaces it and --clear-<field> removes it, which is why naming both for one field is refused. --status DONE records that the goal was reached and CANCELLED that it will not be — say so when the work actually lands, and note that neither is a way to file the project out of sight. At least one flag is required, and --expected-config-revision does not count as one: it is a compare-and-swap that names nothing to write. Pass it the configRevision you read from `orbit project status` and the write commits only if the project is still at it — otherwise it is refused with STALE_CONFIG_REVISION and nothing is written, which is what stops you silently overwriting a coordination setting the account owner changed after you read it. Only one --*-file flag per invocation, since they all read the same stdin.", Mutates: true},
+	{Tool: "project_delete", Argv: []string{"orbit", "project", "delete"}, Usage: "orbit project delete PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Permanently delete an empty project in the account this runner belongs to. This cannot be undone. A project that still holds tasks is refused without deleting or detaching any of them, because a task's project records what that task is for; move those tasks to another project or delete them first.", Mutates: true},
 }
 
 func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
@@ -348,6 +362,8 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectCreate(args[1:], in, out)
 	case "update":
 		return cliProjectUpdate(args[1:], in, out)
+	case "delete":
+		return cliProjectDelete(args[1:], out)
 	case "status":
 		return cliProjectCoordinatorStatus(args[1:], out)
 	case "blockers":
@@ -874,6 +890,30 @@ func cliProjectUpdate(args []string, in io.Reader, out io.Writer) error {
 	raw, err := t.updateProject(id, body)
 	if err != nil {
 		return fmt.Errorf("update project: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+func cliProjectDelete(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project delete")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.deleteProject(id)
+	if err != nil {
+		return fmt.Errorf("delete project: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

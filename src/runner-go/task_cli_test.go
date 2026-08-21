@@ -45,7 +45,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// question the audit answers — and the terminal was the one caller that could not ask it), and
 	// merge_receipt / merge_receipts (recording that a branch was merged is evidence about your own
 	// work, not a power over somebody else's session).
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 32 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 33 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -76,12 +76,14 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// session_* tools at all. project_create/project_update ride the same gate rather than an
 	// orchestration one: writing what a body of work is for reaches only the runner owner's own
 	// projects, exactly as the task commands beside them do, and the coordinator asked to plan
-	// work out is the very session that has no session_* tools to gate on.
+	// work out is the very session that has no session_* tools to gate on. project_delete is the
+	// guarded destructive counterpart: it can remove only an empty project and never detaches or
+	// deletes the project's tasks.
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
 		"provider_list", "notify", "task_labels", "project_get", "project_status",
-		"project_verifications", "project_create", "project_update",
+		"project_verifications", "project_create", "project_update", "project_delete",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {

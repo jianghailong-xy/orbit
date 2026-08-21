@@ -422,6 +422,17 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_delete":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.deleteProject(id)
+		if err != nil {
+			return toolResult("delete project failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -1715,6 +1726,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"since, and being told beats silently overwriting a decision you did not " +
 						"see. Omit it if you did not read one; the write then behaves as it always " +
 						"has.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_delete",
+			"description": "Permanently delete an empty project in the account this runner belongs " +
+				"to. This cannot be undone. A project that still holds tasks is refused atomically: " +
+				"none of those tasks is deleted or detached, because the project records what each " +
+				"task is for. Move them to another project or delete them first.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The empty project to permanently delete, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
 		},
