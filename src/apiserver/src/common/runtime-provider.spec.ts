@@ -24,6 +24,11 @@ test('normalizeRuntimeProvider preserves every built-in runtime and safely defau
 
 test('unsupported built-in models safely downgrade Auto permission mode', () => {
   assert.equal(
+    normalizeBuiltinPermissionMode(AgentProvider.CLAUDE, '', PermissionMode.AUTO),
+    PermissionMode.DEFAULT,
+    'an unresolved model is not evidence that built-in Claude can run Auto',
+  );
+  assert.equal(
     normalizeBuiltinPermissionMode(
       AgentProvider.CLAUDE,
       'claude-haiku-4-5-20251001',

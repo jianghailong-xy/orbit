@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { ClaimedSession } from '@orbit/shared';
+import { AgentProvider, PermissionMode, type ClaimedSession } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from './queue.service';
 
@@ -10,17 +10,23 @@ function harness(
     workspaceModel?: string | null;
     casWinnerModel?: string;
     usesRuntimeDefaultModel?: boolean;
+    provider?: AgentProvider;
+    runtimeDefaultModel?: string;
+    permissionMode?: PermissionMode;
   } = {},
 ) {
+  const provider = options.provider ?? AgentProvider.CODEX;
+  const runtimeDefaultModel = options.runtimeDefaultModel ?? 'gpt-runtime-default';
   const modelWrites: string[] = [];
   const materializeQueries: string[] = [];
   let winnerReads = 0;
   const session = {
     id: '11111111-1111-4111-8111-111111111111',
     ownerId: '22222222-2222-4222-8222-222222222222',
-    provider: 'codex',
+    provider,
     providerBuiltin: true,
     model: sessionModel,
+    permissionMode: options.permissionMode ?? PermissionMode.AUTO,
     usesRuntimeDefaultModel: options.usesRuntimeDefaultModel ?? true,
     numTurns: 0,
     title: 'runtime default test',
@@ -32,9 +38,17 @@ function harness(
     workspaceId: '33333333-3333-4333-8333-333333333333',
     taskId: null,
     assignedRunner: {
-      runtimeDefaultModels: { codex: 'gpt-runtime-default' },
-      modelCatalog: { codex: [{ value: 'gpt-catalog', label: 'Catalog' }] },
+      runtimeDefaultModels: { [provider]: runtimeDefaultModel },
+      modelCatalog: {
+        [provider]: [
+          { value: runtimeDefaultModel, label: 'Runtime default' },
+          { value: 'gpt-catalog', label: 'Catalog' },
+        ],
+      },
     },
+    // Make the persisted Session value authoritative in permission tests: if Queue accidentally
+    // fell back to the account preference, it would dispatch Default rather than Auto.
+    owner: { preferences: { defaultPermissionMode: PermissionMode.DEFAULT } },
     workspace: {
       provider: 'codex',
       model: options.workspaceModel ?? null,
@@ -70,6 +84,7 @@ function harness(
         }
         return session;
       },
+      update: async () => session,
     },
     $executeRaw: async (strings: TemplateStringsArray, ...values: unknown[]) => {
       materializeQueries.push(strings.join('?'));
@@ -149,4 +164,32 @@ test('a concurrent Session model PATCH wins a failed materialization CAS', async
   assert.equal(claimed.agent.model, 'gpt-catalog');
   assert.deepEqual(modelWrites, ['gpt-runtime-default']);
   assert.equal(winnerReads(), 1);
+});
+
+test('persisted Auto is evaluated after a supported Claude runtime default is resolved', async () => {
+  const { queue, modelWrites } = harness(null, {
+    provider: AgentProvider.CLAUDE,
+    runtimeDefaultModel: 'claude-opus-5',
+    permissionMode: PermissionMode.AUTO,
+  });
+
+  const claimed = await build(queue);
+
+  assert.equal(claimed.agent.model, 'claude-opus-5');
+  assert.equal(claimed.agent.permissionMode, PermissionMode.AUTO);
+  assert.deepEqual(modelWrites, ['claude-opus-5']);
+});
+
+test('persisted Auto safely downgrades after an unsupported Claude runtime default is resolved', async () => {
+  const { queue, modelWrites } = harness(null, {
+    provider: AgentProvider.CLAUDE,
+    runtimeDefaultModel: 'claude-haiku-4-5-20251001',
+    permissionMode: PermissionMode.AUTO,
+  });
+
+  const claimed = await build(queue);
+
+  assert.equal(claimed.agent.model, 'claude-haiku-4-5-20251001');
+  assert.equal(claimed.agent.permissionMode, PermissionMode.DEFAULT);
+  assert.deepEqual(modelWrites, ['claude-haiku-4-5-20251001']);
 });

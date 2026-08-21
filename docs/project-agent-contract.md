@@ -302,7 +302,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 | `provider` / `providerBuiltin` | Session **create** | 只读。**Session 的 provider 终生固定**（运行时线程属于开它的 CLI），这是既有约束，v1 不改 |
 | `requiredCapabilities` | Session **create** | 只读 |
 | `resolution` | Session **create** | 只读 |
-| `permissionMode` | Session **create** | 只读（既有行为：create 时 materialize 账号默认） |
+| `permissionMode` | Session **create** | 只读。create 时 materialize 账号默认，冻结的是这次运行的**权限意图**；只有已知 runner 根本无法启动的组合可在 create 时安全收窄（例如 root runner 上 `Bypass` → `Don't Ask`）。依赖实际 model 的 `Auto` → `Default` 由 Queue 在 claim 物化 model 后派生，不回写本列 |
 | `model` | **首次 claim**（既有行为，保留） | 首次 claim 后只读。既有例外保留：模型被 runtime 彻底下架（`retiredPin`）时改写一次 |
 | `effort` | **首次 claim** | 同 `model` |
 | `snapshotFrozenAt` | Session **create** | 一旦非 null，**上表中冻结时刻为 Session create 的那九列**进入只读。它**不**封 `model` / `effort` —— 那两列的封条是首次 claim，见 S4 |
@@ -311,7 +311,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 
 **S2**：resume / reclaim / 心跳 / merge 回报路径**一律不得**读取 `agent.*` / `project.*` / `project_workspace.*` 来重新推导上表任何一列。04A 必须有一条测试：改完 Agent 的 provider 之后 resume 同一条 Session，Session 的 provider 不变。
 
-**S3**：Session 快照**不是**审计日志。它记录"跑成了什么"，不记录"谁在什么时候改了配置"。后者不在 v1 范围。
+**S3**：Session 快照**不是**审计日志。它记录这次运行冻结的执行选择与解析结论，不记录"谁在什么时候改了配置"。`permissionMode` 记录意图；对特定 model / runner 派生出的有效模式是运行时事实，不得反向改写这份 create 快照。配置变更的历史不在 v1 范围。
 
 **S4（唯一冻结时点规则，v1.1）**：上表把快照分成**两个不相交的集合**，每个集合有且只有一个封条：
 
