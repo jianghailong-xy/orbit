@@ -262,18 +262,39 @@ apiserver 侧 `runner-api.controller.ts` 的 steer 分支已经保证了"只 ack
 
 ### 5.3 Runner → 控制面的能力信号
 
-把 `?acceptsSteer=1` 这个 bool 升级成**按 runtime 列举**:
+把 `?acceptsSteer=1` 这个 bool 补上 **runtime 维度**。落地形态(**[3/7] 已实现,取代本节 v1 里
+`?steerRuntimes=claude,codex` 的写法**)是每个请求**本来就带着**的那个能力头:
 
 ```
-GET /runner/sessions/:id/inbox?leaseGeneration=…&acceptsSteer=1&steerRuntimes=claude,codex
+X-Orbit-Runner-Capabilities: session-orchestration-credential-v1,session-terminal-handoff-v1,
+                             session-worktree-ops-v1[,session-codex-steer-v1]
 ```
 
 - `acceptsSteer=1` 的含义**不变**(向后兼容):"我认识 `steer` 这个 kind"。
-- `steerRuntimes` 新增:"这些 runtime 我能真正送达"。**缺省(旧 runner 不发)时按 `claude` 处理** ——
-  这正好等于今天所有在跑的 runner 的真实能力。
-- apiserver `dequeueTurn` 的那个 bool 从"poller 认识 steer"变成"**poller 能 steer 这个 session 的 runtime**":
-  每次 inbox 请求解析一次该 session 的 runtime(`execRuntime`,与 `runtimeTakesSteer` 同一套),
-  再看它在不在 `steerRuntimes` 里。SQL 里 `AND ${acceptsSteer}::boolean` 那一行不用动,只是喂给它的值变准。
+- `session-codex-steer-v1` 新增:"codex 的 `turn/steer` 我**真能送达**"。runner 不手写这个列表,
+  而是从 `providerRuntimes[*].steersMidTurn` 算出来(`declaredSteerCapabilities()`),
+  所以**声明不可能跑到实现前面**;[2/7] 把 codex 那一格翻成 `true` 的同一次改动才会开始声明它。
+- **claude 不需要任何声明**:它的中途送达与 `steer` 这个 kind 同时发布,现网每个 runner 都做得到,
+  给它加门等于当天把一个正在用的功能从全网撤掉。
+- 旧 runner 不发这个 token → 只有 claude 能 steer,**正好等于今天所有在跑的 runner 的真实能力**。
+
+为什么用能力头而不是新开一个 query 参数:
+
+- 这个头**每个请求都带**(`transport.go doHeaders`),inbox 长轮询也带 → `dequeueTurn` 拿得到;
+- heartbeat 已经把它**持久化**进 `Runner.capabilities`(既有逻辑,零改动)→ `createTurn` 也拿得到。
+  而 `createTurn` 发生在"用户按下发送"那一刻,根本不在 inbox 请求里,一个 inbox query 参数到不了它;
+- 于是**同一个词**门控两处,不用维护两套语义,也不用加 DB 列。
+
+**两处门控,缺一不可**(§6.1 的兜底是第二处,但第一处才让混合版本连一次失败都不会发生):
+
+| 位置 | 读哪份 | 拦住什么 |
+| --- | --- | --- |
+| `sessions.service.createTurn` → `runtimeTakesSteer` | 该 session `assignedRunnerId` 的 `Runner.capabilities`(heartbeat 快照) | 一开始就不把这行记成 `kind='steer'` —— 不支持就是普通 `message`,与今天逐字相同 |
+| `runner-api.controller.dequeueTurn` | **本次 inbox 请求自己带的头** | 快照过期(机器降级/回滚)时兜底:steer 行留 PENDING,turn 结束时被既有逻辑降级成 message |
+
+两处都走 `supportsMidTurnSteer(runtime, declared)`(`@orbit/shared`),runtime 一律先用 `execRuntime`
+解析(BYOK slug 判它借的 runtime,不判 slug);dequeue 侧 SQL 里 `AND ${…}::boolean` 那一行不用动,
+只是喂给它的值变准。
 
 **反方向的信号**(控制面 → runner)解决 §4.7 的 `steer_requeue` 门控:在 `RunInboxResponse` 上加
 `steerRequeue?: boolean`,**随这条 steer 本身投递**(投递即答复,不用另开一次往返,也不用 runner 记全局状态)。
@@ -314,9 +335,11 @@ GET /runner/sessions/:id/inbox?leaseGeneration=…&acceptsSteer=1&steerRuntimes=
 "this engine cannot be given a message while a turn is running" —— 从"安静排队"退化成"每次都报错"。
 这不是丢消息(失败是可见的、可重发的),但是明确的 UX 回归,且违反项目"混合版本下宁可安全排队"的要求。
 
-**契约:控制面对 codex 开闸,必须由 §5.3 的 `steerRuntimes` 把关,不得只看 runtime。**
-即 `createTurn` 里 `kind='steer'` 之外,`dequeueTurn` 必须确认 poller 自称能 steer codex。
-旧 runner 不发 `steerRuntimes` → 视为只支持 claude → codex 的 steer 行**留在 PENDING**
+**契约:控制面对 codex 开闸,必须由 §5.3 的能力声明把关,不得只看 runtime。**
+即 `createTurn` 只在该 session 的 runner 声明过 `session-codex-steer-v1` 时才记 `kind='steer'`,
+而 `dequeueTurn` 还要再确认**正在轮询的这个进程**自称能 steer codex。
+旧 runner 不发这个 token → 视为只支持 claude → codex 的 steer 行**根本不会被记下**;
+真被记下又赶上降级(快照过期)的那一条则**留在 PENDING**
 → 该 turn 结束时被既有逻辑降级成普通 `message` → **消息晚一轮执行,不丢、不报错。**
 这也正是 inbox 路由注释里已经写下的那条保证("This is what makes the control plane safe to deploy ahead of the runners")。
 

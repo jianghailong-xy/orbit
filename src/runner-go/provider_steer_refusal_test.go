@@ -7,11 +7,11 @@ import (
 	"testing"
 )
 
-// A steer is a user message written into the turn that is ALREADY running. Only an engine whose
-// input stays open across the turn can be handed one, which is the stream-json transport and
-// nothing else. The control plane asks that question before it files the turn, so a steer
-// reaching any other engine means the two disagree — an older runner, or a session whose provider
-// moved under it.
+// A steer is a user message written into the turn that is ALREADY running. Only an engine with
+// a way to take one mid-turn can be handed it, and only by a binary that implements that way —
+// the control plane asks both questions before it files the turn (steersMidTurn, and the
+// capability declared from it). So a steer reaching a loop that cannot deliver one means the two
+// disagree: a runner older than the control plane, or a session whose provider moved under it.
 //
 // What must NOT happen then is nothing. The turn is already leased (so it is gone from the queued
 // list) and a steer's lease is never reclaimed (re-writing a message the engine may have acted on
@@ -89,10 +89,10 @@ func TestRefusingASteerSettlesItInsteadOfDroppingIt(t *testing.T) {
 // would land the same way, and the failure is silent by construction: the turn is leased and
 // never comes back, so nothing anywhere says a message went missing.
 //
-// Whether an engine CAN take one is providerRuntime.steers, not its transport: codex and kimi are
-// both json-rpc and only codex has a method for it. So the requirement here is not "refuse" — it
-// is that every loop ANSWERS a steer, either by delivering it or by refusing it.
-func TestEverySessionLoopAnswersASteer(t *testing.T) {
+// Keyed on steersMidTurn, not on the transport: codex and kimi are both json-rpc and only codex
+// has a call that folds a message into the running turn, so the transport cannot answer which
+// loops still have to refuse one.
+func TestEverySessionLoopThatCannotSteerRefusesOne(t *testing.T) {
 	loops := map[string][]string{
 		// provider → the source files its inbox dispatch lives in.
 		providerCodex:    {"codex_appserver.go"},
@@ -102,8 +102,8 @@ func TestEverySessionLoopAnswersASteer(t *testing.T) {
 
 	checked := 0
 	for provider, runtime := range providerRuntimes {
-		if runtime.transport == transportStreamJSON {
-			continue // claude folds a steer into the running turn; that is the whole feature
+		if runtime.steersMidTurn {
+			continue // this loop delivers the steer instead of refusing it; that is the feature
 		}
 		checked++
 		files, known := loops[provider]
@@ -122,17 +122,54 @@ func TestEverySessionLoopAnswersASteer(t *testing.T) {
 					file, provider)
 			}
 			// A loop that cannot deliver one must still settle it where the sender can see it.
-			if !runtime.steers && !strings.Contains(string(src), "refuseUnsupportedSteer(") {
+			if !runtime.steersMidTurn && !strings.Contains(string(src), "refuseUnsupportedSteer(") {
 				t.Errorf("%s cannot deliver a steer and does not refuse the one it matches", file)
 			}
 		}
 	}
 	if checked == 0 {
-		t.Fatal("no non-stream-json provider was checked; this test proved nothing")
+		t.Fatal("no non-steering provider was checked; this test proved nothing")
 	}
 }
 
-// providerRuntime.steers is what the control plane's own answer has to agree with: it decides
+// What this binary tells the control plane about mid-turn delivery. The control plane files a
+// `steer` for a runtime only when the runner holding the session has named it, so this list is
+// a promise: a token declared for a loop that still refuses steers turns a mid-turn message
+// from something that quietly queued into something that fails in front of the user, on every
+// send (docs/codex-turn-steer-contract.md §6.1).
+func TestOnlyAnImplementedSteerIsDeclaredToTheControlPlane(t *testing.T) {
+	declared := map[string]bool{}
+	for _, capability := range declaredSteerCapabilities() {
+		if capability == "" {
+			t.Fatal("declared an empty capability token")
+		}
+		declared[capability] = true
+	}
+
+	for provider, runtime := range providerRuntimes {
+		switch {
+		case runtime.steerCapability == "":
+			// claude: its mid-turn delivery predates the gate and needs no token. Nothing to
+			// declare, and nothing that could withdraw it from the runners already in the field.
+		case runtime.steersMidTurn && !declared[runtime.steerCapability]:
+			t.Errorf("%s steers mid-turn but does not declare %q, so the control plane will "+
+				"never file one for it", provider, runtime.steerCapability)
+		case !runtime.steersMidTurn && declared[runtime.steerCapability]:
+			t.Errorf("%s declares %q while its loop still refuses a steer", provider, runtime.steerCapability)
+		}
+	}
+
+	// The declaration travels on the header every request already carries, which is what lets
+	// the same word gate both how a message is filed (from the heartbeat snapshot) and whether
+	// it is handed over (from the poller itself).
+	for _, capability := range declaredSteerCapabilities() {
+		if !strings.Contains(runnerCapabilitiesV1, capability) {
+			t.Errorf("capability %q is declared but missing from the header %q", capability, runnerCapabilitiesV1)
+		}
+	}
+}
+
+// providerRuntime.steersMidTurn is what the control plane's own answer has to agree with: it decides
 // whether a message becomes a steer BEFORE the runner ever sees it, so a provider marked as
 // steering here whose loop cannot actually deliver one turns every mid-turn message on that
 // engine into a visible failure instead of a quiet queue.
@@ -144,7 +181,7 @@ func TestOnlyEnginesWithAMidTurnMethodClaimToSteer(t *testing.T) {
 		providerCodex:  "turn/steer", // written into the turn in progress (codex_steer.go)
 	}
 	for provider, runtime := range providerRuntimes {
-		if !runtime.steers {
+		if !runtime.steersMidTurn {
 			continue
 		}
 		method, known := methods[provider]

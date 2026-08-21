@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 )
 
 // What each provider's engine is, as far as running a session is concerned. A session's
@@ -53,21 +54,26 @@ type sessionProcessArgs struct {
 
 type providerRuntime struct {
 	transport providerTransport
-	// steers: this engine can be handed a user message while a turn is running, and fold it into
-	// that turn. NOT derivable from the transport — codex and kimi are both json-rpc and only
-	// codex has a method for it (docs/codex-turn-steer-contract.md §5.4) — so each engine says so
-	// for itself. A session loop whose provider is false here must refuse a steer rather than
-	// drop it (refuseUnsupportedSteer).
-	steers bool
-	run    func(sessionProcessArgs) (string, bool, bool)
+	// steersMidTurn: this runtime's session loop can write a user message INTO the turn that
+	// is already running (a `steer`) instead of refusing it. Deliberately NOT derived from
+	// the transport: codex and kimi are both json-rpc and only codex has a call for it
+	// (`turn/steer`), so the transport answers a different question than this one.
+	steersMidTurn bool
+	// steerCapability is the token the control plane files a steer for this runtime under —
+	// declared to it only when steersMidTurn, so a binary whose loop refuses a steer can
+	// never be handed one. Empty means no declaration is involved: claude's mid-turn
+	// delivery shipped with the `steer` kind itself, and gating it now would withdraw it
+	// from every runner in the field. See docs/codex-turn-steer-contract.md §5.
+	steerCapability string
+	run             func(sessionProcessArgs) (string, bool, bool)
 }
 
 // providerRuntimes is the set of engines this runner can drive: a name absent from it is
 // not a provider (runtimeProvider falls back to the default for anything else).
 var providerRuntimes = map[string]providerRuntime{
 	providerClaude: {
-		transport: transportStreamJSON,
-		steers:    true, // a `user` frame on a stdin that stays open across the turn
+		transport:     transportStreamJSON,
+		steersMidTurn: true, // a `user` frame on a stdin that stays open across the turn
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runClaudeSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
 				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
@@ -76,7 +82,11 @@ var providerRuntimes = map[string]providerRuntime{
 	},
 	providerCodex: {
 		transport: transportJSONRPC,
-		steers:    true, // turn/steer, written into the turn in progress (codex_steer.go)
+		// turn/steer, written into the turn already in progress (codex_steer.go). Flipping this
+		// on is also what declares the capability below to the control plane, which is why the
+		// two live in one place: the declaration cannot outrun the implementation.
+		steersMidTurn:   true,
+		steerCapability: sessionCodexSteerV1,
 		run: func(p sessionProcessArgs) (string, bool, bool) {
 			return runCodexSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
 				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
@@ -107,6 +117,25 @@ func providerRuntimeFor(provider string) providerRuntime {
 	return providerRuntimes[provider]
 }
 
+// declaredSteerCapabilities is what this binary tells the control plane about mid-turn
+// delivery: one token per runtime whose session loop actually writes a steer into the running
+// turn. Read from the table above rather than written out by hand, so the declaration cannot
+// outrun the implementation — the control plane files a steer only for a runtime it has been
+// told about, and a steer filed for a loop that refuses it fails in front of the user instead
+// of quietly queueing (docs/codex-turn-steer-contract.md §6.1).
+//
+// Sorted, so the header this feeds is stable across runs.
+func declaredSteerCapabilities() []string {
+	var declared []string
+	for _, runtime := range providerRuntimes {
+		if runtime.steersMidTurn && runtime.steerCapability != "" {
+			declared = append(declared, runtime.steerCapability)
+		}
+	}
+	sort.Strings(declared)
+	return declared
+}
+
 // errSteerUnsupported: a steer — a user message meant to be written into the turn already
 // running — reached an engine that has no way to take one. The control plane decides that
 // question before it files the turn (shared/providerTransport.ts), so this is the two of
@@ -117,7 +146,7 @@ func providerRuntimeFor(provider string) providerRuntime {
 var errSteerUnsupported = errors.New("this engine cannot be given a message while a turn is running; send it again once the turn ends")
 
 // refuseUnsupportedSteer settles a steer that arrived at an engine with no way to take one
-// (providerRuntime.steers). It settles only that message: the turn it was meant to join is
+// (providerRuntime.steersMidTurn). It settles only that message: the turn it was meant to join is
 // still running, and failing the session over a side-channel message that never reached the
 // engine would take a working run down with it. Mirrors the claude loop's own refusal
 // (errNoTurnToSteer) so a message refused by any provider reads the same on every client.

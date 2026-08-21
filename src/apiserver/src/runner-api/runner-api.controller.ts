@@ -77,6 +77,7 @@ import {
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
+  supportsMidTurnSteer,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -130,6 +131,7 @@ import {
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
 } from './runner-provider-support';
+import { sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1535,11 +1537,20 @@ export class RunnerApiController {
      *  message runs a turn later instead of vanishing. This is what makes the control plane
      *  safe to deploy ahead of the runners rather than only after them. */
     @Query('acceptsSteer') acceptsSteer?: string,
+    /** …and knowing the kind is not the same as being able to deliver it for THIS session's
+     *  engine. Every runner that speaks `steer` at all can write one into a claude turn;
+     *  codex needs `turn/steer`, which arrived later, so an older binary answers that same
+     *  kind by refusing it in front of the user. The declaration is re-read from the poller
+     *  on every poll rather than trusted from the heartbeat snapshot createTurn used: this
+     *  is the process that will actually execute the turn, and it may have been downgraded
+     *  since. */
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
+    const declared = parseRunnerCapabilities(capabilities) ?? [];
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
     for (;;) {
-      const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1');
+      const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1', declared);
       if (turn) return turn;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { turnId: '', seq: 0, kind: 'message' };
@@ -1631,6 +1642,10 @@ export class RunnerApiController {
     leaseGeneration: string | null,
     /** Whether this poller can act on a steer at all — see the inbox route. */
     acceptsSteer = false,
+    /** What that poller declared it can do, which decides whether "a steer" means one for
+     *  THIS session's engine. Absent is a runner that declared nothing: claude steers as it
+     *  always has, and every gated runtime withholds. */
+    declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
     return this.prisma.$transaction(async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
@@ -1642,10 +1657,14 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          ownerId: string;
+          provider: string;
+          providerBuiltin: boolean;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status
+               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -1682,6 +1701,17 @@ export class RunnerApiController {
           throw new ConflictException('inbox lease generation is missing or retired');
         }
       }
+      // "Can this poller act on a steer" is not a property of the poller alone: it is this
+      // runner's word about the runtime this session actually executes on. A binary that
+      // knows the kind but not this engine's mid-turn call refuses every steer it is handed,
+      // so withholding one here is what keeps a half-upgraded fleet on the behaviour it has
+      // today — the row stays PENDING and turn-complete re-files it as an ordinary message
+      // when the running turn ends. Resolved per poll, through the same runtime resolution
+      // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime
+      // it borrows rather than by its slug.
+      const deliverSteer =
+        acceptsSteer &&
+        supportsMidTurnSteer(await sessionExecRuntime(tx, owned[0]), declaredCapabilities);
       const rows = await tx.$queryRaw<Array<{ id: string; seq: number; kind: string; content: string | null }>>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
@@ -1717,7 +1747,7 @@ export class RunnerApiController {
               -- its turn ends is not stranded either — turn-complete files it as an ordinary
               -- message, which is what it becomes once there is nothing to steer.
               OR (turn."kind" = 'steer' AND turn."status" = 'PENDING'
-                AND ${acceptsSteer}::boolean
+                AND ${deliverSteer}::boolean
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid

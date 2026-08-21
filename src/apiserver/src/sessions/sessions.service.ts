@@ -86,7 +86,12 @@ import {
   normalizeEffortForProvider,
   normalizeRuntimeProvider,
 } from '../common/runtime-provider';
-import { execRuntime, isBuiltinProvider, resolveProviderExec } from '../providers/custom-provider';
+import {
+  execRuntime,
+  isBuiltinProvider,
+  resolveProviderExec,
+  sessionExecRuntime,
+} from '../providers/custom-provider';
 import { ownsModel } from '../providers/preset-overlay';
 import {
   newTerminalResumeHandoffOwner,
@@ -2747,35 +2752,45 @@ export class SessionsService {
   }
 
   /**
-   * Whether the engine this session runs on can be handed a message mid-turn at all.
+   * Whether a message sent to this session right now can be written into the turn already
+   * running — which takes BOTH an engine that can be handed one and a runner that can hand
+   * it over.
    *
-   * A steer is written into a stdin that stays open across the turn, which only the
-   * stream-json transport has (see supportsMidTurnSteer). Filing one for a runtime whose
-   * session loop has no case for it delivered a turn nobody consumes: it is leased, so it
-   * leaves the queued list, and it is never re-leased, so it never reappears — the message
-   * would simply be gone. Asking here keeps those sessions on exactly the behaviour they
-   * already had: an ordinary `message`, queued behind the running turn.
+   * Filing a steer for a runtime whose session loop has no case for it delivered a turn
+   * nobody consumes: it is leased, so it leaves the queued list, and it is never re-leased,
+   * so it never reappears — the message would simply be gone. Filing one for a runner too
+   * old to deliver it is not silent, but it is a regression all the same: that runner
+   * refuses every steer it is handed, so a mid-turn message that quietly queued today would
+   * start failing in front of the user instead (docs/codex-turn-steer-contract.md §6.1).
+   * Both answers must be yes, and either one being unknown means no.
    *
    * The runtime is resolved with the same `execRuntime` dispatch uses, so a configured
    * (BYOK) provider is judged by the built-in runtime it borrows rather than by its slug.
+   *
+   * The runner is judged by what it declared on its own last heartbeat. That snapshot can
+   * only be stale in one direction that matters — a machine downgraded since it last spoke —
+   * and the inbox re-asks the poller itself before handing anything over, so a steer filed
+   * on a stale yes is withheld there and becomes an ordinary message when the turn ends.
    */
   private async runtimeTakesSteer(
     tx: Prisma.TransactionClient,
-    session: { provider: string; providerBuiltin: boolean; ownerId: string },
+    session: {
+      provider: string;
+      providerBuiltin: boolean;
+      ownerId: string;
+      assignedRunnerId: string | null;
+    },
   ) {
-    const declared = session.provider;
-    const customRow = isBuiltinProvider(declared, session.providerBuiltin)
-      ? null
-      : await tx.modelProvider.findFirst({
-          where: { slug: declared, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
-        });
-    return supportsMidTurnSteer(
-      execRuntime({
-        declaredProvider: declared,
-        declaredProviderBuiltin: session.providerBuiltin,
-        customRow,
-      }),
-    );
+    // A session with no runner assigned has nothing running to steer either — engineTurnInFlight
+    // is asked first — so an absent runner only ever reads as "declared nothing", which withholds
+    // every gated runtime and leaves claude exactly where it already was.
+    const runner = session.assignedRunnerId
+      ? await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId },
+          select: { capabilities: true },
+        })
+      : null;
+    return supportsMidTurnSteer(await sessionExecRuntime(tx, session), runner?.capabilities);
   }
 
   private async insertTurnLocked(
@@ -2938,8 +2953,8 @@ export class SessionsService {
       //
       // Only a message steers. A `!cmd` shell turn runs on the runner, not in the engine,
       // so there is nothing to fold it into and it keeps queuing exactly as before — and
-      // neither does a message on an engine that cannot be written to mid-turn, which is
-      // every runtime but claude's (see runtimeTakesSteer).
+      // neither does a message on an engine that cannot be written to mid-turn, or one whose
+      // runner has not said it can deliver that engine's steer (see runtimeTakesSteer).
       const kind =
         dto.kind === 'shell'
           ? 'shell'

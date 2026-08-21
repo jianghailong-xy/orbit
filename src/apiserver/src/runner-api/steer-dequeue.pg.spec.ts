@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { before, after, beforeEach, test } from 'node:test';
 import { Client } from 'pg';
 import { RunStatus } from '@prisma/client';
+import { AgentProvider, SESSION_CODEX_STEER_V1 } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -20,12 +21,16 @@ import { RunnerApiController } from './runner-api.controller';
 const PG_URL = process.env.ORBIT_TEST_PG_URL;
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
+const OWNER_ID = '33333333-3333-4333-8333-333333333333';
+/** What a runner that implements codex `turn/steer` declares; irrelevant to a claude session. */
+const DECLARES_CODEX_STEER = [SESSION_CODEX_STEER_V1];
 
 type Dequeue = (
   sessionId: string,
   runnerId: string,
   leaseGeneration: string | null,
   acceptsSteer: boolean,
+  declaredCapabilities: readonly string[],
 ) => Promise<{ turnId: string; kind: string; content?: string } | null>;
 
 let client: Client;
@@ -41,9 +46,12 @@ before(async () => {
     DROP TABLE IF EXISTS "session";
     CREATE TABLE "session" (
       id uuid PRIMARY KEY,
+      owner_id uuid,
       assigned_runner_id uuid,
       inbox_lease_generation uuid,
       inbox_lease_owner uuid,
+      provider text NOT NULL DEFAULT 'claude',
+      provider_builtin boolean NOT NULL DEFAULT true,
       status text NOT NULL,
       cancel_requested_at timestamptz
     );
@@ -68,11 +76,18 @@ after(async () => {
 beforeEach(async () => {
   if (!PG_URL) return;
   await client.query(`TRUNCATE "conversation_turn"; DELETE FROM "session";`);
-  await client.query(
-    `INSERT INTO "session"(id, assigned_runner_id, status) VALUES ($1::uuid, $2::uuid, $3)`,
-    [SESSION_ID, RUNNER_ID, RunStatus.RUNNING],
-  );
+  await session(AgentProvider.CLAUDE);
 });
+
+/** (Re)create the session under test on a given runtime. */
+async function session(provider: string) {
+  await client.query(`DELETE FROM "session"`);
+  await client.query(
+    `INSERT INTO "session"(id, owner_id, assigned_runner_id, provider, status)
+     VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5)`,
+    [SESSION_ID, OWNER_ID, RUNNER_ID, provider, RunStatus.RUNNING],
+  );
+}
 
 /** Prisma's tagged-template $queryRaw, forwarded to a real connection as $1,$2,… */
 function pgTx() {
@@ -89,8 +104,16 @@ function pgTx() {
   };
 }
 
-/** `acceptsSteer` is the poller saying it knows the kind — what a current runner sends. */
-function dequeue(acceptsSteer = true): Promise<{ turnId: string; kind: string; content?: string } | null> {
+/**
+ * `acceptsSteer` is the poller saying it knows the kind — what every current runner sends —
+ * and `declared` is what it says it can actually deliver for. The two are separate on the wire
+ * and separate here: a runner can know the word and still have no way to write a message into
+ * this session's engine.
+ */
+function dequeue(
+  acceptsSteer = true,
+  declared: readonly string[] = DECLARES_CODEX_STEER,
+): Promise<{ turnId: string; kind: string; content?: string } | null> {
   const tx = pgTx();
   const prisma = { $transaction: async (fn: (t: typeof tx) => unknown) => fn(tx) } as never;
   const controller = new RunnerApiController(
@@ -108,6 +131,7 @@ function dequeue(acceptsSteer = true): Promise<{ turnId: string; kind: string; c
     RUNNER_ID,
     null,
     acceptsSteer,
+    declared,
   );
 }
 
@@ -237,6 +261,50 @@ pgTest('a poller that does not know the kind is handed no steer, and the queue i
   // Still there, and still a steer, for a poller that can act on it.
   const forACurrentRunner = await dequeue(true);
   assert.equal(forACurrentRunner?.kind, 'steer');
+});
+
+// ── which engine the poller can steer, not merely whether it knows the word ──────────────
+//
+// Every runner in the field sends acceptsSteer. Only some of them can write a message into a
+// codex turn (`turn/steer`), and the ones that cannot answer it by failing the message in
+// front of the user. So the gate is per runtime, re-asked of the poller on every poll, and
+// what it withholds is never lost: the row stays PENDING and turn-complete re-files it as an
+// ordinary message when the running turn ends.
+
+pgTest('a codex steer waits for a poller that can deliver one, and is not lost meanwhile', async () => {
+  await session(AgentProvider.CODEX);
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'actually, call it gadget');
+
+  // Knows the kind, cannot deliver it for this engine: this is every runner shipped before
+  // `turn/steer`, and handing it the steer would fail the message instead of queueing it.
+  assert.equal(await dequeue(true, []), null);
+  assert.equal(await dequeue(true, ['session-worktree-ops-v1']), null);
+
+  // The row is untouched by having been withheld — the runner that can steer codex still gets it.
+  const forACapableRunner = await dequeue(true, DECLARES_CODEX_STEER);
+  assert.equal(forACapableRunner?.kind, 'steer');
+  assert.equal(forACapableRunner?.content, 'actually, call it gadget');
+});
+
+pgTest('a claude steer is never gated on the codex declaration', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'actually, call it gadget');
+
+  // Claude's mid-turn delivery shipped with the kind itself. A runner that declares nothing
+  // beyond knowing the word still steers claude, exactly as it does in production today.
+  assert.equal((await dequeue(true, []))?.kind, 'steer');
+});
+
+pgTest('withholding a codex steer withholds nothing else on that session', async () => {
+  await session(AgentProvider.CODEX);
+  await addTurn(1, 'message', 'PENDING', 'the real turn');
+  await addTurn(2, 'interrupt', 'PENDING', '');
+
+  // The gate covers one kind for one runtime. A poller that cannot steer codex still gets its
+  // interrupts and its ordinary turns at exactly the priority it always did.
+  assert.equal((await dequeue(true, []))?.kind, 'interrupt');
+  assert.equal((await dequeue(true, []))?.content, 'the real turn');
 });
 
 pgTest('withholding a steer does not withhold anything else', async () => {

@@ -23,10 +23,34 @@ const (
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
-	runnerCapabilitiesV1             = sessionOrchestrationCredentialV1 + "," + sessionTerminalHandoffV1 + "," + sessionWorktreeOpsV1
-	orchestrationCredentialMissing   = "ORCHESTRATION_CREDENTIAL_MISSING"
-	orchestrationCredentialInvalid   = "ORCHESTRATION_CREDENTIAL_INVALID"
+	// Mid-turn delivery for the codex runtime (`turn/steer`). Declared from the runtime table
+	// rather than listed here — see declaredSteerCapabilities — because a runner that names
+	// it is telling the control plane to file codex steers for this machine, and one whose
+	// loop still refuses them would make every mid-turn message fail instead of queue.
+	sessionCodexSteerV1            = "session-codex-steer-v1"
+	orchestrationCredentialMissing = "ORCHESTRATION_CREDENTIAL_MISSING"
+	orchestrationCredentialInvalid = "ORCHESTRATION_CREDENTIAL_INVALID"
 )
+
+// runnerCapabilitiesV1 is what this binary declares on every call it makes: the fixed set of
+// runner-wide features, plus one token per runtime it can steer mid-turn. Sent on every
+// request rather than only on the heartbeat, so the control plane can answer both questions
+// it has to ask — what this machine could do when it last reported (which decides how a
+// message is filed) and what the process polling right now can do (which decides whether that
+// message is handed over).
+//
+// Built in init() rather than as a var initializer because the runtime table it reads holds
+// the session drivers, and those reach this header back through the transport: written as one
+// expression it is a package initialization cycle.
+var runnerCapabilitiesV1 string
+
+func init() {
+	runnerCapabilitiesV1 = strings.Join(append([]string{
+		sessionOrchestrationCredentialV1,
+		sessionTerminalHandoffV1,
+		sessionWorktreeOpsV1,
+	}, declaredSteerCapabilities()...), ",")
+}
 
 type transportHTTPError struct {
 	method     string
