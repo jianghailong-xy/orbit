@@ -10,8 +10,8 @@
 ## 裁决
 
 > **本节是第一轮（`1144099c`）的裁决，保留原样作为审计留痕。**
-> 单元 24 已修掉标准 8 的 F-22-02 与 F-22-04，第二轮验收在 `feat/project@3bd874e0` 上重做，
-> **现行裁决在[附录 C](#附录-c--在修复后的基线-3bd874e0-上重做验收)：11 PASS / 1 FAIL（仅标准 12），Project 仍保持 OPEN。**
+> 单元 24 已修掉标准 8 的 F-22-02 与 F-22-04，第二轮验收在 `feat/project@3bd874e0` 上重做（附录 C：11 PASS / 1 FAIL）。
+> **最终裁决在[附录 D](#附录-d--最终项目级验收12--12-pass)：在 `feat/project@bdf8f8c4` 上 12 / 12 PASS。**
 
 **第一轮（`1144099c`）：NOT ALL PASS — Project 保持 OPEN。**
 
@@ -585,3 +585,92 @@ git -C … diff | wc -c                   → 0
 - **C.10 一字未改。** 事故发生过就是发生过；这里加的是"后来恢复了"，不是把它说成没发生。
 - 本节的提交从 `feat/project@43ad8551` 新建分支写就，**不把事故期那条已分叉的旧历史 merge 回来**，
   并只在**已恢复的**部署工作树内 `git merge --ff-only`；合并前后都重新核对暂存集合、指纹与 unstaged。
+
+---
+
+## 附录 D — 最终项目级验收：**12 / 12 PASS**
+
+外部控制台已在用户明确授权下完成历史归档。本附录是标准 12 的复验与全项收口，仍由同一个独立验收 Session 执行。
+
+**最终被验提交**：`feat/project` = `bdf8f8c47f3dd41d4c712f3b60b8ede949440485`
+（= 任务分支 = 部署工作树 HEAD，三者一致）
+
+### D.1 标准 12 前半：「全部任务完成」
+
+Project `349bHrtPbgwiouD3cfCVP` 现有 **47** 个 Task：**DONE 43 / CANCELLED 3 / IN_PROGRESS 1**。
+唯一的 IN_PROGRESS 就是本验收任务自身 —— 它按定义只能在结论写完后才收口。**没有任何其它非终态工作。**
+
+三条 CANCELLED 是被 04R4 取代的历史尝试，**归档只归档、不改判**。逐条独立读回（只读，本单元未做任何写入）：
+
+| Task | Task 状态 | 关联 Session | runStatus / lifecycleState | endReason | retry |
+| --- | --- | --- | --- | --- | --- |
+| `34A8FPCBxkJsgE1vpBtJe` 04R | CANCELLED | `34A8GrCXcJxG5PT59LUeM` | **FAILED / COMPLETED** | `null` | 0 |
+| `34A9hr8j41AsVajr3Uo8j` 04R2 | CANCELLED | `34A9idAqG7nvEY3ovRj8L` | **CANCELLED / COMPLETED** | `task_cancelled` | 0 |
+| `34ABi44CV2Iun9MoSFPgz` 04R3 | CANCELLED | `34ABjOqQi7xWKxHbRQnn9` | **CANCELLED / COMPLETED** | `task_cancelled` | 0 |
+
+**04R 的 Session 仍是真实 FAILED**，`session_get` 读回的 `error` 字段仍逐字保留当时的反例结论
+（"同事务 `INSERT(A)→UPDATE(B)` 后最终身份仍为 A…"），`retryAttempts = 0`。**没有任何失败被改写成成功。**
+
+三条 Task 各自带一条外部控制台归档评论，措辞一致：CANCELLED 仅表示历史尝试终态归档，
+不改写原始验收结论、不宣称该尝试成功，并指名后继为 **04R4 `34AE0NtfR02I92WqYFxqD`（DONE，Session `SUCCEEDED / task_done`）**。
+
+### D.2 标准 12 后半：合并状态
+
+`feat/project` 已被外部**重接到 main**，所以合并状态与前几轮完全不同，必须重新核：
+
+| 检查 | 结果 |
+| --- | --- |
+| `feat/project` 与 main | merge-base = **`983ae4b9`（就是 main 的头）**，`ahead=3`、**`behind=0`** —— 不再分叉，也不可能有冲突 |
+| feat/project 相对 main 多出的 3 个提交 | 全部是本报告：`da2cc9e5`（附录 C）、`43ad8551`（C.10 更正）、`bdf8f8c4`（C.11 恢复补记）。**零行实现** |
+| 旧 SHA 是否仍可达 | **否** —— `3bd874e0` / `1144099c` / `c6e21de5` / `d4392b28` / `6045d9d0` / `324515c0` 均已不是祖先。重接把控制环历史换成了 main 自己的集成提交，所以**可达性必须按内容核，`--contains` 在这里必然假阴性** |
+| 按内容核（对照本单元真正验证过的 `3bd874e0`） | `src/apiserver/prisma/migrations/` **逐目录完全相同**（141 条）；`src/apiserver/src/projects/` 只有 `project-e2e-acceptance.pg.spec.ts` 差 **2 个空行**；`schema.prisma` 只差一段 `ConversationTurn.kind` 的**注释**（默认值未变、无需迁移）；契约 §7.3 仍是 `rotate`、dead-letter 修复三处标记全在 |
+| 实现是否已进 main / 上线 | 是。main 的 `0a684004` 已集成，线上 apiserver 跑的就是它，共享库 141 条迁移 |
+
+### D.3 前 11 条未因归档或恢复现场而失效
+
+两条独立理由，不是"想必没问题"：
+
+1. **被测代码与本单元验证过的基线逐字节等价**（D.2 内容核对：只差空行与一段注释，且都在被测面之外）。
+2. **在最终提交 `bdf8f8c4` 上真跑了一遍验收链**（`src/shared` 在 main 侧有改动，会进 apiserver 构建，所以不能只靠推理）：
+
+```
+PCC_E2E_CONTAINER=pcc23g-e2e-pg16 PCC_E2E_PORT=55496 PCC_E2E_DB=pcc23g_e2e \
+PCC_E2E_USER=pcc23g_admin PCC_E2E_PASSWORD=pcc23g_pw bash scripts/project-e2e.sh
+
+==> server identity: database=pcc23g_e2e role=pcc23g_admin system_identifier=7676294215341776935
+==> 141 migrations applied
+==> acceptance suite : # tests 28 / # pass 28 / # fail 0
+==> recovery suite   : # tests 18 / # pass 18 / # fail 0
+==> liveness audit clean
+==> OK        EXIT=0
+```
+
+未重复附录 C 已经跑过且输入未变的耗时套件（26 个 pg spec / 全量单测 / web / go）——它们的输入是同一份代码，重跑只会复制同一组数字。**本节不声称重跑过它们。**
+
+### D.4 12 条最终裁决
+
+| # | 裁决 | 依据 |
+| --- | --- | --- |
+| 1 | **PASS** | AC1×4；`publicIdempotencyKey` / `publicizeIds` 连字符串内嵌 uuid 一并转 Base62 |
+| 2 | **PASS** | AC2×8（含真实 SIGKILL 两侧、真实数据库重启、dead-letter 原子性两向） |
+| 3 | **PASS** | AC3×4 + §10.3 审计零行；**并在真实生产库上零违约** |
+| 4 | **PASS** | AC4×4；新建默认 `GUARDED_AUTO`；变异探针证明该默认被测试守住 |
+| 5 | **PASS** | AC5×2；F-22-04 已按"改文档不改键"闭环，并加了解析契约的守卫测试 |
+| 6 | **PASS** | AC6×2 + verdict/aggregation pg spec |
+| 7 | **PASS** | AC7×2 + `task-aggregation` 25/25 |
+| 8 | **PASS** | 单元 24 修复 + 附录 C.1 六项复验 + C.2 三个反向对照（M1 14/18、M2 15/18、M3 16/18） |
+| 9 | **PASS** | AC9×5，含两实例争抢、旧二进制越权被拒、真实数据库重启 |
+| 10 | **PASS** | AC10×3 + 控制面 11 段 + CLI/Web；且**已部署**，线上 dist 含全部控制环模块 |
+| 11 | **PASS** | AC11×4 + 迁移 SQL 安全默认；**线上 6 个既有 Project 全部 `coordinator_enabled=false` / `MANUAL`** |
+| 12 | **PASS** | D.1（无非终态工作，历史归档不改判、真实 FAILED 保留）+ D.2（已重接 main，`behind=0`，按内容核对可达）+ D.3 |
+
+**最终裁决：12 / 12 PASS。**
+
+本单元据此把 **Task 23 置 DONE**。**Project 状态不由本单元改动** —— 按项目约束，Coordinator 在读回本 Session 自然收口为 `SUCCEEDED / COMPLETED / task_done` 后自行处理。
+
+### D.5 收尾
+
+一次性容器 `pcc23g-e2e-pg16` 与其库已随脚本 trap 删除，`pcc23*` 残留计数 0；临时构建产物与 `src/web/node_modules` 软链已清除；共享 `orbit-postgres` 本轮**只读**（仅状态与评论查询）；任务 worktree 除本报告外 clean。
+落地仍只走**已恢复的**部署工作树 `git merge --ff-only`，合并前后核对用户暂存状态：
+`M README.md` / `D docs/project-agent-contract.md`、当前基线 staged binary diff SHA-256
+`b77cfe26a8d7a0340688d9efc200d086d24d2d18e9da69453bf35a337c062933`、unstaged 0 字节 —— 未 `reset`、未 `stash`、未 `update-ref`，**未提交任何用户暂存内容**。
