@@ -230,7 +230,7 @@ body {
    over the header band is fine here: the cards take no clicks (see below), so the controls
    underneath stay live.
    !important only on the declarations AntD itself sets: its cssinjs rules are injected after
-   this stylesheet and read `:where(.css-hash).ant-message .ant-message-notice-wrapper …`, i.e.
+   this stylesheet and read `:where(.css-hash).ant-message .ant-message-notice …`, i.e.
    specificity (0,2,0)/(0,3,0) — nothing we can write flatly outranks them. The ones AntD
    leaves alone (width, the card's text-align, user-select) land without it. */
 /* Normally level with the notification stack's origin; when that stack has cards up, it parks
@@ -240,15 +240,22 @@ body {
   top: max(calc(env(safe-area-inset-top, 0px) + 8px), var(--toast-stack-top, 0px)) !important;
   transition: top 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.ant-message-notice-wrapper {
-  text-align: right !important;
-  padding-right: max(16px, env(safe-area-inset-right, 0px)) !important;
+/* AntD 6 centres each notice by hand — inset-inline-start:50% plus a -50% translate on a
+   shrink-to-fit box — so right-aligning the stack means replacing that pair, not justifying the
+   list around it. Three classes to outrank AntD's own (0,2,0) rule without !important on
+   `transform`: an important transform would also outrank the entrance keyframes below and turn
+   the slide into a bare fade. */
+.ant-message.ant-message-list .ant-message-list-content > .ant-message-notice {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  transform: none;
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 /* Same card as the lifecycle notification below — radius, padding, border, shadow and icon
    metrics are shared, so two cards stacked in one corner read as one family rather than as two
    systems that happen to overlap. AntD's own defaults for this surface are 8px radius,
    9px/12px padding, a three-layer shadow and 16px icons. */
-.ant-message-notice-content {
+.ant-message-notice-wrapper {
   width: 360px;
   max-width: calc(100vw - 32px);
   padding: 12px 16px !important;
@@ -257,44 +264,47 @@ body {
   background: var(--bg-raised) !important;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1) !important;
   text-align: start;
+  gap: 16px !important;
   /* Toasts don't take clicks — the card floats over the header's right edge and used to
      swallow them (it blocked the double-click-to-rename target). Interactive cards opt back
      in below. */
   pointer-events: none !important;
 }
-:root[data-theme='dark'] .ant-message-notice-content {
+:root[data-theme='dark'] .ant-message-notice-wrapper {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35) !important;
 }
 /* 20px glyph inset 16px, text at 52px — the lifecycle card's icon column, so the two surfaces
    share a text edge. One palette too: AntD's message icons default to its own token colours,
    which are a different red (#f54a45) and orange (#ff8800) from the semantic vars every other
    status surface in the app resolves through. */
-.ant-message-custom-content > .anticon {
-  margin-inline-end: 16px !important;
+.ant-message-notice-icon {
   font-size: 20px !important;
 }
-.ant-message-custom-content.ant-message-success > .anticon {
+.ant-message-notice-icon > .anticon {
+  font-size: inherit !important;
+}
+.ant-message-success > .ant-message-notice-icon {
   color: var(--success-solid) !important;
 }
-.ant-message-custom-content.ant-message-info > .anticon {
+.ant-message-info > .ant-message-notice-icon {
   color: var(--brand) !important;
 }
-.ant-message-custom-content.ant-message-warning > .anticon {
+.ant-message-warning > .ant-message-notice-icon {
   color: var(--warning-solid) !important;
 }
-.ant-message-custom-content.ant-message-error > .anticon {
+.ant-message-error > .ant-message-notice-icon {
   color: var(--error-solid) !important;
 }
-.ant-message-notice-content:has(.toast-err) {
+.ant-message-notice-wrapper:has(.toast-err) {
   pointer-events: auto !important;
 }
-.ant-message-notice-content:has(.toast-err) {
+.ant-message-notice-wrapper:has(.toast-err) {
   user-select: text;
 }
 /* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
    AntD wraps our content in a <span> of its own that shrink-wraps inside the card's flex row,
    so the trailing close action needs that span to fill the card. */
-.ant-message-custom-content > span:has(> .toast-err) {
+.ant-message-notice-title:has(> .toast-err) {
   flex: 1;
   min-width: 0;
 }
@@ -311,41 +321,37 @@ body {
   top: calc(env(safe-area-inset-top, 0px) + 16px) !important;
   margin-right: max(16px, env(safe-area-inset-right, 0px)) !important;
 }
-.ant-notification.ant-notification-topRight
-  .ant-notification-notice-wrapper:has(> .session-lifecycle-toast) {
-  margin-bottom: 8px;
-  border-radius: 10px;
-  background: var(--bg-raised);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
-}
 /* Unlike the Message stack above, every card here takes clicks: the copy block opens the session
    the card names (see lib/toast.tsx), so there is no such thing as an inert one. */
-.ant-notification
-  .ant-notification-notice-wrapper
-  > .session-lifecycle-toast.ant-notification-notice {
+.ant-notification-notice.session-lifecycle-toast {
   box-sizing: border-box;
   width: 360px;
   max-width: calc(
     100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)
   );
   min-height: 64px;
+  margin-bottom: 8px;
   padding: 12px 16px;
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: transparent;
+  background: var(--bg-raised);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
 }
-.session-lifecycle-toast .ant-notification-notice-content,
-.session-lifecycle-toast .ant-notification-notice-with-icon,
-.session-lifecycle-toast .ant-notification-notice-message {
+.session-lifecycle-toast .ant-notification-notice-wrapper,
+.session-lifecycle-toast .ant-notification-notice-title {
   min-width: 0;
+}
+/* AntD 6 lays the card out as a flex row rather than absolutely positioning the glyph against an
+   indented message, so the icon column is the row's own gap: 16px of padding, a 20px glyph and a
+   16px gap put the text on the same edge the Message card uses. */
+.session-lifecycle-toast .ant-notification-notice-wrapper {
+  gap: 16px;
+  align-items: center;
 }
 /* One icon size for every tone, and the same 20px the Message toast uses — success used to
    render at 24px against everyone else's 20px, so the same filled status circle came in two
    weights depending on the outcome. (AntD sizes this one itself, hence !important.) */
 .session-lifecycle-toast .ant-notification-notice-icon {
-  inset-inline-start: 16px;
-  top: 50%;
-  transform: translateY(-50%);
   width: 20px;
   font-size: 20px !important;
   line-height: 1;
@@ -371,20 +377,14 @@ body {
    time out. `danger` keeps the red icon — it reports a destructive result — but not the border,
    because it dismisses itself like any other confirmation, and a card that looks identical to
    the one that stays put is the reason you stop trusting the border at all. */
-.ant-notification
-  .ant-notification-notice-wrapper
-  > .session-lifecycle-toast--warning.ant-notification-notice {
+.ant-notification-notice.session-lifecycle-toast--warning {
   border-color: var(--warning-border);
 }
-.ant-notification
-  .ant-notification-notice-wrapper
-  > .session-lifecycle-toast--error.ant-notification-notice {
+.ant-notification-notice.session-lifecycle-toast--error {
   border-color: var(--error-border);
 }
-.session-lifecycle-toast
-  .ant-notification-notice-with-icon
-  .ant-notification-notice-message {
-  margin-inline-start: 36px;
+.session-lifecycle-toast .ant-notification-notice-title {
+  margin: 0;
   font-size: inherit;
   line-height: inherit;
 }
@@ -446,9 +446,8 @@ body {
   line-height: 18px;
   overflow-wrap: anywhere;
 }
-.session-lifecycle-toast:has(.session-lifecycle-toast-detail) .ant-notification-notice-icon {
-  top: 16px;
-  transform: none;
+.session-lifecycle-toast:has(.session-lifecycle-toast-detail) .ant-notification-notice-wrapper {
+  align-items: flex-start;
 }
 .session-lifecycle-toast--warning,
 .session-lifecycle-toast--error {
@@ -480,9 +479,7 @@ body {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
-:root[data-theme='dark']
-  .ant-notification.ant-notification-topRight
-  .ant-notification-notice-wrapper:has(> .session-lifecycle-toast) {
+:root[data-theme='dark'] .ant-notification-notice.session-lifecycle-toast {
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
@@ -500,18 +497,10 @@ body {
     transform: translate3d(0, 0, 0);
   }
 }
-.ant-notification.ant-notification-topRight
-  .ant-notification-notice-wrapper.ant-notification-fade-enter.ant-notification-fade-enter-active:has(
-    > .session-lifecycle-toast
-  ),
-.ant-notification.ant-notification-topRight
-  .ant-notification-notice-wrapper.ant-notification-fade-appear.ant-notification-fade-appear-active:has(
-    > .session-lifecycle-toast
-  ),
-.ant-message
-  .ant-message-notice-wrapper.ant-message-move-up-enter.ant-message-move-up-enter-active,
-.ant-message
-  .ant-message-notice-wrapper.ant-message-move-up-appear.ant-message-move-up-appear-active {
+.session-lifecycle-toast.ant-notification-fade-enter.ant-notification-fade-enter-active,
+.session-lifecycle-toast.ant-notification-fade-appear.ant-notification-fade-appear-active,
+.ant-message .ant-message-notice.ant-message-fade-enter.ant-message-fade-enter-active,
+.ant-message .ant-message-notice.ant-message-fade-appear.ant-message-fade-appear-active {
   animation-name: orbit-toast-enter !important;
   animation-duration: 180ms !important;
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1) !important;
@@ -524,9 +513,7 @@ body {
     width: auto;
     margin-right: 0 !important;
   }
-  .ant-notification
-    .ant-notification-notice-wrapper
-    > .session-lifecycle-toast.ant-notification-notice {
+  .ant-notification-notice.session-lifecycle-toast {
     width: 100%;
     max-width: none;
   }
@@ -539,19 +526,15 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ant-notification.ant-notification-topRight
-    .ant-notification-notice-wrapper:has(> .session-lifecycle-toast) {
+  .ant-notification-notice.session-lifecycle-toast {
     transition: none !important;
   }
-  .ant-notification.ant-notification-topRight
-    .ant-notification-notice-wrapper.ant-notification-fade-enter:has(> .session-lifecycle-toast),
-  .ant-notification.ant-notification-topRight
-    .ant-notification-notice-wrapper.ant-notification-fade-appear:has(> .session-lifecycle-toast),
-  .ant-notification.ant-notification-topRight
-    .ant-notification-notice-wrapper.ant-notification-fade-leave:has(> .session-lifecycle-toast),
-  .ant-message .ant-message-notice-wrapper.ant-message-move-up-enter,
-  .ant-message .ant-message-notice-wrapper.ant-message-move-up-appear,
-  .ant-message .ant-message-notice-wrapper.ant-message-move-up-leave {
+  .session-lifecycle-toast.ant-notification-fade-enter,
+  .session-lifecycle-toast.ant-notification-fade-appear,
+  .session-lifecycle-toast.ant-notification-fade-leave,
+  .ant-message .ant-message-notice.ant-message-fade-enter,
+  .ant-message .ant-message-notice.ant-message-fade-appear,
+  .ant-message .ant-message-notice.ant-message-fade-leave {
     opacity: 1 !important;
     animation: none !important;
   }
@@ -561,8 +544,9 @@ body {
 }
 
 /* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
-   × instead of centred against the whole block. (0,3,0) to outrank AntD's own align-items. */
-.ant-message-notice-content:has(.toast-err) .ant-message-custom-content {
+   × instead of centred against the whole block. AntD 6 folded v5's inner content row into the
+   card itself, so this lands on the card rather than on a child of it. */
+.ant-message-notice-wrapper:has(.toast-err) {
   align-items: flex-start;
 }
 .toast-err {
@@ -4236,11 +4220,11 @@ html[data-theme='dark'] .session-tag-chip {
    and a shade heavier than the static agent label and usage percent beside them — so
    pull the selected value down to match. The disabled (non-editable) shade is left to
    AntD so a read-only control still reads as read-only. */
-.composer-pills .ant-select-selection-item,
-.composer-pills .ant-select-selection-placeholder {
+.composer-pills .ant-select-content-has-value,
+.composer-pills .ant-select-placeholder {
   font-size: 12px;
 }
-.composer-pills .ant-select:not(.ant-select-disabled) .ant-select-selection-item {
+.composer-pills .ant-select:not(.ant-select-disabled) .ant-select-content-has-value {
   color: var(--text-2);
 }
 /* Lightweight, borderless controls (Claude-style): text-only label, with a faint
@@ -4428,7 +4412,7 @@ html[data-theme='dark'] .session-tag-chip {
   display: block;
   cursor: zoom-in;
 }
-.composer-attach .ant-image-mask {
+.composer-attach .ant-image-cover {
   border-radius: inherit;
 }
 .composer-attach-eye {
@@ -6714,17 +6698,17 @@ html[data-theme='dark'] .session-tag-chip {
   min-width: 0;
   margin: -3px 0;
 }
-.tdp-assignee-select.ant-select .ant-select-selector {
+.tdp-assignee-select.ant-select .ant-select-content {
   padding: 0;
   font-size: 13px;
 }
-.tdp-assignee-select.ant-select .ant-select-selection-item {
+.tdp-assignee-select.ant-select .ant-select-content-has-value {
   color: var(--text-1);
 }
-.tdp-assignee-select.ant-select .ant-select-selection-placeholder {
+.tdp-assignee-select.ant-select .ant-select-placeholder {
   color: var(--text-3);
 }
-.tdp-assignee-select.ant-select:hover .ant-select-selector {
+.tdp-assignee-select.ant-select:hover .ant-select-content {
   background: var(--bg-hover);
   border-radius: 4px;
 }
@@ -7605,11 +7589,10 @@ html[data-theme='dark'] .session-tag-chip {
   }
   /* AntD Select focuses this hidden search input on tap — a <16px font here is what
      still zooms the page when the composer's Mode / Model / Effort dropdowns open.
-     AntD sizes it with a 4-class rule (.ant-select-single:not(…) .ant-select-selector
-     .ant-select-selection-search-input, 14px), which outranks a plain selector, so
-     !important is required to actually lift it. The input is invisible on a non-search
-     Select, so this only affects the zoom trigger, not layout. */
-  .ant-select-selection-search-input {
+     AntD sizes it from the Select's own font token through a rule that outranks a plain
+     selector, so !important is required to actually lift it. The input is invisible on a
+     non-search Select, so this only affects the zoom trigger, not layout. */
+  .ant-select-input {
     font-size: 16px !important;
   }
 }
@@ -8616,7 +8599,7 @@ html[data-theme='dark'] .session-tag-chip {
    chrome: no antd title bar, no footer buttons, body padding stripped. The three
    regions — input, results, hint bar — mirror the session list's own vocabulary so a
    result row reads the same as the row it will navigate to. */
-.ssearch-modal .ant-modal-content {
+.ssearch-modal .ant-modal-container {
   padding: 0;
   overflow: hidden;
   border-radius: 12px;
@@ -8869,7 +8852,7 @@ html[data-theme='dark'] .session-tag-chip {
 }
 
 /* the open list */
-.np-pop .ant-popover-inner {
+.np-pop .ant-popover-container {
   padding: 6px;
 }
 .np-list {
