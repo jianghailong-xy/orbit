@@ -30,6 +30,12 @@ import {
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
 import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
+import { planTaskAggregation } from '../projects/task-aggregation';
+import {
+  AGGREGATION_SCOPE_MAX_TASKS,
+  applyTaskAggregations,
+  collectAggregationScope,
+} from '../projects/task-aggregation-writer';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -154,11 +160,13 @@ export const TASK_LIST_SELECT = {
   autoRunWhenReady: true,
   provider: true,
   model: true,
-  // Two enum columns, in for the same reason parentTaskId is: a reader looking at a project's tree
-  // needs to know which rows complete themselves and what their checks concluded, and the only
-  // alternative is one GET per row.
+  // Two enum columns and the relation they are about, in for the same reason parentTaskId is: a
+  // reader looking at a project's tree needs to know which rows complete themselves, which rows
+  // are checks and of what, and what those checks concluded — and the only alternative is one GET
+  // per row. `verifiesTaskId` is spelled base62 on the way out, like every other id here.
   completionPolicy: true,
   verdict: true,
+  verifiesTaskId: true,
   assignee: {
     select: {
       id: true,
@@ -915,6 +923,90 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Everything that must be true of the task a verification is being pointed AT (§13.2).
+   *
+   * Four refusals, and each of them is a silence somewhere else if it is skipped. A subject the
+   * caller does not own is a cross-tenant read. A subject that is the verifier itself is a task
+   * grading its own claim. A subject that is ITSELF a verification has nothing left to check —
+   * the automatic path has declined that shape since it existed, and a deliberate door should not
+   * be the one that allows it. And a subject in a different project is the quiet one: aggregation
+   * plans over one project's tasks, so a check filed across that line is counted by nobody,
+   * `VERIFICATION_PASSED` reads it as "zero checks" and the parent it was supposed to gate
+   * completes without it.
+   *
+   * `db` is the caller's transaction under the owner lock, so what is read here is still true
+   * when the row that relies on it is written.
+   */
+  private async assertVerificationEligible(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    verifierTaskId: string | null,
+    verifiesTaskId: string,
+    projectId: string | null,
+  ): Promise<void> {
+    if (verifierTaskId && verifiesTaskId === verifierTaskId) {
+      throw new BadRequestException('A task cannot verify itself');
+    }
+    const subject = await db.task.findFirst({
+      where: { id: verifiesTaskId, ownerId },
+      select: { id: true, projectId: true, verifiesTaskId: true },
+    });
+    if (!subject) throw new NotFoundException('verified task not found');
+    if (subject.verifiesTaskId) {
+      throw new BadRequestException(
+        'That task is itself a verification — a check of a check has nothing left to verify',
+      );
+    }
+    if ((subject.projectId ?? null) !== projectId) {
+      throw new BadRequestException(
+        'A verification must be in the same project as the task it verifies — file both under ' +
+          'the same project (or neither) before linking them',
+      );
+    }
+  }
+
+  /**
+   * Recompute §13.1's parent aggregation over everything the write just touched.
+   *
+   * Called after the writes that can change an input to it — a status, a parent link, a policy, a
+   * verdict, a task appearing or disappearing — and never before: the plan is a recomputation
+   * over CURRENT children, so reading them before the write would answer the previous question.
+   *
+   * Best-effort, like `triggerDependents` beside it and for the same reason. A parent that could
+   * not be recomputed is a parent whose status is stale, which the next write over that tree
+   * fixes; failing the caller's status update to protect a derived column would lose the fact to
+   * protect the summary of it.
+   */
+  private async recomputeAggregates(ownerId: string, seedTaskIds: string[]): Promise<string[]> {
+    const seeds = [...new Set(seedTaskIds.filter((id): id is string => !!id))];
+    if (!seeds.length) return [];
+    const scope = await collectAggregationScope(this.prisma, ownerId, seeds);
+    if (scope.truncated) {
+      this.logger.warn(
+        `aggregation skipped for ${seeds.length} task(s): scope exceeded ` +
+          `${AGGREGATION_SCOPE_MAX_TASKS} tasks`,
+      );
+      return [];
+    }
+    const plan = planTaskAggregation(scope.facts);
+    if (plan.cycleTaskIds.length) {
+      // AG2. A cycle has no bottom to recompute from, so the planner returns nothing rather than
+      // guessing — this only says so out loud, since a silently skipped tree looks like one that
+      // had nothing to do.
+      this.logger.warn(
+        `aggregation skipped: ${plan.cycleTaskIds.length} task(s) lie on a parentTaskId cycle`,
+      );
+      return [];
+    }
+    if (!plan.aggregations.length) return [];
+    const moved = await applyTaskAggregations(this.prisma, ownerId, plan.aggregations, new Date());
+    for (const taskId of moved) {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
+    }
+    return moved;
+  }
+
+  /**
    * Walk up from `parentTaskId` and refuse the link if it comes back to `taskId`.
    *
    * One indexed lookup per level rather than loading the owner's edges wholesale, which is what
@@ -981,13 +1073,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     db: Prisma.TransactionClient,
     ownerId: string,
     taskId: string,
-    current: { projectId: string | null; parentTaskId: string | null },
+    current: { projectId: string | null; parentTaskId: string | null; verifiesTaskId: string | null },
     dto: UpdateTaskDto,
   ): Promise<void> {
-    if (dto.projectId === undefined && dto.parentTaskId === undefined) return;
+    if (
+      dto.projectId === undefined &&
+      dto.parentTaskId === undefined &&
+      dto.verifiesTaskId === undefined
+    ) {
+      return;
+    }
     const projectId = dto.projectId === undefined ? current.projectId : (dto.projectId ?? null);
     const parentTaskId =
       dto.parentTaskId === undefined ? current.parentTaskId : (dto.parentTaskId ?? null);
+    const verifiesTaskId =
+      dto.verifiesTaskId === undefined ? current.verifiesTaskId : (dto.verifiesTaskId ?? null);
 
     if (parentTaskId) {
       if (parentTaskId === taskId) {
@@ -997,12 +1097,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       await this.assertNoParentCycle(db, taskId, parentTaskId);
     }
 
+    // Re-asked on a project move as well as on a re-point, and that is the half that matters: a
+    // check and its subject sharing a project is a fact this write can break from EITHER side, and
+    // a verification that has drifted out of its subject's project is counted by nobody.
+    if (verifiesTaskId) {
+      await this.assertVerificationEligible(db, ownerId, taskId, verifiesTaskId, projectId);
+    }
+
     if (projectId !== current.projectId) {
       const subtasks = await db.task.count({ where: { ownerId, parentTaskId: taskId } });
       if (subtasks > 0) {
         throw new BadRequestException(
           `This task has ${subtasks} subtask(s) that would be left in a different project — ` +
             'detach them (parentTaskId: null), move them, and link them again',
+        );
+      }
+      // The same statement from the other side of the relation. Left unchecked, moving a subject
+      // out from under its checks is the quietest way to make `VERIFICATION_PASSED` complete a
+      // parent over verifications that no longer count towards it.
+      const checks = await db.task.count({ where: { ownerId, verifiesTaskId: taskId } });
+      if (checks > 0) {
+        throw new BadRequestException(
+          `This task has ${checks} verification(s) that would be left in a different project — ` +
+            'move or detach them before moving it',
         );
       }
     }
@@ -1259,7 +1376,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let task: Task;
     try {
       task =
-        dependsOnTaskIds.length || dto.parentTaskId
+        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId
           ? await this.prisma.$transaction(async (tx) => {
               await this.lockDependencyGraph(tx, ownerId);
               if (dto.parentTaskId) {
@@ -1267,6 +1384,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   tx,
                   ownerId,
                   dto.parentTaskId,
+                  dto.projectId ?? null,
+                );
+              }
+              // Same lock and the same reason as the parent above: the subject's project is read
+              // here and relied on by the row written next, so a concurrent move of that subject
+              // into another project has to be wholly before or wholly after this. No self-check
+              // is possible — the verifier does not exist yet.
+              if (dto.verifiesTaskId) {
+                await this.assertVerificationEligible(
+                  tx,
+                  ownerId,
+                  null,
+                  dto.verifiesTaskId,
                   dto.projectId ?? null,
                 );
               }
@@ -1298,6 +1428,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // sends one); a task created without an owned session just falls back to the poll. Mirrors
     // SessionsService.create's publishSessionCreated.
     if (sessionId) this.realtime.publishTaskChanged(sessionId, task.id);
+    // AG3 in the direction that is easy to forget: a task ARRIVING is as much a change to its
+    // parent's children as one completing. Without this, filing a subtask under a parent that
+    // ALL_CHILDREN_DONE had already completed leaves the parent DONE over work that has not
+    // started, and a verification filed at a VERIFICATION_PASSED parent leaves it DONE over a
+    // check that has not run.
+    if (task.parentTaskId || task.verifiesTaskId) {
+      await this.recomputeAggregates(
+        ownerId,
+        [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
+      ).catch((e) =>
+        this.logger.warn(`aggregation after create of ${task.id} failed: ${e?.message ?? e}`),
+      );
+    }
     return task;
   }
 
@@ -1343,6 +1486,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       listId: dto.listId,
       projectId: dto.projectId,
       parentTaskId: dto.parentTaskId,
+      // §13.2's relation, and the only column here that decides what another task's completion
+      // means. Omitted leaves it NULL, which is every task that is not a check of something.
+      verifiesTaskId: dto.verifiesTaskId,
       acceptanceCriteria: dto.acceptanceCriteria,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
@@ -1421,6 +1567,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             'under the same project (or neither) before linking them',
         );
     });
+    // A subject named inside the batch, judged here for the same reasons parentRef is: both sides
+    // are in the request, so every rule `assertVerificationEligible` asks of an existing subject
+    // is answerable without a query and before any row is written. Backward-only makes "verifies
+    // itself" unconstructible rather than something to check for, and an earlier item is also the
+    // only one whose id exists by the time this row is written.
+    items.forEach((item, index) => {
+      if (item.verifiesRef === undefined) return;
+      if (item.verifiesTaskId)
+        throw new BadRequestException(
+          `tasks[${index}]: verifiesRef and verifiesTaskId name two different subjects — pass one`,
+        );
+      const position = positionByRef.get(item.verifiesRef);
+      if (position === undefined || position >= index)
+        throw new BadRequestException(
+          `tasks[${index}]: verifiesRef "${item.verifiesRef}" must name an earlier task in this batch`,
+        );
+      const subject = items[position];
+      if (subject.verifiesTaskId || subject.verifiesRef)
+        throw new BadRequestException(
+          `tasks[${index}]: that task is itself a verification — a check of a check has nothing ` +
+            'left to verify',
+        );
+      if ((subject.projectId ?? null) !== (item.projectId ?? null))
+        throw new BadRequestException(
+          `tasks[${index}]: a verification must be in the same project as the task it verifies — ` +
+            'file both under the same project (or neither) before linking them',
+        );
+    });
 
     // Validate every referenced entity before writing anything, once per distinct value.
     const distinct = (values: Array<string | null | undefined>) => [
@@ -1460,6 +1634,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     for (const item of items) {
       if (item.parentTaskId) {
         await this.assertParentEligible(db, ownerId, item.parentTaskId, item.projectId ?? null);
+      }
+      if (item.verifiesTaskId) {
+        await this.assertVerificationEligible(
+          db,
+          ownerId,
+          null,
+          item.verifiesTaskId,
+          item.projectId ?? null,
+        );
       }
     }
   }
@@ -1638,7 +1821,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // which no other request can see — let alone move into another project — so there is nothing
     // for the lock or the DB check below to protect; its rules were settled in assertBatchValid,
     // where both sides of the pair were in the request.
-    const hasParents = items.some((item) => !!item.parentTaskId);
+    const hasParents = items.some((item) => !!item.parentTaskId || !!item.verifiesTaskId);
     const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
     const created = await this.prisma.$transaction(async (tx) => {
       // Same owner lock as create: the tasks and their edges must become visible together, or a
@@ -1664,10 +1847,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // Resolved into the field an already-existing parent would have used, so one write path
         // serves both and nothing downstream has to know which spelling the caller used.
         // Non-null: every parentRef was proven to belong to an earlier, already-created item.
+        // A parentRef or a verifiesRef names an item of this same batch, so the id it stands for
+        // only exists now. Both are resolved into the field an already-existing link would have
+        // used, so one write path serves either spelling and nothing downstream has to know which
+        // the caller passed. Non-null: both were proven to belong to earlier, already-created
+        // items.
         const row =
-          item.parentRef === undefined
+          item.parentRef === undefined && item.verifiesRef === undefined
             ? item
-            : { ...item, parentTaskId: idByRef.get(item.parentRef)! };
+            : {
+                ...item,
+                ...(item.parentRef === undefined
+                  ? {}
+                  : { parentTaskId: idByRef.get(item.parentRef)! }),
+                ...(item.verifiesRef === undefined
+                  ? {}
+                  : { verifiesTaskId: idByRef.get(item.verifiesRef)! }),
+              };
         const task =
           existing ??
           (await tx.task.create({
@@ -1707,6 +1903,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     // One control-plane nudge per task, exactly as create does (see its comment).
     if (sessionId) for (const task of created) this.realtime.publishTaskChanged(sessionId, task.id);
+    // Same as create: rows arriving under a parent, or pointed at one, are a change to what that
+    // parent's status is allowed to claim. Seeded from the links rather than from the new rows —
+    // the parents and subjects are what get recomputed, and half of them are in this batch.
+    const touched = created.flatMap((task) =>
+      [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
+    );
+    if (touched.length) {
+      await this.recomputeAggregates(ownerId, touched).catch((e) =>
+        this.logger.warn(`aggregation after batch create failed: ${e?.message ?? e}`),
+      );
+    }
     return created;
   }
 
@@ -3126,7 +3333,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return comments.map((c) => ({ ...c, authorName: names.get(c.authorId) ?? null }));
   }
 
-  async update(ownerId: string, id: string, dto: UpdateTaskDto) {
+  /**
+   * `actingSessionId` is the run this edit is being made FROM, when there is one — the runner
+   * sends it on every task write an agent makes. It is used for exactly one decision, §13.2's
+   * independence rule below, and is otherwise ignored: a task edit is authorised by the owner,
+   * not by which run happened to make it.
+   */
+  async update(ownerId: string, id: string, dto: UpdateTaskDto, actingSessionId?: string) {
     const before = await this.get(ownerId, id);
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
@@ -3135,7 +3348,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Whether this write can move the task within the project/subtask structure. It decides both
     // that the hierarchy rules are checked at all and that the write takes the owner lock: the
     // check and the update it authorises have to be one serialized step, not two.
-    const touchesHierarchy = dto.projectId !== undefined || dto.parentTaskId !== undefined;
+    const touchesHierarchy =
+      dto.projectId !== undefined ||
+      dto.parentTaskId !== undefined ||
+      dto.verifiesTaskId !== undefined;
     const dependsOnTaskIds =
       dto.dependsOnTaskIds === undefined ? undefined : [...new Set(dto.dependsOnTaskIds)];
     if (dependsOnTaskIds?.includes(id)) {
@@ -3170,12 +3386,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // reading "the verification finished" as a pass.
       verdict: dto.verdict === undefined ? undefined : (dto.verdict ?? null),
     };
+    // What this task verifies AFTER the write, not before it: one call may both point a task at a
+    // subject and conclude about it, and judging the verdict against the old column would refuse
+    // the second half of a write whose first half made it legal.
+    const verifiesTaskId =
+      dto.verifiesTaskId === undefined ? before.verifiesTaskId : (dto.verifiesTaskId ?? null);
     // The column is only meaningful on a row that names what it verifies, and the database says so
     // too (0123's task_verdict_requires_subject). Checked here as well so the caller gets the
     // reason rather than a constraint name.
-    if (dto.verdict != null && !before.verifiesTaskId) {
+    if (dto.verdict != null && !verifiesTaskId) {
       throw new BadRequestException(
         'Only a verification task can carry a verdict — this task does not verify anything',
+      );
+    }
+    // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,
+    // a defect subtask, a downstream block — is recorded against the subject this task named at
+    // the time. Re-pointing it afterwards would leave the ledger asserting conclusions about a
+    // task this verifier no longer checks, and there is no write that repairs that, because the
+    // consequences were correct when they were applied. A new check is one task create.
+    if (
+      dto.verifiesTaskId !== undefined &&
+      (dto.verifiesTaskId ?? null) !== (before.verifiesTaskId ?? null) &&
+      (before.verdict != null || BigInt(before.verdictRevision ?? 0) > 0n)
+    ) {
+      throw new BadRequestException(
+        'This verification has already concluded — its subject can no longer be changed. File a ' +
+          'new verification task for the other subject instead',
       );
     }
     // Does this write REACH a verdict? That is a narrower thing than "the verdict column was in
@@ -3189,6 +3425,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // row is written, since by the time a trigger runs that row is already held and taking the
     // project lock there would reverse the loop's one lock order.
     const concludesVerdict = dto.verdict != null && dto.verdict !== before.verdict;
+    // The independence rule, as a refusal rather than as a sentence in a brief.
+    //
+    // A verification is a SECOND opinion, and the run that produced the work is not a second
+    // opinion about it. The project instructions have said so in prose for as long as there have
+    // been verification tasks; prose is checked by whoever remembers to check it, and the case
+    // that matters — a session finishing its own task and then writing PASS on the check filed
+    // against it — is exactly the one where nobody is watching.
+    //
+    // Scoped to the one relation that makes it wrong: the acting session's own task IS the
+    // subject. A person concluding from no session, a coordinator concluding from its own, and
+    // the verifier's own run concluding about the subject are all left alone.
+    if (concludesVerdict && actingSessionId && verifiesTaskId) {
+      const actingSession = await this.prisma.session.findFirst({
+        where: { id: actingSessionId, ownerId },
+        select: { taskId: true },
+      });
+      if (actingSession?.taskId && actingSession.taskId === verifiesTaskId) {
+        throw new BadRequestException(
+          'A verification cannot be concluded from the session that ran the task it verifies — ' +
+            'the check has to be an independent run',
+        );
+      }
+    }
+    // §13.1's other half: a policy that decides a parent's completion decides it, and a status
+    // write is not a way around it. Refused rather than written-then-recomputed, because a DONE
+    // that survives for one reconcile is a DONE somebody can read, quote and act on.
+    //
+    // AG4's condition is checked as AG4 states it — the policy is inert on a childless task — so
+    // this refuses only where the policy actually answers the question.
+    if (dto.status === TaskStatus.DONE && before.status !== TaskStatus.DONE) {
+      const policy = dto.completionPolicy ?? before.completionPolicy;
+      if (policy && policy !== 'MANUAL') {
+        const children = await this.prisma.task.count({ where: { ownerId, parentTaskId: id } });
+        if (children > 0) {
+          throw new BadRequestException(
+            `This task completes by ${policy}, not by a status write — its ${children} subtask(s)` +
+              (policy === 'VERIFICATION_PASSED' ? ' and its verifications' : '') +
+              ' decide when it is DONE. Set completionPolicy to MANUAL if you mean to write it' +
+              ' by hand',
+          );
+        }
+      }
+    }
     // assigneeId is a relation FK: connect to (re)assign, disconnect to clear.
     if (dto.assigneeId !== undefined) {
       data.assignee = dto.assigneeId ? { connect: { id: dto.assigneeId } } : { disconnect: true };
@@ -3210,6 +3489,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     if (dto.parentTaskId !== undefined) {
       data.parent = dto.parentTaskId ? { connect: { id: dto.parentTaskId } } : { disconnect: true };
+    }
+    // The verification link is a relation FK like the two above: connect to point this task at a
+    // subject, disconnect to make it an ordinary task again.
+    if (dto.verifiesTaskId !== undefined) {
+      data.verifies = dto.verifiesTaskId
+        ? { connect: { id: dto.verifiesTaskId } }
+        : { disconnect: true };
     }
     // One owner lock covers both structures a task can be moved within — its dependency edges and
     // its place in a project's subtask tree — because a single request can touch both and because
@@ -3238,7 +3524,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               // commit an illegal state together.
               const current = await tx.task.findFirst({
                 where: { id, ownerId },
-                select: { projectId: true, parentTaskId: true },
+                select: { projectId: true, parentTaskId: true, verifiesTaskId: true },
               });
               if (!current) throw new NotFoundException('task not found');
               await this.assertHierarchyConsistent(tx, ownerId, id, current, dto);
@@ -3302,6 +3588,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // observation and lets the reader infer the cause from the verification count rather than
     // asserting one. Either way it is a campaign's most consequential silent change: this
     // deployment reverted six tasks in one afternoon and nothing anywhere said so.
+    // Every input to §13.1 that this write could have moved: the task's own status, the policy
+    // that reads its children, the verdict its subject's parent may be waiting on, and either end
+    // of a re-parenting. Seeded with the task itself as well as its links, because the task can be
+    // a parent, a child, a verifier and a subject at once and the closure starts from all of them.
+    const movesAggregationInput =
+      dto.status !== undefined ||
+      dto.completionPolicy !== undefined ||
+      dto.verdict !== undefined ||
+      dto.parentTaskId !== undefined ||
+      dto.verifiesTaskId !== undefined;
+    if (movesAggregationInput) {
+      await this.recomputeAggregates(
+        ownerId,
+        [id, before.parentTaskId, before.verifiesTaskId, dto.parentTaskId, verifiesTaskId].filter(
+          (taskId): taskId is string => !!taskId,
+        ),
+      ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
+    }
     if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
       const checks = await this.prisma.task.count({ where: { verifiesTaskId: id } });
       // The id is encoded where it becomes prose. This detail is stored and replayed to agents,
@@ -3338,6 +3642,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         id: true,
         title: true,
         listId: true,
+        projectId: true,
         isForeman: true,
         verifiesTaskId: true,
         list: { select: { verifyOnDone: true } },
@@ -3400,6 +3705,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         description: this.buildVerificationBrief(task.title, taskId, unevidenced),
         ownerId,
         listId: task.listId,
+        // The subject's project, not none. A check filed outside its subject's project is one
+        // `GET /projects/:id/verifications` cannot see (it filters on the column) and one
+        // `VERIFICATION_PASSED` cannot count — the same rule the deliberate door enforces, which
+        // this path was quietly breaking for every project task it ever checked.
+        projectId: task.projectId,
         assigneeId: task.assignee.id,
         verifiesTaskId: taskId,
         // Dispatched by the DONE it follows, not by a prerequisite reaching DONE.
@@ -4361,10 +4671,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.get(ownerId, id);
-    await this.deleteAndStopRuns(ownerId, [id]);
+    const { survivingLinks } = await this.deleteAndStopRuns(ownerId, [id]);
     // Cascades may remove prerequisite edges from other open DAGs, so invalidate the owner's
     // task snapshots even though the deleted focus task itself can no longer be fetched.
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, id);
+    // A task LEAVING is the third change to a parent's children, beside arriving and completing,
+    // and it is the one that can complete a parent rather than reopen it: delete the last
+    // outstanding subtask and ALL_CHILDREN_DONE is satisfied by what remains.
+    //
+    // `verifiesTaskId` cascades, so deleting a subject takes its checks with it — which is why
+    // the seeds are the DELETED task's own links and not the checks that pointed at it.
+    if (survivingLinks.length) {
+      await this.recomputeAggregates(ownerId, survivingLinks).catch((e) =>
+        this.logger.warn(`aggregation after delete of ${id} failed: ${e?.message ?? e}`),
+      );
+    }
     return { ok: true };
   }
 
@@ -4389,13 +4710,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * fails its foreign key against the row just deleted. Unlocked it could slip in between the
    * scan and the delete and be stranded by the very code meant to prevent that.
    */
-  private async deleteAndStopRuns(ownerId: string, ids: string[]): Promise<number> {
-    const { deleted, runs } = await this.prisma.$transaction(
+  private async deleteAndStopRuns(
+    ownerId: string,
+    ids: string[],
+  ): Promise<{ deleted: number; survivingLinks: string[] }> {
+    const { deleted, runs, links } = await this.prisma.$transaction(
       async (tx) => {
         // Ordered, so two deletes over overlapping selections cannot take the same rows in
         // opposite orders and deadlock.
-        await tx.$queryRaw`
-          SELECT id FROM "task"
+        //
+        // The two links come back off the SAME locked read, which is the only moment they are both
+        // still true and no longer changeable: a parent whose last outstanding subtask this delete
+        // removes has to be recomputed, and after the DELETE there is nothing left to ask.
+        const locked = await tx.$queryRaw<
+          Array<{ parentTaskId: string | null; verifiesTaskId: string | null }>
+        >`
+          SELECT id, "parent_task_id" AS "parentTaskId", "verifies_task_id" AS "verifiesTaskId"
+          FROM "task"
           WHERE id = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
           ORDER BY id
           FOR UPDATE`;
@@ -4404,7 +4735,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true },
         });
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
-        return { deleted: res.count, runs: occupying.map((s) => s.id) };
+        return { deleted: res.count, runs: occupying.map((s) => s.id), links: locked };
       },
       // The delete used to be one implicit statement under no client deadline. Inside an
       // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
@@ -4427,7 +4758,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (runs.length > 0) {
       this.logger.log(`task delete: ended ${runs.length} in-flight run(s) across ${deleted} task(s)`);
     }
-    return deleted;
+    // Only the links that OUTLIVE this delete are worth recomputing; anything inside the same
+    // selection is gone. `links` is [] on a caller whose transaction returned nothing, which is
+    // the same as having no aggregate to recompute.
+    const doomed = new Set(ids);
+    const survivingLinks = [
+      ...new Set(
+        (links ?? [])
+          .flatMap((task) => [task.parentTaskId, task.verifiesTaskId])
+          .filter((id): id is string => !!id && !doomed.has(id)),
+      ),
+    ];
+    return { deleted, survivingLinks };
   }
 
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
@@ -4965,9 +5307,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async batchDelete(ownerId: string, taskIds: string[]) {
     const uniqueIds = [...new Set(taskIds)];
     if (uniqueIds.length === 0) return { deleted: 0 };
-    const deleted = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    const { deleted, survivingLinks } = await this.deleteAndStopRuns(ownerId, uniqueIds);
     if (deleted > 0) {
       this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, uniqueIds[0]);
+      // Same as remove, in bulk: a parent whose last outstanding subtask was in this selection is
+      // completed by what is left of it, and nothing else recomputes it.
+      if (survivingLinks.length) {
+        await this.recomputeAggregates(ownerId, survivingLinks).catch((e) =>
+          this.logger.warn(`aggregation after batch delete failed: ${e?.message ?? e}`),
+        );
+      }
     }
     return { deleted };
   }

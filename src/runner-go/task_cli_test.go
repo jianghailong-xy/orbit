@@ -869,3 +869,109 @@ func TestTaskCLIListRejectsCursorWithoutAll(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// The CLI does not own an id: whatever base62 spelling `task_get` handed the agent has to reach
+// the server byte for byte. This is the same contract the `--runner-id` test pins for agents, and
+// the same class of bug — a door that quietly reshapes an id is one that binds a task to a subject
+// that cannot exist.
+func TestTaskCLIVerifiesTaskIDTravelsVerbatimAndClears(t *testing.T) {
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	const subject = "34AlSqrBhQa7RbAeub5Fr"
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{
+		"create", "--title", "[VERIFY] phase", "--verifies-task-id", subject, "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTaskCLI([]string{
+		"update", "task-1", "--verifies-task-id", subject, "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTaskCLI([]string{"update", "task-1", "--clear-verifies", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bodies) != 3 {
+		t.Fatalf("bodies = %#v", bodies)
+	}
+	if bodies[0]["verifiesTaskId"] != subject {
+		t.Fatalf("create verifiesTaskId = %#v, want %q", bodies[0]["verifiesTaskId"], subject)
+	}
+	if bodies[1]["verifiesTaskId"] != subject {
+		t.Fatalf("update verifiesTaskId = %#v, want %q", bodies[1]["verifiesTaskId"], subject)
+	}
+	// Three-state: omitted keeps the link, an id re-points it, and --clear-verifies detaches it —
+	// which has to be a JSON null in the body, not an absent key.
+	cleared, present := bodies[2]["verifiesTaskId"]
+	if !present || cleared != nil {
+		t.Fatalf("clear verifiesTaskId = %#v (present=%v), want explicit null", cleared, present)
+	}
+}
+
+// A flag that is set to nothing is a typo or an unset shell variable, and detaching has its own
+// spelling — the same rule --parent-task-id and --clear-parent already carry.
+func TestTaskCLIVerifiesFlagsAreExplicitAndExclusive(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"create", "--title", "x", "--verifies-task-id", ""}, want: "--verifies-task-id cannot be empty"},
+		{args: []string{"update", "task-1", "--verifies-task-id", ""}, want: "use --clear-verifies"},
+		{args: []string{"update", "task-1", "--verifies-task-id", "t1", "--clear-verifies"}, want: "cannot be used together"},
+	} {
+		var out bytes.Buffer
+		err := cmdTaskCLI(tc.args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("cmdTaskCLI(%v) error = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+}
+
+// §13.2's independence rule is decided by the server from the acting session, so the CLI has to
+// say which run is writing. Silently omitting it would not fail anything visibly — it would make
+// the rule unenforceable for every verdict written from a terminal inside a session.
+func TestTaskCLIUpdateCarriesTheActingSession(t *testing.T) {
+	var sawSession string
+	var sawHeader bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawSession = r.Header.Get("X-Orbit-Session-Id")
+		_, sawHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	t.Setenv("ORBIT_SESSION_ID", "verifier-session")
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"update", "task-1", "--verdict", "PASS", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if sawSession != "verifier-session" {
+		t.Fatalf("X-Orbit-Session-Id = %q, want verifier-session", sawSession)
+	}
+
+	// And outside a session there is no run to name: the header must be absent rather than empty,
+	// so the server sees "no acting session" instead of one it has to look up and fail to find.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	sawSession, sawHeader = "", false
+	out.Reset()
+	if err := cmdTaskCLI([]string{"update", "task-1", "--status", "DONE", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if sawHeader {
+		t.Fatalf("X-Orbit-Session-Id sent outside a session: %q", sawSession)
+	}
+}

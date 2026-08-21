@@ -88,7 +88,7 @@ export interface ProjectTaskPageQuery {
  * It is a `_count` — one joined aggregate — and NOT `children: true` with a `.length`, which is
  * the difference between an integer per row and every subtask of every row on the page.
  */
-const PROJECT_TASK_TREE_SELECT = {
+export const PROJECT_TASK_TREE_SELECT = {
   id: true,
   title: true,
   status: true,
@@ -102,6 +102,13 @@ const PROJECT_TASK_TREE_SELECT = {
   // through the task API unreadable through the project tree — the client could set it and then
   // could not see it, which reads as the write having been lost.
   runAt: true,
+  // §13.1 / §13.2, and the reason they are on the TREE rather than only on the task: this is the
+  // page a plan is read through, and "which of these rows completes itself", "which of them is a
+  // check" and "of what, concluding what" are the three questions a phase is judged by. Without
+  // them a coordinator looking at its own project cannot tell a verification from a subtask.
+  completionPolicy: true,
+  verdict: true,
+  verifiesTaskId: true,
   assignee: { select: { id: true, name: true } },
 } satisfies Prisma.TaskSelect;
 

@@ -994,12 +994,17 @@ func (t *Transport) createTasksBatch(agentID, sessionID string, body interface{}
 	return out, err
 }
 
-func (t *Transport) updateTask(id string, body interface{}) (json.RawMessage, error) {
+// updateTask carries the acting session, which the server reads for exactly one decision: a
+// verification cannot be concluded from the session that ran the task it verifies (§13.2). Without
+// the header the server cannot tell an independent check from the developer's own run grading
+// itself, and the rule silently never fires.
+func (t *Transport) updateTask(sessionID, id string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.do(nil, "PATCH", "/runner/tasks/"+url.PathEscape(id), body, &out, taskOpTimeout)
+	err := t.doHeaders(nil, "PATCH", "/runner/tasks/"+url.PathEscape(id), body, &out, taskOpTimeout,
+		sessionHeader(sessionID))
 	return out, err
 }
 

@@ -432,7 +432,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -463,7 +463,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "ref", "dependsOnRefs", "parentRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -482,11 +482,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "provider", "model", "acceptanceCriteria", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "verdict", "labels")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
-		raw, err := s.t.updateTask(id, body)
+		raw, err := s.t.updateTask(s.sessionID, id, body)
 		if err != nil {
 			return toolResult("update task failed: "+err.Error(), true)
 		}
@@ -1261,6 +1261,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
 				"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks.",
 			},
+			"verifiesTaskId": map[string]interface{}{
+				"type":        "string",
+				"description": "File this task as a VERIFICATION of that task: it exists to check whether the named task actually did what it claims. This is what makes a check a structured relation instead of a naming convention — it is the precondition for task_update's `verdict`, and the only thing `completionPolicy: VERIFICATION_PASSED` counts. The subject must be owned by you, must not be this task, must not itself be a verification, and must be in the SAME project (a check filed across that line is counted by nobody). A verification is expected to run as its OWN session: concluding one from the session that ran the subject is refused.",
+			},
 			"labels": labelsProp,
 		}
 	}
@@ -1274,6 +1278,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"type":        "array",
 			"items":       str,
 			"description": "Refs of EARLIER items in this same batch that must finish before this one runs. Use this for prerequisites created by this call (their ids don't exist yet) and dependsOnTaskIds for tasks that already exist.",
+		}
+		props["verifiesRef"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Ref of an EARLIER item in this same batch that this item VERIFIES — how a phase and the check on that phase land in one atomic call. Use verifiesTaskId instead for a subject that already exists; naming both is rejected. The item it points at must carry the same projectId as this one and must not itself be a verification. This is the pairing that makes a VERIFICATION_PASSED parent expressible: filed as two calls, the window between them is a parent that can never complete.",
 		}
 		props["parentRef"] = map[string]interface{}{
 			"type":        "string",
@@ -1664,6 +1672,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"enum":        []string{"MANUAL", "ALL_CHILDREN_DONE", "VERIFICATION_PASSED"},
 					"description": "How this task's completion is decided once it has subtasks. MANUAL (default, and how every task has always behaved) means only an explicit status write completes it. ALL_CHILDREN_DONE completes it when every direct subtask is DONE or CANCELLED and at least one is DONE — and reopens it if one is later reopened, added or fails, so a parent never claims more than its subtasks support. VERIFICATION_PASSED additionally requires every verification task pointed at this one to be DONE with a PASS verdict. Has no effect on a task with no subtasks. Switching back to MANUAL stops the recomputation without undoing what it last concluded.",
+				},
+				"verifiesTaskId": map[string]interface{}{
+					"type":        []string{"string", "null"},
+					"description": "The task this one exists to check. Omit to leave the relation alone, null to detach it, an id to point this task at that subject — the same rules as on task_create. Refused once this verification has concluded anything: the consequences already applied name the subject they were about, so re-pointing it afterwards would leave them asserting something about a task this check no longer verifies. File a new verification instead.",
 				},
 				"verdict": map[string]interface{}{
 					"type":        []string{"string", "null"},
