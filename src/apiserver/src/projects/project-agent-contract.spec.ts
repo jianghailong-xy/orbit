@@ -15,9 +15,17 @@ import { bare, column, headingNumbers, section, tables } from './contract-doc';
 // the seven are properties the document states ABOUT ITSELF, which means they are checkable —
 // so they are checked here, and the case numbers below are the ones §13.0 declares.
 //
+// v1.1 was reviewed again and failed on four more (01V, comment 34ArzVefRCxRrqdDh1cEi, on b810be89).
+// Those four are why this file also reads the COORDINATOR contract: two of them were not
+// contradictions inside one document but between two, and a check that only ever opens one file
+// cannot see that shape. §12 E4 and §16 O7 are the clauses; `00.14` and `00.15` are the checks.
+//
 // This file judges nothing about the design. It only holds the contract to the closure it claims.
 const REPO = path.resolve(__dirname, '../../../..');
 const PAC = readFileSync(path.join(REPO, 'docs/project-agent-contract.md'), 'utf8');
+/** The downstream control-loop contract. PAC's dispatch refusals have to land somewhere, and this
+ *  is where §7.4 AU-F says they land, so half of PAC's closure is a property of this file. */
+const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
 
 /** A section body with fenced code blocks removed — SQL and JSON samples are not normative prose. */
 function prose(number: string): string {
@@ -33,6 +41,13 @@ function refusalCodesIn(md: string): Set<string> {
 function errorCodeTable(): string[][] {
   const found = tables(section(PAC, '12')).find((t) => t[0].some((h) => bare(h) === 'code'));
   assert.ok(found, '§12 no longer states the error-code table');
+  return found;
+}
+
+/** One table of a section, addressed by a header it must carry. */
+function tableHeaded(doc: string, number: string, header: string): string[][] {
+  const found = tables(section(doc, number)).find((t) => t[0].some((h) => bare(h) === header));
+  assert.ok(found, `§${number} no longer states a table headed \`${header}\``);
   return found;
 }
 
@@ -253,4 +268,181 @@ test('00.11: the seven blocking contradictions of v1 each have a single answer',
   assert.match(section(PAC, '7.4'), /\*\*AU-F1\*\*/, '§7.4 does not forbid a run_event without a session');
   assert.match(section(PAC, '7.3'), /WORKSPACE_PIN_NOT_A_CANDIDATE/, '§7.3 still overloads NO_PROJECT_WORKSPACE');
   assert.match(section(PAC, '11.1'), /\*\*L2（v1\.1 替换 v1 的 L2）\*\*/, '§11.1 has no rule for an existing Project Task');
+});
+
+test('00.12: the redirect drops the old foreign key before it updates the column', () => {
+  // The v1.1 defect, and the one that only a real database shows: 0111's `project_member_agent_id_fkey`
+  // points at `workspace(id)` and is NOT deferrable, so the UPDATE that rewrites `agent_id` to an
+  // `agent.id` is refused AT THE STATEMENT — `23503`, "is not present in table workspace". v1.1
+  // ordered the three statements UPDATE → DROP → ADD, which passes on an empty table (no rows to
+  // check) and cannot pass on a single row of real data. A migration that is green on an empty
+  // database and red on the production snapshot is the shape M3 exists to catch.
+  const steps = tableHeaded(PAC, '11.2', '步骤');
+  const four = steps.find((row) => bare(row[0]) === '4');
+  assert.ok(four, '§11.2 no longer states step 4');
+  const body = four[1];
+  const drop = body.indexOf('DROP CONSTRAINT');
+  const update = body.indexOf('UPDATE project_member');
+  const add = body.indexOf('ADD CONSTRAINT');
+  assert.ok(drop >= 0 && update >= 0 && add >= 0, 'step 4 no longer states all three statements');
+  assert.ok(drop < update, 'step 4 updates project_member.agent_id BEFORE dropping the old workspace FK');
+  assert.ok(update < add, 'step 4 re-adds the foreign key before the rows it must validate exist');
+  assert.match(body, /同一事务/, 'step 4 no longer runs the three statements in one transaction');
+
+  // Order alone is not the clause: M7 has to say what happens when it fails, and what is asserted
+  // on either side — otherwise "it now works" is untestable on anything but an empty table.
+  const m7 = section(PAC, '11.2').slice(section(PAC, '11.2').indexOf('- **M7'));
+  assert.ok(m7.length > 0, '§11.2 has no M7 explaining why the order is executable');
+  assert.match(m7, /23503|not present in table/, 'M7 does not name the error the old order produces');
+  assert.match(m7, /回滚/, 'M7 does not say what a failure leaves behind');
+  assert.match(m7, /legacy_workspace_id/, 'M7 does not state the bijection the assertions check');
+  assert.match(m7, /真实 0111 外键形状/, 'M7 does not require the case to run against the real FK shape');
+  for (const id of ['02B.7', '06B.3']) {
+    assert.ok(m7.includes(id), `M7 does not name ${id}, so nothing runs its assertions`);
+  }
+});
+
+test('00.13: each pair of refusal predicates that can both hold has one winner', () => {
+  // v1.1 closed the WHERE overload by minting a second code, and `00.10` compared the two SETS —
+  // which stayed equal while the two PREDICATES kept overlapping. Both chains had an input that two
+  // rules answered differently, and a set comparison cannot see an intersection.
+  const codesIn = (md: string): string[] => Array.from(md.matchAll(/`(WHO_[A-Z_]+|WORKSPACE_PIN_NOT_A_CANDIDATE|NO_PROJECT_WORKSPACE)`/g), (m) => m[1]);
+  const when = new Map(column(errorCodeTable(), 'code').map(bare)
+    .map((code, i) => [code, column(errorCodeTable(), '何时').map(bare)[i]]));
+
+  // WHO — an agent can be off the team AND disabled at once. H4 orders the two checks, and the
+  // order is readable as the sequence the clause states.
+  const who = section(PAC, '7.1');
+  const h4 = who.slice(who.indexOf('- **H4'));
+  assert.ok(h4.length > 0, '§7.1 states no rule for an agent that is both off-team and disabled');
+  assert.deepEqual([...new Set(codesIn(h4))], ['WHO_NOT_IN_TEAM', 'WHO_DISABLED'],
+    'H4 does not order exactly the two refusals whose predicates can both hold');
+  assert.match(when.get('WHO_NOT_IN_TEAM') ?? '', /同时为真时本行胜/, '§12 does not record which of the two wins');
+  assert.match(when.get('WHO_DISABLED') ?? '', /在 Team 内/, '§12 lets WHO_DISABLED fire on an agent that is off the team');
+
+  // WHERE — a project with no candidates at all can also carry a pin. The winner is decided by the
+  // PRIORITY TABLE's own order, so this reads the table rather than a sentence about it.
+  const priorities = tables(section(PAC, '7.3')).find((t) => t[0].some((h) => bare(h) === '优先级'));
+  assert.ok(priorities, '§7.3 no longer states the priority table');
+  const rows = priorities.slice(1).map((row) => row.join(' '));
+  const empty = rows.findIndex((row) => /候选集为空/.test(row));
+  const pinned = rows.findIndex((row) => /task\.workspaceId` 非空/.test(row));
+  assert.ok(empty >= 0 && pinned >= 0, '§7.3 no longer decides both the empty candidate set and the pin');
+  assert.ok(empty < pinned, '§7.3 decides the pin before the empty candidate set, so both rules answer that input');
+  assert.match(when.get('NO_PROJECT_WORKSPACE') ?? '', /有没有 pin/, '§12 does not say the empty set wins with a pin present');
+  assert.match(when.get('WORKSPACE_PIN_NOT_A_CANDIDATE') ?? '', /非空/,
+    'the pin refusal does not require a non-empty candidate set, so E2’s exclusivity is only a claim');
+
+  // And each intersection needs a case, or the ordering is a sentence nothing runs.
+  const ids = new Set(cases().map((c) => c.id));
+  for (const id of ['04A.19', '04C.12']) {
+    assert.ok(ids.has(id), `§13 has no case ${id}, so one of the two intersections is untested`);
+  }
+});
+
+test('00.14: PAC’s dispatch refusals and PCC’s blocker kinds close in both directions', () => {
+  // §12 E4. PCC's own spec has checked "a kind claiming PAC as its source really is one" since its
+  // v1.1 — PCC ⊆ PAC. Nothing checked the other way, so PAC could mint a dispatch refusal and every
+  // test on both sides stayed green while the database answered `23514` to it. That is what happened
+  // to `WORKSPACE_PIN_NOT_A_CANDIDATE` for a whole review round.
+  const errors = errorCodeTable();
+  const codes = column(errors, 'code').map(bare);
+  const paths = column(errors, '路径').map(bare);
+  for (const path_ of paths) assert.match(path_, /^(派发|写入)$/, `§12 has a refusal on neither path: ${path_}`);
+  const dispatch = codes.filter((_, i) => paths[i] === '派发');
+  assert.ok(dispatch.length >= 7, '§12 no longer marks the resolution chain’s refusals as dispatch-path');
+
+  const kindTable = tableHeaded(PCC, '11.2', 'kind');
+  const kinds = column(kindTable, 'kind').map(bare);
+  const sources = column(kindTable, '来源').map(bare);
+  const landed = column(kindTable, '落地').map(bare);
+
+  // 1. PAC dispatch ⊆ PCC kinds — the direction that was missing.
+  for (const code of dispatch) {
+    assert.ok(kinds.includes(code),
+      `§12 refuses a dispatch with \`${code}\`, which PCC §11.2 has no kind for — §7.4 AU-F cannot land it`);
+  }
+  // 2. …and back: a kind that claims to be one of ours has to be one of ours.
+  for (const [i, kind] of kinds.entries()) {
+    if (sources[i] !== 'PAC §12') continue;
+    assert.ok(codes.includes(kind), `PCC §11.2 calls \`${kind}\` a PAC §12 refusal code, and §12 has no such row`);
+  }
+  // 3. Whatever PCC has not landed yet must have exactly one declared step that lands it, and that
+  //    step must not name anything else. "Declared future work" is only honest if it is singular:
+  //    without this, `落地` becomes a way to hold a kind in the contract and never ship it, and
+  //    without the reverse half a step could quietly name a kind the table calls landed.
+  //    A step DECLARES a kind with the `【落地 kind：\`X\`】` marker, not by mentioning it: 6j also
+  //    rewrites PROVIDER_UNAVAILABLE's required action, and reading "appears in the cell" as
+  //    "lands here" would call a kind that shipped long ago unlanded.
+  const pending = kinds.filter((_, i) => landed[i] !== '已落地');
+  const steps = tableHeaded(PCC, '12.1', '步骤');
+  const named = (kind: string): string[] => steps.slice(1)
+    .filter((row) => Array.from(row.join(' ').matchAll(/【落地 kind：([^】]*)】/g), (m) => m[1])
+      .some((mark) => mark.includes(`\`${kind}\``)))
+    .map((row) => bare(row[0]));
+  for (const kind of pending) {
+    const at = named(kind);
+    assert.equal(at.length, 1,
+      `PCC §11.2 leaves \`${kind}\` unlanded, and §12.1 declares it in ${at.length} steps — it needs exactly one`);
+    assert.match(landed[kinds.indexOf(kind)], new RegExp(`步骤 ${at[0]}`),
+      `PCC §11.2 points \`${kind}\` at a different step than the one §12.1 actually declares`);
+  }
+  for (const [i, kind] of kinds.entries()) {
+    if (landed[i] !== '已落地') continue;
+    assert.deepEqual(named(kind), [],
+      `PCC §11.2 calls \`${kind}\` landed while §12.1 still declares a step that lands it`);
+  }
+  assert.match(section(PAC, '12'), /- \*\*E4（派发路径的码必须落得下去/, '§12 states no closure rule to check');
+});
+
+test('00.15: the control loop’s projection branches on the contract, and V1 reads no task pin', () => {
+  // §16 O7, and the repo-level half of AC2. PAC v1.1 froze "a V1 task carries no provider/model pin"
+  // and PCC went on reading `task.provider` in the very read set §7.4 clause 8 re-resolves from.
+  // Both documents called themselves frozen, so an implementation could cite either one.
+  const input = section(PCC, '6.1');
+  const world = input.slice(input.indexOf('"world": {'), input.indexOf('"evaluation": {'));
+  assert.match(world, /"executionContract"/,
+    'PCC’s decision input cannot tell a V1 task from a legacy one, so PAC §5 step 2 is undecidable on it');
+
+  const ec1 = tables(section(PCC, '7.4')).find((t) => bare(t[0][t[0].length - 1]) === 'revokedInput');
+  assert.ok(ec1, 'PCC §7.4 EC1 no longer lists the closed read set');
+  for (const row of ec1.slice(1)) {
+    const read = row[2];
+    for (const pin of ['task.provider', 'task.model']) {
+      if (!read.includes(pin)) continue;
+      assert.match(read, /LEGACY/,
+        `PCC EC1 reads \`${pin}\` without saying it is the legacy branch — PAC §3.4 K1 makes it NULL on every V1 row`);
+    }
+  }
+  assert.match(section(PCC, '7.4'), /\*\*EC1-b（V1 不读 Task 上的引擎 pin/, 'PCC states no boundary between the two branches');
+
+  // S10 is the other half: EC1 says what is re-read at commit, S10 says what entered the hash. The
+  // branch selector has to be in both, or one declared input has two legal resolutions.
+  const s10 = tableHeaded(PCC, '6.1', 'EC1 #');
+  const rows = s10.slice(1).map((row) => row.join(' '));
+  assert.ok(rows.some((row) => row.includes('task.execution_contract') && row.includes('tasks[].executionContract')),
+    'PCC S10 does not map the execution contract column into the world projection');
+  assert.match(section(PAC, '16'), /- \*\*O7\*\*：~~/, 'PAC §16 still carries O7 as an open divergence');
+});
+
+test('00.16: the four blocking findings of v1.1 each have a single answer', () => {
+  // Same shape as 00.11, for the second review round. §0.1 is the index; an index that drifts from
+  // the clauses it indexes is how a closed finding quietly reopens, and this project has now had
+  // two rounds of exactly that.
+  const zero = tables(section(PAC, '0')).find((t) => t[0].some((h) => bare(h) === 'v1.2 的唯一结论'));
+  assert.ok(zero, '§0.1 no longer indexes the second revision');
+  assert.equal(zero.length - 1, 4, 'the second review raised four blocking findings');
+  const own = headingNumbers(PAC);
+  for (const row of zero.slice(1)) {
+    for (const ref of row[3].matchAll(/(?<!PCC )§(\d+(?:\.\d+)?)/g)) {
+      assert.ok(own.has(ref[1]), `§0.1 says finding ${bare(row[0])} lands in §${ref[1]}, which does not exist`);
+    }
+    assert.ok(bare(row[2]).length > 0, `finding ${bare(row[0])} has no conclusion`);
+  }
+
+  // The four conclusions, each as one sentence somewhere else in the document.
+  assert.match(section(PAC, '11.2'), /\*\*M7（步骤 4 的顺序是可执行性本身/, '§11.2 has no rule fixing the statement order');
+  assert.match(section(PAC, '7.1'), /\*\*H4（两条拒绝的唯一优先级，v1\.2）\*\*/, '§7.1 has no order for the WHO intersection');
+  assert.match(section(PAC, '7.3'), /\*\*C8（交集的唯一优先级，v1\.2）\*\*/, '§7.3 has no order for the WHERE intersection');
+  assert.match(section(PAC, '11.1'), /\*\*L5（新建 Project Task 的分流由请求形状决定/, '§11.1 has no rule for an old client’s create');
 });

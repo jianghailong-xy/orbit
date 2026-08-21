@@ -1331,7 +1331,7 @@ function opensTurnNow(b: LiveBlocker, triggers: string[]): boolean {
 test('PC-CX-12 escalation changes the owner and nothing else', () => {
   const table = kindTable();
   const triggers = turnTriggerKinds();
-  assert.equal(table.length, 18, '§11.2 freezes eighteen kinds');
+  assert.equal(table.length, 19, '§11.2 freezes nineteen kinds');
 
   for (const row of table) {
     // BL4, stated on the constant column: opensTurn is a function of kind, and it agrees with the
@@ -4115,9 +4115,12 @@ function resolveExecutionContext33(db: Db33): Resolution33 | { refuse: string } 
   if (!db.agent.enabled || db.agent.deletedAt !== null) return { refuse: 'WHO_DISABLED' };
   if (db.member === null) return { refuse: 'WHO_NOT_IN_TEAM' };
 
-  // WITH — PAC §7.2 priorities 1–3, then §7.4's ordered fallback chain
-  const wanted = db.task.provider ?? db.agent.defaultProvider ?? 'claude';
-  const wantedModel = db.task.model ?? (db.task.provider ? null : db.agent.defaultModel);
+  // WITH — PAC §7.2 priorities 1–2, then §7.4's ordered fallback chain. A V1 task carries no
+  // provider/model pin at all (PAC §7.2 P1, enforced by the §3.4 K1 CHECK), so the chain starts at
+  // the agent default and `task.provider` / `task.model` are read only on the LEGACY branch, which
+  // the control loop distinguishes by `execution_contract` (PCC §7.4 EC1-b).
+  const wanted = db.agent.defaultProvider ?? 'claude';
+  const wantedModel = db.agent.defaultModel;
   const usable = (slug: string, model: string | null): boolean => {
     const p = db.providers.find((x) => x.slug === slug);
     return p !== undefined && p.available && (model === null || p.models.includes(model));
@@ -4146,13 +4149,15 @@ function resolveExecutionContext33(db: Db33): Resolution33 | { refuse: string } 
     (required.length === 0 || (w.capabilitiesReportedAt !== null && required.every((c) => w.capabilities.includes(c))));
   const feasible = candidates.filter(meets);
   let chosen: Db33['workspaces'][number] | undefined;
-  if (db.task.workspaceId !== null) {
+  // PAC §7.3 C8: the empty candidate set is decided FIRST, so "no workspace at all" and "the pin is
+  // outside a non-empty set" cannot both be true of one input.
+  if (candidates.length === 0) {
+    return { refuse: 'NO_PROJECT_WORKSPACE' };
+  } else if (db.task.workspaceId !== null) {
     const pinned = candidates.find((w) => w.workspaceId === db.task.workspaceId);
-    if (!pinned) return { refuse: 'NO_PROJECT_WORKSPACE' };
+    if (!pinned) return { refuse: 'WORKSPACE_PIN_NOT_A_CANDIDATE' };
     if (!meets(pinned)) return { refuse: 'RUNTIME_REQUIREMENT_UNMET' };
     chosen = pinned;
-  } else if (candidates.length === 0) {
-    return { refuse: 'NO_PROJECT_WORKSPACE' };
   } else if (feasible.length === 0) {
     return { refuse: 'RUNTIME_REQUIREMENT_UNMET' };
   } else {
