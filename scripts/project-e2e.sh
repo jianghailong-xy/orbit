@@ -28,7 +28,10 @@ KEEP=0
 URL="postgresql://$USER_NAME:$PASSWORD@127.0.0.1:$PORT/$DB"
 NODE="${NODE:-node}"
 PRISMA="$REPO/node_modules/.bin/prisma"
-TSC="$REPO/node_modules/.bin/tsc"
+# TypeScript 7 is installed per workspace: the repo root still hoists the 5.9.3 that
+# @nestjs/cli pins, so take the apiserver copy when it is there.
+TSC="$API/node_modules/.bin/tsc"
+[ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 
 cleanup() {
   if [ "$KEEP" = "1" ]; then

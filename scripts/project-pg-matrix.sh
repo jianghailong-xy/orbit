@@ -39,7 +39,10 @@ IMAGE="${PCC_PG_IMAGE:-postgres:16-alpine}"
 TMPL="${PCC_PG_TEMPLATE:-pcc_matrix_tmpl}"
 SPEC_TIMEOUT="${PCC_PG_SPEC_TIMEOUT:-600}"
 NODE="${NODE:-node}"
-TSC="$REPO/node_modules/.bin/tsc"
+# TypeScript 7 is installed per workspace: the repo root still hoists the 5.9.3 that
+# @nestjs/cli pins, so take the apiserver copy when it is there.
+TSC="$API/node_modules/.bin/tsc"
+[ -x "$TSC" ] || TSC="$REPO/node_modules/.bin/tsc"
 PRISMA="$REPO/node_modules/.bin/prisma"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
