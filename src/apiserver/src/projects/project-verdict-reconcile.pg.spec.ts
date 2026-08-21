@@ -32,6 +32,7 @@ import {
   TaskVerdict,
 } from '@prisma/client';
 import { Client } from 'pg';
+import { base62ToUuid } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
@@ -295,6 +296,21 @@ test('a verification verdict reaches production through the reconcile pass',
             `${target.ids.d}:UPSTREAM`,
             `${target.ids.s}:SUBJECT_DEFECT_OPEN`,
           ].sort(), 'the subject holds on its open defect, its dependant on the failure itself');
+          // AC1. `failureId` is the one id in this payload `PublicIdInterceptor` cannot reach —
+          // it is not a field name the codec classifies — so the read publicizes it itself, the
+          // way `ProjectAuthorizationService` does for its copy of the same row. Everything else
+          // here is still raw at this layer because the interceptor is an HTTP concern and this
+          // test calls the service directly; over the wire both spellings come out Base62.
+          // Unreachable before this pass existed, because the list was always empty.
+          for (const row of surface.blockedTasks) {
+            assert.doesNotMatch(
+              row.failureId,
+              /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/,
+              'failureId is not a raw uuid',
+            );
+            assert.equal(base62ToUuid(row.failureId), surface.failures[0].id,
+              'and it decodes back to the failure row it names');
+          }
         });
 
       await t.test('the same conclusion, delivered again, lands exactly once (V2)', async () => {
