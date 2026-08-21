@@ -17,7 +17,12 @@ struct ToolCardView: View {
     /// clipped to a preview. nil where no console owns the transcript (previews, tests).
     var fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil
     private let previewDisplay: ToolDisplay
-    @State private var expanded: Bool
+    /// The user's own fold decision, once they've made one. nil until then, so the card follows
+    /// `defaultOpen` — which is what lets a result that lands mid-turn open the card it belongs to.
+    /// A `@State` seeded in `init` could not: the seed is read once, when the row first appears,
+    /// and a tool card appears when the *call* does, before any result exists. Web keeps the same
+    /// pair (`manualOpen ?? defaultOpen`) for the same reason.
+    @State private var manualOpen: Bool?
     // Filled once, off the render path, when the untrimmed call/result lands. `fullDisplay` is
     // recomputed there rather than per-render because `describe` runs an LCS diff for Edit cards.
     @State private var fullDisplay: ToolDisplay?
@@ -32,14 +37,7 @@ struct ToolCardView: View {
     init(card: ToolCard, fullPayload: (@MainActor (Int) async -> JSONValue?)? = nil) {
         self.card = card
         self.fullPayload = fullPayload
-        let display = ToolDisplay.describe(name: card.name, input: card.input, status: card.status, id: card.id)
-        self.previewDisplay = display
-        let hasResult = (card.result?.isEmpty == false) || !card.resultImages.isEmpty || card.resultHasImage
-        // A result carrying an image (a screenshot the workspace produced for the user) opens so the
-        // picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
-        // Keyed on the block, not the decoded bytes: a clipped image has none until the open card
-        // fetches them back.
-        _expanded = State(initialValue: (display.autoOpen || card.resultHasImage) && (display.hasBody || hasResult))
+        self.previewDisplay = ToolDisplay.describe(name: card.name, input: card.input, status: card.status, id: card.id)
     }
 
     private var d: ToolDisplay { fullDisplay ?? previewDisplay }
@@ -47,6 +45,12 @@ struct ToolCardView: View {
     private var images: [Data] { fullImages ?? card.resultImages }
     private var hasResult: Bool { card.result?.isEmpty == false || !card.resultImages.isEmpty || card.resultHasImage }
     private var hasDetail: Bool { d.hasBody || hasResult }
+    /// A result carrying an image (a screenshot the workspace produced for the user) opens so the
+    /// picture shows without a click — web parity, where `hasResultImage` joins `defaultOpen`.
+    /// Keyed on the block, not the decoded bytes: a clipped image has none until the open card
+    /// fetches them back.
+    private var defaultOpen: Bool { (d.autoOpen || card.resultHasImage) && hasDetail }
+    private var expanded: Bool { manualOpen ?? defaultOpen }
     private var isOpen: Bool { expanded && hasDetail }
 
     /// A successful `mcp__orbit__session_create` whose JSON result parsed — rendered as a tappable
@@ -153,7 +157,7 @@ struct ToolCardView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             guard hasDetail else { return }
-            expanded.toggle()
+            manualOpen = !expanded
         }
     }
 
