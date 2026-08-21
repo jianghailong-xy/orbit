@@ -132,6 +132,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // how a base62 string reaches a `::uuid` cast.
   'agentId',
   'coordinatorAgentId',
+  // The `workspace` row an Agent was mirrored out of (`agent.legacyWorkspaceId`, migration 0129).
+  // An address, not a fence token: it is the one handle a caller holding an old agent id — an
+  // `orbit agent` script, a recorded MCP payload, a bookmarked URL — hands back to ask "which
+  // Agent is this now", so it has to survive the round trip in the spelling clients use.
+  'legacyWorkspaceId',
   'creatorId',
   'authorId',
   'createdById',

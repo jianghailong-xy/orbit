@@ -261,6 +261,7 @@ model User {
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
+  agents           Agent[] // Agent identities this user owns (tenant scope)
 
   @@map("user")
 }
@@ -645,6 +646,77 @@ model Workspace {
   @@index([ownerId])
   @@index([runnerId])
   @@map("workspace")
+}
+
+/// WHO does the work — an identity, and nothing about where it runs.
+///
+/// Today an "Agent" on the wire is a `workspace` row (MCP `agent_list`, `orbit agent`,
+/// `task.assignee_id`, `project_member.agent_id` all mean that table), which is exactly the defect
+/// this project exists to remove: a workspace names a machine and a directory, so choosing WHO
+/// does a task silently chose WHICH MACHINE ran it. Splitting the identity out is what lets a
+/// task be handed to "the iOS build agent" without that also being a decision about a Mac.
+///
+/// The core constraint is therefore a NEGATIVE one (contract §3.1 A1): this table must never grow
+/// `runnerId`, `targetRunnerId`, `targetLabels`, `workDir`, `enableWorktree` or `env`. Where the
+/// work runs is resolved separately, from the Project's workspaces and the runner capabilities the
+/// task requires. `agent-schema.spec.ts` asserts the absence, because a column added "just for
+/// convenience" is how the coupling would come back.
+model Agent {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  ownerId              String    @map("owner_id") @db.Uuid
+  owner                User      @relation(fields: [ownerId], references: [id])
+  /// Display name. Unique per owner among LIVE rows only — the partial unique index
+  /// (`agent_owner_id_name_active_key`, `WHERE deleted_at IS NULL`) lives in the migration because
+  /// schema.prisma cannot express a partial index, exactly as 0108/0110/0111 do for theirs.
+  /// A plain `@@unique([ownerId, name])` would let a soft-deleted row hold a name for ever.
+  name                 String
+  description          String?
+  /// A human-facing label ("coordinator", "product", "ux", "dev", "qa", …) and nothing more.
+  /// Contract §3.1 A3: this column takes NO part in any authorization decision. The authoritative
+  /// role inside a project is `project_member.role`, which is scoped to that project and enforced
+  /// by an index; a global string on the identity would be a permission anybody can rename.
+  role                 String?
+  systemPrompt         String?   @map("system_prompt")
+  appendSystemPrompt   String?   @map("append_system_prompt")
+  /// What this identity runs on by default. NULL = inherit the owner-level default, which is the
+  /// value every mirrored legacy agent keeps: a workspace never named a provider (the provider is
+  /// derived from what it last ran), so writing one here during the migration would be inventing a
+  /// decision the user never made.
+  defaultProvider      String?   @map("default_provider")
+  defaultModel         String?   @map("default_model")
+  defaultEffort        String?   @map("default_effort")
+  /// Explicit, ordered fallback: `[{provider, model?}]`. Empty — the default — means DO NOT
+  /// downgrade: an unavailable provider fails the run and says so (contract §7.4). Silently
+  /// running somebody's task on a different engine is the failure this default exists to prevent.
+  providerFallbacks    Json      @default("[]") @map("provider_fallbacks")
+  disallowedTools      Json      @default("[]") @map("disallowed_tools")
+  /// This identity's baseline Runtime Requirement (an iOS build agent is permanently `["macos"]`).
+  /// Matched against what a runner REPORTS it can do, so the requirement is a fact about the work
+  /// rather than a pointer at one machine.
+  requiredCapabilities String[]  @default([]) @map("required_capabilities")
+  /// Project permissions, both closed by default (contract §8). A project may narrow them further
+  /// on the membership row; it may never widen them from here.
+  canCreateTasks       Boolean   @default(false) @map("can_create_tasks")
+  canDelegate          Boolean   @default(false) @map("can_delegate")
+  /// Off = cannot be assigned and cannot be dispatched. Kept distinct from `deletedAt`: disabled
+  /// is a reversible operational state, deleted is a removal that in-flight sessions survive.
+  enabled              Boolean   @default(true)
+  /// Creation order, and the deterministic tie-break the mirror backfill numbers duplicate names
+  /// by, so re-running it produces the same assignment.
+  createdAt            DateTime  @default(now()) @map("created_at")
+  /// Soft delete, same semantics as `workspace.deletedAt`: the row stays so history keeps
+  /// resolving, every user-facing listing filters on NULL, and in-flight sessions are unaffected.
+  deletedAt            DateTime? @map("deleted_at")
+  /// MIGRATION ONLY: the `workspace` row this identity was mirrored out of. Written once by
+  /// `0129_project_agent_identity` and read in exactly two places (contract §3.1 A4) — the
+  /// `workspace <-> agent` compatibility lookup, and that migration's own idempotency key. No
+  /// resolution chain and no authorization check may read it, and a hand-created Agent is always
+  /// NULL. Deliberately NOT a foreign key: the contract states no referential action for it, and
+  /// the mirror set includes soft-deleted sources whose rows this column must keep naming.
+  legacyWorkspaceId    String?   @unique @map("legacy_workspace_id") @db.Uuid
+
+  @@index([ownerId])
+  @@map("agent")
 }
 
 /// A tool call this workspace's sessions may make without asking a human again — written
