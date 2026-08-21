@@ -4,7 +4,8 @@ A fresh Claude session, a fresh worktree, a fresh database, and no reuse of what
 concluded. What follows is what this run *observed*; where an earlier round's answer and this
 one's differ, this file records the observation, not the reconciliation.
 
-**Verdict: FAIL — 11 of 12 criteria pass, clause 6 does not.** The project stays OPEN.
+**Verdict: FAIL — 10 of 12 criteria pass. Clause 6 fails on a P1; clause 1 on a P3.** The project
+stays OPEN.
 
 ## What was reviewed
 
@@ -45,12 +46,12 @@ Checks marked *live* were executed against the running deployment through the `f
 runner CLI built from this branch, on a throwaway canary project (`25E acceptance canary`,
 `34Axukmp27kqR6IcbAXCu`) created for the purpose.
 
-**1 — Coordinator identity, workspace, rotatable session, Base62. PASS.**
-`project status` reports `agentId`/`workspaceId`/`sessionId`/`generation` with
-`identitySource: DERIVED`. Four live payloads (`project status`, `project acceptance`,
-`project verifications`, `project blockers`) were scanned for raw UUIDs: **zero** matches of
-`[0-9a-f]{8}-…-[0-9a-f]{12}`. Production has applied `ROTATE_COORDINATOR_SESSION` once.
-`agent-identity-migration`, `agent-persistence`, `coordinator-identity` specs green.
+**1 — Coordinator identity, workspace, rotatable session, Base62. FAIL (P3) — see below.**
+The identity half holds: `project status` reports `agentId`/`workspaceId`/`sessionId`/`generation`
+with `identitySource: DERIVED`, production has applied `ROTATE_COORDINATOR_SESSION` once, and
+`agent-identity-migration`, `agent-persistence` and `coordinator-identity` are green. Four live
+read payloads (`project status`, `project acceptance`, `project verifications`, `project blockers`)
+were scanned for raw UUIDs: **zero** matches. The Base62 half does not hold on refusal bodies.
 
 **2 — Reliable event delivery, idempotent under duplication/reordering/restart. PASS.**
 Live `project_event`: `unconsumed=0`, `retried=0`, `max(occurrences)=18` — duplicates collapse onto
@@ -186,7 +187,8 @@ judging. Filed as defect subtask `34AyFvkPcP9vYPo1Kqg8C`.
 
 This finding was not left resting on one session's reading. A separate Claude session, filed as a
 native verification task (`34AyGjwev1PF0t6AqlPvW`, `verifiesTaskId` → the 25E task) and run on its
-own worktree, reached **verdict PASS** — meaning the "11 PASS + AC6 FAIL" conclusion holds. It
+own worktree, reached **verdict PASS** — meaning the "AC6 FAIL" conclusion holds (it checked the report as it
+stood then, before clause 1's P3 was found). It
 reproduced the finding three independent ways: the same absence of a production caller, this time
 also read out of the **running container's `dist/`** rather than only from source; its own canary,
 where a FAIL again left the subject DONE with no defect and empty `failures`/`blockedTasks`; and
@@ -201,6 +203,35 @@ It also corrected two statements in an earlier draft of this file: the plan is n
 the decision (fixed above — the corrected version is worse for the product, not better), and this
 canary was still OPEN when the residue section first claimed otherwise (now closed). Its own
 declared limit: it re-ran the source, database and live-canary evidence, not the test suites.
+
+## The second finding — P3, clause 1
+
+**A refusal body carries a raw UUID, because nothing publicizes error responses.**
+
+Writing `status=DONE` to this project after its acceptance concluded FAIL returns 409 with
+
+```json
+{"code":"ACCEPTANCE_MISSING","message":"the latest project acceptance concluded FAIL, not PASS",
+ "owner":"USER","requiredAction":"fix what the acceptance found, then run a new acceptance",
+ "runId":"01a02427-6cb5-7ae0-ae3c-ffe57116c33e","verdict":"FAIL"}
+```
+
+`runId` there is the `project_acceptance_run` primary key, confirmed against the database; its
+Base62 form is `34AyfEVcuyd2FFdM3NodC`. The field is not an oversight in the schema — `runId` is
+registered in `PUBLIC_ID_FIELDS` (`codec.ts:109`). It is the *path* that misses it:
+`public-id.interceptor.ts:120` is `next.handle().pipe(map(…))`, so it only ever sees success
+values, and `main.ts:45` registers interceptors while the tree contains no `ExceptionFilter` or
+`@Catch` at all. The same fact read through `GET /projects/:id/acceptance` is clean
+(`runId: null`, `runPublicId: null`), so this is success-path/failure-path divergence rather than a
+field nobody meant to publicize.
+
+Severity P3: nothing breaks, because `PublicIdPipe` accepts a raw UUID handed back. But clause 1
+says *all* public ids are Base62, and this is a response a caller reads. Worth fixing at the filter
+rather than at the throw site — a per-throw `uuidToBase62` is precisely what the next throw site
+forgets. Filed as `34Ayhblo6xg8lPt6dOOWf`.
+
+Found after the independent verification had already concluded, so unlike the clause 6 finding it
+carries one session's evidence rather than two.
 
 ## Residue
 
