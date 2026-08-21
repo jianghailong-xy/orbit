@@ -72,6 +72,11 @@ var (
 type codexSteerDelivery struct {
 	orbitTurnID string
 	state       deliveryState
+	// Codex reports one userMessage item twice over its normal lifecycle: item/started and
+	// item/completed carry the same item id. Keep that id so the second notification is not
+	// mistaken for a second copy in the conversation. A genuinely duplicated turn/steer gets a
+	// new item id even when its clientUserMessageId is the same (contract probe A2/A3).
+	echoItemID string
 	// text/attachments are what the transcript bubble for this message is made of, kept here
 	// because whoever announces it may not be the goroutine that was given it: Codex can echo a
 	// steer back before its own response has been read (§3).
@@ -172,14 +177,20 @@ func acknowledgeCodexSteerEcho(activeMu *sync.Mutex, active **codexAppActiveTurn
 	activeMu.Lock()
 	defer activeMu.Unlock()
 	d := codexSteerRecord(*active, clientID)
+	itemID := firstString(item, "id")
 	switch {
 	case d == nil:
 		// The turn's own opening message, whose clientUserMessageId is the running turn's, or a
 		// steer whose turn has already been finalized.
 		return ""
 	case d.state == deliveryAcknowledged:
+		if itemID != "" && itemID == d.echoItemID {
+			// The ordinary item/started -> item/completed pair for one persisted item.
+			return ""
+		}
 		// Codex does not de-duplicate, so a second echo under one id means the message really is
-		// in the conversation twice. Worth saying out loud: it is a bug on this side.
+		// in the conversation twice. It has a different item id from the lifecycle pair above.
+		// Worth saying out loud: it is a bug on this side.
 		logln("codex echoed steer", clientID, "twice; the message may be in the conversation more than once")
 		return ""
 	case d.state == deliveryFailed:
@@ -190,6 +201,7 @@ func acknowledgeCodexSteerEcho(activeMu *sync.Mutex, active **codexAppActiveTurn
 		return ""
 	}
 	d.state = deliveryAcknowledged
+	d.echoItemID = itemID
 	return d.orbitTurnID
 }
 

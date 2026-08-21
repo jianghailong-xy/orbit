@@ -1630,9 +1630,9 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
 	case "item/completed":
 		item := mapValue(firstPresent(params, "item"))
-		// Both echoes carry the same clientId and arrive within the same millisecond; the
-		// acknowledgement is single-flight, so taking either is what makes this independent of
-		// which one a given build sends.
+		// item/started and item/completed carry the same item id. Acknowledgement is
+		// single-flight, and the steer record remembers that id so this normal lifecycle pair is
+		// distinct from two actual items carrying one clientUserMessageId.
 		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
 		activeMu.Lock()
 		if *active != nil {

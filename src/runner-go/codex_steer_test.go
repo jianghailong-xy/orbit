@@ -323,6 +323,21 @@ func (s *codexSteerSession) echo(clientID string) {
 	})
 }
 
+// completeEcho is the second notification for the SAME Codex item, not a second message. Real
+// app-server 0.149 emits both phases for every steered userMessage.
+func (s *codexSteerSession) completeEcho(clientID string) {
+	s.fake.say(map[string]interface{}{
+		"method": "item/completed",
+		"params": map[string]interface{}{
+			"threadId": steerThreadID,
+			"item": map[string]interface{}{
+				"type": "userMessage", "id": "item-" + clientID, "clientId": clientID,
+				"content": []map[string]interface{}{{"type": "text", "text": "…"}},
+			},
+		},
+	})
+}
+
 // waitFor spins until cond holds, so a test can wait on the notification pump without sleeping
 // for a fixed interval it would then have to guess at.
 func waitFor(t *testing.T, what string, cond func() bool) {
@@ -335,6 +350,57 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s", what)
+}
+
+func captureRunnerStdout(t *testing.T, run func()) string {
+	t.Helper()
+	previous := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = writer
+	defer func() { os.Stdout = previous }()
+	run()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return string(output)
+}
+
+func TestCodexSteerLifecyclePairIsOneEchoButTwoItemIDsAreDuplicates(t *testing.T) {
+	const clientID = "orbit-steer"
+	activeMu := &sync.Mutex{}
+	active := &codexAppActiveTurn{steers: map[string]*codexSteerDelivery{
+		clientID: {orbitTurnID: clientID, state: deliveryWritten},
+	}}
+	item := func(id string) map[string]interface{} {
+		return map[string]interface{}{"type": "userMessage", "id": id, "clientId": clientID}
+	}
+
+	if got := acknowledgeCodexSteerEcho(activeMu, &active, item("item-one")); got != clientID {
+		t.Fatalf("first echo acknowledged %q, want %q", got, clientID)
+	}
+	if got := active.steers[clientID].echoItemID; got != "item-one" {
+		t.Fatalf("remembered echo item = %q, want item-one", got)
+	}
+	if output := captureRunnerStdout(t, func() {
+		acknowledgeCodexSteerEcho(activeMu, &active, item("item-one"))
+	}); output != "" {
+		t.Fatalf("item/completed for the same item was logged as a duplicate: %q", output)
+	}
+	if output := captureRunnerStdout(t, func() {
+		acknowledgeCodexSteerEcho(activeMu, &active, item("item-two"))
+	}); !strings.Contains(output, "twice") {
+		t.Fatalf("a second Codex item with the same client id was not diagnosed: %q", output)
+	}
 }
 
 // The headline case, and the one the whole feature is: a message sent while Codex is mid-turn
@@ -429,8 +495,12 @@ func TestASteerJoinsTheRunningTurnInsteadOfStartingASecondOne(t *testing.T) {
 
 	s.echo(steerOrbitTurn)
 	waitFor(t, "the steer to be acknowledged", func() bool { return s.completionFor(steerOrbitTurn) != nil })
+	s.completeEcho(steerOrbitTurn)
 	if got := s.deliveries(steerOrbitTurn); got[len(got)-1] != string(deliveryAcknowledged) {
 		t.Errorf("delivery states = %v, want acknowledged last", got)
+	}
+	if n := len(s.deliveries(steerOrbitTurn)); n != 3 {
+		t.Errorf("delivery events = %d, want written bubble + written update + one acknowledgement", n)
 	}
 
 	// Settled as a steer, and ONLY the steer: its own row is answered, the turn it joined is
