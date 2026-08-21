@@ -100,6 +100,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'defectTaskId',
   'resolvedByTaskId',
   'raisedByActionId',
+  // §13.4's acceptance record: the run a project's DONE stands on, the run a criterion belongs to,
+  // and the two rows a criterion cites as its evidence. Every one of them is an address somebody
+  // hands straight back — `GET /projects/:id/acceptance/...`, `task_get`, a session link.
+  'runId',
+  'acceptedRunId',
+  'evidenceTaskId',
+  'evidenceSessionId',
   'parentTaskId',
   'batchId',
   'listId',

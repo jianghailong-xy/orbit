@@ -40,7 +40,7 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 25 {
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 29 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script

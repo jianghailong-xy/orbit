@@ -26,6 +26,8 @@
 > **v1.12 修订**：关闭 02 对 v1.11 的独立复审（[`project-coordinator-contract-review-02-v1.11.md`](./project-coordinator-contract-review-02-v1.11.md)）提出的 2 个 P1 契约缺口 `PC-CX-56..57`。逐项闭环在 **§30**；规范条款落在 §2.4 · §4.3 · §7.7 · §8.2 · §12.1 · §15 · §18 · §22.8。v1.12 同样**不是措辞修订** —— 两项有一条贯穿的线：**这道门关掉的，是不是它要关的那件事**。`PC-CX-56` 关多了：§2.4 把"账本 ↔ Session"两侧都写成**立即** `RESTRICT`，再加上五张表随 `project` 级联，三条规范咬成一个环 —— Session 先删被 D19 拒（预期），动作行先删违反 §8.2 GE1，**Project 先删则被 Session 那一侧的 `RESTRICT` 当场拒绝那次级联**，于是 D19-c 承诺的"物理清除的粒度是 Project"在真实拓扑上**一条可提交的事务都没有**；摘掉任一侧又各自留下 orphan 或违反 GE1，**没有唯一权威状态**。这与 `PC-CX-53` 同格：不是"错的能进来"，是"对的进不来"。`PC-CX-57` 关错了对象：D18 ⓪ 的存量兼容分支要跳过的只是 `retiredPins` 自己的数组展开，写下来却是 `RETURN NEW` —— 一句落在 ① ② **之前**的返回，于是"结果链接一次性发布后冻结"与"`claimResolution` 只写一次"被一个**与它们无关的 sibling key 的顶层类型**一起关掉；同一条 claim 改写，账本是合法数组时被拒、是旧畸形对象时通过，**规则不唯一**。v1.12 的答案在三处：**§2.4 第二条 on-delete 从立即 `RESTRICT` 改成可延迟的 `NO ACTION`（默认仍立即，`RESTRICT` 在 PostgreSQL 里永远不能被延迟）**、**新增 §7.7 D20 —— `coordinator_purge_project()` 是唯一的公开 purge 入口，`project_purge_fence` 给裸 `DELETE FROM project` 一条类型化拒绝，而"没有 orphan"由那条可延迟外键在提交点无条件证明**、以及 **D18 ⓪ 的例外只置一个 `ledger_untouched` 标志，被跳过的量化域收成 ③ 一条**（D18-h）。§8.2 GE1 同时写明它唯一的例外：一份账本随它的 Project **整份**消失，**不是**逐条删除。
 > **v1.13 修订**：关闭 02 对 v1.12 的独立复审（[`project-coordinator-contract-review-02-v1.12.md`](./project-coordinator-contract-review-02-v1.12.md)）提出的 1 个 P0 与 3 个 P1 契约缺口 `PC-CX-58..61`。逐项闭环在 **§31**；规范条款落在 §2.4 · §7.7 · §12.1 · §15 · §18 · §22.8。v1.13 同样**不是措辞修订** —— 四项有一条贯穿的线：**一条规范只有一句话说了算吗**。`PC-CX-58`：同一条 lineage 外键的初始模式在现行正文里有两个答案（§2.4 / D20 ① / 步骤 6h 写 `INITIALLY IMMEDIATE`，D19-c 写的却是**默认延迟**的那一版）—— 错误发生在语句上还是提交点上，因此有两个合法答案。`PC-CX-59`：§12.1 的一次性迁移表从 v1.10 直接跳到 v1.12，**整张表里没有一行安装 v1.11 的三个对象**，于是"规范函数体"与"权威迁移表"对同一个版本给出两套数据库对象集合。`PC-CX-60`（**P0**）：D20-c 的散文与 D20 ③-3 的 SQL 各写了一遍同一个集合，而 SQL 那一份宽得多 —— 一次 purge 会**永久删除**散文明确排除的 USER-origin Session，同一份事实上的裸 `DELETE` 却保留它。`PC-CX-61`：D20 ③ 的 doomed 快照与它的级联之间有一个窗口，一次落进窗口的合法发布让整个 purge 在 `COMMIT` 得到原生 `23503` —— 一条被明文承诺可以并发的操作没有 typed 结果、没有 owner、没有确定的赢家。v1.13 的答案在四处：**D19-c 与全文统一成唯一的 `DEFERRABLE INITIALLY IMMEDIATE`**（D20-l 写成一条可静态检查的唯一性条款，历史措辞只留在 §31.5）、**§12.1 新增步骤 6g2 显式安装全部 v1.11 硬门**（审计 → D18 重建为 `BEFORE INSERT OR UPDATE` → D19 外键 → D19 触发器 → 6h 的 D20）、**D20 的量化域收成 ⓪ 号 `coordinator_purge_ledger_pairs()`，② 与 ③ 只读它，说不清的链接一律 typed fail closed**（`PROJECT_PURGE_UNDECIDABLE`，owner=USER / recovery=HUMAN）、以及 **purge 与派发发布无条件共享 `project` 行这个持久 fence 与线性化点**（③-2 的 `FOR UPDATE NOWAIT` + ④ 号 `coordinator_project_publish_fence`），两个提交顺序各有 typed 结果，可延迟外键退回**纯结构兜底**。
 
+> **v1.15 修订**：**不是**一轮审查闭环 —— 前十四轮每一轮都关闭 02 提出的缺口，这一轮关闭的是**本文自己与实现之间**的缺口。§13.4 从 v1.1 起就说清楚了验收必须满足什么（AE1–AE11），却把"验收记录"留成 `project_decision.detail` 里的一段 JSON；23 单元把这个缺口走到了尽头：那一轮 12 条裁决写在一份文档里，`project.status` 由人读完文档之后写，而数据库里没有任何一行把那个 DONE 与它所依据的事实联系起来。新增条款落在 **§13.5**，并在 §2.4 · §12.1 · §14 记账：四张表、两列、九个数据库对象，由单元 25A 落地。判据是一句可以对生产快照直接跑的话 —— `status = 'DONE'` ⟹ `accepted_run_id IS NOT NULL OR legacy_accepted_at IS NOT NULL`，它现在是一条 `CHECK` 而不是一条需要人去核对的不变量。
+
 > **v1.14 修订**：关闭 02 对 v1.13 的独立复审（[`project-coordinator-contract-review-02-v1.13.md`](./project-coordinator-contract-review-02-v1.13.md)）提出的 1 个 P0 契约缺口 `PC-CX-62`。逐项闭环在 **§32**；规范条款落在 §2.4 · §4.3 · §7.7 · §12.1 · §15 · §22.8。v1.14 同样**不是措辞修订** —— 它问的是上一轮那句话的下一半：**一个集合收成了一个函数之后，这个函数量的是不是它该量的那件事**。`PC-CX-60` 让 purge 的量化域只剩一份定义（D20 ⓪），`PC-CX-62` 发现**那一份定义本身比 §4.3 I11-A 宽**：⓪ 的状态分支写的是“`APPLIED` ∧ 链接 = s **或** 非 `APPLIED` ∧ 链接为空”，于是一条已终态的 `REFUSED` / `SUPERSEDED`（以及一条停在 `CLAIMED`）的动作行下面挂着的 COORDINATOR Session 也被当成“未发布的占位”**可以物理删除**；而 I11-A 只认 `APPLIED`，D9 在提交点本来就会拒绝那种行，因此它只可能是存量。更要命的是归属那三列 —— `subject_type`、`subject_id = session.task_id`、Task 与动作行同 Project —— ⓪ **一列都没读**，于是一条双向链接完整、但 Session 的 Task 属于**另一个 Project** 的占位会被这次 purge 带走，而外部 Project 与它的 Task 仍然在。两条的后果同型且不可逆：同一份已提交事实，公开函数删掉了那行、裸 `DELETE` 保留了它（`PROJECT_PURGE_UNDECLARED`），D20-f 的“结果集合相同”第三次为假，而**第一次错误调用删掉的 Session 无法由重试取回**。v1.14 的答案只有一处：**⓪ 的谓词逐列绑死 I11-A 的归属闭包**（`APPLIED` 的 `DISPATCH_TASK`、两侧互指、`subject_type = 'TASK'`、`subject_id = session.task_id`、`task.project_id = a.project_id`），**缺一即 `in_scope = false`，两个入口一起 typed fail closed、一行都不删**（D20-i 逐字不变），迁移侧由 D20-g 第二条把这三类存量一并数出来。
 
 > **适用分支**：`feat/project`（`main` 里没有 `Project`）。
@@ -111,7 +113,7 @@ PAC §1 的两层分法与 R1/R2/R3 三条规则**原样生效**，本文的所�
 
 ### 2.4 执行基础设施新增（**只有这些**）
 
-五张新表，全部 `onDelete: Cascade` 挂在 `project` 下 —— 它们是控制环的内脏，项目没了就没有意义。
+九张新表，全部 `onDelete: Cascade` 挂在 `project` 下 —— 它们是控制环的内脏，项目没了就没有意义。
 **这条级联是 §8.2 GE1"历史行永不删除"唯一被声明的例外**（整份消失，**不是**逐条删除），它怎么走写在 §7.7 D20。
 
 | 表 | 职责 | 一句话判据 |
@@ -121,8 +123,12 @@ PAC §1 的两层分法与 R1/R2/R3 三条规则**原样生效**，本文的所�
 | `project_action` | 幂等动作账本：exactly-once-effect 的唯一依据 | 同上 |
 | `project_blocker` | 结构化阻塞 | 同上 |
 | `project_decision` | 决策审计 | 同上 |
+| `project_acceptance_run` | 一次项目级验收尝试：快照、两个摘要、结论（§13.4 AE1，v1.15 新增） | 同上 |
+| `project_acceptance_criterion` | 该次尝试对**每一条**被声明条件的结论与证据（§13.4 第 3 条） | 同上 |
+| `project_merge_evidence` | 目标分支被观测到的内容与它的 `refGeneration`（§13.4 AE9） | 同上 |
+| `project_acceptance_audit` | 只追加：开、结、绑、拒、重开，各记一行（§13.4 AE8） | 同上 |
 
-以及八列：`task.dispatchAuthority`（§12.3，**v1.4 起是数据库自己维护的派生列**，见 §7.7 D12）、**`task.dispatchAttempt`（§8.2 DA1，v1.2 新增）**、**`task.verdictRevision`（§13.2 V7，v1.3 新增）**、`session.projectActionId`（§8.3）、`session.dispatchOrigin`（§7.7）、**`session.executionPinGeneration`（§4.3 I17-A2 · §7.7 D15，v1.7 新增：`BigInt NOT NULL DEFAULT 0`，PAC §6 的 claim 冻结列改了几次）**、`project_runtime.*`（v1.3 起含 `acceptance_attempt`，§13.4 AE11）、**`project.configRevision`（§9.6 AU2，v1.4 新增）**。
+以及十列：`task.dispatchAuthority`（§12.3，**v1.4 起是数据库自己维护的派生列**，见 §7.7 D12）、**`task.dispatchAttempt`（§8.2 DA1，v1.2 新增）**、**`task.verdictRevision`（§13.2 V7，v1.3 新增）**、`session.projectActionId`（§8.3）、`session.dispatchOrigin`（§7.7）、**`session.executionPinGeneration`（§4.3 I17-A2 · §7.7 D15，v1.7 新增：`BigInt NOT NULL DEFAULT 0`，PAC §6 的 claim 冻结列改了几次）**、`project_runtime.*`（v1.3 起含 `acceptance_attempt`，§13.4 AE11）、**`project.configRevision`（§9.6 AU2，v1.4 新增）**、**`project.acceptedRunId`（§13.4 AE2 · §13.5 BD1，v1.15 新增：DONE 与"凭什么 DONE"是同一行，因此不可能各说各话）**、**`project.legacyAcceptedAt`（§13.5 LG1，v1.15 新增：迁移之前就已 DONE 的项目被**标注**，而不是被追认成证据，也不是被重开）**。
 
 新表自己的列不计入上面这个数（它们随表一起来）：v1.3 给 `project_blocker` 加了 `lifecycle_generation`（§11.3 BE1），给 `project_runtime` 加了 `acceptance_attempt`（§13.4 AE11）；**v1.5 给 `project_action` 加了 `execution_context` 与 `execution_context_digest`（§7.4 EC1/EC2）、给 `project_action` 加了 `reason_code`（§7.6 TR2-a 的窗口锚点要按原因查它）；v1.7 给 `project_action` 加了 `execution_result_digest`（§7.4 EC2-b，结果摘要与授权摘要分列）、给 `project_event` 加了 `disposition`（§5.5 EV2 的三个终态处置）**。**这三个新计数（派发、blocker 周期、验收）与 `task.verdictRevision` 是同一条纪律的四个实例**：永久动作键的代次必须来自一个只进不退的持久化列（§8.2 GE1）。
 
@@ -146,6 +152,15 @@ PAC §1 的两层分法与 R1/R2/R3 三条规则**原样生效**，本文的所�
 | `coordinator_purge_project` | function | **物理清除 Project 的唯一公开入口**：一个事务里删 Project、级联整份账本、删这本账认下的占位（§7.7 D20，v1.12 新增，`PC-CX-56`） |
 | `coordinator_purge_ledger_pairs` | function | **一次 purge 的量化域本身**：这本账触到的每一对 `(action, session)`，以及这一对是不是 D20-c 认下的 COORDINATOR 占位 —— **谓词逐列就是 §4.3 I11-A 的归属闭包**（`APPLIED` 的 `DISPATCH_TASK`、两侧互指、`subject_type = 'TASK'`、`subject_id = session.task_id`、Task 与动作行同 Project，v1.14 收口 `PC-CX-62`）。`project_purge_fence` 与 `coordinator_purge_project` **都只读它**（§7.7 D20 ⓪ · D20-c · D20-i，v1.13 新增，`PC-CX-60`） |
 | `coordinator_purge_lock_ledger` | function | purge 在快照之前把这本账的每一条动作行 `FOR UPDATE NOWAIT` 取到手；取不到 ⇒ typed `PROJECT_PURGE_CONTENDED`，**而不是 `40P01`**（§7.7 D20 ③-lock · D20-j，v1.13 新增，`PC-CX-61`） |
+| `project_acceptance_done_gate` | `BEFORE UPDATE OF status, accepted_run_id` trigger（project） | `status → DONE` 必须绑定一条**本项目的、PASS 的、未被取代的**验收记录，且没有未解决的 blocker 与验证失败（§13.4 AE2，v1.15 新增） |
+| `project_done_evidence_chk` | `CHECK` constraint | `status = 'DONE'` ⟹ `accepted_run_id IS NOT NULL OR legacy_accepted_at IS NOT NULL`。**没有第三种形状**，因此 I10 可以直接对生产快照跑（§13.5 BD1，v1.15 新增） |
+| `project_acceptance_reopen` | function | AE8 的原子重开：取 `FOR NO KEY UPDATE`、取代全部可用记录、清空绑定、写审计与 `user.project_edited`。**三个触发器都只调它**（§13.4 AE8，v1.15 新增） |
+| `project_acceptance_task_fact` | `AFTER INSERT OR DELETE` + `AFTER UPDATE OF status, completion_policy, project_id, verdict, verifies_task_id` trigger（task） | AE6 表里 `taskSet` 与 `verdicts` 两个投影的**全部**写路径，含 AE10 的跨项目移动（两把锁、两次重开）。**由数据库执行**，所以裸 SQL 与旧二进制同样挡不住（v1.15 新增） |
+| `project_acceptance_criteria_fact` | `AFTER UPDATE OF acceptance_criteria` trigger（project） | 同上，`criteriaRevision` 投影（v1.15 新增） |
+| `project_acceptance_merge_fact` | `AFTER INSERT` trigger（project_merge_evidence） | 同上，`mergeEvidence` 投影 —— 即 AE9-c 的 post-DONE 协议（v1.15 新增） |
+| `project_acceptance_run_immutable_guard` | `BEFORE UPDATE` trigger（project_acceptance_run） | 已结论的记录只允许再记"被取代"，其余列此后不可改写（§8.2 GE1，v1.15 新增） |
+| `project_acceptance_criterion_immutable_guard` | `BEFORE UPDATE` trigger（project_acceptance_criterion） | 同上的对偶：改一条已结论记录的逐条证据，就是换条路改结论（v1.15 新增） |
+| `project_acceptance_audit_append_only` | `BEFORE UPDATE` trigger（project_acceptance_audit） | 审计是对其它规则的记录；被自己的对象编辑的记录不是记录（v1.15 新增） |
 | `coordinator_project_publish_fence` | `BEFORE INSERT OR UPDATE` trigger（project_action）+ `BEFORE INSERT` trigger（session） | 发布那一侧的**同一个线性化点**：写这本账之前先取 Project 行的 `FOR KEY SHARE`；Project 已被清除时得到 typed `PROJECT_PURGED` 而不是裸 `23503`（§7.7 D20 ④ · D20-j · D20-k，v1.13 新增，`PC-CX-61`） |
 
 **三条跨"账本 ↔ Session"的 id 列，on-delete 语义在这里冻结（v1.11 新增，`PC-CX-54`；v1.12 修订第二行，`PC-CX-56`）**：v1.3–v1.10 只写了这些列存在，
@@ -3229,6 +3244,7 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 | **6g** | **建 v1.10 的对象并重建五条可延迟约束**（`PC-CX-50` / `PC-CX-51` / `PC-CX-52`）：新增 `coordinator_execution_result_shape`（§7.7 D17 的 ⓪ 号，`IMMUTABLE`）与 `project_action_result_ledger_mutator`（§7.7 D18，`BEFORE UPDATE` on `project_action`）；**重建** `session_dispatch_attribution_check`（D9）/ `task_claimed_project_move_guard`（D10）/ `session_execution_context_guard`（D14）/ `session_execution_result_check` + `project_action_pin_ledger_check`（D16）/ `project_action_execution_digest_check`（D17）—— 五条的函数体第一句都改成按稳定键重读最终行（D9-f），`project_action_pin_ledger_check` 的触发器还必须**去掉 `UPDATE OF detail, result_session_id` 列清单**（`DROP TRIGGER` + `CREATE`，`CREATE OR REPLACE` 改不了触发器的事件列表）。**建 D18 之前必须先跑 D18-e 的三条存量审计并断言全部 0 行**：`APPLIED` 而链接为空、链接不对称、账本与代次对不上；非 0 行按 §11.2 开 `USER / HUMAN` 人工裁决，迁移**不代为收敛**（与步骤 3b 那次"迁移可以自己收敛"恰好相反：那一次两条占位哪条留下有一个确定规则，这一次哪一侧权威没有规则） | `DROP … IF EXISTS` + `CREATE OR REPLACE`；审计只读 |
 | **6g2** | **建 v1.11 的三个硬门**（`PC-CX-53` / `PC-CX-54` / `PC-CX-55`；**v1.13 新增这一行，`PC-CX-59`** —— v1.12 的表从 6g 直接跳到 6h，于是一次按本表执行的迁移落地的是"v1.10 + D20"，D19 的两个对象根本不存在、D18 仍然只监听 `UPDATE`，而 G5 第 ⑱ ⑲ 条却要"验证"它们）。**四件事按依赖顺序，一件都不能提前**：① **先跑 D18-e 的四条存量审计**（`APPLIED` 而链接为空、链接不对称、账本与代次对不上、`retiredPins` 既不是数组也不是 SQL NULL）与 **D19-e 的一条存量审计**（`result_session_id` 非空而那条 Session 不存在）——前三条与 D19-e 返回 0 行才允许继续，第 ④ 条按 D18-e ④-a 由迁移自己收敛未发布的行、④-b 对已 `APPLIED` 的行开 `USER / HUMAN` 人工裁决；② **重建 `project_action_result_ledger_mutator` 为 `BEFORE INSERT OR UPDATE`**（§7.7 D18 —— `CREATE OR REPLACE` **改不了**触发器的事件列表，必须 `DROP TRIGGER` + `CREATE`；只改函数体等于把 ⓪ 号类型判定留在一个进不来的事件面上），函数体同时落 v1.11 的"类型判定排在任何 `jsonb_array_` 之前"与 v1.12 的 `ledger_untouched` 控制流（D18-g / D18-h）；③ **建 `project_action_result_session_fk`**（`ON DELETE RESTRICT ON UPDATE RESTRICT`，§7.7 D19 ①）与它需要的 `project_action (result_session_id)` 索引 —— **必须排在 ① 的 D19-e 审计之后**，非 0 行时这条外键根本建不起来、整个迁移失败；④ **建 `session_result_link_delete_guard`**（`BEFORE DELETE` on `session`，§7.7 D19 ②）。**本行必须整体排在 6h 之前**：6h 的 D20-g 审计与 `ADD CONSTRAINT` 假定账本两侧的硬门已经在位 | `DROP … IF EXISTS` + `CREATE`／`ADD CONSTRAINT` 前 `DROP CONSTRAINT IF EXISTS`；审计只读，④-a 的收敛幂等（再跑一次影响 0 行） |
 | **6h** | **建 v1.12 的 Project purge 协议与 v1.13 的量化域/线性化点**（`PC-CX-56` / `PC-CX-60` / `PC-CX-61`），**排在 6g2 之后**：**先** `DROP CONSTRAINT IF EXISTS session_project_action_fk` **再** `ADD CONSTRAINT … FOREIGN KEY (project_action_id) REFERENCES project_action(id) ON DELETE NO ACTION ON UPDATE NO ACTION DEFERRABLE INITIALLY IMMEDIATE`（PostgreSQL 不能把一条既有外键**改**成可延迟的；**初始模式全文只有这一个**，§7.7 D20-l），建 `coordinator_purge_ledger_pairs()`（§7.7 D20 ⓪，量化域本身）、`coordinator_purge_lock_ledger()`（D20 ③-lock）、`project_purge_fence`（`BEFORE DELETE` on `project`）、`coordinator_purge_project()`（D20 ③）与 `coordinator_project_publish_fence`（**两条触发器**：`BEFORE INSERT OR UPDATE` on `project_action` 与 `BEFORE INSERT` on `session`，D20 ④），并建 `project_action (project_id)` 索引（级联、fence 查询与 ③-2 的取锁都扫它）。**`ADD CONSTRAINT` 之前必须先跑 D20-g 的第一条存量审计并得到 0 行**；**建 ④ 号之前必须对每个 Project 跑一次 ⓪ 并把 `in_scope = false` 的行数打进迁移输出**（D20-g 第二条，非 0 行按 D20-i 开 `USER / HUMAN` 人工裁决，不阻塞迁移；**v1.14 起 ⓪ 的谓词是 §4.3 I11-A 的完整归属闭包，因此这一条同时数出已终态 / 停在 `CLAIMED` 的占位、错 `subject_type` / `subject_id` 与跨 Project Task 的存量**，`PC-CX-62`） | 幂等：drop/add 成对，函数 `CREATE OR REPLACE`，触发器 `DROP … IF EXISTS` + `CREATE`；两条审计只读 |
+| **6i** | **建 v1.15 的原生验收（迁移 `0127_project_acceptance_run`，单元 25A）**，排在 6h 之后：建枚举 `project_acceptance_verdict`；建表 `project_acceptance_run` / `project_acceptance_criterion` / `project_merge_evidence` / `project_acceptance_audit`；给 `project` 加 `accepted_run_id`（FK → `project_acceptance_run`，`ON DELETE SET NULL`）与 `legacy_accepted_at`；**回填**：把每个**已经 DONE** 的 Project 标 `legacy_accepted_at = now()` 并写一行 `legacy_marked` 审计（**不重开、不追认、不删除**，见 §13.5 LG1）；**回填之后**才建 `project_done_evidence_chk`，否则存量行当场违约；建 `project_acceptance_reopen` 函数与 `project_acceptance_done_gate` / `project_acceptance_task_fact` / `project_acceptance_criteria_fact` / `project_acceptance_merge_fact` / `project_acceptance_run_immutable_guard` / `project_acceptance_criterion_immutable_guard` / `project_acceptance_audit_append_only` 七个触发器 | 全部**可空或有默认**；回填幂等（`WHERE legacy_accepted_at IS NULL`，再跑一次影响 0 行） |
 | 7 | **不含任何 `DROP COLUMN`** | 同 PAC M4 |
 
 - **G1（关键）**：列默认值与"新建 Project 的默认"是**两个不同的值**，不能靠一个 `@default` 同时表达。`automation_policy` 的**数据库默认是 `MANUAL`**（保护存量），**服务层在创建新 Project 时显式写入 `GUARDED_AUTO`**。反过来做（默认 GUARDED_AUTO + 迁移里 UPDATE 存量）会在迁移与新代码上线之间留一个窗口，窗口里创建的项目全是自动的。同理 `coordinator_enabled` 数据库默认 `false`，新建时显式 `true`。**04 单元必须同时测这两条**：迁移后存量为 MANUAL/false，且新建为 GUARDED_AUTO/true。
@@ -3444,6 +3460,58 @@ acceptanceDigest = sha256(canonical({
 
 ---
 
+### 13.5 原生验收记录（v1.15 新增，单元 25A）
+
+§13.4 说清楚了验收**必须**满足什么，但把"验收记录"留成了 `project_decision.detail` 里的一段 JSON。
+23 单元把这个缺口走到了尽头：那一轮的 12 条裁决写在一份文档里，`project.status` 由人读完文档之后写，
+而数据库里**没有任何一行**把那个 DONE 和它所依据的事实联系起来。于是三个问题都没有机械答案 ——
+"这个 DONE 现在还成立吗"、"是哪一条标准通过了"、"退回一个 Task 会不会让它失效"。
+v1.15 把 AE1–AE11 从"实现时自己发明"变成四张表、两列和九个数据库对象。
+
+**AR1（一次尝试是一行，逐条结论是一行一条）**：`project_acceptance_run` 一行是一次尝试；
+`project_acceptance_criterion` 一行是**一条被声明的条件**在这次尝试里的结论与证据。
+被声明的条件由服务层从 `project.acceptance_criteria` **机械分解**：一条非空行是一条，列表符号（`-` / `1.` / `（1）` / `第 3 条`）是装饰，
+整段没有换行的文字是**一条**而不是零条。每条的 `criterion_key` 取自它自己的文字，因此重排列表不改变一条条件的身份，改写它的字句才改变。
+
+**AR2（结论是算出来的，不是报上来的）**：一次尝试的 `verdict` 由逐条结论**推导**：全 PASS 即 PASS，出现 FAIL 即 FAIL，其余 INCONCLUSIVE。
+调用方**不能**直接提交它，而且快照里的每一条都必须被回答 —— 少答一条即拒绝。
+这就是这套机制与"在评论里写全绿"之间的**全部**区别：后者是一句断言，前者是一张必须填满的清单。
+
+**AR3（两个摘要分列）**：`input_digest` 是 AE1 的 `acceptanceDigest`（被判断的世界），
+`result_digest` 是逐条结论的摘要（判断本身）。分开的理由与 §7.4 EC2-b 相同：
+"判了什么"和"判成什么"是两个问题，一个哈希盖住两者就一个也答不了。
+结论提交时 `input_digest` 会**按当时的行重算**——一次尝试是对它**提交时**的世界作出的结论，不是对它开始时的。
+
+**AR4（谁作出结论由门决定，不由请求体声明）**：runner 门（CLI / MCP）一律写 `COORDINATOR_AGENT`，
+用户门默认写 `USER`。§13.4 AE2 第 2 步要的是 `COORDINATOR_AGENT` 的记录，因此一次由人手工记录的验收
+**被保留**（它是一次真实检查的真实记录）但**不单独打开** DONE 的门，拒绝语句直说是哪一半缺了。
+
+**BD1（DONE 与它的依据是同一行）**：`project.accepted_run_id` 在写 `status = DONE` 的**同一条语句**里被写上，
+被任何一次重开清空。加上 `project_done_evidence_chk`，"DONE 而没有依据"在数据库里**不可达** ——
+I10 因此不再是一条需要人去核对的不变量，而是一条 `CHECK`。
+`project_acceptance_done_gate` 是它后面那堵墙：服务层的硬门只存在于写了它的那个二进制里，
+而一次旧版 apiserver 的写、一段迁移脚本、一条手打的 `UPDATE` 都要撞上这个触发器。
+
+**RF1（三个拒绝码）**：`ACCEPTANCE_MISSING`（没有可用的 PASS：没跑过、没结论、结论不是 PASS、或由人记录）、
+`ACCEPTANCE_EVIDENCE_STALE`（有 PASS，但它判的不是这份事实）、
+`ACCEPTANCE_BLOCKED`（尚有未解决的 blocker 或验证失败）。前两个是 AE2 第 3 步冻结的；
+第三个是本节新增，单列的理由是它把人送去**另一个**地方：一个是"重跑验收"，一个是"先把已知没完的事做完"。
+每一次拒绝都在 `project_acceptance_audit` 留一行 `done_refused` —— 被拒的那个事务已经回滚，
+而"我按了按钮什么也没发生"必须有地方可查。
+
+**IV1（重开是唯一需要写下来的失效）**：AE4 说旧证据不必失效，因为摘要不再匹配。
+这对**事实变化**成立，对**重开**不成立 —— 单纯把 DONE 改回 OPEN 不改变四个投影里的任何一个，摘要逐字不变。
+因此重开（人工的，或 AE8 触发的）必须显式把该项目全部未取代的记录标 `superseded_at`。
+被取代的记录**不删除、不改判**：它仍然是当时的结论，只是不再可用。
+
+**LG1（存量 DONE 被标注，不被追认也不被重开）**：迁移 `0127` 给每个**已经 DONE** 的 Project 写 `legacy_accepted_at`
+并留一行 `legacy_marked` 审计。这样的项目：`accepted_run_id` 为空，读接口上 `legacyEvidence: true`，
+`doneGate.allowed: false`，**且事实变化不会重开它** —— 它从未声称自己绑定过一份事实，因此没有事实能反驳它。
+升级时重开别人已经完成的项目，是"兼容"这个词的破坏性读法，AC11 要的不是那个。
+这个标注在**有人把它重开**的那一刻失效：`legacy_accepted_at` 被清空，它的下一次 DONE 与任何项目一样要挣一次真的验收。
+
+---
+
 ## 14. 12 条项目验收标准逐条映射
 
 **分类列**：**业务** = 落在 `project`/`task` 的字段或既有业务语义；**基础设施** = 新表/新列/新服务；**复用** = 由 PAC 已冻结的条款承担，本项目不重复实现。
@@ -3461,9 +3529,9 @@ acceptanceDigest = sha256(canonical({
 | **AC9** | 崩溃/Session 结束/Runner 离线/接管/混合版本后能恢复，不丢任务、不重复启动、不越权 | §8.1 · §8.4 · §12.4 · §7.7 D8–D16（含 D14-f · D14-g · D11 的两个闭集 allowlist · D15-f · D16-d）· I7 · I17-A/I17-A2/I17-A3/I17-B | **基础设施**（fencing token、`project_action`、投影触发器） | 19 · 22 | 19 `-`旧 fencing token 提交影响 0 行 · 19 `+`两实例并发只有一个提交 · 19 `+`合法派发之后推进 token，I11-A 仍成立（PG）· 19 `-`在飞 Task 跨 Project 移动被拒（PG）· 19 `-`执行上下文被撤销后的占位在 `COMMIT` 被数据库拒绝，与二进制版本无关（D14，PG）· 19 `-`任何写端改写 `APPLIED` 行的冻结上下文 / `reason_code` 都被拒，逐列 mutation 由 schema 驱动（D11，PG，v1.7）· 19 `+`占位的 create 冻结列由 `execution_context` 构造并被数据库证明，`model`/`effort` 的三阶段代次两个方向都成立（D15 · I17-A/I17-A2，PG，v1.7）· 19 `-`§8.3 的发布 UPDATE 逐列 mutation 全拒、`CLAIMED` 的转移目标是闭集、终态不再出去（D11-f/D11-g，PG，v1.8）· 19 `-`任何写端都不能把一条 live COORDINATOR 占位写出 D5 的索引覆盖集，第二条占位仍然只拿到唯一冲突（D15-f · I17-A3，PG，v1.8）· 19 `+`提交点证明 Session 实际结果 = 动作冻结结果、代次与 `detail` 账本双向一致，缺账/多账/错代次全拒（D16，PG，v1.8）· 19 `+`Coordinator Session 死后轮换继续推进 · 22 端到端故障注入矩阵（§15） |
 | **AC10** | Web/API/CLI 展示当前状态、最近决策、下一动作、阻塞、下次唤醒、验收证据；有可独立运行的测试 | §6.2 · §11.1 · §13.4 | **基础设施**（读接口） | 20 · 21 | 20 API/CLI/MCP parity + 鉴权 + 全 Base62 · 20 `-`陈旧/越权写入被拒 · 21 组件测试覆盖 loading/error/empty + 三策略 + 审批 + blocker + 离线 Runner + legacy Project · 21 `-`界面不得暗示 silent fallback |
 | **AC11** | 既有 Project 默认兼容、不被意外开启自动推进；迁移后须显式选策略或沿用安全默认 | §12.1 · §12.2 · §12.3 · §7.7 D8-a · D13 | **业务**（策略字段）+ **基础设施**（迁移、投影触发器） | 03 · 04 · 22 | 04 `M`迁移后存量 `coordinator_enabled = false` / `MANUAL`（G1 两条都测）· 04 `M`迁移不产生事件/唤醒（G2）· 04 `M`空库+生产快照 `migrate diff` 为空（G4）· 04 `M`D13 漂移查询返回 0 行（G5）· 06 `+`无 Project 的 Task 派发逐字段不变（§12.2）· 14 `-`legacy sweep 不碰 `COORDINATOR` 权任务（D1）· 04 `M`I17-A 与 I17-A2 各返回 0 行、`disposition` 回填完成、D11 的逐列 mutation 全拒（G5 v1.7）· 04 `M`发布语句的逐列 mutation 全拒、create 冻结集由 PAC §6 生成、D5 谓词列不可被 UPDATE 移出、两条提交点约束触发器存在且可延迟（G5 v1.8）· 22 `-`旧二进制的裸 SQL 移动 Task 后投影仍不陈旧（PG） |
-| **AC12** | 全部任务完成后执行项目级验收并核对合并状态，全 PASS 才可标 DONE | §13.4 · §9.2 最后一行 | **业务**（`project.status` 的写入门）+ **基础设施**（验收记录） | 23 | 23 `-`任一 FAIL 时标 DONE 被服务端拒绝（硬门，第 5 条）· 23 `+`全 PASS 后可标 DONE · 23 `+`合并核对按内容而非 `--contains`（第 6 条）· 23 `-`控制环任何策略下都不能自己标 DONE |
+| **AC12** | 全部任务完成后执行项目级验收并核对合并状态，全 PASS 才可标 DONE | §13.4 · §13.5 · §9.2 最后一行 | **业务**（`project.status` 的写入门）+ **基础设施**（`project_acceptance_run` 与它的三张伴生表） | 23 · 25A | 23 `-`任一 FAIL 时标 DONE 被服务端拒绝（硬门，第 5 条）· 23 `+`全 PASS 后可标 DONE · 23 `+`合并核对按内容而非 `--contains`（第 6 条）· 23 `-`控制环任何策略下都不能自己标 DONE · 25A `project-acceptance.pg.spec`：`-`无验收 / 未结论 / INCONCLUSIVE / FAIL / 由人记录 / 陈旧摘要 / 未解决 blocker 或验证失败，各自稳定拒绝并留一行 `done_refused` · `+`一致 PASS 时 DONE 成功且 exactly-once（重复写与并发写各产生一条 `done_bound`）· `+`DONE 之后的裸 `UPDATE task` 原子重开并取代全部记录 · `+`新的 `refGeneration` 同样重开（AE9-c）· `-`重开后旧 PASS 不可复用 · `-`裸 `UPDATE project SET status='DONE'` 被数据库拒绝 · `+`存量 DONE 被标注为 legacy 且不因事实变化重开 · 25A `project-acceptance.spec`：摘要对四个投影各自敏感、对顺序不敏感 |
 
-**总计**：业务字段 **5 个**（§2.2），新业务实体 **0 个**（§2.3），新基础设施表 **5 张** + 新列 **8 个**（§2.4）。
+**总计**：业务字段 **5 个**（§2.2），新业务实体 **0 个**（§2.3），新基础设施表 **9 张** + 新列 **10 个**（§2.4）。
 v1.1 相对 v1 只多了一列（`session.dispatch_origin`）与两个数据库约束对象（一个 partial unique index、一个 trigger，§2.4）。**新业务实体仍然是 0 个** —— 关闭两个 P0 靠的是把互斥挪进数据库，不是靠新概念。
 v1.3 相对 v1.2 多一列（`task.verdict_revision`）、两个新表自己的列（`project_blocker.lifecycle_generation`、`project_runtime.acceptance_attempt`）与三个数据库约束对象（一个可延迟约束触发器、一个 CHECK、一个唯一索引，§2.4）。**新业务实体仍然是 0 个** —— 关闭这六项靠的是给已有的账本装上单调代次、给已有的锁排一个全序、让已有的触发器读它声称保证的那几列。
 v1.4 相对 v1.3 多一列（`project.config_revision`）与三组数据库对象（一个可延迟约束触发器 D10、一个 `BEFORE UPDATE` 触发器 D11、一组投影触发器 D12/D8-a，§2.4），并**删掉**了一处服务层义务（§12.3 D3 的三个写入点）。**新业务实体仍然是 0 个** —— 关闭这七项靠的是把不变量的时态说清楚、把决策输入说全、给同时为真的原因排一个全序、把一个投影交给数据库自己算，以及让人工与控制环共用一把本来就存在的行锁。

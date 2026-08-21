@@ -162,9 +162,12 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 		t.Fatal("unknown project command was accepted")
 	}
 
-	// The five verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that
-	// the family does not route to is text nobody can read.
-	for _, action := range []string{"get", "status", "verifications", "create", "update"} {
+	// The verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that the
+	// family does not route to is text nobody can read.
+	for _, action := range []string{
+		"get", "status", "verifications", "create", "update",
+		"acceptance", "acceptance-run", "acceptance-verdict", "merge-evidence",
+	} {
 		out.Reset()
 		if err := cmdProjectCLI([]string{action, "--help"}, strings.NewReader(""), &out); err != nil {
 			t.Fatalf("project %s --help: %v", action, err)
@@ -192,7 +195,7 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
 		specs[spec.Tool] = spec
 	}
-	if len(specs) != 5 {
+	if len(specs) != 9 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -220,9 +223,24 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	if audit.Mutates {
 		t.Fatal("project_verifications is advertised as mutating")
 	}
-	// The two write verbs must say so: an agent reads `mutates` to decide whether a command is
+	// `project_acceptance` is a read like the two above, and the one an agent reaches for first
+	// when it is deciding whether a project can be closed at all.
+	acceptance, ok := specs["project_acceptance"]
+	if !ok {
+		t.Fatalf("project capabilities lost project_acceptance: %#v", projectCLICapabilities)
+	}
+	if got := strings.Join(acceptance.Argv, " "); got != "orbit project acceptance" {
+		t.Fatalf("project_acceptance argv = %q", got)
+	}
+	if acceptance.Mutates {
+		t.Fatal("project_acceptance is advertised as mutating")
+	}
+	// The write verbs must say so: an agent reads `mutates` to decide whether a command is
 	// safe to run while exploring, and a write advertised as a read is the wrong answer.
-	for _, tool := range []string{"project_create", "project_update"} {
+	for _, tool := range []string{
+		"project_create", "project_update",
+		"project_acceptance_run", "project_acceptance_verdict", "project_merge_evidence",
+	} {
 		write, ok := specs[tool]
 		if !ok {
 			t.Fatalf("%s has no CLI capability: %#v", tool, projectCLICapabilities)
@@ -230,7 +248,11 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 		if !write.Mutates {
 			t.Fatalf("%s is not advertised as mutating", tool)
 		}
-		if got := strings.Join(write.Argv, " "); got != "orbit project "+strings.TrimPrefix(tool, "project_") {
+		// The MCP name is snake_case and the CLI verb is kebab-case — `project_acceptance_run` is
+		// `orbit project acceptance-run`. One mechanical mapping, so a new verb cannot quietly
+		// advertise an argv nobody can type.
+		verb := strings.ReplaceAll(strings.TrimPrefix(tool, "project_"), "_", "-")
+		if got := strings.Join(write.Argv, " "); got != "orbit project "+verb {
 			t.Fatalf("%s argv = %q", tool, got)
 		}
 	}

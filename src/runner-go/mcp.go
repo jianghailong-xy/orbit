@@ -273,6 +273,70 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_acceptance":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectAcceptance(id)
+		if err != nil {
+			return toolResult("get project acceptance failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_acceptance_run":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		// No decidedBy: the credential is a machine's, so the server records the coordinator
+		// agent. A parameter for it would be this process claiming an identity.
+		raw, err := s.t.openProjectAcceptanceRun(id, map[string]interface{}{})
+		if err != nil {
+			return toolResult("open project acceptance run failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_acceptance_verdict":
+		id := getString(args, "projectId")
+		runID := getString(args, "runId")
+		if id == "" || runID == "" {
+			return toolResult("projectId and runId are required", true)
+		}
+		criteria, ok := args["criteria"].([]interface{})
+		if !ok || len(criteria) == 0 {
+			return toolResult("criteria must be a non-empty array with one entry per stated criterion", true)
+		}
+		raw, err := s.t.finalizeProjectAcceptanceRun(id, runID, map[string]interface{}{"criteria": criteria})
+		if err != nil {
+			return toolResult("conclude project acceptance run failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_merge_evidence":
+		id := getString(args, "projectId")
+		requirement := getString(args, "requirementId")
+		branch := getString(args, "targetBranch")
+		hash := getString(args, "contentHash")
+		if id == "" || requirement == "" || branch == "" {
+			return toolResult("projectId, requirementId and targetBranch are required", true)
+		}
+		if !isSHA256Hex(hash) {
+			return toolResult("contentHash must be 64 hex characters: a sha256 of the CONTENT you "+
+				"read, not a commit SHA and not `git branch --contains` (a squash makes both wrong)", true)
+		}
+		body := map[string]interface{}{
+			"requirementId": requirement,
+			"targetBranch":  branch,
+			"contentHash":   strings.ToLower(hash),
+		}
+		copyIfPresent(body, args, "source", "detail")
+		raw, err := s.t.recordProjectMergeEvidence(id, body)
+		if err != nil {
+			return toolResult("record project merge evidence failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_create":
 		title := getString(args, "title")
 		if title == "" {
@@ -1321,6 +1385,117 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
+		},
+		{
+			"name": "project_acceptance",
+			"description": "Read the evidence a project's DONE would be checked against, and " +
+				"whether it would be allowed right now. A comment saying the tests passed is not " +
+				"evidence this server can check; a run in this record is. Returns: the stated " +
+				"acceptance criteria decomposed one per non-blank line — the checklist an " +
+				"acceptance run has to answer item for item; acceptanceDigest, the digest of the " +
+				"criteria text, every task with its status and completion policy, every " +
+				"verification verdict and the newest merge observation per requirement; every " +
+				"attempt with its per-criterion conclusions, evidence and the digest of the facts " +
+				"it judged; what each target branch was last observed to CONTAIN and at which " +
+				"refGeneration; the append-only audit of runs opened and concluded, DONEs bound " +
+				"and refused, and every reopen with the fact that caused it; and doneGate — " +
+				"allowed, or the code and sentence the write would be refused with " +
+				"(ACCEPTANCE_MISSING when there is no usable PASS, ACCEPTANCE_EVIDENCE_STALE when " +
+				"one exists but the facts have moved since, ACCEPTANCE_BLOCKED when a blocker or " +
+				"an unresolved verification failure is still open).",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_acceptance_run",
+			"description": "Open a project acceptance attempt. The acceptance criteria are frozen " +
+				"with their digest and one empty row per stated criterion is created — the " +
+				"checklist project_acceptance_verdict then has to fill, item for item. Open it " +
+				"when you are about to CHECK the project, not when you are about to report on it: " +
+				"the digest of the facts is taken now, and a task, a verdict, the criteria or the " +
+				"branch content changing afterwards makes this attempt stale rather than wrong. " +
+				"Opening an attempt supersedes any earlier live one, so there is never a choice of " +
+				"which conclusion to believe. A project that states no acceptance criteria is " +
+				"refused, because an acceptance with nothing to check would pass by having nothing " +
+				"to fail.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to run acceptance on, as shown in its web UI URL.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_acceptance_verdict",
+			"description": "Conclude a project acceptance attempt with one verdict per stated " +
+				"criterion. Address each criterion by ordinal (its position in the snapshot) or " +
+				"criterionKey (its content). EVERY criterion must be answered: a missing one is " +
+				"refused, because a project-level PASS is the conjunction of them and one nobody " +
+				"checked is not a pass. The attempt's own verdict is DERIVED and cannot be " +
+				"supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — " +
+				"which is the whole difference between this and writing 'all green' in a task " +
+				"comment. Put real evidence in each entry's `evidence`: the command, its exit " +
+				"code, the key output, the SHA, the environment. Only a PASS recorded here lets " +
+				"the project be set DONE, and only while the facts it judged are still current.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project whose attempt is being concluded.",
+				},
+				"runId": map[string]interface{}{
+					"type":        "string",
+					"description": "The attempt to conclude, as returned by project_acceptance_run.",
+				},
+				"criteria": map[string]interface{}{
+					"type": "array",
+					"description": "One entry per stated criterion: {ordinal or criterionKey, " +
+						"verdict: PASS|FAIL|INCONCLUSIVE, summary, evidence, evidenceTaskId, " +
+						"evidenceSessionId}.",
+					"items": map[string]interface{}{"type": "object"},
+				},
+			}, "projectId", "runId", "criteria"),
+		},
+		{
+			"name": "project_merge_evidence",
+			"description": "Record what a target branch was observed to CONTAIN — the merge half " +
+				"of a project's acceptance evidence. Hash the content you actually read (a " +
+				"normalized `git grep` result, a blob or tree digest, a rendered diff), never " +
+				"`git branch --contains`: after a squash merge that answer is a guaranteed false " +
+				"negative while the content is plainly there. Same content as the last " +
+				"observation and only the observation time moves; different content writes a new " +
+				"row one refGeneration up, which is what makes 'the branch changed and changed " +
+				"back' visible to a database that cannot lock a git ref — and if the project was " +
+				"DONE against the old content, that same write reopens it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project this observation belongs to.",
+				},
+				"requirementId": map[string]interface{}{
+					"type":        "string",
+					"description": "What was required, in the words the acceptance criteria use.",
+				},
+				"targetBranch": map[string]interface{}{
+					"type":        "string",
+					"description": "Where it had to land, e.g. main or feat/project.",
+				},
+				"contentHash": map[string]interface{}{
+					"type":        "string",
+					"description": "sha256 of the observed content, 64 hex characters.",
+				},
+				"source": map[string]interface{}{
+					"type":        "string",
+					"description": "Who observed it. Defaults to MERGE_EVIDENCE_WRITER.",
+				},
+				"detail": map[string]interface{}{
+					"type":        "object",
+					"description": "The raw observation behind the hash: the command, its output, the blob ids.",
+				},
+			}, "projectId", "requirementId", "targetBranch", "contentHash"),
 		},
 		{
 			"name": "project_create",

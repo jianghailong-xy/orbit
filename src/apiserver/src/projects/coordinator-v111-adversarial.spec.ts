@@ -45,7 +45,10 @@ const D20_SQL = firstSql(D20);
 test('PC-CX-56: the Project purge is one declared transaction, not an unreachable cycle', () => {
   // §2.4's cascade and the action → Session RESTRICT are unchanged: the finding was never that
   // either of them was wrong, it was that the *third* edge made all three orders unreachable.
-  assert.match(INFRA, /五张新表，全部 `onDelete: Cascade` 挂在 `project` 下/,
+  // The COUNT of tables is not what this finding is about and is checked for §14 agreement in
+  // `coordinator-contract.spec.ts`; pinning it here made a later unit adding a table look like a
+  // regression of PC-CX-56. What must not change is the cascade itself.
+  assert.match(INFRA, /新表，全部 `onDelete: Cascade` 挂在 `project` 下/,
     'the action ledger no longer cascades with its Project, which is not what this finding asked for');
   assert.match(INFRA, /`project_action\.result_session_id → session\.id` \| \*\*RESTRICT\*\*/,
     'the action-to-Session side must stay immediate: the purge never needs it deferred');

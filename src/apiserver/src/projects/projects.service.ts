@@ -28,6 +28,7 @@ import {
   encodeTaskPageCursor,
 } from '../tasks/tasks.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 import { publicIdempotencyKey } from './project-decision.service';
 import {
@@ -365,9 +366,16 @@ export class ProjectsService {
     'it is, or delete it first. Moving a coordinator is not something this endpoint does as a side ' +
     'effect of asking for one.';
 
+  /**
+   * `acceptance` carries its own default so that the several dozen existing constructions of this
+   * service — every one of them in a test, over a Prisma double — keep compiling and keep meaning
+   * what they meant. Nest still injects the module's singleton in production: the parameter is
+   * typed, so `design:paramtypes` names it and the DI container resolves it like the other two.
+   */
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionsService,
+    private readonly acceptance: ProjectAcceptanceService = new ProjectAcceptanceService(prisma),
   ) {}
 
   /**
@@ -1024,6 +1032,12 @@ export class ProjectsService {
     const candidates = wakeDetail?.wakeCandidates ?? [];
     const decisions = decisionRows.map((row) => ProjectsService.decisionSummary(row, decisionActions));
     const pendingActions = pendingActionRows.map(ProjectsService.actionSummary);
+    // §13.4's native record, and the gate as a read. Two round trips rather than a join: the gate
+    // needs one consistent snapshot of four projections, which is a transaction, not a SELECT.
+    const [acceptanceRun, doneGate] = await Promise.all([
+      this.acceptance.summary(projectId),
+      this.acceptance.evaluateGate(projectId),
+    ]);
 
     return {
       projectId,
@@ -1135,11 +1149,21 @@ export class ProjectsService {
         recent: eventRows.map(ProjectsService.eventSummary),
       },
       acceptance: {
-        // §13.4's evidence, not its verdict: running project acceptance is a coordinator turn, and
-        // this endpoint reads. What it serves is what such a turn — or a person — has to check.
+        // §13.4's evidence AND, since unit 25A, its verdict: `run` is the native acceptance record
+        // and `doneGate` is the same decision the write path makes, evaluated as a read so this
+        // endpoint can say what is missing before somebody presses a button and gets a 409.
         criteria,
         criteriaAbsentReason: reasonIfAbsent(criteria, 'NO_ACCEPTANCE_CRITERIA'),
         attempt: counter(head.acceptanceAttempt),
+        run: acceptanceRun,
+        runAbsentReason: reasonIfAbsent(acceptanceRun, 'ACCEPTANCE_NOT_ATTEMPTED'),
+        doneGate: {
+          allowed: doneGate.allowed,
+          runId: doneGate.runId,
+          refusalCode: doneGate.code,
+          reason: doneGate.reason,
+          acceptanceDigest: doneGate.digest,
+        },
         lastRun: acceptanceRow === undefined
           ? null
           : ProjectsService.actionSummary(acceptanceRow),
@@ -1816,6 +1840,12 @@ export class ProjectsService {
       ...(authorizationWrites.length > 0 ? { configRevision: { increment: 1 } } : {}),
     };
 
+    // §13.4 AE7: a write that settles the project takes the EXCLUSIVE lock, and takes it as the
+    // transaction's first statement. Everything that could change the acceptance facts holds
+    // `FOR NO KEY UPDATE` on the same row, and the two conflict — which is what makes "the fact
+    // changed" and "the project was accepted" two orderings rather than an interleaving. §8.6 LO3
+    // forbids starting weak and upgrading, so the strength is chosen here, before the first read.
+    const settling = dto.status === ProjectStatus.DONE;
     try {
       const project = await this.prisma.$transaction(async (tx) => {
         // The project row first, and this is the lock a coordinator has to take before committing
@@ -1823,13 +1853,20 @@ export class ProjectsService {
         // and "the coordinator acted on what it read" two orderings rather than an interleaving:
         // whichever commits first, the other sees it. It also fixes the order of the two writes
         // below (project before its team row), which is the order every path takes.
+        const select = Prisma.sql`
+          SELECT "coordinator_enabled", "config_revision", "status"::text AS "status",
+                 "accepted_run_id" AS "accepted_run_id", "legacy_accepted_at" AS "legacy_accepted_at"
+            FROM "project"
+           WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
         const [locked] = await tx.$queryRaw<Array<{
           coordinator_enabled: boolean;
           config_revision: bigint;
-        }>>`
-          SELECT "coordinator_enabled", "config_revision" FROM "project"
-          WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-          FOR NO KEY UPDATE`;
+          status: string;
+          accepted_run_id: string | null;
+          legacy_accepted_at: Date | null;
+        }>>(settling
+          ? Prisma.sql`${select} FOR UPDATE`
+          : Prisma.sql`${select} FOR NO KEY UPDATE`);
         if (!locked) throw new NotFoundException('project not found');
         // Under the lock, so the comparison and the write cannot be separated by another writer.
         // Throwing here rolls the transaction back, which is the whole guarantee a stale write
@@ -1838,6 +1875,44 @@ export class ProjectsService {
         // The value the lock produced, not the one read before it: a concurrent write that turned
         // this project off is exactly the case the check has to see.
         ProjectsService.assertLevelNamedWhenTurningOn(locked.coordinator_enabled, dto);
+
+        // §13.4 AE2, in the transaction that writes DONE and after the lock that orders it. AE5:
+        // this is the one place `project.status = DONE` is decided, so a user in the web app, the
+        // CLI, MCP `project_update` and a coordinator inside a turn all meet the same check.
+        //
+        // Idempotent by re-reading the LOCKED row rather than by trusting the caller: a project
+        // that is already DONE is not re-gated and not re-bound, so pressing the button twice
+        // produces one binding and one audit row.
+        if (settling && locked.status !== ProjectStatus.DONE) {
+          const gate = await this.acceptance.assertDoneAllowed(tx, id);
+          data.acceptedRunId = gate.runId;
+          await ProjectAcceptanceService.writeAudit(
+            tx, id, 'done_bound', `bound to acceptance attempt ${gate.attempt}`,
+            { attempt: String(gate.attempt), acceptanceDigest: gate.digest }, gate.runId,
+          );
+        }
+
+        // The reverse door, and the reason a stale PASS cannot be reused: reopening a project
+        // retires every acceptance run it has. AE4 says old evidence does not need invalidating
+        // because the digest stops matching — true for a fact change, and NOT true here, since a
+        // reopen on its own changes none of the four projections. So this is the one invalidation
+        // that has to be written rather than derived.
+        if (dto.status === ProjectStatus.OPEN && locked.status === ProjectStatus.DONE) {
+          await tx.projectAcceptanceRun.updateMany({
+            where: { projectId: id, supersededAt: null },
+            data: { supersededAt: new Date(), supersededReason: 'reopened_by_user' },
+          });
+          data.acceptedRunId = null;
+          // A legacy DONE that a person reopens stops being one: its next DONE has to earn a run
+          // like any other, which is how the compatibility stamp expires instead of accumulating.
+          data.legacyAcceptedAt = null;
+          await ProjectAcceptanceService.writeAudit(
+            tx, id, 'reopened_by_user', 'the owner reopened this project',
+            { previousAcceptedRunId: locked.accepted_run_id, wasLegacy: locked.legacy_accepted_at !== null },
+            locked.accepted_run_id,
+          );
+        }
+
         if (agentId !== undefined) {
           await ProjectsService.writeCoordinatorAgent(tx, ownerId, id, agentId);
         }
@@ -1845,6 +1920,23 @@ export class ProjectsService {
       });
       return withCoordination(project);
     } catch (e) {
+      // A refused DONE is a thing somebody has to be able to look up afterwards — "I pressed it and
+      // nothing happened" is the report, and the refusal itself rolled back with the transaction
+      // that raised it. Written outside that transaction, best effort: failing to record why a
+      // write was refused must not turn the refusal into a 500.
+      if (e instanceof AcceptanceRefusal) {
+        await this.prisma.projectAcceptanceAudit
+          .create({
+            data: {
+              projectId: id,
+              kind: 'done_refused',
+              reason: e.code,
+              detail: e.getResponse() as Prisma.InputJsonValue,
+            },
+          })
+          .catch(() => undefined);
+        throw e;
+      }
       // The partial unique index behind "one coordinator per project", reached only by a second
       // writer that got between the read and the write above. Reported as the rule it is rather
       // than as a 500 — the caller can re-read and decide.

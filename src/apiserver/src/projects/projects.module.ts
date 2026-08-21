@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectDecisionService } from './project-decision.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
@@ -20,6 +21,7 @@ import { ProjectsService } from './projects.service';
   controllers: [ProjectsController],
   providers: [
     ProjectsService,
+    ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,
     ProjectAuthorizationService,
@@ -31,6 +33,7 @@ import { ProjectsService } from './projects.service';
   ],
   exports: [
     ProjectsService,
+    ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,
     ProjectAuthorizationService,

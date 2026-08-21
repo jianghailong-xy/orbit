@@ -20,6 +20,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
@@ -59,6 +60,7 @@ export interface E2eServices {
   dispatcher: ProjectTaskDispatcherService;
   verdicts: ProjectVerificationVerdictService;
   reaper: ProjectAvailabilityReaperService;
+  acceptance: ProjectAcceptanceService;
   projects: ProjectsService;
   sessions: SessionsService;
   /** Post-commit announcements the loop made, so "it told the runner" is observable. */
@@ -68,7 +70,10 @@ export interface E2eServices {
 
 /** Every table the control loop can write, in dependency order. */
 const WORLD_TABLES = [
-  'project_blocker', 'project_event', 'project_decision', 'project_action', 'project_runtime',
+  'project_acceptance_audit', 'project_acceptance_criterion', 'project_merge_evidence',
+  'project_blocker', 'project_event', 'project_decision', 'project_action',
+  // Before `project`, because `project.accepted_run_id` references it (migration 0127).
+  'project_acceptance_run', 'project_runtime',
   'project_member', 'task_verification_failure', 'task_dependency', 'task_comment', 'task',
   'task_list', 'session', 'workspace', 'runner', 'model_provider', 'project', 'user',
 ];
@@ -130,7 +135,8 @@ export function servicesOn(url: string, options: { registerHandler?: boolean } =
   const verdicts = new ProjectVerificationVerdictService(prisma, reconciler);
   const reaper = new ProjectAvailabilityReaperService(prisma);
   const sessions = new SessionsService(prisma, queue, realtime);
-  const projects = new ProjectsService(prisma, sessions);
+  const acceptance = new ProjectAcceptanceService(prisma);
+  const projects = new ProjectsService(prisma, sessions, acceptance);
 
   // The production wiring, minus the timers: `onModuleInit` would also start §10.2's clock, and a
   // suite that asserts on exact pass counts cannot share the world with a background ticker.
@@ -143,7 +149,7 @@ export function servicesOn(url: string, options: { registerHandler?: boolean } =
 
   return {
     db, events, decisions, reconciler, coordinatorSessions, dispatcher, verdicts, reaper,
-    projects, sessions, announced,
+    acceptance, projects, sessions, announced,
     dispose: async () => {
       unregisterRotation();
       unregisterHandler();
@@ -164,6 +170,9 @@ export interface WorldOptions {
   /** Register a `model_provider` row for this slug, so a dispatch of it can be authorized. */
   providers?: Array<{ slug: string; runtime: string; enabled?: boolean; defaultModel?: string }>;
   coordinatorEnabled?: boolean;
+  /** What this project's DONE has to be checked against (§13.4). One criterion per non-blank
+   *  line, which is what `parseCriteria` decides and what an acceptance run is a checklist of. */
+  acceptanceCriteria?: string;
 }
 
 export interface World {
@@ -217,6 +226,7 @@ export async function world(
       automationPolicy: options.policy ?? ProjectAutomationPolicy.AUTO,
       maxConcurrentTasks: options.maxConcurrentTasks ?? 3,
       sessionBudgetPerDay: options.sessionBudgetPerDay ?? null,
+      acceptanceCriteria: options.acceptanceCriteria ?? null,
       coordinatorWorkspaceId: agentId,
     },
   });

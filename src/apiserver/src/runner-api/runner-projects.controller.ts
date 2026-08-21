@@ -11,7 +11,14 @@ import {
 } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { PublicIdPipe } from '../common/public-id';
-import { CreateProjectDto, UpdateProjectDto } from '../projects/dto';
+import {
+  CreateProjectDto,
+  FinalizeAcceptanceRunDto,
+  OpenAcceptanceRunDto,
+  RecordMergeEvidenceDto,
+  UpdateProjectDto,
+} from '../projects/dto';
+import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -41,7 +48,10 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 @UseGuards(RunnerAuthGuard)
 @Controller('runner')
 export class RunnerProjectsController {
-  constructor(private readonly projects: ProjectsService) {}
+  constructor(
+    private readonly projects: ProjectsService,
+    private readonly acceptance: ProjectAcceptanceService,
+  ) {}
 
   /**
    * Record a new project. The body is the same CreateProjectDto the user-facing POST /projects
@@ -110,6 +120,65 @@ export class RunnerProjectsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     return this.projects.coordinatorStatus(runner.ownerId, id);
+  }
+
+  /**
+   * This project's acceptance standing (contract §13.4), through the machine door.
+   *
+   * The read a coordinator has to make before it can settle anything: the criteria as the parser
+   * decomposes them, the digest of the facts a DONE would be checked against, every attempt with
+   * its per-criterion conclusions, the merge observations, the audit, and `doneGate` — what is
+   * still missing, in the same words the write path would refuse with.
+   */
+  @Get('projects/:id/acceptance')
+  projectAcceptance(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
+    return this.acceptance.overview(runner.ownerId, id);
+  }
+
+  /**
+   * Open an acceptance attempt, and conclude one.
+   *
+   * These ARE the agent's door in the sense §13.4 clause 2 means: acceptance is executed by the
+   * coordinator agent inside a turn. What the agent cannot do is grant itself the outcome — the
+   * run's verdict is derived from the per-criterion conclusions, and the DONE that may follow is
+   * gated on the same facts through the same service.
+   */
+  @Post('projects/:id/acceptance/runs')
+  openAcceptanceRun(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: OpenAcceptanceRunDto,
+  ) {
+    // Who concluded is a fact about which door the request came through, not a field the caller
+    // fills in: this one is a machine credential, so the run is the coordinator agent's. The user
+    // door takes the claim explicitly, and an agent cannot make it about a person.
+    return this.acceptance.openRun(runner.ownerId, id, { ...dto, decidedBy: 'COORDINATOR_AGENT' });
+  }
+
+  @Post('projects/:id/acceptance/runs/:runId/verdict')
+  finalizeAcceptanceRun(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('runId', PublicIdPipe) runId: string,
+    @Body() dto: FinalizeAcceptanceRunDto,
+  ) {
+    return this.acceptance.finalizeRun(runner.ownerId, id, runId, dto.criteria);
+  }
+
+  /**
+   * Record what a target branch was observed to contain (§13.4 AE9-b).
+   *
+   * The runner is the side that can actually look: it has the checkout. `contentHash` is a digest
+   * of the CONTENT, never `git branch --contains` — a squash makes that a guaranteed false
+   * negative, which is the lesson §13.4 clause 6 exists to carry.
+   */
+  @Post('projects/:id/acceptance/merge-evidence')
+  recordMergeEvidence(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RecordMergeEvidenceDto,
+  ) {
+    return this.acceptance.recordMergeEvidence(runner.ownerId, id, dto);
   }
 
   /**

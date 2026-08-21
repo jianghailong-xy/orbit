@@ -12,6 +12,8 @@ import {
   runStateCopy,
   triggerRefusal,
   BLOCKER_SEVERITY_COLOR,
+  DONE_REFUSAL_TEXT,
+  type AcceptanceRun,
   type ControlRefusal,
   type CoordinatorAction,
   type CoordinatorBlocker,
@@ -453,6 +455,39 @@ export function CoordinatorInFlight({ status }: { status: CoordinatorStatus }) {
   );
 }
 
+/** One acceptance attempt: what it concluded, criterion by criterion, and whether it still counts.
+ *
+ *  A superseded run is drawn as superseded rather than hidden — "we did pass once, and here is what
+ *  ended it" is the question somebody asks after a project reopens, and a screen that dropped the
+ *  row would answer it with silence. */
+function AcceptanceRunRow({ run }: { run: AcceptanceRun }) {
+  const colour = run.verdict === 'PASS' ? 'green' : run.verdict === 'FAIL' ? 'red' : run.verdict ? 'gold' : 'default';
+  return (
+    <div style={{ fontSize: 12 }}>
+      <div>
+        <Tag color={colour}>{run.verdict ?? 'not concluded'}</Tag>
+        <Typography.Text type="secondary">attempt {run.attempt} · by {run.decidedBy}</Typography.Text>
+        {run.supersededAt ? (
+          <Tag color="volcano" style={{ marginLeft: 6 }}>
+            superseded{run.supersededReason ? `: ${run.supersededReason}` : ''}
+          </Tag>
+        ) : null}
+      </div>
+      {run.criteria.map((criterion) => (
+        <div key={criterion.id} style={{ padding: '2px 0' }}>
+          <Tag color={criterion.verdict === 'PASS' ? 'green' : criterion.verdict === 'FAIL' ? 'red' : criterion.verdict ? 'gold' : 'default'}>
+            {criterion.verdict ?? 'open'}
+          </Tag>
+          <Typography.Text>{criterion.ordinal}. {criterion.criterionText}</Typography.Text>
+          {criterion.summary ? (
+            <Typography.Text type="secondary"> — {criterion.summary}</Typography.Text>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** The evidence a project-level acceptance would be judged on — never a verdict of this screen's
  *  own. "Never attempted" is rendered as itself, because a page that drew it as a clean slate
  *  would be claiming a pass nobody ran. */
@@ -466,7 +501,37 @@ export function CoordinatorAcceptance({ status }: { status: CoordinatorStatus })
           ? <Typography.Text style={{ whiteSpace: 'pre-wrap' }}>{a.criteria}</Typography.Text>
           : <Absent reason={a.criteriaAbsentReason} />}
       </Fact>
-      <Fact label="Last acceptance run">
+      <Fact label="May this project be DONE?">
+        {a.doneGate.allowed ? (
+          <span>
+            <Tag color="green">yes</Tag>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              the acceptance run below matches the current facts
+            </Typography.Text>
+          </span>
+        ) : (
+          <span>
+            <Tag color="red">no</Tag>
+            <Typography.Text code style={{ fontSize: 12 }}>{a.doneGate.refusalCode ?? 'REFUSED'}</Typography.Text>{' '}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {(a.doneGate.refusalCode && DONE_REFUSAL_TEXT[a.doneGate.refusalCode])
+                || a.doneGate.reason
+                || 'This build does not recognise the refusal code the server returned.'}
+            </Typography.Text>
+          </span>
+        )}
+      </Fact>
+      <Fact label="Acceptance run">
+        {a.run ? <AcceptanceRunRow run={a.run} /> : <Absent reason={a.runAbsentReason} />}
+      </Fact>
+      <Fact label="Facts digest">
+        <Typography.Text code style={{ fontSize: 12 }}>{a.doneGate.acceptanceDigest.slice(0, 16)}…</Typography.Text>{' '}
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          the criteria, every task and its status, every verification verdict and the newest branch
+          observation — a PASS is only usable while this value still matches the one it recorded
+        </Typography.Text>
+      </Fact>
+      <Fact label="Last acceptance action">
         {a.lastRun ? <ActionRow action={a.lastRun} /> : <Absent reason={a.lastRunAbsentReason} />}
       </Fact>
       <Fact label="Verifications">

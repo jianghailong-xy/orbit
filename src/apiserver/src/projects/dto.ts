@@ -1,4 +1,7 @@
+import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -10,6 +13,7 @@ import {
   Min,
   MinLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { ProjectAutomationPolicy, ProjectStatus } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
@@ -185,4 +189,73 @@ export class OpenProjectCoordinatorDto {
    * workspace you believed you were opening, not of changing it.
    */
   @IsOptional() @IsPublicId() workspaceId?: string;
+}
+
+// ── Project acceptance (contract §13.4 / §13.5) ──────────────────────────────────────────────
+
+export const MAX_ACCEPTANCE_SUMMARY_CHARS = 4_000;
+export const MAX_MERGE_REQUIREMENT_CHARS = 200;
+/** A sha256 hex digest of the observed CONTENT of a target branch — never a commit SHA, and never
+ *  a `git branch --contains` boolean (§13.4 clause 6: both are false negatives after a squash). */
+export const CONTENT_HASH_PATTERN = /^[0-9a-fA-F]{64}$/;
+
+const ACCEPTANCE_VERDICTS = ['PASS', 'FAIL', 'INCONCLUSIVE'] as const;
+const ACCEPTANCE_DECIDERS = ['COORDINATOR_AGENT', 'USER'] as const;
+
+export class OpenAcceptanceRunDto {
+  /** Who is concluding — the closed pair `project_decision.decided_by` carries.
+   *
+   *  Optional at the user door and defaulted to USER, because a person recording an acceptance is
+   *  recording their own. The runner door ignores it and writes COORDINATOR_AGENT: there, who
+   *  concluded is a fact about the credential rather than a claim in the body. Only a
+   *  COORDINATOR_AGENT run opens the DONE gate (§13.4 AE2 step 2), so stating it here is an
+   *  explicit claim rather than something anybody gets by accident. */
+  @IsOptional() @IsIn(ACCEPTANCE_DECIDERS) decidedBy?: 'COORDINATOR_AGENT' | 'USER';
+  /** Historical attribution: which agent, and in which conversation. Recorded, never dereferenced —
+   *  rotating or deleting either must not rewrite who ran an acceptance. */
+  @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
+  @IsOptional() @IsPublicId() coordinatorSessionId?: string | null;
+  /** Ledger lineage when the run came from a `RUN_PROJECT_ACCEPTANCE` pass rather than a person. */
+  @IsOptional() @IsPublicId() decisionId?: string | null;
+  @IsOptional() @IsPublicId() projectActionId?: string | null;
+}
+
+/** One criterion's conclusion. Addressed by `ordinal` (its position in the snapshot) or by
+ *  `criterionKey` (its content), so a caller that re-read the snapshot after an edit cannot answer
+ *  criterion 3 while meaning criterion 4. */
+export class AcceptanceCriterionOutcomeDto {
+  @IsOptional() @IsInt() @Min(1) ordinal?: number;
+  @IsOptional() @IsString() @MinLength(1) criterionKey?: string;
+  @IsIn(ACCEPTANCE_VERDICTS) verdict!: 'PASS' | 'FAIL' | 'INCONCLUSIVE';
+  @IsOptional() @IsString() @MaxLength(MAX_ACCEPTANCE_SUMMARY_CHARS) summary?: string | null;
+  /** Commands, key output, SHAs, environment — §13.4 clause 3's evidence, as JSON rather than
+   *  prose so that a checker can read it without parsing sentences. */
+  @IsOptional() evidence?: Record<string, unknown>;
+  @IsOptional() @IsPublicId() evidenceTaskId?: string | null;
+  @IsOptional() @IsPublicId() evidenceSessionId?: string | null;
+}
+
+export class FinalizeAcceptanceRunDto {
+  /** Every criterion in the run's snapshot, each with its own conclusion. The run's verdict is
+   *  derived from these and never supplied: a project-level PASS is the conjunction of them. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => AcceptanceCriterionOutcomeDto)
+  criteria!: AcceptanceCriterionOutcomeDto[];
+}
+
+export class RecordMergeEvidenceDto {
+  /** What was required, in the words whoever wrote the acceptance criteria used. */
+  @IsString() @MinLength(1) @MaxLength(MAX_MERGE_REQUIREMENT_CHARS) requirementId!: string;
+  /** Where it had to land. */
+  @IsString() @MinLength(1) @MaxLength(MAX_MERGE_REQUIREMENT_CHARS) targetBranch!: string;
+  /** The normalized content observation (§13.4 AE9-b). */
+  @Matches(CONTENT_HASH_PATTERN, {
+    message: 'contentHash must be a 64-character sha256 hex digest of the observed content',
+  })
+  contentHash!: string;
+  @IsOptional() @IsString() @MaxLength(200) source?: string;
+  /** The raw observation behind the hash: the command, its output, the blob ids it read. */
+  @IsOptional() detail?: Record<string, unknown>;
 }

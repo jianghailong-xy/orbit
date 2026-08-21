@@ -836,6 +836,68 @@ func (t *Transport) getProjectCoordinatorStatus(id string) (json.RawMessage, err
 	return out, err
 }
 
+// getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
+// as the server decomposes them, the digest of the facts a DONE would be checked against, every
+// attempt with its per-criterion conclusions and evidence, the newest merge observation per
+// requirement, the append-only audit, and doneGate — whether a DONE would be allowed right now and,
+// if not, the code and the sentence the write path would refuse with.
+//
+// The read to make BEFORE claiming a project is finished. "The tests passed" written in a comment
+// is not evidence the server can check; a run in this table is.
+func (t *Transport) getProjectAcceptance(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/acceptance", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// openProjectAcceptanceRun starts an acceptance attempt: the criteria are frozen with their digest
+// and one empty row per stated criterion is created — the checklist the verdict has to fill.
+//
+// Who concluded is the server's to decide from this credential (COORDINATOR_AGENT), not this
+// process's to claim.
+func (t *Transport) openProjectAcceptanceRun(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/acceptance/runs", body, &out, taskOpTimeout)
+	return out, err
+}
+
+// finalizeProjectAcceptanceRun concludes an attempt: one verdict per stated criterion, with the
+// evidence for it. The run's own verdict is derived from those and cannot be supplied — all PASS is
+// PASS, any FAIL is FAIL, anything else is INCONCLUSIVE.
+func (t *Transport) finalizeProjectAcceptanceRun(id, runID string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(runID); err != nil {
+		return nil, fmt.Errorf("run id: %w", err)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/acceptance/runs/"+url.PathEscape(runID)+"/verdict",
+		body, &out, taskOpTimeout)
+	return out, err
+}
+
+// recordProjectMergeEvidence records what a target branch was observed to CONTAIN (§13.4 AE9-b).
+//
+// The runner is the side that can actually look — it has the checkout. contentHash is a sha256 of
+// the content, never `git branch --contains`: after a squash that answer is a guaranteed false
+// negative, which is the lesson the contract carries in clause 6.
+func (t *Transport) recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/acceptance/merge-evidence", body, &out, taskOpTimeout)
+	return out, err
+}
+
 // createProject records a new project under the runner's owner — the same tenant every task write
 // here lands in, since the credential names a machine rather than a person.
 //
