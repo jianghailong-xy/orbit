@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": "./build-project-event-faults",
+    "incremental": false
+  },
+  "include": [
+    "src/projects/coordinator-pg-test-safety.ts",
+    "src/projects/project-events.service.ts",
+    "src/projects/project-events.service.spec.ts",
+    "src/projects/project-events.pg.spec.ts",
+    "src/projects/project-event-sources.pg.spec.ts",
+    "src/projects/project-availability-event-sources.pg.spec.ts",
+    "src/projects/project-events-fault-injection.pg.spec.ts"
+  ],
+  "exclude": ["node_modules", "dist", "build", "build-project-event-faults"]
+}

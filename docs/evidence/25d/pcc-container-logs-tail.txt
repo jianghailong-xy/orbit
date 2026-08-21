@@ -1,0 +1,35 @@
+--- pcc14-34amsq-pg16 ---
+2026-08-20 10:07:54.419 UTC [127] STATEMENT:  INSERT INTO "public"."project_runtime" ("project_id","coordinator_generation","coordinator_identity_source","run_state","fencing_token","acceptance_attempt","created_at","updated_at") VALUES ($1,$2,CAST($3::text AS "public"."project_identity_source"),CAST($4::text AS "public"."project_run_state"),$5,$6,$7,$8) RETURNING "public"."project_runtime"."project_id", "public"."project_runtime"."coordinator_generation", "public"."project_runtime"."coordinator_session_id", "public"."project_runtime"."coordinator_identity_source"::text, "public"."project_runtime"."coordinator_identity_landing_id", "public"."project_runtime"."run_state"::text, "public"."project_runtime"."next_wake_at", "public"."project_runtime"."next_wake_reason", "public"."project_runtime"."lease_holder", "public"."project_runtime"."lease_expires_at", "public"."project_runtime"."lease_heartbeat_at", "public"."project_runtime"."fencing_token", "public"."project_runtime"."acceptance_attempt", "public"."project_runtime"."created_at", "public"."project_runtime"."updated_at"
+2026-08-20 10:07:54.575 UTC [129] ERROR:  duplicate key value violates unique constraint "project_runtime_pkey"
+2026-08-20 10:07:54.575 UTC [129] DETAIL:  Key (project_id)=(bd517d9d-30df-4c4d-b9bd-23643f55c556) already exists.
+2026-08-20 10:07:54.575 UTC [129] STATEMENT:  INSERT INTO "public"."project_runtime" ("project_id","coordinator_generation","coordinator_identity_source","run_state","fencing_token","acceptance_attempt","created_at","updated_at") VALUES ($1,$2,CAST($3::text AS "public"."project_identity_source"),CAST($4::text AS "public"."project_run_state"),$5,$6,$7,$8) RETURNING "public"."project_runtime"."project_id", "public"."project_runtime"."coordinator_generation", "public"."project_runtime"."coordinator_session_id", "public"."project_runtime"."coordinator_identity_source"::text, "public"."project_runtime"."coordinator_identity_landing_id", "public"."project_runtime"."run_state"::text, "public"."project_runtime"."next_wake_at", "public"."project_runtime"."next_wake_reason", "public"."project_runtime"."lease_holder", "public"."project_runtime"."lease_expires_at", "public"."project_runtime"."lease_heartbeat_at", "public"."project_runtime"."fencing_token", "public"."project_runtime"."acceptance_attempt", "public"."project_runtime"."created_at", "public"."project_runtime"."updated_at"
+2026-08-20 10:11:59.908 UTC [62] LOG:  checkpoint starting: time
+2026-08-20 10:12:02.254 UTC [62] LOG:  checkpoint complete: wrote 23 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=2.281 s, sync=0.032 s, total=2.346 s; sync files=23, longest=0.021 s, average=0.002 s; distance=29 kB, estimate=4356 kB; lsn=0/1DDFB50, redo lsn=0/1DDFB18
+--- pcc15-34AOqoHF-pg16 ---
+2026-08-20 12:19:12.448 UTC [648] STATEMENT:  UPDATE "task" SET "verdict" = 'PASS' WHERE "id" = '293dbb8f-00d6-420d-a343-9e7e980380c8'::uuid
+2026-08-20 12:19:15.647 UTC [651] LOG:  skipping analyze of "project_runtime" --- lock not available
+2026-08-20 12:19:15.647 UTC [651] LOG:  skipping analyze of "task" --- lock not available
+2026-08-20 12:19:15.647 UTC [651] LOG:  skipping vacuum of "project_event" --- lock not available
+2026-08-20 12:19:55.227 UTC [55] LOG:  checkpoint starting: time
+2026-08-20 12:22:54.356 UTC [55] LOG:  checkpoint complete: wrote 1755 buffers (10.7%); 0 WAL file(s) added, 0 removed, 1 recycled; write=178.533 s, sync=0.492 s, total=179.129 s; sync files=2377, longest=0.010 s, average=0.001 s; distance=18790 kB, estimate=22900 kB; lsn=0/4E1AB28, redo lsn=0/4DC49C8
+--- pcc16-34AQDd-pg16 ---
+2026-08-20 13:46:15.812 UTC [975] CONTEXT:  PL/pgSQL function project_purge_fence() line 7 at RAISE
+2026-08-20 13:46:15.812 UTC [975] STATEMENT:  DELETE FROM project WHERE id='p-cross'
+2026-08-20 13:46:16.341 UTC [975] ERROR:  PROJECT_PURGE_UNDECLARED: project p-terminal-bare still owns 1 coordinator placeholder session(s) whose lineage points into its action ledger (owner=SYSTEM, recovery=EVENT: call coordinator_purge_project('p-terminal-bare') — it is the only public purge, and it removes the project, its ledger and those placeholders in one transaction)
+2026-08-20 13:46:16.341 UTC [975] CONTEXT:  PL/pgSQL function project_purge_fence() line 16 at RAISE
+2026-08-20 13:46:16.341 UTC [975] STATEMENT:  DELETE FROM project WHERE id='p-terminal-bare'
+2026-08-20 13:49:03.989 UTC [55] LOG:  checkpoint complete: wrote 2039 buffers (12.4%); 0 WAL file(s) added, 0 removed, 2 recycled; write=228.472 s, sync=2.955 s, total=231.577 s; sync files=6012, longest=0.080 s, average=0.001 s; distance=30159 kB, estimate=30159 kB; lsn=0/674C5E0, redo lsn=0/5999108
+--- pcc17-34ASQ-pg16 ---
+2026-08-20 22:59:00.399 UTC [2438] LOG:  invalid length of startup packet
+2026-08-20 23:12:19.658 UTC [2492] LOG:  invalid length of startup packet
+2026-08-21 00:04:31.183 UTC [2702] LOG:  invalid length of startup packet
+2026-08-21 00:19:20.591 UTC [2762] LOG:  invalid length of startup packet
+2026-08-21 01:10:13.870 UTC [2967] LOG:  invalid length of startup packet
+2026-08-21 01:25:41.583 UTC [3029] LOG:  invalid length of startup packet
+--- pcc18-34AUU-pg16 ---
+2026-08-20 15:59:12.643 UTC [364] ERROR:  VERDICT_REVISION_NOT_MONOTONIC: task 51ae55a1-6607-4c67-9b53-db6f5300e93b cannot move verdict_revision 1 -> 0
+2026-08-20 15:59:12.643 UTC [364] CONTEXT:  PL/pgSQL function task_verdict_revision_monotonic() line 4 at RAISE
+2026-08-20 15:59:12.643 UTC [364] STATEMENT:  UPDATE "task" SET "verdict_revision" = 0 WHERE "id" = $1::uuid
+2026-08-20 15:59:44.352 UTC [54] LOG:  checkpoint complete: wrote 2275 buffers (13.9%); 0 WAL file(s) added, 0 removed, 2 recycled; write=269.269 s, sync=1.206 s, total=270.633 s; sync files=5144, longest=0.025 s, average=0.001 s; distance=25811 kB, estimate=25811 kB; lsn=0/4409318, redo lsn=0/37AEF30
+2026-08-20 16:00:13.394 UTC [54] LOG:  checkpoint starting: time
+2026-08-20 16:02:06.092 UTC [54] LOG:  checkpoint complete: wrote 1042 buffers (6.4%); 0 WAL file(s) added, 0 removed, 1 recycled; write=112.123 s, sync=0.222 s, total=112.699 s; sync files=200, longest=0.024 s, average=0.002 s; distance=12769 kB, estimate=24507 kB; lsn=0/4454BF8, redo lsn=0/4427658

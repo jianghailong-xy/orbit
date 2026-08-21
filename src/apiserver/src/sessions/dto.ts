@@ -1,3 +1,8 @@
+import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
+
+const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
+
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */
   title?: string;
@@ -47,6 +52,16 @@ export interface SessionTurnDto {
   attachmentIds?: string[];
 }
 
+/** Stop the running turn, and — when a follow-up rides along — queue what to do instead,
+ *  in the same transaction. See RunInterruptRequest for why the two travel together. */
+export interface SessionInterruptDto {
+  /** Idempotency key (UUID) for the follow-up; required whenever one is present. */
+  clientTurnId?: string;
+  /** What to send once the current turn has stopped. Omitted → a plain interrupt. */
+  content?: string;
+  attachmentIds?: string[];
+}
+
 export interface SessionResumeDto extends SessionTurnDto {
   /** Per-session overrides re-applied on resume (the runner re-spawns the runtime, so a
    *  new mode/model/effort takes effect). Omitted fields keep the session's prior value. */
@@ -93,4 +108,31 @@ export interface SessionConfigDto {
    *  the transcript, the resume id and the wire protocol belong to the CLI that started the
    *  session. Omitted keeps the current provider. */
   provider?: string;
+}
+
+/**
+ * Record one merge of this session's branch (contract §13.7).
+ *
+ * A class rather than an interface, unlike everything above it: this body carries object names that
+ * are checked against a repository later, and a SHA that arrives malformed and is stored anyway is
+ * evidence that cannot be verified — which is the one thing a receipt may not be. `recordedBy` is
+ * deliberately NOT here; it is decided by which door the request came through.
+ */
+export class RecordMergeReceiptDto {
+  @IsIn(MERGE_RECEIPT_RESULT_VALUES) result!: MergeReceiptResult;
+  /** Omitted falls back to the session's own recorded branch. */
+  @IsOptional() @IsString() @MaxLength(400) sourceBranch?: string;
+  @IsString() @MaxLength(64) sourceSha!: string;
+  @IsString() @MinLength(1) @MaxLength(400) targetBranch!: string;
+  @IsOptional() @IsString() @MaxLength(64) targetShaBefore?: string;
+  @IsOptional() @IsString() @MaxLength(64) targetShaAfter?: string;
+  /** The base the source had been rebased onto when this merge was computed. Omitted means it was
+   *  not rebased — the distinction decides whether the tests that passed were about this tree. */
+  @IsOptional() @IsString() @MaxLength(64) rebaseBaseSha?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) @MaxLength(1024, { each: true })
+  conflicts?: string[];
+  /** The raw observation: the command, its output, the refs read. */
+  @IsOptional() detail?: Record<string, unknown>;
+  /** Supply one when the caller has a natural key; omitted derives MR4's from the merge itself. */
+  @IsOptional() @IsString() @MaxLength(200) idempotencyKey?: string;
 }

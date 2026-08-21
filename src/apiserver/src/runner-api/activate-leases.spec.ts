@@ -98,7 +98,7 @@ function harness({
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
+      { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
     ),
     executeCalls,
     preflightCalls,

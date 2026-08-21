@@ -983,7 +983,7 @@ while :; do :; done`)
 	status, ended, _ := runOpenCodeSessionProcess(
 		ctx, shutdownCtx, NewTransport(srv.URL, "token"),
 		&ClaimedSession{SessionID: "s1", Agent: AgentExecConfig{Env: map[string]string{"READY_PATH": readyPath, "COUNT_PATH": countPath}}},
-		"", dir, dir, func(string, map[string]interface{}) {}, func(string) {}, false, nil,
+		"", dir, dir, func(string, map[string]interface{}) {}, func(string, string, map[string]interface{}) {}, func(string) {}, false, nil,
 		func(req TurnCompleteRequest, _ ...context.Context) error {
 			completions = append(completions, req)
 			return nil
@@ -1068,7 +1068,7 @@ printf '%s\n' '{"type":"step_finish","part":{"cost":0,"tokens":{"total":2,"input
 	status, ended, _ := runOpenCodeSessionProcess(
 		ctx, shutdownCtx, NewTransport(srv.URL, "token"),
 		&ClaimedSession{SessionID: "s1", Agent: AgentExecConfig{Env: map[string]string{"COUNT_PATH": countPath}}},
-		"", dir, dir, func(string, map[string]interface{}) {}, func(string) {}, false, nil,
+		"", dir, dir, func(string, map[string]interface{}) {}, func(string, string, map[string]interface{}) {}, func(string) {}, false, nil,
 		func(req TurnCompleteRequest, _ ...context.Context) error {
 			if completeCalls.Add(1) == 1 {
 				close(ackStarted)
@@ -1150,7 +1150,7 @@ func TestOpenCodeInterruptCancelsAttachmentPreparation(t *testing.T) {
 	status, ended, _ := runOpenCodeSessionProcess(
 		ctx, shutdownCtx, NewTransport(srv.URL, "token"),
 		&ClaimedSession{SessionID: "s1", Agent: AgentExecConfig{Env: map[string]string{"COUNT_PATH": countPath}}},
-		"", dir, dir, func(string, map[string]interface{}) {}, func(string) {}, false, nil,
+		"", dir, dir, func(string, map[string]interface{}) {}, func(string, string, map[string]interface{}) {}, func(string) {}, false, nil,
 		func(req TurnCompleteRequest, _ ...context.Context) error { completion = req; return nil },
 		func(context.Context) bool { return true },
 		func(error) {},

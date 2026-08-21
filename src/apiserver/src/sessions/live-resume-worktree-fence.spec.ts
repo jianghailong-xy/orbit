@@ -63,6 +63,7 @@ function makeService(
         turnCreates++;
         return { id: 'turn-2', ...data };
       },
+      count: async () => 0,
     },
   };
   const prisma = {
@@ -79,10 +80,7 @@ function makeService(
   const service = new SessionsService(
     prisma,
     { notifySessionQueued: () => queueWakes++ } as never,
-    {
-      notifyInbox: () => inboxWakes++,
-      publishQueuedTurnsChanged: () => undefined,
-    } as never,
+    { notifyInbox: () => inboxWakes++, publishQueuedTurnsChanged: () => undefined } as never,
   );
   return {
     service,
@@ -139,7 +137,7 @@ for (const tc of [
         clientTurnId: 'client-2',
         content: 'resolve this in the session',
       }),
-      { turnId: 'turn-2', seq: 2 },
+      { turnId: 'turn-2', seq: 2, kind: 'message' },
     );
 
     assert.equal(h.lockCalls.length, 1);
@@ -189,7 +187,7 @@ for (const tc of [
       content: 'resolve this in the session',
     });
 
-    assert.deepEqual(result, { turnId: 'turn-2', seq: 2 });
+    assert.deepEqual(result, { turnId: 'turn-2', seq: 2, kind: 'message' });
     assert.equal(h.lockCalls.length, 1);
     assert.deepEqual(h.outerUpdates, []);
     assert.equal(h.turnCreates(), 1);

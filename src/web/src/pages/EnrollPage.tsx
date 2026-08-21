@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { useToast } from '../lib/toast';
 
-interface DeviceInfo {
+export interface DeviceInfo {
   userCode: string;
   name: string;
   hostname?: string;
@@ -11,6 +11,22 @@ interface DeviceInfo {
   maxConcurrent: number;
   status: string;
   nameConflict?: boolean;
+}
+
+/** The identity being approved. The user-chosen name and OS hostname are separate fields. */
+export function EnrollmentDetails({ info }: { info: DeviceInfo }) {
+  return (
+    <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
+      <Descriptions.Item label="Runner">{info.name}</Descriptions.Item>
+      {info.hostname && info.hostname !== info.name && (
+        <Descriptions.Item label="Hostname">{info.hostname}</Descriptions.Item>
+      )}
+      <Descriptions.Item label="Labels">
+        {info.labels.length ? info.labels.map((l) => <Tag key={l}>{l}</Tag>) : '—'}
+      </Descriptions.Item>
+      <Descriptions.Item label="Code">{info.userCode}</Descriptions.Item>
+    </Descriptions>
+  );
 }
 
 /** Browser approval page for `orbit register` (reached via /enroll?code=XXXX-XXXX). */
@@ -63,7 +79,7 @@ export function EnrollPage() {
           <Result
             status="success"
             title="Machine approved"
-            subTitle={`"${info?.hostname || info?.name}" is now registered. Return to your terminal — it will continue automatically.`}
+            subTitle={`"${info?.name}" is now registered. Return to your terminal — it will continue automatically.`}
           />
         ) : (
           <>
@@ -71,21 +87,14 @@ export function EnrollPage() {
               A machine is requesting to register as a runner on your account. Approve it only if you
               just started <code>orbit register</code>.
             </p>
-            <Descriptions column={1} size="small" bordered style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="Runner">{info?.hostname || info?.name}</Descriptions.Item>
-              <Descriptions.Item label="Workspaces">{info?.name}/…</Descriptions.Item>
-              <Descriptions.Item label="Labels">
-                {info?.labels?.length ? info.labels.map((l) => <Tag key={l}>{l}</Tag>) : '—'}
-              </Descriptions.Item>
-              <Descriptions.Item label="Code">{info?.userCode}</Descriptions.Item>
-            </Descriptions>
+            {info && <EnrollmentDetails info={info} />}
             {info?.nameConflict && (
               <Alert
                 type="warning"
                 showIcon
                 style={{ marginBottom: 16 }}
-                message={`This machine ("${info.hostname || info.name}") is already registered on your account.`}
-                description="Approving re-issues its credential and adds/updates this directory's workspace. The old credential stops working; no duplicate machine is created."
+                message={`This runner ("${info.name}") is already registered on your account.`}
+                description="Approving re-issues its credential. The old credential stops working; no duplicate runner is created."
               />
             )}
             <Button

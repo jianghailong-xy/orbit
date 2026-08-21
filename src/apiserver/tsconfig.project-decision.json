@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": "./build-project-decision",
+    "incremental": false
+  },
+  "include": [
+    "src/prisma/prisma.service.ts",
+    "src/projects/coordinator-pg-test-safety.ts",
+    "src/projects/project-decision.service.ts",
+    "src/projects/project-decision.service.spec.ts",
+    "src/projects/project-decision-contract.spec.ts",
+    "src/projects/project-decision.pg.spec.ts",
+    "src/projects/project-events.service.ts",
+    "src/projects/project-reconcile.service.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "build-project-decision"
+  ]
+}

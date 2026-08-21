@@ -9,7 +9,13 @@ import {
   StopOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import {
   Avatar,
   Button,
@@ -30,6 +36,12 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
+import {
+  refreshManyTaskScheduleViews,
+  refreshTaskScheduleViews,
+  scheduledStart,
+  type TaskRefreshTarget,
+} from '../lib/taskSchedule';
 import {
   canDispatchTask,
   canStartTask,
@@ -114,6 +126,92 @@ const tallyReasons = (skipped: { reason: string }[]): string => {
   for (const s of skipped) counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1);
   return [...counts].map(([reason, n]) => (n > 1 ? `${reason} ×${n}` : reason)).join(', ');
 };
+
+/** The toast calls the two Run actions make — narrow, so a test can hand over three spies. */
+type RunToast = Pick<ReturnType<typeof useToast>, 'success' | 'warning' | 'error'>;
+
+/** What `POST /tasks/batch-execute` answers: a count of what it started, never a list of it. */
+interface BatchRunResult {
+  dispatched: number;
+  failed: unknown[];
+  skipped: { reason: string }[];
+}
+
+/** The bulk Run's variables: the rows themselves, not just their ids. */
+interface BatchRunVars {
+  tasks: readonly TaskRefreshTarget[];
+  maxConcurrent: number;
+}
+
+/**
+ * A single row's Run/Retry, as options a `useMutation` — or a test's `MutationObserver` — can be
+ * handed directly. Same request the detail panel's Run now sends; the backend validates assignee
+ * and runner and dedups an in-flight run, so a stray double-click cannot double-trigger.
+ *
+ * Takes the ROW, not just its id, because an accepted run CONSUMES that task's one-shot `runAt`
+ * and starts a session — so a Project page cached in another tab goes on advertising a start that
+ * has already been spent, and a status that has already moved, unless this says which project to
+ * refresh. The row is carried through the mutation's own variables rather than read back out of
+ * the component's selection state, which a poll can have changed by the time the server answers.
+ *
+ * Built as a function rather than written inline for the same reason `runNowMutationOptions` is:
+ * everything here happens after the server answers, behind a button no static render can press.
+ */
+export function runRowMutationOptions(qc: QueryClient, message: RunToast) {
+  return {
+    mutationFn: ({ id }: TaskRefreshTarget) => api(`/tasks/${id}/execute`, { method: 'POST' }),
+    onSuccess: (_res: unknown, { id, projectId }: TaskRefreshTarget) => {
+      message.success('Run started');
+      // Returned, never fired and forgotten: the mutation stays pending until those views have
+      // actually refetched, rather than re-enabling the button over the row it just spent.
+      return refreshTaskScheduleViews(qc, id, projectId);
+    },
+    onError: (e: Error) => message.error(e.message),
+  };
+}
+
+/**
+ * The bulk Run behind the "Run tasks" modal, on the same terms — `dismiss` closes that modal and
+ * drops the selection. It runs on every ANSWER the server gives, including one that dispatched
+ * nothing: the request was read, and each row it refused comes back with a reason the toast
+ * reports. A REJECTED request is the other case, and leaves both alone — the modal stays open
+ * over the selection that produced it, which is what lets the reader read the error and retry.
+ *
+ * The endpoint takes ids and nothing else, so the project each row belongs to stays on this side
+ * of the wire: it is local knowledge about what the run makes stale, not an argument the server
+ * has any use for.
+ *
+ * What comes back is a TALLY — dispatched, failed, skipped — and never the ids that actually
+ * started, so the whole submitted set is refreshed. That refetches a few rows the server skipped,
+ * which costs a request; the alternative, guessing which rows ran, leaves a consumed schedule and
+ * a stale status on screen when the guess is wrong. Every submitted task's own detail is refreshed;
+ * only what those rows SHARE collapses — one `['tasks']` for the batch, and each project once
+ * however many of its rows were in it. See `refreshManyTaskScheduleViews`.
+ *
+ * A batch that dispatched NOTHING refreshes nothing: no `runAt` was spent and no task started, so
+ * every refetch it could trigger would redraw precisely what is already on screen.
+ */
+export function batchRunMutationOptions(qc: QueryClient, message: RunToast, dismiss: () => void) {
+  return {
+    mutationFn: ({ tasks, maxConcurrent }: BatchRunVars) =>
+      api<BatchRunResult>('/tasks/batch-execute', {
+        method: 'POST',
+        body: { taskIds: tasks.map((t) => t.id), maxConcurrent },
+      }),
+    onSuccess: (res: BatchRunResult, { tasks }: BatchRunVars) => {
+      dismiss();
+      const parts = [`Triggered ${res.dispatched} task(s)`];
+      if (res.failed.length) parts.push(`${res.failed.length} failed`);
+      // A bare skip count leaves the user with no idea why nothing ran — the endpoint
+      // reports a reason per task, so surface them tallied instead of dropping them.
+      if (res.skipped.length) parts.push(`${res.skipped.length} skipped (${tallyReasons(res.skipped)})`);
+      message[res.dispatched ? 'success' : 'warning'](parts.join(', '));
+      if (!res.dispatched) return undefined;
+      return refreshManyTaskScheduleViews(qc, tasks);
+    },
+    onError: (e: Error) => message.error(e.message),
+  };
+}
 
 // The task-list view: the task table (all tasks, or a single user list) plus its detail
 // panel and batch-action modals. The task-list routes ("/tasks", "/lists/:key")
@@ -467,36 +565,15 @@ export function TaskListView() {
     },
     onError: (e: Error) => message.error(e.message),
   });
-  // Single-task run/retry from the row's hover actions; reuses the per-task execute the
-  // detail panel uses. The backend validates assignee + runner and dedups an in-flight run,
-  // so a stray double-click can't double-trigger.
-  const runOne = useMutation({
-    mutationFn: (id: string) => api(`/tasks/${id}/execute`, { method: 'POST' }),
-    onSuccess: () => {
-      message.success('Run started');
-      invalidate();
-    },
-    onError: (e: Error) => message.error(e.message),
-  });
-  const batchRun = useMutation({
-    mutationFn: (body: { taskIds: string[]; maxConcurrent: number }) =>
-      api<{ dispatched: number; failed: unknown[]; skipped: { reason: string }[] }>(
-        '/tasks/batch-execute',
-        { method: 'POST', body },
-      ),
-    onSuccess: (res) => {
+  // Single-task run/retry from the row's hover actions, and the bulk Run behind the modal. Both
+  // are built above, where what they refresh can be asserted against a seeded cache.
+  const runOne = useMutation(runRowMutationOptions(qc, message));
+  const batchRun = useMutation(
+    batchRunMutationOptions(qc, message, () => {
       setBatchOpen(false);
       setSelection(EMPTY_SELECTION);
-      const parts = [`Triggered ${res.dispatched} task(s)`];
-      if (res.failed.length) parts.push(`${res.failed.length} failed`);
-      // A bare skip count leaves the user with no idea why nothing ran — the endpoint
-      // reports a reason per task, so surface them tallied instead of dropping them.
-      if (res.skipped.length) parts.push(`${res.skipped.length} skipped (${tallyReasons(res.skipped)})`);
-      message[res.dispatched ? 'success' : 'warning'](parts.join(', '));
-      invalidate();
-    },
-    onError: (e: Error) => message.error(e.message),
-  });
+    }),
+  );
   const batchStop = useMutation({
     mutationFn: (body: { taskIds: string[] }) =>
       api<{ stopped: number; failed: unknown[]; tasks: number }>('/tasks/batch-stop', {
@@ -833,6 +910,11 @@ export function TaskListView() {
     // blocked, or already done. FAILED reframes the same action as "Retry".
     const canRunRow = canStartTask(r);
     const isRetry = r.status === 'FAILED';
+    // When the server will start this task by itself, read on the viewer's own wall clock. Null
+    // for the ordinary unscheduled row and for an unreadable value alike, so neither renders a
+    // marker — and neither renders the words "Invalid Date". `scheduledStart` owns that rule;
+    // the project page's rows read the same one, so the two cannot drift.
+    const starts = scheduledStart(r.runAt);
     return (
       <div
         className={`task-row clickable${selected ? ' selected' : ''}${
@@ -881,6 +963,36 @@ export function TaskListView() {
               />
             </Tooltip>
           ) : null}
+          {/* Beside the title rather than in a column of its own: a scheduled start is a property
+              of the few rows that have one, and a column of its own would spend width on every
+              row that does not. "Starts", never "Due" — this is the moment the server acts on, and
+              the row shows no `dueDate` at all, so the word has one meaning here.
+
+              The row has to say three things and can only show two, so the third is text that is
+              clipped rather than absent:
+                - the VISIBLE text is the reader's own wall clock, to the minute, which is what
+                  makes "is this soon?" answerable at a glance;
+                - `dateTime` is that same instant in canonical UTC, for anything parsing the page;
+                - the clipped suffix completes the sentence a screen reader reads out. It is real
+                  text content, not `aria-label`: `<time>` maps to the `generic` role, and ARIA
+                  prohibits naming `generic`, so a label there is not a name a browser is obliged
+                  to expose — the same objection that rules out leaning on `title`, which plenty
+                  of setups never announce and a touch device has no way to reach at all. Text
+                  content has no such caveat. Name-from-content concatenates the element's text in
+                  order, so the suffix only adds what is missing — that it fires ONCE, and whose
+                  clock the time is written on — instead of repeating the words above it.
+              `title` stays for a sighted reader hovering, where it can also afford the exact
+              instant a to-the-minute local rendering rounds off. */}
+          {starts ? (
+            <time
+              className="task-run-at"
+              dateTime={starts.iso}
+              title={`Starts once, at ${starts.local} in your own time zone (${starts.iso})`}
+            >
+              Starts {starts.local}
+              <span className="task-run-at-note">, once, in your own time zone</span>
+            </time>
+          ) : null}
         </div>
         {showAssigneeCol && (
           <div className="task-creator">
@@ -908,7 +1020,7 @@ export function TaskListView() {
                 icon={isRetry ? <ReloadOutlined /> : <PlayCircleOutlined />}
                 onClick={(e) => {
                   e.stopPropagation();
-                  runOne.mutate(r.id);
+                  runOne.mutate({ id: r.id, projectId: r.projectId });
                 }}
               />
             </Tooltip>
@@ -1242,7 +1354,9 @@ export function TaskListView() {
         onCancel={() => setBatchOpen(false)}
         onOk={() =>
           batchRun.mutate({
-            taskIds: selectedRows.map((r: any) => r.id),
+            // The rows, so the refresh afterwards knows which projects they came from; only the
+            // ids reach the request body.
+            tasks: selectedRows.map((r: any) => ({ id: r.id as string, projectId: r.projectId })),
             maxConcurrent: concurrency,
           })
         }

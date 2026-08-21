@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": "./build-project-reconcile-faults",
+    "incremental": false
+  },
+  "include": [
+    "src/projects/coordinator-pg-test-safety.ts",
+    "src/projects/project-events.service.ts",
+    "src/projects/project-events.service.spec.ts",
+    "src/projects/project-reconcile.service.ts",
+    "src/projects/project-reconcile.service.spec.ts",
+    "src/projects/project-reconcile.pg.spec.ts",
+    "src/projects/project-reconcile-fault-injection.pg.spec.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "build-project-event-faults",
+    "build-project-reconcile-faults"
+  ]
+}

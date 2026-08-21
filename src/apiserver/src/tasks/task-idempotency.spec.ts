@@ -32,6 +32,7 @@ function fixture(opts: { inFlightTurn: string | null; existingByKey?: (key: stri
     session: { findFirst: async () => ({ id: SESSION }) },
     conversationTurn: {
       findFirst: async () => (opts.inFlightTurn ? { id: opts.inFlightTurn } : null),
+      count: async () => 0,
     },
     $transaction: async (fn: (tx: any) => Promise<unknown>) => fn({ task, taskDependency: prisma.taskDependency }),
   };

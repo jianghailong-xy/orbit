@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": "./build/project-authorization",
+    "incremental": false
+  },
+  "include": [
+    "src/prisma/prisma.service.ts",
+    "src/projects/coordinator-pg-test-safety.ts",
+    "src/projects/project-authorization.service.ts",
+    "src/projects/project-authorization.service.spec.ts",
+    "src/projects/project-authorization.pg.spec.ts",
+    "src/projects/project-decision.service.ts",
+    "src/projects/project-decision.service.spec.ts",
+    "src/projects/project-decision.pg.spec.ts",
+    "src/runner-api/runner-agents.controller.ts",
+    "src/runner-api/runner-agents-sanitize.spec.ts",
+    "src/tasks/task-retry-policy.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "build"
+  ]
+}

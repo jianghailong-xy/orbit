@@ -18,6 +18,7 @@ import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
 import { RunnerDetailPage } from './pages/RunnerDetailPage';
 import { RunnersPage } from './pages/RunnersPage';
+import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
 import { TaskListView } from './pages/TaskListView';
 
@@ -165,6 +166,22 @@ export function App() {
               }
             />
             <Route path="admin/providers" element={<Navigate to="/providers" replace />} />
+            <Route
+              path="projects"
+              element={
+                <DocView>
+                  <ProjectsPage />
+                </DocView>
+              }
+            />
+            <Route
+              path="projects/:id"
+              element={
+                <DocView>
+                  <ProjectDetailPage />
+                </DocView>
+              }
+            />
             <Route
               path="runners"
               element={

@@ -33,6 +33,25 @@ func TestDefaultRunnerNameIsHostname(t *testing.T) {
 	}
 }
 
+func TestRegisterHelpDescribesCurrentRunnerNaming(t *testing.T) {
+	help := cmdHelp["register"]
+	for _, want := range []string{
+		"Its name defaults to the machine hostname",
+		"can be changed with --name",
+		"Workspaces are configured separately",
+		"--name <name>            Runner name (default: machine hostname)",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("register help does not contain %q:\n%s", want, help)
+		}
+	}
+	for _, stale := range []string{"Base name for the agents", "<name>/<agentkey>"} {
+		if strings.Contains(help, stale) {
+			t.Fatalf("register help still contains stale naming copy %q:\n%s", stale, help)
+		}
+	}
+}
+
 func TestMachineHomeHonorsOrbitHome(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("ORBIT_HOME", tmp)

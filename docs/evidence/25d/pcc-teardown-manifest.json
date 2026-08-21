@@ -1,0 +1,454 @@
+{
+  "capturedAt": "2026-08-21T08:34:11Z",
+  "capturedBy": {"task": "34AlSqwXjz7lRTBmHeUyR", "session": "34Atn3gtRcfAZZ3mW9IlE", "branch": "orbit/25d-guarded-auto-dogfood-20aa12", "base": "35e9a24b176266d5d60ff283dddd5a388f942b8c"},
+  "dockerVersion": "29.5.2",
+  "containers": [
+    {
+        "name": "pcc14-34amsq-pg16",
+        "id": "4bb687e82de289ef0ab4128dc72e8cc2e57bb160f821a0ee5f6e7b0169b2d462",
+        "image": "postgres:16",
+        "imageDigest": "sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5",
+        "created": "2026-08-20T09:56:54.749046149Z",
+        "state": "running",
+        "startedAt": "2026-08-20T09:56:54.997671121Z",
+        "ports": {
+            "5432/tcp": [
+                {
+                    "HostIp": "127.0.0.1",
+                    "HostPort": "32788"
+                }
+            ]
+        },
+        "networks": [
+            "bridge"
+        ],
+        "labels": {},
+        "anonymousVolumes": [
+            {
+                "name": "41274b66edcaf93307151d1b9c016912d993e9ae10e7c7a4f1ba7def5fcea06d",
+                "destination": "/var/lib/postgresql/data",
+                "source": "/var/lib/docker/volumes/41274b66edcaf93307151d1b9c016912d993e9ae10e7c7a4f1ba7def5fcea06d/_data"
+            }
+        ],
+        "bindMounts": [],
+        "postgresEnv": {
+            "POSTGRES_DB": "pcc14_dispatch",
+            "POSTGRES_USER": "pcc14_user",
+            "POSTGRES_PASSWORD": "pcc14_test_pw"
+        },
+        "databases": [
+            {
+                "db": "pcc14_dispatch",
+                "sizeBytes": 12549143
+            },
+            {
+                "db": "postgres",
+                "sizeBytes": 7699479
+            }
+        ],
+        "schemaTableCounts": [
+            {
+                "schema": "pcc11_decision",
+                "tables": 13
+            },
+            {
+                "schema": "pcc12_policy",
+                "tables": 7
+            },
+            {
+                "schema": "public",
+                "tables": 36
+            }
+        ]
+    }
+,
+    {
+        "name": "pcc15-34AOqoHF-pg16",
+        "id": "c1c760f68ca914f53187103cb83b0553e9571caa5290c7930ee490df2c3b1755",
+        "image": "postgres:16-alpine",
+        "imageDigest": "sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760",
+        "created": "2026-08-20T11:37:19.668655431Z",
+        "state": "running",
+        "startedAt": "2026-08-20T11:37:20.171661315Z",
+        "ports": {
+            "5432/tcp": [
+                {
+                    "HostIp": "127.0.0.1",
+                    "HostPort": "55461"
+                }
+            ]
+        },
+        "networks": [
+            "bridge"
+        ],
+        "labels": {},
+        "anonymousVolumes": [
+            {
+                "name": "211984ad8632ad3712b4598bac9b086bb598db09fb95cac0e880c55db09afba9",
+                "destination": "/var/lib/postgresql/data",
+                "source": "/var/lib/docker/volumes/211984ad8632ad3712b4598bac9b086bb598db09fb95cac0e880c55db09afba9/_data"
+            }
+        ],
+        "bindMounts": [],
+        "postgresEnv": {
+            "POSTGRES_USER": "pcc15_admin",
+            "POSTGRES_PASSWORD": "pcc15pass",
+            "POSTGRES_DB": "pcc15_aggregate_verify"
+        },
+        "databases": [
+            {
+                "db": "pcc15_aggregate_verify",
+                "sizeBytes": 16342039
+            },
+            {
+                "db": "postgres",
+                "sizeBytes": 7699479
+            }
+        ],
+        "schemaTableCounts": [
+            {
+                "schema": "pcc05_event_outbox",
+                "tables": 5
+            },
+            {
+                "schema": "pcc06_event_sources",
+                "tables": 6
+            },
+            {
+                "schema": "pcc07_availability_sources",
+                "tables": 10
+            },
+            {
+                "schema": "pcc08_event_faults",
+                "tables": 6
+            },
+            {
+                "schema": "pcc08_event_rolling",
+                "tables": 14
+            },
+            {
+                "schema": "pcc10_reconcile_faults",
+                "tables": 7
+            },
+            {
+                "schema": "pcc11_decision",
+                "tables": 13
+            },
+            {
+                "schema": "pcc12_policy",
+                "tables": 7
+            },
+            {
+                "schema": "public",
+                "tables": 36
+            }
+        ]
+    }
+,
+    {
+        "name": "pcc16-34AQDd-pg16",
+        "id": "3b1cc2b8cfdfffc2abcd78d197ccf8829ab9b0f34eb812174fbbc21a47bf9a37",
+        "image": "postgres:16-alpine",
+        "imageDigest": "sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760",
+        "created": "2026-08-20T12:35:28.898160866Z",
+        "state": "running",
+        "startedAt": "2026-08-20T12:35:29.208226225Z",
+        "ports": {
+            "5432/tcp": [
+                {
+                    "HostIp": "127.0.0.1",
+                    "HostPort": "55462"
+                }
+            ]
+        },
+        "networks": [
+            "bridge"
+        ],
+        "labels": {},
+        "anonymousVolumes": [
+            {
+                "name": "901b56bc6bbefc6fa03ded406819a3381196e2ddec7960394ae570c93043f155",
+                "destination": "/var/lib/postgresql/data",
+                "source": "/var/lib/docker/volumes/901b56bc6bbefc6fa03ded406819a3381196e2ddec7960394ae570c93043f155/_data"
+            }
+        ],
+        "bindMounts": [],
+        "postgresEnv": {
+            "POSTGRES_USER": "pcc16_admin",
+            "POSTGRES_PASSWORD": "pcc16pass",
+            "POSTGRES_DB": "pcc16_verdict_verify"
+        },
+        "databases": [
+            {
+                "db": "pcc16_verdict_verify",
+                "sizeBytes": 21773335
+            },
+            {
+                "db": "postgres",
+                "sizeBytes": 7699479
+            }
+        ],
+        "schemaTableCounts": [
+            {
+                "schema": "pcc03a_companions",
+                "tables": 5
+            },
+            {
+                "schema": "pcc03b_final_row",
+                "tables": 5
+            },
+            {
+                "schema": "pcc03c_provenance",
+                "tables": 5
+            },
+            {
+                "schema": "pcc04r3_adversarial",
+                "tables": 5
+            },
+            {
+                "schema": "pcc05_event_outbox",
+                "tables": 5
+            },
+            {
+                "schema": "pcc06_event_sources",
+                "tables": 6
+            },
+            {
+                "schema": "pcc07_availability_sources",
+                "tables": 10
+            },
+            {
+                "schema": "pcc08_event_faults",
+                "tables": 6
+            },
+            {
+                "schema": "pcc08_event_rolling",
+                "tables": 14
+            },
+            {
+                "schema": "pcc10_reconcile_faults",
+                "tables": 7
+            },
+            {
+                "schema": "pcc11_decision",
+                "tables": 13
+            },
+            {
+                "schema": "pcc12_policy",
+                "tables": 8
+            },
+            {
+                "schema": "pcc_v14",
+                "tables": 3
+            },
+            {
+                "schema": "pcc_v15",
+                "tables": 6
+            },
+            {
+                "schema": "pcc_v17",
+                "tables": 2
+            },
+            {
+                "schema": "pcc_v18",
+                "tables": 3
+            },
+            {
+                "schema": "pcc_v19",
+                "tables": 4
+            },
+            {
+                "schema": "public",
+                "tables": 39
+            }
+        ]
+    }
+,
+    {
+        "name": "pcc17-34ASQ-pg16",
+        "id": "79f7f2de83f2ca5c63291503dae3a52ca16b489c29b00eef38b963f129c92f63",
+        "image": "postgres:16-alpine",
+        "imageDigest": "sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760",
+        "created": "2026-08-20T14:14:10.650175461Z",
+        "state": "running",
+        "startedAt": "2026-08-20T14:14:11.120173621Z",
+        "ports": {
+            "5432/tcp": [
+                {
+                    "HostIp": "0.0.0.0",
+                    "HostPort": "55617"
+                },
+                {
+                    "HostIp": "::",
+                    "HostPort": "55617"
+                }
+            ]
+        },
+        "networks": [
+            "bridge"
+        ],
+        "labels": {},
+        "anonymousVolumes": [
+            {
+                "name": "c21db49d41f4a2b4a967f18595ae6b30eb96741c87e126529ad8d53c13bfc0a0",
+                "destination": "/var/lib/postgresql/data",
+                "source": "/var/lib/docker/volumes/c21db49d41f4a2b4a967f18595ae6b30eb96741c87e126529ad8d53c13bfc0a0/_data"
+            }
+        ],
+        "bindMounts": [],
+        "postgresEnv": {
+            "POSTGRES_USER": "pcc17_owner",
+            "POSTGRES_DB": "pcc17_blocker",
+            "POSTGRES_PASSWORD": "pcc17pass"
+        },
+        "databases": [
+            {
+                "db": "pcc17_blocker",
+                "sizeBytes": 21355543
+            },
+            {
+                "db": "pcc17_full",
+                "sizeBytes": 12622871
+            },
+            {
+                "db": "postgres",
+                "sizeBytes": 7699479
+            }
+        ],
+        "schemaTableCounts": [
+            {
+                "schema": "pcc05_event_outbox",
+                "tables": 5
+            },
+            {
+                "schema": "pcc06_event_sources",
+                "tables": 6
+            },
+            {
+                "schema": "pcc07_availability_sources",
+                "tables": 10
+            },
+            {
+                "schema": "pcc08_event_faults",
+                "tables": 6
+            },
+            {
+                "schema": "pcc08_event_rolling",
+                "tables": 14
+            },
+            {
+                "schema": "pcc10_reconcile_faults",
+                "tables": 7
+            },
+            {
+                "schema": "pcc11_decision",
+                "tables": 14
+            },
+            {
+                "schema": "pcc12_policy",
+                "tables": 8
+            },
+            {
+                "schema": "pcc17_blocker",
+                "tables": 13
+            },
+            {
+                "schema": "public",
+                "tables": 37
+            }
+        ]
+    }
+,
+    {
+        "name": "pcc18-34AUU-pg16",
+        "id": "0dd527d331735ab8414fd1f5529bd7c1eb15421e46be51c65e187d56774315af",
+        "image": "postgres:16-alpine",
+        "imageDigest": "sha256:d845e7f0ac8517b9d9868b6d20379f9688ba3676595e50ca7c0b664964b2a760",
+        "created": "2026-08-20T15:25:04.260239353Z",
+        "state": "running",
+        "startedAt": "2026-08-20T15:25:05.435148551Z",
+        "ports": {
+            "5432/tcp": [
+                {
+                    "HostIp": "127.0.0.1",
+                    "HostPort": "55618"
+                }
+            ]
+        },
+        "networks": [
+            "bridge"
+        ],
+        "labels": {},
+        "anonymousVolumes": [
+            {
+                "name": "dc799c6b6570f6f345df6b09f0bbe912b087fc9167fa04432168b112b11cd743",
+                "destination": "/var/lib/postgresql/data",
+                "source": "/var/lib/docker/volumes/dc799c6b6570f6f345df6b09f0bbe912b087fc9167fa04432168b112b11cd743/_data"
+            }
+        ],
+        "bindMounts": [],
+        "postgresEnv": {
+            "POSTGRES_USER": "pcc18_owner",
+            "POSTGRES_PASSWORD": "pcc18_secret",
+            "POSTGRES_DB": "pcc18_verify"
+        },
+        "databases": [
+            {
+                "db": "pcc18_lin",
+                "sizeBytes": 11189271
+            },
+            {
+                "db": "pcc18_verify",
+                "sizeBytes": 20634647
+            },
+            {
+                "db": "postgres",
+                "sizeBytes": 7699479
+            }
+        ],
+        "schemaTableCounts": [
+            {
+                "schema": "pcc05_event_outbox",
+                "tables": 5
+            },
+            {
+                "schema": "pcc06_event_sources",
+                "tables": 6
+            },
+            {
+                "schema": "pcc07_availability_sources",
+                "tables": 10
+            },
+            {
+                "schema": "pcc08_event_faults",
+                "tables": 6
+            },
+            {
+                "schema": "pcc08_event_rolling",
+                "tables": 14
+            },
+            {
+                "schema": "pcc10_reconcile_faults",
+                "tables": 7
+            },
+            {
+                "schema": "pcc11_decision",
+                "tables": 14
+            },
+            {
+                "schema": "pcc12_policy",
+                "tables": 8
+            },
+            {
+                "schema": "pcc17_blocker",
+                "tables": 13
+            },
+            {
+                "schema": "public",
+                "tables": 38
+            }
+        ]
+    }
+
+  ]
+}

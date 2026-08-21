@@ -187,10 +187,28 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 			wantBody:   map[string]interface{}{"message": "please adjust the tests\n"},
 		},
 		{
+			// The same idempotency key every other door sends: a retry of a call whose answer
+			// was lost returns the turn already filed instead of queueing the message twice.
+			name:       "send with an idempotency key",
+			args:       []string{"send", "child-session", "--message", "again", "--client-turn-id", "key-1", "--json"},
+			method:     http.MethodPost,
+			requestURI: "/api/runner/sessions/child-session/turns",
+			wantBody:   map[string]interface{}{"message": "again", "clientTurnId": "key-1"},
+		},
+		{
 			name:       "interrupt",
 			args:       []string{"interrupt", "child-session", "--json"},
 			method:     http.MethodPost,
 			requestURI: "/api/runner/sessions/child-session/interrupt",
+		},
+		{
+			// "Stop that and do THIS instead" — one request, so the follow-up cannot be deleted
+			// by the interrupt it travels with, nor folded into the turn it is replacing.
+			name:       "interrupt and send",
+			args:       []string{"interrupt", "child-session", "--message", "do this instead", "--client-turn-id", "key-2", "--json"},
+			method:     http.MethodPost,
+			requestURI: "/api/runner/sessions/child-session/interrupt",
+			wantBody:   map[string]interface{}{"message": "do this instead", "clientTurnId": "key-2"},
 		},
 		{
 			name:       "merge",

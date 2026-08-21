@@ -40,7 +40,12 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 20 {
+	// Three joined in 25C, all ungated reads/writes about the caller's own work: project_blockers
+	// (a blocker episode is never deleted, so "what was blocking this, and what ended it" is a
+	// question the audit answers — and the terminal was the one caller that could not ask it), and
+	// merge_receipt / merge_receipts (recording that a branch was merged is evidence about your own
+	// work, not a power over somebody else's session).
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 33 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -59,10 +64,26 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// task_labels is ungated because it only reads, and because the alternative to having it is an
 	// agent running task_list once per label to answer "how far along is each batch" — the loop
 	// this command exists to replace.
+	// project_verifications is ungated for the same two reasons as project_get, plus one of its
+	// own: it is the only place that says why a task that looks ready is not running, and the
+	// session that hits that wall is the coordinator, which has no session_* tools to gate on.
+	// project_status is ungated for the same reason as project_verifications, and answers the
+	// question that most often gets a coordinator to file work nobody needed: "why is this project
+	// not moving". It reads the control loop and cannot drive it — the manual trigger is the
+	// account owner's door, not this one.
+	// project_get is ungated on the same principle as task_labels: it only reads, and the agent
+	// that needs a project's goal and acceptance criteria is the coordinator session, which has no
+	// session_* tools at all. project_create/project_update ride the same gate rather than an
+	// orchestration one: writing what a body of work is for reaches only the runner owner's own
+	// projects, exactly as the task commands beside them do, and the coordinator asked to plan
+	// work out is the very session that has no session_* tools to gate on. project_delete is the
+	// guarded destructive counterpart: it can remove only an empty project and never detaches or
+	// deletes the project's tasks.
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
-		"provider_list", "notify", "task_labels",
+		"provider_list", "notify", "task_labels", "project_get", "project_status",
+		"project_verifications", "project_create", "project_update", "project_delete",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {
@@ -853,5 +874,111 @@ func TestTaskCLIListRejectsCursorWithoutAll(t *testing.T) {
 	err := cmdTaskCLI([]string{"list", "--cursor", "c2"}, strings.NewReader(""), &out)
 	if err == nil || !strings.Contains(err.Error(), "only meaningful with --all") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The CLI does not own an id: whatever base62 spelling `task_get` handed the agent has to reach
+// the server byte for byte. This is the same contract the `--runner-id` test pins for agents, and
+// the same class of bug — a door that quietly reshapes an id is one that binds a task to a subject
+// that cannot exist.
+func TestTaskCLIVerifiesTaskIDTravelsVerbatimAndClears(t *testing.T) {
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	const subject = "34AlSqrBhQa7RbAeub5Fr"
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{
+		"create", "--title", "[VERIFY] phase", "--verifies-task-id", subject, "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTaskCLI([]string{
+		"update", "task-1", "--verifies-task-id", subject, "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := cmdTaskCLI([]string{"update", "task-1", "--clear-verifies", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(bodies) != 3 {
+		t.Fatalf("bodies = %#v", bodies)
+	}
+	if bodies[0]["verifiesTaskId"] != subject {
+		t.Fatalf("create verifiesTaskId = %#v, want %q", bodies[0]["verifiesTaskId"], subject)
+	}
+	if bodies[1]["verifiesTaskId"] != subject {
+		t.Fatalf("update verifiesTaskId = %#v, want %q", bodies[1]["verifiesTaskId"], subject)
+	}
+	// Three-state: omitted keeps the link, an id re-points it, and --clear-verifies detaches it —
+	// which has to be a JSON null in the body, not an absent key.
+	cleared, present := bodies[2]["verifiesTaskId"]
+	if !present || cleared != nil {
+		t.Fatalf("clear verifiesTaskId = %#v (present=%v), want explicit null", cleared, present)
+	}
+}
+
+// A flag that is set to nothing is a typo or an unset shell variable, and detaching has its own
+// spelling — the same rule --parent-task-id and --clear-parent already carry.
+func TestTaskCLIVerifiesFlagsAreExplicitAndExclusive(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"create", "--title", "x", "--verifies-task-id", ""}, want: "--verifies-task-id cannot be empty"},
+		{args: []string{"update", "task-1", "--verifies-task-id", ""}, want: "use --clear-verifies"},
+		{args: []string{"update", "task-1", "--verifies-task-id", "t1", "--clear-verifies"}, want: "cannot be used together"},
+	} {
+		var out bytes.Buffer
+		err := cmdTaskCLI(tc.args, strings.NewReader(""), &out)
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("cmdTaskCLI(%v) error = %v, want %q", tc.args, err, tc.want)
+		}
+	}
+}
+
+// §13.2's independence rule is decided by the server from the acting session, so the CLI has to
+// say which run is writing. Silently omitting it would not fail anything visibly — it would make
+// the rule unenforceable for every verdict written from a terminal inside a session.
+func TestTaskCLIUpdateCarriesTheActingSession(t *testing.T) {
+	var sawSession string
+	var sawHeader bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawSession = r.Header.Get("X-Orbit-Session-Id")
+		_, sawHeader = r.Header["X-Orbit-Session-Id"]
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	configureCLITestRunner(t, srv.URL)
+
+	t.Setenv("ORBIT_AGENT_ID", "agent-1")
+	t.Setenv("ORBIT_SESSION_ID", "verifier-session")
+	var out bytes.Buffer
+	if err := cmdTaskCLI([]string{"update", "task-1", "--verdict", "PASS", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if sawSession != "verifier-session" {
+		t.Fatalf("X-Orbit-Session-Id = %q, want verifier-session", sawSession)
+	}
+
+	// And outside a session there is no run to name: the header must be absent rather than empty,
+	// so the server sees "no acting session" instead of one it has to look up and fail to find.
+	t.Setenv("ORBIT_SESSION_ID", "")
+	sawSession, sawHeader = "", false
+	out.Reset()
+	if err := cmdTaskCLI([]string{"update", "task-1", "--status", "DONE", "--json"}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if sawHeader {
+		t.Fatalf("X-Orbit-Session-Id sent outside a session: %q", sawSession)
 	}
 }

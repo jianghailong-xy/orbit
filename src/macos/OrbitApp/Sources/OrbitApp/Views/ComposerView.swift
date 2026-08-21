@@ -266,6 +266,27 @@ struct ComposerView: View {
                     .buttonStyle(.plain)
                     .help("Stop the current turn")
                 } else {
+                    // With something typed while a turn generates, Send steers — the message joins
+                    // the turn that is running. "Stop this and do THIS instead" is the other intent
+                    // people have at that moment and cannot be expressed by typing, so it gets its
+                    // own control, beside Send rather than instead of it (web parity).
+                    if ComposerLogic.offersInterruptAndSend(
+                        session: app.session(id: console.sessionID)?.effectiveRunStatus,
+                        stream: console.state.status,
+                        canSend: console.canSend,
+                        ordinaryDraft: !ComposerLogic.parseShell(console.composerText).shell
+                            && !(ComposerHostCommand.commandName(in: console.composerText).map { ComposerHostCommand.isLocal($0) } ?? false),
+                        replying: console.replyContext != nil,
+                        busy: console.sending) {
+                        Button { Task { await console.interruptAndSend() } } label: {
+                            Image(systemName: "stop.circle")
+                                .font(sendGlyphFont)
+                                .foregroundStyle(Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Stop the current turn and send this instead")
+                        .accessibilityLabel("Stop and send")
+                    }
                     Button {
                         // Capture the authoritative status at tap time so a mid-turn send is labeled
                         // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.
@@ -429,7 +450,7 @@ struct ComposerView: View {
                 Menu {
                     ForEach(effortMenuItems) { e in
                         Button {
-                            console.effort = e
+                            console.selectEffort(e)
                             Task { await console.applyConfig(effort: e.rawValue) }
                             // Remember this as the account default so the next new session (here or
                             // on web) starts at it — the cross-device port of web's localStorage write.
@@ -1177,7 +1198,11 @@ private struct PlanUsageDetailPresentation: ViewModifier {
         }
         #else
         if horizontalSizeClass == .regular {
-            content.popover(isPresented: $isPresented, arrowEdge: .top) {
+            // Let iPadOS choose the arrow edge. This control lives against the bottom-trailing
+            // safe area: forcing `.top` places the popover below the control on current iPadOS,
+            // leaving most of the panel outside the screen. The unconstrained overload selects
+            // the viable edge (above here) and keeps the fixed-width panel inside the viewport.
+            content.popover(isPresented: $isPresented) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
                     PlanUsageDetailRows(rows: usage.rows)

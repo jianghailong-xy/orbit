@@ -35,6 +35,7 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
       updateMany: async () => ({ count: 1 }),
       findUnique: async () => ({ kind: 'message' }),
       count: async () => pendingExecutable,
+      findFirst: async () => null,
     },
     session: {
       findUniqueOrThrow: async () => ({
@@ -65,7 +66,7 @@ function makeController(pendingExecutable: number, taskId: string | null = null)
   } as never;
   const queue = { notifySessionQueued: () => queueWakes++ } as never;
   return {
-    controller: new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never, {} as never),
+    controller: new RunnerApiController(prisma, queue, realtime, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never),
     runnerId,
     sessionId,
     statusWrites,

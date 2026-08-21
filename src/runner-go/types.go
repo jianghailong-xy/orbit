@@ -369,7 +369,14 @@ type MergeResultRequest struct {
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
-	Message   string `json:"message,omitempty"`
+	// The branch this merge advanced, the tip it had before, and the base the source was replayed
+	// onto — the fields the control plane's merge receipt (§13.7) is checked against afterwards.
+	// Omitted by an older runner; the receipt is still written, naming what it knows.
+	TargetBranch    string   `json:"targetBranch,omitempty"`
+	TargetShaBefore string   `json:"targetShaBefore,omitempty"`
+	RebaseBaseSha   string   `json:"rebaseBaseSha,omitempty"`
+	Conflicts       []string `json:"conflicts,omitempty"`
+	Message         string   `json:"message,omitempty"`
 }
 
 // CommitCommand mirrors @orbit/shared: a request to commit a live session's uncommitted
@@ -763,9 +770,13 @@ const (
 	evToolResult    = "tool_result"
 	evError         = "error"
 	// Interactive sessions (Route B)
-	evUser      = "user"
-	evTurnEnd   = "turn_end"
-	evInterrupt = "interrupt"
+	evUser    = "user"
+	evTurnEnd = "turn_end"
+	// How far a user message got on its way into the engine's conversation: enqueued ->
+	// written -> acknowledged, or failed with a reason (claude_delivery.go). The `user`
+	// event that opens a turn carries its own first state; this reports every one after.
+	evUserDelivery = "user_delivery"
+	evInterrupt    = "interrupt"
 	// Background shells (Bash run_in_background): durable lifecycle signal parsed from
 	// Claude's <task-notification> user message, and the live tail of the output file.
 	evBackgroundTask   = "background_task"

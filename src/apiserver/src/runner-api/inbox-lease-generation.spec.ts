@@ -41,7 +41,7 @@ function harness(
   const prisma = {
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   } as never;
-  const controller = new RunnerApiController(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  const controller = new RunnerApiController(prisma, {} as never, {} as never, {} as never, {} as never, {} as never, { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never);
   return {
     dequeue: (controller as unknown as { dequeueTurn: Dequeue }).dequeueTurn.bind(controller),
     rawCalls,

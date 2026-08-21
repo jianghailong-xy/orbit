@@ -1,9 +1,10 @@
 import 'reflect-metadata';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
@@ -43,6 +44,10 @@ async function bootstrap() {
   // Alongside it, every public id also goes out in both spellings (`sessionId` +
   // `sessionPublicId`) so clients can move to the short form without a flag day.
   app.useGlobalInterceptors(new WorkspaceAliasInterceptor(), new PublicIdInterceptor());
+  // A response body leaves by one of two doors, and both spell ids the same way. The interceptor
+  // above maps what a handler returns; this maps what it throws, which used to leave raw UUIDs in
+  // refusal bodies on endpoints whose success bodies were base62.
+  app.useGlobalFilters(new PublicIdExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
 
   const origins = (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173')
     .split(',')
