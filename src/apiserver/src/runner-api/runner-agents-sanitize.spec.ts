@@ -1,12 +1,49 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BadRequestException } from '@nestjs/common';
+import { ArgumentMetadata, BadRequestException, Body, PipeTransform } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import { uuidToBase62 } from '@orbit/shared';
 import { RunnerAgentsController } from './runner-agents.controller';
 
 // A runner whose calling session passes the shared orchestration authorizer, so every case below
 // exercises the field whitelist rather than the gate.
 const RUNNER = { id: 'r1', ownerId: 'o1' } as never;
 const ORCHESTRATION_TOKEN = 'signed-session-credential';
+
+// A *different* runner, named the way a caller actually holds it. This controller is agent-facing,
+// so PublicIdInterceptor hands the CLI and `orbit mcp` the base62 spelling — and that is what they
+// hand back when an orchestrator binds an agent to some other machine.
+const OTHER_RUNNER_UUID = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
+const OTHER_RUNNER_B62 = uuidToBase62(OTHER_RUNNER_UUID);
+
+// Nest keys `__routeArguments__` by `paramtype:index`; read the body's number off a probe rather
+// than hardcode it, so a renumbering inside Nest fails here instead of silently piping nothing.
+class BodyProbe {
+  probe(@Body() _b: unknown) {}
+}
+const BODY = Number(
+  Object.keys(Reflect.getMetadata(ROUTE_ARGS_METADATA, BodyProbe, 'probe') as object)[0].split(
+    ':',
+  )[0],
+);
+
+/** The body as the handler receives it: run through the pipes the route itself declares, which is
+ *  the only place the decode lives. Calling the handler with a raw object — as every other test
+ *  here does — skips them, so a test that wants the decode has to go through this. */
+function asRouteReceivesIt(method: 'createWorkspace' | 'updateWorkspace', body: unknown): unknown {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerAgentsController, method) as Record<
+    string,
+    { pipes?: unknown[] }
+  >;
+  const entry = Object.entries(args).find(([key]) => Number(key.split(':')[0]) === BODY);
+  assert.ok(entry, `${method} declares no @Body()`);
+  const pipes = (entry[1].pipes ?? []) as PipeTransform[];
+  assert.ok(pipes.length > 0, `${method}'s @Body() binds no pipe, so no id it carries is decoded`);
+  return pipes.reduce(
+    (value, pipe) => pipe.transform(value, { type: 'body' } as ArgumentMetadata),
+    body,
+  );
+}
 
 /** Builds a controller whose WorkspacesService just captures the sanitized DTO, plus the
  *  control-plane push each write fires (see `published`). */
@@ -256,3 +293,67 @@ function assertSensitiveWorkspaceFieldsRedacted(workspace: Record<string, unknow
   const runner = workspace.runner as Record<string, unknown> | undefined;
   assert.equal(runner ? 'tokenHash' in runner : false, false, 'runner token hash leaked');
 }
+
+// The regression. `orbit agent create --runner-id 349tsNoHC7biW3WXF1ddp` (and the identical MCP
+// call) is how you bind a new agent to a machine that isn't the one you're running on. The id is
+// the base62 one this same API returned; unconverted it reached `prisma.runner.findFirst` inside
+// WorkspacesService.assertOwnedRunner as a P2023 `Inconsistent column data` — a bare 500 with
+// nothing for the caller to act on, and no raw-UUID spelling they could have used instead.
+test('create binds to a runner named in base62', async () => {
+  const { controller, seen } = makeController();
+  await controller.createWorkspace(
+    RUNNER,
+    's1',
+    ORCHESTRATION_TOKEN,
+    asRouteReceivesIt('createWorkspace', { name: 'ux', runnerId: OTHER_RUNNER_B62 }),
+  );
+  assert.equal(seen.create?.runnerId, OTHER_RUNNER_UUID);
+});
+
+test('create still accepts the raw UUID spelling', async () => {
+  const { controller, seen } = makeController();
+  await controller.createWorkspace(
+    RUNNER,
+    's1',
+    ORCHESTRATION_TOKEN,
+    asRouteReceivesIt('createWorkspace', { name: 'ux', runnerId: OTHER_RUNNER_UUID }),
+  );
+  assert.equal(seen.create?.runnerId, OTHER_RUNNER_UUID);
+});
+
+test('create with no runnerId still defaults to the calling runner', async () => {
+  const { controller, seen } = makeController();
+  await controller.createWorkspace(
+    RUNNER,
+    's1',
+    ORCHESTRATION_TOKEN,
+    asRouteReceivesIt('createWorkspace', { name: 'ux' }),
+  );
+  assert.equal(seen.create?.runnerId, 'r1');
+});
+
+test('update rebinds to a runner named in base62', async () => {
+  const { controller, seen } = makeController();
+  await controller.updateWorkspace(
+    RUNNER,
+    's1',
+    ORCHESTRATION_TOKEN,
+    'a1',
+    asRouteReceivesIt('updateWorkspace', { runnerId: OTHER_RUNNER_B62 }),
+  );
+  assert.equal(seen.update?.runnerId, OTHER_RUNNER_UUID);
+});
+
+// An id that is neither spelling is the caller's mistake, and it has to be named as one: this is
+// the other half of "no Prisma 500 on this path". A runner that decodes but isn't this owner's
+// stays WorkspacesService.assertOwnedRunner's 403 — also a 4xx, and deliberately not a 404, so
+// the answer doesn't reveal whether another tenant's runner exists.
+test('an id in neither spelling is a 400 that names the field', () => {
+  for (const method of ['createWorkspace', 'updateWorkspace'] as const) {
+    assert.throws(
+      () => asRouteReceivesIt(method, { name: 'ux', runnerId: 'not a runner id' }),
+      { message: 'invalid runnerId' },
+      method,
+    );
+  }
+});

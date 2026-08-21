@@ -19,6 +19,12 @@ import { PUBLIC_ID_FIELDS } from '@orbit/shared';
  *
  * Both were real when this was written: six class fields (`BatchAssignDto.taskIds` and friends)
  * and `TurnCompleteRequest.turnId`, whose id the runner echoes back into `where: { id }`.
+ *
+ * And a third, found later: a body typed `unknown`, validated by hand in the controller because
+ * there is no class for the ValidationPipe to check and no interface for the scan above to read.
+ * That is a hole in BOTH nets at once, and it swallowed `runnerId` on agent create/update — the
+ * base62 id `orbit agent create --runner-id` was handed by this very API reached
+ * `prisma.runner.findFirst` and 500'd. Hence the third test.
  */
 const SRC = path.resolve(__dirname, '../..', 'src');
 const SHARED_DTO = path.resolve(__dirname, '../../..', 'shared/src/dto.ts');
@@ -104,4 +110,31 @@ test('every interface DTO body normalizes the public ids it carries', () => {
   });
   assert.ok(scanned > 0, 'found no interface-DTO bodies carrying ids — the scan broke');
   assert.deepEqual(offenders, [], 'interface DTO body needs @Body(PublicIdPipe.forFields(…))');
+});
+
+/**
+ * The free-form bodies: `@Body() body: unknown`, whitelisted and validated by hand in the
+ * controller. Nothing above can see what fields they carry — there is no class and no named
+ * interface — so the rule here is positional and fails safe: such a body MUST bind a
+ * `PublicIdPipe`. A controller that genuinely takes no id from its body should give the body a
+ * type, which puts it back under one of the two scans above.
+ */
+test('every free-form @Body() binds a PublicIdPipe', () => {
+  const offenders: string[] = [];
+  let scanned = 0;
+  walk(SRC, (file) => {
+    if (!file.endsWith('.controller.ts')) return;
+    const lines = readFileSync(file, 'utf8').split('\n');
+    lines.forEach((line, i) => {
+      // The type annotation may sit on the next line when the pipe expression wraps.
+      const decl = `${line} ${lines[i + 1] ?? ''}`;
+      if (!/@Body\(/.test(line) || !/:\s*unknown\b/.test(decl)) return;
+      scanned++;
+      if (!/@Body\([^)]*PublicIdPipe/.test(decl)) {
+        offenders.push(`${path.basename(file)}:${i + 1}`);
+      }
+    });
+  });
+  assert.ok(scanned > 0, 'found no free-form bodies — the scan broke, not the controllers');
+  assert.deepEqual(offenders, [], 'hand-validated body needs @Body(PublicIdPipe.forFields(…))');
 });

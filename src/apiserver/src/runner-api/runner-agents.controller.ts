@@ -84,7 +84,7 @@ export class RunnerAgentsController {
     @CurrentRunner() runner: Runner,
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
-    @Body() body: unknown,
+    @Body(PublicIdPipe.forFields('runnerId')) body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);
     const sanitized = this.sanitize(body, runner.id);
@@ -110,7 +110,7 @@ export class RunnerAgentsController {
     @Headers('x-orbit-session-id') sessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
-    @Body() body: unknown,
+    @Body(PublicIdPipe.forFields('runnerId')) body: unknown,
   ) {
     const scope = await this.orchestration.assert(runner, sessionId, orchestrationToken);
     const workspace = await this.workspaces.update(
@@ -148,7 +148,13 @@ export class RunnerAgentsController {
   /** Whitelist the caller's fields (drops enableOrchestration/enabled etc. a workspace must not
    *  control). On create, default runnerId to the calling runner so the workspace can run.
    *  This body is a plain type, not a DTO class, so the global ValidationPipe has no metatype
-   *  to check — the free-form fields are validated here instead. */
+   *  to check — the free-form fields are validated here instead.
+   *
+   *  `runnerId` arrives already decoded: for that same reason `@IsPublicId` cannot reach it, so
+   *  both routes bind `@Body(PublicIdPipe.forFields('runnerId'))`. The CLI and MCP hand back the
+   *  base62 id this API gave them (`PublicIdInterceptor` — this controller is agent-facing, not
+   *  machine protocol), and unconverted that string reached `prisma.runner.findFirst` as a bare
+   *  P2023 500. `defaultRunnerId` is the calling runner's own UUID, so it needs no decoding. */
   private sanitize(body: unknown, defaultRunnerId?: string): OrchestratorWorkspaceInput {
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {
       throw new BadRequestException('workspace body must be an object');

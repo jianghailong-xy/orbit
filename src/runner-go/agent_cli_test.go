@@ -94,6 +94,55 @@ func TestAgentCLIRoutesHeadersAndBodies(t *testing.T) {
 	}
 }
 
+// The CLI's half of the base62 rule: it does not own the id, so it must not reshape it. Every id
+// a caller holds came out of this API in the base62 spelling (PublicIdInterceptor), and
+// `--runner-id 349tsNoHC7biW3WXF1ddp` is how you bind an agent to a machine other than the one
+// you are on. Reject it, pad it, or lowercase it here and the server never gets the chance to
+// decode it — which is why this asserts the exact bytes rather than "some runnerId arrived".
+func TestAgentCLISendsABase62RunnerIDVerbatim(t *testing.T) {
+	const runnerID = "349tsNoHC7biW3WXF1ddp"
+	const agentID = "349v3072q7OPwydQE1yiU"
+	var got struct {
+		path string
+		body map[string]interface{}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.path = r.URL.Path
+		got.body = nil
+		if r.Body != nil && r.ContentLength != 0 {
+			_ = json.NewDecoder(r.Body).Decode(&got.body)
+		}
+		_, _ = w.Write([]byte(`{"id":"` + agentID + `"}`))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv(envMCPOrchestration, "true")
+	t.Setenv("ORBIT_SESSION_ID", "caller-session")
+	t.Setenv(envOrchestrationToken, "session-token")
+
+	var out bytes.Buffer
+	if err := cmdAgentCLI([]string{"create", "--name", "UX", "--runner-id", runnerID, "--json"}, &out); err != nil {
+		t.Fatalf("agent create: %v", err)
+	}
+	if got.body["runnerId"] != runnerID {
+		t.Fatalf("create sent runnerId = %#v, want %q", got.body["runnerId"], runnerID)
+	}
+
+	// A rebind carries it the same way, and the agent's own id — base62 too — stays a legal path
+	// segment rather than being second-guessed into a UUID requirement.
+	out.Reset()
+	if err := cmdAgentCLI([]string{"update", agentID, "--runner-id", runnerID, "--json"}, &out); err != nil {
+		t.Fatalf("agent update: %v", err)
+	}
+	if got.path != "/api/runner/agents/"+agentID {
+		t.Fatalf("agent update hit %s", got.path)
+	}
+	if got.body["runnerId"] != runnerID {
+		t.Fatalf("update sent runnerId = %#v, want %q", got.body["runnerId"], runnerID)
+	}
+}
+
 // The agent verbs are orchestration-only, exactly like the session ones: no service-token scope
 // names them, and outside a session there is no calling agent to authorize them at all.
 func TestAgentCLIRequiresALiveOrchestrationSession(t *testing.T) {
