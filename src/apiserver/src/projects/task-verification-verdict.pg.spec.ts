@@ -39,6 +39,7 @@ import {
   verificationDefectIdempotencyKey,
   verificationVerdictActionKey,
 } from './task-verification-verdict';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -306,7 +307,7 @@ test('verification verdicts have native consequences on PostgreSQL',
     assert.equal(migrated.rows[0]?.count, '1', 'the isolated database must have migration 0124');
     await emptyWorld(identity);
 
-    const db = new PrismaClient({ datasources: { db: { url: URL } } });
+    const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
     const events = new ProjectEventsService(prisma);
     const decisions = new ProjectDecisionService(prisma);

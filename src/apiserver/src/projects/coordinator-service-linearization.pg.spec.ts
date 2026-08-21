@@ -9,6 +9,7 @@ import {
 } from './coordinator-pg-test-safety';
 import { COORDINATOR_UNAVAILABLE_CODE, ProjectsService } from './projects.service';
 import { WorkspacesService } from '../workspaces/workspaces.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * The four repairs of validation 04 that are claims about ORDER and FAILURE, asserted where those
@@ -43,7 +44,6 @@ const MINTED = [
 ];
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
-type PrismaCtor = new (config: { datasources: { db: { url: string } } }) => any;
 
 const skip = URL ? false : 'set COORDINATOR_PG_URL to run';
 
@@ -88,10 +88,12 @@ async function open() {
   await probe.connect();
   await verifyCoordinatorPgIdentity(probe);
 
-  const { PrismaClient } = (await import('@prisma/client')) as unknown as { PrismaClient: PrismaCtor };
-  const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
+  // Both clients stay untyped, as they were when this fixture built them through a hand-written
+  // constructor signature: the assertions below read rows straight off `findUnique` without
+  // narrowing away `null`, and hand the client to services that expect the injected PrismaService.
+  const prisma: any = prismaClientFor(URL!);
   /** A second pool, so a transaction on one can genuinely block a transaction on the other. */
-  const other = new PrismaClient({ datasources: { db: { url: URL! } } });
+  const other: any = prismaClientFor(URL!);
 
   /**
    * Close everything this function has opened, for the path where it never gets to return.

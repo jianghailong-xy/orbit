@@ -28,6 +28,7 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { MergeReceiptService } from './merge-receipt.service';
 import { mergeReceiptIdempotencyKey } from './merge-receipt';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -98,7 +99,7 @@ suite('merge receipts, on real PostgreSQL', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
   const client = new Client({ connectionString: URL });
   await client.connect();
-  const db = new PrismaClient({ datasources: { db: { url: URL } } });
+  const db = prismaClientFor(URL);
   const receipts = new MergeReceiptService(db as unknown as PrismaService);
   t.after(async () => {
     await db.$disconnect();

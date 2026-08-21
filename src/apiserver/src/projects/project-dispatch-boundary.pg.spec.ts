@@ -33,6 +33,7 @@ import {
   ProjectTaskDispatchCommand,
   ProjectTaskDispatcherService,
 } from './project-task-dispatcher.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -173,7 +174,7 @@ test('Project dispatcher is exactly-once, fail-closed and legacy-compatible on P
     assert.equal(migrated.rows[0]?.count, '1', 'the isolated database must have migration 0122');
     await identity.end();
 
-    const db = new PrismaClient({ datasources: { db: { url: URL } } });
+    const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
     const events = new ProjectEventsService(prisma);
     const decisions = new ProjectDecisionService(prisma);

@@ -52,7 +52,7 @@ import {
 } from '../common/session-tree-sql';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { MAX_UPLOAD_BYTES } from '../attachments/attachments.media';
+import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
@@ -2558,7 +2558,7 @@ export class SessionsService {
         mimeType,
         sizeBytes: data.length,
         fileName: filename,
-        data,
+        data: toBytes(data),
       },
     });
   }

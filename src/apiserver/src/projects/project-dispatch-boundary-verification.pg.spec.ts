@@ -36,6 +36,7 @@ import {
   ProjectTaskDispatchCommand,
   ProjectTaskDispatcherService,
 } from './project-task-dispatcher.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * Unit 14: independent verification of the units 12 and 13 dispatch boundary on a real, private
@@ -91,7 +92,7 @@ interface Services {
 }
 
 function connectServices(): Services {
-  return servicesOn(new PrismaClient({ datasources: { db: { url: URL } } }));
+  return servicesOn(prismaClientFor(URL!));
 }
 
 function servicesOn(db: PrismaClient): Services {

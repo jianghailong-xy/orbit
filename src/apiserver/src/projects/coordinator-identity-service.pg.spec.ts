@@ -7,7 +7,9 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
+import { PrismaService } from '../prisma/prisma.service';
 import { ProjectsService } from './projects.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * The same rules as `project-coordinator-identity.spec.ts`, but against a real database and a real
@@ -36,7 +38,6 @@ const SESSION_OLD = '00000000-0000-7000-8000-0000000003c5';
 const SESSION_NEW = '00000000-0000-7000-8000-0000000003c6';
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
-type PrismaCtor = new (config: { datasources: { db: { url: string } } }) => any;
 
 /**
  * Prove the target, then seed the fixture this file owns and nothing else.
@@ -52,8 +53,7 @@ async function open(): Promise<{ prisma: any; service: ProjectsService; teardown
   await verifyCoordinatorPgIdentity(probe);
   await probe.end();
 
-  const { PrismaClient } = (await import('@prisma/client')) as unknown as { PrismaClient: PrismaCtor };
-  const prisma = new PrismaClient({ datasources: { db: { url: URL! } } });
+  const prisma = prismaClientFor(URL!);
 
   const wipe = async () => {
     await prisma.projectMember.deleteMany({ where: { project: { ownerId: OWNER_ID } } });
@@ -101,7 +101,7 @@ async function open(): Promise<{ prisma: any; service: ProjectsService; teardown
 
   return {
     prisma,
-    service: new ProjectsService(prisma, sessions as never),
+    service: new ProjectsService(prisma as unknown as PrismaService, sessions as never),
     teardown: async () => {
       await wipe();
       await prisma.$disconnect();

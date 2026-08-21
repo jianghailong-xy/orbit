@@ -32,6 +32,7 @@ import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
 import { openBlockersStoppingDispatch } from './project-blocker-guard';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * Unit 18: independent verification of units 15–17 against a real, private PostgreSQL server.
@@ -206,7 +207,7 @@ test('unit 18: the blocker loop closes on a real PostgreSQL', { skip, timeout: 2
   assert.equal(migrated.rows[0]?.count, '3', 'the isolated database must carry migrations 0123-0125');
   await emptyWorld(identity);
 
-  const services = servicesOn(new PrismaClient({ datasources: { db: { url: URL } } }));
+  const services = servicesOn(prismaClientFor(URL));
   const unregister = services.events.registerHandler(services.reconciler);
 
   try {
@@ -352,7 +353,7 @@ test('unit 18: the blocker loop closes on a real PostgreSQL', { skip, timeout: 2
         // A fresh set of services over a fresh client is what a process restart looks like from
         // the database's side: nothing in memory carries over.
         for (let delivery = 0; delivery < 4; delivery += 1) {
-          const restarted = servicesOn(new PrismaClient({ datasources: { db: { url: URL } } }));
+          const restarted = servicesOn(prismaClientFor(URL));
           await reconcile(restarted, target);
           await restarted.db.$disconnect();
         }

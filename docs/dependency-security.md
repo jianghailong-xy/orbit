@@ -40,6 +40,12 @@ The original findings were associated with
 The same maintenance change upgrades Vite, Vitest, and the React plugin to remove development-tool findings.
 The root Node.js requirement is therefore 20.19 or newer.
 
+## Active overrides
+
+| Override | Reason | Removal condition |
+| --- | --- | --- |
+| `deepmerge-ts` pinned to `^8.0.2` | Prisma 7.9.1's CLI pins `@prisma/config` to `deepmerge-ts` 7.1.5, which carries [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) (high; stack exhaustion when merging recursive object graphs). The package reaches the production tree through `@prisma/client`'s optional `prisma` peer, so it is not a dev-only finding. `@prisma/config` uses only `deepmerge` as c12's config merger, and 8.x keeps that export with the same semantics for plain objects. | Drop the `overrides` entry once a Prisma release depends on `deepmerge-ts` 8 or later. |
+
 ## Verification
 
 Run from a clean checkout:

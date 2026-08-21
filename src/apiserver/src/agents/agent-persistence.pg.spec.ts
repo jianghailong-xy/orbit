@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 
 import { assertCoordinatorPgUrlIsIsolated } from '../projects/coordinator-pg-test-safety';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 /**
  * Unit 02A, the persistence half: an Agent written and read back through the generated client, on
@@ -31,7 +32,7 @@ const OWNER_B = '00000000-0000-7000-8000-00000000b101';
 
 async function connect(): Promise<PrismaClient> {
   assertCoordinatorPgUrlIsIsolated(URL);
-  const prisma = new PrismaClient({ datasources: { db: { url: URL } } });
+  const prisma = prismaClientFor(URL);
   // This suite owns the two tenants it names and nothing else, so it removes its own rows rather
   // than truncating tables another spec on the same disposable database may be using.
   await prisma.agent.deleteMany({ where: { ownerId: { in: [OWNER_A, OWNER_B] } } });

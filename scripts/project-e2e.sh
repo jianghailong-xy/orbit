@@ -27,7 +27,9 @@ KEEP=0
 
 URL="postgresql://$USER_NAME:$PASSWORD@127.0.0.1:$PORT/$DB"
 NODE="${NODE:-node}"
-PRISMA="$REPO/node_modules/.bin/prisma"
+# Prisma 7 is installed per workspace too — npm no longer hoists it to the repo root.
+PRISMA="$API/node_modules/.bin/prisma"
+[ -x "$PRISMA" ] || PRISMA="$REPO/node_modules/.bin/prisma"
 # TypeScript 7 is installed per workspace: the repo root still hoists the 5.9.3 that
 # @nestjs/cli pins, so take the apiserver copy when it is there.
 TSC="$API/node_modules/.bin/tsc"

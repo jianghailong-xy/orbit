@@ -28,6 +28,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { TasksService } from './tasks.service';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -94,7 +95,7 @@ suite('task supersession, on real PostgreSQL', async (t) => {
   assertCoordinatorPgUrlIsIsolated(URL);
   const client = new Client({ connectionString: URL });
   await client.connect();
-  const db = new PrismaClient({ datasources: { db: { url: URL } } });
+  const db = prismaClientFor(URL);
   t.after(async () => {
     await db.$disconnect();
     await client.end();

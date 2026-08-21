@@ -9,7 +9,9 @@ let announced = false;
  * anything. The explicit expected identity makes a copied production URL fail before the first
  * write; the pcc_ naming rule also rejects Orbit's shared database and role by construction.
  */
-export function assertCoordinatorPgUrlIsIsolated(connectionString: string | undefined): void {
+export function assertCoordinatorPgUrlIsIsolated(
+  connectionString: string | undefined,
+): asserts connectionString is string {
   assert.ok(connectionString, 'COORDINATOR_PG_URL is required');
   const expectedDatabase = process.env.COORDINATOR_PG_EXPECTED_DATABASE;
   const expectedUser = process.env.COORDINATOR_PG_EXPECTED_USER;

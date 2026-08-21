@@ -28,6 +28,7 @@ import {
 } from './project-reconcile.service';
 import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
 import { COORDINATOR_ROTATION_REASON_CODE } from './project-coordinator-session';
+import { prismaClientFor } from '../prisma/prisma-client';
 
 // §7.5 · §8.4, driven the way production drives it, on a DISPOSABLE PostgreSQL server.
 //
@@ -68,7 +69,7 @@ interface Loop {
 }
 
 function loop(url: string): Loop {
-  const db = new PrismaClient({ datasources: { db: { url } } });
+  const db = prismaClientFor(url);
   const prisma = db as unknown as PrismaService;
   const announced: string[] = [];
   const events = new ProjectEventsService(prisma);
