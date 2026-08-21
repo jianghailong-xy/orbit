@@ -929,6 +929,17 @@ export interface RunInboxResponse {
    *  key, so it is resolved here at delivery — the queued turn stores the provider's slug and
    *  nothing else, keeping the credential out of `conversation_turn`. */
   env?: Record<string, string>;
+  /** Only on a `steer`: this control plane understands `steer_requeue`, so a steer the runner
+   *  can PROVE never reached the engine may be filed back as the ordinary message it would have
+   *  been had it arrived a moment later (see TURN_COMPLETE_STEER_REQUEUE).
+   *
+   *  Carried on the delivery itself rather than asked for separately: the answer is needed
+   *  exactly once, at the moment a steer is being answered for, and a runner that stored it
+   *  globally would have to decide what a mixed fleet of control planes means. Absent — an
+   *  older control plane — is `false` in every language here, and a runner that reads false
+   *  must fail the steer visibly instead: that control plane's turn-complete does not read
+   *  `subtype`, so a `steer_requeue` sent to it would ack the row and lose the message. */
+  steerRequeue?: boolean;
 }
 
 /** Runner → control plane: expire only leases owned by one dead engine process.
@@ -1018,6 +1029,9 @@ export interface TurnCompleteRequest {
   /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
   status: RunStatus;
   result?: string;
+  /** The engine's own result subtype, except for the two the runner uses to say what KIND of
+   *  completion this is: `steer` settles one mid-turn message, and TURN_COMPLETE_STEER_REQUEUE
+   *  un-files one. */
   subtype?: string;
   numTurns?: number;
   costUsd?: number;
@@ -1042,6 +1056,51 @@ export interface TurnCompleteRequest {
   branchSha?: string;
   /** The worktree's actual current HEAD branch (see SessionLiveState.worktreeBranch). */
   worktreeBranch?: string;
+}
+
+/**
+ * `TurnCompleteRequest.subtype` for a steer the runner PROVED never reached the engine: Codex
+ * refused it before reading the input (no turn to steer, a turn id that had already moved on, a
+ * build with no `turn/steer` at all), or it was never sent. The row goes back to being the
+ * ordinary `message` it would have been had it arrived a moment later — same row, same seq, same
+ * clientTurnId; the kind is the only thing that was ever about timing — and runs when the turn it
+ * missed ends.
+ *
+ * Reserved for PROVABLY undelivered. An unknown outcome (a timeout, an unrecognised refusal, an
+ * accepted steer that was never echoed back) must be reported as a failure instead: Codex does not
+ * de-duplicate, so re-filing a message it may already have taken is how one prompt gets executed
+ * twice. See docs/codex-turn-steer-contract.md §4.3.
+ */
+export const TURN_COMPLETE_STEER_REQUEUE = 'steer_requeue';
+
+/**
+ * One mid-turn message that was leased by a runner process which then died holding it.
+ *
+ * Whether it reached the engine is not knowable from here, and re-delivering it could execute
+ * it twice, so it is not re-filed — it is handed to the process taking the session over, which
+ * reports it as undelivered on the session's own event stream (the one place a person reads) and
+ * then settles the row.
+ */
+export interface AbandonedSteer {
+  turnId: string;
+  /** The message text, so the reporter can render a bubble for one that never got as far as
+   *  producing its own `user` event. */
+  content: string;
+  /** Whether this steer already has a `user` event in the transcript. False means the dead
+   *  process never got to announce it, so the report has to open the bubble as well as settle
+   *  it; true means the bubble is already there and only needs amending, and emitting a second
+   *  one would show the same message twice. */
+  announced: boolean;
+}
+
+/** Control plane → runner response for POST /runner/sessions/:id/activate-leases. */
+export interface ActivateTurnLeasesResponse {
+  ok: true;
+  /** Steers stranded by the process this activation replaces. Reported, not settled, here: the
+   *  activation is retried on transport errors, so a response nobody received must leave the
+   *  rows exactly as they were for the next attempt to hand over again. The taking-over runner
+   *  settles each one with `subtype: 'steer'` once it has said so on the event stream. */
+  abandonedSteers?: AbandonedSteer[];
 }
 
 /** One file changed by a worktree-isolated session, as a compact diff summary the runner

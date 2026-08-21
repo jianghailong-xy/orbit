@@ -433,9 +433,16 @@ func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID, leaseGener
 // activateTurnLeases makes a freshly reserved process generation the only inbox consumer.
 // The server accepts an idempotent retry for the same generation and rejects a different
 // generation until its predecessor has been released.
-func (t *Transport) activateTurnLeases(ctx context.Context, sessionID, leaseGeneration string) error {
+// activateTurnLeases makes this engine generation the session's sole inbox consumer, and returns
+// what the generation it replaces left behind: mid-turn messages that were leased by a process
+// which then died. The control plane cannot answer for those itself — a steer's whole outcome is
+// reported on the session's event stream, which only a live runner writes to — so it hands them
+// over here, to the one process that has both a stream and a reason to be looking.
+func (t *Transport) activateTurnLeases(ctx context.Context, sessionID, leaseGeneration string) (ActivateTurnLeasesResponse, error) {
 	body := map[string]string{"leaseGeneration": leaseGeneration, "leaseOwner": t.leaseOwner}
-	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/activate-leases", body, nil, 15*time.Second)
+	var out ActivateTurnLeasesResponse
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/activate-leases", body, &out, 15*time.Second)
+	return out, err
 }
 
 // retryReleaseTurnLeases is kept separate from process spawning so the ordering

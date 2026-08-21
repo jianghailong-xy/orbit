@@ -551,6 +551,33 @@ type RunInboxResponse struct {
 	// an empty (non-nil) map is how a move onto a self-authenticating built-in engine arrives.
 	// Nil on every other reload, meaning the environment did not change.
 	Env map[string]string `json:"env,omitempty"`
+	// SteerRequeue: only on a `steer`, and only from a control plane that understands
+	// `steer_requeue` — that a steer which provably never reached the engine may be filed back
+	// as the ordinary message it would have been had it arrived a moment later.
+	//
+	// Absent is false, which is exactly right for an older control plane: its turn-complete
+	// does not read `subtype` at all, so a `steer_requeue` sent to it acks the row and the
+	// message is gone. False here means a provably-undelivered steer is reported as a visible
+	// failure instead — worse for the person, but nothing is lost.
+	SteerRequeue bool `json:"steerRequeue,omitempty"`
+}
+
+// AbandonedSteer is a mid-turn message a dead runner process left leased, handed to the process
+// taking the session over so it can be answered for. Whether it reached the engine is unknowable
+// from either side, so it is never re-delivered — it is reported as undelivered and settled.
+type AbandonedSteer struct {
+	TurnID  string `json:"turnId"`
+	Content string `json:"content"`
+	// Announced: this steer already has a `user` event in the transcript, so the report only has
+	// to amend that bubble. False means the dead process never got that far and the report has to
+	// open one too — emitting a second for a turn that already has one shows the message twice.
+	Announced bool `json:"announced"`
+}
+
+// ActivateTurnLeasesResponse answers the activation that makes one engine generation a session's
+// sole inbox consumer.
+type ActivateTurnLeasesResponse struct {
+	AbandonedSteers []AbandonedSteer `json:"abandonedSteers,omitempty"`
 }
 
 type ReclaimSession struct {

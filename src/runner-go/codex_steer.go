@@ -59,6 +59,9 @@ var (
 	errCodexSteerDropped = errors.New("the turn ended before codex read this message into the conversation; it was not delivered")
 	// errCodexSteerUnsupported: this Codex build has no turn/steer at all (§5.2).
 	errCodexSteerUnsupported = errors.New("this codex is too old to take a message while a turn is running; send it again once the turn ends")
+	// errCodexSteerDuplicate: this conversation turn was handed over twice. Nothing was sent for
+	// the second copy — which is the whole point, since Codex would insert the message twice.
+	errCodexSteerDuplicate = errors.New("this message had already been delivered into the running turn")
 )
 
 // codexSteerDelivery is one mid-turn message's progress into the turn it was aimed at. It lives
@@ -69,6 +72,16 @@ var (
 type codexSteerDelivery struct {
 	orbitTurnID string
 	state       deliveryState
+	// text/attachments are what the transcript bubble for this message is made of, kept here
+	// because whoever announces it may not be the goroutine that was given it: Codex can echo a
+	// steer back before its own response has been read (§3).
+	text        string
+	attachments []map[string]interface{}
+	// announced: a `user` event for this message is in the transcript. The first outcome opens
+	// the bubble and every later one amends it, so that exactly one bubble exists per message —
+	// and so a message that ends up NOT joining the turn (requeued as an ordinary message) never
+	// leaves one behind for the delivery that eventually runs it to duplicate.
+	announced bool
 }
 
 // beginCodexSteer aims one message at the turn currently running and records it there before a
@@ -79,7 +92,7 @@ type codexSteerDelivery struct {
 // there is a window where a turn is running, is being interrupted, or has ended, and no Codex turn
 // id is available to address a steer to. Waiting is bounded by ctx; every way out of here without
 // an id is a message that provably never left the runner.
-func beginCodexSteer(ctx context.Context, activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID string) (string, error) {
+func beginCodexSteer(ctx context.Context, activeMu *sync.Mutex, active **codexAppActiveTurn, orbitTurnID, text string, attachments []map[string]interface{}) (string, error) {
 	tk := time.NewTicker(codexSteerTargetPoll)
 	defer tk.Stop()
 	for {
@@ -93,7 +106,18 @@ func beginCodexSteer(ctx context.Context, activeMu *sync.Mutex, active **codexAp
 			if a.steers == nil {
 				a.steers = map[string]*codexSteerDelivery{}
 			}
-			a.steers[orbitTurnID] = &codexSteerDelivery{orbitTurnID: orbitTurnID, state: deliveryEnqueued}
+			if existing := a.steers[orbitTurnID]; existing != nil {
+				// The same conversation turn handed over twice. The control plane leases a steer
+				// once and never re-leases it, so this is a delivery that should not exist —
+				// and acting on it would put the message into the conversation twice, because
+				// Codex does not de-duplicate (§0.1). Refuse the copy; the original stands.
+				activeMu.Unlock()
+				return "", errCodexSteerDuplicate
+			}
+			a.steers[orbitTurnID] = &codexSteerDelivery{
+				orbitTurnID: orbitTurnID, state: deliveryEnqueued,
+				text: text, attachments: attachments,
+			}
 			codexTurnID := a.codexTurnID
 			activeMu.Unlock()
 			return codexTurnID, nil
@@ -223,6 +247,15 @@ type codexSteerRefusal struct {
 	// unsupported: this Codex has no turn/steer at all, so every later steer on this process is
 	// refused without asking (§5.2).
 	unsupported bool
+	// requeue: Codex PROVED it never read this message — it refused the request before looking at
+	// the input, or nothing was ever sent — so the message can go back to being an ordinary
+	// queued one and run when the turn it missed ends. Nobody sees a failure and nothing is
+	// re-executed (§4.3a).
+	//
+	// False is the safe answer and the default. "We do not know whether it arrived" must never
+	// re-file: Codex does not de-duplicate, so a message it had in fact taken would be executed
+	// twice — once inside the turn and once as the turn after it (§4.3b).
+	requeue bool
 }
 
 // classifyCodexSteerFailure reads a refusal off its message. Codex answers EVERY failure with
@@ -236,21 +269,28 @@ func classifyCodexSteerFailure(err error) codexSteerRefusal {
 	// Before the malformed-request row: Codex prefixes an absent method with "Invalid request"
 	// too, and this one is the only refusal that is about the engine rather than the message.
 	case errors.Is(err, errCodexSteerUnsupported) || strings.Contains(msg, "unknown variant `turn/steer`"):
-		return codexSteerRefusal{code: "E-UNSUPPORTED", retryable: true, unsupported: true}
+		return codexSteerRefusal{code: "E-UNSUPPORTED", retryable: true, unsupported: true, requeue: true}
 	case errors.Is(err, errNoTurnToSteer) || strings.Contains(msg, "no active turn to steer"):
-		return codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true}
+		return codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true, requeue: true}
 	case errors.Is(err, errCodexSteerTurnMismatch) || strings.Contains(msg, "expected active turn id"):
-		return codexSteerRefusal{code: "E-MISMATCH", retryable: true}
+		return codexSteerRefusal{code: "E-MISMATCH", retryable: true, requeue: true}
 	// The runner's own pre-flight refusals. Not a row of the table: they are §4.3a's "provably
 	// not delivered" reached before anything was sent at all.
 	case errors.Is(err, errCodexSteerUnaimed) || errors.Is(err, errCodexSteerBacklogged) ||
 		errors.Is(err, errCodexSteerEngineGone):
-		return codexSteerRefusal{code: "E-UNSENT", retryable: true}
+		return codexSteerRefusal{code: "E-UNSENT", retryable: true, requeue: true}
+	// A second copy of a message already delivered. Provably not sent — but re-filing it would
+	// queue a duplicate of a message the engine has, which is the very thing the refusal
+	// prevented. The original's own outcome is the one that reports this message.
+	case errors.Is(err, errCodexSteerDuplicate):
+		return codexSteerRefusal{code: "E-DUPLICATE", retryable: false}
 	case strings.Contains(msg, "missing field") || strings.Contains(msg, "invalid request") ||
 		strings.Contains(msg, "invalid thread id"):
 		return codexSteerRefusal{code: "E-BAD-REQUEST", retryable: false}
 	case errors.Is(err, errCodexSteerDropped):
 		return codexSteerRefusal{code: "E-DROPPED", retryable: true}
+	case errors.Is(err, errSteerAbandoned):
+		return codexSteerRefusal{code: "E-ABANDONED", retryable: true}
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) ||
 		strings.Contains(msg, "app-server closed"):
 		return codexSteerRefusal{code: "E-TIMEOUT", retryable: true}
@@ -315,22 +355,13 @@ func (d *codexSteerDispatcher) deliver(ctx context.Context, resp *RunInboxRespon
 		return
 	}
 	aimCtx, cancelAim := context.WithTimeout(ctx, codexSteerRequestTimeout)
-	codexTurnID, err := beginCodexSteer(aimCtx, d.activeMu, d.active, resp.TurnID)
+	codexTurnID, err := beginCodexSteer(aimCtx, d.activeMu, d.active, resp.TurnID,
+		resp.Content, prepared.AttachmentRefs)
 	cancelAim()
 	if err != nil {
 		d.refuse(resp, err)
 		return
 	}
-
-	// Announced before the request goes out, so the transcript never shows a message arriving
-	// after the engine has already echoed it back.
-	userEv := map[string]interface{}{
-		"text": resp.Content, "steer": true, "delivery": string(deliveryEnqueued),
-	}
-	if len(prepared.AttachmentRefs) > 0 {
-		userEv["attachments"] = prepared.AttachmentRefs
-	}
-	d.emitFor(resp.TurnID, evUser, userEv)
 
 	reqCtx, cancelReq := context.WithTimeout(ctx, codexSteerRequestTimeout)
 	defer cancelReq()
@@ -343,51 +374,133 @@ func (d *codexSteerDispatcher) deliver(ctx context.Context, resp *RunInboxRespon
 	}
 	if err != nil {
 		if failCodexSteer(d.activeMu, d.active, resp.TurnID) {
-			d.fail(resp.TurnID, err)
+			d.settle(resp, err)
 		}
 		return
 	}
 	if markCodexSteerWritten(d.activeMu, d.active, resp.TurnID) {
 		// Codex has it; the model has not seen it yet. That gap has been measured at 31 seconds,
 		// and "Delivering…" for that long is the truth, not a stall (§4.6).
-		d.report(resp.TurnID, deliveryWritten, "", false)
+		d.announce(resp.TurnID, deliveryWritten, "", false)
 	}
 }
 
 // acknowledge settles a steer Codex echoed back. The echo is a steer's only answer — it has no
 // result of its own — and the turn it joined carries on regardless.
 func (d *codexSteerDispatcher) acknowledge(turnID string) {
-	d.report(turnID, deliveryAcknowledged, "", false)
+	d.announce(turnID, deliveryAcknowledged, "", false)
 	settleSteerTurn(turnID, nil, d.job, d.completeTurn)
 }
 
-// refuse answers a steer that was never announced, so the refusal itself is what enters the
-// transcript. With no event at all the sender is left watching an optimistic bubble wait for
-// something that is never coming, and a reload has nothing to render the message from — never as
-// a message that looks sent.
+// refuse answers a steer that never got as far as being recorded on the running turn, so there is
+// no record to open a bubble from — the inbox's own copy of the message is used instead.
 func (d *codexSteerDispatcher) refuse(resp *RunInboxResponse, cause error) {
+	if errors.Is(cause, errCodexSteerDuplicate) {
+		// A second delivery of a message already being delivered. There is one row and the first
+		// delivery owns it: answering here would report and settle the same conversation turn
+		// twice, over a copy that was never sent. Refusing it silently IS the answer.
+		logln("codex steer E-DUPLICATE for", d.job.SessionID+":", resp.TurnID,
+			"was handed over twice; the first delivery answers for it")
+		return
+	}
+	if d.requeue(resp, cause) {
+		return
+	}
 	d.emitFor(resp.TurnID, evUser, map[string]interface{}{
 		"text": resp.Content, "steer": true, "delivery": string(deliveryFailed),
 	})
 	d.fail(resp.TurnID, cause)
 }
 
-// fail settles one steer as undelivered. It settles nothing else: the turn this message was
-// written into is still running, and taking a working session down over a side-channel message
-// that never arrived is the opposite of what a steer's own turn is for.
+// settle answers a steer that WAS recorded and then refused by Codex. Same two outcomes as
+// refuse, and the same order: re-file it if that is provably safe, otherwise report the failure.
+func (d *codexSteerDispatcher) settle(resp *RunInboxResponse, cause error) {
+	if d.requeue(resp, cause) {
+		return
+	}
+	d.fail(resp.TurnID, cause)
+}
+
+// requeue un-files a steer Codex proved it never read, so that it runs as the ordinary message it
+// would have been had it been sent a moment later. Answers whether it took the message.
+//
+// Deliberately silent: no `user` event, no delivery report. The row goes back to PENDING and the
+// delivery that eventually runs it writes the one bubble that message ever gets — announcing it
+// here would leave a second one behind, showing what the person sent twice. What they see in the
+// meantime is the queued-message state the control plane already publishes for it.
+func (d *codexSteerDispatcher) requeue(resp *RunInboxResponse, cause error) bool {
+	refusal := classifyCodexSteerFailure(cause)
+	if refusal.unsupported {
+		d.app.steerUnsupported.Store(true)
+	}
+	if !refusal.requeue {
+		return false
+	}
+	if !resp.SteerRequeue {
+		// A control plane that predates `steer_requeue`. Its turn-complete does not read the
+		// subtype, so re-filing would ack the row and lose the message outright; a visible
+		// failure the person can re-send is the safe half of that trade (§5.3).
+		logln("codex steer", refusal.code, "for", d.job.SessionID+
+			": the control plane cannot re-file it, reporting it undelivered instead")
+		return false
+	}
+	logln("codex steer", refusal.code, "for", d.job.SessionID+
+		": provably not delivered, re-filing it as an ordinary message —", cause.Error())
+	requeueSteerTurn(resp.TurnID, d.job, d.completeTurn)
+	return true
+}
+
+// fail reports one steer as undelivered and settles it. It settles nothing else: the turn this
+// message was aimed at is still running, and taking a working session down over a side-channel
+// message that never arrived is the opposite of what a steer's own turn is for.
+//
+// This is where a turn ending answers for the steers it was still holding, too — a steer Codex
+// took and never echoed back (§4.4) reaches it with a bubble already open, which the report
+// amends rather than duplicating.
 func (d *codexSteerDispatcher) fail(turnID string, cause error) {
 	refusal := classifyCodexSteerFailure(cause)
 	logln("codex steer", refusal.code, "for", d.job.SessionID+":", cause.Error())
 	if refusal.unsupported {
 		d.app.steerUnsupported.Store(true)
 	}
-	d.report(turnID, deliveryFailed, cause.Error(), refusal.retryable)
+	d.announce(turnID, deliveryFailed, cause.Error(), refusal.retryable)
 	settleSteerTurn(turnID, cause, d.job, d.completeTurn)
 }
 
-// report publishes one steer's delivery state, addressed to its own turn. The state is passed in
-// rather than read back off the record: what a report must say is the transition it belongs to,
-// not whatever the record holds by the time the event is built.
+// announce publishes one steer's delivery state, addressed to its own turn, opening the bubble if
+// this is the first thing anyone has said about the message and amending it otherwise.
+//
+// The first word can come from either of two goroutines — the one that sent the request, or the
+// one reading Codex's notifications, which has been seen echoing a steer back before the response
+// to it was observed (§3) — so which of them opens the bubble is a race, and only that the bubble
+// is opened exactly once is not.
+//
+// The state is passed in rather than read off the record: what a report must say is the
+// transition it belongs to, not whatever the record holds by the time the event is built.
+func (d *codexSteerDispatcher) announce(turnID string, state deliveryState, reason string, retryable bool) {
+	d.activeMu.Lock()
+	rec := codexSteerRecord(*d.active, turnID)
+	opening := rec != nil && !rec.announced
+	var text string
+	var attachments []map[string]interface{}
+	if opening {
+		rec.announced = true
+		text, attachments = rec.text, rec.attachments
+	}
+	d.activeMu.Unlock()
+	if opening {
+		userEv := map[string]interface{}{
+			"text": text, "steer": true, "delivery": string(state),
+		}
+		if len(attachments) > 0 {
+			userEv["attachments"] = attachments
+		}
+		d.emitFor(turnID, evUser, userEv)
+	}
+	d.report(turnID, state, reason, retryable)
+}
+
+// report files one delivery state against the message's own turn, without touching the bubble.
 func (d *codexSteerDispatcher) report(turnID string, state deliveryState, reason string, retryable bool) {
 	p := map[string]interface{}{"turnId": turnID, "delivery": string(state)}
 	if reason != "" {

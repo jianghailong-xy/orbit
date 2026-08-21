@@ -3,6 +3,10 @@
 **状态**:冻结。本文件是 [1/7] 的产物,是 [2/7](Runner 实现)、[3/7](控制面能力门控)、
 以及后续竞态/故障注入任务的**唯一权威**。改这里的任何一条,必须同时改依赖它的任务。
 
+**v1.1([4/7],2026-08-21)**:§4.7 的 `steer_requeue` 已落地(wire + apiserver + runner),
+§4.4 的 `E-DROPPED` 归档保持"不确定"档,新增 §4.8「Runner 死掉留下的 steer」,§8 待办表已结案。
+本次只**补**竞态与恢复,§1–§3 的线上格式和 §5–§6 的门控一个字未动。
+
 **范围**:只描述"Orbit 把一条用户消息塞进 Codex 正在跑的 turn"这件事的线上格式、事件相关性、
 失败语义和混合版本行为。**不含**业务实现。
 
@@ -148,6 +152,8 @@ Codex 把它原样回显在 userMessage item 的 **`item.clientId`** 上(schema 
 | `E-UNKNOWN` | 其它任何 `-32600`,或任何非预期的错误形状 | **不确定** | 默认拒绝:`delivery=failed, retryable=true`,**不重排、不重试** |
 | `E-TIMEOUT` | 请求写出去了但没等到 response(超时 / app-server 死了 / runner 被杀) | **不确定** | 同 `E-UNKNOWN` |
 | `E-DROPPED` | 返回过 OK,但 `turn/completed` 到达时回显始终没出现 | **否**(实测,见下) | `delivery=failed, retryable=true`,**不自动重排**(见 §4.4) |
+| `E-DUPLICATE` | 同一条 `conversation_turn` 被 inbox 交出**两次** | **否**(第二份一个字节都没发) | **什么都不做**:第一份交付拥有这一行,它会自己结算。第二份既不报事件也不结算,否则同一行会被答两次([4/7] 新增) |
+| `E-ABANDONED` | 这条 steer 被某个 runner 进程 lease 走之后,那个进程死了 | **不确定** | `delivery=failed, retryable=true`,由接管的进程报(§4.8,[4/7] 新增) |
 
 ### 4.3 三条区分线
 
@@ -180,7 +186,13 @@ settle 成失败、`retryable: true`、把重发的决定交给人。
   `turn/completed` 之后仍未回显的 → `E-DROPPED`。
 - **`E-DROPPED` 归到"不确定"一档,不自动重排。** 虽然实测证明它没进会话,但"回显晚于 `turn/completed` 到达"
   这个重排序还没有被证伪 —— 观察到的顺序都是回显在前。为了不冒双发的险,这里选**显式失败**而不是自动重排。
-  给 [4/7] 的故障注入留一条待办:如果能证明回显与 `turn/completed` 有严格顺序,这条可以升级成"可证未送达 → 安全重排"。
+
+  > **[4/7] 结论:维持不重排。** 两种顺序都做了故障注入
+  > (`TestAnAcceptedSteerThatWasNeverEchoedIsReportedNotRefiled` /
+  > `TestAnEchoBeforeTheTurnEndsSettlesTheSteerAsDelivered`):回显先到 → `acknowledged` 并只结算一次;
+  > `turn/completed` 先到 → `E-DROPPED`,**之后再来的回显不会把已结算的失败改回去**,也不会二次结算。
+  > 升级成"可证未送达"仍然要一个 Codex 侧的顺序保证 —— 本次没有拿到,而**猜错的代价是会话里多一条真实用户消息**,
+  > 所以这条不是"还没做",是**已裁定不做**。要翻案,需要的证据是 app-server 保证 `item/*` 先于 `turn/completed` 落地。
 - 实践上这条路径很窄:Orbit 的 interrupt 走的是独立的 `interrupt` turn,而 `interrupt-and-send` 的后续消息
   **本来就是以普通 message 而非 steer 归档的**(见 `RunInterruptRequest` 的注释),所以最常见的触发者是
   "用户按下停止,而此前刚好发过一条 steer"。
@@ -218,7 +230,9 @@ apiserver 侧 `runner-api.controller.ts` 的 steer 分支已经保证了"只 ack
 不动 session 状态、不把 session 打成 FAILED"。**这条不变,codex 直接复用。**
 
 需要**新增**的是"可证未送达 → 重排"的回执(§4.3a)。现有 `settleSteerTurn` 只能把行标成 `ANSWERED`,
-一旦 ANSWERED 就永远不会再投递,消息就没了。给 [2/7] / [3/7] 的接口约定:
+一旦 ANSWERED 就永远不会再投递,消息就没了。接口约定(**[4/7] 已实现**:
+`requeueSteerTurn`(runner)、`turnComplete` 的 `steer_requeue` 分支(apiserver)、
+`TURN_COMPLETE_STEER_REQUEUE`(`@orbit/shared`)):
 
 - wire:`TurnCompleteRequest.Subtype = "steer_requeue"`(新常量,与现有 `"steer"` 并列),`Status: SUCCEEDED`。
 - apiserver 语义:把该行从 `kind='steer', status='IN_FLIGHT'` 改回 `kind='message', status='PENDING'`,
@@ -227,6 +241,54 @@ apiserver 侧 `runner-api.controller.ts` 的 steer 分支已经保证了"只 ack
 - 幂等:同一 turnId 重复报 `steer_requeue` 必须只生效一次(行已经是 `kind='message'` 时是 no-op)。
 - 旧 apiserver 收到未知 subtype 会当成普通 steer ack(标 ANSWERED)→ 消息丢失。所以
   **`steer_requeue` 必须受 §5 的能力门控保护**:runner 只在控制面明确支持时才走这条路。
+
+**[4/7] 补充三条,都是实现里踩出来的:**
+
+1. **重排路径不发任何事件。** 不发 `user`,也不发 `user_delivery`。因为这一行会以 `kind='message'`
+   被重新投递,而普通 message 路径**一定会**发它自己的 `user` 事件 —— 重排时留下的气泡不会被复用,
+   而是变成**同一条消息在 transcript 里出现两次**,其中一条永远停在 "Sending…"。这条消息在重排后
+   由控制面的排队视图负责显示(`listQueuedTurns`),它本来就是排队消息了。
+2. **因此 `user` 事件必须推迟到"第一个已知结果"才发**,而不是发请求之前。谁先知道结果谁发
+   (响应 goroutine 或读通知的 goroutine,§3 的回显可能先到),之后所有转移都只是修正
+   (`codexSteerDispatcher.announce`)。代价是 leased 到出结果之间(实测 6ms~520ms,上限 10s)
+   transcript 里暂时没有这条消息 —— 发送方自己有乐观气泡,这段时间的语义与 `enqueued` 相同
+   ("Sending…"),换来的是**任何一条消息永远只有一个气泡**。
+3. **幂等的判据是 `kind` 本身**:`WHERE id=? AND kind='steer' AND status='IN_FLIGHT'`。
+   重复上报第二次匹配不到行 → no-op;与"turn 结束把 PENDING steer 降级成 message"那条路径
+   在 `status` 上天然互斥(那条只碰 PENDING),所以两者并发也不会互相踩。
+   重排成功后如果 session 已经被那个 turn 停到 `AWAITING_INPUT`,要把它改回 `PENDING` 并 `notifyInbox`
+   —— 否则就是一条挂在没人叫醒的会话后面的 PENDING message(经典 lost-wakeup)。
+
+### 4.8 Runner 死掉留下的 steer(**[4/7] 新增**)
+
+v1 没有覆盖这一格,而它是一个**真的死角**:steer 只投递一次、且**故意不可 re-lease**(§4.2 表下面那段),
+于是一个 runner 进程在 lease 走 steer 之后被 SIGKILL / 机器挂掉,这一行就再也没有人会回来:
+
+| 谁可能来收 | 为什么收不了 |
+| --- | --- |
+| inbox 的 dequeue 谓词 | 只交出 `kind='steer' AND status='PENDING'` |
+| `release-leases` / `activate-leases` 的过期 lease 重投 | `WHERE kind IN ('message','shell')`,故意不含 steer |
+| turn 结束时"PENDING steer 降级成 message" | 只碰 PENDING |
+
+结果:行永远卡在 `IN_FLIGHT`,不在排队列表里(那里只列 PENDING),`user_delivery` 停在最后一次上报的状态。
+**这就是"静默丢失"本身。**
+
+契约:
+
+- **控制面负责发现,runner 负责回答。** `POST /runner/sessions/:id/activate-leases` 的响应新增
+  `abandonedSteers: AbandonedSteer[]`(`{turnId, content, announced}`),列出这个 session 上
+  `kind='steer' AND status='IN_FLIGHT' AND lease_generation != <本次的 generation>` 的行。
+  接管的 runner 进程在**启动引擎之前**逐条报 `user_delivery{failed, retryable:true}` 并
+  `settleSteerTurn(..., errSteerAbandoned)`(`reportAbandonedSteer`)。
+- **为什么不能由 apiserver 直接写事件**:`run_event.seq` 由 runner 从 `job.MaxSeq+1` 本地分配,
+  claim 之后服务端插入的事件会和 runner 的计数器撞 seq,而 `createMany(skipDuplicates)` 会**静默丢掉一条**。
+  所以"一条 steer 的结局只在 session 事件流上可见"这件事,决定了只能由**活着的 runner** 来说。
+- **只报不改**:activate 会因传输错误重试,如果在这里就把行标成 ANSWERED,那么**响应丢失的那次重试**
+  会查不到行 → 这条消息永远没人答。所以 activate 只读;是 runner 的 `turn-complete` 把它结算掉,
+  从而自然退出这个集合。同理**快路径(generation 已安装)也必须返回它** —— 那正是"已提交但响应丢了"的重试落点。
+- **`announced`**:该 turn 是否已经有 `user` 事件(apiserver 查 `run_event`)。接管进程**不可能知道**
+  ——前一个 generation 的记录跟它一起死了——而多发一个 `user` 会把同一条消息显示两次。
+- **归"不确定"档,retryable:true。** 消息有没有被 Codex 读到,两边都不知道;重投是双发,所以不重投、不重排。
 
 ## 5. 能力信号:provider-specific + 版本感知
 
@@ -298,6 +360,7 @@ X-Orbit-Runner-Capabilities: session-orchestration-credential-v1,session-termina
 
 **反方向的信号**(控制面 → runner)解决 §4.7 的 `steer_requeue` 门控:在 `RunInboxResponse` 上加
 `steerRequeue?: boolean`,**随这条 steer 本身投递**(投递即答复,不用另开一次往返,也不用 runner 记全局状态)。
+**[4/7] 已实现**:`dequeueTurn` 在交出 `kind='steer'` 时置 `true`。
 
 - 收到 `steerRequeue: true` → 送不进去时走 §4.3a 的重排。
 - 字段缺失(旧控制面,JSON 里没有 → Go 里是零值 `false`)→ runner 退回**显式失败**(`delivery=failed, retryable=true`)。
@@ -385,12 +448,22 @@ apiserver 不知道 codex 版本(§5.1 最后一行),所以 steer 行会被记�
 - **不改 Claude 路径。** `deliveryState` 词表、`steerDelivery.ts` 的四句文案、`interrupt-and-send`
   记普通 message 的语义,一个字都不动。
 
-## 8. 留给后续任务的待办
+## 8. 待办结案表
 
-| # | 待办 | 归属 |
-| --- | --- | --- |
-| 1 | `E-DROPPED` 能否升级为"可证未送达 → 安全重排":需要证明 userMessage 回显与 `turn/completed` 的顺序是严格的 | [4/7] 故障注入 |
-| 2 | Codex 处于 `waitingOnApproval` / `waitingOnUserInput`(`ThreadActiveFlag`)时 `turn/steer` 的行为 —— 本次没测(Orbit 用 `approvalPolicy: never`,很难构造) | [4/7] |
-| 3 | 带 `localImage` 附件的 steer 端到端(schema 支持,本次只测了纯文本) | [2/7] 实现 + [6/7] smoke |
-| 4 | `turn/steer` 与 `reload`(会话中途换 provider/model)同时到达的排序 | [4/7] |
-| 5 | `steer_requeue` 的 apiserver 幂等性与并发(同一行同时被 requeue 和被 turn-complete 降级) | [3/7] |
+| # | 待办 | 归属 | 结论([4/7],2026-08-21) |
+| --- | --- | --- | --- |
+| 1 | `E-DROPPED` 能否升级为"可证未送达 → 安全重排" | [4/7] | **裁定不升级**,见 §4.4 的方框。两种顺序都做了故障注入,行为已固定;翻案需要 app-server 侧的顺序保证 |
+| 2 | Codex 处于 `waitingOnApproval` / `waitingOnUserInput` 时 `turn/steer` 的行为 | [4/7] | **不需要单独测**:§4.2 的表是**封闭**的 —— 任何认不出来的 message 一律 `E-UNKNOWN`(显式失败、retryable、**绝不重排**),所以未知状态的答复不可能造成双发。`TestAnUnrecognisedRefusalIsReportedRatherThanGuessedAt` 拿这几种 message 直接钉住了这条 |
+| 3 | 带 `localImage` 附件的 steer 端到端 | [2/7] 实现 + [6/7] smoke | 未动:[2/7] 已实现(`codexSteerParams` 带 `localImage`),端到端 smoke 仍属 [6/7] |
+| 4 | `turn/steer` 与 `reload`(会话中途换 provider/model)同时到达的排序 | [4/7] | **不需要新机制**。换 provider 的 reload 让 app-server 重启(`return stCancelled, false, true`),`workerCtx` 一取消,steer worker 的 drain 就把**还在排队**的全部按 `E-UNSENT` 重排(`TestMessagesStillQueuedWhenTheEngineEndsAreAllRefiled`);**已经发出请求**的那条按 `E-TIMEOUT` 显式失败(不确定,不重排)。不换 provider 的 reload(model/effort)不重启进程,steer 照常 —— 而 steer 本来就带不了 override(§1),所以两者没有需要协调的顺序 |
+| 5 | `steer_requeue` 的 apiserver 幂等性与并发 | [3/7] → 实际由 [4/7] 做 | 见 §4.7 的补充 3:幂等判据是 `kind='steer' AND status='IN_FLIGHT'`,与"turn 结束降级 PENDING steer"在 `status` 上互斥。`steer-requeue.spec.ts` + `steer-dequeue.pg.spec.ts` 覆盖 |
+
+### 8.1 [4/7] 新增的验证入口
+
+| 测什么 | 在哪 |
+| --- | --- |
+| 重排 / 不确定 / 重复 / 被遗弃 四类结局,以及分类表本身 | `src/runner-go/codex_steer_recovery_test.go` |
+| `steer_requeue` 的 turn-complete 语义与幂等 | `src/apiserver/src/runner-api/steer-requeue.spec.ts` |
+| activate 的 `abandonedSteers` 交接(含重试路径) | `src/apiserver/src/runner-api/abandoned-steer.spec.ts` |
+| 重排后的行**真的**会被 inbox 谓词交出来(真 Postgres) | `src/apiserver/src/runner-api/steer-dequeue.pg.spec.ts` 最后两条 |
+| 同一 `clientTurnId` 重发只记一行 | `src/apiserver/src/sessions/steer-kind.spec.ts` 最后两条 |

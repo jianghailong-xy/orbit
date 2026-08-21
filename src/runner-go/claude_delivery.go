@@ -234,6 +234,60 @@ func settleSteerTurn(turnID string, cause error, job *ClaimedSession, completeTu
 	}
 }
 
+// subtypeSteerRequeue un-files a steer instead of settling it: the message goes back to being
+// the ordinary queued message it would have been had it arrived a moment later, on the same row,
+// and runs when the turn it could not join ends. Reserved for a message the engine PROVABLY never
+// read — anything less certain has to be reported as a failure, because re-filing a message the
+// engine did take is how one prompt gets executed twice.
+const subtypeSteerRequeue = "steer_requeue"
+
+// errSteerAbandoned: a mid-turn message that was leased by a runner process which then died
+// holding it. Neither side can tell whether the engine read it first, so it is never re-delivered
+// and never re-filed — it is reported undelivered, and re-sending it is the person's call.
+var errSteerAbandoned = errors.New("the runner stopped while this message was on its way into the running turn, so whether the engine read it is unknown; send it again if it was not acted on")
+
+// requeueSteerTurn takes a steer back off the running turn and files it as the next ordinary
+// message. Nothing about the session changes: the turn this message failed to join is still
+// running, and this row simply rejoins the queue behind it.
+//
+// Reported as SUCCEEDED because it IS one — the runner did what it could with this message and
+// nothing was lost. A control plane too old to know the subtype would read it as an ordinary ack
+// and drop the message, which is why the runner only sends it when the delivery it is answering
+// said the control plane understands it (RunInboxResponse.SteerRequeue).
+func requeueSteerTurn(turnID string, job *ClaimedSession, completeTurn turnCompleter) {
+	if err := completeTurn(TurnCompleteRequest{
+		TurnID:           turnID,
+		Status:           stSucceeded,
+		Subtype:          subtypeSteerRequeue,
+		RuntimeSessionID: currentRuntimeSessionID(job),
+	}); err != nil {
+		logln("steer requeue turn-complete failed for", job.SessionID+":", err)
+	}
+}
+
+// reportAbandonedSteer answers for one mid-turn message the process before this one left leased.
+// It is the taking-over process that does this, on the session's live event stream, because that
+// stream is the only place a steer's outcome is ever visible — a steer produces no reply of its
+// own — and the control plane cannot write to it (a run event's sequence belongs to the runner
+// holding the session).
+//
+// `announced` is the control plane's answer to whether the dead process got as far as putting a
+// bubble in the transcript. This process cannot know: its predecessor's record died with it, and
+// emitting a second `user` event for a turn that already has one shows the message twice.
+func reportAbandonedSteer(steer AbandonedSteer, job *ClaimedSession, emitFor emitTurnFn, completeTurn turnCompleter) {
+	logln("answering for a steer stranded by a previous process on", job.SessionID+":", steer.TurnID)
+	if !steer.Announced {
+		emitFor(steer.TurnID, evUser, map[string]interface{}{
+			"text": steer.Content, "steer": true, "delivery": string(deliveryFailed),
+		})
+	}
+	emitFor(steer.TurnID, evUserDelivery, map[string]interface{}{
+		"turnId": steer.TurnID, "delivery": string(deliveryFailed),
+		"reason": errSteerAbandoned.Error(), "retryable": true,
+	})
+	settleSteerTurn(steer.TurnID, errSteerAbandoned, job, completeTurn)
+}
+
 // The two things a process on its way out can owe, and what each one means for whoever
 // sent the message.
 var (

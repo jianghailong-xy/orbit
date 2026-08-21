@@ -235,8 +235,18 @@ func (s *codexSteerSession) name(codexTurnID string) {
 	s.activeMu.Unlock()
 }
 
-// steer delivers one message the way the inbox loop's steer worker does.
+// steer delivers one message the way the inbox loop's steer worker does, from a control plane
+// that can take a provably-undelivered one back (which every control plane that files a codex
+// steer at all can — see steerFromLegacyControlPlane for the one that cannot).
 func (s *codexSteerSession) steer(ctx context.Context, turnID, content string) {
+	s.dispatch.deliver(ctx, &RunInboxResponse{
+		TurnID: turnID, Kind: "steer", Content: content, SteerRequeue: true,
+	})
+}
+
+// steerFromLegacyControlPlane delivers one the way a control plane that predates `steer_requeue`
+// does: no flag on the delivery, so nothing may be re-filed through it.
+func (s *codexSteerSession) steerFromLegacyControlPlane(ctx context.Context, turnID, content string) {
 	s.dispatch.deliver(ctx, &RunInboxResponse{TurnID: turnID, Kind: "steer", Content: content})
 }
 
@@ -260,6 +270,21 @@ func (s *codexSteerSession) deliveries(turnID string) []string {
 		}
 	}
 	return out
+}
+
+// bubbles counts the `user` events filed for one turn. A message gets exactly one, whoever files
+// it: a second would show what the person sent twice, in a transcript where the same turn can be
+// answered for by the goroutine that sent it, the one reading Codex's notifications, or a later
+// process picking up after this one died.
+func (s *codexSteerSession) bubbles(turnID string) int {
+	events, _ := s.snapshot()
+	n := 0
+	for _, ev := range events {
+		if ev.turnID == turnID && ev.typ == evUser {
+			n++
+		}
+	}
+	return n
 }
 
 func (s *codexSteerSession) lastDelivery(turnID string) map[string]interface{} {
@@ -386,8 +411,15 @@ func TestASteerJoinsTheRunningTurnInsteadOfStartingASecondOne(t *testing.T) {
 	waitFor(t, "the steer to report written", func() bool {
 		return len(s.deliveries(steerOrbitTurn)) >= 2
 	})
-	if got := s.deliveries(steerOrbitTurn); got[0] != string(deliveryEnqueued) || got[len(got)-1] != string(deliveryWritten) {
-		t.Errorf("delivery states = %v, want enqueued then written", got)
+	// The bubble opens at the first thing anyone actually knows about this message, and `written`
+	// is that: Codex has taken it and the model has not read it yet. It stays there for a real
+	// 31-second gap in the measured case, which is the truth rather than a stall.
+	if got := s.deliveries(steerOrbitTurn); got[0] != string(deliveryWritten) || got[len(got)-1] != string(deliveryWritten) {
+		t.Errorf("delivery states = %v, want written", got)
+	}
+	// One message, one bubble — no matter which goroutine got to say the first word about it.
+	if n := s.bubbles(steerOrbitTurn); n != 1 {
+		t.Errorf("user events for the steer = %d, want exactly one", n)
 	}
 	// Nothing is settled yet: an OK is not delivery, and saying so early is the fake send this
 	// whole receipt chain exists to remove.
@@ -444,8 +476,8 @@ func TestASteerJoinsTheRunningTurnInsteadOfStartingASecondOne(t *testing.T) {
 // The window before turn/start has answered is real — the request goes out on its own goroutine —
 // and expectedTurnId is mandatory, so a steer arriving in it has nothing to address itself to.
 // It waits, and if the turn is never named it gives up having sent nothing at all, which is the
-// cleanest kind of failure there is: the same message can be sent again with no risk of the work
-// being done twice.
+// cleanest kind of failure there is: not a byte left the runner, so the message simply becomes
+// the ordinary next one.
 func TestASteerAimedAtATurnThatIsNeverNamedSendsNothing(t *testing.T) {
 	s := newCodexSteerSession(t)
 	s.startTurn() // running, unnamed: turn/start has not come back
@@ -457,18 +489,16 @@ func TestASteerAimedAtATurnThatIsNeverNamedSendsNothing(t *testing.T) {
 	if got := s.fake.methods(); len(got) != 0 {
 		t.Fatalf("requests = %v, want none: there was no turn id to address one to", got)
 	}
-	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
-	if reason := asString(s.lastDelivery(steerOrbitTurn)["reason"]); !strings.Contains(reason, "had not been started") {
-		t.Errorf("reason = %q, want it to name the window this fell into", reason)
-	}
+	assertSteerRefiled(t, s, steerOrbitTurn)
 	assertRunningTurnUntouched(t, s)
 }
 
 // A steer with nothing running to fold it into. The control plane files one only while a turn
 // holds the lease, so this is the turn ending in the gap between that decision and this delivery
-// — which is a race, not a bug, and it happens. Refusing it is what the sender sees; dropping it
-// would be invisible, because a steer's row is leased and never handed out again.
-func TestASteerWithNoTurnRunningIsRefusedWhereTheSenderCanSeeIt(t *testing.T) {
+// — which is a race, not a bug, and it happens. Nothing is sent, so the message is re-filed as an
+// ordinary one; what must never happen is dropping it, since a steer's row is leased and never
+// handed out again.
+func TestASteerWithNoTurnRunningIsRefiledAsAnOrdinaryMessage(t *testing.T) {
 	s := newCodexSteerSession(t)
 
 	s.steer(context.Background(), steerOrbitTurn, "one more thing")
@@ -476,10 +506,7 @@ func TestASteerWithNoTurnRunningIsRefusedWhereTheSenderCanSeeIt(t *testing.T) {
 	if got := s.fake.methods(); len(got) != 0 {
 		t.Fatalf("requests = %v, want none: a doomed request is not worth sending", got)
 	}
-	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
-	if reason := asString(s.lastDelivery(steerOrbitTurn)["reason"]); !strings.Contains(reason, "no turn was running") {
-		t.Errorf("reason = %q", reason)
-	}
+	assertSteerRefiled(t, s, steerOrbitTurn)
 }
 
 // A turn on its way out is the same answer. Codex discards a steer buffered behind an interrupt
@@ -498,7 +525,7 @@ func TestASteerIntoATurnBeingInterruptedIsRefused(t *testing.T) {
 	if got := s.fake.methods(); len(got) != 0 {
 		t.Fatalf("requests = %v, want none", got)
 	}
-	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
+	assertSteerRefiled(t, s, steerOrbitTurn)
 }
 
 // Codex refusing the message. The turn it was aimed at is still running and still owns the
@@ -510,11 +537,6 @@ func TestARefusedSteerSettlesItselfAndLeavesTheTurnRunning(t *testing.T) {
 		message   string
 		retryable bool
 	}{
-		// The turn ended between the control plane filing this and Codex reading it. Provably
-		// not in the conversation: Codex refuses before it reads the input.
-		{"the turn ended first", "no active turn to steer", true},
-		// Addressed to a turn that is no longer the one running.
-		{"a different turn is running", "expected active turn id `01a02539-0000-…` but found `01a0253a-…`", true},
 		// Orbit built the request wrong. Retryable is false on purpose: sending it again
 		// reproduces it exactly, which is a loop rather than a recovery.
 		{"orbit built it wrong", "Invalid request: missing field `expectedTurnId`", false},
@@ -580,7 +602,9 @@ func TestASteerAnsweredForAnotherTurnIsNotDelivery(t *testing.T) {
 	s.fake.answer(s.fake.take("turn/steer"), map[string]interface{}{"turnId": steerNoSuchTurn})
 	<-done
 
-	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
+	// Not delivery, and provably not: the turn it named is not the one this message was aimed
+	// at, so it goes back to being an ordinary message rather than being reported as lost.
+	assertSteerRefiled(t, s, steerOrbitTurn)
 	assertRunningTurnUntouched(t, s)
 }
 
@@ -600,7 +624,10 @@ func TestACodexWithoutTurnSteerIsOnlyAskedOnce(t *testing.T) {
 	s.fake.refuse(s.fake.take("turn/steer"),
 		"Invalid request: unknown variant `turn/steer`, expected one of `initialize`, `turn/start`, `turn/interrupt`")
 	<-done
-	assertSteerFailedVisibly(t, s, steerOrbitTurn, true)
+	// A build with no turn/steer refused before reading the input, so the message is provably not
+	// in the conversation and becomes the ordinary next one — which is also the whole mixed-version
+	// story: an engine too old to be steered simply runs the message a turn later (§6.3).
+	assertSteerRefiled(t, s, steerOrbitTurn)
 
 	if !s.fake.app.steerUnsupported.Load() {
 		t.Fatal("the engine's answer was not remembered; every later message would ask again")
@@ -610,7 +637,7 @@ func TestACodexWithoutTurnSteerIsOnlyAskedOnce(t *testing.T) {
 		t.Errorf("requests = %v, want the second message to be refused without asking", got)
 	}
 	// Still answered, though — refusing without asking must not mean refusing in silence.
-	assertSteerFailedVisibly(t, s, steerOtherTurn, true)
+	assertSteerRefiled(t, s, steerOtherTurn)
 	assertRunningTurnUntouched(t, s)
 }
 
@@ -767,6 +794,10 @@ func TestTheTurnsOwnOpeningMessageIsNotMistakenForASteer(t *testing.T) {
 // -32600 rather than -32601 — so the message text is the only thing that separates "the turn just
 // ended, this is safe to send again" from "this Codex cannot do it at all" from "we have no idea".
 // A release that reworded one would land in the unknown bucket, which is the safe end.
+// `requeue` is the column that matters most here: true means "Codex PROVED it never read this",
+// which is the only licence to put the message back in the queue. Marking an outcome that is
+// merely unknown as re-filable would run the person's message twice — once inside the turn and
+// once as the turn after it — because Codex does not de-duplicate (contract §4.3).
 func TestARefusalIsClassifiedByItsWording(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -775,12 +806,12 @@ func TestARefusalIsClassifiedByItsWording(t *testing.T) {
 	}{
 		{
 			"the turn ended", errors.New("turn/steer: no active turn to steer"),
-			codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true},
+			codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true, requeue: true},
 		},
 		{
 			"a different turn is running",
 			errors.New("turn/steer: expected active turn id `01a0…` but found `01a1…`"),
-			codexSteerRefusal{code: "E-MISMATCH", retryable: true},
+			codexSteerRefusal{code: "E-MISMATCH", retryable: true, requeue: true},
 		},
 		{
 			// Ordered ahead of the malformed-request row on purpose: Codex prefixes an absent
@@ -788,7 +819,7 @@ func TestARefusalIsClassifiedByItsWording(t *testing.T) {
 			// asking an engine that has already said it cannot.
 			"no such method",
 			errors.New("turn/steer: Invalid request: unknown variant `turn/steer`, expected one of `initialize`, `turn/start`"),
-			codexSteerRefusal{code: "E-UNSUPPORTED", retryable: true, unsupported: true},
+			codexSteerRefusal{code: "E-UNSUPPORTED", retryable: true, unsupported: true, requeue: true},
 		},
 		{
 			"a field orbit left out", errors.New("turn/steer: Invalid request: missing field `expectedTurnId`"),
@@ -800,11 +831,23 @@ func TestARefusalIsClassifiedByItsWording(t *testing.T) {
 		},
 		{
 			"nothing was sent", errCodexSteerUnaimed,
-			codexSteerRefusal{code: "E-UNSENT", retryable: true},
+			codexSteerRefusal{code: "E-UNSENT", retryable: true, requeue: true},
 		},
 		{
 			"no turn to send it into", errNoTurnToSteer,
-			codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true},
+			codexSteerRefusal{code: "E-NO-ACTIVE", retryable: true, requeue: true},
+		},
+		{
+			// Provably not sent, and still not re-filed: the message this duplicates is already
+			// on its way in, so re-filing would queue a second copy of it.
+			"handed over twice", errCodexSteerDuplicate,
+			codexSteerRefusal{code: "E-DUPLICATE"},
+		},
+		{
+			// The process that had it died. Not knowable either way, so it is reported and left
+			// for a person — never re-filed, never re-delivered.
+			"abandoned by a dead process", errSteerAbandoned,
+			codexSteerRefusal{code: "E-ABANDONED", retryable: true},
 		},
 		{
 			"taken and never echoed", errCodexSteerDropped,
@@ -866,6 +909,27 @@ func TestASteerCarriesTheMessageAndNothingElse(t *testing.T) {
 // assertSteerFailedVisibly checks the whole visible outcome of a message that did not arrive: it
 // is in the transcript as the failure it is, it says why, and its own turn is settled so it stops
 // being a leased row nobody will ever answer.
+// assertSteerRefiled is the outcome for a message Codex PROVED it never read: the row goes back
+// to being an ordinary queued message and runs when the turn it could not join ends. Nobody is
+// told, because nothing went wrong from where the person is standing — and a bubble left here
+// would be duplicated by the delivery that eventually runs it (contract §4.3a).
+func assertSteerRefiled(t *testing.T, s *codexSteerSession, turnID string) {
+	t.Helper()
+	c := s.completionFor(turnID)
+	if c == nil {
+		t.Fatalf("%s was never answered: a steer is never re-delivered, so its row would stay in flight", turnID)
+	}
+	if c.Subtype != subtypeSteerRequeue || c.Status != stSucceeded {
+		t.Fatalf("completion for %s = %+v, want a succeeded %q", turnID, *c, subtypeSteerRequeue)
+	}
+	if got := s.deliveries(turnID); len(got) != 0 {
+		t.Errorf("delivery events for %s = %v, want none: nothing failed", turnID, got)
+	}
+	if n := s.bubbles(turnID); n != 0 {
+		t.Errorf("user events for %s = %d, want none", turnID, n)
+	}
+}
+
 func assertSteerFailedVisibly(t *testing.T, s *codexSteerSession, turnID string, retryable bool) {
 	t.Helper()
 	events, _ := s.snapshot()

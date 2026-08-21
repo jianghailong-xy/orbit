@@ -670,8 +670,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		leaseResetGeneration = leaseGeneration
 		activateBaseCtx, activateBaseCancel := contextUntilEither(sessionCtx, shutdownCtx)
 		activateCtx, activateCancel := context.WithTimeout(activateBaseCtx, leaseActivationTimeout)
+		var activated ActivateTurnLeasesResponse
 		activateErr := retryActivateTurnLeases(activateCtx, func(attemptCtx context.Context) error {
-			return t.activateTurnLeases(attemptCtx, sessionID, leaseGeneration)
+			var err error
+			activated, err = t.activateTurnLeases(attemptCtx, sessionID, leaseGeneration)
+			return err
 		})
 		activateCancel()
 		activateBaseCancel()
@@ -711,6 +714,15 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				status = stFailed
 			}
 			break
+		}
+		// Whatever the process this generation replaces left leased. A mid-turn message is
+		// delivered exactly once and never re-delivered, so a process that died holding one
+		// leaves a row nothing else will ever come back for; the control plane cannot answer for
+		// it either, because a steer's outcome is only ever visible on this event stream. Done
+		// before the engine starts, so the answer is in the transcript before anything the new
+		// generation says — and never re-delivered, whatever the engine turns out to be.
+		for _, stranded := range activated.AbandonedSteers {
+			reportAbandonedSteer(stranded, job, emitFor, completeTurn)
 		}
 		engineCtx, engineCancel := context.WithCancel(sessionCtx)
 		engineHandle := &engineStopHandle{cancel: engineCancel}

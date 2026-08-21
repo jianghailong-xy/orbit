@@ -135,6 +135,17 @@ function dequeue(
   );
 }
 
+/** What the row looks like now, so a re-file can be checked as a state and not only as a call. */
+async function readTurn(content: string) {
+  const { rows } = await client.query(
+    `SELECT seq, kind, status, delivered_at AS "deliveredAt", lease_deadline_at AS "leaseDeadlineAt",
+            lease_generation AS "leaseGeneration"
+     FROM "conversation_turn" WHERE content = $1`,
+    [content],
+  );
+  return rows[0];
+}
+
 async function addTurn(seq: number, kind: string, status: string, content: string, leaseMs?: number) {
   const lease = leaseMs === undefined ? null : new Date(Date.now() + leaseMs);
   await client.query(
@@ -315,4 +326,57 @@ pgTest('withholding a steer does not withhold anything else', async () => {
   // and everything else at exactly the priority it always did.
   assert.equal((await dequeue(false))?.kind, 'interrupt');
   assert.equal((await dequeue(false))?.content, 'the real turn');
+});
+
+// ── the round trip: a steer the engine never read, coming back as an ordinary message ────────
+//
+// turn-complete does the re-filing (steer-requeue.spec.ts asserts the write). What only a real
+// database can answer is whether the row it leaves behind is one the inbox will actually hand
+// over — a re-file into a state the predicate never selects is a message just as lost as one
+// that was acked away, and no stubbed test can tell the difference.
+
+pgTest('a re-filed steer is handed over as an ordinary message once its turn ends', async () => {
+  await session(AgentProvider.CODEX);
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  await addTurn(2, 'steer', 'PENDING', 'actually, call it gadget');
+
+  // Delivered mid-turn, as a steer.
+  assert.equal((await dequeue())?.kind, 'steer');
+  assert.equal((await readTurn('actually, call it gadget')).status, 'IN_FLIGHT');
+
+  // Codex refused it before reading the input, so the runner reports it back — exactly the
+  // write turn-complete makes.
+  await client.query(
+    `UPDATE "conversation_turn"
+        SET kind = 'message', status = 'PENDING', delivered_at = NULL,
+            lease_deadline_at = NULL, lease_generation = NULL
+      WHERE kind = 'steer' AND status = 'IN_FLIGHT'`,
+  );
+  const refiled = await readTurn('actually, call it gadget');
+  assert.equal(refiled.kind, 'message');
+  // Its place in the conversation is unchanged: it runs after the turn it could not join, and
+  // before anything sent since — which is what re-using the row rather than making a new one buys.
+  assert.equal(refiled.seq, 2);
+
+  // While that turn is still running it waits, exactly like any other queued message…
+  assert.equal(await dequeue(), null);
+
+  // …and when the turn ends it is handed over, which is the whole promise of not failing it.
+  await client.query(`UPDATE "conversation_turn" SET status = 'ANSWERED' WHERE kind = 'message' AND seq = 1`);
+  const next = await dequeue();
+  assert.equal(next?.kind, 'message');
+  assert.equal(next?.content, 'actually, call it gadget');
+});
+
+pgTest('a steer stranded by a dead runner is never handed to the next one', async () => {
+  await session(AgentProvider.CODEX);
+  await addTurn(1, 'message', 'IN_FLIGHT', 'rename the widget', 60_000);
+  // Leased by a process that died holding it, with the lease long expired.
+  await addTurn(2, 'steer', 'IN_FLIGHT', 'actually, call it gadget', -60_000);
+
+  // An expired lease re-delivers a message turn. It must NOT re-deliver a steer: whether codex
+  // read it before the process died is unknowable, and writing it again would put the person's
+  // message into the conversation twice. It is answered out of band instead (abandoned-steer.spec).
+  assert.equal(await dequeue(), null);
+  assert.equal((await readTurn('actually, call it gadget')).status, 'IN_FLIGHT');
 });

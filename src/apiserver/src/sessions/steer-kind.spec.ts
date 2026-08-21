@@ -27,6 +27,8 @@ function makeService(
   /** What the runner holding this session declared on its last heartbeat — `null` for a
    *  session with no runner assigned at all. */
   runnerCapabilities: string[] | null = [],
+  /** A row already filed under the clientTurnId being sent — what a retried send finds. */
+  existingTurn: Record<string, unknown> | null = null,
 ) {
   const created: Record<string, unknown>[] = [];
   const countFilters: Record<string, unknown>[] = [];
@@ -54,7 +56,7 @@ function makeService(
       update: async () => ({ ...session }),
     },
     conversationTurn: {
-      findUnique: async () => null,
+      findUnique: async () => existingTurn,
       findFirst: async () => ({ seq: 1 }),
       create: async ({ data }: { data: Record<string, unknown> }) => {
         created.push(data);
@@ -290,4 +292,51 @@ test('a steer still needs a live engine turn, not merely a runner that could del
   assert.equal(probe.kind, 'message');
   assert.equal(probe.status, 'IN_FLIGHT');
   assert.ok((probe.leaseDeadlineAt as { gt?: Date })?.gt instanceof Date);
+});
+
+/**
+ * A retried send never becomes a second message.
+ *
+ * This is the only de-duplication in the whole path, and everything downstream leans on it:
+ * Codex does not de-duplicate on the id Orbit sends it (docs/codex-turn-steer-contract.md §0.1),
+ * so a second row here is a second `turn/steer` and a second copy of the person's message in the
+ * conversation — which the model reads as being asked twice. A network retry, a double-tap on
+ * Send, an MCP client replaying a request: all of them arrive as the same clientTurnId.
+ */
+test('sending the same clientTurnId twice mid-turn files one steer, not two', async () => {
+  const already = {
+    id: 'turn-existing',
+    seq: 2,
+    kind: 'steer',
+    clientTurnId: '44444444-4444-4444-8444-444444444444',
+    status: 'IN_FLIGHT',
+  };
+  const h = makeService(1, RunStatus.RUNNING, { provider: 'claude', providerBuiltin: true }, [], already);
+
+  const out = await send(h);
+
+  assert.equal(h.created.length, 0, 'a retry created a second row for one message');
+  assert.equal(out.turnId, 'turn-existing');
+  // Answered as the steer it already is, so the client goes on showing the delivery it was
+  // already watching rather than starting a second bubble beside it.
+  assert.equal(out.kind, 'steer');
+});
+
+test('a retry does not re-decide the kind, even if the turn ended in between', async () => {
+  // The engine is idle now, so a fresh message here would be filed as an ordinary turn. The
+  // existing row is what this message IS, though — re-deciding would tell the client its
+  // in-flight steer had become a queued message and leave two things watching one row.
+  const already = {
+    id: 'turn-existing',
+    seq: 2,
+    kind: 'steer',
+    clientTurnId: '44444444-4444-4444-8444-444444444444',
+    status: 'IN_FLIGHT',
+  };
+  const h = makeService(0, RunStatus.RUNNING, { provider: 'claude', providerBuiltin: true }, [], already);
+
+  const out = await send(h);
+
+  assert.equal(h.created.length, 0);
+  assert.equal(out.kind, 'steer');
 });
