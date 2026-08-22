@@ -603,7 +603,7 @@ test('§13.1 AG6: a MANUAL project never asks a person to Run an aggregate paren
   });
   manual.world.project.automationPolicy = 'MANUAL';
   const held = detectProjectBlockerConditions(manual, {
-    aggregationCycleTaskIds: [],
+    aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
     verificationVerdicts: [],
     coordinatorSession: { status: 'UNSUPPORTED' },
   }).filter((condition) => condition.kind === 'POLICY_MANUAL_HOLD');

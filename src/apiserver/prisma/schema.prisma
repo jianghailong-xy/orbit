@@ -121,6 +121,7 @@ enum ProjectActionType {
   APPLY_VERIFICATION_VERDICT
   REQUEST_APPROVAL
   RUN_PROJECT_ACCEPTANCE
+  FILE_VERIFICATION_TASK
 
   @@map("project_action_type")
 }

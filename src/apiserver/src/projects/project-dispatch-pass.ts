@@ -41,13 +41,20 @@
  *    cannot be the throttle.
  */
 
-import { ProjectDecisionInput } from './project-decision.service';
+import { ProjectDecisionInput, aggregationFacts } from './project-decision.service';
 import {
   PROJECT_BLOCKER_RESOLUTION_CHAIN_KINDS,
   ProjectBlockerFact,
 } from './project-blocker';
 import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
-import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
+import {
+  AggregationTaskStatus,
+  TaskChildCounts,
+  TaskCompletionPolicyValue,
+  isAggregateParent,
+  planTaskAggregation,
+  verificationSubjectReady,
+} from './task-aggregation';
 import {
   TaskRetirement,
   dependencySatisfied,
@@ -207,6 +214,12 @@ export function selectDispatchableTasks(
   // project-blocked early return below explains every considered task, and "considered" is one of
   // the questions §13.6 SU6 answers — so these have to exist by then, not eleven lines later.
   const statusOf = new Map(input.world.tasks.map((task) => [task.id, task.status]));
+  const taskById = new Map(input.world.tasks.map((task) => [task.id, task]));
+  // AG8's counts, from §13.1's own recomputation rather than from a second walk of the same rows.
+  const childCounts = new Map(
+    planTaskAggregation(aggregationFacts(input)).childCounts
+      .map((entry) => [entry.taskId, entry.counts] as const),
+  );
   // Absent fields read as "not retired" (pre-0129), which is what every one of those rows was.
   const retirementOf = new Map(input.world.tasks.map((task) => [task.id, taskRetirement({
     supersededByTaskId: task.supersededByTaskId ?? null,
@@ -271,7 +284,8 @@ export function selectDispatchableTasks(
   for (const task of [...input.world.tasks].sort((a, b) => compare(a.id, b.id))) {
     const due = input.evaluation.dueTasks[task.id];
     const reason = firstFailure(
-      task, due, statusOf, successorOf, retirementOf, parentsWithChildren, blockers,
+      input, task, due, statusOf, taskById, childCounts, successorOf, retirementOf,
+      parentsWithChildren, blockers,
       latestDispatch.get(task.id), epochMs,
     );
     if (reason) {
@@ -307,9 +321,12 @@ export function selectDispatchableTasks(
 }
 
 function firstFailure(
+  input: ProjectDecisionInput,
   task: ProjectDecisionInput['world']['tasks'][number],
   due: { runAtDue: boolean; retryBackoffExpired: boolean } | undefined,
   statusOf: Map<string, string>,
+  taskById: ReadonlyMap<string, ProjectDecisionInput['world']['tasks'][number]>,
+  childCounts: ReadonlyMap<string, TaskChildCounts>,
   successorOf: Map<string, string | null>,
   retirementOf: Map<string, TaskRetirement | null>,
   parentsWithChildren: ReadonlySet<string>,
@@ -385,8 +402,32 @@ function firstFailure(
   // §7.4 precondition 3, second half: a check may not run before the thing it checks is finished.
   // The REPLACED case was split out and answered at the top of this function; what is left here is
   // the genuine wait.
-  if (task.verifiesTaskId && statusOf.get(task.verifiesTaskId) !== 'DONE') {
-    return 'VERIFICATION_SUBJECT_NOT_DONE';
+  if (task.verifiesTaskId) {
+    // AG8, not `status === 'DONE'`. The blunt form is a deadlock on exactly one shape — a
+    // `VERIFICATION_PASSED` roll-up is completed BY this check, so demanding it be DONE first makes
+    // the check undispatchable and the subject uncompletable, each waiting on the other. The
+    // predicate is shared with §13.1's own counts so "the children are in" means one thing here and
+    // in the recomputation that will complete the subject the moment this check passes.
+    //
+    // Nothing else moves: the subject still gets no Session of its own (AG6 is above, unchanged),
+    // and every other subject still has to be DONE.
+    const subject = taskById.get(task.verifiesTaskId);
+    if (!subject) return 'VERIFICATION_SUBJECT_NOT_DONE';
+    // …and versioned, like every other rule this file added to a snapshot format that outlives it.
+    // A decision captured before AG7 was decided by a binary that asked `status === 'DONE'`, and a
+    // replay has to reproduce THAT answer: without this clause an old snapshot would replay to a
+    // dispatchable check, which is the audit reporting a dispatch the loop never made.
+    if (!input.world.protocol?.completionGaps) {
+      if (subject.status !== 'DONE') return 'VERIFICATION_SUBJECT_NOT_DONE';
+    } else if (!verificationSubjectReady({
+      status: subject.status as AggregationTaskStatus,
+      completionPolicy: (subject.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
+      hasDirectChildren: parentsWithChildren.has(subject.id),
+      childrenDone: childCounts.get(subject.id)?.done ?? 0,
+      childrenOutstanding: childCounts.get(subject.id)?.outstanding ?? 0,
+    })) {
+      return 'VERIFICATION_SUBJECT_NOT_DONE';
+    }
   }
   // Not a gate this pass enforces — §9.2 does, and it DENYs — but an unassigned task has no agent
   // whose concurrency cap could be counted below, so it cannot be ranked. It reaches the dispatcher

@@ -29,6 +29,7 @@ export type ProjectAuthorizationAction =
   | 'OPEN_COORDINATOR_TURN'
   | 'ROTATE_COORDINATOR_SESSION'
   | 'APPLY_VERIFICATION_VERDICT'
+  | 'FILE_VERIFICATION_TASK'
   | 'RUN_PROJECT_ACCEPTANCE'
   | 'SET_PROJECT_DONE'
   | 'DELETE_TASK'
@@ -331,7 +332,11 @@ const ALWAYS_SAFE = new Set<ProjectAuthorizationAction>([
   'REQUEST_APPROVAL',
 ]);
 const COORDINATOR_ROUTINE = new Set<ProjectAuthorizationAction>([
+  // §13.2 V8's filing sits here beside the verdict it is the mirror of: both are the coordinator
+  // acting on a check, and both CREATE a task row (V8 the check itself, the verdict its defect).
+  // Classifying it anywhere else would be a second policy answer for the same kind of write.
   'OPEN_COORDINATOR_TURN', 'ROTATE_COORDINATOR_SESSION', 'APPLY_VERIFICATION_VERDICT',
+  'FILE_VERIFICATION_TASK',
 ]);
 const USER_CONTROL_ONLY = new Set<ProjectAuthorizationAction>([
   'SET_PROJECT_DONE', 'DELETE_TASK', 'DELETE_PROJECT', 'CHANGE_ACCEPTANCE_CRITERIA',
@@ -411,6 +416,16 @@ export function authorizeProjectAction(
   }
   if (input.requiredPermission === 'DELEGATE' && !input.principal.canDelegate) {
     return result('DENY', 'DELEGATE_PERMISSION_DENIED');
+  }
+  // §13.2 V8 is the one action that exercises BOTH, and `requiredPermission` names one. It creates
+  // a task AND hands it to a different agent, so a coordinator with only one of the two may not
+  // perform it — checking both here keeps that in the frozen matrix rather than in a hand-written
+  // clause at the two call sites, which is where the two would eventually differ.
+  if (input.action === 'FILE_VERIFICATION_TASK'
+      && !(input.principal.canCreateTasks && input.principal.canDelegate)) {
+    return result('DENY', input.principal.canCreateTasks
+      ? 'DELEGATE_PERMISSION_DENIED'
+      : 'CREATE_TASK_PERMISSION_DENIED');
   }
 
   let providerResolution: ProjectProviderResolution | undefined;

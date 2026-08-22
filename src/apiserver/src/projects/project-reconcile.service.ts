@@ -12,6 +12,7 @@ import {
   createDecisionId,
   hashDecisionInput,
   planProjectDecision,
+  completionGapPlan,
   publicIdempotencyKey,
   verificationVerdictPlan,
 } from './project-decision.service';
@@ -23,6 +24,7 @@ import {
   ProjectEventsService,
 } from './project-events.service';
 import { PlannedTaskAggregation } from './task-aggregation';
+import { PlannedVerificationFiling, planCompletionGaps } from './project-completion-gap';
 import {
   PlannedBlockerRaise,
   ProjectBlockerFact,
@@ -59,6 +61,7 @@ const ACTION_TYPES = [
   'APPLY_VERIFICATION_VERDICT',
   'REQUEST_APPROVAL',
   'RUN_PROJECT_ACCEPTANCE',
+  'FILE_VERIFICATION_TASK',
 ] as const;
 
 export type ProjectReconcileActionType = (typeof ACTION_TYPES)[number];
@@ -190,6 +193,26 @@ export interface ProjectVerdictExecutor {
 }
 
 /**
+ * What the ledger needs from §13.2 V8's filing, and nothing else.
+ *
+ * Same terms as the verdict executor above, and registered the same way. Split out rather than
+ * folded into it because the two answer different questions — one turns a conclusion that exists
+ * into consequences, the other creates the check that does not exist — and a single executor with
+ * a discriminated command would make "is a verdict due" and "is a filing due" one condition.
+ */
+export interface ProjectFilingExecutor {
+  idempotencyKey(projectId: string, subjectTaskId: string, generation: string): string;
+  actionDetail(planned: PlannedVerificationFiling): Prisma.InputJsonValue;
+  fileInTransaction(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    command: { decisionId: string; planned: PlannedVerificationFiling },
+    actionId: string,
+    now: Date,
+  ): Promise<void | ProjectActionEffectRefusal>;
+}
+
+/**
  * What the ledger needs from §7.6's turn, and nothing else.
  *
  * Same terms as the two executors above. Until this existed, §7.2's total order ended in a plan
@@ -253,6 +276,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private _backstopHits = 0;
   private rotationExecutor?: ProjectRotationExecutor;
   private verdictExecutor?: ProjectVerdictExecutor;
+  private filingExecutor?: ProjectFilingExecutor;
   private turnExecutor?: ProjectTurnExecutor;
   private dispatchPass?: ProjectDispatchPassExecutor;
   private readonly pendingRotations: string[] = [];
@@ -295,6 +319,17 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     this.verdictExecutor = executor;
     return () => {
       if (this.verdictExecutor === executor) this.verdictExecutor = undefined;
+    };
+  }
+
+  /** Install the sole §13.2 V8 filing executor, on the terms the verdict executor is installed on. */
+  registerFilingExecutor(executor: ProjectFilingExecutor): () => void {
+    if (this.filingExecutor && this.filingExecutor !== executor) {
+      throw new Error('a Project filing executor is already registered');
+    }
+    this.filingExecutor = executor;
+    return () => {
+      if (this.filingExecutor === executor) this.filingExecutor = undefined;
     };
   }
 
@@ -432,11 +467,19 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // one verdict this pass will claim appended, so the decision that authorises the action and
       // the pass that applies it read one snapshot.
       const pending = await this.pendingVerificationVerdicts(tx, projectId, captured.input);
-      const outcome = pending.length
+      // §13.2 V8, proposed on the same terms and behind the verdicts: both write task rows, so the
+      // second of any two in one pass would be refused `STALE_SNAPSHOT` by the effects of the first
+      // — and a refusal spends a permanent key. Deferring costs one wake, which the floor below
+      // pays for; sharing a pass would cost a generation.
+      const filings = pending.length ? [] : this.pendingVerificationFilings(captured.input);
+      const proposed = pending.length
+        ? [this.verdictAction(projectId, pending[0])]
+        : filings.length ? [this.filingAction(projectId, filings[0])] : [];
+      const outcome = proposed.length
         ? planProjectDecision(captured.input, {
           decisionId,
           consumedEventIds,
-          actions: [...base.actions, this.verdictAction(projectId, pending[0])],
+          actions: [...base.actions, ...proposed],
         })
         : base;
       if (BigInt(outcome.fencingToken) !== lease.fencingToken) {
@@ -458,6 +501,9 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       const verdictsLeft = await this.applyVerificationVerdicts(
         tx, lease, decisionId, pending, rotationAttempted, now,
       );
+      const filingsLeft = await this.applyVerificationFilings(
+        tx, lease, decisionId, filings, rotationAttempted, now,
+      );
       // §7.6, third in the same one-gated-write-per-pass chain, and LAST of the three on purpose:
       // a verdict rewrites the very task rows a turn's facts are computed from, so waking the
       // coordinator on the world the verdict PRODUCED — next pass, under a different digest if the
@@ -467,7 +513,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       const turn = await this.applyCoordinatorTurn(
         tx, lease, decisionId, outcome,
         {
-          gatedWriteTaken: rotationAttempted || pending.length > 0,
+          gatedWriteTaken: rotationAttempted || pending.length > 0 || filings.length > 0,
           automationPolicy: captured.input.world.project.automationPolicy,
         },
         now,
@@ -480,11 +526,14 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // §10.4 chose a wake for a world that has one more thing to do in it. Floor it — never
       // push it out — and only take the reason when this is genuinely the earlier alarm, so a
       // blocker's own recheck keeps its explanation when it was already due.
-      if ((verdictsLeft > 0 || turn === 'DEFERRED') && !(nextWakeAt && nextWakeAt <= now)) {
+      if ((verdictsLeft > 0 || filingsLeft > 0 || turn === 'DEFERRED')
+        && !(nextWakeAt && nextWakeAt <= now)) {
         nextWakeAt = now;
         nextWakeReason = verdictsLeft > 0
           ? `${verdictsLeft} verification verdict(s) awaiting consequences`
-          : 'coordinator turn awaiting a pass of its own';
+          : filingsLeft > 0
+            ? `${filingsLeft} verification task(s) awaiting filing`
+            : 'coordinator turn awaiting a pass of its own';
       }
       // §7.6 TR2-c: an explicit request's `consumed_at` is written only when it is ANSWERED, and
       // the only answer this pass can give is a committed `MANUAL` turn. Rate-limited, in flight,
@@ -1396,6 +1445,82 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       this.log.log(
         `Project ${uuidToBase62(lease.projectId)} applied verdict ${planned.verdict} `
         + `from ${planned.verifierTaskId} (revision ${planned.verdictRevision})`,
+      );
+    }
+    return pending.length - 1;
+  }
+
+  /**
+   * The verification tasks this snapshot says should exist and do not (§13.1 AG7 / §13.2 V8).
+   *
+   * The generation in the key comes from the snapshot's own ledger history, so this needs no second
+   * query to find out what has already been tried — unlike the verdicts above, whose keys are
+   * computed from the verifier's revision and therefore have to be checked against the ledger. Two
+   * reconciles of the same world compute the same key and the second one conflicts.
+   *
+   * Empty when no executor is registered, for the reason the verdicts are: proposing an action
+   * nobody can claim puts an unclaimable key in the audit and says the loop decided something it
+   * cannot do.
+   */
+  private pendingVerificationFilings(
+    input: ProjectDecisionInput,
+  ): PlannedVerificationFiling[] {
+    if (!this.filingExecutor) return [];
+    return planCompletionGaps(input, completionGapPlan(input)).filings;
+  }
+
+  /** The audit's spelling of one filing's key (§6.2 / §8.2). */
+  private filingAction(
+    projectId: string,
+    planned: PlannedVerificationFiling,
+  ): ProjectDecisionOutcome['actions'][number] {
+    return {
+      type: 'FILE_VERIFICATION_TASK',
+      idempotencyKey: publicIdempotencyKey(this.filingExecutor!.idempotencyKey(
+        projectId, base62ToUuid(planned.subjectTaskId), planned.generation,
+      )),
+      subject: { type: 'TASK', id: planned.subjectTaskId },
+    };
+  }
+
+  /**
+   * File the one verification this pass claimed, and report how many are still owed after it.
+   *
+   * Same shape as the verdicts: one gated write per pass, a refusal is a committed audit row rather
+   * than an exception, and what is left over floors the wake so the loop comes straight back.
+   */
+  private async applyVerificationFilings(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    pending: readonly PlannedVerificationFiling[],
+    rotationAttempted: boolean,
+    now: Date,
+  ): Promise<number> {
+    if (!pending.length || !this.filingExecutor) return 0;
+    if (rotationAttempted) return pending.length;
+    const planned = pending[0];
+    const result = await this.applyDecisionActionInTransaction(
+      tx,
+      lease,
+      decisionId,
+      {
+        type: 'FILE_VERIFICATION_TASK',
+        idempotencyKey: this.filingExecutor.idempotencyKey(
+          lease.projectId, base62ToUuid(planned.subjectTaskId), planned.generation,
+        ),
+        subject: { type: 'TASK', id: base62ToUuid(planned.subjectTaskId) },
+        detail: this.filingExecutor.actionDetail(planned),
+      },
+      async (effectTx, actionId) => this.filingExecutor!.fileInTransaction(
+        effectTx, lease, { decisionId, planned }, actionId, now,
+      ),
+      now,
+    );
+    if (result.status === 'APPLIED') {
+      this.log.log(
+        `Project ${uuidToBase62(lease.projectId)} filed the verification `
+        + `${planned.subjectTaskId} completes on (generation ${planned.generation})`,
       );
     }
     return pending.length - 1;

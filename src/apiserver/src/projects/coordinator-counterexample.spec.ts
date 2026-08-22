@@ -1331,7 +1331,7 @@ function opensTurnNow(b: LiveBlocker, triggers: string[]): boolean {
 test('PC-CX-12 escalation changes the owner and nothing else', () => {
   const table = kindTable();
   const triggers = turnTriggerKinds();
-  assert.equal(table.length, 19, '§11.2 freezes nineteen kinds');
+  assert.equal(table.length, 22, '§11.2 freezes twenty-two kinds');
 
   for (const row of table) {
     // BL4, stated on the constant column: opensTurn is a function of kind, and it agrees with the
