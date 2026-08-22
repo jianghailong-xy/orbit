@@ -4082,6 +4082,13 @@ html[data-theme='dark'] .session-tag-chip {
   background: rgba(22, 119, 255, 0.25);
   -webkit-text-fill-color: var(--text-1);
 }
+/* antd 6 gives `variant="borderless"` inputs their own brand-coloured `:focus-visible` outline
+   (antd 5 set `outline: none` there). Inside the composer that paints a second blue ring around
+   the textarea, nested inside the box's own `:focus-within` border — one focus affordance, drawn
+   twice. The box border stays; this one goes. */
+.composer-field textarea.ant-input:focus-visible {
+  outline: none;
+}
 /* Zero net layout width: the padding shaping the pill is cancelled by an equal negative margin,
    so the background bleeds outward while the glyphs stay exactly where the textarea puts them.
    Any residual width here compounds — every chip pushes the rest of the line further off. */
