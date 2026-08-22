@@ -52,7 +52,7 @@ func hostdSystemDefaults() hostdSystem {
 func (s hostdSystem) verbs() map[string]hostdVerb {
 	return map[string]hostdVerb{
 		"enable":  s.enable,
-		"disable": s.unitVerb("disable", "--now"),
+		"disable": s.disable,
 		"start":   s.unitVerb("start"),
 		"stop":    s.unitVerb("stop"),
 		"restart": s.unitVerb("restart"),
@@ -109,14 +109,14 @@ func (s hostdSystem) target(peer hostdPeer, verb string) (hostdTarget, hostdResp
 }
 
 // unitVerb builds the verbs that are one systemctl subcommand against the caller's own
-// instance and nothing more: disable (--now), start, stop, restart.
-func (s hostdSystem) unitVerb(verb string, flags ...string) hostdVerb {
+// instance and nothing more: start, stop, restart.
+func (s hostdSystem) unitVerb(verb string) hostdVerb {
 	return func(peer hostdPeer, _ hostdRequest) hostdResponse {
 		t, refusal, ok := s.target(peer, verb)
 		if !ok {
 			return refusal
 		}
-		if err := s.systemctl(append(append([]string{verb}, flags...), t.unit)...); err != nil {
+		if err := s.systemctl(verb, t.unit); err != nil {
 			return hostdFail("%v", err)
 		}
 		return hostdOK(t.data(nil))
@@ -148,6 +148,30 @@ func (s hostdSystem) enable(peer hostdPeer, _ hostdRequest) hostdResponse {
 	return hostdOK(t.data(nil))
 }
 
+// disable is what `orbit unregister` asks for: leave this user with no live runner at
+// all. That is more than the uid-keyed instance. An account that registered the sudo way
+// before `orbit host setup` existed, and never re-registered, still owns a pre-template
+// unit — and unregistering only orbit-runner@<uid> (a unit that account never enabled,
+// so systemctl reports success) leaves that one running against the credential the
+// server just deleted, restarting into a 401 forever. enable migrates those units out of
+// the way; disable has to take the same ones down, or the broker path is a tear-down
+// that leaves the thing it was asked to remove behind.
+//
+// After the instance, not before: the instance is what the caller asked about and what
+// the response reports on, so a systemctl that cannot even do that is the failure worth
+// returning — the legacy sweep that follows is best-effort in the same way enable's is.
+func (s hostdSystem) disable(peer hostdPeer, _ hostdRequest) hostdResponse {
+	t, refusal, ok := s.target(peer, "disable")
+	if !ok {
+		return refusal
+	}
+	if err := s.systemctl("disable", "--now", t.unit); err != nil {
+		return hostdFail("%v", err)
+	}
+	s.migrateLegacyUnits(t)
+	return hostdOK(t.data(nil))
+}
+
 // status answers "is my runner up". `systemctl show` rather than is-active or status
 // because it answers for a unit that was never enabled, and because it is the one
 // subcommand with output meant to be parsed. Without --value the lines name themselves,
@@ -173,6 +197,10 @@ func (s hostdSystem) status(peer hostdPeer, _ hostdRequest) hostdResponse {
 // orbit-runner. Both run the same `orbit run`, so leaving one enabled beside the new
 // instance means two runners for one account — and the older one holds a credential the
 // re-registration just rotated, so it 401s forever rather than failing loudly.
+//
+// Both halves of the lifecycle call it, for that same second reason: enable, so the new
+// instance is the account's only runner, and disable, so unregister does not leave one
+// behind holding a credential that no longer exists.
 //
 // Ownership is decided by the unit's own User=, never by its name. That is what keeps
 // this safe on a shared machine (another account's orbit-runner is their runner, not

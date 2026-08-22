@@ -225,6 +225,109 @@ func TestHostdEnableLeavesACollidingUnitOfAnotherAccountAlone(t *testing.T) {
 	}
 }
 
+// disable's own criteria 1-3: unregister has to leave the account with no runner at all,
+// so the instance is taken down and the same pre-template units enable migrates are swept
+// with it — but only the ones whose User= says they are this caller's. Without the sweep,
+// an account that registered the sudo way and never re-registered keeps a legacy unit
+// alive against the credential unregister just deleted: a 401 restart loop forever.
+func TestHostdDisableAlsoRemovesTheCallersLegacyUnits(t *testing.T) {
+	perUser := systemdServiceFor(testUser) // orbit-runner-alice
+	disableInstance := []string{"systemctl", "disable", "--now", testUnit}
+
+	cases := []struct {
+		name string
+		// legacy unit files to plant, as svc name -> the unit's User=.
+		legacy      map[string]string
+		wantRan     [][]string
+		wantRemoved []string
+		wantKept    []string
+	}{
+		{
+			name:    "no legacy unit: the instance, and nothing else",
+			wantRan: [][]string{disableInstance},
+		},
+		{
+			// The bug this verb was missing: orbit-runner@<uid> was never enabled by this
+			// account, so disabling it succeeds and says nothing about the unit that is
+			// actually running.
+			name:   "the caller's own per-user unit",
+			legacy: map[string]string{perUser: testUser},
+			wantRan: [][]string{
+				disableInstance,
+				{"systemctl", "disable", "--now", perUser + ".service"},
+				{"systemctl", "daemon-reload"},
+			},
+			wantRemoved: []string{perUser},
+		},
+		{
+			name:   "the caller's own bare pre-naming unit",
+			legacy: map[string]string{systemdService: testUser},
+			wantRan: [][]string{
+				disableInstance,
+				{"systemctl", "disable", "--now", systemdService + ".service"},
+				{"systemctl", "daemon-reload"},
+			},
+			wantRemoved: []string{systemdService},
+		},
+		{
+			name:   "both generations of the caller's unit",
+			legacy: map[string]string{perUser: testUser, systemdService: testUser},
+			wantRan: [][]string{
+				disableInstance,
+				{"systemctl", "disable", "--now", perUser + ".service"},
+				{"systemctl", "disable", "--now", systemdService + ".service"},
+				{"systemctl", "daemon-reload"},
+			},
+			wantRemoved: []string{perUser, systemdService},
+		},
+		{
+			// The name says alice; User= says bob. That is bob's runner, and unregistering
+			// alice must not touch it.
+			name:     "a per-user unit whose User= is somebody else",
+			legacy:   map[string]string{perUser: "bob"},
+			wantRan:  [][]string{disableInstance},
+			wantKept: []string{perUser},
+		},
+		{
+			name:     "a bare unit belonging to another account's runner",
+			legacy:   map[string]string{systemdService: "bob"},
+			wantRan:  [][]string{disableInstance},
+			wantKept: []string{systemdService},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, sys := newFakeSystem(t)
+			for _, svc := range []string{perUser, systemdService} { // deterministic order
+				if runAs, ok := c.legacy[svc]; ok {
+					writeLegacyUnit(t, f, sys, svc, runAs)
+				}
+			}
+
+			resp := sys.verbs()["disable"](testPeer, hostdRequest{V: 1, Verb: "disable"})
+			if !resp.OK {
+				t.Fatalf("disable failed: %s", resp.Error)
+			}
+			assertArgv(t, f.ran, c.wantRan...)
+			if got := resp.Data["unit"]; got != testUnit {
+				t.Errorf("response unit = %v, want %v", got, testUnit)
+			}
+
+			for _, svc := range c.wantRemoved {
+				if _, err := os.Stat(filepath.Join(sys.unitDir, svc+".service")); !os.IsNotExist(err) {
+					t.Errorf("%s.service survived the unregister", svc)
+				}
+			}
+			for _, svc := range c.wantKept {
+				if _, err := os.Stat(filepath.Join(sys.unitDir, svc+".service")); err != nil {
+					t.Errorf("%s.service belongs to another account and must not be touched: %v", svc, err)
+				}
+			}
+		})
+	}
+}
+
 // Criterion 3: every verb targets the caller's own instance, spelled exactly.
 func TestHostdVerbsTargetTheCallersOwnInstance(t *testing.T) {
 	cases := []struct {
@@ -383,6 +486,26 @@ func TestHostdEnableStillProceedsWhenTheMigrationFails(t *testing.T) {
 		[]string{"systemctl", "enable", testUnit},
 		[]string{"systemctl", "restart", testUnit},
 	)
+}
+
+// The instance comes first and its failure is the answer: a systemctl that cannot take
+// down the unit the caller asked about is not a tear-down to report success for, and the
+// best-effort legacy sweep is not a consolation prize to run in its place.
+func TestHostdDisableSurfacesASystemctlFailureBeforeSweepingLegacyUnits(t *testing.T) {
+	svc := systemdServiceFor(testUser)
+	f, sys := newFakeSystem(t)
+	writeLegacyUnit(t, f, sys, svc, testUser)
+	f.fail["systemctl disable --now "+testUnit] = errors.New("exit status 1")
+	f.stdout["systemctl disable --now "+testUnit] = "Failed to disable unit: Connection timed out.\n"
+
+	resp := sys.verbs()["disable"](testPeer, hostdRequest{V: 1, Verb: "disable"})
+	if resp.OK {
+		t.Fatal("a failed systemctl disable was reported as success")
+	}
+	if !strings.Contains(resp.Error, "Connection timed out") {
+		t.Errorf("error %q drops what systemd actually said", resp.Error)
+	}
+	assertArgv(t, f.ran, []string{"systemctl", "disable", "--now", testUnit})
 }
 
 func TestHostdShowProperties(t *testing.T) {
