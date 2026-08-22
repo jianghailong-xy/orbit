@@ -50,15 +50,21 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     file: 'tasks.service.ts',
     method: 'create',
     statements: ['task.create', 'taskDependency.createMany'],
-    holds: ['lockTaskLists(tx, [dto.listId])', 'lockCreatorSessions(tx, [sessionId])'],
+    holds: [
+      'await lockTaskLists(tx, [dto.listId]);',
+      'await this.preLockCreatorSessions(tx, [sessionId], [dto.supersedesTaskId]);',
+      'if (dto.supersedesTaskId && dto.projectId) {',
+    ],
     note:
       'One INSERT, and it is inside the transaction now even when the create names no link — the ' +
-      'unlocked `task.create` fallback is gone, so there is no second statement here. Rank 10 only ' +
-      'when it links (a plain create must not queue behind a DAG rewrite); 20 and 30 always, ahead ' +
-      'of the INSERT whose foreign keys would otherwise take them mid-write. It needs no rank-40 ' +
-      'pre-lock: project_acceptance_task_fact takes the project after the INSERT, but the only ' +
-      '`task` row this holds is one no other transaction can see, so it can never be the holding ' +
-      'side of a project/task inversion.',
+      'unlocked `task.create` fallback is gone. Rank 10 only when it links (a plain create must ' +
+      'not queue behind a DAG rewrite); 20 and 30 always, ahead of the INSERT whose foreign keys ' +
+      'would otherwise take them mid-write, and rank 30 covers the PREDECESSOR\'s creator Session ' +
+      'too when this create retires one, because that is a second `task` row this transaction ' +
+      'writes. Rank 40 only in that same case: a plain create needs none, because the only `task` ' +
+      'row it holds when project_acceptance_task_fact takes the project is one no other ' +
+      'transaction can see, so it can never be the holding side of a project/task inversion — but ' +
+      'the predecessor IS visible, so a supersession takes the project first.',
   },
   {
     file: 'tasks.service.ts',
@@ -67,11 +73,13 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     holds: [
       'await this.lockDependencyGraph(tx, ownerId);',
       'lockTaskLists(tx, items.map((item) => item.listId))',
-      'lockCreatorSessions(tx, [sessionId])',
+      'await this.preLockCreatorSessions(',
+      'items.map((item) => item.supersedesTaskId),',
     ],
     note:
       'Rank 10 unconditionally: a batch writes several `task` rows in item order, which is not an ' +
-      'order any other writer shares. Then 20 and 30, once for the whole batch.',
+      'order any other writer shares. Then 20 and 30, once for the whole batch — rank 30 over the ' +
+      'creating Session AND every predecessor this batch retires, in one ordered statement.',
   },
   {
     file: 'tasks.service.ts',
@@ -87,7 +95,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'if (restructures) await this.lockDependencyGraph(tx, ownerId);',
       'await lockTaskLists(tx, [dto.listId]);',
       'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);',
-      'const acceptanceProjects = touchesAcceptanceFacts || supersession || movesProject',
+      'const acceptanceProjects = touchesAcceptanceFacts || supersession',
     ],
     note:
       'The only Task write that can need all four ranks, and each is conditional on the write ' +
