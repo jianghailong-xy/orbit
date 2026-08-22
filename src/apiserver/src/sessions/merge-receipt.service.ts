@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -12,6 +12,7 @@ import {
   normalizeSha,
   resultLanded,
 } from './merge-receipt';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
@@ -42,6 +43,8 @@ export interface RecordMergeReceiptInput {
  */
 @Injectable()
 export class MergeReceiptService {
+  private readonly logger = new Logger(MergeReceiptService.name);
+
   constructor(private prisma: PrismaService) {}
 
   /**
@@ -157,7 +160,11 @@ export class MergeReceiptService {
     };
 
     if (tx) return run(tx);
-    return this.prisma.$transaction(run);
+    // Retried whole, but only on the branch that OWNS the transaction. When a caller passes `tx`
+    // this is part of THEIR unit of work and theirs to re-run — a nested retry would re-run a
+    // closure inside a transaction the server has already thrown away. The receipt is keyed by
+    // `idempotencyKey`, computed above and outside, so every attempt writes the same row.
+    return withTransactionRetry(this.prisma, run, loggedRetry(this.logger, 'sessionMergeReceipt.record'));
   }
 
   /** One session's receipts, newest first. */

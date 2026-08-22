@@ -3,10 +3,13 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
+import { orderedIds } from '../common/lock-order';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { CreateSessionTagDto, UpdateSessionTagDto } from './dto';
@@ -47,6 +50,8 @@ const TAG_ORDER: Prisma.SessionTagOrderByWithRelationInput[] = [
 
 @Injectable()
 export class SessionTagsService {
+  private readonly logger = new Logger(SessionTagsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     // @Global RealtimeModule. The tag library belongs to the owner, not to a session, so library
@@ -140,12 +145,27 @@ export class SessionTagsService {
       const owned = await this.prisma.sessionTag.count({ where: { id: { in: ids }, ownerId } });
       if (owned !== ids.length) throw new BadRequestException('unknown tag');
     }
-    await this.prisma.$transaction([
-      this.prisma.sessionTagLink.deleteMany({ where: { sessionId } }),
-      ...(ids.length
-        ? [this.prisma.sessionTagLink.createMany({ data: ids.map((tagId) => ({ sessionId, tagId })) })]
-        : []),
-    ]);
+    // Sorted, and retried whole. The INSERT takes `FOR KEY SHARE` on each tag row through
+    // `session_tag_link_tag_id_fkey`, in whatever order the picker happened to send — so two
+    // people re-tagging two different sessions with the same tags in opposite orders were taking
+    // the same rows backwards. FOR KEY SHARE does not conflict with itself, so that pair alone
+    // could not cycle; a concurrent tag rename or delete (FOR UPDATE) is the other half that
+    // could. Ordering costs nothing and removes the question (common/lock-order.ts, `orderedIds`).
+    //
+    // Every attempt re-runs both statements against a snapshot where neither has happened, and
+    // `ids` is computed above, outside the closure — so a retry rewrites the same link set rather
+    // than a different one.
+    const linkIds = orderedIds(ids);
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        await tx.sessionTagLink.deleteMany({ where: { sessionId } });
+        if (linkIds.length > 0) {
+          await tx.sessionTagLink.createMany({ data: linkIds.map((tagId) => ({ sessionId, tagId })) });
+        }
+      },
+      loggedRetry(this.logger, 'sessionTags.setForSession'),
+    );
     // The list row shows a session's tag dots, so refresh that row on the other clients too.
     this.realtime.publishSessionUpdated(sessionId);
     return this.tagsForSession(sessionId);

@@ -96,12 +96,26 @@ async function reset(client: Client): Promise<void> {
       "status" TEXT NOT NULL DEFAULT 'OPEN',
       "dispatch_hold" BOOLEAN NOT NULL DEFAULT false,
       "run_at" TIMESTAMP(3),
-      "assignee_id" UUID
+      "assignee_id" UUID,
+      "verifies_task_id" UUID,
+      -- §13.6's columns, which the adapter reads since 0130: a stand-in schema that omits a
+      -- column the code under test selects fails on the column, not on the property.
+      "superseded_by_task_id" UUID,
+      "superseded_at" TIMESTAMP(3),
+      "terminal_reason" TEXT
     );
     CREATE TABLE "task_dependency" (
       "task_id" UUID NOT NULL,
       "depends_on_task_id" UUID NOT NULL,
       PRIMARY KEY ("task_id", "depends_on_task_id")
+    );
+    -- 0132's dispatch version boundary. The adapter takes FOR SHARE on this row before it reads
+    -- the prerequisite set, so the harness has to have it or the read under test never runs. The
+    -- rows are seeded beside the tasks below; the real schema does that from a trigger, which
+    -- this stand-in has no reason to reproduce.
+    CREATE TABLE "task_dependency_revision" (
+      "task_id" UUID PRIMARY KEY,
+      "revision" BIGINT NOT NULL DEFAULT 0
     );
     -- §13.2's condition row, in the shape the guard reads it: the commit-time gate answers "is a
     -- failed check still holding this task" from here, so the harness has to have it for the
@@ -125,7 +139,10 @@ async function reset(client: Client): Promise<void> {
       "status" TEXT NOT NULL,
       "deleted_at" TIMESTAMP(3),
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "error" TEXT
+      "error" TEXT,
+      -- Read by the admission counts since 0131: a session that does not start task work is not
+      -- an in-flight task.
+      "starts_task_work" BOOLEAN NOT NULL DEFAULT true
     );
     CREATE TABLE "project_action" (
       "id" UUID PRIMARY KEY,
@@ -193,6 +210,10 @@ async function reset(client: Client): Promise<void> {
       ($1, $2, $3, $4),
       ($5, $2, $3, $4)
   `, [TASK_A, OWNER, PROJECT, AGENT_A, TASK_B]);
+  // The real schema seeds these from a trigger on `task` (0132); this stand-in has no reason to
+  // reproduce the trigger, only the invariant it keeps — every Task has a revision row to lock.
+  await client.query(
+    `INSERT INTO "task_dependency_revision" ("task_id") VALUES ($1), ($2)`, [TASK_A, TASK_B]);
 }
 
 function command(taskId: string, overrides: Partial<ProjectAuthorizationTransactionCommand> = {})

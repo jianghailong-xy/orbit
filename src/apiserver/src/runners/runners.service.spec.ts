@@ -59,9 +59,12 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
     session: {
       groupBy: async () => [],
     },
-    $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
+    // Callback form: the reorder issues its updates one at a time, in id order, inside one
+    // transaction — which is the property that keeps two opposite drags from deadlocking.
+    $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(db),
     // Deliberately no `workspace` mock: runner ordering must not depend on querying workspaces.
   } as unknown as PrismaService;
+  const db = prisma;
 
   const result = await new RunnersService(prisma).reorderRunners('owner-1', [
     'foreign-runner',

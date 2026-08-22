@@ -3,6 +3,7 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { Prisma } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 export const PROJECT_EVENT_SOURCE_TYPES = [
   'TASK',
@@ -268,7 +269,13 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
     const handler = this.handler;
     if (!handler) return { status: 'NO_HANDLER' };
 
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole, and this is where RepeatableRead makes it necessary rather than merely safe:
+    // a snapshot invalidated by a concurrent writer arrives as 40001, which the loop below is the
+    // only correct answer to. Safe because the handler contract forbids touching anything outside
+    // the database inside this transaction — `afterCommit` (called by `drainOnce`, outside) is where
+    // that goes — so a re-run re-reads the pending events and re-runs `handle` against the snapshot
+    // that actually commits, and nothing has been told about the attempt that did not.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const projects = await tx.$queryRaw<Array<{ projectId: string }>>(Prisma.sql`
         SELECT p."id" AS "projectId"
           FROM "project" p
@@ -405,7 +412,7 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
           : { status: 'RETRY_SCHEDULED', projectId, eventIds: retry.map((event) => event.id) } as const;
       }
 
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    }, loggedRetry(this.log, 'projectEvents.deliverOnce', { transaction: { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead } }));
   }
 
   private requestDrain(): void {

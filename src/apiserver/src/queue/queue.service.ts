@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import { AgentProvider, ClaimedSession, PermissionMode } from '@orbit/shared';
@@ -19,6 +19,7 @@ import {
 import { OPENCODE_RUNNER_UPGRADE_ERROR } from '../runner-api/runner-provider-support';
 import { ALWAYS_ALLOWED_TOOLS, resolvePermissionMode } from '../common/permission-mode';
 import { dispatchAllowedTools } from '../common/permission-rules';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /**
  * Session claim queue backed by the `Session` table. A runner long-polls for the
@@ -28,6 +29,8 @@ import { dispatchAllowedTools } from '../common/permission-rules';
  */
 @Injectable()
 export class QueueService {
+  private readonly logger = new Logger(QueueService.name);
+
   private readonly signal = new EventEmitter();
 
   constructor(private readonly prisma: PrismaService) {
@@ -86,7 +89,10 @@ export class QueueService {
     // returns null so the outer claimSessionForRunner loop waits on the signal and
     // retries; this prevents lock storms from starving new sessions indefinitely.
     try {
-      const rows = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. A claim is a compare-and-set on rows this closure locks and re-reads: an
+    // attempt the server discarded claimed nothing, so a re-run competes from the real state. The
+    // claimed session is only handed to the runner once this returns.
+      const rows = await withTransactionRetry(this.prisma, async (tx) => {
         // pg_advisory_xact_lock returns PostgreSQL void, which queryRaw cannot deserialize;
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
@@ -194,7 +200,7 @@ export class QueueService {
         )
         RETURNING id
       `);
-      });
+      }, loggedRetry(this.logger, 'queue.trySessionClaim'));
       if (rows.length === 0) return null;
       return this.buildSession(rows[0].id);
     } catch (err: any) {
@@ -236,7 +242,10 @@ export class QueueService {
     // Serialize lazy first-turn seeding with createTurn. A message can arrive after the
     // PENDING->RUNNING claim but before buildSession runs; without the Session row lock it
     // could take seq=1 and make this path mistake the follow-up for the opening prompt.
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. The session row an aborted attempt inserted does not exist, so a re-run
+    // inserts one session rather than a second — and the capacity fence it commits under is
+    // re-evaluated inside the closure on every attempt.
+    await withTransactionRetry(this.prisma, async (tx) => {
       await tx.$queryRaw`SELECT id FROM "session" WHERE id = ${session.id}::uuid FOR UPDATE`;
       const seedClientTurnId = `initial-${session.id}`;
       const existingSeed = await tx.conversationTurn.findUnique({
@@ -264,7 +273,7 @@ export class QueueService {
         where: { sessionId: session.id, turnId: null },
         data: { turnId: turn.id },
       });
-    });
+    }, loggedRetry(this.logger, 'queue.buildSession'));
     // Continue the monotonic event seq past whatever a prior run persisted (incl. a
     // failed first run's error events) so new events never collide; 0 when fresh.
     const maxSeq =

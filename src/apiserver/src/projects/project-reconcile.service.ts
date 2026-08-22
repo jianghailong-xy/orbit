@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ProjectDecisionBlockerAudit,
@@ -673,7 +674,9 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
 
   /** Persistently acquire the Project lease; returns null for an inactive, missing or busy row. */
   async acquireLease(projectId: string, now = new Date()): Promise<ProjectReconcileLease | null> {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. Acquiring a lease is a compare-and-set on the project row: an attempt the
+    // server threw away took no lease, so a re-run competes for it from the state that exists.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const projects = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         SELECT "id" FROM "project"
          WHERE "id" = ${projectId}::uuid AND "status" = 'OPEN' AND "coordinator_enabled" = true
@@ -682,7 +685,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       if (!projects[0]) return null;
       await this.ensureRuntime(tx, projectId, now);
       return this.acquireLeaseInTransaction(tx, projectId, now);
-    });
+    }, loggedRetry(this.log, 'projectReconcile.acquireLease'));
   }
 
   async renewLease(
@@ -731,7 +734,11 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     now = new Date(),
   ): Promise<ProjectActionApplyResult> {
     this.assertAction(lease, action);
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. `effect` is contractually database-only (see this method's doc comment), the
+    // action key is the caller's and computed above, and the claim/publish pair is re-read under
+    // the project lock inside the closure — so a re-run either re-claims a key nobody took or
+    // finds the winner's, which is the same pair of outcomes a first attempt has.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const projects = await tx.$queryRaw<Array<{
         status: 'OPEN' | 'DONE' | 'CANCELLED'; coordinatorEnabled: boolean;
       }>>(Prisma.sql`
@@ -788,7 +795,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       `);
       if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
       return { status: 'APPLIED', actionId } as const;
-    });
+    }, loggedRetry(this.log, 'projectReconcile.applyAction'));
   }
 
   /**
@@ -1016,17 +1023,24 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** PostgreSQL may abort an RR contender whose first snapshot predates a conflicting action. */
+  /**
+   * PostgreSQL may abort an RR contender whose first snapshot predates a conflicting action.
+   *
+   * Which failures count as that, what the whole-transaction retry looks like and what it says in
+   * the log are the shared `withTransactionRetry` rules (common/transaction-retry) rather than this
+   * service's: an aborted transaction means the same thing here as it does anywhere else in the API
+   * server, and a second local answer to any of those questions could only ever disagree with the
+   * first. The line this used to write is one of them — it interpolated the driver's own error
+   * text, which is where the failing SQL and its parameter values live.
+   */
   private async repeatableRead<T>(effect: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        return await this.prisma.$transaction(effect, {
-          isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-        });
-      } catch (cause) {
-        if (attempt >= 3 || !isSerializationFailure(cause)) throw cause;
-      }
-    }
+    return withTransactionRetry(
+      this.prisma,
+      effect,
+      loggedRetry(this.log, 'project.applyDecisionAction', {
+        transaction: { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      }),
+    );
   }
 
   private async acquireLeaseInTransaction(
@@ -1773,14 +1787,4 @@ function internalDedupeKey(dedupeKey: string): string {
 function errorText(cause: unknown): string {
   const text = cause instanceof Error ? cause.message : String(cause);
   return text.slice(0, 2_000);
-}
-
-function isSerializationFailure(cause: unknown): boolean {
-  if (!cause || typeof cause !== 'object') return false;
-  const error = cause as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
-  return error.code === 'P2034'
-    || error.code === '40001'
-    || error.meta?.code === '40001'
-    || (typeof error.message === 'string'
-      && /could not serialize access|write conflict|deadlock/i.test(error.message));
 }

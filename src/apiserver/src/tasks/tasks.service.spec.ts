@@ -56,8 +56,12 @@ function taskServiceFixture(
       return fn({
         task,
         taskDependency,
-        $queryRaw: async () => {
-          calls.push('lock');
+        // Labelled by what the statement is for, so the recorded sequence reads as the canonical
+        // lock order (common/lock-order.ts): the owner graph mutex, then the creator Sessions
+        // this task write will foreign-key check, then the writes.
+        $queryRaw: async (strings: TemplateStringsArray) => {
+          const sql = strings.join('?');
+          calls.push(/creator_session_id/.test(sql) ? 'creator-sessions' : 'lock');
           return [{ id: 'owner' }];
         },
       });
@@ -106,7 +110,17 @@ test('update atomically replaces and deduplicates an existing task dependency se
     dependsOnTaskIds: [TASK_B, TASK_B, TASK_C],
   });
 
-  assert.deepEqual(fixture.calls, ['transaction', 'lock', 'update', 'delete', 'create']);
+  // No 'creator-sessions': since 0132 a dependency replacement writes the task row exactly once
+  // (`task.update`), because the edge write advances `task_dependency_revision` instead of
+  // re-writing the dependent Task. One write of a row does not re-check its foreign keys, so
+  // there is no creator Session to pre-lock (common/lock-order.ts, I2).
+  assert.deepEqual(fixture.calls, [
+    'transaction',
+    'lock',
+    'update',
+    'delete',
+    'create',
+  ]);
   assert.deepEqual(fixture.createdEdges(), [
     { taskId: TASK_A, dependsOnTaskId: TASK_B },
     { taskId: TASK_A, dependsOnTaskId: TASK_C },
@@ -160,6 +174,10 @@ test('dependency replacement rejects a task outside the owner scope', async () =
   assert.deepEqual(fixture.calls, []);
 });
 
+// Both sides take the rank-10 owner mutex and nothing else. Under 0122 they also took a rank-30
+// pre-lock, because `task_dependency_dispatch_touch` re-wrote the dependent Task and so re-checked
+// `task_creator_session_id_fkey`; 0132 advances `task_dependency_revision` instead, and an edge
+// write now touches no Session at all (common/lock-order.ts, I2).
 test('single-edge add and remove use the same owner-scoped graph lock', async () => {
   const add = taskServiceFixture();
   await add.service.addDependency('owner', TASK_A, TASK_B);
