@@ -7,6 +7,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -91,6 +92,7 @@ import {
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -281,6 +283,8 @@ function sameIds(next: readonly string[], stored: readonly string[]): boolean {
 @MachineProtocol()
 @Controller('runner')
 export class RunnerApiController {
+  private readonly logger = new Logger(RunnerApiController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
@@ -1238,7 +1242,11 @@ export class RunnerApiController {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
     const expectedLeaseOwner = parseLeaseGeneration(dto?.expectedLeaseOwner ?? undefined);
-    const status = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. Every fence this evaluates — the lease owner, the generation, the session's
+    // status — is re-read under the row lock inside the closure, so a re-run judges the state the
+    // winning transaction left rather than replaying a takeover decided against a discarded
+    // snapshot. `dto` and the parsed generations are computed above and identical on every attempt.
+    const status = await withTransactionRetry(this.prisma, async (tx) => {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
@@ -1344,7 +1352,7 @@ export class RunnerApiController {
           AND status = 'IN_FLIGHT'
       `;
       return owned[0].status;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
     this.realtime.notifyInbox(sessionId);
     return { ok: true, status: status as SharedRunStatus };
   }
@@ -1385,7 +1393,9 @@ export class RunnerApiController {
       return { ok: true, abandonedSteers: await this.abandonedSteers(sessionId, generation) };
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole, for the same reason as the takeover above: the ownership fence is re-read
+    // under the row lock on each attempt, and nothing outside the closure moves between them.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
@@ -1467,7 +1477,7 @@ export class RunnerApiController {
           AND status = 'IN_FLIGHT'
           AND "lease_generation" IS DISTINCT FROM ${generation}::uuid
       `;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.activateLeases'));
     // A steer is deliberately NOT included above: expiring its lease would re-deliver it, and
     // the one thing mid-turn delivery must never do is write a message the engine may already
     // have acted on a second time. It is handed to the incoming process to report instead.
@@ -1532,7 +1542,10 @@ export class RunnerApiController {
   ): Promise<{ ok: true }> {
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. A release is idempotent by construction — it clears an ownership this
+    // transaction re-reads under the row lock — so a re-run against a fresh snapshot either
+    // clears it or finds it already clear, which is the same answer.
+    await withTransactionRetry(this.prisma, async (tx) => {
       // Use the same Session row lock as dequeueTurn. Whichever request arrives
       // last observes the other's generation, so a delayed release from a dead
       // process can never expire its replacement's lease.
@@ -1574,7 +1587,7 @@ export class RunnerApiController {
           AND status = 'IN_FLIGHT'
           AND "lease_generation" IS NOT DISTINCT FROM ${generation}::uuid
       `;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.releaseLeases'));
     this.realtime.notifyInbox(sessionId);
     return { ok: true };
   }
@@ -1715,7 +1728,12 @@ export class RunnerApiController {
      *  always has, and every gated runtime withholds. */
     declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
+    // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
+    // so a re-run claims from the state that actually exists rather than reporting a turn it does
+    // not own. The response is built from the winning attempt's read, and nothing is sent to the
+    // runner until this returns.
+    return withTransactionRetry(this.prisma, async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -1941,7 +1959,7 @@ export class RunnerApiController {
         // instead of being reported as a failure the person has to re-send by hand.
         steerRequeue: t.kind === 'steer' ? true : undefined,
       };
-    });
+    }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
   }
 
   /**
@@ -2142,7 +2160,11 @@ export class RunnerApiController {
   ) {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const usage = dto.usage;
-    const finalized = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. Every decision — the duplicate-ack check, the park, the merge-state clear, the
+    // billing accrual — is taken from the Session row read under its own lock inside the closure,
+    // so a re-run cannot accrue against a turn the winner already closed. `dto` and its usage are
+    // outside, so a retry books the same numbers and not a second set.
+    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
@@ -2444,7 +2466,7 @@ export class RunnerApiController {
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
       return { applied: true, steer: false, requeued: false, status: nextStatus, failSession, retryAt: current.retryAt };
-    });
+    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
     if (finalized.steer) {
       // Nothing about the session changed, so nothing about it is announced. The queue view
       // did change — a steer left it — and the clients read that from the durable list.
@@ -2514,7 +2536,13 @@ export class RunnerApiController {
         e.type !== RunEventType.THINKING_DELTA &&
         e.type !== RunEventType.BACKGROUND_OUTPUT,
     );
-    const session = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
+    // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
+    // skipDuplicates, the tool_call outcome by tool_use id, the running sets by set semantics),
+    // `durable` and `events` are derived from the request body above, and the ONE Session write is
+    // accumulated from a row re-read under its lock on every attempt. The live broadcast below is
+    // outside the loop, so a retried batch is published once, after the attempt that committed.
+    const session = await withTransactionRetry(this.prisma, async (tx) => {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
       // outside the transaction and later deadlocking when they touch Session.
@@ -2832,7 +2860,7 @@ export class RunnerApiController {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
       return session;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.events'));
 
     // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they
@@ -2868,7 +2896,10 @@ export class RunnerApiController {
     // checkout lifetime. The process fence is evaluated from that same locked snapshot,
     // so a predecessor cannot finalize after takeover. Billing is accrued per-turn by
     // /turn-complete.
-    const outcome = await this.prisma.$transaction(async (tx) => {
+    // Retried whole: one locked re-read decides the final status and the checkout lifetime, and a
+    // re-run re-reads it. A session another writer finalized first is seen as finalized, which is
+    // the answer this already gives.
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       if (!TERMINAL.includes(dto.status as RunStatus)) {
         throw new BadRequestException('finalization status must be terminal');
@@ -2984,7 +3015,7 @@ export class RunnerApiController {
         }
       }
       return { finalized: true, effectiveStatus, keepCheckout, retryAt };
-    });
+    }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
 
     this.realtime.publish(sessionId, {
@@ -3073,7 +3104,10 @@ export class RunnerApiController {
       throw new BadRequestException('released requires the claimed operation');
     }
     const merged = dto.status === 'merged';
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
+    // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
+    // two outcomes a first attempt has.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
@@ -3192,7 +3226,7 @@ export class RunnerApiController {
           operationId: dto.operationId ?? null,
         });
       }
-    });
+    }, loggedRetry(this.logger, 'runnerApi.mergeResult'));
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is
@@ -3232,7 +3266,8 @@ export class RunnerApiController {
       throw new BadRequestException('released requires the claimed operation');
     }
     const clean = dto.status === 'committed' || dto.status === 'nochange';
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole, on the same claim fence as the merge result above.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
@@ -3292,7 +3327,7 @@ export class RunnerApiController {
           ...(clean ? { worktreeDirty: false } : {}),
         },
       });
-    });
+    }, loggedRetry(this.logger, 'runnerApi.commitResult'));
     // Mirror mergeResult: release a message queued behind this commit now that the
     // checkout is free, rather than waiting for the queue's periodic poll.
     if (!released) this.queue.notifySessionQueued();

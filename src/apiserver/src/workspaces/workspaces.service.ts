@@ -3,10 +3,13 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
+import { orderedIds } from '../common/lock-order';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import {
@@ -21,6 +24,8 @@ type OrchestrationPreference = { defaultEnableOrchestration?: unknown };
 
 @Injectable()
 export class WorkspacesService {
+  private readonly logger = new Logger(WorkspacesService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -168,8 +173,36 @@ export class WorkspacesService {
     });
     const ownedIds = new Set(owned.map((a) => a.id));
     const ordered = ids.filter((id) => ownedIds.has(id));
-    await this.prisma.$transaction(
-      ordered.map((id, i) => this.prisma.workspace.update({ where: { id }, data: { position: i } })),
+    // The position a workspace ends up with is its index in the order the CALLER sent. The order
+    // the rows are LOCKED in is by id, and the two are deliberately different things.
+    //
+    // Writing in the caller's order was a deadlock waiting for two people to drag the same
+    // sidebar — or one person on two devices. A drag that moves A above B and a drag that moves B
+    // above A send exactly reversed arrays, so the two transactions took the same `workspace`
+    // rows in opposite orders and PostgreSQL had to shoot one of them (40P01), which surfaced as
+    // an unexplained 500 on a sidebar drag. Nothing about the request was wrong.
+    //
+    // Sorting the STATEMENTS fixes it without changing a single stored position: each row still
+    // gets the index the caller asked for, and every concurrent reorder now takes the rows in one
+    // agreed order, which is the same trick `RunnersService.reorderRunners` has always used and
+    // the general rule `orderedIds` exists for (common/lock-order.ts). Two reorders that overlap
+    // now queue behind each other and both commit, last writer winning per row — which is what a
+    // sidebar order means anyway.
+    const position = new Map(ordered.map((id, index) => [id, index]));
+    const ranked = orderedIds(ordered);
+    if (ranked.length === 0) return this.list(ownerId);
+    // Retried whole. The ordering above removes the reorder-versus-reorder cycle, but a
+    // `workspace` row is also touched by other writers, so the residual conflict is answered
+    // rather than assumed away — and it is safe to answer this way because every attempt writes
+    // the same positions from the same `ranked` array, computed once, outside the closure.
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        for (const id of ranked) {
+          await tx.workspace.update({ where: { id }, data: { position: position.get(id) } });
+        }
+      },
+      loggedRetry(this.logger, 'workspaces.reorder'),
     );
     return this.list(ownerId);
   }
@@ -297,7 +330,9 @@ export class WorkspacesService {
     // tasks stay linked (no FK SET NULL orphaning) and it stays restorable; every user-facing
     // listing filters on `deletedAt: null`, while runtime lookups by a live session's workspaceId
     // deliberately don't — so in-flight sessions keep resolving their workspace's config.
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole: the row is re-read under its own lock inside the closure, and a delete that
+    // already happened is the same answer on any attempt.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const held = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "workspace"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid AND "deleted_at" IS NULL
@@ -313,7 +348,7 @@ export class WorkspacesService {
         );
       }
       await tx.workspace.update({ where: { id }, data: { deletedAt: new Date() } });
-    });
+    }, loggedRetry(this.logger, 'workspaces.remove'));
     return { ok: true };
   }
 

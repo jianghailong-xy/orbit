@@ -36,7 +36,11 @@ import {
   lockTaskLists,
   orderedIds,
 } from '../common/lock-order';
-import { withTransactionRetry, type TransactionRetryOptions } from '../common/transaction-retry';
+import {
+  loggedRetry,
+  withTransactionRetry,
+  type TransactionRetryOptions,
+} from '../common/transaction-retry';
 import {
   DEFAULT_AGENT_PROVIDER,
   agentProviderSeed,
@@ -1742,36 +1746,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * How a Task write asks for the shared whole-transaction retry, and the only thing it says
-   * about one.
+   * How a Task write asks for the shared whole-transaction retry.
    *
-   * The loop, the classifier and the backoff are `common/transaction-retry`'s — a second local
-   * answer to "did the database abort this?" could only ever disagree with the first. What is
-   * local is the line it writes, and what that line is allowed to contain: an operation name from
-   * this file, the closed set of outcomes the loop defines, the attempt counter, and the SQLSTATE
-   * — `40001`, `40P01`, `P2034`, or the literal `message` when only the driver's wording survived
-   * the wrapping. Every field is low-cardinality by construction, so this is safe to aggregate on.
-   *
-   * The error object itself is never logged. It is the one place a task's title, a prompt, a
-   * parameter value or the failing SQL can appear, and a retried create is exactly the moment
-   * somebody would think to include it.
-   *
-   * Only the outcomes that mean the database threw the transaction away are said out loud:
-   * `FAILED` is the ordinary path of every validation refusal and every duplicate key, and a
-   * first-attempt `COMMITTED` is the ordinary path of every create there is.
+   * The loop, the classifier, the backoff and the log line are all `common/transaction-retry`'s —
+   * a second local answer to "did the database abort this?" or "what does that look like in the
+   * log" could only ever drift from the first. All this adds is which logger the line goes to and
+   * what the operation is called.
    */
-  private transientWriteRetry(operation: string): TransactionRetryOptions {
-    return {
-      label: operation,
-      onOutcome: (event) => {
-        if (event.outcome === 'FAILED') return;
-        if (event.outcome === 'COMMITTED' && event.attempt === 1) return;
-        this.logger.warn(
-          `operation=${event.label} outcome=${event.outcome} ` +
-            `attempt=${event.attempt}/${event.maxAttempts} sqlstate=${event.evidence ?? 'none'}`,
-        );
-      },
-    };
+  private transientWriteRetry(
+    operation: string,
+    policy: Parameters<typeof loggedRetry>[2] = {},
+  ): TransactionRetryOptions {
+    return loggedRetry(this.logger, operation, policy);
   }
 
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
@@ -4378,7 +4364,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const updated = await (
       !restructures && !(touchesAcceptanceFacts && before.projectId)
         ? this.prisma.task.update({ where: { id }, data })
-        : this.prisma.$transaction(async (tx) => {
+        // Retried whole, on the transaction branch only. The one-statement branch is an
+        // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
+        // conflict there leaves the global 503 boundary to answer it
+        // (common/transient-db-conflict.filter). The closure below re-reads the task inside the
+        // owner mutex on every attempt — `current`, the acceptance projects, the hierarchy check
+        // and the edge set are all derived there — so a re-run judges the row the winner left
+        // rather than replaying a decision made against a snapshot the server discarded.
+        : withTransactionRetry(this.prisma, async (tx) => {
             if (restructures) await this.lockDependencyGraph(tx, ownerId);
             // Ranks 20 and 30 of the canonical order (common/lock-order.ts), both ahead of the
             // task write below. The list is the FK endpoint a concurrent pause holds FOR UPDATE;
@@ -4598,7 +4591,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               }
             }
             return task;
-          })
+          }, this.transientWriteRetry('tasks.update'))
     // Both branches share one translation: a project deleted between this request's check and its
     // write is the caller's race to hear about, not a server fault (see translateProjectFk). Only
     // an update that named a project can be relabelled, so every other FK failure is untouched.
@@ -5645,7 +5638,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `These changes would create a cycle: ${preview.cycle.map((c) => c.title).join(' → ')}`,
       );
     }
-    const applied = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. Every decision this makes is re-derived inside the closure: the edge set is
+    // re-read under the owner mutex and re-checked for cycles, and `effectiveOps` is computed from
+    // that read — so a retry judges the graph the winning transaction left behind, not the one the
+    // aborted attempt saw. `ops` and the human-facing `preview` are computed above, outside, and
+    // are the same on every attempt. The publish and the reconcile below are outside the loop.
+    const applied = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       // No rank-30 pre-lock any more. This batch writes edges and nothing else: since 0132 an edge
       // write no longer re-writes its dependent Task, so it no longer re-checks
@@ -5688,7 +5686,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         });
       }
       return { removed: removals.length, added: additions.length };
-    });
+    }, this.transientWriteRetry('tasks.applyDag'));
     // The DAG view and every task list refresh off the owner's stream; a restructure may touch
     // tasks with no creator session to publish through.
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, listId);
@@ -5705,7 +5703,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (taskId === dependsOnTaskId) throw new BadRequestException('A task cannot depend on itself');
     await this.assertOwnedTasks(ownerId, [taskId, dependsOnTaskId]);
     try {
-      await this.prisma.$transaction(async (tx) => {
+      // Retried whole. The cycle check re-reads the whole edge set under the owner mutex on every
+      // attempt, so a re-run cannot pass a check the winning graph would fail. A duplicate edge
+      // arrives as P2002, which the classifier calls permanent — it is answered below on the first
+      // attempt rather than retried into the same answer three more times.
+      await withTransactionRetry(this.prisma, async (tx) => {
         await this.lockDependencyGraph(tx, ownerId);
         // Rank 10 only. Since 0132 the edge write touches no `task` row, so there is no second
         // write to re-check `task_creator_session_id_fkey` against and no creator Session to
@@ -5721,7 +5723,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           throw new BadRequestException('This dependency would create a cycle');
         }
         await tx.taskDependency.create({ data: { taskId, dependsOnTaskId } });
-      });
+      }, this.transientWriteRetry('tasks.addDependency'));
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException('This dependency already exists');
@@ -5740,11 +5742,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async removeDependency(ownerId: string, taskId: string, dependsOnTaskId: string) {
     await this.assertOwnedTasks(ownerId, [taskId]);
     if (!UUID_RE.test(dependsOnTaskId)) throw new NotFoundException('task not found');
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole: one DELETE and the revision it advances, both re-derived under the owner
+    // mutex on every attempt. Removing an edge that is already gone is the same answer either way.
+    await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       // Same shape as the add: the DELETE advances the same revision row and writes no `task`.
       await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
-    });
+    }, this.transientWriteRetry('tasks.removeDependency'));
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
     return this.get(ownerId, taskId);
   }
@@ -5794,7 +5798,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     ids: string[],
   ): Promise<{ deleted: number; survivingLinks: string[] }> {
-    const { deleted, runs, links } = await this.prisma.$transaction(
+    // Retried whole. Everything it decides is read inside the closure and under the owner mutex —
+    // the surviving links, the occupying runs, the rows the DELETE names — so a re-run deletes
+    // against the state the winning transaction left. The run teardown below is deliberately
+    // OUTSIDE the loop and outside the transaction: it talks to runners, and a retry must not be
+    // able to send a second cancel for a run the first attempt never actually deleted.
+    const { deleted, runs, links } = await withTransactionRetry(
+      this.prisma,
       async (tx) => {
         // Rank 10. A delete is a graph mutation — it cascades edges away and fires the dispatch
         // touch on whatever depended on these tasks — and it writes many `task` rows, so it takes
@@ -5848,11 +5858,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
         return { deleted: res.count, runs: occupying.map((s) => s.id), links: locked };
       },
-      // The delete used to be one implicit statement under no client deadline. Inside an
-      // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
-      // cascade through thousands of comments and edges would hit — turning deletes that used
-      // to work into P2028. The locks are held for as long as the delete takes either way.
-      { timeout: 60_000, maxWait: 10_000 },
+      this.transientWriteRetry('tasks.delete', {
+        // The delete used to be one implicit statement under no client deadline. Inside an
+        // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
+        // cascade through thousands of comments and edges would hit — turning deletes that used
+        // to work into P2028. The locks are held for as long as the delete takes either way.
+        // Handed to every attempt, not only the first.
+        transaction: { timeout: 60_000, maxWait: 10_000 },
+        // Two, for the reason TaskListsService.remove gives: a cascade this size should absorb
+        // one collision, not spend four deadlines on the same one.
+        maxAttempts: 2,
+      }),
     );
     for (const sessionId of runs) {
       // Each end is its own transaction, and one that fails must not take the delete with it:
@@ -6864,7 +6880,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const distinct = [...new Set(projectIds.filter((id): id is string => !!id))].sort();
     if (distinct.length === 0) return;
     const requestId = randomUUID();
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole, and safe because the identity is minted OUTSIDE the closure: every attempt
+    // passes `project_event_manual_trigger` the same request id over the same sorted project list,
+    // which is what that function deduplicates on. A retry therefore records the same trigger, not
+    // a second one.
+    await withTransactionRetry(this.prisma, async (tx) => {
       for (const projectId of distinct) {
         await tx.$executeRaw(Prisma.sql`
           SELECT "project_event_manual_trigger"(
@@ -6874,7 +6894,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           )
         `);
       }
-    });
+    }, this.transientWriteRetry('tasks.recordManualProjectTriggers'));
   }
 
   /**
@@ -7386,13 +7406,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // one `updateMany` takes its row locks in whatever order the plan produced them, and two
     // selections that overlap could take them in opposite orders. The owner mutex is what puts
     // this in one line with every other multi-row Task write instead of relying on the planner.
-    const res = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. One conditional multi-row UPDATE under the owner mutex, and `ids` is sorted
+    // and computed above, so every attempt names the same rows and writes the same value.
+    const res = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
       return tx.task.updateMany({
         where: { id: { in: ids }, ownerId },
         data: { assigneeId: assigneeId ?? null },
       });
-    });
+    }, this.transientWriteRetry('tasks.batchAssign'));
     return { updated: res.count };
   }
 

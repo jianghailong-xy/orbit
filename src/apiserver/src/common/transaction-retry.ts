@@ -306,6 +306,48 @@ function notify<E>(hook: ((event: E) => void) | undefined, event: E): void {
   }
 }
 
+/** The one method this module needs of a logger, so nothing here depends on Nest. */
+export interface RetryLogger {
+  warn(message: string): void;
+}
+
+/**
+ * The line a retried transaction writes, and the only thing any caller says about one.
+ *
+ * There is one of these rather than one per service because a second local answer to "what does a
+ * retry log look like" is a second thing to keep in step with the loop's own vocabulary. What a
+ * caller supplies is the operation name; everything else on the line comes from the closed sets
+ * this module defines — the outcome, the attempt counter, and the SQLSTATE (`40001`, `40P01`,
+ * `P2034`, or the literal `message` when only the driver's wording survived the wrapping). Every
+ * field is low-cardinality by construction, so this is safe to aggregate on.
+ *
+ * The error object itself is never logged. It is the one place a task's title, a prompt, a
+ * parameter value or the failing SQL can appear, and a retried write is exactly the moment
+ * somebody would think to include it.
+ *
+ * Only the outcomes that mean the database threw the transaction away are said out loud:
+ * `FAILED` is the ordinary path of every validation refusal and every duplicate key, and a
+ * first-attempt `COMMITTED` is the ordinary path of every write there is.
+ */
+export function loggedRetry(
+  logger: RetryLogger,
+  operation: string,
+  policy: TransactionRetryPolicy & { transaction?: TransactionOptions } = {},
+): TransactionRetryOptions {
+  return {
+    ...policy,
+    label: operation,
+    onOutcome: (event) => {
+      if (event.outcome === 'FAILED') return;
+      if (event.outcome === 'COMMITTED' && event.attempt === 1) return;
+      logger.warn(
+        `operation=${event.label} outcome=${event.outcome} ` +
+          `attempt=${event.attempt}/${event.maxAttempts} sqlstate=${event.evidence ?? 'none'}`,
+      );
+    },
+  };
+}
+
 /**
  * Run `work` inside a transaction, re-running the whole of it if PostgreSQL aborts it.
  *

@@ -21,6 +21,7 @@ import {
   selectDispatchableTasks,
 } from './project-dispatch-pass';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** What one pass did, for the log line and for a test that wants to assert on a single wake. */
 export interface ProjectDispatchPassResult {
@@ -184,7 +185,11 @@ implements ProjectDispatchPassExecutor, OnModuleInit, OnModuleDestroy {
     selection: ProjectDispatchSelection;
   } | null> {
     const decisionId = createDecisionId();
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. `decisionId` is minted above, OUTSIDE the closure, so every attempt writes the
+    // same decision identity and the same idempotency key rather than minting a second decision for
+    // one pass. The snapshot, the selection and the fencing-token check are all re-derived inside,
+    // which is what a RepeatableRead transaction that lost its snapshot (40001) needs.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const captured = await this.decisions.capture(tx, lease.projectId);
       const selection = selectDispatchableTasks(captured.input);
       const chosen = selection.candidates.find((candidate) => !attempted.has(candidate.taskId));
@@ -210,7 +215,7 @@ implements ProjectDispatchPassExecutor, OnModuleInit, OnModuleDestroy {
       }
       await this.decisions.persist(tx, captured, outcome, decisionId);
       return { decisionId, taskId: chosen.taskId, idempotencyKey, selection };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    }, loggedRetry(this.log, 'projectDispatch.planOne', { transaction: { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead } }));
   }
 }
 

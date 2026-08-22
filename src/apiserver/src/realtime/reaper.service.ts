@@ -18,6 +18,7 @@ import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 const REAP_INTERVAL_MS = 30_000;
 // How often to permanently purge sessions that have sat in Trash past the retention
@@ -285,7 +286,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // same thing the row does: this end is one the server means to undo, not a settlement.
     const retryAt = opts.armRetry ? new Date() : null;
     const resetTaskTo = opts.resetTaskTo ?? TaskStatus.OPEN;
-    const ok = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. The reaper re-reads the session under its row lock and decides from that read,
+    // so a re-run either finds the same stalled run or finds that somebody finished it first.
+    const ok = await withTransactionRetry(this.prisma, async (tx) => {
       const res = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -321,7 +324,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         await postRunFailureComment(tx, taskId, opts.failureDetail ?? reason);
       }
       return true;
-    });
+    }, loggedRetry(this.log, 'reaper.forceFinalize'));
     if (!ok) return;
     if (runnerId) this.realtime.requestCancel(runnerId, sessionId);
     this.realtime.publish(sessionId, {
@@ -353,7 +356,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
     // rolls BOTH back (no half-ended, wedged session). Retried next sweep if so. The
     // re-check mirrors sweep() — still parked and its task is terminal — so a turn
     // that arrived since the sweep read doesn't get cut off.
-    const done = await this.prisma.$transaction(async (tx) => {
+    // Retried whole, for the same reason as forceFinalize above.
+    const done = await withTransactionRetry(this.prisma, async (tx) => {
       const now = new Date();
       const claimed = await tx.session.updateMany({
         where: {
@@ -390,7 +394,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         },
       });
       return true;
-    });
+    }, loggedRetry(this.log, 'reaper.endParked'));
     if (!done) return;
     if (reason === SessionEndReason.TASK_DONE) {
       this.realtime.publishSessionLifecycleChanged(

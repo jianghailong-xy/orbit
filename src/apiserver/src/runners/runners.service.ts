@@ -3,6 +3,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
@@ -15,6 +16,7 @@ import { generateToken, sha256 } from '../common/crypto.util';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEnrollmentTokenDto, UpdateRunnerDto } from './dto';
 
@@ -27,6 +29,8 @@ const DEVICE_LOOKUP_MAX = 20;
 
 @Injectable()
 export class RunnersService {
+  private readonly logger = new Logger(RunnersService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private readonly deviceLookups = new Map<string, number[]>();
@@ -175,10 +179,18 @@ export class RunnersService {
       .sort((left, right) =>
         left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
       );
-    await this.prisma.$transaction(
-      ranked.map(({ id, position }) =>
-        this.prisma.runner.update({ where: { id }, data: { position } }),
-      ),
+    if (ranked.length === 0) return this.listRunners(ownerId);
+    // Retried whole, for the residual conflict the id ordering above cannot rule out: a heartbeat
+    // writes these same rows. Safe to re-run because `ranked` is computed once, outside the
+    // closure, so every attempt writes exactly the same positions to exactly the same rows.
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        for (const { id, position } of ranked) {
+          await tx.runner.update({ where: { id }, data: { position } });
+        }
+      },
+      loggedRetry(this.logger, 'runners.reorder'),
     );
     return this.listRunners(ownerId);
   }
