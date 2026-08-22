@@ -73,6 +73,14 @@ pc:v1:{projectId}:finding:{subjectTaskId}:{scopeRevision}:{failureFingerprint}
 两把唯一索引都在数据库里（`task_verification_finding_dedup_key`、`..._effect_key`），因此绕过服务的写入者
 同样挡得住。
 
+**指纹只有一个（FP1）**：`failureFingerprint` 由报告方给出，写进 finding 行；`[K2]` 的判定行必须记录
+**同一个值**，因此 `ConvergenceObservation.authoritativeFingerprint` 把它原样带过去，而不是让 ledger 再
+从 `FailureFacts` 哈希一遍。两处不一致的代价不是审计难看，而是 §8 的重复行**永远不成立**：
+`chargeFinding` 拿 finding 的指纹去比 `lastFingerprint`，后者读的是 ledger 那一列，两个值构造上就不可能
+相等，`sameFingerprintRepeats` 于是恒为 0。该字段缺省时 ledger 仍按原样自行哈希（`[K2]` 的既有调用方一个
+字不用改），传入时必须是 64 位小写 hex，否则 `record` 在读任何东西之前就拒绝——一个谁都比不上的身份，
+落库之后没有补救。
+
 ## 3. 分流（FD2）
 
 一条 finding 恰好产生 §3 表里那一个结果。判定顺序即判断本身：
