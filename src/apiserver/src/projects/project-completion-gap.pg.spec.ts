@@ -585,7 +585,9 @@ test('§13.1 AG7 / §13.2 V8 on real PostgreSQL', { skip, concurrency: 1 }, asyn
       { isolationLevel: 'RepeatableRead' },
     );
     // The marker the capture stamps, without which the AG8 exception below is versioned off.
-    assert.deepEqual(captured.input.world.protocol, { completionGaps: true });
+    // Both capability markers this build stamps: AG7's gaps and §13.3 DEP's epoch.
+    assert.deepEqual(captured.input.world.protocol,
+      { completionGaps: true, verificationEpoch: true });
     const selection = selectDispatchableTasks(captured.input);
     assert.deepEqual(selection.candidates.map((c) => c.taskId), [uuidToBase62(taskId)]);
     assert.equal(

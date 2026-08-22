@@ -105,7 +105,13 @@ export class CreateTaskDto {
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
   // Prerequisite task ids this new task should wait on (each must be owned by the
-  // caller). The task only runs once they're all DONE.
+  // caller). The task only runs once they're all DONE.  //
+  // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled
+  // `dependsOn: A`: once anything checks A, §13.3 DEP holds that edge until A's latest check has
+  // actually PASSED — a check that finished DONE with a FAIL verdict does not release it, and
+  // neither does re-opening the question with a new check. An edge naming the CHECK resolves to
+  // the same epoch, so old plans keep working, but it reads as being about one particular run
+  // when what the author meant was the work.
   @IsOptional() @IsArray() @IsPublicId({ each: true }) dependsOnTaskIds?: string[];
   // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
@@ -223,7 +229,13 @@ export class UpdateTaskDto {
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
   // Full replacement for this task's prerequisites. Omit to keep them unchanged;
-  // pass [] to clear them all.
+  // pass [] to clear them all.  //
+  // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled
+  // `dependsOn: A`: once anything checks A, §13.3 DEP holds that edge until A's latest check has
+  // actually PASSED — a check that finished DONE with a FAIL verdict does not release it, and
+  // neither does re-opening the question with a new check. An edge naming the CHECK resolves to
+  // the same epoch, so old plans keep working, but it reads as being about one particular run
+  // when what the author meant was the work.
   @ValidateIf((_dto, value) => value !== undefined)
   @IsArray()
   @IsPublicId({ each: true })
@@ -270,7 +282,13 @@ export class UpdateTaskDto {
 
 export class AddDependencyDto {
   // The prerequisite task this task should wait on. Must be owned by the caller, differ
-  // from the task itself, and not introduce a dependency cycle.
+  // from the task itself, and not introduce a dependency cycle.  //
+  // Name the SUBJECT, not its verification task. "B waits for A to be verified" is spelled
+  // `dependsOn: A`: once anything checks A, §13.3 DEP holds that edge until A's latest check has
+  // actually PASSED — a check that finished DONE with a FAIL verdict does not release it, and
+  // neither does re-opening the question with a new check. An edge naming the CHECK resolves to
+  // the same epoch, so old plans keep working, but it reads as being about one particular run
+  // when what the author meant was the work.
   @IsPublicId() dependsOnTaskId!: string;
 }
 

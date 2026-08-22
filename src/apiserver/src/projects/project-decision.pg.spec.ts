@@ -172,7 +172,8 @@ async function reset(client: Client): Promise<void> {
       "verifies_task_id" UUID,
       "completion_policy" TEXT NOT NULL DEFAULT 'MANUAL', "verdict" TEXT,
       "verdict_revision" BIGINT NOT NULL DEFAULT 0,
-      -- §13.6's columns, which the authorization adapter reads since 0130: a stand-in schema that
+      -- §13.6 SU1's columns, which the authorization adapter and the capture have selected since
+      -- they landed: a hand-built subset only ever agrees with itself, and a stand-in schema that
       -- omits a column the code under test selects fails on the column, not on the property.
       "superseded_by_task_id" UUID, "superseded_at" TIMESTAMP(3), "terminal_reason" TEXT,
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -188,6 +189,9 @@ async function reset(client: Client): Promise<void> {
       "effort" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "started_at" TIMESTAMP(3), "finished_at" TIMESTAMP(3),
       "completed_at" TIMESTAMP(3), "deleted_at" TIMESTAMP(3), "result" TEXT, "error" TEXT,
+      -- 13.3 DEP3's two: the lifecycle half the capture projects beside completed_at, and the
+      -- end reason that tells a worker finishing the task from a person filing the session.
+      "archived_at" TIMESTAMP(3), "end_reason" TEXT,
       "branch" TEXT, "base_sha" TEXT, "changed_files" JSONB, "merge_status" TEXT,
       "merged_source_sha" TEXT, "merge_target" TEXT, "branch_merged" BOOLEAN,
       "worktree_branch" TEXT, "worktree_dirty" BOOLEAN, "commit_status" TEXT

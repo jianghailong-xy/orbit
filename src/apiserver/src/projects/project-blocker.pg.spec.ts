@@ -227,6 +227,10 @@ async function reset(client: Client): Promise<void> {
       "effort" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "started_at" TIMESTAMP(3), "finished_at" TIMESTAMP(3),
       "completed_at" TIMESTAMP(3), "deleted_at" TIMESTAMP(3), "result" TEXT, "error" TEXT,
+      -- 13.3 DEP3's two, which the capture projects beside completed_at: the other half of 4.2's
+      -- COMPLETED lifecycle, and the end reason that tells a worker finishing the task apart from
+      -- a person filing the session.
+      "archived_at" TIMESTAMP(3), "end_reason" TEXT,
       "branch" TEXT, "base_sha" TEXT, "changed_files" JSONB, "merge_status" TEXT,
       "merged_source_sha" TEXT, "merge_target" TEXT, "branch_merged" BOOLEAN,
       "worktree_branch" TEXT, "worktree_dirty" BOOLEAN, "commit_status" TEXT

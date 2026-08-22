@@ -15,6 +15,7 @@ import {
 } from '../tasks/task-supersession';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
 import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
+import { verificationEpochOpenSql } from '../tasks/verification-dependency';
 
 export type ProjectAutomationPolicyValue = 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
 
@@ -84,6 +85,7 @@ export type ProjectAuthorizationReasonCode =
   | 'TASK_DISPATCH_HELD'
   | 'TASK_NOT_DUE'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
+  | 'VERIFICATION_NOT_PASSED'
   // §13.2 V3: an unresolved verification failure stops work here rather than by rewriting the
   // blocked tasks' status, so "why is this not running" stays a question the data answers.
   | 'VERIFICATION_DEFECT_OPEN'
@@ -184,6 +186,14 @@ export interface ProjectActionAuthorizationInput {
     dispatchHold: boolean;
     runAtDue: boolean;
     dependenciesReady: boolean;
+    /**
+     * §13.3 DEP: at least one unmet prerequisite is a CHECK that is DONE without an open PASS
+     * epoch. Separate from `dependenciesReady` because it changes the SENTENCE, not the verdict:
+     * "a prerequisite is still running" and "a prerequisite's check concluded FAIL" are opposite
+     * things to be told, and only one of them is a wait. Absent reads as false, which is what
+     * every caller that predates DEP meant.
+     */
+    dependenciesVerificationBlocked?: boolean;
     /**
      * The unresolved verification failure that stops this task, or null. Absent on audits captured
      * before §13.2 landed, which read as "nothing was blocking" — which is what was true then.
@@ -571,7 +581,15 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
     };
   }
   if (!task.dependenciesReady) {
-    return { decision: 'DEFER', reasonCode: 'TASK_DEPENDENCIES_INCOMPLETE' };
+    // §13.3 DEP. Still DEFER, not DENY: a check that failed is re-run once the defect is fixed, and
+    // the epoch opens with nobody asked — the same shape as `verificationBlock` above, which is the
+    // other half of §7.4 precondition 3 and answers for the SUBJECT rather than for an edge.
+    return {
+      decision: 'DEFER',
+      reasonCode: task.dependenciesVerificationBlocked
+        ? 'VERIFICATION_NOT_PASSED'
+        : 'TASK_DEPENDENCIES_INCOMPLETE',
+    };
   }
   if (task.hasLiveSession) return { decision: 'DEFER', reasonCode: 'TASK_ALREADY_RUNNING' };
   if (!task.assigneeAgentId) return { decision: 'DENY', reasonCode: 'WHO_UNRESOLVED' };
@@ -940,8 +958,9 @@ export class ProjectAuthorizationService {
               OR a."id" <> ${command.currentActionId ?? null}::uuid)
          AND a."created_at" >= ${new Date(now.getTime() - 24 * 60 * 60 * 1_000)}
     `);
-    const [dependencyState] = command.taskId == null ? [{ incomplete: 0 }]
-      : await tx.$queryRaw<Array<{ incomplete: number }>>(Prisma.sql`
+    const [dependencyState] = command.taskId == null
+      ? [{ incomplete: 0, verificationBlocked: false }]
+      : await tx.$queryRaw<Array<{ incomplete: number; verificationBlocked: boolean }>>(Prisma.sql`
           -- §13.6 SU9: an edge names an ATTEMPT, and a replaced attempt's work is held by its
           -- successor. Walked forward with a recursive CTE — the chain is short (0128 caps it at
           -- 256 and refuses cycles), and the walk is bounded here as well so data the trigger says
@@ -961,11 +980,39 @@ export class ProjectAuthorizationService {
               JOIN "task" successor ON successor."id" = current."superseded_by_task_id"
              WHERE chain.depth < 256
           )
-          SELECT count(*)::int AS "incomplete" FROM (
-            SELECT chain.root FROM chain
-             GROUP BY chain.root
-            HAVING bool_and(chain.status <> 'DONE')
-          ) unsatisfied
+          -- §13.3 DEP, on the same walk: once something CHECKS a prerequisite, that prerequisite
+          -- being DONE no longer means it is done — the check has to have passed. Asked of the
+          -- prerequisite's epoch SUBJECT, which is the row itself or, when the edge names a check,
+          -- what that check is about. verificationEpochOpenSql is TRUE for every task nothing
+          -- checks, so ordinary prerequisites reduce to exactly the old clause.
+          --
+          -- Projected per link and rolled up afterwards rather than written as
+          -- bool_and(... EXISTS ...): an aggregate whose argument carries a correlated subquery
+          -- is the shape that is easiest to get subtly wrong, and this one is read at a commit
+          -- point.
+          SELECT count(*)::int AS "incomplete",
+                 bool_or(rolled."verificationBlocked") AS "verificationBlocked"
+            FROM (
+              SELECT links.root,
+                     bool_and(NOT links."satisfied") AS "unsatisfied",
+                     bool_or(links."status" = 'DONE' AND NOT links."epochOpen")
+                       AS "verificationBlocked"
+                FROM (
+                  SELECT chain.root AS root, chain.status AS "status",
+                         ${Prisma.raw(verificationEpochOpenSql('chain_task', 'dependent_task'))}
+                           AS "epochOpen",
+                         (chain.status = 'DONE'
+                          AND ${Prisma.raw(verificationEpochOpenSql('chain_task', 'dependent_task'))}
+                         ) AS "satisfied"
+                    FROM chain
+                    JOIN "task" chain_task ON chain_task."id" = chain.id
+                    -- The WAITING task, joined so DEP's self-exemption can be asked: a check that
+                    -- depends on the subject it checks must not wait for its own conclusion.
+                    JOIN "task" dependent_task ON dependent_task."id" = ${command.taskId}::uuid
+                ) links
+               GROUP BY links.root
+            ) rolled
+           WHERE rolled."unsatisfied"
         `);
     // §7.4 precondition 3's second half. Two shapes, one read, most-specific first:
     //
@@ -1092,6 +1139,7 @@ export class ProjectAuthorizationService {
               dispatchHold: task?.dispatchHold ?? true,
               runAtDue: task?.runAt == null || task.runAt <= now,
               dependenciesReady: (dependencyState?.incomplete ?? 0) === 0,
+              dependenciesVerificationBlocked: dependencyState?.verificationBlocked === true,
               verificationBlock: verificationBlockRow == null ? null : {
                 reason: verificationBlockRow.reason,
                 failureId: uuidToBase62(verificationBlockRow.failureId),

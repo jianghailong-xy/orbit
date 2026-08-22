@@ -559,7 +559,14 @@ function runtimeAvailable(engines: unknown, runtime: AgentProvider, configured: 
  * to change.
  */
 export function wireRefusalCode(reasonCode: string): string {
-  return reasonCode === 'TASK_AGGREGATE_PARENT' ? 'STALE_SNAPSHOT' : reasonCode;
+  if (reasonCode === 'TASK_AGGREGATE_PARENT') return 'STALE_SNAPSHOT';
+  // §13.3 DEP, and the same rule as the line above rather than a second one: `VERIFICATION_NOT_PASSED`
+  // is a refinement OF `TASK_DEPENDENCIES_INCOMPLETE` — an unmet prerequisite, said more precisely —
+  // so the old vocabulary already has the right word for it and an old reader classifies that word
+  // as non-blocking. The refinement is not lost: `reasonCode` carries it verbatim, next to the
+  // authorization audit that says which prerequisite and why.
+  if (reasonCode === 'VERIFICATION_NOT_PASSED') return 'TASK_DEPENDENCIES_INCOMPLETE';
+  return reasonCode;
 }
 
 function providerAvailability(rows: ProviderRow[]): ProviderAvailability[] {

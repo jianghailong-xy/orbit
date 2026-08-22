@@ -421,6 +421,12 @@ export const PROJECT_BLOCKER_NON_BLOCKING_REFUSALS: ReadonlySet<string> = new Se
   'TASK_DISPATCH_HELD',
   'TASK_NOT_DUE',
   'TASK_DEPENDENCIES_INCOMPLETE',
+  // §13.3 DEP: a prerequisite's check has not passed. Non-blocking for the same reason
+  // `TASK_DEPENDENCIES_INCOMPLETE` is — the row that somebody must act on is the FAILED CHECK's
+  // own §13.2 condition, which is already open against the SUBJECT and names the defect subtask.
+  // A second row against the downstream task would ask a different person for the same thing, and
+  // §13.4's DONE gate would hold the project open on both.
+  'VERIFICATION_NOT_PASSED',
   'TASK_ALREADY_RUNNING',
   'RETRY_BACKOFF_ACTIVE',
   'PROJECT_CONCURRENCY_LIMIT',

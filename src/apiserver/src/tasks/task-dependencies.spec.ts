@@ -5,6 +5,7 @@ import {
   canRun,
   computeDependencyState,
   dependencyStateFromCounts,
+  statusPrerequisites,
   wouldCreateCycle,
   wouldReplacementCreateCycle,
   type DependencyEdge,
@@ -17,32 +18,32 @@ test('no prerequisites -> NONE (and runnable)', () => {
 });
 
 test('all prerequisites DONE -> READY (and runnable)', () => {
-  const state = computeDependencyState([TaskStatus.DONE, TaskStatus.DONE]);
+  const state = computeDependencyState(statusPrerequisites([TaskStatus.DONE, TaskStatus.DONE]));
   assert.equal(state, 'READY');
   assert.equal(canRun(state), true);
 });
 
 test('any prerequisite still open/in-progress -> BLOCKED (not runnable)', () => {
-  assert.equal(computeDependencyState([TaskStatus.DONE, TaskStatus.OPEN]), 'BLOCKED');
-  assert.equal(computeDependencyState([TaskStatus.IN_PROGRESS]), 'BLOCKED');
+  assert.equal(computeDependencyState(statusPrerequisites([TaskStatus.DONE, TaskStatus.OPEN])), 'BLOCKED');
+  assert.equal(computeDependencyState(statusPrerequisites([TaskStatus.IN_PROGRESS])), 'BLOCKED');
   assert.equal(canRun('BLOCKED'), false);
 });
 
 test('a CANCELLED prerequisite escalates to BLOCKED_FAILED even if others are DONE', () => {
-  const state = computeDependencyState([TaskStatus.DONE, TaskStatus.CANCELLED]);
+  const state = computeDependencyState(statusPrerequisites([TaskStatus.DONE, TaskStatus.CANCELLED]));
   assert.equal(state, 'BLOCKED_FAILED');
   assert.equal(canRun(state), false);
 });
 
 test('CANCELLED wins over a still-pending prerequisite', () => {
   assert.equal(
-    computeDependencyState([TaskStatus.OPEN, TaskStatus.CANCELLED]),
+    computeDependencyState(statusPrerequisites([TaskStatus.OPEN, TaskStatus.CANCELLED])),
     'BLOCKED_FAILED',
   );
 });
 
 test('a FAILED prerequisite escalates to BLOCKED_FAILED (needs a human, like CANCELLED)', () => {
-  const state = computeDependencyState([TaskStatus.DONE, TaskStatus.FAILED]);
+  const state = computeDependencyState(statusPrerequisites([TaskStatus.DONE, TaskStatus.FAILED]));
   assert.equal(state, 'BLOCKED_FAILED');
   assert.equal(canRun(state), false);
 });

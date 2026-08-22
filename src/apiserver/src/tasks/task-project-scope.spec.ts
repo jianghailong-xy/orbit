@@ -222,7 +222,10 @@ test('omitting the project leaves the scope exactly as it was', async () => {
   await service.listPage(OWNER_ID, { status: 'RUNNABLE' });
 
   for (const statement of raw.statements) {
-    assert.doesNotMatch(statement.text, /project_id/);
+    // `t.project_id`, not any `project_id`: §13.3 DEP's epoch clause names the column too, on the
+    // ledger row it looks the verdict action up by. That is not a scope — the scope is the one
+    // spelling the two positive assertions above pin, and this is its negation.
+    assert.doesNotMatch(statement.text, /t\.project_id/);
   }
   for (const where of [...countWheres, ...groupByWheres]) {
     assert.ok(!('projectId' in where), `scope grew a projectId key: ${JSON.stringify(where)}`);

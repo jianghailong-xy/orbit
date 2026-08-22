@@ -57,9 +57,14 @@ import {
 } from './task-aggregation';
 import {
   TaskRetirement,
-  dependencySatisfied,
   taskRetirement,
 } from '../tasks/task-supersession';
+import { dependencyEpochGate, dependencySatisfied } from '../tasks/task-dependencies';
+import {
+  VerificationEpochEntry,
+  VerificationRunFact,
+  verificationEpochGates,
+} from '../tasks/verification-dependency';
 import { isLiveSessionStatus } from './project-coordinator-session';
 
 /** How many dispatches one pass may propose, however much capacity the project reports. */
@@ -120,6 +125,14 @@ export type ProjectDispatchSkipReason =
   | 'RETRY_BACKOFF_ACTIVE'
   | 'TASK_ALREADY_RUNNING'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
+  /**
+   * §13.3 DEP: a prerequisite of this task is a CHECK, and the subject it checks has no open PASS
+   * epoch. Its own reason and not `TASK_DEPENDENCIES_INCOMPLETE`, because the two are opposite
+   * sentences: one says "wait, work is still running", and this one can say "the check concluded
+   * FAIL" — which is not a wait, it is a refusal somebody has to act on. The precise clause is in
+   * the audit; this is the answer the skip list shows.
+   */
+  | 'DEPENDENCY_VERIFICATION_NOT_PASSED'
   | 'VERIFICATION_SUBJECT_NOT_DONE'
   /**
    * §13.6 SU6, the derived half: this task CHECKS an attempt that was replaced or abandoned. The
@@ -234,6 +247,23 @@ export function selectDispatchableTasks(
   const obsoleteSubjects = new Set(
     [...retirementOf].filter(([, retired]) => retired != null).map(([id]) => id),
   );
+  // §13.3 DEP, from this same snapshot and nothing else. Versioned like AG8 below: a decision taken
+  // before DEP carries neither `verdictApplied` nor a session's `endReason`, so it is replayed by
+  // the rule its own binary used — `status = 'DONE'` — rather than by this one over missing facts.
+  const epochOf = input.world.protocol?.verificationEpoch
+    ? verificationEpochGates(
+        input.world.tasks.map((task) => ({
+          id: task.id,
+          status: task.status,
+          verifiesTaskId: task.verifiesTaskId,
+          verdict: task.verdict ?? null,
+          verdictRevision: task.verdictRevision ?? '0',
+          verdictApplied: task.verdictApplied ?? false,
+          retired: retirementOf.get(task.id) != null,
+        })),
+        verificationRunsByTask(input),
+      )
+    : new Map<string, VerificationEpochEntry>();
   // §13.1 AG6's first clause, over the same set `planTaskAggregation` counts children in: a
   // `parentTaskId` naming a task outside this Project's snapshot matches nothing here, which is
   // exactly how aggregation reads it — the half of a tree this snapshot cannot see is not guessed
@@ -285,7 +315,7 @@ export function selectDispatchableTasks(
     const due = input.evaluation.dueTasks[task.id];
     const reason = firstFailure(
       input, task, due, statusOf, taskById, childCounts, successorOf, retirementOf,
-      parentsWithChildren, blockers,
+      parentsWithChildren, blockers, epochOf,
       latestDispatch.get(task.id), epochMs,
     );
     if (reason) {
@@ -331,6 +361,7 @@ function firstFailure(
   retirementOf: Map<string, TaskRetirement | null>,
   parentsWithChildren: ReadonlySet<string>,
   blockers: readonly ProjectBlockerFact[],
+  epochOf: ReadonlyMap<string, VerificationEpochEntry>,
   latestDispatch: ProjectDecisionInput['world']['actions'][number] | undefined,
   epochMs: number,
 ): ProjectDispatchSkipReason | null {
@@ -396,8 +427,15 @@ function firstFailure(
   // §7.4 precondition 3, first half — through §13.6 SU9's chain. An edge points at an ATTEMPT, and
   // when that attempt was replaced the work moved to its successor while the edge did not. Read as
   // `status = 'DONE'` it is a prerequisite nothing can ever complete.
-  if (task.dependsOnTaskIds.some((id) => !dependencySatisfied(id, statusOf, successorOf))) {
-    return 'TASK_DEPENDENCIES_INCOMPLETE';
+  // ...and through §13.3 DEP, which qualifies what `DONE` means on a prerequisite that is a CHECK.
+  // Reported apart from the plain wait so the skip list can say "the check failed" rather than
+  // "not finished yet", which is the sentence that let a FAIL release its downstream.
+  if (task.dependsOnTaskIds.some((id) =>
+    !dependencySatisfied(id, statusOf, successorOf, epochOf, task.verifiesTaskId))) {
+    return task.dependsOnTaskIds.some((id) => statusOf.get(id) === 'DONE'
+      && dependencyEpochGate(id, epochOf, task.verifiesTaskId) != null)
+      ? 'DEPENDENCY_VERIFICATION_NOT_PASSED'
+      : 'TASK_DEPENDENCIES_INCOMPLETE';
   }
   // §7.4 precondition 3, second half: a check may not run before the thing it checks is finished.
   // The REPLACED case was split out and answered at the top of this function; what is left here is
@@ -510,4 +548,31 @@ function byTaskId(a: { taskId: string }, b: { taskId: string }): number {
 /** By bytes, never by a database collation — §10.4 W5-2a's rule, for the same reason. */
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Every task's runs, as §13.3 DEP1 reads them, from the snapshot's own session list.
+ *
+ * Deleted sessions are kept rather than filtered: `verificationRunSettled` reads `deletedAt` itself
+ * to decide that a trashed run is not evidence of a natural finish, and dropping them here would
+ * make a check whose only run was deleted look like a check that never ran — a different answer for
+ * the same world.
+ */
+function verificationRunsByTask(
+  input: ProjectDecisionInput,
+): ReadonlyMap<string, VerificationRunFact[]> {
+  const runs = new Map<string, VerificationRunFact[]>();
+  for (const session of input.world.sessions) {
+    if (session.taskId == null) continue;
+    const fact: VerificationRunFact = {
+      runStatus: session.runStatus,
+      endReason: session.endReason ?? null,
+      deletedAt: session.deletedAt,
+      completionAt: session.completedAt ?? session.archivedAt ?? null,
+    };
+    const list = runs.get(session.taskId);
+    if (list) list.push(fact);
+    else runs.set(session.taskId, [fact]);
+  }
+  return runs;
 }

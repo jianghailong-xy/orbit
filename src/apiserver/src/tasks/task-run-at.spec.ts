@@ -202,7 +202,10 @@ test('a dependent whose schedule has already passed is started by its prerequisi
       ],
     },
   });
-  (service as any).dependencyStatesFor = async () => new Map([[TASK_ID, 'READY']]);
+  // §13.3 DEP: `execute` reads prerequisite FACTS now, not just a reduced state, so that it can
+  // say which clause refused it. One satisfied prerequisite reduces to the READY this stubbed.
+  (service as any).dependencyFactsFor = async () =>
+    new Map([[TASK_ID, [{ status: TaskStatus.DONE }]]]);
   (service as any).execute = async (_o: string, id: string) => void executed.push(id);
 
   await (service as any).triggerDependents(OWNER_ID, 'done-task');
@@ -774,7 +777,10 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
   };
   const service = serviceWith(prisma, sessions, { publishForUser: () => undefined });
   (service as any).materialisationBudget = async () => ({ runner: new Map(), list: new Map() });
-  (service as any).dependencyStatesFor = async () => new Map([[TASK_ID, 'READY']]);
+  // §13.3 DEP: `execute` reads prerequisite FACTS now, not just a reduced state, so that it can
+  // say which clause refused it. One satisfied prerequisite reduces to the READY this stubbed.
+  (service as any).dependencyFactsFor = async () =>
+    new Map([[TASK_ID, [{ status: TaskStatus.DONE }]]]);
   return { service, createdSessions, writes };
 }
 

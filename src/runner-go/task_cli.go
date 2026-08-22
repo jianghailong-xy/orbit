@@ -123,7 +123,9 @@ Options:
   --due-date ISO_DATE
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
-  --depends-on ID[,ID...]     Repeatable prerequisite task ids
+  --depends-on ID[,ID...]     Repeatable prerequisite task ids; name the SUBJECT of the work,
+                              not its verification task — a dependency on a verified task is
+                              already held until that task's check PASSES
   --label L[,L...]            Repeatable grouping label, orthogonal to --list-id
   --auto-run-when-ready[=BOOL]
   --completion-policy MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED
@@ -237,7 +239,9 @@ Options:
   --acceptance-criteria-file -
                               Read the replacement criteria from stdin; paths are rejected
   --clear-acceptance-criteria Leave the task with no acceptance criteria
-  --depends-on ID[,ID...]     Replace all prerequisites; repeatable
+  --depends-on ID[,ID...]     Replace all prerequisites; repeatable. Name the SUBJECT of the
+                              work, not its verification task — a dependency on a verified
+                              task is already held until that task's check PASSES
   --clear-dependencies        Remove all prerequisites
   --label L[,L...]            Replace all labels; repeatable
   --clear-labels              Remove all labels
@@ -455,7 +459,7 @@ func cliTaskDependencyGraph(args []string, out io.Writer) error {
 func cliTaskDependencyAdd(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit task dependency-add")
-	dependsOn := fs.String("depends-on", "", "prerequisite task id this task waits for (required)")
+	dependsOn := fs.String("depends-on", "", "prerequisite task id this task waits for (required); name the SUBJECT, not its verification task — the server holds the edge until the subject's check PASSES")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -1788,7 +1792,7 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
 	{Tool: "task_dependency_graph", Argv: []string{"orbit", "task", "dependency-graph"}, Usage: "orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--max-depth <n> (server default when unset)", "--max-nodes <n> (server default when unset)", "--json"}},
-	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Mutates: true},
+	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Description: "Add one dependency edge: taskId waits for --depends-on. Point it at the SUBJECT rather than at that subject's verification task: once anything checks that task, the server holds the edge until its latest check has PASSED. An edge naming the check resolves to the same gate, so older plans keep working.", Mutates: true},
 	{Tool: "task_dependency_remove", Argv: []string{"orbit", "task", "dependency-remove"}, Usage: "orbit task dependency-remove [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Mutates: true},
 	{Tool: "tasklist_list", Argv: []string{"orbit", "task-list", "list"}, Usage: "orbit task-list list [--json]", Arguments: []string{"--json"}},
 	{Tool: "tasklist_create", Argv: []string{"orbit", "task-list", "create"}, Usage: "orbit task-list create --title TITLE [--json]", Arguments: []string{"--title <text> (required)", "--json"}, Mutates: true},
