@@ -5,6 +5,7 @@ import { ClientVersionInterceptor } from './common/client-version.interceptor';
 import { PrismaModule } from './prisma/prisma.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { EventsModule } from './events/events.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { QueueModule } from './queue/queue.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -27,6 +28,7 @@ import { ProvidersModule } from './providers/providers.module';
     PrismaModule,
     RealtimeModule,
     EventsModule,
+    MetricsModule,
     QueueModule,
     AuthModule,
     UsersModule,
