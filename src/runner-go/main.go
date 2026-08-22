@@ -68,6 +68,7 @@ Usage:
   orbit notify --message TEXT       Alert this account's devices with a line you write
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit capabilities [--json]       Show the CLI capabilities available to agents
+  orbit host setup --server URL     Set this machine up for runners (root, once per host)
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
 Run 'orbit <command> --help' for command-specific options.
@@ -180,6 +181,7 @@ running it when the machine is idle. Disable the daily check with ORBIT_NO_ENGIN
 	"provider":  providerHelp,
 	"notify":    notifyHelp,
 	"token":     tokenHelp,
+	"host":      hostHelp,
 	"capabilities": `orbit capabilities — show agent-safe Orbit CLI capabilities
 
 Usage:
@@ -316,6 +318,11 @@ func main() {
 	case "capabilities":
 		if err := cmdCapabilitiesCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit capabilities:", err)
+			os.Exit(1)
+		}
+	case "host":
+		if err := cmdHostCLI(args[1:], os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit host:", err)
 			os.Exit(1)
 		}
 	case "upgrade":
