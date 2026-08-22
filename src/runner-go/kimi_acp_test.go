@@ -1007,3 +1007,86 @@ func TestRunnerEnginePathIncludesKimiInstallerDirectory(t *testing.T) {
 		t.Fatalf("runnerEnginePath is not idempotent: %q -> %q", got, twice)
 	}
 }
+
+// The P0 this exists for: Kimi rejected `session/new` with a JSON-RPC "Internal
+// error" whose only useful sentence rode in error.data.details. Dropping data
+// left the transcript with a bare "session/new: Internal error".
+func TestKimiRPCFailureCarriesErrorDataDetails(t *testing.T) {
+	var msg kimiRPCMessage
+	if err := json.Unmarshal([]byte(`{"id":"orbit-kimi-1","error":{"code":-32603,"message":"Internal error","data":{"details":"ACP stdio MCP server orbit does not declare a runtime identity"}}}`), &msg); err != nil {
+		t.Fatal(err)
+	}
+	failure := &kimiRPCFailure{method: "session/new", err: *msg.Error}
+	got := failure.Error()
+	for _, want := range []string{"session/new", "Internal error", "ACP stdio MCP server orbit does not declare a runtime identity"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Error() = %q, want it to carry %q", got, want)
+		}
+	}
+	if !strings.HasPrefix(got, "session/new: ") {
+		t.Fatalf("Error() = %q, want the method prefix kept", got)
+	}
+}
+
+func TestKimiRPCFailureWithoutDataIsUnchanged(t *testing.T) {
+	tests := []struct {
+		name string
+		err  kimiRPCError
+		want string
+	}{
+		{"no data", kimiRPCError{Code: -32603, Message: "Internal error"}, "session/new: Internal error"},
+		{"empty object", kimiRPCError{Code: -32603, Message: "Internal error", Data: map[string]interface{}{}}, "session/new: Internal error"},
+		{"empty string", kimiRPCError{Code: -32603, Message: "Internal error", Data: ""}, "session/new: Internal error"},
+		{"data repeats the message", kimiRPCError{Code: -32603, Message: "Internal error", Data: map[string]interface{}{"message": "Internal error"}}, "session/new: Internal error"},
+		{"no message", kimiRPCError{Code: -32603}, "session/new failed"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			failure := &kimiRPCFailure{method: "session/new", err: tc.err}
+			if got := failure.Error(); got != tc.want {
+				t.Fatalf("Error() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A server that answers with its whole request context must not flood the transcript.
+func TestKimiRPCFailureClipsOversizedData(t *testing.T) {
+	long := strings.Repeat("x", kimiRPCErrorDataMax*3)
+	tests := map[string]interface{}{
+		"named string field": map[string]interface{}{"details": long},
+		"encoded object":     map[string]interface{}{"request": long},
+	}
+	for name, data := range tests {
+		t.Run(name, func(t *testing.T) {
+			failure := &kimiRPCFailure{method: "session/new", err: kimiRPCError{Code: -32603, Message: "Internal error", Data: data}}
+			got := failure.Error()
+			const prefix = "session/new: Internal error ("
+			if !strings.HasPrefix(got, prefix) || !strings.HasSuffix(got, "…)") {
+				t.Fatalf("Error() = %q, want %q…) around a clipped detail", got, prefix)
+			}
+			detail := []rune(strings.TrimSuffix(strings.TrimPrefix(got, prefix), ")"))
+			if len(detail) != kimiRPCErrorDataMax+1 {
+				t.Fatalf("detail is %d runes, want %d plus the ellipsis", len(detail), kimiRPCErrorDataMax)
+			}
+		})
+	}
+}
+
+// kimiAuthMessage decides whether a failed handshake earns the sign-in card. An
+// ordinary engine failure must reach the user as itself — prefixing it with
+// "Failed to authenticate" would send the user to re-login over an MCP config bug.
+func TestKimiAuthMessageLeavesNonAuthFailureAlone(t *testing.T) {
+	failure := &kimiRPCFailure{method: "session/new", err: kimiRPCError{
+		Code:    -32603,
+		Message: "Internal error",
+		Data:    map[string]interface{}{"details": "ACP stdio MCP server orbit does not declare a runtime identity"},
+	}}
+	got := kimiAuthMessage(failure)
+	if got != failure.Error() {
+		t.Fatalf("kimiAuthMessage = %q, want the failure verbatim (%q)", got, failure.Error())
+	}
+	if strings.Contains(got, "Failed to authenticate") {
+		t.Fatalf("kimiAuthMessage = %q, want no sign-in prefix on a non-auth failure", got)
+	}
+}

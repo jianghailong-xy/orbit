@@ -77,11 +77,49 @@ type kimiRPCFailure struct {
 	err    kimiRPCError
 }
 
+// kimiRPCErrorDataMax caps how much of a JSON-RPC error's `data` reaches the
+// transcript. The useful part of an ACP failure is a sentence; the cap keeps a
+// server that answers with its whole request context from flooding the session.
+const kimiRPCErrorDataMax = 300
+
 func (e *kimiRPCFailure) Error() string {
+	msg := e.method + ": " + e.err.Message
 	if e.err.Message == "" {
-		return e.method + " failed"
+		msg = e.method + " failed"
 	}
-	return e.method + ": " + e.err.Message
+	if detail := kimiRPCErrorDetail(e.err.Data); detail != "" && detail != e.err.Message {
+		return msg + " (" + clip(detail, kimiRPCErrorDataMax) + ")"
+	}
+	return msg
+}
+
+// kimiRPCErrorDetail renders a JSON-RPC error's `data` member as one line.
+//
+// `message` is by spec a short summary ("Internal error"), with the sentence that
+// actually says what went wrong carried in `data` — Kimi rejects an MCP server it
+// cannot identify with data.details, and dropping it left the transcript with a
+// bare "session/new: Internal error" nobody could act on. Named string fields win
+// because they are the human-readable part; anything else is JSON so the operator
+// at least sees what the engine sent.
+func kimiRPCErrorDetail(data interface{}) string {
+	switch v := data.(type) {
+	case nil:
+		return ""
+	case string:
+		return strings.TrimSpace(v)
+	case map[string]interface{}:
+		if len(v) == 0 {
+			return ""
+		}
+		if s := firstString(v, "details", "detail", "message", "error", "reason", "description"); s != "" {
+			return strings.TrimSpace(s)
+		}
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 type kimiACPClient struct {
