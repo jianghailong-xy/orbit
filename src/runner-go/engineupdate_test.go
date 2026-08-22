@@ -99,6 +99,32 @@ func TestEngineInstallerDirsAgreeWithServicePath(t *testing.T) {
 	}
 }
 
+// What engineInstallerDirs documents about order has to be what runnerEnginePath's loop does.
+// It drifted once already: the list was lifted out of runnerEnginePath and the comment that came
+// with it called the slice "PATH precedence order", while the prepend loop went on reversing it —
+// a claim about the produced PATH that no test could contradict, because none asserted the order.
+func TestServicePathReversesInstallerDirsSoLocalBinLeads(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+	dirs := engineInstallerDirs(home)
+	if len(dirs) == 0 {
+		t.Fatal("no installer directories")
+	}
+	// Derived from the list, never spelled out: a directory added there is covered by this
+	// assertion the moment it is added, rather than the day someone updates a literal.
+	reversed := make([]string, 0, len(dirs))
+	for i := len(dirs) - 1; i >= 0; i-- {
+		reversed = append(reversed, dirs[i])
+	}
+	want := strings.Join(reversed, ":") + ":/usr/bin"
+	if got := runnerEnginePath(home, "/usr/bin"); got != want {
+		t.Errorf("service PATH = %q, want %q", got, want)
+	}
+	// Stated once more the way the comments state it, so a failure names the promise it broke.
+	if reversed[0] != filepath.Join(home, ".local", "bin") {
+		t.Errorf("~/.local/bin must lead the engine dirs (the Claude/Codex resolution order), got %q", reversed[0])
+	}
+}
+
 func TestRecordEngineUpdateCarriesLastSuccess(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
 

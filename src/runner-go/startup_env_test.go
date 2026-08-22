@@ -99,8 +99,9 @@ func TestResolveRunnerEnvUnionsLoginPathBehindEngineDirs(t *testing.T) {
 		return -1
 	}
 	// Every engine installer dir is present and sits ahead of the inherited PATH, with
-	// ~/.local/bin first — the order runnerEnginePath produces from engineInstallerDirs,
-	// which is the single list the official-install check reads too.
+	// ~/.local/bin first: it is engineInstallerDirs' last entry, and runnerEnginePath
+	// prepends each in turn, so the PATH carries that list reversed (see service.go).
+	// That one list is also what the official-install check reads.
 	dirs := engineInstallerDirs(home)
 	if len(dirs) == 0 {
 		t.Fatal("no installer directories")

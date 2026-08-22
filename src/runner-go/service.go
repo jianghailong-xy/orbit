@@ -338,6 +338,9 @@ func primaryGroup(u *user.User) string {
 // successfully and is still unreachable. An engine may also be installed on demand
 // after the unit/plist was written, so every directory must be present even when it
 // does not exist yet.
+//
+// Prepending one at a time reverses engineInstallerDirs: the last entry there leads
+// the PATH this returns. That reversal is the point — see engineInstallerDirs.
 func runnerEnginePath(home, path string) string {
 	for _, dir := range engineInstallerDirs(home) {
 		if !pathContains(path, dir) {
@@ -348,8 +351,13 @@ func runnerEnginePath(home, path string) string {
 }
 
 // engineInstallerDirs lists the directories the official engine installers drop a binary into,
-// in PATH precedence order (~/.local/bin last, preserving the existing Claude/Codex resolution
-// order; OpenCode and Kimi each use a private dir instead).
+// in reverse PATH precedence order — ~/.kimi-code/bin, ~/.opencode/bin, ~/.local/bin — because
+// runnerEnginePath prepends them one at a time. The PATH it builds therefore reads them the
+// other way round, ~/.local/bin outermost: Claude and Codex install there, and keeping it first
+// preserves the resolution order that predates the private dirs (OpenCode and Kimi each use a
+// private dir instead). That produced order is what every unit and plist already on disk was
+// baked with; doctor_test.go's TestEngineInstallPathsIncludeOpenCode and
+// TestServicePathReversesInstallerDirsSoLocalBinLeads hold it in place.
 //
 // One list, because two questions read it and they must agree: which directories a service's
 // PATH needs, and whether a binary found on that PATH is an official install Orbit may re-run
