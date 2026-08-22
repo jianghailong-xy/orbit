@@ -1,15 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { ForbiddenException } from '@nestjs/common';
+import { ArgumentsHost, ForbiddenException, HttpException, HttpServer } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { TRANSIENT_DB_CONFLICT_CODE, TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS } from '@orbit/shared';
 
 import { classifyTransactionError } from '../common/transaction-retry';
+import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
 import { TasksService } from './tasks.service';
 
 const OWNER = 'owner-1';
 const SESSION = '550e8400-e29b-41d4-a716-446655440000';
 const PREREQUISITE = '550e8400-e29b-41d4-a716-446655440001';
+const PROJECT = '550e8400-e29b-41d4-a716-446655440002';
 const CLIENT_VERSION = '7.9.1';
 
 /**
@@ -148,7 +151,7 @@ function fixture(opts: FixtureOptions = {}) {
       count: async () => 0,
     },
     taskList: { findMany: async () => [] },
-    project: { count: async () => 1 },
+    project: { findFirst: async () => ({ id: PROJECT }), count: async () => 1 },
     $queryRaw: async () => [],
     $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => {
       attempts += 1;
@@ -288,7 +291,47 @@ for (const [name, call] of [
     assert.equal(f.attempts(), 4, 'the bounded budget, spent — not an unbounded loop');
     assert.equal(f.committed.length, 0, 'nothing was left behind by the attempts that failed');
     assert.deepEqual(f.published, [], 'and nothing was announced');
+
+    // And what a caller is actually told, through the boundary this error is meant to reach. The
+    // wording, the header and the fact that none of it names the statement are the boundary's own
+    // contract (transient-db-conflict.spec); what is asserted here is that a Task create's
+    // exhaustion is a thing that contract applies to — a 503 the client may re-send, not the 500
+    // an unrecognised error becomes.
+    assert.deepEqual(answerFor(raised), {
+      status: 503,
+      code: TRANSIENT_DB_CONFLICT_CODE,
+      retryable: true,
+      retryAfter: String(TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS),
+    });
   });
+}
+
+/** What the global boundary answers for `raised`: the status, the code and the Retry-After. */
+function answerFor(raised: unknown) {
+  const headers: Record<string, string> = {};
+  const handed: unknown[] = [];
+  const adapter = {
+    isHeadersSent: () => false,
+    setHeader: (_res: unknown, name: string, value: string) => void (headers[name] = value),
+  } as unknown as HttpServer;
+  const host = {
+    getType: () => 'http',
+    switchToHttp: () => ({ getRequest: () => ({ method: 'POST' }), getResponse: () => ({}) }),
+  } as unknown as ArgumentsHost;
+
+  new TransientDbConflictFilter({ catch: (e: unknown) => void handed.push(e) }, adapter).catch(
+    raised,
+    host,
+  );
+
+  const answered = handed[0] as HttpException;
+  const body = answered.getResponse() as { code: string; retryable: boolean };
+  return {
+    status: answered.getStatus(),
+    code: body.code,
+    retryable: body.retryable,
+    retryAfter: headers['Retry-After'],
+  };
 }
 
 // ----------------------------------------------------------------------------------------------
@@ -318,8 +361,15 @@ test('a duplicate key is answered on the first attempt, not retried', async () =
 test('a foreign key violation is answered on the first attempt, not retried', async () => {
   const f = fixture({ failures: Number.POSITIVE_INFINITY, error: foreignKeyViolation });
 
-  await assert.rejects(f.service.create(OWNER, { title: 'orphan' } as never));
+  // With the named project still there, `translateProjectFk` has nothing to translate: the error
+  // reaches the caller as the P2003 it is. Only a project that really vanished mid-write becomes
+  // the request-language refusal (task-project-race.spec), and neither is a conflict.
+  const raised = await f.service
+    .create(OWNER, { title: 'orphan', projectId: PROJECT } as never)
+    .then(() => null, (e: unknown) => e);
 
+  assert.ok(raised instanceof Prisma.PrismaClientKnownRequestError);
+  assert.equal(raised.code, 'P2003');
   assert.equal(f.attempts(), 1);
 });
 
