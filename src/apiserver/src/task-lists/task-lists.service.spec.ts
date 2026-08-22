@@ -63,34 +63,43 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
   const calls: string[] = [];
   let updateArgs: any;
   let sessionWhere: unknown;
+  // The disarm and the delete are one transaction under the owner graph mutex — two multi-row
+  // `task` writes have to take their rows in an order somebody else can share
+  // (common/lock-order.ts, I1) — so the double has to be able to hand itself back as the tx.
+  const prismaDouble: Record<string, unknown> = {
+    taskList: {
+      findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks: [] }),
+      delete: async () => {
+        calls.push('deleteList');
+        return { id: LIST_ID };
+      },
+    },
+    session: {
+      groupBy: async () => [],
+      findMany: async (args: any) => {
+        calls.push('findSessions');
+        sessionWhere = args.where;
+        return [{ id: 'session-a' }, { id: 'session-b' }];
+      },
+    },
+    task: {
+      updateMany: async (args: any) => {
+        calls.push('disarm');
+        updateArgs = args;
+        return { count: 2 };
+      },
+    },
+    taskDependency: { findMany: async () => [] },
+    user: { findMany: async () => [] },
+    workspace: { findMany: async () => [] },
+    $queryRaw: async () => {
+      calls.push('lock:user');
+      return [{ id: OWNER_ID }];
+    },
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaDouble),
+  };
   const service = new TaskListsService(
-    {
-      taskList: {
-        findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks: [] }),
-        delete: async () => {
-          calls.push('deleteList');
-          return { id: LIST_ID };
-        },
-      },
-      session: {
-        groupBy: async () => [],
-        findMany: async (args: any) => {
-          calls.push('findSessions');
-          sessionWhere = args.where;
-          return [{ id: 'session-a' }, { id: 'session-b' }];
-        },
-      },
-      task: {
-        updateMany: async (args: any) => {
-          calls.push('disarm');
-          updateArgs = args;
-          return { count: 2 };
-        },
-      },
-      taskDependency: { findMany: async () => [] },
-      user: { findMany: async () => [] },
-      workspace: { findMany: async () => [] },
-    } as never,
+    prismaDouble as never,
     { publishForUser: () => undefined } as never,
     {
       cancel: async (_ownerId: string, id: string) => {
@@ -106,6 +115,7 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
   // whatever it catches in between.
   assert.deepEqual(calls, [
     'findSessions',
+    'lock:user',
     'disarm',
     'deleteList',
     'cancel:session-a',
@@ -126,21 +136,24 @@ test('deleting a list disarms its tasks before tearing down their runs', async (
 
 test('a runner that will not answer does not fail the delete', async () => {
   let deleted = false;
-  const service = new TaskListsService(
-    {
-      taskList: {
-        findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks: [] }),
-        delete: async () => {
-          deleted = true;
-          return { id: LIST_ID };
-        },
+  const prismaDouble: Record<string, unknown> = {
+    taskList: {
+      findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks: [] }),
+      delete: async () => {
+        deleted = true;
+        return { id: LIST_ID };
       },
-      session: { groupBy: async () => [], findMany: async () => [{ id: 'session-a' }] },
-      task: { updateMany: async () => ({ count: 1 }) },
-      taskDependency: { findMany: async () => [] },
-      user: { findMany: async () => [] },
-      workspace: { findMany: async () => [] },
-    } as never,
+    },
+    session: { groupBy: async () => [], findMany: async () => [{ id: 'session-a' }] },
+    task: { updateMany: async () => ({ count: 1 }) },
+    taskDependency: { findMany: async () => [] },
+    user: { findMany: async () => [] },
+    workspace: { findMany: async () => [] },
+    $queryRaw: async () => [{ id: OWNER_ID }],
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prismaDouble),
+  };
+  const service = new TaskListsService(
+    prismaDouble as never,
     { publishForUser: () => undefined } as never,
     { cancel: async () => { throw new Error('runner offline'); } } as never,
   );

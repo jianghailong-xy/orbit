@@ -7,6 +7,7 @@ import {
   TaskStatus as SharedTaskStatus,
   uuidToBase62,
 } from '@orbit/shared';
+import { lockOwnerTaskGraph } from '../common/lock-order';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -295,6 +296,12 @@ export class TaskListsService {
     recordAs: { note?: string | null; author?: RevisionAuthor; authorSessionId?: string | null } | null,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      // Rank 10 before rank 20 (common/lock-order.ts, I1): a pause writes every Task in the list,
+      // so it is a multi-row Task write and takes the same owner mutex every other one takes.
+      // Without it, this transaction holds the list row and waits for Task rows while a PATCH
+      // that re-files a Task holds that Task and waits for the list — the two sides of one
+      // foreign key, taken in opposite orders.
+      await lockOwnerTaskGraph(tx, ownerId);
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "task_list"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -672,11 +679,20 @@ export class TaskListsService {
     // ever be resumed, which is a wedge rather than a stop. Disarming and releasing together say
     // the one thing that is actually true: nothing will start this on its own any more, and a
     // person still can.
-    await this.prisma.task.updateMany({
-      where: { ownerId, listId: id },
-      data: { autoRunWhenReady: false, dispatchHold: false },
+    // One transaction, under the owner graph mutex (common/lock-order.ts, I1). Two multi-row
+    // `task` writes happen here — this one, and the `Task.listId` SET NULL the delete cascades —
+    // and neither takes its rows in an order any other writer shares. Rank 10 is what puts them
+    // in one line with every other multi-row Task write rather than trusting two planners to
+    // agree; making the pair atomic while we are here also removes the state where the tasks were
+    // disarmed and the list survived.
+    await this.prisma.$transaction(async (tx) => {
+      await lockOwnerTaskGraph(tx, ownerId);
+      await tx.task.updateMany({
+        where: { ownerId, listId: id },
+        data: { autoRunWhenReady: false, dispatchHold: false },
+      });
+      await tx.taskList.delete({ where: { id } });
     });
-    await this.prisma.taskList.delete({ where: { id } });
     // In-flight runs, torn down only after the tasks can no longer be re-dispatched — the other
     // order re-runs whatever the sweep catches in between. Best-effort, as in
     // TasksService.batchStop: a runner that will not answer must not fail the delete.

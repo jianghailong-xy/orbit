@@ -29,6 +29,13 @@ import {
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
+import {
+  creatorSessionsOf,
+  lockCreatorSessions,
+  lockOwnerTaskGraph,
+  lockTaskLists,
+  orderedIds,
+} from '../common/lock-order';
 import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { planTaskAggregation } from '../projects/task-aggregation';
 import {
@@ -1153,9 +1160,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * avoids the write-skew where concurrent A->B and B->A requests both inspect the old
    * graph, pass cycle detection, and then commit a cycle. Every endpoint that mutates
    * edges on existing tasks (replacement/add/remove) holds this lock through its write.
+   *
+   * It is also rank 10 of the canonical lock order (`common/lock-order.ts`, I1): every
+   * transaction here that writes more than one `task` row takes it first, which is what makes
+   * two Task-writing transactions unable to deadlock with each other whatever rows they go on
+   * to touch. Delegated so the order has one definition rather than one per caller.
    */
   private async lockDependencyGraph(tx: Prisma.TransactionClient, ownerId: string): Promise<void> {
-    await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerId}::uuid FOR UPDATE`;
+    await lockOwnerTaskGraph(tx, ownerId);
+  }
+
+  /**
+   * I2 of the canonical lock order: the Session rows this Task write will foreign-key check,
+   * locked ahead of the first Task/edge write in one ordered `FOR KEY SHARE` statement.
+   *
+   * `sessionIds` are the ones the caller already knows (a create's own creator Session);
+   * `taskIds` are Tasks whose rows this transaction will write or make
+   * `task_dependency_dispatch_touch` re-write, whose creator Sessions are read here because the
+   * caller cannot know them. Both sets go into one sorted statement, so a transaction touching
+   * several Sessions can never take them in a different order from another that touches the
+   * same ones.
+   */
+  private async preLockCreatorSessions(
+    tx: Prisma.TransactionClient,
+    sessionIds: ReadonlyArray<string | null | undefined>,
+    taskIds: ReadonlyArray<string | null | undefined> = [],
+  ): Promise<void> {
+    const fromTasks = await creatorSessionsOf(tx, taskIds);
+    await lockCreatorSessions(tx, [...sessionIds, ...fromTasks]);
   }
 
   /**
@@ -1387,12 +1419,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // another project has to be either wholly before or wholly after this. No cycle check is
     // needed, though — a task that does not exist yet has no subtasks, so nothing can close a loop
     // through it.
+    //
+    // A create that names no link still goes through the transaction when it has a creator
+    // Session, because the INSERT's own `task_creator_session_id_fkey` check takes FOR KEY SHARE
+    // on that Session and the canonical order says a Task transaction takes its Session locks
+    // before its Task writes (lock-order.ts, I2). One extra ordered statement; without it the
+    // create's Session lock lands in the middle of its Task writes, which is the shape of the
+    // 2026-08-21 05:53:11 cycle.
     let task: Task;
     try {
       task =
-        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId
+        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId || sessionId
           ? await this.prisma.$transaction(async (tx) => {
-              await this.lockDependencyGraph(tx, ownerId);
+              // Rank 10 only when this write actually restructures the graph. A plain create
+              // must not queue behind another request's DAG rewrite just to be ordered.
+              if (dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId) {
+                await this.lockDependencyGraph(tx, ownerId);
+              }
+              // Rank 20 and 30, before the first Task/FK write below.
+              await lockTaskLists(tx, [dto.listId]);
+              await lockCreatorSessions(tx, [sessionId]);
               if (dto.parentTaskId) {
                 await this.assertParentEligible(
                   tx,
@@ -1828,9 +1874,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // create collapses a re-run of a batch, item by item, without merging distinct items.
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
 
-    const hasDependencies = items.some(
-      (item) => item.dependsOnTaskIds?.length || item.dependsOnRefs?.length,
-    );
     // Only parents that already exist. A parentRef points at a row this very transaction writes,
     // which no other request can see — let alone move into another project — so there is nothing
     // for the lock or the DB check below to protect; its rules were settled in assertBatchValid,
@@ -1842,7 +1885,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
       // A batch naming parents takes it for the matching reason — each parent's project is read
       // here and relied on by the rows written next.
-      if (hasDependencies || hasParents) await this.lockDependencyGraph(tx, ownerId);
+      //
+      // Taken unconditionally, unlike `create`: a batch writes several `task` rows in item order,
+      // which is not an order any other writer can be expected to share, and rank 10 of the
+      // canonical order (lock-order.ts, I1) is what keeps two multi-row Task writes from taking
+      // the same rows in opposite orders.
+      await this.lockDependencyGraph(tx, ownerId);
+      // Rank 20 and 30, in one ordered statement each and before the first Task/FK write: every
+      // list this batch files into, and the one Session that created it. Both are locks the row
+      // INSERTs would otherwise take one at a time, interleaved with the Task writes (I2).
+      await lockTaskLists(tx, items.map((item) => item.listId));
+      await lockCreatorSessions(tx, [sessionId]);
       // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
       // parent in item 40 must not leave items 1-39 written.
       if (hasParents) await this.assertBatchHierarchy(tx, ownerId, items);
@@ -3673,18 +3726,66 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // serializing each against itself but not against the other would leave exactly the gap the
     // lock exists to close. An update that touches neither still takes no lock at all: renaming a
     // task must not queue behind another owner's DAG rewrite.
+    //
+    // A write that only re-files the task into another list joins them, because
+    // `TaskListsService` locks a list row and then writes every Task in it: without the ordered
+    // pre-lock below, that pause and this move take `task_list` and `task` in opposite orders.
+    //
+    // `status` and `completionPolicy` join them for the OTHER endpoint. Both are in the column
+    // list `project_acceptance_task_fact_update` is declared over, so writing either makes an
+    // AFTER trigger take `FOR NO KEY UPDATE` on this task's project — measured, not inferred:
+    // `lock-order.pg.spec.ts` holds that lock and watches a status write block on it while a
+    // title write sails past. Left on the one-statement path, such a write holds the task row and
+    // then asks for the project, which is the reverse of the order the Project authorization
+    // adapter takes them in (project first, then the task FOR SHARE).
+    //
+    // The five columns below are exactly the ones that trigger is declared over.
+    const touchesAcceptanceFacts =
+      dto.status !== undefined ||
+      dto.completionPolicy !== undefined ||
+      dto.verdict !== undefined ||
+      dto.projectId !== undefined ||
+      dto.verifiesTaskId !== undefined;
+    // Restructuring is what rank 10 is for. A status write moves one row and no edge, so it must
+    // not queue behind another request's DAG rewrite — the same reasoning that keeps a rename off
+    // the lock entirely, applied to the writes that now need rank 40.
+    const restructures =
+      dependsOnTaskIds !== undefined ||
+      touchesHierarchy ||
+      concludesVerdict ||
+      !!supersession ||
+      dto.listId !== undefined;
+    // The FK re-check only fires on a SECOND write of this task's row, which is what a dependency
+    // replacement (through the dispatch touch) and a supersession (a separate statement) each do.
+    const rewritesTaskRow = dependsOnTaskIds !== undefined || !!supersession;
     const updated = await (
-      dependsOnTaskIds === undefined && !touchesHierarchy && !concludesVerdict && !supersession
+      !restructures && !(touchesAcceptanceFacts && before.projectId)
         ? this.prisma.task.update({ where: { id }, data })
         : this.prisma.$transaction(async (tx) => {
-            await this.lockDependencyGraph(tx, ownerId);
+            if (restructures) await this.lockDependencyGraph(tx, ownerId);
+            // Ranks 20 and 30 of the canonical order (common/lock-order.ts), both ahead of the
+            // task write below. The list is the FK endpoint a concurrent pause holds FOR UPDATE;
+            // the Session is the one `task_creator_session_id_fkey` re-checks — and it IS
+            // re-checked here even though nothing about it changes, because this transaction
+            // writes the task row and any second write of that row (the dependency touch, the
+            // supersession statement) re-runs every one of its foreign keys.
+            await lockTaskLists(tx, [dto.listId]);
+            if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);
             // §13.4 AE6-a. A verdict is one of the facts a project's acceptance is computed from,
             // so reaching one takes the project's own row before it writes — the same lock the
             // acceptance gate takes, which is what puts the two in an order instead of letting
-            // both commit and leave a DONE project asserting a verdict it never saw. Taken after
-            // the owner lock and before the task write, so the order here is always
-            // user -> project -> task and two of these can never wait on each other backwards.
-            if (concludesVerdict && before.projectId) {
+            // both commit and leave a DONE project asserting a verdict it never saw.
+            //
+            // Taken for every project-filed update, not only a verdict: `project_acceptance_reopen`
+            // takes this exact lock from an AFTER trigger on any status, verdict, policy, project
+            // or verification-link write, so pre-locking it changes nothing about WHICH locks this
+            // transaction ends up holding — only when. That is the whole point. Rank 40: after the
+            // Session pre-lock, so this can never hold the project while waiting for a Session a
+            // runner owns (session_project_capacity_serialize comes at the project from that
+            // side), and before the task write, so it can never hold the task while the Project
+            // authorization adapter — which takes the project first and the task FOR SHARE second —
+            // waits for it.
+            if (before.projectId && touchesAcceptanceFacts) {
               await tx.$queryRaw`
                 SELECT 1 FROM "project" WHERE "id" = ${before.projectId}::uuid FOR NO KEY UPDATE`;
             }
@@ -4773,6 +4874,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const applied = await this.prisma.$transaction(async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
+      // Rank 30 before any edge write: every edge this batch writes makes
+      // `task_dependency_dispatch_touch` re-write its dependent Task, and a Task written twice in
+      // one transaction (a remove and an add on the same dependent, which a restructure routinely
+      // produces) re-runs `task_creator_session_id_fkey` and takes FOR KEY SHARE on that Task's
+      // creator Session. One ordered statement for the whole batch, so a restructure and another
+      // owner's request can never take two Sessions in opposite orders.
+      await this.preLockCreatorSessions(tx, [], ops.map((op) => op.taskId));
       // The graph is re-read inside the lock and re-checked whole. The preview above is for the
       // human; this is the one that decides, and between them a concurrent edit may have made the
       // batch illegal.
@@ -4827,6 +4935,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.prisma.$transaction(async (tx) => {
         await this.lockDependencyGraph(tx, ownerId);
+        // Rank 30, before the edge write: `task_dependency_dispatch_touch` re-writes the
+        // dependent Task, which re-checks `task_creator_session_id_fkey` and takes FOR KEY SHARE
+        // on that Task's creator Session (common/lock-order.ts, I2).
+        await this.preLockCreatorSessions(tx, [], [taskId]);
         // Cycle check over this owner's whole dependency subgraph (both endpoints are
         // same-owner by construction, so filtering by the dependent's owner is enough).
         const edges = await tx.taskDependency.findMany({
@@ -4858,6 +4970,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!UUID_RE.test(dependsOnTaskId)) throw new NotFoundException('task not found');
     await this.prisma.$transaction(async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
+      // Same rank-30 pre-lock as the add: the DELETE fires the same dispatch touch.
+      await this.preLockCreatorSessions(tx, [], [taskId]);
       await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
     });
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);
@@ -4911,6 +5025,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{ deleted: number; survivingLinks: string[] }> {
     const { deleted, runs, links } = await this.prisma.$transaction(
       async (tx) => {
+        // Rank 10. A delete is a graph mutation — it cascades edges away and fires the dispatch
+        // touch on whatever depended on these tasks — and it writes many `task` rows, so it takes
+        // the same owner mutex every other multi-row Task write takes (lock-order.ts, I1). That
+        // is what makes it unable to deadlock against a create, a dependency edit or a verdict,
+        // whichever rows the two happen to share.
+        await this.lockDependencyGraph(tx, ownerId);
+        // Rank 30, and the reason this transaction is the order's one declared exception: the
+        // DELETE below cascades `session.task_id` to NULL, which writes every run attached to
+        // these tasks — a `session` lock taken from inside a `task` lock. Taking those rows here,
+        // ordered, puts the ordinary case back in rank order. It cannot be complete (a dispatch
+        // that commits between this statement and the task lock attaches a run this did not see),
+        // which is exactly why the task lock below still comes before the run scan.
+        await tx.$queryRaw`
+          SELECT "id" FROM "session"
+          WHERE "task_id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+          ORDER BY "id"
+          FOR UPDATE`;
+        // Rank 40, and the same lock `project_acceptance_reopen` takes from an AFTER trigger on
+        // every one of the DELETEs below — moved ahead of the task lock so this transaction is
+        // never caught holding a task row while asking for its project, which is the reverse of
+        // the order the Project authorization adapter takes them in. Ordered, and read under the
+        // owner mutex, which is the only lock a task's project can move under.
+        await tx.$queryRaw`
+          SELECT "id" FROM "project"
+          WHERE "id" IN (
+            SELECT DISTINCT "project_id" FROM "task"
+             WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+               AND "project_id" IS NOT NULL
+          )
+          ORDER BY "id"
+          FOR NO KEY UPDATE`;
         // Ordered, so two deletes over overlapping selections cannot take the same rows in
         // opposite orders and deadlock.
         //
@@ -5519,9 +5664,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /** Set (or clear, when assigneeId is null) the responsible workspace on many tasks at once. */
   async batchAssign(ownerId: string, taskIds: string[], assigneeId?: string | null) {
     await this.assertOwnedWorkspace(ownerId, assigneeId);
-    const res = await this.prisma.task.updateMany({
-      where: { id: { in: taskIds }, ownerId },
-      data: { assigneeId: assigneeId ?? null },
+    const ids = orderedIds(taskIds);
+    if (ids.length === 0) return { updated: 0 };
+    // A multi-row `task` write, so rank 10 of the canonical order applies (lock-order.ts, I1):
+    // one `updateMany` takes its row locks in whatever order the plan produced them, and two
+    // selections that overlap could take them in opposite orders. The owner mutex is what puts
+    // this in one line with every other multi-row Task write instead of relying on the planner.
+    const res = await this.prisma.$transaction(async (tx) => {
+      await this.lockDependencyGraph(tx, ownerId);
+      return tx.task.updateMany({
+        where: { id: { in: ids }, ownerId },
+        data: { assigneeId: assigneeId ?? null },
+      });
     });
     return { updated: res.count };
   }
