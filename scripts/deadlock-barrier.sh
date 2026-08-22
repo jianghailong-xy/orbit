@@ -5,6 +5,7 @@
 #   scripts/deadlock-barrier.sh three-party    # the three-party 40P01 baseline
 #   scripts/deadlock-barrier.sh spec           # the harness's own pg spec
 #   scripts/deadlock-barrier.sh session-scope  # the 0130 Session event-source scope regression
+#   scripts/deadlock-barrier.sh lock-order     # the canonical lock order, from both arrival orders
 #   scripts/deadlock-barrier.sh all            # every gate above, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
 #
@@ -39,8 +40,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|three-party|spec|session-scope|all) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|three-party|spec|session-scope|all] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|session-scope|lock-order|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|session-scope|lock-order|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -86,7 +87,7 @@ URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
 case "$TARGET" in
   # session-scope runs LAST because it rebuilds the pre-0130 trigger mid-test: an interrupted
   # run must never be able to leave a baseline executing against a schema it did not intend.
-  all) TARGETS=(spec baseline three-party session-scope) ;;
+  all) TARGETS=(spec baseline three-party lock-order session-scope) ;;
   *)   TARGETS=("$TARGET") ;;
 esac
 
@@ -98,6 +99,10 @@ run_target() {
     # The regression the narrowing owns. It rebuilds the pre-0130 trigger to prove its own
     # barrier discriminates, then re-applies 0130 — so it must not run beside the baselines.
     session-scope) CMD=("$NODE" --test --test-concurrency=1 build/projects/project-session-event-scope.pg.spec.js) ;;
+    # The post-fix regression: the same two barrier timings, both arrival orders, every party
+    # committing. It runs AFTER the baselines so a run that stops early has still proven the
+    # cycles it is the answer to, and BEFORE session-scope, which rebuilds a trigger mid-test.
+    lock-order)  CMD=("$NODE" --test --test-concurrency=1 build/deadlock/lock-order.pg.spec.js) ;;
   esac
   echo "==> $1"
   ( cd "$API" && COORDINATOR_PG_URL="$URL" \
