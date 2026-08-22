@@ -141,33 +141,52 @@ export class TaskScopeMovedError extends Error {
   }
 }
 
-/** The closure of `seeds`, as one query, so the walk cannot disagree with itself between reads. */
+/**
+ * The closure of `seeds`, as one query, so the walk cannot disagree with itself between reads.
+ *
+ * No backticks anywhere below the `Prisma.sql` tag, and that is not a style rule. A backtick inside
+ * a tagged template closes it, so a SQL comment written the way the comments above are written ends
+ * the template at the word it was quoting and the rest of the statement parses as TypeScript. It
+ * fails as a `TS1005` pointing at a line some distance further down, which is why this is said here
+ * rather than left to be rediscovered: SQL comments in this file use plain words.
+ */
 async function readScope(
   tx: Prisma.TransactionClient,
   ownerId: string,
   request: TaskScopeRequest,
 ): Promise<{ taskIds: string[]; projectIds: string[] }> {
   const seeds = [...new Set(request.taskIds)].sort();
-  if (seeds.length === 0) return { taskIds: [], projectIds: [] };
+  if (seeds.length === 0) {
+    const seeded = [...new Set((request.extraProjectIds ?? [])
+      .filter((id): id is string => !!id))].sort();
+    return { taskIds: [], projectIds: seeded };
+  }
+  const followVerification = request.followVerification !== false;
+  const followDeleteFanout = request.followDeleteFanout === true;
+  // Carried in the closure rather than fetched by a correlated subquery over it: PostgreSQL forbids
+  // a recursive CTE from referring to itself inside a subquery, and the SUBJECT direction of the
+  // verification edge (the seed's own verifies_task_id) needs that column of the row already in the
+  // closure. Selecting it alongside the id costs nothing and keeps the recursive term a plain join.
   const rows = await tx.$queryRaw<Array<{ id: string; projectId: string | null }>>(Prisma.sql`
     WITH RECURSIVE closure AS (
-      SELECT t."id", t."project_id"
+      SELECT t."id", t."project_id", t."verifies_task_id", t."parent_task_id",
+             t."superseded_by_task_id"
         FROM "task" t
        WHERE t."id" = ANY(${seeds}::uuid[]) AND t."owner_id" = ${ownerId}::uuid
       UNION
-      SELECT n."id", n."project_id"
+      SELECT n."id", n."project_id", n."verifies_task_id", n."parent_task_id",
+             n."superseded_by_task_id"
         FROM closure c
         JOIN "task" n
           ON n."owner_id" = ${ownerId}::uuid
          AND (
            -- The verification edge, BOTH ways: a verdict's consequences land on the subject, and a
            -- subject's delete CASCADEs onto its verifiers.
-           (${request.followVerification !== false}
-             AND (n."verifies_task_id" = c."id" OR n."id" = (
-               SELECT v."verifies_task_id" FROM "task" v WHERE v."id" = c."id")))
-           -- The rows a DELETE rewrites by SET NULL. `superseded_by_task_id` is an acceptance-fact
+           (${followVerification}::boolean
+             AND (n."verifies_task_id" = c."id" OR n."id" = c."verifies_task_id"))
+           -- The rows a DELETE rewrites by SET NULL. The superseded-by pointer is an acceptance-fact
            -- column, so those rows reopen projects of their own.
-           OR (${request.followDeleteFanout === true}
+           OR (${followDeleteFanout}::boolean
              AND (n."parent_task_id" = c."id" OR n."superseded_by_task_id" = c."id"))
          )
     )
@@ -177,7 +196,7 @@ async function readScope(
     ...rows.map((row) => row.projectId),
     ...(request.extraProjectIds ?? []),
   ].filter((id): id is string => !!id))].sort();
-  return { taskIds: rows.map((row) => row.id).sort(), projectIds };
+  return { taskIds: [...new Set(rows.map((row) => row.id))].sort(), projectIds };
 }
 
 /**
