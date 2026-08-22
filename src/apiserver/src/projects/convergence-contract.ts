@@ -217,6 +217,8 @@ export type ConvergenceCounterName =
   | 'attemptsOnRevision'
   | 'attemptsWithoutProgress'
   | 'sameFingerprintRepeats'
+  | 'sameActionRepeats'
+  | 'repairsWithoutSeverityDrop'
   | 'decisionsWithoutProgress'
   | 'verificationRounds'
   | 'transientRetries'
@@ -229,6 +231,25 @@ export interface ConvergenceCounters {
   /** Attempts since the last strict improvement. §4 PV4 resets it; that is the whole point. */
   attemptsWithoutProgress: number;
   sameFingerprintRepeats: number;
+  /**
+   * `[K4]` (v1.2). How many times the action this decision proposes has ALREADY been proposed on
+   * this revision since the last strict progress.
+   *
+   * Counted against the whole run rather than against the previous decision alone, because the
+   * cheapest way past a consecutive counter is to alternate: A, B, A, B never repeats twice in a
+   * row and never stops. The incident (§0) alternated between re-running the suite and pushing a
+   * fix for one turn at a time, which is why "the same failure twice in a row" never fired.
+   */
+  sameActionRepeats: number;
+  /**
+   * `[K4]` (v1.2). Closed repair rounds since `openP0 + openP1` last strictly dropped.
+   *
+   * §8's `verificationRounds` asks "how many times has this been sent back"; this asks whether
+   * being sent back is ACHIEVING anything. A task can burn repair rounds while the defect count
+   * holds steady — every round closes one finding and opens another — and that is the shape of a
+   * repair loop rather than of a repair.
+   */
+  repairsWithoutSeverityDrop: number;
   decisionsWithoutProgress: number;
   verificationRounds: number;
   transientRetries: number;
@@ -239,6 +260,8 @@ export const ZERO_COUNTERS: Readonly<ConvergenceCounters> = {
   attemptsOnRevision: 0,
   attemptsWithoutProgress: 0,
   sameFingerprintRepeats: 0,
+  sameActionRepeats: 0,
+  repairsWithoutSeverityDrop: 0,
   decisionsWithoutProgress: 0,
   verificationRounds: 0,
   transientRetries: 0,
@@ -254,8 +277,31 @@ export const ZERO_COUNTERS: Readonly<ConvergenceCounters> = {
 export const PROGRESS_RESET_COUNTERS: readonly ConvergenceCounterName[] = [
   'attemptsWithoutProgress',
   'sameFingerprintRepeats',
+  'sameActionRepeats',
   'decisionsWithoutProgress',
   'transientRetries',
+];
+
+/**
+ * `[K4]`: what happened to the defect load — `openP0 + openP1` — between two vectors.
+ *
+ * Three cases and not two, because "it did not fall" and "there was nothing to fall" are different
+ * worlds and only one of them is evidence of a repair loop. A task whose findings are not filed as
+ * P0/P1 at all would otherwise spend the repair budget on a line that has nothing to say about it,
+ * and be stopped with a reason — 「返修没让缺陷数下降」— that is not true of it.
+ */
+export type SeverityTrend = 'DROPPED' | 'HELD' | 'NONE';
+
+/**
+ * `[K4]` (v1.2): the one counter with a reset licence of its own.
+ *
+ * `repairsWithoutSeverityDrop` is deliberately NOT in the set above. Strict progress is any
+ * dimension improving, and closing an acceptance item while the defect count holds is exactly the
+ * world this counter exists to name — letting it be zeroed by that would delete the observation
+ * that produced it. It resets on its own evidence and on nothing else: `openP0 + openP1` went down.
+ */
+export const SEVERITY_RESET_COUNTERS: readonly ConvergenceCounterName[] = [
+  'repairsWithoutSeverityDrop',
 ];
 
 /** §8's thresholds. `null` is "unbounded" and is only legal with a USER's signature (OW4). */
@@ -263,6 +309,8 @@ export interface ConvergenceThresholds {
   maxAttemptsWithoutProgress: number | null;
   maxAttemptsPerScopeRevision: number | null;
   maxSameFingerprintRepeats: number | null;
+  maxSameActionRepeats: number | null;
+  maxRepairsWithoutSeverityDrop: number | null;
   maxDecisionsWithoutProgress: number | null;
   maxVerificationRounds: number | null;
   maxTransientRetries: number | null;
@@ -273,6 +321,13 @@ export const DEFAULT_CONVERGENCE_THRESHOLDS: Readonly<ConvergenceThresholds> = {
   maxAttemptsWithoutProgress: 5,
   maxAttemptsPerScopeRevision: 24,
   maxSameFingerprintRepeats: 2,
+  maxSameActionRepeats: 2,
+  // Three rather than two, and the reason is ordering rather than generosity: at two this line
+  // would fire on the incident's own replay one round BEFORE `SAME_FAILURE_REPEATED`, and report
+  // "the defect count is not falling" about a loop whose actual diagnosis is "this exact failure,
+  // again". These two lines exist to catch what the fingerprint line MISSES — a loop whose error
+  // text changes every round — not to answer ahead of it when it is about to speak.
+  maxRepairsWithoutSeverityDrop: 3,
   maxDecisionsWithoutProgress: 6,
   maxVerificationRounds: 2,
   maxTransientRetries: 3,
@@ -314,6 +369,8 @@ export const DEFAULT_ATTEMPT_BUDGET: Readonly<AttemptBudget> = {
 export type NonConvergenceReason =
   | 'SCOPE_EXPANSION_REQUIRED'
   | 'SAME_FAILURE_REPEATED'
+  | 'SAME_ACTION_REPEATED'
+  | 'SEVERITY_NOT_DECLINING'
   | 'VERIFICATION_ROUNDS_EXHAUSTED'
   | 'TRANSIENT_RETRY_BUDGET_EXHAUSTED'
   | 'ATTEMPT_BUDGET_EXHAUSTED'
@@ -323,6 +380,8 @@ export type NonConvergenceReason =
 export const NON_CONVERGENCE_PRIORITY: readonly NonConvergenceReason[] = [
   'SCOPE_EXPANSION_REQUIRED',
   'SAME_FAILURE_REPEATED',
+  'SAME_ACTION_REPEATED',
+  'SEVERITY_NOT_DECLINING',
   'VERIFICATION_ROUNDS_EXHAUSTED',
   'TRANSIENT_RETRY_BUDGET_EXHAUSTED',
   'ATTEMPT_BUDGET_EXHAUSTED',
@@ -342,6 +401,18 @@ export const NON_CONVERGENCE_RULE: Readonly<Record<NonConvergenceReason, {
   SAME_FAILURE_REPEATED: {
     counter: 'sameFingerprintRepeats',
     threshold: 'maxSameFingerprintRepeats',
+  },
+  // `[K4]`: the two lines the incident walked straight past. It never repeated a FAILURE twice in a
+  // row — the error text carried a fresh session id every time — and it never ran out of
+  // verification rounds, because each round did close something. What it did do was propose the
+  // same action over and over while the defect count never moved, and neither of those was a line.
+  SAME_ACTION_REPEATED: {
+    counter: 'sameActionRepeats',
+    threshold: 'maxSameActionRepeats',
+  },
+  SEVERITY_NOT_DECLINING: {
+    counter: 'repairsWithoutSeverityDrop',
+    threshold: 'maxRepairsWithoutSeverityDrop',
   },
   VERIFICATION_ROUNDS_EXHAUSTED: {
     counter: 'verificationRounds',

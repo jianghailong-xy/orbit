@@ -5,6 +5,13 @@ import { test } from 'node:test';
 
 import { bare, column, headingNumbers, section, tables } from './contract-doc';
 import {
+  EvidenceFreshness,
+  actionIdentity,
+  evidenceSupportsProgress,
+  hypothesisIdentity,
+} from './convergence-evidence';
+import { EMPTY_PROGRESS_VECTOR } from './convergence-progress';
+import {
   AttemptBudget,
   CLASSIFICATION_COUNTER,
   CLASSIFICATION_OUTCOME,
@@ -66,9 +73,11 @@ test('§0–§9 all exist, and the code names the version the document does', ()
   for (const n of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
     assert.ok(headings.has(n), `§${n} is missing from the convergence contract`);
   }
-  // v1.1: `[K3]` added the two attempt-budget dimensions §8's prose already relied on. Every other
-  // table in this document is byte-identical to the frozen v1.0, and the assertions below say so.
-  assert.match(DOC.split('\n')[0], /有界收敛契约 v1\.1$/);
+  // v1.2: `[K3]` added the two attempt-budget dimensions §8's prose already relied on, and `[K4]`
+  // added the two threshold rows the incident crossed without a line — the repeated ACTION and the
+  // repair that repairs nothing. Every other table is still byte-identical to the frozen v1.0, and
+  // the assertions below say so.
+  assert.match(DOC.split('\n')[0], /有界收敛契约 v1\.2$/);
 });
 
 test('§2: the state table and the code list exactly the same states', () => {
@@ -315,7 +324,7 @@ test('§4 PV4: the reset set is the four the document names, and the three absol
   for (const counter of PROGRESS_RESET_COUNTERS) {
     assert.ok(resets.includes(counter), `§4 PV4 must name ${counter} as reset by strict progress`);
   }
-  assert.equal(PROGRESS_RESET_COUNTERS.length, 4);
+  assert.equal(PROGRESS_RESET_COUNTERS.length, 5);
   for (const absolute of ['attemptsOnRevision', 'verificationRounds', 'scopeExpansionRequests']) {
     assert.ok(absolutes.includes(absolute), `§4 PV4 must name ${absolute} as 永不清零`);
     assert.ok(
@@ -323,6 +332,47 @@ test('§4 PV4: the reset set is the four the document names, and the three absol
       `${absolute} must survive strict progress — §4 PV4 calls it 永不清零`,
     );
   }
+});
+
+test('§4 PV6: the freshness readings are the code\'s, and only FRESH may claim progress', () => {
+  const stated = column(tableWith('4', '读数'), '读数').map(bare) as EvidenceFreshness[];
+  assert.deepEqual([...stated].sort(), ['FRESH', 'STALE', 'UNMEASURED']);
+  const claims = column(tableWith('4', '读数'), '能否刷新 lastProgressAt').map(bare);
+  for (let i = 0; i < stated.length; i++) {
+    assert.equal(
+      evidenceSupportsProgress({ freshness: stated[i], evidenceAsOf: null, staleItems: [] }),
+      claims[i] === '能',
+      `§4 PV6 row ${stated[i]}`,
+    );
+  }
+  // PV1 again, from the other side: freshness must not have become a ninth dimension while nobody
+  // was looking. The vector's fields are §4's table and this reading is not one of them.
+  const fields = column(tableWith('4', '字段'), '字段').map(bare);
+  assert.deepEqual([...fields].sort(), Object.keys(EMPTY_PROGRESS_VECTOR).sort());
+  assert.ok(!fields.some((f) => /fresh|evidence/i.test(f)));
+});
+
+test('§5.1: the action identity is over the document\'s four fields and nothing else', () => {
+  const stated = column(tableWith('5', '动作字段'), '动作字段').map(bare);
+  assert.deepEqual([...stated].sort(), ['hypothesis', 'kind', 'scopeHash', 'target']);
+  // FP5: the generation is in the idempotency KEY and never in the identity. Stated as a property
+  // of the values rather than of the names, because the failure it refuses is silent — an identity
+  // that varied per generation would simply never report a repeat.
+  const facts = { kind: 'DISPATCH_ATTEMPT', target: 'branch', hypothesis: 'retry the suite', scopeHash: 'abc' };
+  assert.equal(actionIdentity(facts), actionIdentity({ ...facts }));
+  // FP4: §5's normalization, so an id, a timestamp and a constant are the same proposal.
+  assert.equal(
+    actionIdentity({ ...facts, hypothesis: 'retry session 3f7c1a52-9d3e-4b8f-8a21-77dcb0c5e9a1 with timeout 5' }),
+    actionIdentity({ ...facts, hypothesis: 'retry session 91b0dd47-2e6a-42c1-9f70-1d4ab8e63c05 with timeout 30' }),
+  );
+  // FP2's other side: a genuinely different plan is a different identity.
+  assert.notEqual(actionIdentity(facts), actionIdentity({ ...facts, kind: 'FILE_DEFECT' }));
+  // FP3/FP6: a new revision is a new question, so the same words are a different proposal.
+  assert.notEqual(actionIdentity(facts), actionIdentity({ ...facts, scopeHash: 'def' }));
+  assert.notEqual(
+    hypothesisIdentity('retry the suite', 'abc'),
+    hypothesisIdentity('retry the suite', 'def'),
+  );
 });
 
 test('§8: the two attempt lines read different counters, and only one of them resets', () => {

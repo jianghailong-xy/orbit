@@ -29,6 +29,12 @@ import {
   scopeHash,
   strictlyImproves,
 } from './convergence-progress';
+import {
+  EvidenceFreshness,
+  EvidenceReading,
+  evidenceSupportsProgress,
+  severityTrend,
+} from './convergence-evidence';
 
 /**
  * `[K2]`: what a coordination judgment IS, as a pure function of committed facts.
@@ -73,6 +79,16 @@ export interface ConvergenceState {
   progressVector: ProgressVector | null;
   /** The previous decision's fingerprint, for §8's `sameFingerprintRepeats`. */
   lastFingerprint: string | null;
+  /**
+   * `[K4]`: how many committed decisions in the current no-progress window already proposed the
+   * action this observation is proposing.
+   *
+   * Read from the ledger by the writer under the same lock as everything else here, because it is
+   * a fact about committed rows (TH4) and because it depends on the observation — a counter cannot
+   * accumulate it without also being told when a DIFFERENT action was taken. Absent means "the
+   * caller did not look", which counts as zero: it cannot invent repeats, only miss them.
+   */
+  sameActionPriorCount?: number;
 }
 
 /**
@@ -95,12 +111,32 @@ export interface ConvergenceObservation {
   failure: FailureFacts | null;
   /** §4's measurement, taken now. Its `scopeHash` is what makes it comparable — or not (PV3). */
   progressVector: ProgressVector;
+  /**
+   * `[K4]` PV6: how old the evidence behind that vector is.
+   *
+   * Absent when the caller measured the vector itself rather than deriving it from a snapshot —
+   * `[K2]`'s callers and its specs, where the vector IS the observation. Present on every path
+   * that derives one, which is every path from `[K5]` on. A STALE reading cannot claim progress;
+   * see `evidenceSupportsProgress`.
+   */
+  evidence?: EvidenceReading | null;
   observedAt: Date;
   decidedBy: ConvergenceDecidedBy;
   /** Whether this observation closes a verification round (§8's `verificationRounds`). */
   verificationRoundClosed?: boolean;
   /** What the caller will do about it, if anything. `null` records a judgment that acted on nothing. */
   action: string | null;
+  /**
+   * `[K4]` §5.1: the normalized identity of that action, and of the hypothesis behind it.
+   *
+   * Not the same thing as `actionIdempotencyKey`, and the difference is the whole point.
+   * The key answers "has THIS action already been performed" and contains the attempt generation,
+   * so every generation gets a fresh one — that is what makes a redelivery safe. The identity
+   * answers "is this the same thing we tried last time", so it must NOT contain the generation, or
+   * a loop would look like a sequence of distinct plans forever.
+   */
+  actionIdentity?: string | null;
+  hypothesisIdentity?: string | null;
   sessionId?: string | null;
   projectDecisionId?: string | null;
 }
@@ -118,9 +154,14 @@ export interface PlannedConvergenceDecision {
   action: string | null;
   actionIdempotencyKey: string | null;
   failureFingerprint: string | null;
+  actionIdentity: string | null;
+  hypothesisIdentity: string | null;
   progressVector: ProgressVector;
   progressVectorDigest: string;
   progressed: boolean;
+  /** PV6: what the evidence reading was, and how old its oldest item was. Null when unmeasured. */
+  evidenceFreshness: EvidenceFreshness | null;
+  evidenceAsOf: Date | null;
   counters: ConvergenceCounters;
   nonConvergenceReason: NonConvergenceReason | null;
   knownGoodSha: string | null;
@@ -163,9 +204,21 @@ export interface ConvergenceDecisionInput {
   observedProgressVector: ProgressVector;
   previousFingerprint: string | null;
   observedFingerprint: string | null;
+  /** v2 (`[K4]`): the three inputs the breaker gained. A replay without them is a v1 replay. */
+  observedActionIdentity: string | null;
+  sameActionPriorCount: number;
+  evidenceFreshness: EvidenceFreshness | null;
 }
 
-export const CONVERGENCE_LEDGER_INPUT_VERSION = 1 as const;
+/**
+ * v2: `[K4]` added the action identity, its window count and the evidence reading.
+ *
+ * Versioned rather than silently widened because the input is hashed: a v1 row's `input_hash` was
+ * taken over a v1 shape, and a replay that fed it through today's serializer would compute a
+ * different hash and report the ledger as corrupt. The version in the row says which shape its
+ * hash was taken over.
+ */
+export const CONVERGENCE_LEDGER_INPUT_VERSION = 2 as const;
 
 /**
  * §6.2's shape, for a task's ledger. The revision is IN the key on purpose: the same fact observed
@@ -222,6 +275,10 @@ const REPLAN_REQUIRED_ACTION: Readonly<Record<NonConvergenceReason, string>> = {
     'This scope revision has reached its absolute attempt cap. Split it or re-scope it; it was mis-sized.',
   NO_PROGRESS:
     'Consecutive decisions produced no strict progress. Re-plan the task or extend the budget explicitly.',
+  SAME_ACTION_REPEATED:
+    'The same action has been proposed again and again on this scope revision without moving it. Change what is being tried — a different action, a new revision, or a person — rather than repeating it.',
+  SEVERITY_NOT_DECLINING:
+    'Repairs keep being filed and the open P0/P1 count is not falling. Re-plan the task: closing one defect per round while another opens is not convergence.',
 };
 
 /**
@@ -283,7 +340,18 @@ export function planConvergenceDecision(
 
   const previousVector = state.progressVector
     ?? { ...EMPTY_PROGRESS_VECTOR, scopeHash: state.scopeHash };
-  const progressed = strictlyImproves(previousVector, observation.progressVector);
+  // PV6 before PV2: a measurement the evidence cannot support is not a smaller improvement, it is
+  // not a measurement of now at all. Refusing it HERE rather than inside `strictlyImproves` keeps
+  // §4's comparison a pure statement about two vectors — the question "may this vector be
+  // believed" is about the snapshot behind it, and answering both in one function would make a
+  // stale reading indistinguishable from a step that genuinely moved nothing.
+  const believable = evidenceSupportsProgress(observation.evidence);
+  const progressed = believable && strictlyImproves(previousVector, observation.progressVector);
+  // A reading that may not be believed says nothing about the defect load either — `HELD` rather
+  // than `NONE`, because "we could not measure" must not read as "there was nothing to fix".
+  const severity = believable
+    ? severityTrend(previousVector, observation.progressVector)
+    : 'HELD';
 
   const attemptStarted = observation.event === 'ATTEMPT_STARTED';
   const counters = advanceCounters(state.counters, {
@@ -293,6 +361,8 @@ export function planConvergenceDecision(
     previousFingerprint: state.lastFingerprint,
     attemptStarted,
     verificationRoundClosed: observation.verificationRoundClosed === true,
+    sameActionPriorCount: state.sameActionPriorCount ?? 0,
+    severity,
   });
 
   const moved = progressStateAfter(state.progressState, observation.event);
@@ -345,6 +415,9 @@ export function planConvergenceDecision(
     observedProgressVector: observation.progressVector,
     previousFingerprint: state.lastFingerprint,
     observedFingerprint: fingerprint,
+    observedActionIdentity: observation.actionIdentity ?? null,
+    sameActionPriorCount: state.sameActionPriorCount ?? 0,
+    evidenceFreshness: observation.evidence?.freshness ?? null,
   };
 
   return {
@@ -361,9 +434,16 @@ export function planConvergenceDecision(
       ? convergenceActionKey(taskId, state.scopeRevision, attemptGeneration, action)
       : null,
     failureFingerprint: fingerprint,
+    // Recorded whether or not the action was authorized: the row says what this judgment PROPOSED,
+    // and `action` says what it was allowed to do. Dropping the identity on a refused action would
+    // erase the evidence of the repeat from the very decision the repeat caused.
+    actionIdentity: observation.actionIdentity ?? null,
+    hypothesisIdentity: observation.hypothesisIdentity ?? null,
     progressVector: observation.progressVector,
     progressVectorDigest: progressVectorDigest(observation.progressVector),
     progressed,
+    evidenceFreshness: observation.evidence?.freshness ?? null,
+    evidenceAsOf: observation.evidence?.evidenceAsOf ?? null,
     counters,
     nonConvergenceReason: verdict.reason,
     knownGoodSha: observation.progressVector.knownGoodSha,

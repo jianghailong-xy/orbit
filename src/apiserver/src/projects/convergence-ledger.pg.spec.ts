@@ -42,6 +42,7 @@ const LEGACY_TASK = '00000000-0000-7000-8000-000000002007';
 const SESSION = '00000000-0000-7000-8000-000000002008';
 
 const LEDGER = migration('0132_task_convergence_ledger');
+const IDENTITY = migration('0134_task_progress_vector_identity');
 
 const SCOPE = scopeHash({ title: 'T', description: null, acceptanceCriteria: 'AC' });
 const AT = new Date('2026-08-22T10:00:00.000Z');
@@ -138,6 +139,10 @@ async function reset(client: Client): Promise<void> {
     );
   `);
   await client.query(LEDGER);
+  // `[K4]`'s 0134 too: the service this spec drives writes the action identity and the evidence
+  // reading, which are 0134's columns. A fixture that stopped at the migration this file is named
+  // after would be testing a service that no longer exists.
+  await client.query(IDENTITY);
   await client.query(`
     INSERT INTO "project" ("id", "owner_id", "title") VALUES ('${PROJECT}', '${OWNER}', 'P');
     INSERT INTO "project" ("id", "owner_id", "title", "automation_policy")

@@ -15,6 +15,7 @@ import {
   isDispatchableProgressState,
   progressStateAfter,
 } from './convergence-contract';
+import { severityTrend } from './convergence-evidence';
 import {
   EMPTY_PROGRESS_VECTOR,
   FailureFacts,
@@ -200,11 +201,13 @@ test('§3 CL2: a failure that keeps being called transient is reclassified once 
   }
 });
 
-test('§4 PV4: strict progress resets the four counters it names and nothing else', () => {
+test('§4 PV4/PV7: strict progress resets the five counters it names and nothing else', () => {
   const before: ConvergenceCounters = {
     attemptsOnRevision: 4,
     attemptsWithoutProgress: 3,
     sameFingerprintRepeats: 2,
+    sameActionRepeats: 2,
+    repairsWithoutSeverityDrop: 1,
     decisionsWithoutProgress: 5,
     verificationRounds: 1,
     transientRetries: 2,
@@ -215,11 +218,17 @@ test('§4 PV4: strict progress resets the four counters it names and nothing els
     progressed: true,
     fingerprint: null,
     previousFingerprint: null,
+    sameActionPriorCount: 0,
+    // `[K4]` PV7: this progress did not come from the defect load falling, so the repair counter
+    // keeps its 1 while the five PV4 names go to zero. That asymmetry IS the rule.
+    severity: 'NONE',
   });
   assert.deepEqual(after, {
     attemptsOnRevision: 4,
     attemptsWithoutProgress: 0,
     sameFingerprintRepeats: 0,
+    sameActionRepeats: 0,
+    repairsWithoutSeverityDrop: 1,
     decisionsWithoutProgress: 0,
     verificationRounds: 1,
     transientRetries: 0,
@@ -235,6 +244,8 @@ test('a step that classifies nothing and moves nothing still spends the no-progr
       progressed: false,
       fingerprint: null,
       previousFingerprint: null,
+      sameActionPriorCount: 0,
+      severity: 'NONE',
     });
   }
   assert.equal(counters.decisionsWithoutProgress, 7);
@@ -246,6 +257,8 @@ test('§8 TH4: a restart cannot talk a counter downward', () => {
     attemptsOnRevision: 4,
     attemptsWithoutProgress: 3,
     sameFingerprintRepeats: 2,
+    sameActionRepeats: 1,
+    repairsWithoutSeverityDrop: 1,
     decisionsWithoutProgress: 5,
     verificationRounds: 2,
     transientRetries: 3,
@@ -259,6 +272,7 @@ test('§8 TH4: a restart cannot talk a counter downward', () => {
     ...committed,
     attemptsWithoutProgress: 0,
     sameFingerprintRepeats: 0,
+    sameActionRepeats: 0,
     decisionsWithoutProgress: 0,
     transientRetries: 0,
   }, true);
@@ -266,6 +280,10 @@ test('§8 TH4: a restart cannot talk a counter downward', () => {
     attemptsOnRevision: 4,
     attemptsWithoutProgress: 0,
     sameFingerprintRepeats: 0,
+    sameActionRepeats: 0,
+    // `[K4]` PV7: progress alone does not buy the repair counter a reset, so the merge keeps the
+    // committed 1 even though the proposal was allowed to zero the five.
+    repairsWithoutSeverityDrop: 1,
     decisionsWithoutProgress: 0,
     verificationRounds: 2,
     transientRetries: 0,
@@ -289,6 +307,11 @@ test('incident replay: three hundred rounds of the same failure trip the breaker
       progressed: false,
       fingerprint,
       previousFingerprint: previous,
+      sameActionPriorCount: 0,
+      // The incident's defect stayed open the whole time, and `[K4]`'s repair line sees that. It
+      // crosses on the same round as the fingerprint line and TH1 puts the fingerprint first,
+      // because "this exact failure, again" is the more specific thing to tell a person.
+      severity: 'HELD',
     });
     previous = fingerprint;
     const verdict = detectNonConvergence(counters, DEFAULT_CONVERGENCE_THRESHOLDS);
@@ -316,15 +339,21 @@ test('incident replay, mutated: without §5 normalization the same loop never tr
       progressed: false,
       fingerprint: raw,
       previousFingerprint: previous,
+      sameActionPriorCount: 0,
+      severity: 'HELD',
     });
     previous = raw;
   }
   assert.equal(counters.sameFingerprintRepeats, 0, 'raw text never repeats');
-  // It still stops — that is the point of having more than one line. The attempt budget and the
-  // no-progress budget are both crossed, and TH1 makes the reported one determinate.
+  // It still stops — that is the point of having more than one line. Under v1.2 it stops SOONER
+  // and for a better reason: `[K4]`'s repair line does not read the error text at all, so the
+  // mutation that blinds the fingerprint line does nothing to it. It crosses on round four, where
+  // the attempt budget would not have crossed until round six.
   const verdict = detectNonConvergence(counters, DEFAULT_CONVERGENCE_THRESHOLDS);
   assert.equal(verdict.tripped, true);
-  assert.equal(verdict.reason, 'ATTEMPT_BUDGET_EXHAUSTED');
+  assert.equal(verdict.reason, 'SEVERITY_NOT_DECLINING');
+  assert.ok(counters.attemptsWithoutProgress > (DEFAULT_CONVERGENCE_THRESHOLDS.maxAttemptsWithoutProgress as number),
+    'and the attempt budget is crossed too — TH1 is what makes the reported reason determinate');
 });
 
 test('a task that is genuinely converging is never stopped by the attempt budget', () => {
@@ -345,6 +374,11 @@ test('a task that is genuinely converging is never stopped by the attempt budget
       fingerprint: `fp-${round}`,
       previousFingerprint: `fp-${round - 1}`,
       attemptStarted: true,
+      sameActionPriorCount: 0,
+      // Derived rather than asserted: this is the round-by-round world `[K4]`'s repair line reads,
+      // and a task closing one P0 per round must clear it every time. Writing 'HELD' here by hand
+      // would be the false stop this test exists to refuse.
+      severity: severityTrend(before, after),
     });
     before = after;
     assert.equal(detectNonConvergence(counters, DEFAULT_CONVERGENCE_THRESHOLDS).tripped, false,
@@ -370,6 +404,8 @@ test('§8: the hard cap still stops a task that inches forward forever', () => {
       fingerprint: `fp-${round}`,
       previousFingerprint: `fp-${round - 1}`,
       attemptStarted: true,
+      sameActionPriorCount: 0,
+      severity: 'NONE',
     });
     const verdict = detectNonConvergence(counters, DEFAULT_CONVERGENCE_THRESHOLDS);
     if (verdict.tripped) {
@@ -406,6 +442,8 @@ test('§8 TH6: the attempt count on one revision is bounded by the two lines tog
         fingerprint: `fp-${cycle}-${i}`,
         previousFingerprint: `fp-${cycle}-${i - 1}`,
         attemptStarted: true,
+        sameActionPriorCount: 0,
+        severity: 'NONE',
       });
       attempts++;
       if (detectNonConvergence(counters, DEFAULT_CONVERGENCE_THRESHOLDS).tripped) {
@@ -444,6 +482,8 @@ test('incident replay: the scope-expansion loop stops at the first request, unde
   const counters = advanceCounters(ZERO_COUNTERS, {
     classification: 'SCOPE_EXPANSION',
     progressed: false,
+    sameActionPriorCount: 0,
+    severity: 'NONE',
     fingerprint: 'fp',
     previousFingerprint: null,
     attemptStarted: true,
@@ -465,6 +505,8 @@ test('incident replay: the scope-expansion loop stops at the first request, unde
     fingerprint: null,
     previousFingerprint: null,
     attemptStarted: true,
+    sameActionPriorCount: 0,
+    severity: 'NONE',
   });
   assert.equal(afterProgress.scopeExpansionRequests, 1);
   assert.equal(
@@ -497,6 +539,13 @@ test('incident replay, mutated: letting the loop revise its own scope makes it u
       fingerprint,
       previousFingerprint: previous,
       attemptStarted: true,
+      sameActionPriorCount: 0,
+      // PV3 again, through `[K4]`'s line: vectors measured against two different targets say
+      // nothing about each other's defects, so the repair counter has nothing to charge either.
+      severity: severityTrend(
+        { ...vector({ openP0: 1 }), scopeHash: previous ?? SCOPE },
+        { ...vector({ openP0: 1 }), scopeHash: grown },
+      ),
     });
     previous = fingerprint;
   }

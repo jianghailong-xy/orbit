@@ -271,11 +271,13 @@ test('SM1: a SETTLED task is never tripped and never leaves', () => {
 // §4 — progress.
 // -------------------------------------------------------------------------------------------
 
-test('§4 PV4: strict progress zeroes the four, and only the four', () => {
+test('§4 PV4: strict progress zeroes the five, and only the five', () => {
   const spent: ConvergenceCounters = {
     attemptsOnRevision: 7,
     attemptsWithoutProgress: 4,
     sameFingerprintRepeats: 1,
+    sameActionRepeats: 1,
+    repairsWithoutSeverityDrop: 0,
     decisionsWithoutProgress: 5,
     verificationRounds: 1,
     transientRetries: 2,
@@ -298,6 +300,8 @@ test('§4 PV4: strict progress zeroes the four, and only the four', () => {
     attemptsOnRevision: 7,
     attemptsWithoutProgress: 0,
     sameFingerprintRepeats: 0,
+    sameActionRepeats: 0,
+    repairsWithoutSeverityDrop: 0,
     decisionsWithoutProgress: 0,
     verificationRounds: 1,
     transientRetries: 0,

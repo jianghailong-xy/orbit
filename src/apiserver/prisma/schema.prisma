@@ -2459,7 +2459,7 @@ model Task {
   progressState      String   @default("CONVERGING") @map("progress_state")
   /// §8's seven counters. Migration 0132's trigger refuses any UPDATE that walks one DOWN without
   /// strict progress or a new scope revision — which is every shape a budget has ever escaped by.
-  convergenceCounters Json    @default("{\"attemptsOnRevision\":0,\"attemptsWithoutProgress\":0,\"sameFingerprintRepeats\":0,\"decisionsWithoutProgress\":0,\"verificationRounds\":0,\"transientRetries\":0,\"scopeExpansionRequests\":0}") @map("convergence_counters")
+  convergenceCounters Json    @default("{\"attemptsOnRevision\":0,\"attemptsWithoutProgress\":0,\"sameFingerprintRepeats\":0,\"sameActionRepeats\":0,\"repairsWithoutSeverityDrop\":0,\"decisionsWithoutProgress\":0,\"verificationRounds\":0,\"transientRetries\":0,\"scopeExpansionRequests\":0}") @map("convergence_counters")
   /// §4 PV4: moved ONLY by strict improvement toward acceptance. Producing an action, opening a
   /// session, writing a commit or burning a token does not touch it (RL0).
   lastProgressAt     DateTime? @map("last_progress_at")
@@ -2641,6 +2641,16 @@ model TaskConvergenceDecision {
   actionIdempotencyKey String? @map("action_idempotency_key")
 
   failureFingerprint   String?  @map("failure_fingerprint") @db.Char(64)
+  /// `[K4]` §5.1: the normalized identity of the action this judgment PROPOSED, and of the
+  /// hypothesis behind it. Not `actionIdempotencyKey`, which carries the attempt generation so a
+  /// redelivery can be recognised — an identity that carried it could never see a repeat.
+  actionIdentity       String?  @map("action_identity") @db.Char(64)
+  hypothesisIdentity   String?  @map("hypothesis_identity") @db.Char(64)
+  /// `[K4]` PV6: how old the oldest piece of evidence behind `progressVector` was, and whether the
+  /// reading may be believed. Null means the writer took no reading; `UNMEASURED` means the
+  /// reading came back empty, which is a broken evidence pipeline rather than a clean world.
+  evidenceFreshness    String?   @map("evidence_freshness")
+  evidenceAsOf         DateTime? @map("evidence_as_of")
   progressVector       Json     @map("progress_vector")
   progressVectorDigest String   @map("progress_vector_digest") @db.Char(64)
   progressed           Boolean
@@ -2666,6 +2676,10 @@ model TaskConvergenceDecision {
   @@index([taskId, seq(sort: Desc)])
   @@index([ownerId, createdAt(sort: Desc)])
   @@index([taskId, scopeRevision, failureFingerprint])
+  /// The window query `[K4]` asks on every judgment: this task, this revision, this action, since
+  /// the last row that progressed. Both are partial indexes, declared in migration 0134 (as with
+  /// `actionIdempotencyKey`), because this schema cannot spell a WHERE clause.
+  @@index([taskId, scopeRevision, actionIdentity])
   @@map("task_convergence_decision")
 }
 

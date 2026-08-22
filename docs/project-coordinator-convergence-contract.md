@@ -1,4 +1,4 @@
-# Project Coordinator 有界收敛契约 v1.1
+# Project Coordinator 有界收敛契约 v1.2
 
 冻结单元 `[K1]`。本文件是 `[K1]..[K9]` 的规范来源，由
 `src/apiserver/src/projects/convergence-contract.spec.ts` 逐表核对代码，任何一处不一致都会变红。
@@ -173,16 +173,35 @@ Project 计的，本契约把同一件事按 **Task 的一次 scope revision** �
 - **PV2**：`strictlyImproves(a, b)` 为真，当且仅当 `a.scopeHash === b.scopeHash`、**没有任何一个
   维度变差**、且**至少一个维度变好**。
 - **PV3**：`scopeHash` 不同 → 不可比 → 不是进展。换了目标不算逼近目标。
-- **PV4**：只有 `strictlyImproves` 为真时才刷新 `lastProgressAt` 并把 §8 的四个「自上次进展以来」
-  计数清零：`attemptsWithoutProgress`、`sameFingerprintRepeats`、`decisionsWithoutProgress`、
-  `transientRetries`。绝对计数（`attemptsOnRevision`、`verificationRounds`、
-  `scopeExpansionRequests`）永不清零。
+- **PV4**：只有 `strictlyImproves` 为真时才刷新 `lastProgressAt` 并把 §8 的五个「自上次进展以来」
+  计数清零：`attemptsWithoutProgress`、`sameFingerprintRepeats`、`sameActionRepeats`、
+  `decisionsWithoutProgress`、`transientRetries`。绝对计数（`attemptsOnRevision`、
+  `verificationRounds`、`scopeExpansionRequests`）永不清零。`repairsWithoutSeverityDrop` 两者都不是——
+  见 PV7。
 - **PV5**：进展本身是**有限**的。表里每个数值维度都单调走向一个边界（`acceptanceClosed` 至多到
   `acceptanceTotal`，其余三个至少到 0），`knownGoodSha` 只在第一次出现时算一次。因此一个
   scopeRevision 上严格进展的次数至多是
   `acceptanceTotal + openP0₀ + openP1₀ + regressions₀ + openBlockers₀ + 1`。
   换 checkpoint 不算进展，就是为了堵住这里唯一一个可以无限刷的维度——事故里「又推了一个提交」
   正是这个形状。
+- **PV6（证据新鲜度）**：向量由证据**推导**（§1），所以在比较之前先要回答「这份读数还算不算此刻的世界」。
+  新鲜度**不是**向量的第九维——PV1 是穷举的，加一维等于承认「测了一次」本身是进展——它是**能否把这次
+  测量当作进展**的前置条件：
+
+  | 读数 | 何时得到 | 能否刷新 `lastProgressAt` |
+  | --- | --- | --- |
+  | `FRESH` | 快照里每一项都不早于 `notBefore`（通常是本次 attempt 的开始），且未超过绝对时限 | 能 |
+  | `STALE` | 至少有一项早于上面那条线 | 不能 |
+  | `UNMEASURED` | 快照里什么都没有 | 不能 |
+
+  取**最旧**的一项定读数，不取平均也不取最新：快照是对同一个世界的一次测量，其中一项过期就意味着整份读数
+  描述的是一个已经移动过的世界——那条「已关闭」的验收项完全可能已被正在被评判的这次改动重新打开，而数字上
+  看不出来。`UNMEASURED` 单独成一类而不并进 `STALE`，是因为空快照推出来的向量是全零，而全零在只看数字的
+  比较里与「所有缺陷都已修复」不可区分：证据管道坏掉必须读作坏掉，不能读作大获全胜。新鲜度只否决**进展
+  主张**，不豁免计数——「这一轮没测出来」是一次没有进展的决定，而事故正是由这种决定堆成的。
+- **PV7**：`repairsWithoutSeverityDrop` 的清零许可只有一条：`openP0 + openP1` 真的下降，且该步同时是严格
+  进展。它不随任意一次严格进展清零，因为「关掉一个验收项、缺陷数纹丝不动」正是它要指认的那个世界，让那次
+  进展把它抹掉，等于删掉产生它的观察本身。
 
 ## 5. 失败指纹
 
@@ -212,6 +231,31 @@ Project 计的，本契约把同一件事按 **Task 的一次 scope revision** �
 - **FP1**：只有数字、id、时间戳、路径前缀不同的两条错误必须得到同一个指纹。
 - **FP2**：`violatedInvariant` 不同的两次失败必须得到不同的指纹，即使文本归一化后相同。
 - **FP3**：指纹是 scope 内的身份——`scopeHash` 变了指纹就变了，因为「同一个错」在新目标下是新问题。
+
+### 5.1 动作与假设身份
+
+指纹回答「这是不是同一个错」；`actionIdentity` 回答「这是不是同一件事」。两者用**同一套**归一化（上表的
+八步），理由也是同一个：事故里每条错误文字都带一个新 session id，于是没有两次失败是「同一个」；而每一轮的
+动作也带着同样那些 id、写在同样的句子里，于是一个动作的循环被读成几十个各不相同的计划。
+
+`actionIdentity(facts)` = sha256(canonicalJson) over exactly：
+
+| 动作字段 | 说明 |
+| --- | --- |
+| `kind` | 做什么：`DISPATCH_ATTEMPT` / `FILE_DEFECT` / `RETRY` …… |
+| `target` | 对什么做：分支、文件、任务。`kind` 已经说尽时为 null |
+| `hypothesis` | 为什么相信这次会成。没说就是空串 |
+| `scopeHash` | 当前 scope revision 的摘要 |
+
+- **FP4**：数字也一并被归一化掉，这是判断而不是疏漏。「把重试次数调到 30」紧接着「把重试次数调到 5」是同一个
+  假设换了个旋钮；若一个常数就能买来一份新预算，熔断永远关不上它唯一要关的那个形状。归一化只认**独立的数字
+  token**（`5` 而不是 `5s`），这是 §5 那八步的既有边界；`[K4]` 宁可留下这点残余，也不另造一套归一化——
+  「同一个错」和「同一件事」用两套规则判定，是比这点残余严重得多的缺陷。
+- **FP5**：`actionIdentity` 里**没有** `attemptGeneration`，而 `actionIdempotencyKey`（§6.2）里有。这不是
+  疏忽而是分工：幂等键回答「这个动作是不是已经执行过」，所以必须每代不同，否则重投递会被当成新动作执行第二
+  次；身份回答「这是不是上次那件事」，所以必须每代相同，否则一个循环永远显示为一串互不相同的新计划。
+- **FP6**：`hypothesisIdentity` 同样是 scope 内的身份（FP3 的理由）。重规划之后同一句话是对另一个问题的
+  提案，把它当作「已经试过」会让新 revision 连第一次尝试都做不成。
 
 ## 6. 验证 finding
 
@@ -270,6 +314,8 @@ Project 计的，本契约把同一件事按 **Task 的一次 scope revision** �
 | `maxAttemptsWithoutProgress` | 5 | 自上次严格进展以来的 attempt | `ATTEMPT_BUDGET_EXHAUSTED` |
 | `maxAttemptsPerScopeRevision` | 24 | Task × scopeRevision，永不清零 | `HARD_ATTEMPT_CAP_REACHED` |
 | `maxSameFingerprintRepeats` | 2 | 连续相同指纹 | `SAME_FAILURE_REPEATED` |
+| `maxSameActionRepeats` | 2 | 同一无进展窗口内重复提出的同一动作身份 | `SAME_ACTION_REPEATED` |
+| `maxRepairsWithoutSeverityDrop` | 3 | `openP0 + openP1` 未下降的返修轮次 | `SEVERITY_NOT_DECLINING` |
 | `maxDecisionsWithoutProgress` | 6 | 连续无严格进展的决定 | `NO_PROGRESS` |
 | `maxVerificationRounds` | 2 | Task × scopeRevision，永不清零 | `VERIFICATION_ROUNDS_EXHAUSTED` |
 | `maxTransientRetries` | 3 | 连续 TRANSIENT | `TRANSIENT_RETRY_BUDGET_EXHAUSTED` |
@@ -293,12 +339,20 @@ Project 计的，本契约把同一件事按 **Task 的一次 scope revision** �
 `contextWindow` 未被 Runner 上报时这一维读作 `UNMEASURED`：既不算越线，也不算无限，其余五维照常有界。
 
 `[K3]` 的实现细则（attempt 与 Session 的对应、六维余量、自然收口、fresh generation 的门禁）在
-`docs/project-coordinator-attempt-budget.md`，本表是它的规范来源。
+`docs/project-coordinator-attempt-budget.md`；`[K4]` 的实现细则（证据如何推出向量、动作身份、两条新线怎样
+原子熔断）在 `docs/project-coordinator-progress-vector.md`。本表是两者的规范来源。
+
+阈值表的第三、第四行由 `[K4]` 补入（v1.2）。它们不是新想出来的限制，而是事故**已经越过、当时却没有线**的
+两条：那几百轮里没有一次让 `sameFingerprintRepeats` 数到二（每条错误文字都带着新 id），也没有一次用光返修
+轮次（每一轮确实都关掉了点什么）——它重复的是**动作**，而缺陷数从头到尾没有下降过。
 
 - **TH1**：熔断原因的判定顺序是固定的，与计数器的读取顺序无关：
-  `SCOPE_EXPANSION_REQUIRED` → `SAME_FAILURE_REPEATED` → `VERIFICATION_ROUNDS_EXHAUSTED` →
+  `SCOPE_EXPANSION_REQUIRED` → `SAME_FAILURE_REPEATED` → `SAME_ACTION_REPEATED` →
+  `SEVERITY_NOT_DECLINING` → `VERIFICATION_ROUNDS_EXHAUSTED` →
   `TRANSIENT_RETRY_BUDGET_EXHAUSTED` → `ATTEMPT_BUDGET_EXHAUSTED` → `HARD_ATTEMPT_CAP_REACHED` →
-  `NO_PROGRESS`。同时越过两条线时，报告的原因必须是确定的一个，否则回放会得到两种答案。
+  `NO_PROGRESS`。同时越过两条线时，报告的原因必须是确定的一个，否则回放会得到两种答案。顺序里越靠前的
+  越**具体**：「返修没让缺陷数下降」比「返修轮次用完了」多告诉人一件事，而把具体的那条藏在通用的那条后面，
+  等于让读的人去修错的问题。
 - **TH2**：达到资源预算**不是**失败。当前 attempt 以真实结局收口（`SUCCEEDED` / `FAILED` /
   `INTERRUPTED` / `BLOCKED`）并写下 checkpoint；不得用 cancel/complete 覆写成 `CANCELLED`。
 - **TH3**：预算用尽后 Coordinator 只能以**新的 hypothesis** 开一条新 Session（新的

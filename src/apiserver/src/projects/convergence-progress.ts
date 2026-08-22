@@ -5,11 +5,15 @@ import {
   CLASSIFICATION_COUNTER,
   ConvergenceClassification,
   ConvergenceCounters,
+  ConvergenceDispatchRefusal,
   ConvergenceThresholds,
   NON_CONVERGENCE_PRIORITY,
   NON_CONVERGENCE_RULE,
   NonConvergenceReason,
   PROGRESS_RESET_COUNTERS,
+  SEVERITY_RESET_COUNTERS,
+  SeverityTrend,
+  TaskProgressState,
   ZERO_COUNTERS,
 } from './convergence-contract';
 
@@ -199,6 +203,13 @@ export function scopeHash(scope: {
  *  - An observation with no classification and no progress still spends `decisionsWithoutProgress`.
  *    "Nothing applied" was the incident's most common step, and treating it as free is what let the
  *    loop run unbounded while every individual rule looked satisfied.
+ *
+ * `[K4]`'s two inputs — `sameActionPriorCount` and `severity` — are REQUIRED rather than optional,
+ * and that is deliberate. A default for `severity` would charge the repair line to a task that DID
+ * reduce its defect load, which is the false stop this unit was reviewed for; a default for
+ * `sameActionPriorCount` would fail open on the line the incident actually crossed. Both are facts
+ * about the world that only the caller can have looked up, and a caller that has not looked should
+ * find that out from the type checker rather than from a task that was stopped for a bad reason.
  */
 export function advanceCounters(
   counters: ConvergenceCounters,
@@ -210,6 +221,15 @@ export function advanceCounters(
     /** An attempt was started for this observation. Charges the absolute per-revision counter. */
     attemptStarted?: boolean;
     verificationRoundClosed?: boolean;
+    /**
+     * `[K4]`: how many decisions in the CURRENT no-progress window already proposed this action.
+     * Read from the ledger by the writer, because it is a fact about committed rows and not
+     * something a counter can accumulate — see `sameActionRepeats` below for why it is a window
+     * rather than a run.
+     */
+    sameActionPriorCount: number;
+    /** `[K4]`: what happened to `openP0 + openP1` — see `severityTrend`. */
+    severity: SeverityTrend;
   },
 ): ConvergenceCounters {
   const next: ConvergenceCounters = { ...counters };
@@ -222,6 +242,24 @@ export function advanceCounters(
       && observation.fingerprint === observation.previousFingerprint
       ? counters.sameFingerprintRepeats + 1
       : 0;
+    // The MAXIMUM over the window, not this action's own count. Two properties come out of that
+    // and both are needed: it cannot go down while the window is open (RL3/TH4 — a new action
+    // must not talk the counter back down and buy another round), and it reads as "some action
+    // has now been proposed N+1 times without moving", which is the sentence §8 bounds.
+    next.sameActionRepeats = Math.max(
+      counters.sameActionRepeats,
+      observation.sameActionPriorCount,
+    );
+  }
+  // §8's repair line. Charged only where somebody claims this is a defect of THIS task — the
+  // classification whose promise is "one more repair closes it" — and only when the defect load
+  // did not in fact fall. Reset needs both licences: the load fell AND the step was strict
+  // progress overall, because a round that closed a P0 and opened a regression has not earned a
+  // fresh repair budget.
+  if (observation.progressed && observation.severity === 'DROPPED') {
+    for (const key of SEVERITY_RESET_COUNTERS) next[key] = 0;
+  } else if (observation.classification === 'IN_SCOPE_DEFECT' && observation.severity === 'HELD') {
+    next.repairsWithoutSeverityDrop += 1;
   }
   if (observation.verificationRoundClosed) next.verificationRounds += 1;
   const counter = observation.classification
@@ -298,14 +336,46 @@ export function mergeCounters(
   committed: ConvergenceCounters,
   proposed: ConvergenceCounters,
   progressed: boolean,
+  severity: SeverityTrend = 'NONE',
 ): ConvergenceCounters {
   const merged: ConvergenceCounters = { ...ZERO_COUNTERS };
   for (const key of Object.keys(ZERO_COUNTERS) as Array<keyof ConvergenceCounters>) {
-    // Strict progress is the ONE licence to reset, and §4 PV4 says which four it resets.
-    const resettable = progressed && PROGRESS_RESET_COUNTERS.includes(key);
+    // Strict progress is the ONE licence to reset, and §4 PV4 says which it resets. `[K4]`'s
+    // repair counter is outside that set and carries the second licence, which is strictly
+    // narrower: progress AND the defect load actually falling.
+    const resettable = progressed
+      && (PROGRESS_RESET_COUNTERS.includes(key)
+        || (severity === 'DROPPED' && SEVERITY_RESET_COUNTERS.includes(key)));
     merged[key] = resettable ? proposed[key] : Math.max(committed[key], proposed[key]);
   }
   return merged;
+}
+
+/**
+ * §9's gate, as the pure function GT2 asks for.
+ *
+ * It answers §9's two questions and no others: whether the breaker has already landed in the
+ * state column, and whether it has crossed a line the state column has not caught up with yet.
+ * Whether the task is in a state that may be attempted at all is §2 SM2's question and stays
+ * with `isDispatchableProgressState`, and the rest of the preconditions are the main contract's
+ * §7.4 — a gate that quietly answered those too would be a second, disagreeing copy of them.
+ *
+ * `null` is "§9 has no objection", not "dispatch". The distinction matters because the caller has
+ * other questions to ask, and a gate that returns a cheerful `ALLOWED` invites skipping them.
+ *
+ * GT1: both answers are terminal. A caller that gets one must not queue, back off or schedule a
+ * wake — SM4's three explicit authorizations are the only things that clear them, and a retry
+ * timer would just re-ask a question whose answer cannot change on its own.
+ */
+export function convergenceDispatchRefusal(
+  state: { progressState: TaskProgressState; counters: ConvergenceCounters },
+  thresholds: ConvergenceThresholds,
+): ConvergenceDispatchRefusal | null {
+  if (state.progressState === 'NEEDS_REPLAN') return 'TASK_NEEDS_REPLAN';
+  if (state.progressState === 'SETTLED') return null;
+  return detectNonConvergence(state.counters, thresholds).tripped
+    ? 'TASK_CONVERGENCE_BUDGET_EXHAUSTED'
+    : null;
 }
 
 function sha256(value: string): string {

@@ -7,14 +7,16 @@ import {
   AttemptBudget,
   ConvergenceAutomationPolicy,
   ConvergenceCounters,
+  ConvergenceDispatchRefusal,
   ConvergenceThresholds,
   ScopeAuthorization,
   TaskProgressState,
   ZERO_COUNTERS,
+  isDispatchableProgressState,
   resolveAttemptBudget,
   resolveThresholds,
 } from './convergence-contract';
-import { ProgressVector } from './convergence-progress';
+import { ProgressVector, convergenceDispatchRefusal } from './convergence-progress';
 import {
   ConvergenceLedgerEntry,
   ConvergenceObservation,
@@ -142,7 +144,12 @@ export class ConvergenceLedgerService {
     `);
     if (duplicate) return { decision: null, id: duplicate.id, duplicate: true };
 
-    const planned = planConvergenceDecision(taskId, state, observation, state.thresholds);
+    const planned = planConvergenceDecision(
+      taskId,
+      { ...state, sameActionPriorCount: await this.sameActionPriorCount(tx, taskId, state, observation) },
+      observation,
+      state.thresholds,
+    );
     const id = randomUUID();
 
     await tx.$executeRaw(Prisma.sql`
@@ -163,6 +170,7 @@ export class ConvergenceLedgerService {
         "id", "task_id", "owner_id", "seq", "scope_revision", "scope_hash", "attempt_generation",
         "idempotency_key", "input_hash", "input", "event", "from_state", "to_state",
         "classification", "decision", "action", "action_idempotency_key", "failure_fingerprint",
+        "action_identity", "hypothesis_identity", "evidence_freshness", "evidence_as_of",
         "progress_vector", "progress_vector_digest", "progressed", "counters",
         "non_convergence_reason", "known_good_sha", "required_action", "owner", "next_check_at",
         "decided_by", "session_id", "project_decision_id", "created_at"
@@ -173,6 +181,8 @@ export class ConvergenceLedgerService {
         ${planned.event}, ${planned.fromState}, ${planned.toState},
         ${planned.classification}, ${planned.decision}, ${planned.action},
         ${planned.actionIdempotencyKey}, ${planned.failureFingerprint},
+        ${planned.actionIdentity}, ${planned.hypothesisIdentity},
+        ${planned.evidenceFreshness}, ${planned.evidenceAsOf},
         ${JSON.stringify(planned.progressVector)}::jsonb, ${planned.progressVectorDigest},
         ${planned.progressed}, ${JSON.stringify(planned.counters)}::jsonb,
         ${planned.nonConvergenceReason}, ${planned.knownGoodSha},
@@ -311,7 +321,11 @@ export class ConvergenceLedgerService {
              "input_hash" AS "inputHash", "event", "from_state" AS "fromState",
              "to_state" AS "toState", "classification", "decision", "action",
              "action_idempotency_key" AS "actionIdempotencyKey",
-             "failure_fingerprint" AS "failureFingerprint", "progress_vector" AS "progressVector",
+             "failure_fingerprint" AS "failureFingerprint",
+             "action_identity" AS "actionIdentity",
+             "hypothesis_identity" AS "hypothesisIdentity",
+             "evidence_freshness" AS "evidenceFreshness", "evidence_as_of" AS "evidenceAsOf",
+             "progress_vector" AS "progressVector",
              "progress_vector_digest" AS "progressVectorDigest", "progressed", "counters",
              "non_convergence_reason" AS "nonConvergenceReason",
              "known_good_sha" AS "knownGoodSha", "required_action" AS "requiredAction",
@@ -360,6 +374,71 @@ export class ConvergenceLedgerService {
           ? null
           : uuidToBase62(row.projectDecisionId),
       })),
+    };
+  }
+
+  /**
+   * §8's repeat line for actions: how many committed decisions in the CURRENT no-progress window
+   * already proposed this one.
+   *
+   * The window is "since the last decision that progressed", not "the previous decision", and the
+   * difference is the whole reason this is a query rather than a counter. A consecutive counter is
+   * defeated by alternating two actions — A, B, A, B never repeats twice in a row, and the
+   * incident's loop had exactly that shape — while a count over the window notices the third A
+   * however many Bs are interleaved.
+   *
+   * Rows of superseded revisions are excluded by the `scope_revision` predicate: after a re-plan
+   * the same action is a proposal about a different question (§5 FP3), and charging it against the
+   * old revision's repeats would refuse the new revision its first attempt.
+   */
+  private async sameActionPriorCount(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+    state: { scopeRevision: number },
+    observation: ConvergenceObservation,
+  ): Promise<number> {
+    if (!observation.actionIdentity) return 0;
+    const [row] = await tx.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
+      SELECT count(*) AS "n"
+        FROM "task_convergence_decision"
+       WHERE "task_id" = ${taskId}::uuid
+         AND "scope_revision" = ${state.scopeRevision}
+         AND "action_identity" = ${observation.actionIdentity}
+         AND "seq" > coalesce((
+               SELECT max("seq") FROM "task_convergence_decision"
+                WHERE "task_id" = ${taskId}::uuid
+                  AND "scope_revision" = ${state.scopeRevision}
+                  AND "progressed"
+             ), 0)
+    `);
+    return Number(row?.n ?? 0n);
+  }
+
+  /**
+   * §9's gate, read under the task row lock.
+   *
+   * The lock is the point. A breaker that trips in one transaction while a dispatcher decides in
+   * another is not a breaker — both read a world in which the task was still allowed, and the
+   * retry the trip was supposed to stop happens anyway. Taking the same `FOR UPDATE` lock the
+   * writer takes serialises the two: whichever runs second sees what the first committed.
+   *
+   * Returns §9's refusal or null, plus what SM2 says about the state, so the caller (`[K7]`) can
+   * ask both questions from one read without this method inventing an answer to either.
+   */
+  async dispatchGate(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+    ownerId: string,
+  ): Promise<{
+    refusal: ConvergenceDispatchRefusal | null;
+    dispatchable: boolean;
+    progressState: TaskProgressState;
+  }> {
+    const state = await this.lockAndRead(tx, taskId, ownerId);
+    return {
+      refusal: convergenceDispatchRefusal(state, state.thresholds),
+      dispatchable: isDispatchableProgressState(state.progressState),
+      progressState: state.progressState,
     };
   }
 
@@ -545,6 +624,10 @@ interface LedgerRow {
   action: string | null;
   actionIdempotencyKey: string | null;
   failureFingerprint: string | null;
+  actionIdentity: string | null;
+  hypothesisIdentity: string | null;
+  evidenceFreshness: string | null;
+  evidenceAsOf: Date | null;
   progressVector: unknown;
   progressVectorDigest: string;
   progressed: boolean;
