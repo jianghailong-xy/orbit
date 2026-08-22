@@ -17,7 +17,8 @@
 scripts/deadlock-barrier.sh              # 20 轮二方基线，退出码即结论
 scripts/deadlock-barrier.sh three-party  # 20 轮三方基线
 scripts/deadlock-barrier.sh spec         # harness 自检
-scripts/deadlock-barrier.sh all          # 一台服务器上跑 spec + 两条基线，任一红即非零退出
+scripts/deadlock-barrier.sh retry        # 公共事务重试模块的真实 40001 用例
+scripts/deadlock-barrier.sh all          # 一台服务器上跑 spec + retry + 两条基线，任一红即非零退出
 scripts/deadlock-barrier.sh spec --keep
 ```
 
@@ -144,6 +145,11 @@ A5 阻塞瞬间的 `pg_locks`（已滤掉索引噪声；`WAITING` = `granted = f
 * **三方基线**：`ScenarioSpec` 的 `parties` 与 `plan` 都是数据，所以第三方只是多一个 party 和多几条
   `block` / `settle`；`pg-barrier.ts` 一行没改，`threePartyDeadlockScenario` 与二方共用同一个
   `seedLockFixture`（三方在其上多插一行已提交的 task，见 `seedThreePartyFixture`）。
+* **公共事务重试**：`src/apiserver/src/common/transaction-retry.pg.spec.ts` 复用 `Observer`
+  —— 同一个"读服务器状态才推进"的原语 —— 把一个真实 REPEATABLE READ 事务停在
+  `wait_event_type = Lock` 且被竞争者阻塞的那一刻，再让竞争者提交，从而拿到真正的 40001 并验证
+  整个 closure 被重跑。它不需要 `runScenario`：这一侧的受害者由重试循环自己驱动，不是一份固定
+  剧本（`scripts/deadlock-barrier.sh retry`）。
 * **为什么基线不是 `*.spec.ts`**：它断言的是缺陷本身，修复必须让它失败。默认测试套件里长期驻扎一个
   "修好就变红"的用例，是没人能读的套件。因此基线是独立命令，默认套件里只有与修复无关的 harness
   自检（`pg-barrier.pg.spec.ts`，11/11 通过，无 skip）。
