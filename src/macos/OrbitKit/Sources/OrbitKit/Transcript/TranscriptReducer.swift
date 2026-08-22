@@ -485,7 +485,9 @@ public struct TranscriptReducer: Sendable, Codable {
     private mutating func closeTool(_ ev: RunEvent) {
         let id = str(ev, "toolUseId") ?? str(ev, "tool_use_id") ?? str(ev, "id")
         let isError = ev.payload["isError"]?.boolValue ?? ev.payload["is_error"]?.boolValue ?? false
-        let result = str(ev, "content") ?? str(ev, "result") ?? ev.payload["content"]?.asString
+        // `content` is a string, a block array, or a whole MCP CallToolResult wrapper — flattened
+        // the one way web flattens it. `result` is the older runners' key for the same thing.
+        let result = ToolResultContent.text(ev.payload["content"]) ?? str(ev, "result")
         // A Read on an image (or an MCP screenshot) delivers `content` as an array of image blocks,
         // not a string — decode those into bytes for inline display (web parity: `resultImages()`).
         let images = ToolResultContent.images(ev.payload["content"])

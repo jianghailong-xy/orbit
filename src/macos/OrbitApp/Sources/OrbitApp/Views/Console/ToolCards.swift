@@ -93,7 +93,7 @@ struct ToolCardView: View {
             // Set before the payload is read: an image-only result yields no text, and keying the
             // guard on `fullResult` would refetch the whole screenshot on every re-open.
             resultResolved = true
-            fullResult = p["content"]?.stringValue ?? p["content"]?.asString
+            fullResult = ToolResultContent.text(p["content"])
             fullImages = ToolResultContent.images(p["content"])
         }
     }

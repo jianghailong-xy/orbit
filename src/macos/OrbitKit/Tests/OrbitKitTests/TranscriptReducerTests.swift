@@ -308,6 +308,73 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(tool?.resultTruncated == true, "and the card needs the seq to fetch it back")
     }
 
+    /// An MCP tool's result is a block array, not a string: `[{type:"text", text:"…"}]`. Native read
+    /// only the string shape, so every MCP call rendered with a blank OUTPUT — and the
+    /// `mcp__orbit__session_create` jump card, which parses that text as JSON, never built. Flatten
+    /// the blocks the way web's `resultText` does.
+    func testTextBlockArrayResultFlattensToText() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("m1"), "name": .string("mcp__orbit__task_create"), "input": .null])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("m1"),
+            "content": .array([
+                .object(["type": .string("text"), "text": .string("created task 7")]),
+                .object(["type": .string("text"), "text": .string("assigned to agent 2")]),
+            ])])))
+        XCTAssertEqual(r.state.items.first?.asTool?.result, "created task 7\nassigned to agent 2",
+                       "text blocks join on a newline, like web's resultText")
+    }
+
+    /// Some engines hand the whole MCP `CallToolResult` through instead of its blocks — `content` is
+    /// then an object, not an array. Web prints it as JSON (`safeJson`); native printed nothing at
+    /// all. Same JSON here, with Foundation's `" : "` separator rather than JS's `": "` — the one
+    /// cosmetic difference left between the two dumps.
+    func testCallToolResultWrapperFallsBackToJSON() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("m2"), "name": .string("mcp__orbit__task_get"), "input": .null])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("m2"),
+            "content": .object([
+                "_meta": .null,
+                "content": .array([.object(["text": .string("ok: /tmp/a.txt"), "type": .string("text")])]),
+            ])])))
+        XCTAssertEqual(r.state.items.first?.asTool?.result, """
+        {
+          "_meta" : null,
+          "content" : [
+            {
+              "text" : "ok: /tmp/a.txt",
+              "type" : "text"
+            }
+          ]
+        }
+        """)
+    }
+
+    /// A result that carries both: the text prints, the picture draws, and neither swallows the
+    /// other (web renders images above the text panel for the same result).
+    func testMixedImageAndTextResultKeepsBoth() {
+        var r = TranscriptReducer()
+        let pngBytes = Data([0x89, 0x50, 0x4E, 0x47])
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("m3"), "name": .string("Read"),
+            "input": .object(["file_path": .string("/tmp/shot.png")])])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("m3"),
+            "content": .array([
+                .object(["type": .string("text"), "text": .string("Read 1 image")]),
+                .object(["type": .string("image"),
+                         "source": .object(["type": .string("base64"),
+                                            "media_type": .string("image/png"),
+                                            "data": .string(pngBytes.base64EncodedString())])]),
+            ])])))
+        let tool = r.state.items.first?.asTool
+        XCTAssertEqual(tool?.result, "Read 1 image", "the image block contributes no text")
+        XCTAssertEqual(tool?.resultImages, [pngBytes])
+    }
+
     /// The flag is about images, not about arrays: a text-only result must not claim one, or every
     /// such card would open itself and ask the server for a payload it already has.
     func testTextResultReportsNoImage() {
