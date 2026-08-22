@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { taskNotObsoleteSql } from '../tasks/task-supersession';
 
 /**
  * The one-shot recovery scan for failures that happened before anything could answer them
@@ -116,6 +117,20 @@ export class ProjectFailureRecoveryService implements OnModuleInit {
     // whether today's rules would open a turn for it: that judgement is `failedTaskDisposition`'s
     // and the loop applies it on a snapshot under a lease. Asking it here would be a second copy
     // of the rule, evaluated against rows nobody locked.
+    //
+    // §13.6 SU6 is the one judgement this scan DOES make, and it is not a second copy of anything:
+    // a replaced attempt is not an unanswered failure, it is a finished piece of work whose record
+    // happens to say `FAILED`. Re-arming a project to "answer" one is exactly how this deployment
+    // re-opened a review that had already been re-run from scratch, weeks after it was done.
+    //
+    // Both columns, never just `superseded_by_task_id`. 0128's FK is `ON DELETE SET NULL`, so
+    // deleting the successor leaves `terminal_reason = 'SUPERSEDED'` with nothing to name, and
+    // `ABANDONED` never had a pointer at all — a predicate on the pointer alone re-arms for both.
+    //
+    // And the derived half: a FAILED CHECK whose subject was replaced is obsolete even though the
+    // check itself is healthy. Its subject will never be dispatched again, so the check can never
+    // run and its failure can never be answered — re-arming a project for it is the same silent
+    // wake, reached from the other side.
     const episodes = await this.prisma.$queryRaw<Array<{
       projectId: string; taskId: string; dispatchAttempt: bigint;
     }>>(Prisma.sql`
@@ -125,6 +140,10 @@ export class ProjectFailureRecoveryService implements OnModuleInit {
         JOIN "project" p ON p."id" = t."project_id"
         JOIN "project_runtime" r ON r."project_id" = p."id"
        WHERE t."status" = 'FAILED'
+         -- §13.6 SU6, the line this scan was missing and the one the incident came through. See
+         -- the note above the query: a FAILED task that has been replaced is a historical failure,
+         -- and both columns are read, never just the pointer.
+         AND ${Prisma.raw(taskNotObsoleteSql('t'))}
          AND p."status" = 'OPEN' AND p."coordinator_enabled" = true
          AND r."run_state" <> 'SETTLED'
          -- §7.4 precondition 4 / §4.2 guard 5: somebody is on it, so the failure is not settled.

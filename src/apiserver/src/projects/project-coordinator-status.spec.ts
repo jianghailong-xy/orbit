@@ -228,6 +228,8 @@ interface Ledger {
   runs?: unknown[];
   /** §13.7's merge receipts, the evidence a project's branches actually landed. */
   mergeReceipts?: unknown[];
+  /** §13.8: @-mentions in this project that nobody has received. */
+  undeliveredMentions?: unknown[];
 }
 
 /** Both spellings a raw query arrives in: `Prisma.sql` (a Sql) and a tagged template. */
@@ -269,6 +271,11 @@ function service(ledger: Ledger = {}): ProjectsService {
       if (sql.includes('RUN_PROJECT_ACCEPTANCE')) return ledger.acceptance ?? [];
       // The digest's `mergeEvidence` projection: newest generation per (requirement, branch).
       if (sql.includes('FROM "project_merge_evidence"')) return [];
+      // §13.8's undelivered @-mentions. Empty by default for the same reason as the merge evidence
+      // above: this file is about the control-loop sections, and the ledger has its own pg spec.
+      if (sql.includes('FROM "task_comment_mention_delivery"')) {
+        return ledger.undeliveredMentions ?? [];
+      }
       if (sql.includes('a."decision_id" IN')) return ledger.decisionActions ?? [];
       if (sql.includes(`a."status"::text = 'CLAIMED'`)) return ledger.pendingActions ?? [];
       if (sql.includes('FROM "project_decision"')) return ledger.decisions ?? [];

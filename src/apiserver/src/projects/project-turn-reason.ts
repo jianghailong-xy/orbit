@@ -31,6 +31,7 @@ import type { ProjectDecisionInput } from './project-decision.service';
 import type { CoordinatorSessionPlan } from './project-coordinator-session';
 import type { ProjectBlockerProjection } from './project-blocker';
 import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
+import { taskRetirement } from '../tasks/task-supersession';
 import { PROJECT_BLOCKER_POLICY } from './project-blocker';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
 
@@ -226,6 +227,10 @@ export function turnReasonFactsOf(
  * silence rather than restraint, which is `PC-CX-63`'s sentence, unchanged.
  */
 function failureEpisodes(input: ProjectDecisionInput): string[] {
+  const retirementOf = new Map(input.world.tasks.map((task) => [task.id, taskRetirement({
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  })]));
   return input.world.tasks
     .filter((task) => {
       const disposition = failedTaskDisposition({
@@ -237,9 +242,21 @@ function failureEpisodes(input: ProjectDecisionInput): string[] {
         // before `dueTasks` existed, which read as "nothing is holding it" — the same default
         // §7.8's pass uses for the same field.
         retryBackoffExpired: input.evaluation.dueTasks[task.id]?.retryBackoffExpired ?? true,
+        // §13.6 SU6. Absent on a pre-0129 snapshot, which reads as "not retired".
+        retirement: retirementOf.get(task.id) ?? null,
+        // ...and its subject's, so a failed check of replaced work does not wake a person about
+        // failures that are no longer about anything.
+        subjectRetirement: task.verifiesTaskId
+          ? (retirementOf.get(task.verifiesTaskId) ?? null)
+          : null,
       });
+      // `RETIRED` is excluded by name rather than by falling out of the two arms below, because it
+      // would NOT fall out of them: it is neither `NOT_FAILED` nor `OCCUPIED`, and the loop cannot
+      // retry it, so the original three-clause filter admitted it — and that is the exact
+      // expression that opened a `TASK_FAILURE` turn about a review somebody had already re-run.
       return disposition !== 'NOT_FAILED'
         && disposition !== 'OCCUPIED'
+        && disposition !== 'RETIRED'
         && !loopCanRetryFailedTask(disposition);
     })
     .map((task) => `${task.id}#${task.dispatchAttempt}`)

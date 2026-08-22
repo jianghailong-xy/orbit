@@ -3,6 +3,7 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { taskRetirement } from '../tasks/task-supersession';
 import {
   ProjectActionApplyResult,
   ProjectActionEffectRefusal,
@@ -43,6 +44,9 @@ interface VerifierRow {
   verdict: string | null;
   verdictRevision: bigint;
   verifiesTaskId: string | null;
+  /** §13.6 SU6's two columns, read under the same `FOR UPDATE` as everything else here. */
+  supersededByTaskId: string | null;
+  terminalReason: string | null;
 }
 
 interface SubjectRow {
@@ -53,6 +57,8 @@ interface SubjectRow {
   title: string;
   listId: string | null;
   assigneeId: string | null;
+  supersededByTaskId: string | null;
+  terminalReason: string | null;
 }
 
 /**
@@ -201,7 +207,9 @@ implements ProjectVerdictExecutor, OnModuleInit, OnModuleDestroy {
     const verifiers = await tx.$queryRaw<VerifierRow[]>(Prisma.sql`
       SELECT "id", "owner_id" AS "ownerId", "project_id" AS "projectId", "status"::text,
              "verdict"::text, "verdict_revision" AS "verdictRevision",
-             "verifies_task_id" AS "verifiesTaskId"
+             "verifies_task_id" AS "verifiesTaskId",
+             "superseded_by_task_id" AS "supersededByTaskId",
+             "terminal_reason" AS "terminalReason"
         FROM "task" WHERE "id" = ${verifierId}::uuid
     `);
     const verifier = verifiers[0];
@@ -223,6 +231,21 @@ implements ProjectVerdictExecutor, OnModuleInit, OnModuleDestroy {
           : uuidToBase62(verifier.verifiesTaskId),
       });
     }
+    // §13.6 SU6, at the commit point and under the `FOR UPDATE` taken above. The planner refuses a
+    // retired check on the snapshot; this is the half that answers "the supersession was recorded
+    // AFTER we planned". Read through the row lock, so the link and this apply serialize on the
+    // task row instead of each reading the other as absent — and refused BEFORE the first write, so
+    // a replaced finding cannot revert a subject, file a defect, write a failure row or open a turn.
+    const verifierRetirement = taskRetirement(verifier);
+    if (verifierRetirement) {
+      return superseded('VERIFICATION_VERIFIER_RETIRED', {
+        verifierTaskId: planned.verifierTaskId,
+        terminalReason: verifierRetirement,
+        supersededByTaskId: verifier.supersededByTaskId == null
+          ? null
+          : uuidToBase62(verifier.supersededByTaskId),
+      });
+    }
     // The snapshot's conclusion has to still be the row's conclusion. A newer verdict has a newer
     // revision and therefore its own action; applying this one on top would replay a superseded
     // finding against a subject that has since moved on.
@@ -238,12 +261,27 @@ implements ProjectVerdictExecutor, OnModuleInit, OnModuleDestroy {
 
     const subjects = await tx.$queryRaw<SubjectRow[]>(Prisma.sql`
       SELECT "id", "owner_id" AS "ownerId", "project_id" AS "projectId", "status"::text,
-             "title", "list_id" AS "listId", "assignee_id" AS "assigneeId"
+             "title", "list_id" AS "listId", "assignee_id" AS "assigneeId",
+             "superseded_by_task_id" AS "supersededByTaskId",
+             "terminal_reason" AS "terminalReason"
         FROM "task" WHERE "id" = ${subjectId}::uuid
     `);
     const subject = subjects[0];
     if (!subject || subject.projectId !== lease.projectId) {
       return superseded('VERIFICATION_SUBJECT_MISSING', { subjectTaskId: planned.subjectTaskId });
+    }
+    // The other side, same lock and same reason. A finding about work that has been REPLACED must
+    // not revert that work (nothing will dispatch it again) or file a defect under it (a work item
+    // nobody can close, holding acceptance open for as long as it exists).
+    const subjectRetirement = taskRetirement(subject);
+    if (subjectRetirement) {
+      return superseded('VERIFICATION_SUBJECT_RETIRED', {
+        subjectTaskId: planned.subjectTaskId,
+        terminalReason: subjectRetirement,
+        supersededByTaskId: subject.supersededByTaskId == null
+          ? null
+          : uuidToBase62(subject.supersededByTaskId),
+      });
     }
 
     if (planned.consequences.resolveConditions) {

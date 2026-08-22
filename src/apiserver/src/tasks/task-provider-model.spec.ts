@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { RunStatus } from '@prisma/client';
 import { TasksService } from './tasks.service';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -29,9 +30,16 @@ function runFixture(
     },
     taskDependency: { findMany: async () => [] },
     session: {
-      // Two reads in runWorkspaceOnTask: the mid-flight dedup (filters on status) and the
-      // most-recent session for this task+workspace (doesn't).
-      findFirst: async ({ where }: any) => (where.status ? null : (latestSession ?? null)),
+      // Two reads in runWorkspaceOnTask, and BOTH now filter on status (§13.6 SU6): the mid-flight
+      // dedup asks for PENDING/RUNNING, and the continue-this-run read asks for the two PAUSED
+      // statuses. A terminal session is no longer a candidate to continue at all — a new attempt
+      // gets a new Session and the old row stays readable as what it was — so the fixture's
+      // "latest session" is a paused one, which is the only kind that can be continued.
+      findFirst: async ({ where }: any) => {
+        const wanted = where.status?.in ?? [];
+        const paused = wanted.includes(RunStatus.AWAITING_INPUT);
+        return paused ? (latestSession ?? null) : null;
+      },
     },
   } as never;
   const sessions = {
@@ -81,16 +89,20 @@ test('resuming the task\'s last session re-applies the pinned model', async () =
   assert.equal(f.resumeCalls[0][2].model, 'claude-haiku-4-5');
 });
 
-test('re-pinning the provider starts a fresh session instead of continuing the old one', async () => {
-  // A session's provider is fixed for its lifetime, so resuming would keep running codex
-  // forever and the re-pin would silently never take effect.
+test('re-pinning the provider while a run is paused is refused, not silently forked', async () => {
+  // A session's provider is fixed for its lifetime, so continuing this one would keep running codex
+  // forever and the re-pin would never take effect. Starting a SECOND session beside it is not the
+  // answer either, and since 0130 it is not even possible: the paused run holds the task's
+  // execution claim across all four live statuses, so the create would fail on a unique index and
+  // reach the caller as a duplicate-key error. The honest answer is the reason.
   const f = runFixture({ provider: 'claude' }, { id: 'session-old', provider: 'codex' });
 
-  const result = await f.service.execute('owner-1', TASK_ID);
-
+  await assert.rejects(
+    () => f.service.execute('owner-1', TASK_ID),
+    (error: Error) => /cannot change provider/.test(error.message),
+  );
   assert.equal(f.resumeCalls.length, 0);
-  assert.equal(result.sessionId, 'session-new');
-  assert.equal(f.createCalls[0][1].provider, 'claude');
+  assert.equal(f.createCalls.length, 0, 'and no second session beside the paused one');
 });
 
 test('an unpinned task still resumes its last session whatever provider that session runs', async () => {

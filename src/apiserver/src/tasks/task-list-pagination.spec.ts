@@ -150,7 +150,7 @@ test('runnable filter is applied before pagination with the same rules as the Ru
     );
     assert.match(
       sql,
-      /NOT EXISTS \([\s\S]*FROM task_dependency d[\s\S]*p\.status <> 'DONE'::task_status/,
+      /NOT EXISTS \([\s\S]*FROM task_dependency dep[\s\S]*WITH RECURSIVE chain/,
     );
   }
   const [page, badge] = raw.statements;

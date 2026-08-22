@@ -375,7 +375,11 @@ export class QueueService {
       resume,
       // Injected into the runtime process so the `orbit mcp` server knows its context.
       agentId: session.workspaceId ?? undefined,
-      taskId: session.taskId ?? undefined,
+      // §13.8: a conversation ABOUT a task needs the same tool context as one executing it — the
+      // agent is asked to call `task_get` and `task_comment`, and both default to `ORBIT_TASK_ID`.
+      // Only the tool default: `context_task_id` takes no execution claim, occupies no slot and is
+      // invisible to the reaper, which is exactly why the two columns are separate.
+      taskId: session.taskId ?? session.contextTaskId ?? undefined,
       // Mirror the workspace's orchestration opt-in so the runner injects ORBIT_ALLOW_ORCHESTRATION
       // and `orbit mcp` exposes the session_* tools only for enabled workspaces.
       allowOrchestration: workspace?.enableOrchestration ?? false,

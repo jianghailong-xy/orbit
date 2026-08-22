@@ -26,6 +26,7 @@
  */
 
 import { AggregationTaskStatus, TaskVerdictValue } from './task-aggregation';
+import { taskRetirement } from '../tasks/task-supersession';
 
 /** One verification task as this reads it, plus what its subject and its last run look like. */
 export interface VerificationVerdictFact {
@@ -49,6 +50,12 @@ export interface VerificationVerdictFact {
   hasLiveSession: boolean;
   /** The verifier's last run, for the record the defect subtask carries. Null if it never ran. */
   session: VerificationSessionEvidence | null;
+  /**
+   * §13.6 SU6's two columns for the VERIFIER. Optional: absent on a snapshot captured before 0129,
+   * which reads as "nothing retired this check" — what every one of those rows was.
+   */
+  supersededByTaskId?: string | null;
+  terminalReason?: string | null;
 }
 
 /** A verifier's last run, by its natural terminal state — never by a turn count (V5). */
@@ -65,6 +72,9 @@ export interface VerificationSessionEvidence {
 export interface VerificationSubjectFact {
   id: string;
   status: AggregationTaskStatus;
+  /** §13.6 SU6 for the SUBJECT, same optionality and same reason as on the verifier. */
+  supersededByTaskId?: string | null;
+  terminalReason?: string | null;
 }
 
 export type VerificationVerdictSkipReason =
@@ -73,7 +83,19 @@ export type VerificationVerdictSkipReason =
   | 'NOT_CONCLUDED'
   | 'RUN_IN_FLIGHT'
   | 'SUBJECT_MISSING'
-  | 'UNREVISIONED_VERDICT';
+  | 'UNREVISIONED_VERDICT'
+  /**
+   * §13.6 SU6: this CHECK was replaced or abandoned. Its conclusion is history — the re-run that
+   * took over reaches its own, and applying this one would revert a subject, file a defect and wake
+   * a person over a finding somebody has already superseded.
+   */
+  | 'VERIFIER_RETIRED'
+  /**
+   * §13.6 SU6: the WORK this check was about was replaced. Reverting it is meaningless (nothing
+   * will dispatch it again) and the defect subtask would be filed under an attempt nobody is doing
+   * — a work item that can never be closed, holding acceptance open for as long as it exists.
+   */
+  | 'SUBJECT_RETIRED';
 
 /** The mechanical consequences §13.2's table gives this verdict. */
 export interface VerificationVerdictConsequences {
@@ -216,9 +238,26 @@ function skipReason(
   // check that has concluded but not finished has not concluded.
   if (fact.status !== 'DONE') return 'NOT_CONCLUDED';
   if (fact.hasLiveSession) return 'RUN_IN_FLIGHT';
+  // §13.6 SU6, both sides, before the subject is even looked up: neither a replaced check nor a
+  // finding about replaced work may produce a consequence. Each has its own reason because they
+  // send a reader to different places — "the re-run is over there" and "that work is being done
+  // over there" are different sentences.
+  if (taskRetirement({
+    supersededByTaskId: fact.supersededByTaskId ?? null,
+    terminalReason: fact.terminalReason ?? null,
+  }) != null) {
+    return 'VERIFIER_RETIRED';
+  }
   // V6: the subject can be deleted while its check runs — fixtures take whole trees with them.
   // Planning nothing here is the quiet half; the action that races the delete records SUPERSEDED.
-  if (!subjects.has(fact.verifiesTaskId)) return 'SUBJECT_MISSING';
+  const subject = subjects.get(fact.verifiesTaskId);
+  if (!subject) return 'SUBJECT_MISSING';
+  if (taskRetirement({
+    supersededByTaskId: subject.supersededByTaskId ?? null,
+    terminalReason: subject.terminalReason ?? null,
+  }) != null) {
+    return 'SUBJECT_RETIRED';
+  }
   // A verdict written before migration 0124 has no revision, so it has no action identity. It is
   // not lost — the next conclusion on that verifier advances the counter and carries it.
   if (!(BigInt(fact.verdictRevision) > 0n)) return 'UNREVISIONED_VERDICT';

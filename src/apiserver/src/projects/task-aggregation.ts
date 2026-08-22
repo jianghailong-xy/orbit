@@ -15,6 +15,12 @@
  * earlier value turns "do this again because the world came back" into "already did this once".
  */
 
+import {
+  successorChain,
+  taskIsObsolete,
+  type TaskRetirement,
+} from '../tasks/task-supersession';
+
 export const TASK_COMPLETION_POLICIES = [
   'MANUAL',
   'ALL_CHILDREN_DONE',
@@ -35,11 +41,18 @@ export type AggregationTaskStatus =
 /** One task as aggregation reads it. Ids are opaque and compared by identity only. */
 export interface AggregationTaskFact {
   id: string;
+  /** §13.6 SU1's pointer, needed to tell whether a replaced child's work stays in this subtree. */
+  supersededByTaskId?: string | null;
   status: AggregationTaskStatus;
   parentTaskId: string | null;
   completionPolicy: TaskCompletionPolicyValue;
   verifiesTaskId: string | null;
   verdict: TaskVerdictValue | null;
+  /**
+   * §13.6 SU6: this attempt was replaced or abandoned. Optional, and absent reads as "not retired"
+   * — a snapshot taken before the columns existed must aggregate to what it originally did.
+   */
+  retirement?: TaskRetirement | null;
 }
 
 export type TaskAggregationReason =
@@ -116,6 +129,21 @@ export function planTaskAggregation(
     }
   }
 
+  // §13.6 SU6's derived half, resolved once for the whole snapshot: a task is obsolete when it was
+  // itself retired OR when it checks work that was. Both settle, and computing it here rather than
+  // in `recompute` is what keeps the parent's answer and the verification's answer consistent.
+  const obsolete = new Set<string>();
+  for (const task of tasks) {
+    if (taskIsObsolete({
+      retirement: task.retirement ?? null,
+      subjectRetirement: task.verifiesTaskId
+        ? (byId.get(task.verifiesTaskId)?.retirement ?? null)
+        : null,
+    })) {
+      obsolete.add(task.id);
+    }
+  }
+
   const planned = new Map<string, PlannedTaskAggregation>();
   // `effective` is the status the parent above should be judged against: the recomputed one where
   // this plan changes it, the stored one everywhere else.
@@ -126,7 +154,9 @@ export function planTaskAggregation(
   for (const root of [...byId.keys()].sort()) {
     for (const id of postOrder(root, children, effective)) {
       const task = byId.get(id)!;
-      const aggregation = recompute(task, children.get(id) ?? [], verifiers.get(id) ?? [], effective);
+      const aggregation = recompute(
+        task, children.get(id) ?? [], verifiers.get(id) ?? [], effective, obsolete, byId,
+      );
       if (aggregation) planned.set(id, aggregation);
       effective.set(id, aggregation ? aggregation.to : task.status);
     }
@@ -138,12 +168,43 @@ export function planTaskAggregation(
   };
 }
 
+/**
+ * Does this replaced child's work stay under `parentId`?
+ *
+ * Walks the supersession chain to its end and asks whether that attempt is a child of the same
+ * parent. Truncation (a cycle, or a chain longer than the database can write) answers NO, and so
+ * does a successor this snapshot cannot see: both are cases where the honest answer is "cannot
+ * tell", and a parent may not be completed on one.
+ */
+function chainStaysUnder(
+  child: AggregationTaskFact,
+  parentId: string,
+  byId: ReadonlyMap<string, AggregationTaskFact>,
+): boolean {
+  const edges = new Map([...byId].map(([id, task]) => [id, task.supersededByTaskId ?? null]));
+  const { chain, truncated } = successorChain(child.id, edges);
+  if (truncated) return false;
+  const tail = chain.at(-1);
+  if (tail === undefined) return false;
+  return byId.get(tail)?.parentTaskId === parentId;
+}
+
 function recompute(
   task: AggregationTaskFact,
   childTasks: readonly AggregationTaskFact[],
   verifierTasks: readonly AggregationTaskFact[],
   effective: ReadonlyMap<string, AggregationTaskStatus>,
+  obsolete: ReadonlySet<string>,
+  byId: ReadonlyMap<string, AggregationTaskFact>,
 ): PlannedTaskAggregation | null {
+  // §13.6 SU6, about the task being RECOMPUTED rather than about its children. A retired parent's
+  // CANCELLED or FAILED is the audit fact SU4 preserves, and aggregation may not rewrite it — not
+  // to DONE when its children happen to have finished, and not back to OPEN when one is reopened.
+  //
+  // Left in, this is not merely wrong but LOUD: 0130's `task_retirement_status_check` refuses the
+  // write, the caller logs a failure, and the next event recomputes the same plan and fails the
+  // same way — a retired parent with subtasks would produce an error on every reconcile forever.
+  if (obsolete.has(task.id)) return null;
   if (task.completionPolicy === 'MANUAL') return null;
   // AG4. A policy on a childless task is inert, and stays inert rather than becoming inert-until-
   // someone-adds-a-child: nothing here writes when there is nothing to aggregate over.
@@ -156,9 +217,26 @@ function recompute(
     // DONE and CANCELLED settle; everything else — including FAILED — is outstanding. A failed
     // child is the case this distinction exists for: it has stopped, which is not the same as
     // being finished, and counting it as settled would complete a parent over a broken subtask.
+    //
+    // §13.6 SU6 adds the one exception, and it is the same sentence read the other way: a REPLACED
+    // attempt has stopped AND is not the work anymore. Its successor is a sibling in this very
+    // project, outstanding on its own account until it finishes, so counting the retired attempt
+    // as unfinished counts one piece of work twice and holds the parent open on a row nobody will
+    // ever move again. It settles as CANCELLED, which is what it is: an attempt that ended without
+    // finishing, whose ending is now history.
     const status = effective.get(child.id) ?? child.status;
+    // A replaced child settles ONLY when the work is still represented in this parent's subtree —
+    // which means its chain ends at another child of THIS parent, counted on its own row.
+    //
+    // "The successor is a sibling" is a natural assumption and an unenforced one: SU3 requires the
+    // same project, and nothing requires the same parent. A child superseded by a task under a
+    // different parent (or under none) would otherwise settle here while the work that replaced it
+    // is outside this subtree entirely, and the parent would report DONE over it. Fail closed: the
+    // child stays outstanding, and re-parenting the successor — or unlinking — is a decision
+    // somebody makes.
+    const replacedWithin = obsolete.has(child.id) && chainStaysUnder(child, task.id, byId);
     if (status === 'DONE') done += 1;
-    else if (status === 'CANCELLED') cancelled += 1;
+    else if (status === 'CANCELLED' || replacedWithin) cancelled += 1;
     else outstanding += 1;
   }
   const childrenSettled = outstanding === 0 && done > 0;
@@ -166,6 +244,11 @@ function recompute(
   let passed = 0;
   let verificationsOutstanding = 0;
   for (const verifier of verifierTasks) {
+    // A retired check is neither a pass nor an outstanding one: the re-run that replaced it is
+    // itself pointed at this subject and is counted on its own row. Leaving it outstanding would
+    // make VERIFICATION_PASSED unreachable for every subject whose check was ever re-filed, which
+    // is precisely the shape this project's own 04R / 04R2 / 04R3 history has.
+    if (obsolete.has(verifier.id)) continue;
     const status = effective.get(verifier.id) ?? verifier.status;
     if (status === 'DONE' && verifier.verdict === 'PASS') passed += 1;
     else verificationsOutstanding += 1;

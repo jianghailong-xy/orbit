@@ -256,7 +256,7 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.dispatch_hold = false/, 'a paused list must hold a schedule back');
   assert.match(sql, /a\.runner_id IS NOT NULL/, 'no runner, no dispatch');
-  assert.match(sql, /p\.status <> 'DONE'::task_status/, 'an unfinished prerequisite blocks');
+  assert.match(sql, /WITH RECURSIVE chain/, 'an unfinished prerequisite blocks — through its chain');
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.
   assert.match(sql, /ORDER BY t\.run_at ASC, t\.id ASC/);
@@ -491,40 +491,48 @@ test('a bulk run keeps the appointment the same way a single run does', async ()
 // ---------------------------------------------------------------------------
 
 test('an @-mention answers the comment without cancelling the schedule', async () => {
-  // The mention path shares runWorkspaceOnTask with Run Now but is NOT Run Now: it is a reply to
-  // a comment, not a decision to start the work. Consumption therefore lives in execute() and
-  // batchExecute() rather than in the shared dispatcher — if it ever moves down there, answering
-  // a question in the comments would silently cancel a schedule nobody meant to touch.
+  // A mention is a reply to a comment, not a decision to start the work, so it must not spend the
+  // task's `run_at` — answering a question in the comments would silently cancel an appointment
+  // nobody meant to touch.
+  //
+  // It no longer shares `runWorkspaceOnTask` at all: §13.8 delivers mentions through the ledger,
+  // which opens a CONVERSATION (`context_task_id`, no `task_id`) and never runs the task. So the
+  // property is asserted where it now lives — the delivery path writes no task row whatsoever.
   const writes: any[] = [];
-  const resumed: string[] = [];
+  const created: unknown[] = [];
+  const deliveryId = '00000000-0000-7000-8000-0000000000d1';
   const service = serviceWith(
     {
       task: {
-        findFirst: async () => ({
-          id: TASK_ID,
-          title: 'Ship it',
-          description: null,
-          provider: null,
-          model: null,
-          runAt: SCHEDULED,
-          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
-        }),
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
+        update: async (args: any) => (writes.push(args), { id: TASK_ID }),
       },
       session: { findFirst: async () => null },
+      conversationTurn: { findFirst: async () => null },
+      $queryRaw: async () => [],
+      $executeRaw: async () => 1,
     },
-    { create: async () => (resumed.push('created'), { id: 'session-1' }) },
+    { create: async (...args: unknown[]) => (created.push(args), { id: 'session-1' }) },
   );
+  // Drive the delivery itself: one claimed row, standing in for what the sweep hands it.
+  (service as any).prisma.$queryRaw = async (query: any) => {
+    const text = String(query?.strings?.join('') ?? query?.sql ?? '');
+    if (text.includes('task_comment')) {
+      return [{ body: 'what is the status here?', taskTitle: 'Ship it', workspaceModel: null,
+        runnerId: 'runner-1', workspaceExists: true, workspaceEnabled: true }];
+    }
+    return [];
+  };
 
-  await (service as any).triggerMentionedWorkspace(
-    OWNER_ID,
-    { id: TASK_ID, title: 'Ship it', provider: null, model: null },
-    { id: 'workspace-1', runnerId: 'runner-1' },
-    'what is the status here?',
-  );
+  await assert.doesNotReject(() => (service as any).deliverOneMention(
+    {
+      id: deliveryId, commentId: 'c1', taskId: TASK_ID, workspaceId: 'workspace-1',
+      ownerId: OWNER_ID, desiredSessionId: null, targetSessionId: null,
+    },
+    'holder',
+  ));
 
-  assert.deepEqual(resumed, ['created'], 'the mention still gets its run');
-  assert.equal(writes.length, 0, 'and the appointment it did not keep is still standing');
+  assert.equal(writes.length, 0, 'the appointment it did not keep is still standing');
 });
 
 /** The batch-create preview's world: which workspaces have runners, which lists are paused. */

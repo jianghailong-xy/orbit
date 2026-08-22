@@ -152,3 +152,308 @@ export function successorChain(
   }
   return { chain, truncated: false };
 }
+
+/**
+ * Why the control loop must not touch this attempt again — or null when it still may (§13.6 SU6).
+ *
+ * The distinction this answers is the one the incident turned on. `status` says how an attempt
+ * ENDED; supersession says whether anybody is still doing the work. A `FAILED` task that was
+ * replaced is a historical failure, and every gate that reads `status = 'FAILED'` and stops there
+ * treats it as a live one: the boot recovery scan re-armed the project, the pass selected the task,
+ * the dispatcher minted a Session, and a finished piece of work started itself again.
+ *
+ * Both terminal reasons retire an attempt, and reading only the POINTER is the bug one level down:
+ *
+ *  - `SUPERSEDED` with a successor — the ordinary case, the successor owns the work;
+ *  - `SUPERSEDED` with NO successor — 0128's FK is `ON DELETE SET NULL`, so deleting the successor
+ *    takes the pointer and leaves the reason. A gate keyed on `superseded_by_task_id IS NOT NULL`
+ *    reads that row as never-superseded and re-dispatches it, which is the same accident with an
+ *    extra step;
+ *  - `ABANDONED` — dropped on purpose, with nothing replacing it. Nothing about "the loop should
+ *    leave this alone" was ever about the successor; it is about somebody having said it stopped.
+ *
+ * So the predicate is `terminal_reason IS NOT NULL`, and the pointer only names WHICH successor.
+ * Every SQL gate spells the same thing the same way; see `TASK_RETIRED_SQL_PREDICATE`.
+ */
+export type TaskRetirement = TaskTerminalReason;
+
+export function taskRetirement(
+  facts: Pick<TaskSupersessionFacts, 'supersededByTaskId' | 'terminalReason'>,
+): TaskRetirement | null {
+  // The pointer implies the reason (0128's `task_superseded_link_check`), so this arm is only ever
+  // reached by a row written before that CHECK existed. Reading it as SUPERSEDED rather than
+  // trusting the reason column alone is what makes the predicate safe on unmigrated data.
+  if (facts.supersededByTaskId != null) return 'SUPERSEDED';
+  if (facts.terminalReason === 'SUPERSEDED') return 'SUPERSEDED';
+  if (facts.terminalReason === 'ABANDONED') return 'ABANDONED';
+  return null;
+}
+
+/**
+ * The same predicate in SQL, as a fragment every raw gate pastes rather than retypes.
+ *
+ * `t` is the task alias. Kept as a string constant and not a `Prisma.sql` so it can be spliced into
+ * a template without becoming a parameter, and so a test can assert that each gate carries it
+ * literally — the failure mode this closes is one query out of six spelling it differently.
+ */
+export function taskNotRetiredSql(alias = 't'): string {
+  return `(${alias}."terminal_reason" IS NULL AND ${alias}."superseded_by_task_id" IS NULL)`;
+}
+
+/**
+ * `taskIsObsolete` in SQL: this task is not retired AND neither is the work it checks.
+ *
+ * The second half is a correlated subquery rather than a join so it can be pasted into a predicate
+ * that already has its own FROM. `verifies_task_id IS NULL` — an ordinary task — reads as "nothing
+ * to check", which is what `NOT EXISTS` gives for free.
+ */
+export function taskNotObsoleteSql(alias = 't'): string {
+  return `(${taskNotRetiredSql(alias)} AND NOT EXISTS (
+    SELECT 1 FROM "task" obsolete_subject
+     WHERE obsolete_subject."id" = ${alias}."verifies_task_id"
+       AND NOT ${taskNotRetiredSql('obsolete_subject')}
+  ))`;
+}
+
+/**
+ * A verification failure that is HISTORY, in SQL — the second half of §13.6 SU6, and the one that
+ * decides whether a project can ever be finished.
+ *
+ * `task_verification_failure` is resolved by exactly one thing: a later PASS on the same subject
+ * (revoking the verdict deliberately does not resolve it, so deleting an inconvenient conclusion is
+ * not a way to unblock work). That rule is right, and it has a terminal case it cannot answer:
+ *
+ *  - the VERIFIER was replaced — the check was re-run from scratch, and the re-run's own conclusion
+ *    is the live one. Nothing will ever run the old verifier again, so no later PASS can come from
+ *    it, and its FAIL sits unresolved forever;
+ *  - the SUBJECT was replaced — the work the finding was about is not being done here anymore. The
+ *    successor gets its own checks; the old subject will never be dispatched, so again no PASS can
+ *    arrive.
+ *
+ * Either way the row stops being a request and becomes a record. §13.4's DONE gate counts
+ * unresolved failures, and §7.4's third precondition defers every task downstream of one, so a row
+ * left in that state is a project that cannot be accepted and tasks that cannot run, with no action
+ * available to anybody that would change it. That is a wedge, not a safeguard — BL2's own
+ * distinction — and it is exactly the shape this deployment's re-run history produces.
+ *
+ * `resolved_at` is deliberately NOT written when this becomes true: the row was never resolved, and
+ * claiming it was would be a rewrite. It is read as history, by both readers, through this one
+ * predicate — `verifier` and `subject` are the aliases of the two tasks the failure must be joined
+ * to.
+ */
+export function verificationFailureIsHistorySql(
+  verifier = 'verifier',
+  subject = 'subject',
+): string {
+  return `(NOT ${taskNotRetiredSql(verifier)} OR NOT ${taskNotRetiredSql(subject)})`;
+}
+
+/**
+ * PostgreSQL's `lock_not_available` (55P03), as raised by a `FOR UPDATE NOWAIT` that lost.
+ *
+ * Matched on the SQLSTATE rather than on the message: Prisma wraps a failed raw query as `P2010`
+ * and carries the driver's code in `meta`, and the driver itself surfaces it as `error.code`. Both
+ * shapes reach a caller depending on whether the statement ran through the client or through `pg`
+ * directly in a test, and a predicate that recognised one of them would be a guard that works in
+ * production and not in the spec that proves it — or the other way round.
+ */
+export function isLockNotAvailable(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: unknown; meta?: { code?: unknown } };
+  return candidate.code === '55P03' || candidate.meta?.code === '55P03';
+}
+
+/**
+ * §13.6 SU6, derived: a task the control loop must stop treating as outstanding.
+ *
+ * Two ways in, and the second is the one that kept being missed. A task is obsolete when it was
+ * itself replaced or abandoned — or when it is a VERIFICATION whose subject was. The second is not
+ * a weaker version of the first: the check itself is perfectly healthy, `OPEN`, un-retired, and
+ * pointed at work that will never be dispatched again, so it can never run (§7.4's third
+ * precondition needs its subject DONE) and never stop being outstanding. A world holding one sits
+ * in `AWAITING_VERIFICATION` forever, waking every sixty seconds to decide nothing, with its parent
+ * held open by a child nothing will move. That is §10.1 AC3's silent idling reached from a state
+ * every individual rule calls healthy.
+ *
+ * One predicate, read by `runStateOf`, by §9.2's commit-point gate, by §13.1's aggregation and by
+ * §7.8's pass, so those four cannot disagree about which tasks the project is still waiting on.
+ * `subjectRetirement` is null for a task that verifies nothing — and for one whose subject this
+ * snapshot cannot see, which reads as "not retired" for the same reason an unknown prerequisite
+ * reads as outstanding: a projection may not infer a fact from a row it did not read.
+ */
+export function taskIsObsolete(facts: {
+  retirement: TaskRetirement | null;
+  subjectRetirement?: TaskRetirement | null;
+}): boolean {
+  return facts.retirement != null || facts.subjectRetirement != null;
+}
+
+/** The two tasks a "may this task's work run" question is about: the task, and what it checks. */
+export interface TaskWorkFacts {
+  supersededByTaskId: string | null;
+  terminalReason: string | null;
+  subjectSupersededByTaskId: string | null;
+  subjectTerminalReason: string | null;
+}
+
+/**
+ * §13.6 SU6 as one sentence for the public entry points: may this task's WORK be started?
+ *
+ * Every door that starts a run asks it — Run Now, the sweeps, a batch, a resume of a paused run,
+ * arming an auto-retry — and each of them used to ask a slightly different version, or none. The
+ * two that mattered were being missed in opposite directions: the derived half (this task CHECKS
+ * work that was replaced, so it is obsolete even though it is healthy itself), and the fact that a
+ * friendly pre-check has to name the same condition the database will refuse on. Without the first,
+ * a caller got a raw `check_violation` 500 from 0130's guard; without the second, they got a
+ * cheerful success and a session that could not exist.
+ *
+ * Returns the sentence, or null when the work may run. `retired`/`obsolete` are separate because
+ * they send a reader to different places: one says "that attempt was replaced", the other says "the
+ * thing you were going to check was".
+ */
+export function taskWorkRefusal(
+  facts: TaskWorkFacts,
+  spell: (id: string) => string,
+): string | null {
+  const own = taskRetirement(facts);
+  if (own) {
+    return `this task is recorded as ${own}` +
+      (facts.supersededByTaskId
+        ? ` — ${spell(facts.supersededByTaskId)} took over this work, so run that instead`
+        : ' and nothing replaced it, so there is no run to repeat') +
+      '. If this attempt really is being picked up again, clear the retirement first ' +
+      '(supersededByTaskId: null with terminalReason: null); to read or salvage the old run, open ' +
+      'a session against it directly rather than running the task';
+  }
+  const subject = taskRetirement({
+    supersededByTaskId: facts.subjectSupersededByTaskId,
+    terminalReason: facts.subjectTerminalReason,
+  });
+  if (subject) {
+    return `this task checks work that is recorded as ${subject}` +
+      (facts.subjectSupersededByTaskId
+        ? ` — ${spell(facts.subjectSupersededByTaskId)} replaced it` : '') +
+      ', so the check is obsolete: its subject will never be dispatched again and can never become ' +
+      'DONE. Point a check at the attempt that took over instead';
+  }
+  return null;
+}
+
+/**
+ * The database's own refusals for the same question, recognised so a race that slips past the
+ * pre-check above still reaches the caller as a 409 rather than a 500.
+ *
+ * Matched on the message rather than the SQLSTATE because every guard in 0130 raises
+ * `check_violation`, which is also what an ordinary CHECK raises — narrowing to the codes this
+ * unit defines is what keeps an unrelated constraint failure from being relabelled as a
+ * supersession conflict.
+ */
+export function isTaskWorkRefusedByDatabase(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /TASK_SUPERSEDED|TASK_RETIRED_WHILE_RUNNING|TASK_VERIFICATION_SUBJECT_SUPERSEDED/
+    .test(message);
+}
+
+/**
+ * Every typed refusal this unit's database fences raise, turned into one question a service can
+ * ask: is this error a "somebody else holds these rows right now" or "this work has been replaced"
+ * condition the caller can act on?
+ *
+ * Centralised because the alternative is each call site matching its own subset, and the failure
+ * mode of that is silent: a fence nobody translated surfaces as a raw Prisma error and reaches the
+ * user as a 500 for a condition that has a name, a cause and a remedy. Every marker below is one
+ * migration 0130 raises deliberately; anything else is left alone, so an unrelated constraint
+ * failure is never relabelled as a supersession conflict.
+ */
+export function taskFenceConflictMessage(error: unknown): string | null {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (/TASK_SUPERSEDED|TASK_VERIFICATION_SUBJECT_SUPERSEDED/.test(message)) {
+    return "this task's work has been replaced — the attempt that took over holds it now, so no "
+      + 'run of this one may be started. Open a session against it directly to read the old run';
+  }
+  if (/TASK_RETIRED_WHILE_RUNNING/.test(message)) {
+    return 'this task still has a live run, so it cannot be recorded as replaced yet — wait for '
+      + 'that run to reach a terminal status of its own';
+  }
+  if (/SESSION_PROJECT_BUSY|TASK_SUPERSESSION_PROJECT_BUSY/.test(message)) {
+    return "this task's project is being reconciled right now — nothing was changed; retry";
+  }
+  if (/SESSION_TASK_BUSY|TASK_VERIFICATION_SUBJECT_BUSY/.test(message)) {
+    return 'this task is being written right now — nothing was changed; retry';
+  }
+  if (/SESSION_TASK_MOVED/.test(message)) {
+    return 'this task changed project while the request was being prepared — nothing was changed; '
+      + 'retry';
+  }
+  return null;
+}
+
+/**
+ * §13.6 SU9: is a PREREQUISITE satisfied, when the attempt it names was replaced?
+ *
+ * A dependency edge points at an attempt. When that attempt is superseded the work did not stop —
+ * it moved to the successor — and the edge, which nobody re-pointed, still names the old row. Read
+ * literally (`status = 'DONE'`) it is a prerequisite that can never complete: the old attempt will
+ * never be dispatched again, so every task downstream of it is blocked for good, and the project
+ * idles with no blocker and nothing to act on. That is the same silent shape this whole unit is
+ * about, reached through the relation instead of through the status.
+ *
+ * So the edge is followed to the END of the supersession chain and answered from there: the work
+ * this dependency is waiting on is whatever attempt currently holds it.
+ *
+ * Fail-closed in every case where the chain cannot be trusted:
+ *
+ *   - a cycle or an over-long chain (`successorChain` reports `truncated`) — the walk found data
+ *     0128's trigger says is unwritable, and guessing about it is worse than waiting;
+ *   - a successor this snapshot cannot see — a project-scoped read may not infer a row it did not
+ *     read, the same rule an unknown prerequisite already follows;
+ *   - `SUCCESSOR_DELETED` (retired with no pointer) and `ABANDONED` — nothing took the work over,
+ *     so nothing will complete it. The edge stays unsatisfied and a person has to decide.
+ */
+export function dependencySatisfied(
+  prerequisiteId: string,
+  statusOf: ReadonlyMap<string, string>,
+  edges: ReadonlyMap<string, string | null>,
+): boolean {
+  if (statusOf.get(prerequisiteId) === 'DONE') return true;
+  const { chain, truncated } = successorChain(prerequisiteId, edges);
+  if (truncated) return false;
+  const tail = chain.at(-1);
+  if (tail === undefined) return false;
+  return statusOf.get(tail) === 'DONE';
+}
+
+/**
+ * §13.6 SU9 as a correlated SQL predicate: every prerequisite of `alias` is satisfied.
+ *
+ * The legacy sweeps ask this question in SQL, and the Coordinator's pass asks it in TypeScript
+ * (`dependencySatisfied`). They have to give the same answer or a task is ready to one and blocked
+ * to the other, which is how the two dispatch paths come to disagree about the same row.
+ *
+ * A prerequisite is satisfied when its chain CONTAINS a DONE. That is the same thing as "its tail
+ * is DONE": SU4 only lets a CANCELLED or FAILED task name a successor, so no interior link of a
+ * chain can be DONE — only the end of it can. Written this way because it needs no ORDER BY and
+ * stops as soon as it finds one.
+ *
+ * The depth cap mirrors `TASK_SUPERSESSION_MAX_HOPS`: 0128's trigger refuses a cycle, and a walk
+ * that reaches the cap has found data no writer here produced, so it stops rather than spinning.
+ */
+export function dependenciesSatisfiedSql(alias = 't'): string {
+  return `NOT EXISTS (
+    SELECT 1 FROM task_dependency dep
+     WHERE dep.task_id = ${alias}.id
+       AND NOT EXISTS (
+         WITH RECURSIVE chain(id, status, depth) AS (
+           SELECT p.id, p.status::text, 0
+             FROM task p WHERE p.id = dep.depends_on_task_id
+           UNION ALL
+           SELECT successor.id, successor.status::text, chain.depth + 1
+             FROM chain
+             JOIN task current ON current.id = chain.id
+             JOIN task successor ON successor.id = current.superseded_by_task_id
+            WHERE chain.depth < ${TASK_SUPERSESSION_MAX_HOPS}
+         )
+         SELECT 1 FROM chain WHERE chain.status = 'DONE'
+       )
+  )`;
+}

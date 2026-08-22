@@ -37,6 +37,10 @@ for (const [taskStatus, expectedReason, movesToCompleted, runnerStatus] of [
             assignedRunnerId: runnerId,
             status: RunStatus.AWAITING_INPUT,
             provider: 'claude',
+            // §13.6 SU6: only a run DOING the task's work follows the task's lifecycle. A session
+            // opened to look at a task (`false`) is deliberately left alone, so the sweep under
+            // test here has to be about the other kind.
+            startsTaskWork: true,
             runtimeSessionId: 'runtime-1',
             lastTurnAt: new Date(),
             cancelRequestedAt: null,

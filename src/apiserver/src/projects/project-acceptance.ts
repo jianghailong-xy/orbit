@@ -12,7 +12,36 @@ import { createHash } from 'node:crypto';
 
 /** Bumped only when the digest's INPUT SHAPE changes, so an old record cannot silently match a new
  *  reading of the same world. It is inside the hash, not beside it. */
-export const ACCEPTANCE_DIGEST_VERSION = 1;
+/**
+ * Version 2 (§13.6 SU6): `taskSet` carries each task's successor and terminal reason.
+ *
+ * It had to. AE1's whole promise is that a recorded digest identifies the WORLD a conclusion was
+ * reached about, and supersession is a fact about that world which the previous three columns could
+ * not see: an attempt linked to its successor after an acceptance was opened changed which tasks
+ * count as unfinished — the DONE gate reads it, aggregation reads it, §11's detectors read it —
+ * while the digest stayed byte-identical. A run frozen before the link would have passed on
+ * evidence about a different world and reported nothing amiss.
+ *
+ * BOTH columns, for the reason SU6 gives everywhere else: `superseded_by_task_id` and
+ * `terminal_reason` move independently. Deleting a successor takes the pointer and leaves the
+ * reason; re-pointing a `SUCCESSOR_DELETED` row at a new attempt moves the pointer and not the
+ * reason. A digest carrying one of them agrees about worlds that differ in the other, and — worse —
+ * disagrees with `hashDecisionInput`, which carries the whole task row. Two hashes over one change
+ * must not reach two answers about whether the world moved.
+ *
+ * `superseded_at` is deliberately NOT here, and the rule that excludes it is the same one that
+ * excludes `updated_at`: it is AUDIT, not semantics. No gate reads it — retirement is decided by
+ * the other two columns and by nothing else — so including it would make an acceptance go stale on
+ * a re-statement that changed nothing anybody consults. (`hashDecisionInput` does carry it, because
+ * that hash is "the snapshot I read", not "the facts my conclusion depends on"; `updated_at` is in
+ * that one too and in neither of the reasons anything decides.)
+ *
+ * The consequence of the bump is deliberate and is the recoverable one: every acceptance run open
+ * at deploy time re-digests differently and its DONE is refused `ACCEPTANCE_EVIDENCE_STALE`, which
+ * names itself and is answered by opening a new attempt. The alternative — leaving the shape alone
+ * — is a digest that silently agrees about worlds that differ.
+ */
+export const ACCEPTANCE_DIGEST_VERSION = 2;
 
 /**
  * Why a DONE was refused. Two of the three are frozen by the contract (§13.4 AE2 step 3); the third
@@ -33,8 +62,14 @@ export type AcceptanceRefusalCode =
 export interface AcceptanceFacts {
   /** sha256 of `project.acceptance_criteria ?? ''` — one edited character changes it. */
   criteriaRevision: string;
-  /** (taskId, status, completionPolicy) — `status` is in it so DONE → OPEN moves the digest. */
-  taskSet: Array<[string, string, string]>;
+  /**
+   * (taskId, status, completionPolicy, terminalReason, supersededByTaskId) — `status` is in it so
+   * DONE → OPEN moves the digest, and the last two are in it so being REPLACED, being UNLINKED, or
+   * having a successor deleted each move it too. Both are the empty string when absent, which keeps
+   * the tuple fixed-width and keeps "nothing here" from rendering as the same JSON as some future
+   * value spelled `null`. See `ACCEPTANCE_DIGEST_VERSION` for why `supersededAt` is not among them.
+   */
+  taskSet: Array<[string, string, string, string, string]>;
   /** (verifierTaskId, verifiesTaskId, verdict) — a verdict that changes changes the digest. */
   verdicts: Array<[string, string, string]>;
   /** (requirementId, targetBranch, contentHash, refGeneration) — §13.4 AE9's authoritative row. */

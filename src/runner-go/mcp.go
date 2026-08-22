@@ -488,7 +488,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId")
 		// Default the assignee to the current agent when the caller didn't specify one
 		// (an explicit assigneeId, including null to leave it unassigned, is respected).
 		if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
@@ -519,7 +519,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "assigneeId", "dueDate", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef")
 			// Same assignee default as task_create: this agent unless the caller said otherwise.
 			if _, ok := body["assigneeId"]; !ok && s.agentID != "" {
 				body["assigneeId"] = s.agentID
@@ -1177,7 +1177,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	str := map[string]interface{}{"type": "string"}
 	taskIDProp := map[string]interface{}{"type": "string", "description": "Task id; defaults to the current task (ORBIT_TASK_ID) if omitted"}
 	promptDesc := map[string]interface{}{"type": "string", "description": "Write this as a self-contained, executable prompt for the task — background, files involved, concrete steps, and acceptance criteria — so an agent with no prior conversation context can pick it up and act on it directly."}
-	status := map[string]interface{}{"type": "string", "enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED"}}
+	// FAILED is one of the five values TaskStatus has always had, and the server has always
+	// accepted it — it was missing from this enum alone, which made "put a task back the way its
+	// run left it" unreachable from any tool while remaining reachable from raw SQL.
+	status := map[string]interface{}{
+		"type": "string",
+		"enum": []string{"OPEN", "IN_PROGRESS", "DONE", "CANCELLED", "FAILED"},
+		"description": "FAILED is what a run that died leaves behind; write it to restore that " +
+			"outcome, never to express \"I could not finish\" about work nobody ran. Pair it with " +
+			"supersededByTaskId in ONE call when a later attempt took over, so the attempt keeps " +
+			"how it ended and gains what replaced it.",
+	}
 	providerProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to start where the assignee's project last started, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
@@ -1320,6 +1330,20 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"verifiesTaskId": map[string]interface{}{
 				"type":        "string",
 				"description": "File this task as a VERIFICATION of that task: it exists to check whether the named task actually did what it claims. This is what makes a check a structured relation instead of a naming convention — it is the precondition for task_update's `verdict`, and the only thing `completionPolicy: VERIFICATION_PASSED` counts. The subject must be owned by you, must not be this task, must not itself be a verification, and must be in the SAME project (a check filed across that line is counted by nobody). A verification is expected to run as its OWN session: concluding one from the session that ran the subject is refused.",
+			},
+			"supersedesTaskId": map[string]interface{}{
+				"type": "string",
+				"description": "The attempt this new task REPLACES, recorded in the same write that " +
+					"creates it. The predecessor keeps the CANCELLED or FAILED it ended with — the " +
+					"original outcome is the fact being preserved — and gains a pointer to this task " +
+					"plus terminalReason SUPERSEDED, so \"who ended up doing this\" becomes a relation " +
+					"a query can follow instead of a sentence in a description. Use this rather than " +
+					"creating the replacement and linking it afterwards: the two-call version has a " +
+					"window, and an attempt left in that window reads to every downstream gate as an " +
+					"ordinary unfinished failure — this deployment re-dispatched one months later. " +
+					"Refused if the predecessor is still open, belongs to another owner or another " +
+					"project, or has already been replaced (two racing replacements give one winner " +
+					"and one error, never a pointer that depends on timing).",
 			},
 			"labels": labelsProp,
 		}

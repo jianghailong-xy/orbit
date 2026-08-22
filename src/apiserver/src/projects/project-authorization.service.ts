@@ -6,6 +6,14 @@ import {
   MAX_AUTO_RUN_FAILURES,
   retryBackoffUntil,
 } from '../tasks/task-retry-policy';
+import {
+  TaskRetirement,
+  taskIsObsolete,
+  taskNotRetiredSql,
+  taskRetirement,
+  verificationFailureIsHistorySql,
+} from '../tasks/task-supersession';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
 
 export type ProjectAutomationPolicyValue = 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
 
@@ -62,6 +70,9 @@ export type ProjectAuthorizationReasonCode =
   | 'DELEGATE_PERMISSION_DENIED'
   | 'USER_CONTROL_REQUIRED'
   | 'TASK_NOT_OPEN'
+  // §13.6 SU6: this attempt was replaced or abandoned. DENY and not DEFER — a deferral says "not
+  // yet", and there is no later instant at which a superseded attempt becomes the live one again.
+  | 'TASK_SUPERSEDED'
   | 'TASK_DISPATCH_HELD'
   | 'TASK_NOT_DUE'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
@@ -171,6 +182,26 @@ export interface ProjectActionAuthorizationInput {
      */
     verificationBlock?: ProjectVerificationBlock | null;
     hasLiveSession: boolean;
+    /**
+     * §13.6 SU6 as this gate READ IT AT THE COMMIT POINT, under the task row's `FOR SHARE`.
+     *
+     * This is the field the race turns on. §7.8's pass chose this task from a snapshot taken before
+     * anything locked it; between that snapshot and this transaction somebody may have linked a
+     * successor. The pass cannot see that, and it is not a stale-snapshot fault either — the
+     * decision was correct when it was made. Re-reading it here, inside the lock that the link
+     * itself has to take, is what turns "we planned it, then the world changed" into a refusal with
+     * a name rather than a Session for work that has already been re-done.
+     */
+    retirement?: TaskRetirement | null;
+    /**
+     * §13.6 SU6's derived half: the retirement of the task this one VERIFIES, when it verifies one.
+     *
+     * A check whose subject was replaced is obsolete even though the check itself is healthy — its
+     * subject will never be dispatched again, so it can never satisfy §7.4's third precondition and
+     * can never stop being outstanding. Refusing it here, and not only in §7.8's pass, is what makes
+     * "planned before the subject was replaced, admitted after" a refusal instead of a run.
+     */
+    verificationSubjectRetirement?: TaskRetirement | null;
     assigneeAgentId: string | null;
     assigneeIsProjectMember: boolean;
     assigneeEnabled: boolean;
@@ -451,6 +482,16 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
 } | null {
   const task = input.task;
   if (!task) return { decision: 'DENY', reasonCode: 'TASK_NOT_OPEN' };
+  // §13.6 SU6, first and DENY. First because a retired attempt is not a task whose preconditions
+  // are unmet — none of the clauses below is the reason it must not run — and DENY because every
+  // other refusal here describes a condition that can lift. This one cannot: the successor named by
+  // the link is what is live now, and no amount of waiting makes this row the work again.
+  if (taskIsObsolete({
+    retirement: task.retirement ?? null,
+    subjectRetirement: task.verificationSubjectRetirement ?? null,
+  })) {
+    return { decision: 'DENY', reasonCode: 'TASK_SUPERSEDED' };
+  }
   // §7.4 precondition 1, v1.18 (`PC-CX-64`): `FAILED` is a status this gate ADMITS ON, not one it
   // refuses out of hand. WHICH of §9.5 Q3's rows the task is on is then settled by clauses this
   // function already had, and that is deliberate — they are where `failedTaskBlockerKind` took its
@@ -699,17 +740,45 @@ export class ProjectAuthorizationService {
     `);
     const principal = agents[0];
 
+    // `FOR SHARE` on the task is this gate's fence, and §13.6 SU6's two columns are read THROUGH
+    // it: `task_supersession_guard` fires on `BEFORE UPDATE OF superseded_by_task_id`, so a
+    // concurrent link takes a row lock that conflicts with this one. Either the link commits first
+    // and this read sees it (refused below), or this dispatch commits first and the link waits and
+    // then applies to a task that is already running — never both reading the other as absent.
     const taskRows = command.taskId == null ? [] : await tx.$queryRaw<Array<{
-      id: string; status: string; dispatchHold: boolean; runAt: Date | null; assigneeAgentId: string | null;
+      id: string; status: string; dispatchHold: boolean; runAt: Date | null;
+      assigneeAgentId: string | null;
+      supersededByTaskId: string | null; terminalReason: string | null;
+      verifiesTaskId: string | null;
     }>>(Prisma.sql`
       SELECT t."id", t."status"::text, t."dispatch_hold" AS "dispatchHold",
-             t."run_at" AS "runAt", t."assignee_id" AS "assigneeAgentId"
+             t."run_at" AS "runAt", t."assignee_id" AS "assigneeAgentId",
+             t."superseded_by_task_id" AS "supersededByTaskId",
+             t."terminal_reason" AS "terminalReason",
+             t."verifies_task_id" AS "verifiesTaskId"
         FROM "task" t
        WHERE t."id" = ${command.taskId}::uuid AND t."project_id" = ${command.projectId}::uuid
          AND t."owner_id" = ${command.ownerId}::uuid
        FOR SHARE
     `);
     const task = taskRows[0];
+
+    // §13.6 SU6's derived half, in a SECOND statement — deliberately, and not as a LEFT JOIN with
+    // `FOR SHARE OF t, subject`: PostgreSQL refuses to lock the nullable side of an outer join, so
+    // that spelling is not merely inelegant, it is an error on every ordinary task.
+    //
+    // Two statements in a fixed order — verifier, then subject — which is also the order 0130's
+    // session guard takes, so the two cannot invert. There is no TOCTOU between them: the link is a
+    // column of the row this transaction now holds `FOR SHARE`, and changing it requires an UPDATE
+    // of that row, which this lock blocks. What was read above is what will still be true here.
+    const subjectRows = task?.verifiesTaskId == null ? [] : await tx.$queryRaw<Array<{
+      supersededByTaskId: string | null; terminalReason: string | null;
+    }>>(Prisma.sql`
+      SELECT t."superseded_by_task_id" AS "supersededByTaskId",
+             t."terminal_reason" AS "terminalReason"
+        FROM "task" t WHERE t."id" = ${task.verifiesTaskId}::uuid
+       FOR SHARE
+    `);
 
     const targetAgents = !task?.assigneeAgentId ? []
       : await tx.$queryRaw<AuthorizationAgentRow[]>(Prisma.sql`
@@ -738,12 +807,17 @@ export class ProjectAuthorizationService {
       `);
     }
 
+    // §9.4's cap counts every session §4.2 guard 5 calls live, which is the four in
+    // `PROJECT_LIVE_SESSION_STATUS_SQL` and not the two this query used to name. A run paused at
+    // `AWAITING_INPUT` still holds its slot: it is resumable, nothing has released the runner, and
+    // counting it as free let a project run over its own concurrency limit.
     const [projectConcurrency] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
       SELECT count(*)::int AS "count" FROM "session" s
         JOIN "task" t ON t."id" = s."task_id"
        WHERE t."project_id" = ${command.projectId}::uuid
          AND t."owner_id" = ${command.ownerId}::uuid AND s."owner_id" = ${command.ownerId}::uuid
-         AND s."deleted_at" IS NULL AND s."status"::text IN ('PENDING', 'RUNNING')
+         AND s."deleted_at" IS NULL AND s."starts_task_work"
+         AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
     `);
     const [agentConcurrency] = !task?.assigneeAgentId ? [{ count: 0 }]
       : await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
@@ -752,7 +826,8 @@ export class ProjectAuthorizationService {
            WHERE t."project_id" = ${command.projectId}::uuid
              AND t."owner_id" = ${command.ownerId}::uuid AND s."owner_id" = ${command.ownerId}::uuid
              AND t."assignee_id" = ${task.assigneeAgentId}::uuid
-             AND s."deleted_at" IS NULL AND s."status"::text IN ('PENDING', 'RUNNING')
+             AND s."deleted_at" IS NULL AND s."starts_task_work"
+             AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
         `);
     const [dailyBudget] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
       SELECT count(*)::int AS "count" FROM "project_action" a
@@ -765,11 +840,30 @@ export class ProjectAuthorizationService {
     `);
     const [dependencyState] = command.taskId == null ? [{ incomplete: 0 }]
       : await tx.$queryRaw<Array<{ incomplete: number }>>(Prisma.sql`
-          SELECT count(*)::int AS "incomplete" FROM "task_dependency" d
-            JOIN "task" prerequisite ON prerequisite."id" = d."depends_on_task_id"
-           WHERE d."task_id" = ${command.taskId}::uuid
-             AND prerequisite."owner_id" = ${command.ownerId}::uuid
-             AND prerequisite."status"::text <> 'DONE'
+          -- §13.6 SU9: an edge names an ATTEMPT, and a replaced attempt's work is held by its
+          -- successor. Walked forward with a recursive CTE — the chain is short (0128 caps it at
+          -- 256 and refuses cycles), and the walk is bounded here as well so data the trigger says
+          -- is unwritable cannot spin. A prerequisite counts as complete when the END of its chain
+          -- is DONE; a chain that runs out at a retired row with no successor does not, because
+          -- nothing took that work over.
+          WITH RECURSIVE chain(root, id, status, depth) AS (
+            SELECT prerequisite."id", prerequisite."id", prerequisite."status"::text, 0
+              FROM "task_dependency" d
+              JOIN "task" prerequisite ON prerequisite."id" = d."depends_on_task_id"
+             WHERE d."task_id" = ${command.taskId}::uuid
+               AND prerequisite."owner_id" = ${command.ownerId}::uuid
+            UNION ALL
+            SELECT chain.root, successor."id", successor."status"::text, chain.depth + 1
+              FROM chain
+              JOIN "task" current ON current."id" = chain.id
+              JOIN "task" successor ON successor."id" = current."superseded_by_task_id"
+             WHERE chain.depth < 256
+          )
+          SELECT count(*)::int AS "incomplete" FROM (
+            SELECT chain.root FROM chain
+             GROUP BY chain.root
+            HAVING bool_and(chain.status <> 'DONE')
+          ) unsatisfied
         `);
     // §7.4 precondition 3's second half. Two shapes, one read, most-specific first:
     //
@@ -802,10 +896,20 @@ export class ProjectAuthorizationService {
                    f."defect_task_id" AS "defectTaskId", f."created_at" AS "createdAt"
               FROM "task_verification_failure" f
               JOIN "task" defect ON defect."id" = f."defect_task_id"
+              JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+              JOIN "task" subject ON subject."id" = f."subject_task_id"
              WHERE f."subject_task_id" = ${command.taskId}::uuid
                AND f."project_id" = ${command.projectId}::uuid
                AND f."resolved_at" IS NULL
                AND defect."status"::text NOT IN ('DONE', 'CANCELLED')
+               -- §13.6 SU6: a defect somebody REPLACED stops holding the subject, for the same
+               -- reason V4 already lets a deleted one stop holding it — an unresolvable block is a
+               -- wedge, not a safeguard. The successor is dispatchable on its own account.
+               AND ${Prisma.raw(taskNotRetiredSql('defect'))}
+               -- ...and so does the whole finding once the check that made it, or the work it was
+               -- about, has been replaced. Shared verbatim with §13.4's DONE gate so "this failure
+               -- is history" cannot mean two things.
+               AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
             UNION ALL
             SELECT 'UPSTREAM' AS "reason", 1 AS "rank", f."id" AS "failureId",
                    f."verifier_task_id" AS "verifierTaskId",
@@ -814,9 +918,14 @@ export class ProjectAuthorizationService {
                    f."defect_task_id" AS "defectTaskId", f."created_at" AS "createdAt"
               FROM "task_verification_failure" f
               JOIN "task_dependency" d ON d."depends_on_task_id" = f."subject_task_id"
+              JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+              JOIN "task" subject ON subject."id" = f."subject_task_id"
              WHERE d."task_id" = ${command.taskId}::uuid
                AND f."project_id" = ${command.projectId}::uuid
                AND f."resolved_at" IS NULL AND f."blocks_downstream" = true
+               -- Same predicate as the arm above: a finding from a replaced check, or about
+               -- replaced work, must not defer every task downstream of it forever.
+               AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
           ) blocks
            ORDER BY "rank", "createdAt", "failureId"
            LIMIT 1
@@ -826,7 +935,8 @@ export class ProjectAuthorizationService {
       : await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
           SELECT count(*)::int AS "count" FROM "session" s
            WHERE s."task_id" = ${command.taskId}::uuid AND s."owner_id" = ${command.ownerId}::uuid
-             AND s."deleted_at" IS NULL AND s."status"::text IN ('PENDING', 'RUNNING')
+             AND s."deleted_at" IS NULL AND s."starts_task_work"
+             AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
         `);
     const failures = command.taskId == null ? []
       : await tx.$queryRaw<Array<{ createdAt: Date; error: string | null }>>(Prisma.sql`
@@ -892,6 +1002,10 @@ export class ProjectAuthorizationService {
                   : uuidToBase62(verificationBlockRow.defectTaskId),
               },
               hasLiveSession: (liveTask?.count ?? 0) > 0,
+              retirement: task == null ? null : taskRetirement(task),
+              verificationSubjectRetirement: subjectRows[0]
+                ? taskRetirement(subjectRows[0])
+                : null,
               assigneeAgentId: task?.assigneeAgentId == null
                 ? null
                 : uuidToBase62(task.assigneeAgentId),

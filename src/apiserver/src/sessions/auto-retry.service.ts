@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import {
   RunEventType,
   lastUserMessageText,
@@ -8,6 +8,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { taskRetirement } from '../tasks/task-supersession';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
@@ -107,6 +108,18 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAttempts: true,
         assignedRunnerId: true,
         status: true,
+        // §13.6 SU6's two columns, so the sweep can answer "is this task's work still this task's
+        // to do" itself instead of finding out from a trigger that refuses the write.
+        taskId: true,
+        task: {
+          select: {
+            terminalReason: true,
+            supersededByTaskId: true,
+            // §13.6 SU6's derived half: a retry of a check whose subject was replaced would resume
+            // a run that can never conclude about anything.
+            verifies: { select: { terminalReason: true, supersededByTaskId: true } },
+          },
+        },
         // When the reaper gave up on this session — the clock MAX_OFFLINE_WAIT_MS runs on.
         finishedAt: true,
         // The rest of what deriveSessionCapabilities reads, so the runner-liveness question
@@ -131,6 +144,29 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // sweep started with, not from what it has since stored.
       const attempts = session.retryAttempts;
       try {
+        // §13.6 SU6 FIRST, ahead of every resource question below.
+        //
+        // Those are all deferrals — the runner is rebooting, the quota resets at four, the provider
+        // is down — and each of them re-arms and waits. This is not a deferral: the task's work is
+        // being done by the attempt that replaced it, and no amount of waiting changes that. Asked
+        // after the offline branch (where it was first written) a retired session on a runner that
+        // stays down would show "Retrying" and renew itself for the whole offline grace period,
+        // which is a promise the sweep cannot keep. An unrecoverable fact outranks a temporary one.
+        //
+        // DISARMED rather than skipped: leaving `retry_at` set means selecting this row on every
+        // sweep forever, either silently or by being refused at the write and logging each time.
+        // No attempt is spent — `retryAttempts` is the budget for failures of the RUN, and this
+        // retry never happened.
+        const retirement = session.task
+          ? (taskRetirement(session.task)
+            ?? (session.task.verifies ? taskRetirement(session.task.verifies) : null))
+          : null;
+        if (retirement) {
+          await this.disarm(session.id, session.status,
+            `task was ${retirement.toLowerCase()}; the attempt that replaced it holds this work`);
+          continue;
+        }
+
         const quotaKey = `${session.assignedRunnerId ?? 'none'}:${session.provider}`;
         if ((released.get(quotaKey) ?? 0) >= PER_QUOTA_PER_SWEEP) continue;
 
@@ -155,6 +191,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
+
 
         // The authoritative answer to "is the account able to run at all", checked as late as
         // possible: for a quota retry the reset time it was armed with came from the runtime's
@@ -191,17 +228,88 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // NOT refunded on success: only a reply that is no longer one of these failures resets
         // the count (runner-api.controller retryPlanFor), which is what bounds a provider
         // failing the retry exactly as it failed the original.
+        // The claim carries §13.6 SU6 as well as the retry's own condition: a supersession that
+        // commits between the check above and this write makes it match zero rows, which is
+        // already the "somebody else owns this retry" path — no new branch, and no revive of
+        // replaced work. `retry_at` is cleared by that same statement only when it wins, so a
+        // loser leaves the row for the next sweep, which disarms it above.
         const claimed = await this.prisma.session.updateMany({
-          where: { id: session.id, retryAt: { not: null } },
+          where: {
+            id: session.id,
+            retryAt: { not: null },
+            OR: [
+              { taskId: null },
+              { task: { terminalReason: null, supersededByTaskId: null } },
+            ],
+          },
           data: { retryAt: null, retryAttempts: attempts + 1 },
         });
         if (claimed.count === 0) continue;
         released.set(quotaKey, (released.get(quotaKey) ?? 0) + 1);
 
-        await this.sessions.resume(session.ownerId, session.id, {
-          content,
-          clientTurnId: randomUUID(),
-        });
+        try {
+          await this.sessions.resume(session.ownerId, session.id, {
+            content,
+            clientTurnId: randomUUID(),
+          });
+        } catch (error) {
+          // §13.6 SU6, at the only point left where it can still surprise this sweep: the claim
+          // above and the resume below are two transactions, so a supersession can commit between
+          // them. The resume is then refused — correctly — but the ordinary catch would treat it as
+          // a transient failure, re-arm for two minutes and keep the attempt it spent. Both are
+          // wrong: nothing was retried, and nothing will be. The retry ends here instead.
+          //
+          // Re-read rather than pattern-matched on the message, so this cannot be fooled by a
+          // refusal that merely mentions the word, and refunded with a compare-and-set that names
+          // the attempt count this sweep wrote — a concurrent writer that moved it on wins, and
+          // this refunds nothing rather than overwriting somebody else's number.
+          const [current] = await this.prisma.$queryRaw<Array<{
+            terminalReason: string | null; supersededByTaskId: string | null;
+            subjectTerminalReason: string | null; subjectSupersededByTaskId: string | null;
+          }>>(Prisma.sql`
+            SELECT t."terminal_reason" AS "terminalReason",
+                   t."superseded_by_task_id" AS "supersededByTaskId",
+                   subject."terminal_reason" AS "subjectTerminalReason",
+                   subject."superseded_by_task_id" AS "subjectSupersededByTaskId"
+              FROM "task" t
+              JOIN "session" s ON s."task_id" = t."id"
+              LEFT JOIN "task" subject ON subject."id" = t."verifies_task_id"
+             WHERE s."id" = ${session.id}::uuid
+          `);
+          const retiredNow = current
+            ? (taskRetirement(current)
+              ?? taskRetirement({
+                supersededByTaskId: current.subjectSupersededByTaskId,
+                terminalReason: current.subjectTerminalReason,
+              }))
+            : null;
+          if (!retiredNow) throw error;
+          const refunded = await this.prisma.session.updateMany({
+            where: { id: session.id, retryAt: null, retryAttempts: attempts + 1 },
+            data: { retryAttempts: attempts },
+          });
+          this.log.log(
+            `session ${session.id} retry abandoned: task was ${retiredNow.toLowerCase()}`,
+          );
+          // The same settlement `disarm` publishes, and for the same reason: the clients have been
+          // drawing this row as "Retrying" off a `retryAt` the claim above already removed, and no
+          // future sweep will select it again. Without this the card waits forever for a countdown
+          // that has ended. Guarded on the CAS so a concurrent writer that moved the row on is not
+          // announced over, and so a re-entry publishes nothing twice.
+          if (refunded.count > 0) {
+            if (session.status === RunStatus.FAILED) {
+              this.realtime.publish(session.id, {
+                seq: Number.MAX_SAFE_INTEGER,
+                type: RunEventType.STATUS,
+                ts: new Date().toISOString(),
+                payload: { status: RunStatus.FAILED, final: true },
+              });
+            } else {
+              this.realtime.publishSessionUpdated(session.id);
+            }
+          }
+          continue;
+        }
         this.log.log(`session ${session.id} resumed (retry ${attempts + 1})`);
       } catch (e) {
         // The resume failed (runner gone, session raced into another state). Back off and
