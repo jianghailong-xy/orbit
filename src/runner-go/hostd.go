@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -77,6 +79,42 @@ func (c hostdConfig) withDefaults() hostdConfig {
 		c.listenFD = hostdListenFDsStart
 	}
 	return c
+}
+
+// cmdHostd is `orbit hostd`, the command orbit-hostd.service's ExecStart names. It is
+// composition and nothing else — take the socket systemd handed over (or open one
+// ourselves), serve the verb table on it — because each half is tested on its own and
+// an entry point that stays thin is one that cannot drift from what it joins up.
+//
+// sys is a parameter rather than hostdSystemDefaults() called in here, so a test can
+// drive this very entry against a recording systemctl instead of the machine's own.
+func cmdHostd(cfg hostdConfig, sys hostdSystem, foreground bool, stderr io.Writer) error {
+	if runtime.GOOS != "linux" {
+		// Not a missing feature to fill in later: hostd brokers systemd units and takes
+		// its whole notion of identity from SO_PEERCRED, so on a platform with neither
+		// there is no version of this that does anything (see hostd_peercred_other.go).
+		return errors.New("hostd brokers systemd units and identifies its callers with SO_PEERCRED, so it runs on Linux only")
+	}
+	if foreground {
+		// Negative rather than zero: withDefaults reads zero as "use the default", and a
+		// broker that vanished 30s into a debugging session is the thing this switch
+		// exists to prevent.
+		cfg.idleTimeout = -1
+	}
+	l, err := hostdListen(cfg)
+	if err != nil {
+		return err
+	}
+	defer l.Close()
+	if foreground {
+		// Under systemd stderr is the journal and silence is right; run by hand, "which
+		// socket did it actually take" is the first question, so answer it unasked.
+		fmt.Fprintf(stderr, "orbit-hostd: serving %s in the foreground — idle exit disabled\n", l.Addr())
+	}
+	// sys.verbs() is the one place the table is built. Spelling the verbs out again here
+	// would make this the second place, and the copy that goes stale is always the one
+	// the daemon actually serves.
+	return hostdServe(l, cfg, sys.verbs())
 }
 
 // systemdListenFDs reports how many listening sockets systemd passed in through the

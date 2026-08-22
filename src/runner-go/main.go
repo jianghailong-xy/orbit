@@ -69,6 +69,7 @@ Usage:
   orbit token <command>             Mint/list/revoke credentials for headless processes
   orbit capabilities [--json]       Show the CLI capabilities available to agents
   orbit host setup --server URL     Set this machine up for runners (root, once per host)
+  orbit hostd [--foreground]        Serve the machine broker (systemd starts this, not you)
   orbit upgrade                     Force-reinstall the latest binary (if auto-update isn't working)
 
 Run 'orbit <command> --help' for command-specific options.
@@ -190,6 +191,25 @@ Usage:
 Shows the commands available through this binary. --json emits a stable,
 machine-readable document including argument schemas from the built-in Orbit MCP
 server. Session commands appear only inside an orchestration-enabled agent session.
+`,
+	"hostd": `orbit hostd — serve the machine broker on /run/orbit/host.sock
+
+Usage:
+  orbit hostd [--foreground]
+
+The root-owned broker every user's orbit asks to enable, restart or report on their own
+runner. Each verb acts on the caller's own orbit-runner@<uid>.service, decided from the
+connection's peer credentials and never from the request body.
+
+'orbit host setup' installs the socket and service units that run this; systemd starts
+it on the first connection and it exits once the machine goes quiet, so a replaced
+binary takes effect on the next call rather than at the next reboot. It is not meant to
+be run by hand.
+
+Options:
+  --foreground             Serve until stopped rather than exiting once the machine goes
+                           quiet, and name the socket on stderr. For watching a broker
+                           you started by hand.
 `,
 	"mcp": `orbit mcp — run the Task/TaskList MCP server (stdio)
 
@@ -323,6 +343,11 @@ func main() {
 	case "host":
 		if err := cmdHostCLI(args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "orbit host:", err)
+			os.Exit(1)
+		}
+	case "hostd":
+		if err := cmdHostd(hostdConfig{}, hostdSystemDefaults(), bools["foreground"], os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, "orbit hostd:", err)
 			os.Exit(1)
 		}
 	case "upgrade":
