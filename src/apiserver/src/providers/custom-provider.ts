@@ -22,6 +22,7 @@ export function isBuiltinProvider(slug?: string | null, providerBuiltin = true):
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
   if (slug === AgentProvider.OPENCODE) return true;
   if (slug === AgentProvider.KIMI) return providerBuiltin;
+  if (slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
 
@@ -61,6 +62,9 @@ export function execRuntime(args: {
   if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
     return AgentProvider.KIMI;
+  }
+  if (args.declaredProvider === AgentProvider.DSH && args.declaredProviderBuiltin !== false) {
+    return AgentProvider.DSH;
   }
   return AgentProvider.CLAUDE;
 }

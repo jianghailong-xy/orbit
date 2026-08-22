@@ -35,6 +35,7 @@ export function normalizeRuntimeProvider(
   if (value === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
   if (value === AgentProvider.KIMI && providerBuiltin) return AgentProvider.KIMI;
+  if (value === AgentProvider.DSH && providerBuiltin) return AgentProvider.DSH;
   return AgentProvider.CLAUDE;
 }
 

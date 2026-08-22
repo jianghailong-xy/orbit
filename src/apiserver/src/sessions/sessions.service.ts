@@ -943,7 +943,7 @@ export class SessionsService {
   async spawnForServiceToken(
     ownerId: string,
     scope: { assignedRunnerId: string; workspaceId: string; tokenId: string },
-    dto: { prompt: string; title?: string; model?: string; permissionMode?: string },
+    dto: { prompt: string; title?: string; model?: string; permissionMode?: string; provider?: string },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
     assertKnownPermissionMode(dto.permissionMode);
@@ -967,6 +967,7 @@ export class SessionsService {
         workspaceId: workspace.id,
         model: dto.model,
         permissionMode: dto.permissionMode,
+        provider: dto.provider,
         effort,
       },
       { batch: { id: scope.tokenId, maxConcurrent: SERVICE_TOKEN_CONCURRENCY } },
