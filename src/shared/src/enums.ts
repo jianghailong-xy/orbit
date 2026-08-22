@@ -415,4 +415,5 @@ export enum AgentProvider {
   CODEX = 'codex',
   KIMI = 'kimi',
   OPENCODE = 'opencode',
+  DSH = 'dsh',
 }

@@ -19,6 +19,11 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
   [AgentProvider.KIMI]: 'json-rpc',
   // One process per turn, carrying that turn's prompt and exiting with it.
   [AgentProvider.OPENCODE]: 'one-shot',
+  // DSH rides stream-json through the dsh-orbit-bridge.mjs engine process (one bridge per
+  // session, user/assistant/result frames — the same shapes claude uses), but the bridge
+  // QUEUES a frame that arrives mid-turn instead of folding it into the running turn, so
+  // supportsMidTurnSteer() still has to say no for it (see below).
+  [AgentProvider.DSH]: 'stream-json',
 };
 
 /**
@@ -36,5 +41,10 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
  * borrows a built-in runtime, so resolve it with `execRuntime` first.
  */
 export function supportsMidTurnSteer(runtime: string): boolean {
-  return PROVIDER_TRANSPORTS[runtime as AgentProvider] === 'stream-json';
+  // DSH's bridge queues a mid-turn frame rather than folding it into the running turn:
+  // the transport is stream-json (one resident process), but steer-capable is about the
+  // ENGINE folding, which the bridge does not implement. The runner refuses a stray
+  // steer anyway (refuseUnsupportedSteer), so this only decides how the turn is filed.
+  return PROVIDER_TRANSPORTS[runtime as AgentProvider] === 'stream-json' &&
+    runtime !== AgentProvider.DSH;
 }

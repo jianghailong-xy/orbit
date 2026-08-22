@@ -11,6 +11,10 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<AgentProvider, string> = {
   // leaving selection to OpenCode (configured/default for a new session, current model
   // for an existing runtime session).
   [AgentProvider.OPENCODE]: '',
+  // DSH (DeepSeek Harness) headless profile's composed default; the runner's runtime
+  // default probe (fetchDSHDefaultModel) reports the same value, and DSH_ORBIT_MODEL
+  // overrides it on a given runner.
+  [AgentProvider.DSH]: 'deepseek-official/deepseek-v4-flash',
 };
 
 /**
