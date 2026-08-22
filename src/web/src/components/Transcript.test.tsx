@@ -750,6 +750,77 @@ describe('Orbit write tool cards', () => {
     expect(html).toContain('batch-graph');
   });
 
+  // The batch tool answers with every field of every row it wrote. Folded, nobody saw it; open by
+  // default, it is several hundred lines of JSON restating the list right above it.
+  it('does not print the batch result back as JSON', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__task_create_batch', { tasks: [{ title: '分片 A' }] }),
+            {
+              seq: 2,
+              type: 'tool_result',
+              payload: {
+                toolUseId: 't1',
+                content: JSON.stringify([{ id: '34BchKpoLd', title: '分片 A', ownerId: '2p7QMFOw', status: 'OPEN' }]),
+              },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('分片 A');
+    expect(html).not.toContain('ownerId');
+    expect(html).not.toContain('chat-result');
+  });
+
+  // Dropping the echo must not drop the one payload that says something the card cannot.
+  it('still shows a failed batch what went wrong', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__task_create_batch', { tasks: [{ title: '分片 A', dependsOnRefs: ['r'] }] }),
+            {
+              seq: 2,
+              type: 'tool_result',
+              payload: { toolUseId: 't1', content: 'unknown ref "r"', isError: true },
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('unknown ref');
+    expect(html).toContain('chat-result');
+  });
+
+  // SVG text neither wraps nor ellipsizes: past the box it runs on over the node beside it. The
+  // label budget has to be a width, so a Chinese title gets half the characters a Latin one does.
+  it('clips a wide-glyph label by width, not by character count', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__task_create_batch', {
+              tasks: [
+                { title: '一二三四五六七八九十壹贰叁肆伍', ref: 'r' },
+                { title: 'twenty characters ok', ref: 'a', dependsOnRefs: ['r'] },
+              ],
+            }),
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('一二三四五六七八九…');
+    expect(html).not.toContain('一二三四五六七八九十…');
+    // Twenty half-ems of Latin is still the twenty characters the old count allowed.
+    expect(html).toContain('>twenty characters ok<');
+  });
+
   // Fifty is a legal batch (TASK_BATCH_CREATE_MAX) and fifty unfolded rows is a wall dropped into
   // the middle of a turn. Past the ceiling the card goes back to being a card.
   it('leaves an oversized batch folded', () => {

@@ -9,9 +9,34 @@ const COL_GAP = 12;
 const ROW_GAP = 26;
 const PAD = 2;
 
-/** Titles are long and SVG text does not wrap or ellipsize; the full one rides in a tooltip. */
+/** Kanji, kana, Hangul, fullwidth forms — a full em each, where Latin advances about half. */
+const WIDE =
+  /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
+
+/** Twenty half-ems: the width the old twenty-character budget bought when every glyph was Latin. */
+const LABEL_HALF_EMS = 20;
+
+/**
+ * Titles are long and SVG text neither wraps nor ellipsizes — past the box it simply keeps going,
+ * over the node beside it. The budget is the same twenty it always was, but counted in half-ems
+ * rather than in characters: twenty of those is a comfortable line of Latin and half again the
+ * width of the box in Chinese, which is what a title like `[A3] 让 JSON-RPC 失败带出细节` does to it.
+ * The full one rides in a tooltip either way.
+ */
 function clip(title: string): string {
-  return title.length > 20 ? `${title.slice(0, 19)}…` : title;
+  const width = (ch: string) => (WIDE.test(ch) ? 2 : 1);
+  let total = 0;
+  for (const ch of title) total += width(ch);
+  if (total <= LABEL_HALF_EMS) return title;
+  let out = '';
+  let used = 0;
+  for (const ch of title) {
+    // The ellipsis needs a column of its own.
+    if (used + width(ch) > LABEL_HALF_EMS - 1) break;
+    out += ch;
+    used += width(ch);
+  }
+  return `${out}…`;
 }
 
 /**

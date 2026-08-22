@@ -1764,6 +1764,13 @@ function Thinking({ text, seq }: { text: string; seq?: number }) {
 // record.
 const BATCH_AUTO_OPEN_MAX = 12;
 
+/** The batch tool's own input, when it named tasks to draw. */
+function batchTasks(node: ToolNode): BatchTaskInput[] | null {
+  if (node.name !== 'mcp__orbit__task_create_batch') return null;
+  const tasks = node.input?.tasks;
+  return Array.isArray(tasks) && tasks.length > 0 ? tasks : null;
+}
+
 /**
  * A batch small enough to unfold on sight.
  *
@@ -1772,9 +1779,20 @@ const BATCH_AUTO_OPEN_MAX = 12;
  * nobody asked to open.
  */
 function isAutoOpenBatch(node: ToolNode): boolean {
-  if (node.name !== 'mcp__orbit__task_create_batch' || node.truncated) return false;
-  const tasks = node.input?.tasks;
-  return Array.isArray(tasks) && tasks.length > 0 && tasks.length <= BATCH_AUTO_OPEN_MAX;
+  const tasks = batchTasks(node);
+  return !!tasks && !node.truncated && tasks.length <= BATCH_AUTO_OPEN_MAX;
+}
+
+/**
+ * A call whose success payload is its own body over again.
+ *
+ * The batch tool answers with every field of every row it wrote — several hundred lines of JSON
+ * restating the list the card has just drawn — and this card opens on sight, so that blob would be
+ * the first thing under the picture it repeats. Not fetched back either: a payload nothing renders
+ * is not worth a round trip. A failure is untouched — it renders above the body, on its own path.
+ */
+function resultRepeatsBody(node: ToolNode): boolean {
+  return !!batchTasks(node);
 }
 
 // ── tool calls ──────────────────────────────────────────────────────────────
@@ -1816,10 +1834,11 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // The session-created card parses its result as JSON even while folded, so a clipped copy would
   // fail to parse and render nothing — it needs the whole result regardless of the fold.
   const needsWholeResult = node.name === 'mcp__orbit__session_create';
+  const hideResult = resultRepeatsBody(node);
   const fullResult = useFullPayload(
     node.result?.seq ?? 0,
     node.result?.truncated,
-    (open || needsWholeResult) && !!node.result,
+    (open || needsWholeResult) && !!node.result && !hideResult,
   );
   const input = fullInput?.input ?? node.input;
   const resultContent = fullResult ? fullResult.content : node.result?.content;
@@ -1893,7 +1912,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
               <NodeList nodes={node.children} live={live} />
             </div>
           )}
-          {node.result && !node.result.isError && (
+          {node.result && !node.result.isError && !hideResult && (
             <ToolResult seq={node.seq} content={resultContent} compact markdown={isSubWorkspace} />
           )}
         </div>
