@@ -42,7 +42,7 @@ import {
 } from '../projects/task-aggregation-writer';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { SessionsService } from '../sessions/sessions.service';
+import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
 import {
@@ -194,6 +194,12 @@ const MENTION_DELIVERY_TERMINAL_CODES = ['WORKSPACE_GONE', 'COMMENT_GONE'];
 /** Codes that mean "this landing is spent, take the next one": the ledger drops its binding so the
  *  retry chooses again rather than coming back to a session that can no longer carry the message. */
 const MENTION_DELIVERY_REBIND_CODES = ['TURN_STRANDED'];
+
+/** A lock fence from migration 0130, which must keep its own meaning rather than being swallowed as
+ *  "this landing is spent" — nothing is spent, the rows were simply busy. */
+function isTaskWorkFence(error: unknown): boolean {
+  return taskFenceConflictMessage(error) != null;
+}
 
 /** Backoff ceiling. Deliberately half an hour rather than longer: a runner that comes back after a
  *  day should deliver its messages within the half hour, not on the next deploy. */
@@ -6213,11 +6219,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // fixed key — `createTurn` rather than `resume`, because this session is live and a revive
         // is not what is wanted; `resume` delegates to exactly that for a live row, and would
         // refuse a PENDING one outright.
-        const turn = await this.sessions.createTurn(delivery.ownerId, remembered.id, {
-          clientTurnId, content: prompt,
-        } as never);
-        // Just written, so it is PENDING by construction: queued, not yet seen.
-        return { sessionId: remembered.id, turnId: turn.turnId, consumed: false };
+        return this.enqueueMentionTurn(delivery.ownerId, remembered.id, clientTurnId, prompt);
       }
       // Terminal, or trashed, with nothing delivered into it. A terminal Session is what that run
       // WAS, and reviving it to carry a comment rewrites that record. Rotate: mint the next id and
@@ -6261,10 +6263,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // `createTurn`, not `resume`: this row is live, the turn belongs on the running
         // conversation, and `startsTaskWork` is deliberately not passed — answering a comment never
         // relabels somebody else's run as the task's work.
-        const turn = await this.sessions.createTurn(delivery.ownerId, liveWork.id, {
-          clientTurnId, content: prompt,
-        } as never);
-        return { sessionId: liveWork.id, turnId: turn.turnId, consumed: false };
+        return this.enqueueMentionTurn(delivery.ownerId, liveWork.id, clientTurnId, prompt);
       }
     }
 
@@ -6359,6 +6358,65 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         noWorktree: true,
       },
     );
+  }
+
+  /**
+   * Put the mention's turn on a session that was live when this worker looked at it.
+   *
+   * The look was unlocked, so it is a guess: a run can reach a terminal status between the read and
+   * the write, and `createTurn` — which takes the session row and re-checks its lifecycle — refuses
+   * when it does. That refusal is not a failed delivery and must not spend the budget; it means
+   * this landing is spent and the message needs another one.
+   *
+   * Re-read before deciding, because the same refusal covers two worlds: a turn this worker already
+   * wrote before dying (in which case the delivery is queued and nothing is owed), and a session
+   * that ended with nothing on it (in which case `TURN_STRANDED` releases the binding and the sweep
+   * opens a fresh conversation). Neither touches the ended run, which keeps every field it has.
+   */
+  private async enqueueMentionTurn(
+    ownerId: string,
+    sessionId: string,
+    clientTurnId: string,
+    prompt: string,
+  ): Promise<{ sessionId: string; turnId: string | null; consumed: boolean }> {
+    try {
+      const turn = await this.sessions.createTurn(ownerId, sessionId, {
+        clientTurnId, content: prompt,
+      } as never);
+      // Just written, so it is unstamped by construction: queued, not yet seen.
+      return { sessionId, turnId: turn.turnId, consumed: false };
+    } catch (error) {
+      if (isTaskWorkFence(error)) throw error;
+      const already = await this.prisma.conversationTurn.findFirst({
+        where: { sessionId, clientTurnId },
+        select: { id: true, deliveredAt: true },
+      });
+      if (already) {
+        return { sessionId, turnId: already.id, consumed: already.deliveredAt != null };
+      }
+      // Only a session that cannot take the message is a spent landing. `createTurn` fails for
+      // ordinary reasons too — an oversized prompt, a database that is down, an owner that no
+      // longer matches — and re-homing on those would spin the message between fresh sessions
+      // forever while hiding the failure that actually needs reporting. So: believe the typed
+      // refusal, which was decided under the row lock; for anything else look at the row, and if
+      // it is still able to take a message, this was a real failure and must surface as one.
+      if (!(error instanceof SessionNotSendable)) {
+        const now = await this.prisma.session.findFirst({
+          where: { id: sessionId },
+          select: { status: true, deletedAt: true, cancelRequestedAt: true },
+        });
+        const spent = !now || now.deletedAt != null || now.cancelRequestedAt != null
+          || SessionsService.TERMINAL.includes(now.status);
+        if (!spent) throw error;
+      }
+      throw new MentionUndeliverable(
+        'TURN_STRANDED',
+        `the run this mention was going into (${uuidToBase62(sessionId)}) stopped accepting ` +
+          `messages first: ${error instanceof Error ? error.message : String(error)}`,
+        true,
+        'no action needed — the mention will be re-delivered into a fresh conversation',
+      );
+    }
   }
 
   /**

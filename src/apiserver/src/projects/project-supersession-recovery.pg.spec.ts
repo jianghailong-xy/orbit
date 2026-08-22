@@ -1914,6 +1914,115 @@ test('unit E: every @-mention gets exactly one delivery, and says what happened 
         assert.deepEqual(after.finishedAt, frozen.finishedAt);
       });
 
+      await t.test('a run that ends between the look and the write re-homes, spending nothing',
+        async () => {
+          // The look at the target is unlocked, so it is a guess. This fixture makes the guess
+          // wrong the way production does: the row is live when the worker reads it and settles
+          // before the write lands, so the refusal comes from the real `createTurn` under the real
+          // row lock — not from a session that was already finished when the sweep began.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-toctou');
+          const subject = await task(services.db, target, 'the work');
+          const run = await session(services.db, target, {
+            taskId: subject, status: RunStatus.AWAITING_INPUT, finishedAt: null,
+          });
+          await comment(target, subject, [target.agentId]);
+          const [filed] = await deliveries(subject);
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery" SET "desired_session_id" = $2::uuid
+              WHERE "id" = $1::uuid`, filed.id, run,
+          );
+
+          // The barrier: end the run in the window the worker cannot see, then let the production
+          // write proceed into it.
+          const real = services.sessions.createTurn.bind(services.sessions);
+          let barriers = 0;
+          (services.sessions as { createTurn: unknown }).createTurn = async (...args: unknown[]) => {
+            if (barriers === 0) {
+              barriers += 1;
+              await services.db.session.update({
+                where: { id: run },
+                data: {
+                  status: RunStatus.SUCCEEDED, finishedAt: new Date(), completedAt: new Date(),
+                },
+              });
+            }
+            return (real as (...a: unknown[]) => unknown)(...args);
+          };
+          let frozen;
+          try {
+            await services.tasks.deliverMentions();
+            frozen = await services.db.session.findUniqueOrThrow({ where: { id: run } });
+
+            const [after] = await deliveries(subject);
+            assert.equal(barriers, 1, 'the write reached the run that had just ended');
+            assert.equal(after.errorCode, 'TURN_STRANDED');
+            assert.equal(after.attempts, 0, 'a spent landing costs no delivery budget');
+            assert.equal(after.desiredSessionId, null, 'and releases the binding');
+            assert.equal(frozen.status, RunStatus.SUCCEEDED, 'the finished run keeps its fields');
+            assert.equal(await turnsIn(run).then((t) => t.length), 0, 'with nothing written on it');
+
+            // The next sweep puts the message where it can be read.
+            await services.db.$executeRawUnsafe(
+              `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+                WHERE "task_id" = $1::uuid`, subject,
+            );
+            await services.tasks.deliverMentions();
+          } finally {
+            (services.sessions as { createTurn: unknown }).createTurn = real;
+          }
+          const [rehomed] = await deliveries(subject);
+          assert.notEqual(rehomed.targetSessionId, run);
+          const settled = await services.db.session.findUniqueOrThrow({ where: { id: run } });
+          assert.deepEqual(settled.completedAt, frozen!.completedAt, 'still untouched');
+          assert.equal(
+            (await sessionsFor(subject)).filter((row) => row.about === subject).length, 1,
+            'into exactly one fresh conversation',
+          );
+        });
+
+      await t.test('a live run that fails the write keeps its landing and spends an attempt',
+        async () => {
+          // The opposite of the case above, and the reason it cannot be read from the failure
+          // alone: `createTurn` also fails for ordinary reasons. Re-homing on those would move the
+          // message between fresh sessions forever, and every rotation would bury the failure that
+          // needs reporting. The run is still able to take a message, so this is a failed delivery.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-live-error');
+          const subject = await task(services.db, target, 'the work');
+          const run = await session(services.db, target, {
+            taskId: subject, status: RunStatus.AWAITING_INPUT, finishedAt: null,
+          });
+          await comment(target, subject, [target.agentId]);
+          const [filed] = await deliveries(subject);
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery" SET "desired_session_id" = $2::uuid
+              WHERE "id" = $1::uuid`, filed.id, run,
+          );
+
+          const real = services.sessions.createTurn.bind(services.sessions);
+          (services.sessions as { createTurn: unknown }).createTurn = async () => {
+            throw new Error('attachment upload failed');
+          };
+          try {
+            await services.tasks.deliverMentions();
+          } finally {
+            (services.sessions as { createTurn: unknown }).createTurn = real;
+          }
+
+          const [after] = await deliveries(subject);
+          assert.equal(after.errorCode, 'DELIVERY_FAILED', 'reported as the failure it is');
+          assert.match(after.lastError ?? '', /attachment upload failed/);
+          assert.equal(after.attempts, 1, 'and it spends the budget rather than retrying forever');
+          assert.equal(after.desiredSessionId, run, 'the landing is kept, not rotated away');
+          assert.equal(
+            (await sessionsFor(subject)).filter((row) => row.about === subject).length, 0,
+            'so no conversation is opened beside the live run',
+          );
+          const still = await services.db.session.findUniqueOrThrow({ where: { id: run } });
+          assert.equal(still.status, RunStatus.AWAITING_INPUT);
+        });
+
       await t.test('a 0.1.130 comment gets no ledger row and is left to the old path', async () => {
         // The rolling-deploy rule: an old binary omits `mention_delivery_version`, it defaults to
         // 0, and this sweep must not deliver a comment that binary already delivered inline.

@@ -279,6 +279,14 @@ interface ResolvedProviderSwitch {
   keepsModel: boolean;
 }
 
+/**
+ * This session will not take another message: it has ended, or it is in Trash. Typed rather than
+ * left as prose, because a caller that must tell "this landing is spent, re-home the message" apart
+ * from "the write failed" cannot afford to read error strings — the two answers lead opposite ways,
+ * and one of them silently discards a real failure. Still a 409 with the same text on the wire.
+ */
+export class SessionNotSendable extends ConflictException {}
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -2700,7 +2708,7 @@ export class SessionsService {
   // Not live: resume() revives these (and complete/delete/config treat them as
   // already-ended). CANCELLED covers both a hard stop and a graceful, still-resumable end
   // (idle recycle / user end) — `endReason` is what tells those apart for display.
-  private static readonly TERMINAL: RunStatus[] = [
+  static readonly TERMINAL: RunStatus[] = [
     RunStatus.SUCCEEDED,
     RunStatus.FAILED,
     RunStatus.CANCELLED,
@@ -2745,10 +2753,10 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
     if (session.deletedAt) {
-      throw new ConflictException('the session is in Trash; restore it before sending a message');
+      throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
     }
     if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-      throw new ConflictException('the session has ended');
+      throw new SessionNotSendable('the session has ended');
     }
     return session;
   }
@@ -3000,10 +3008,10 @@ export class SessionsService {
       }
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
       if (session.deletedAt) {
-        throw new ConflictException('the session is in Trash; restore it before sending a message');
+        throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
       }
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
-        throw new ConflictException('the session has ended');
+        throw new SessionNotSendable('the session has ended');
       }
       const existing = await tx.conversationTurn.findUnique({
         where: { sessionId_clientTurnId: { sessionId: id, clientTurnId: dto.clientTurnId } },
