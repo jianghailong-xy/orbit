@@ -9,6 +9,10 @@ import { RunnerApiController } from './runner-api.controller';
 function makeController(
   status: RunStatus = RunStatus.AWAITING_INPUT,
   runtimeSessionId: string | null = 'runtime-1',
+  // What the Session row already carries. The batch's single write is computed against these
+  // (see the one-write invariant in common/lock-order.ts), so a test that wants to observe a set
+  // being cleared has to start it non-empty — a write that would change nothing is not issued.
+  stored: { runningBgShells?: string[]; runningSubagents?: string[] } = {},
 ) {
   const calls = {
     createMany: [] as any[],
@@ -21,8 +25,6 @@ function makeController(
   let published = 0;
   const tx = {
     $queryRaw: async () => [{ id: 'session-1', leaseOwnerMatches: true }],
-    // The running-work sets are maintained with atomic array SQL rather than a read-modify-write;
-    // record the statement so a test can assert which set a launch touched.
     $executeRaw: async (strings: TemplateStringsArray, ..._values: unknown[]) => {
       calls.executeRaw.push(strings.join('?'));
       return 1;
@@ -49,6 +51,9 @@ function makeController(
       findUniqueOrThrow: async () => ({
         status,
         runtimeSessionId,
+        cancelRequestedAt: null,
+        runningBgShells: stored.runningBgShells ?? [],
+        runningSubagents: stored.runningSubagents ?? [],
       }),
       updateMany: async (args: any) => {
         calls.updateMany.push(args);
@@ -86,7 +91,11 @@ test('a reclaimed session init is persisted without advancing lastTurnAt', async
   });
 
   assert.equal(calls.createMany.length, 1, 'the runtime handshake remains durable');
-  assert.equal(calls.updateMany.length, 0, 'the old activity time remains unchanged');
+  assert.equal(calls.updateMany.length, 0, 'the Session row is never written more than once');
+  assert.ok(
+    !calls.update.some((c: any) => 'lastTurnAt' in (c.data ?? {})),
+    'the old activity time remains unchanged',
+  );
 });
 
 test('an OpenCode init event persists the runtime id without counting as turn activity', async () => {
@@ -109,16 +118,21 @@ test('an OpenCode init event persists the runtime id without counting as turn ac
   });
 
   assert.equal(calls.createMany.length, 1, 'the runtime handshake remains durable');
-  assert.deepEqual(calls.updateMany, [
-    {
-      where: { id: 'session-1', runtimeSessionId: null },
-      data: { runtimeSessionId: 'opencode-runtime-1' },
-    },
-  ]);
+  // One write, carrying the runtime id and nothing that would count as turn activity. The
+  // `runtimeSessionId IS NULL` guard this used to carry in its WHERE is the value read under the
+  // row lock, which nothing can move while this transaction holds it.
+  assert.equal(calls.updateMany.length, 0);
+  assert.equal(calls.update.length, 1);
+  assert.deepEqual(calls.update[0].where, { id: 'session-1' });
+  assert.equal(calls.update[0].data.runtimeSessionId, 'opencode-runtime-1');
+  assert.equal('lastTurnAt' in calls.update[0].data, false);
 });
 
 test('a respawn handshake clears background work left by the previous process', async () => {
-  const { calls, controller } = makeController();
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
+    runningBgShells: ['toolu_prev'],
+    runningSubagents: ['toolu_sub'],
+  });
 
   await controller.events({ id: 'runner-1' }, 'session-1', {
     events: [
@@ -150,7 +164,10 @@ test('a respawn handshake clears background work left by the previous process', 
  * every claim and reclaim performs.
  */
 test('an init does not clear background work, since every query emits one', async () => {
-  const { calls, controller } = makeController();
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
+    runningBgShells: ['toolu_prev'],
+    runningSubagents: ['toolu_sub'],
+  });
 
   await controller.events({ id: 'runner-1' }, 'session-1', {
     events: [
@@ -188,9 +205,16 @@ test('a Monitor launch joins the running background set', async () => {
     ],
   });
 
-  assert.ok(
-    calls.executeRaw.some((sql: string) => sql.includes('running_bg_shells')),
+  assert.equal(calls.executeRaw.length, 0, 'the running sets ride the batch\'s one Session write');
+  assert.deepEqual(
+    calls.update[0].data.runningBgShells,
+    ['toolu_mon'],
     'the Monitor launch is recorded as background work',
+  );
+  assert.equal(
+    'runningSubagents' in calls.update[0].data,
+    false,
+    'the set it did not touch is left out of the write entirely',
   );
 });
 
@@ -257,14 +281,19 @@ test('a durable turn event still advances lastTurnAt', async () => {
     ],
   });
 
-  assert.equal(calls.updateMany.length, 1);
-  assert.ok(calls.updateMany[0].data.lastTurnAt instanceof Date);
+  assert.equal(calls.updateMany.length, 0, 'the Session row is written once, not once per field');
+  assert.equal(calls.update.length, 1);
+  assert.ok(calls.update[0].data.lastTurnAt instanceof Date);
 });
 
-/** The session write carrying the list-preview columns, which is not the batch's only update. */
+/**
+ * The batch's Session write — which now carries the list-preview columns along with everything
+ * else the batch changed, because a batch writes the row exactly once (common/lock-order.ts, I3).
+ * The filter is kept so the assertion still names what it is reading.
+ */
 function previewUpdate(calls: { update: any[] }) {
   const hit = calls.update.filter((c: any) => 'lastToolUse' in (c.data ?? {}));
-  assert.equal(hit.length, 1, 'exactly one preview write per batch');
+  assert.equal(hit.length, 1, 'exactly one Session write per batch');
   return hit[0].data;
 }
 
