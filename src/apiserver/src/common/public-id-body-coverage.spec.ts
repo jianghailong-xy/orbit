@@ -231,9 +231,12 @@ test('both exits map the body: the interceptor for returns, the filter for throw
     /useGlobalInterceptors\(.*new PublicIdInterceptor\(\)/,
     'the success path stopped mapping ids',
   );
+  // Reached through the conflict boundary, which is registered in front of it: Nest runs exactly
+  // one filter per exception, so the id filter is wired as that one's `next` rather than as a
+  // second global. Dropping it out of the chain is the same regression as dropping it entirely.
   assert.match(
     main,
-    /useGlobalFilters\(new PublicIdExceptionFilter\(/,
+    /useGlobalFilters\(\s*new TransientDbConflictFilter\(new PublicIdExceptionFilter\(/,
     'a refusal body leaves unmapped again — see public-id.filter.ts for what that cost',
   );
 });

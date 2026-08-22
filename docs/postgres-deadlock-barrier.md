@@ -150,6 +150,11 @@ A5 阻塞瞬间的 `pg_locks`（已滤掉索引噪声；`WAITING` = `granted = f
   `wait_event_type = Lock` 且被竞争者阻塞的那一刻，再让竞争者提交，从而拿到真正的 40001 并验证
   整个 closure 被重跑。它不需要 `runScenario`：这一侧的受害者由重试循环自己驱动，不是一份固定
   剧本（`scripts/deadlock-barrier.sh retry`）。
+* **API 的 503 兜底**：`src/apiserver/src/common/transient-db-conflict.pg.spec.ts` 把同一套原语用在
+  HTTP 那一端 —— 真实的 40001（callback / array 两种 `$transaction` 形态）与真实的 40P01（不带事务的
+  单条写，靠 `ORDER BY … FOR UPDATE` 钉死加锁顺序、竞争者 `SET LOCAL deadlock_timeout = '20s'` 钉死
+  受害者），走 `main.ts` 那条过滤器链，断言客户端拿到的整份 503 body 与 `Retry-After`，并断言这份
+  body 与日志里都没有 schema 名、表名、SQL 或 PostgreSQL 的原话（`scripts/deadlock-barrier.sh boundary`）。
 * **为什么基线不是 `*.spec.ts`**：它断言的是缺陷本身，修复必须让它失败。默认测试套件里长期驻扎一个
   "修好就变红"的用例，是没人能读的套件。因此基线是独立命令，默认套件里只有与修复无关的 harness
   自检（`pg-barrier.pg.spec.ts`，11/11 通过，无 skip）。

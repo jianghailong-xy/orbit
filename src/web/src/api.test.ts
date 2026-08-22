@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSessionEventPage } from './api';
+import {
+  TRANSIENT_DB_CONFLICT_CODE,
+  TRANSIENT_DB_CONFLICT_MESSAGE,
+  TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS,
+  transientDbConflictBody,
+} from '@orbit/shared';
+import { ApiError, api, getSessionEventPage } from './api';
 
 const okJson = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as Response;
@@ -50,5 +56,43 @@ describe('getSessionEventPage', () => {
 
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.signal).toBeUndefined();
+  });
+});
+
+describe('a database conflict answered by the server', () => {
+  // The apiserver's boundary turns a deadlock or a failed serialization into this one answer
+  // (src/apiserver/src/common/transient-db-conflict.filter.ts). What is asserted here is the web
+  // half of that contract: the body the server actually serves — the shared builder both sides
+  // import, not a copy of it — arrives as an ApiError a caller can branch on, by CODE rather than
+  // by rewordable prose.
+  const conflictResponse = () =>
+    ({
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: new Headers({ 'retry-after': String(TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS) }),
+      json: async () => transientDbConflictBody(),
+    }) as unknown as Response;
+
+  it('reaches the caller as an ApiError carrying the stable code', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => conflictResponse()));
+
+    const error = await api('/tasks', { method: 'POST', body: {} }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(503);
+    expect((error as ApiError).code).toBe(TRANSIENT_DB_CONFLICT_CODE);
+    expect((error as ApiError).message).toBe(TRANSIENT_DB_CONFLICT_MESSAGE);
+  });
+
+  it('says nothing about the database it came from', () => {
+    // The same claim the server-side contract test makes, from the other end: a client can render
+    // this body verbatim without leaking a statement, a table or a bound parameter.
+    const served = JSON.stringify(transientDbConflictBody());
+    for (const forbidden of ['UPDATE ', 'SELECT ', 'conversation_turn', '$1', 'sk-ant', 'at ']) {
+      expect(served).not.toContain(forbidden);
+    }
+    expect(transientDbConflictBody().retryable).toBe(true);
+    expect(transientDbConflictBody().retryAfterSeconds).toBe(TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS);
   });
 });
