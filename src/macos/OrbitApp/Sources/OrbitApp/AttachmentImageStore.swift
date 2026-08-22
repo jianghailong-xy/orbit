@@ -20,8 +20,8 @@ import UIKit
 final class AttachmentImageStore {
     private let api: APIClient
     private var cache: [String: PlatformImage] = [:]
-    /// Ids that failed to decode (not an image, or a fetch error) — render a file chip instead of
-    /// retrying forever.
+    /// Ids the server answered for with bytes that are not a renderable image — render a file chip.
+    /// A *failed* fetch never lands here: see `load`.
     private var notImage: Set<String> = []
     private var loading: Set<String> = []
 
@@ -50,11 +50,26 @@ final class AttachmentImageStore {
     }
 
     /// Fetch + decode `id` if not already known. Idempotent and dedups concurrent callers.
+    ///
+    /// Only an answer about the file itself is remembered. This used to latch on any thrown error,
+    /// which meant a `.task` cancelled when its row scrolled out of the List — or one dropped
+    /// connection — permanently redressed a sent screenshot as a `photo.png` chip, with nothing to
+    /// undo it short of relaunching the app. A transport failure says nothing about the bytes, so it
+    /// leaves the id unresolved and the next appearance tries again.
     func load(_ id: String) async {
         guard cache[id] == nil, !notImage.contains(id), !loading.contains(id) else { return }
         loading.insert(id)
         defer { loading.remove(id) }
-        guard let data = try? await api.downloadAttachment(id), let img = PlatformImage(data: data) else {
+        let data: Data
+        do {
+            data = try await api.downloadAttachment(id)
+        } catch let APIError.http(status, _) where (400..<500).contains(status) {
+            notImage.insert(id)   // the server won't serve it — gone or not ours; asking again won't help
+            return
+        } catch {
+            return                // offline, dropped, or cancelled — retry when the row comes back
+        }
+        guard let img = PlatformImage(data: data) else {
             notImage.insert(id)
             return
         }
