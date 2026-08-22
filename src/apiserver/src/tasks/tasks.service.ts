@@ -36,6 +36,7 @@ import {
   lockTaskLists,
   orderedIds,
 } from '../common/lock-order';
+import { withTransactionRetry, type TransactionRetryOptions } from '../common/transaction-retry';
 import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { planTaskAggregation } from '../projects/task-aggregation';
 import {
@@ -1378,6 +1379,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return { type: CreatorType.AGENT, id: workspace.id };
   }
 
+  /**
+   * How a Task write asks for the shared whole-transaction retry, and the only thing it says
+   * about one.
+   *
+   * The loop, the classifier and the backoff are `common/transaction-retry`'s — a second local
+   * answer to "did the database abort this?" could only ever disagree with the first. What is
+   * local is the line it writes, and what that line is allowed to contain: an operation name from
+   * this file, the closed set of outcomes the loop defines, the attempt counter, and the SQLSTATE
+   * — `40001`, `40P01`, `P2034`, or the literal `message` when only the driver's wording survived
+   * the wrapping. Every field is low-cardinality by construction, so this is safe to aggregate on.
+   *
+   * The error object itself is never logged. It is the one place a task's title, a prompt, a
+   * parameter value or the failing SQL can appear, and a retried create is exactly the moment
+   * somebody would think to include it.
+   *
+   * Only the outcomes that mean the database threw the transaction away are said out loud:
+   * `FAILED` is the ordinary path of every validation refusal and every duplicate key, and a
+   * first-attempt `COMMITTED` is the ordinary path of every create there is.
+   */
+  private transientWriteRetry(operation: string): TransactionRetryOptions {
+    return {
+      label: operation,
+      onOutcome: (event) => {
+        if (event.outcome === 'FAILED') return;
+        if (event.outcome === 'COMMITTED' && event.attempt === 1) return;
+        this.logger.warn(
+          `operation=${event.label} outcome=${event.outcome} ` +
+            `attempt=${event.attempt}/${event.maxAttempts} sqlstate=${event.evidence ?? 'none'}`,
+        );
+      },
+    };
+  }
+
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
@@ -1420,58 +1454,65 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // needed, though — a task that does not exist yet has no subtasks, so nothing can close a loop
     // through it.
     //
-    // A create that names no link still goes through the transaction when it has a creator
-    // Session, because the INSERT's own `task_creator_session_id_fkey` check takes FOR KEY SHARE
-    // on that Session and the canonical order says a Task transaction takes its Session locks
-    // before its Task writes (lock-order.ts, I2). One extra ordered statement; without it the
-    // create's Session lock lands in the middle of its Task writes, which is the shape of the
-    // 2026-08-21 05:53:11 cycle.
+    // A create that names no link goes through the same transaction, rather than the bare
+    // `task.create` this used to fall back to. Two reasons, and the first is the canonical order:
+    // the INSERT's own `task_creator_session_id_fkey` and `task_list_id_fkey` checks take FOR KEY
+    // SHARE on the creator Session and the list anyway, so the pre-locks above take no lock the
+    // statement was not going to take — they only take them in rank order, up front, which is what
+    // stops a Session lock landing in the middle of a Task write (lock-order.ts, I2; the shape of
+    // the 2026-08-21 05:53:11 cycle). The second is retrying: a deadlock victim has to re-run a
+    // whole unit of work from a new snapshot, and a unit of work has to be a transaction to be
+    // re-runnable at all.
+    //
+    // Which is what `withTransactionRetry` does here: every attempt calls `$transaction` afresh
+    // with this same closure, so a 40P01/40001 victim retakes its locks in order and re-derives
+    // everything it read. Nothing outside the closure moves between attempts — `data` and its
+    // idempotency key are computed once above, so a retry re-inserts the same row rather than a
+    // second one — and the realtime publish below is outside the loop, so it happens once, after
+    // the attempt that actually committed. A conflict that outlives the attempts is rethrown
+    // unchanged for the global boundary to answer 503 (common/transient-db-conflict.filter).
     let task: Task;
     try {
-      task =
-        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId || sessionId
-          ? await this.prisma.$transaction(async (tx) => {
-              // Rank 10 only when this write actually restructures the graph. A plain create
-              // must not queue behind another request's DAG rewrite just to be ordered.
-              if (dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId) {
-                await this.lockDependencyGraph(tx, ownerId);
-              }
-              // Rank 20 and 30, before the first Task/FK write below.
-              await lockTaskLists(tx, [dto.listId]);
-              await lockCreatorSessions(tx, [sessionId]);
-              if (dto.parentTaskId) {
-                await this.assertParentEligible(
-                  tx,
-                  ownerId,
-                  dto.parentTaskId,
-                  dto.projectId ?? null,
-                );
-              }
-              // Same lock and the same reason as the parent above: the subject's project is read
-              // here and relied on by the row written next, so a concurrent move of that subject
-              // into another project has to be wholly before or wholly after this. No self-check
-              // is possible — the verifier does not exist yet.
-              if (dto.verifiesTaskId) {
-                await this.assertVerificationEligible(
-                  tx,
-                  ownerId,
-                  null,
-                  dto.verifiesTaskId,
-                  dto.projectId ?? null,
-                );
-              }
-              const created = await tx.task.create({ data });
-              if (dependsOnTaskIds.length) {
-                await tx.taskDependency.createMany({
-                  data: dependsOnTaskIds.map((dependsOnTaskId) => ({
-                    taskId: created.id,
-                    dependsOnTaskId,
-                  })),
-                });
-              }
-              return created;
-            })
-          : await this.prisma.task.create({ data });
+      task = await withTransactionRetry(
+        this.prisma,
+        async (tx) => {
+          // Rank 10 only when this write actually restructures the graph. A plain create
+          // must not queue behind another request's DAG rewrite just to be ordered.
+          if (dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId) {
+            await this.lockDependencyGraph(tx, ownerId);
+          }
+          // Rank 20 and 30, before the first Task/FK write below.
+          await lockTaskLists(tx, [dto.listId]);
+          await lockCreatorSessions(tx, [sessionId]);
+          if (dto.parentTaskId) {
+            await this.assertParentEligible(tx, ownerId, dto.parentTaskId, dto.projectId ?? null);
+          }
+          // Same lock and the same reason as the parent above: the subject's project is read
+          // here and relied on by the row written next, so a concurrent move of that subject
+          // into another project has to be wholly before or wholly after this. No self-check
+          // is possible — the verifier does not exist yet.
+          if (dto.verifiesTaskId) {
+            await this.assertVerificationEligible(
+              tx,
+              ownerId,
+              null,
+              dto.verifiesTaskId,
+              dto.projectId ?? null,
+            );
+          }
+          const created = await tx.task.create({ data });
+          if (dependsOnTaskIds.length) {
+            await tx.taskDependency.createMany({
+              data: dependsOnTaskIds.map((dependsOnTaskId) => ({
+                taskId: created.id,
+                dependsOnTaskId,
+              })),
+            });
+          }
+          return created;
+        },
+        this.transientWriteRetry('tasks.create'),
+      );
     } catch (e) {
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
@@ -1880,7 +1921,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // where both sides of the pair were in the request.
     const hasParents = items.some((item) => !!item.parentTaskId || !!item.verifiesTaskId);
     const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
-    const created = await this.prisma.$transaction(async (tx) => {
+    // Retried whole, exactly as `create` is and for the same reason: PostgreSQL aborts a deadlock
+    // victim's transaction entirely, so the only correct response is to run all of it again from a
+    // new snapshot. Everything a retry must not re-derive is already outside the closure — the
+    // validated `items`, the session, the turn the idempotency keys are built from, and the held
+    // list ids — so a second attempt writes the same batch rather than a second one, and the
+    // find-or-create by key inside makes an attempt that half-committed impossible to double up on
+    // even in principle. `idByRef` and `rows` are rebuilt per attempt, because they name rows an
+    // aborted attempt no longer has.
+    const created = await withTransactionRetry(this.prisma, async (tx) => {
       // Same owner lock as create: the tasks and their edges must become visible together, or a
       // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
       // A batch naming parents takes it for the matching reason — each parent's project is read
@@ -1963,9 +2012,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
       return rows;
-    }).catch(async (e) => {
+    }, this.transientWriteRetry('tasks.createMany')).catch(async (e) => {
       // A batch is all-or-nothing, so one item's project vanishing mid-write fails the whole call —
       // and it should say so in the language of the request, not as a 500 (see translateProjectFk).
+      // Reached only once the retry loop is done with the error: a transient conflict never gets
+      // here on an attempt that has another one coming.
       throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
     });
     // One control-plane nudge per task, exactly as create does (see its comment).

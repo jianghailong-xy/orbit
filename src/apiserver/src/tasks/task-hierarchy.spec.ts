@@ -114,8 +114,9 @@ test('creating a subtask reads its parent under the owner lock, in one transacti
 });
 
 // The other half of the same rule: an ordinary create must not queue behind another request's DAG
-// rewrite for the same owner.
-test('creating an ordinary task takes no transaction and no lock', async () => {
+// rewrite for the same owner. It is still a transaction — every create is, so that a deadlock
+// victim has a whole unit of work to re-run — but an empty one: no owner lock, no list, no Session.
+test('creating an ordinary task takes its own transaction and no lock', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
     {
@@ -132,7 +133,7 @@ test('creating an ordinary task takes no transaction and no lock', async () => {
 
   await service.create(OWNER_ID, { title: 'just a task' } as never);
 
-  assert.deepEqual(calls, ['createTask']);
+  assert.deepEqual(calls, ['BEGIN', 'createTask', 'COMMIT']);
 });
 
 test('a project belonging to somebody else cannot be filed into', async () => {

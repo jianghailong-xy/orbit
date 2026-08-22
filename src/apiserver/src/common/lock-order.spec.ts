@@ -36,14 +36,16 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   {
     file: 'tasks.service.ts',
     method: 'create',
-    statements: ['task.create', 'taskDependency.createMany', 'task.create'],
+    statements: ['task.create', 'taskDependency.createMany'],
     holds: ['lockTaskLists(tx, [dto.listId])', 'lockCreatorSessions(tx, [sessionId])'],
     note:
-      'Rank 10 only when it links (a plain create must not queue behind a DAG rewrite); 20 and 30 ' +
-      'always, ahead of the INSERT whose foreign keys would otherwise take them mid-write. It ' +
-      'needs no rank-40 pre-lock: project_acceptance_task_fact takes the project after the INSERT, ' +
-      'but the only `task` row this holds is one no other transaction can see, so it can never be ' +
-      'the holding side of a project/task inversion.',
+      'One INSERT, and it is inside the transaction now even when the create names no link — the ' +
+      'unlocked `task.create` fallback is gone, so there is no second statement here. Rank 10 only ' +
+      'when it links (a plain create must not queue behind a DAG rewrite); 20 and 30 always, ahead ' +
+      'of the INSERT whose foreign keys would otherwise take them mid-write. It needs no rank-40 ' +
+      'pre-lock: project_acceptance_task_fact takes the project after the INSERT, but the only ' +
+      '`task` row this holds is one no other transaction can see, so it can never be the holding ' +
+      'side of a project/task inversion.',
   },
   {
     file: 'tasks.service.ts',
