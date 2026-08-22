@@ -543,7 +543,7 @@ func (a *kimiACPClient) close() {
 	a.wg.Wait()
 }
 
-func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) (*kimiACPClient, error) {
+func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDir, kimiHome string, emit emitFn) (*kimiACPClient, error) {
 	procCtx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(procCtx, providerKimi, "acp")
 	configureSessionProcessTree(cmd)
@@ -556,6 +556,9 @@ func startKimiACP(ctx context.Context, t *Transport, job *ClaimedSession, execDi
 		"ORBIT_ALLOW_ORCHESTRATION="+orchestrationEnv(job.AllowOrchestration),
 		envMCPPermissionPrompt+"=0",
 	)
+	// The session's private Kimi home (see kimi_home.go), so runner-owned
+	// configuration never lands in the user's own ~/.kimi-code.
+	cmd.Env = envWithValue(cmd.Env, "KIMI_CODE_HOME", kimiHome)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
@@ -1156,7 +1159,21 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
-	app, err := startKimiACP(ctx, t, job, execDir, emit)
+	realHome, err := effectiveKimiHome(envWithAgent(job.Agent.Env), execDir)
+	if err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to resolve the Kimi home directory: " + err.Error()})
+		return stFailed, true, false
+	}
+	kimiHome, err := prepareKimiHomeOverlay(scratchDir, realHome)
+	if err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to prepare the private Kimi home: " + err.Error()})
+		return stFailed, true, false
+	}
+	// Registered before the spawn so a failed start is cleaned up too. Defers run
+	// LIFO, so the overlay outlives the process it belongs to.
+	defer func() { _ = removeKimiHomeOverlay(kimiHome) }()
+
+	app, err := startKimiACP(ctx, t, job, execDir, kimiHome, emit)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to spawn kimi acp: " + err.Error()})
 		return stFailed, true, false
