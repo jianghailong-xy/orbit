@@ -66,13 +66,24 @@ function serviceFailingWith(error: unknown, liveProjects: string[]) {
         throw error;
       },
       count: async () => 0,
+      // §13.6 SU3's other direction: moving a task now reads whether it is anybody's SUCCESSOR
+      // before it commits. Nothing here replaces anything, so the answer is nobody.
+      findMany: async () => [],
     },
     // Like the project, the list passes its pre-write check — the race is what happens after.
     taskList: { findFirst: async () => ({ id: LIST_ID }), findMany: async () => [] },
     taskDependency: { findMany: async () => [] },
   };
   // Naming a project makes the write take the owner lock, so the stub has to answer it.
-  client.$queryRaw = async () => [{ id: OWNER_ID }];
+  // The owner lock answers with a row; the live-session probe a project move now makes (§12.3 D3)
+  // must answer with none — nothing in these cases is running, and a blanket row would make every
+  // move refuse before it could reach the failure each case is actually about.
+  client.$queryRaw = async (strings: unknown, ...bound: unknown[]) => {
+    const query = strings && typeof strings === 'object' && 'raw' in (strings as object)
+      ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
+      : (strings as Prisma.Sql);
+    return /FROM "session"/i.test(query.text) ? [] : [{ id: OWNER_ID }];
+  };
   client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => fn(client);
   return { service: new TasksService(client as never, {} as never, {} as never), lookups };
 }

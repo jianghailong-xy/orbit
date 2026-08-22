@@ -382,6 +382,10 @@ export const PROJECT_BLOCKER_NON_BLOCKING_REFUSALS: ReadonlySet<string> = new Se
   // A dispatch this unit's own guard stopped because a blocker is already open. Mapping it to a
   // kind would make every blocker breed a second one on the next pass.
   'PROJECT_BLOCKED',
+  // §13.6 SU6: the attempt was replaced or abandoned. Nobody is being asked for anything — the
+  // successor holds the work — so a row here would be a request addressed to no one, and §13.4's
+  // DONE gate would hold the whole project open on it.
+  'TASK_SUPERSEDED',
 ]);
 
 /**

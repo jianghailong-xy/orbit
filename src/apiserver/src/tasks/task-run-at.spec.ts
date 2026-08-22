@@ -256,7 +256,7 @@ test('the scan asks only for tasks that are due AND actually runnable', async ()
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.dispatch_hold = false/, 'a paused list must hold a schedule back');
   assert.match(sql, /a\.runner_id IS NOT NULL/, 'no runner, no dispatch');
-  assert.match(sql, /p\.status <> 'DONE'::task_status/, 'an unfinished prerequisite blocks');
+  assert.match(sql, /WITH RECURSIVE chain/, 'an unfinished prerequisite blocks — through its chain');
   assert.match(sql, /FROM session s/, 'nothing already occupying the task');
   // Deterministic and bounded: longest-overdue first, ties broken by id, capped per pass.
   assert.match(sql, /ORDER BY t\.run_at ASC, t\.id ASC/);

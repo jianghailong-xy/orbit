@@ -399,7 +399,7 @@ export class ProjectTaskDispatcherService {
         "effort", "workspace_id", "assigned_runner_id", "task_id", "source",
         "creator_id", "owner_id", "project_action_id", "dispatch_origin", "run_source",
         "resolution", "snapshot_frozen_at", "required_capabilities",
-        "execution_pin_generation", "updated_at"
+        "execution_pin_generation", "starts_task_work", "updated_at"
       ) VALUES (
         ${sessionId}::uuid, ${title}, ${row.enableWorktree ? makeBranchName(title) : null},
         ${prompt}, 'PENDING', ${selectedProvider}, ${providerBuiltin},
@@ -408,13 +408,18 @@ export class ProjectTaskDispatcherService {
         ${row.workspaceId}::uuid, ${row.runnerId}::uuid, ${command.taskId}::uuid, 'user',
         ${row.ownerId}::uuid, ${row.ownerId}::uuid, ${actionId}::uuid,
         'PROJECT_COORDINATOR', 'PROJECT_COORDINATOR', ${JSON.stringify(resolution)}::jsonb,
-        ${now}, ${effectiveCapabilities}::text[], ${lease.fencingToken}, ${now}
+        ${now}, ${effectiveCapabilities}::text[], ${lease.fencingToken}, true, ${now}
       )
       ON CONFLICT ("task_id") WHERE "task_id" IS NOT NULL AND "deleted_at" IS NULL
-        AND "status" IN ('PENDING', 'RUNNING')
+        AND "status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
       DO NOTHING
       RETURNING "id"
     `);
+    // The predicate above must be spelled EXACTLY as `session_task_execution_claim_idx` is (0130),
+    // or PostgreSQL infers no index and the INSERT raises instead of landing here. It is the same
+    // four statuses §4.2 guard 5 calls live: a run paused at `AWAITING_INPUT` holds its task, and
+    // the two-status version of this predicate is what let a second Session be opened on a
+    // conversation somebody was in the middle of.
     if (!inserted[0]) {
       return this.refusal('TASK_ALREADY_RUNNING', 'TASK_ALREADY_RUNNING', {
         authorization: audit,

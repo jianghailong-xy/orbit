@@ -26,6 +26,7 @@ import {
   AggregationTaskStatus,
   PlannedTaskAggregation,
 } from './task-aggregation';
+import { taskRetirement } from '../tasks/task-supersession';
 
 /**
  * How many tasks one recomputation may pull in before it gives up.
@@ -55,6 +56,8 @@ type ScopeRow = {
   completionPolicy: AggregationTaskFact['completionPolicy'];
   verifiesTaskId: string | null;
   verdict: AggregationTaskFact['verdict'];
+  supersededByTaskId: string | null;
+  terminalReason: string | null;
 };
 
 const SCOPE_SELECT = {
@@ -64,6 +67,10 @@ const SCOPE_SELECT = {
   completionPolicy: true,
   verifiesTaskId: true,
   verdict: true,
+  // §13.6 SU6's two inputs. Read here rather than derived later so the closure and the plan judge
+  // one row's retirement from one read.
+  supersededByTaskId: true,
+  terminalReason: true,
 } satisfies Prisma.TaskSelect;
 
 /**
@@ -96,6 +103,11 @@ export async function collectAggregationScope(
           { id: { in: frontier } },
           { parentTaskId: { in: frontier } },
           { verifiesTaskId: { in: frontier } },
+          // §13.6 SU9: whoever names one of these as its PREDECESSOR. Following supersession
+          // backwards is what makes a change at the end of a chain wake the parent at the start of
+          // it — the successor may sit under a different parent, and without this edge the row that
+          // has to be recomputed is not in the closure at all.
+          { supersededByTaskId: { in: frontier } },
         ],
       },
       select: SCOPE_SELECT,
@@ -106,14 +118,32 @@ export async function collectAggregationScope(
         byId.set(row.id, row);
         if (byId.size > AGGREGATION_SCOPE_MAX_TASKS) return { facts: [], truncated: true };
       }
-      for (const linked of [row.parentTaskId, row.verifiesTaskId]) {
+      // ...and forwards. `chainStaysUnder` walks to the END of a chain, so every hop of it has to
+      // be loaded or the walk stops at an id the map does not hold and answers "cannot tell" —
+      // which fails closed, correctly, but for the wrong reason: the row exists, it simply was not
+      // fetched. Multi-hop chains, and chains that leave a parent and come back, need every link.
+      for (const linked of [row.parentTaskId, row.verifiesTaskId, row.supersededByTaskId]) {
         if (linked && !byId.has(linked)) next.add(linked);
       }
     }
     frontier = [...next];
   }
 
-  return { facts: [...byId.values()], truncated: false };
+  // The one place a ScopeRow becomes an AggregationTaskFact, so §13.6 SU6 is derived once from the
+  // two columns rather than by each reader deciding what "retired" means.
+  return {
+    facts: [...byId.values()].map((row) => ({
+      id: row.id,
+      status: row.status,
+      parentTaskId: row.parentTaskId,
+      completionPolicy: row.completionPolicy,
+      verifiesTaskId: row.verifiesTaskId,
+      verdict: row.verdict,
+      supersededByTaskId: row.supersededByTaskId,
+      retirement: taskRetirement(row),
+    })),
+    truncated: false,
+  };
 }
 
 /**

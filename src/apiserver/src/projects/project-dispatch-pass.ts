@@ -47,6 +47,11 @@ import {
   ProjectBlockerFact,
 } from './project-blocker';
 import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
+import {
+  TaskRetirement,
+  dependencySatisfied,
+  taskRetirement,
+} from '../tasks/task-supersession';
 import { isLiveSessionStatus } from './project-coordinator-session';
 
 /** How many dispatches one pass may propose, however much capacity the project reports. */
@@ -81,6 +86,13 @@ export const PROJECT_DISPATCH_RETRY_WINDOW_MS = 60_000;
  */
 export type ProjectDispatchSkipReason =
   | 'TASK_NOT_OPEN'
+  /**
+   * §13.6 SU6: this attempt was replaced or abandoned. Its own reason and not `TASK_NOT_OPEN`,
+   * because the two send a reader to opposite places — "it has not started" versus "somebody else
+   * finished this". It is also the one skip whose absence was an incident: without it a `FAILED`
+   * task that had been re-done read as an ordinary retryable failure and was dispatched again.
+   */
+  | 'TASK_SUPERSEDED'
   /** §9.5 Q3's terminal cells: the failure is real and nothing mechanical advances it (`PC-CX-64`). */
   | 'TASK_FAILED_TERMINAL'
   | 'NOT_COORDINATOR_AUTHORITY'
@@ -90,6 +102,14 @@ export type ProjectDispatchSkipReason =
   | 'TASK_ALREADY_RUNNING'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
   | 'VERIFICATION_SUBJECT_NOT_DONE'
+  /**
+   * §13.6 SU6, the derived half: this task CHECKS an attempt that was replaced or abandoned. The
+   * check is obsolete — its subject will never be dispatched again, so it can never become DONE,
+   * and `VERIFICATION_SUBJECT_NOT_DONE` would be true forever while reading as a temporary wait.
+   * A separate reason because it is a TERMINAL answer, and everything downstream keys on that: no
+   * blocker, no retry, no wake, no AWAITING_VERIFICATION.
+   */
+  | 'VERIFICATION_SUBJECT_SUPERSEDED'
   | 'WHO_UNRESOLVED'
   | 'PROJECT_BLOCKED'
   | 'TASK_BLOCKED'
@@ -171,20 +191,38 @@ export function selectDispatchableTasks(
   const empty: ProjectDispatchSelection = { candidates: [], skipped: [], freeSlots: 0 };
   if (project.status !== 'OPEN' || !project.coordinatorEnabled) return empty;
 
+  // The whole snapshot's indexes, built BEFORE the first branch that reads them. The
+  // project-blocked early return below explains every considered task, and "considered" is one of
+  // the questions §13.6 SU6 answers — so these have to exist by then, not eleven lines later.
+  const statusOf = new Map(input.world.tasks.map((task) => [task.id, task.status]));
+  // Absent fields read as "not retired" (pre-0129), which is what every one of those rows was.
+  const retirementOf = new Map(input.world.tasks.map((task) => [task.id, taskRetirement({
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  })]));
+  // §13.6 SU9's edges: attempt → the attempt that replaced it. A successor outside this snapshot is
+  // deliberately absent rather than assumed, which makes the walk stop and the dependency read as
+  // outstanding — the same answer an unknown prerequisite already gets.
+  const successorOf = new Map(input.world.tasks.map(
+    (task) => [task.id, task.supersededByTaskId ?? null],
+  ));
+  const obsoleteSubjects = new Set(
+    [...retirementOf].filter(([, retired]) => retired != null).map(([id]) => id),
+  );
+
   // §4.2's `run_state` is deliberately absent from this predicate; see `dispatchStoppedByRunState`.
   const blockers = input.world.blockers ?? [];
   if (blockers.some((blocker) => blocker.subjectType === 'PROJECT')) {
     return {
       candidates: [],
       skipped: input.world.tasks
-        .filter(consideredForDispatch)
+        .filter((task) => consideredForDispatch(task, obsoleteSubjects))
         .map((task) => ({ taskId: task.id, reason: 'PROJECT_BLOCKED' as const }))
         .sort(byTaskId),
       freeSlots: 0,
     };
   }
 
-  const statusOf = new Map(input.world.tasks.map((task) => [task.id, task.status]));
   // `world.actions` is ordered by `(created_at, id)`, so the last one seen per subject is that
   // task's latest attempt — the same read `refusedDispatchConditions` makes of the same list.
   const latestDispatch = new Map<string, ProjectDecisionInput['world']['actions'][number]>();
@@ -212,9 +250,12 @@ export function selectDispatchableTasks(
   // starved by one filed after it, and two passes over one world agree on who goes first.
   for (const task of [...input.world.tasks].sort((a, b) => compare(a.id, b.id))) {
     const due = input.evaluation.dueTasks[task.id];
-    const reason = firstFailure(task, due, statusOf, blockers, latestDispatch.get(task.id), epochMs);
+    const reason = firstFailure(
+      task, due, statusOf, successorOf, retirementOf, blockers,
+      latestDispatch.get(task.id), epochMs,
+    );
     if (reason) {
-      if (consideredForDispatch(task)) skipped.push({ taskId: task.id, reason });
+      if (consideredForDispatch(task, obsoleteSubjects)) skipped.push({ taskId: task.id, reason });
       continue;
     }
     ready.push({ taskId: task.id, attempt: task.dispatchAttempt });
@@ -249,10 +290,30 @@ function firstFailure(
   task: ProjectDecisionInput['world']['tasks'][number],
   due: { runAtDue: boolean; retryBackoffExpired: boolean } | undefined,
   statusOf: Map<string, string>,
+  successorOf: Map<string, string | null>,
+  retirementOf: Map<string, TaskRetirement | null>,
   blockers: readonly ProjectBlockerFact[],
   latestDispatch: ProjectDecisionInput['world']['actions'][number] | undefined,
   epochMs: number,
 ): ProjectDispatchSkipReason | null {
+  // §13.6 SU6, before anything else this function asks. A retired attempt is not a task whose
+  // preconditions failed — it is not this project's next step at all, whatever its status, its
+  // authority or its backoff say. Asked first so the sentence a reader gets names the fact that
+  // actually decided it, and so the answer cannot change when some other precondition does.
+  const retirement = taskRetirement({
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  });
+  if (retirement != null) return 'TASK_SUPERSEDED';
+  // ...and the derived half, HERE rather than beside §7.4 precondition 3 where it naturally reads.
+  // The order is the point: below this line come the failure ladder, the retry budget and §11's
+  // blockers, and every one of them would answer first for a FAILED check whose subject was
+  // replaced — reporting `TASK_FAILED_TERMINAL`, opening a `TEST_FAILED` row and waking a person
+  // about a check that can never run again for a reason that has nothing to do with its failures.
+  // An obsolete task is not a task whose preconditions failed; it is not a step at all.
+  if (task.verifiesTaskId && retirementOf.get(task.verifiesTaskId) != null) {
+    return 'VERIFICATION_SUBJECT_SUPERSEDED';
+  }
   // §7.4 precondition 1, v1.18 (`PC-CX-64`). `OPEN` is one of the two statuses a dispatchable task
   // can be in, not the only one: a real failed run leaves `FAILED`, and §9.5 Q3's retry ladder is
   // written for exactly that task. `failedTaskDisposition` is the single judgement — the same one
@@ -260,7 +321,9 @@ function firstFailure(
   // turns into a row — so a task this pass calls retryable cannot be one the dispatcher refuses as
   // exhausted, or one the turn planner simultaneously reports as beyond mechanical help.
   if (task.status !== 'OPEN') {
-    const disposition = failedTaskDisposition(dispatchFailureFacts(task, due));
+    const disposition = failedTaskDisposition(dispatchFailureFacts(
+      task, due, task.verifiesTaskId ? retirementOf.get(task.verifiesTaskId) : null,
+    ));
     // The backoff arm falls through to the shared `RETRY_BACKOFF_ACTIVE` skip below, so one world
     // reports one reason whichever status the task is in.
     if (!loopCanRetryFailedTask(disposition)) {
@@ -282,10 +345,15 @@ function firstFailure(
   // §7.4 precondition 3, first half. A prerequisite this snapshot cannot see is NOT ready: the
   // snapshot is project-scoped, so an edge that leaves the project is an unknown, and an unknown
   // prerequisite has to read as outstanding.
-  if (task.dependsOnTaskIds.some((id) => statusOf.get(id) !== 'DONE')) {
+  // §7.4 precondition 3, first half — through §13.6 SU9's chain. An edge points at an ATTEMPT, and
+  // when that attempt was replaced the work moved to its successor while the edge did not. Read as
+  // `status = 'DONE'` it is a prerequisite nothing can ever complete.
+  if (task.dependsOnTaskIds.some((id) => !dependencySatisfied(id, statusOf, successorOf))) {
     return 'TASK_DEPENDENCIES_INCOMPLETE';
   }
   // §7.4 precondition 3, second half: a check may not run before the thing it checks is finished.
+  // The REPLACED case was split out and answered at the top of this function; what is left here is
+  // the genuine wait.
   if (task.verifiesTaskId && statusOf.get(task.verifiesTaskId) !== 'DONE') {
     return 'VERIFICATION_SUBJECT_NOT_DONE';
   }
@@ -317,7 +385,23 @@ function firstFailure(
  * the candidate list a person needs a sentence about, and before `PC-CX-64` it was the one status
  * that got none.
  */
-function consideredForDispatch(task: { status: string }): boolean {
+function consideredForDispatch(
+  task: {
+    status: string; supersededByTaskId?: string | null; terminalReason?: string | null;
+    verifiesTaskId?: string | null;
+  },
+  obsoleteSubjects?: ReadonlySet<string>,
+): boolean {
+  if (task.verifiesTaskId && obsoleteSubjects?.has(task.verifiesTaskId)) return true;
+  // A retired attempt is explained whatever status it holds: `TASK_SUPERSEDED` on a CANCELLED row
+  // is the sentence that tells a reader the work moved rather than stopped, and it is the one this
+  // project's own history had no way to say.
+  if (taskRetirement({
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  }) != null) {
+    return true;
+  }
   return task.status === 'OPEN' || task.status === 'FAILED';
 }
 
@@ -329,6 +413,7 @@ function consideredForDispatch(task: { status: string }): boolean {
 function dispatchFailureFacts(
   task: ProjectDecisionInput['world']['tasks'][number],
   due: { runAtDue: boolean; retryBackoffExpired: boolean } | undefined,
+  subjectRetirement?: TaskRetirement | null,
 ) {
   return {
     status: task.status,
@@ -338,6 +423,11 @@ function dispatchFailureFacts(
     // An absent entry predates `dueTasks` and reads as "no backoff is holding it", which is what
     // `selectDispatchableTasks` already assumes for `runAtDue` two lines below.
     retryBackoffExpired: due?.retryBackoffExpired ?? true,
+    retirement: taskRetirement({
+      supersededByTaskId: task.supersededByTaskId ?? null,
+      terminalReason: task.terminalReason ?? null,
+    }),
+    subjectRetirement: subjectRetirement ?? null,
   };
 }
 

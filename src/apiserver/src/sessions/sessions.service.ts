@@ -36,9 +36,15 @@ import {
   SessionState,
   type SessionSearchHit,
   supportsMidTurnSteer,
+  uuidToBase62,
 } from '@orbit/shared';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  TaskWorkFacts,
+  isLockNotAvailable,
+  taskWorkRefusal,
+} from '../tasks/task-supersession';
 import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
@@ -321,6 +327,15 @@ export class SessionsService {
       parentSessionId?: string;
       dispatchOrigin?: SessionDispatchOrigin;
       runSource?: SessionRunSource;
+      /**
+       * §13.6 SU6: this Session exists to DO the task's work, not to look at it.
+       *
+       * Only the paths that start work set it — Run Now, the sweeps, the Project dispatcher — and
+       * 0130's guard is its only reader: it is what lets the database refuse a repeat of replaced
+       * work while still allowing somebody to open a session against the replaced attempt and read
+       * what it did. Defaults false, which is what an ordinary session_create means.
+       */
+      startsTaskWork?: boolean;
     },
   ) {
     if (!dto.prompt) throw new BadRequestException('prompt is required');
@@ -533,6 +548,7 @@ export class SessionsService {
         taskId: dto.taskId,
         dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: opts?.runSource ?? SessionRunSource.MANUAL,
+        startsTaskWork: opts?.startsTaskWork ?? false,
         // A task session must remain discoverable in Open even if an internal caller
         // accidentally asks for the legacy "system" provenance.
         source: dto.taskId ? 'user' : (opts?.source ?? 'user'),
@@ -1907,22 +1923,25 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
-    // A Claude row with turns but no runtime session id has no conversation to resume (it
-    // predates the column, or its id was minted by a different runtime), so the capabilities
-    // payload says MISSING_CONTEXT and the UI blocks resume (it creates a new session
-    // instead). Fix it eagerly on read so every consumer — detail page, list, realtime
-    // stream — sees the session as resumable.
-    if (session.provider === 'claude' && session.numTurns > 0 && !session.runtimeSessionId) {
-      const sid = randomUUID();
-      await this.prisma.session.update({
-        where: { id },
-        data: { runtimeSessionId: sid, numTurns: 0 },
-      });
-      session.runtimeSessionId = sid;
-      session.numTurns = 0;
-    }
+    // A Claude row with turns but no runtime session id has no conversation to resume (it predates
+    // the column, or its id was minted by a different runtime), so the capabilities payload would
+    // say MISSING_CONTEXT and the UI would block resume.
+    //
+    // PROJECTED, NOT WRITTEN. This used to repair the row here, on a GET — so merely OPENING a
+    // historical session's page rewrote `runtime_session_id` and reset `numTurns`, which are the
+    // record of what that run did. On a retired task that is worse than untidy: the resume it was
+    // preparing for is refused (§13.6 SU6), so the only lasting effect of looking at the page was
+    // to edit the history being looked at. A read has no business writing.
+    //
+    // The repair itself still happens — inside the revive transaction, on the locked row, after the
+    // task fence has approved it. Here it is only what the capabilities derivation is told, so the
+    // UI offers the button that will, if pressed, do the write.
+    const projected = session.provider === 'claude'
+        && session.numTurns > 0 && !session.runtimeSessionId
+      ? { ...session, runtimeSessionId: SessionsService.RESUMABLE_PROJECTION, numTurns: 0 }
+      : session;
     // Flatten the join to a picker-ordered `tags` array (system first), matching the list payload.
-    const { tagLinks, ...rest } = session;
+    const { tagLinks, ...rest } = projected;
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
@@ -1993,6 +2012,21 @@ export class SessionsService {
       throw new BadRequestException('retryAt must be a future instant');
     if (at.getTime() - now > MAX_ARM_AHEAD_MS)
       throw new BadRequestException('retryAt is too far out');
+    // §13.6 SU6, before the write. Arming a retry on a task whose work has been replaced promises a
+    // run that can never happen: the sweep would select it, find the task retired, and disarm it —
+    // so the only lasting effect of the click is a countdown in the UI that expires into nothing.
+    // Refused here, `retry_at`, `retry_attempts` and `updated_at` are all untouched. A supersession
+    // that lands AFTER this is the sweep's to handle, and it does: one disarm, no attempt spent.
+    const [armTarget] = await this.prisma.$queryRaw<Array<{ taskId: string | null }>>(Prisma.sql`
+      SELECT s."task_id" AS "taskId" FROM "session" s
+       WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
+    `);
+    if (armTarget?.taskId) {
+      const refusal = await this.taskWorkRefusalFor(this.prisma, armTarget.taskId);
+      if (refusal) {
+        throw new ConflictException(`this retry cannot be armed: ${refusal}`);
+      }
+    }
     const armed = await this.prisma.session.updateMany({
       where: {
         id,
@@ -2889,18 +2923,43 @@ export class SessionsService {
   }
 
   /** Enqueue a user message for a live or still-queued (PENDING) session. */
-  async createTurn(ownerId: string, id: string, dto: SessionTurnDto, opts?: { clearSettledWorktreeState?: boolean }) {
+  async createTurn(
+    ownerId: string,
+    id: string,
+    dto: SessionTurnDto,
+    opts?: {
+      clearSettledWorktreeState?: boolean;
+      /** §13.6 SU6: this turn carries the task's prompt, so the row is doing the task's work. */
+      startsTaskWork?: boolean;
+    },
+  ) {
     assertPromptSize(dto.content, 'message');
     await this.getSendable(ownerId, id); // fast ownership/lifecycle validation
     const queued = await this.prisma.$transaction(async (tx) => {
       // Linearize against claim and turnComplete. If completion wins, it first releases
       // RUNNING->AWAITING_INPUT and this enqueue changes it to PENDING. If enqueue wins,
       // completion sees this turn and retains RUNNING. Neither ordering can lose a wakeup.
+      // BLOCKING, deliberately. This is the point where an ordinary turn serializes against the
+      // runner's claim and against `turnComplete`, and the waiting is the mechanism: whichever
+      // arrives second sees the other's committed state, which is what makes a message delivered
+      // exactly once rather than lost. NOWAIT here would turn a normal, short lock hold into a 409
+      // and drop the user's turn.
+      //
+      // It is also not the acquisition that could deadlock: this transaction holds nothing else
+      // yet. The revive path is the one that arrives here already holding a project and a task, and
+      // that one takes the session NOWAIT for exactly that reason.
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
+      // §13.6 SU6: a turn that carries the TASK's prompt is the task's work, whatever this row was
+      // opened for. Written in the same transaction as the turn — so 0130's guard judges the value
+      // this turn actually starts under, and a session first opened to look at a task cannot keep
+      // the salvage exemption while executing it.
+      if (opts?.startsTaskWork) {
+        await tx.session.update({ where: { id }, data: { startsTaskWork: true } });
+      }
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
       if (session.deletedAt) {
         throw new ConflictException('the session is in Trash; restore it before sending a message');
@@ -3815,11 +3874,62 @@ export class SessionsService {
    * context rather than starting fresh. Requires that runner to be online because the
    * transcript lives on its disk.
    */
+  /**
+   * A placeholder runtime id used only to DERIVE capabilities on a read (see `get`).
+   *
+   * Never written. It exists so `deriveSessionCapabilities` answers the question it is being asked
+   * — "would a resume of this row work" — rather than the question the un-repaired row spells,
+   * without the read having to write to make that true. The real id is minted inside the revive
+   * transaction, once the task fence has let it through.
+   */
+  private static readonly RESUMABLE_PROJECTION = '00000000-0000-4000-8000-000000000000';
+
+  /**
+   * §13.6 SU6 for one task, as the sentence every entry point uses.
+   *
+   * Both halves in one read: the task's own retirement, and — when it is a verification — its
+   * subject's. The second is the one that used to reach callers as a raw `check_violation` from
+   * 0130's guard, because nothing above the database asked it.
+   *
+   * `locked` takes the rows `FOR SHARE`, which is what makes it a fence rather than a check: used
+   * inside the revive transaction, a supersession committing concurrently either lands before this
+   * read (and is seen) or waits for this transaction (and applies to a row already resumed).
+   */
+  private async taskWorkRefusalFor(
+    db: Prisma.TransactionClient | PrismaService,
+    taskId: string,
+    locked = false,
+  ): Promise<string | null> {
+    const [facts] = await db.$queryRaw<Array<TaskWorkFacts>>(Prisma.sql`
+      SELECT t."terminal_reason" AS "terminalReason",
+             t."superseded_by_task_id" AS "supersededByTaskId",
+             subject."terminal_reason" AS "subjectTerminalReason",
+             subject."superseded_by_task_id" AS "subjectSupersededByTaskId"
+        FROM "task" t
+        LEFT JOIN "task" subject ON subject."id" = t."verifies_task_id"
+       WHERE t."id" = ${taskId}::uuid
+       ${locked ? Prisma.sql`FOR SHARE OF t` : Prisma.empty}
+    `);
+    return facts ? taskWorkRefusal(facts, uuidToBase62) : null;
+  }
+
   async resume(
     ownerId: string,
     id: string,
     dto: SessionResumeDto,
-    opts?: { batch?: { id: string; maxConcurrent: number } | null },
+    opts?: {
+      batch?: { id: string; maxConcurrent: number } | null;
+      /**
+       * §13.6 SU6: this turn is the TASK's work, not a comment on it.
+       *
+       * Set by the paths that run a task (Run Now, the sweeps, a batch) when they hand a paused run
+       * the task's prompt. An @-mention deliberately does not set it: replying in a session about a
+       * task is not executing the task, and marking it as such would make the reaper close that
+       * conversation the moment the task settled. Written in the same UPDATE that revives the row,
+       * so 0130's guard judges the value this turn is actually starting under.
+       */
+      startsTaskWork?: boolean;
+    },
   ) {
     assertPromptSize(dto.content, 'message');
     const session = await this.prisma.session.findFirst({
@@ -3829,18 +3939,55 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    // §13.6 SU6, and it comes BEFORE the runtime repair below on purpose.
+    //
+    // A resume of a session whose task was replaced is refused — by 0130's revive guard if it gets
+    // that far, and by this if it does not. The order matters because the repair underneath writes
+    // to the Session: `runtime_session_id` and `numTurns` are the record of what that run actually
+    // did, and rewriting them for a resume that is then refused would edit the history of a run to
+    // no purpose. Read once, checked once, before anything with an effect.
+    //
+    // No exemption for a person here, unlike a fresh session_create: reviving a terminal row is
+    // indistinguishable on the row itself from the auto-retry sweep doing it, so the rule that can
+    // be enforced is the categorical one. Salvage stays available by opening a NEW session.
+    // §13.6 SU6, applied to what THIS request is, not to the row's history.
+    //
+    // Three shapes reach here and they are not the same question:
+    //
+    //   a live salvage continuing as a salvage — the row is `starts_task_work = false`, the request
+    //     does not claim otherwise, and 0130's guard deliberately lets a live row keep moving
+    //     between live statuses. Refusing it would mean a person could open a session on a replaced
+    //     attempt, get one reply, and never be able to ask a second question;
+    //   a live row being handed the TASK's work (`opts.startsTaskWork`) — that is a new claim about
+    //     what the run is for, and it is judged;
+    //   a terminal revival — judged categorically, whoever asks: nothing on the row separates a
+    //     person reviving it from the auto-retry sweep doing so.
+    const continuesSalvage = SessionsService.LIVE.includes(session.status)
+      && !session.startsTaskWork
+      && !opts?.startsTaskWork;
+    if (session.taskId && !continuesSalvage) {
+      const refusal = await this.taskWorkRefusalFor(this.prisma, session.taskId);
+      if (refusal) {
+        throw new ConflictException(`this session's run may not be resumed: ${refusal}`);
+      }
+    }
     // A Claude row with turns but no runtime session id has no conversation to resume. That
     // wedges the capabilities check: MISSING_CONTEXT blocks resume because the session
-    // appears to have lost its conversation. Generate a fresh id and reset numTurns so the
-    // runner does a first spawn (--session-id) instead of a doomed --resume, and the session
-    // is resumable from the UI.
-    if (session.provider === 'claude' && session.numTurns > 0 && !session.runtimeSessionId) {
-      const sid = randomUUID();
-      await this.prisma.session.update({
-        where: { id },
-        data: { runtimeSessionId: sid, numTurns: 0 },
-      });
-      session.runtimeSessionId = sid;
+    // appears to have lost its conversation. A fresh id with `numTurns` reset makes the runner do
+    // a first spawn (--session-id) instead of a doomed --resume.
+    //
+    // NOT WRITTEN HERE. It used to be, and that made it the first side effect of a resume that
+    // could still be refused several checks later — by Trash, by a pending worktree operation, or
+    // (§13.6 SU6) by a supersession that committed after the read above. The caller got an error
+    // and the Session's own history had been edited anyway: `runtime_session_id` and `numTurns` are
+    // the record of what that run did. The repair now happens inside the revive transaction, on the
+    // row re-read under `FOR UPDATE`, so a refusal takes it with it.
+    const needsRuntimeRepair =
+      session.provider === 'claude' && session.numTurns > 0 && !session.runtimeSessionId;
+    if (needsRuntimeRepair) {
+      // The in-memory copy only, so the capability derivations below judge the world the
+      // transaction is going to create. Nothing is persisted until that transaction commits.
+      session.runtimeSessionId = randomUUID();
       session.numTurns = 0;
     }
     const initialCapabilities = deriveSessionCapabilities(session);
@@ -3860,6 +4007,9 @@ export class SessionsService {
     if (SessionsService.LIVE.includes(session.status) && !session.cancelRequestedAt) {
       return this.createTurn(ownerId, id, dto, {
         clearSettledWorktreeState: true,
+        // Carried through: a live paused run being handed the task's prompt is the task's work,
+        // and the row has to say so in the same transaction that writes the turn.
+        startsTaskWork: opts?.startsTaskWork,
       });
     }
     if (
@@ -3874,10 +4024,86 @@ export class SessionsService {
     // Re-check capability and revive under the same Session row lock used by complete/delete.
     // This closes the race where Trash could win after the fast read but before the turn insert.
     const revived = await this.prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-        FOR UPDATE`;
+      // PROJECT FIRST — the one order this system takes these three rows in.
+      //
+      // A revive ends by writing a live status onto this row, which reaches
+      // `session_project_capacity_serialize` and takes the project. Taken there, the order would be
+      // session → task → project, against every Coordinator path's project → task → session, and
+      // the two interleave into a native 40P01 that reaches a caller as a 500. Taken here it is the
+      // same three rows in the same order as everybody else, so the cycle cannot be built.
+      //
+      // Only when this session belongs to a task in a project — which is exactly when the capacity
+      // trigger would have taken it, so nothing acquires a lock it did not already end up holding.
+      const [scope] = await tx.$queryRaw<Array<{ taskId: string; projectId: string | null }>>(
+        Prisma.sql`
+          SELECT s."task_id" AS "taskId", t."project_id" AS "projectId"
+            FROM "session" s JOIN "task" t ON t."id" = s."task_id"
+           WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
+        `,
+      );
+      // The scope read above took no lock, so it is a guess about BOTH halves: which project the
+      // task is in, and whether it is in one at all. A task with no project can be moved INTO one
+      // between the two reads, and this transaction would then reach
+      // `session_project_capacity_serialize` holding nothing — session → task → P2, against every
+      // P2 → task path. Null is not the safe case; it is the case with nothing to lock, which is
+      // why the confirmation below runs either way.
+      if (scope) {
+        if (scope.projectId) {
+          await tx.$queryRaw`
+            SELECT 1 FROM "project" WHERE "id" = ${scope.projectId}::uuid FOR NO KEY UPDATE`;
+        }
+        // The project was read WITHOUT a lock a moment ago, so it is a guess until the task row
+        // confirms it. Two things can have happened in between, and both end in a cycle rather than
+        // a wrong answer: the task moved to another project (this transaction now holds the OLD
+        // project while the capacity trigger below will reach for the NEW one), or a writer already
+        // holds the task and is waiting for a project this transaction holds.
+        //
+        // NOWAIT, for the same reason 0130's `task_supersession_project_lock_order` uses it:
+        // waiting is what builds a cycle, and refusing immediately cannot. Then re-read the scope
+        // THROUGH the lock and require it to be the one that was locked. Either answer leaves this
+        // transaction with nothing written.
+        let confirmed: Array<{ projectId: string | null }>;
+        try {
+          confirmed = await tx.$queryRaw<Array<{ projectId: string | null }>>(Prisma.sql`
+            SELECT t."project_id" AS "projectId"
+              FROM "session" s JOIN "task" t ON t."id" = s."task_id"
+             WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
+             FOR SHARE OF t NOWAIT
+          `);
+        } catch (error) {
+          if (!isLockNotAvailable(error)) throw error;
+          throw new ConflictException(
+            'this session\'s task is being written right now, so the run cannot be resumed in ' +
+              'this request — nothing was changed; retry',
+          );
+        }
+        // Compared in BOTH directions, including null → project and project → null: what matters is
+        // that the row this transaction locked is the row the capacity trigger will reach for.
+        if ((confirmed[0]?.projectId ?? null) !== (scope.projectId ?? null)) {
+          throw new ConflictException(
+            'this session\'s task moved to another project while the resume was being prepared — ' +
+              'nothing was changed; retry',
+          );
+        }
+      }
+      // NOWAIT, and only here. This transaction already holds the project and the task (above), so
+      // an ordinary wait on the session row closes the loop against any writer that took the
+      // session first — which, for an UPDATE, is every writer, since PostgreSQL locks the target
+      // row before a BEFORE ROW trigger can take anything else. `createTurn`'s own lock is
+      // deliberately blocking; it holds nothing and must not drop a user's turn.
+      let locked: Array<{ id: string }>;
+      try {
+        locked = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM "session"
+          WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+          FOR UPDATE NOWAIT`;
+      } catch (error) {
+        if (!isLockNotAvailable(error)) throw error;
+        throw new ConflictException(
+          'this session is being written right now, so it cannot be revived in this request — ' +
+            'nothing was changed; retry',
+        );
+      }
       if (locked.length === 0) throw new NotFoundException('session not found');
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
@@ -3885,6 +4111,44 @@ export class SessionsService {
           assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
         },
       });
+      // Everything was locked in the order project → task → session, but the SESSION was the last
+      // one taken, so its own fields are the ones that could have moved in between. Re-checked
+      // against the scope this transaction actually holds: a rebind to another task means the
+      // project and task it locked are not this session's any more.
+      if ((current.taskId ?? null) !== (scope?.taskId ?? null)) {
+        throw new ConflictException(
+          'this session was rebound to another task while the resume was being prepared — ' +
+            'nothing was changed; retry',
+        );
+      }
+      // §13.6 SU6, re-read under the Session row lock this transaction already holds and the Task
+      // row it takes here. The check before the transaction is the friendly one; this is the fence.
+      // A supersession that commits between them makes this refuse, and because it refuses INSIDE
+      // the transaction, every write below — the runtime repair, the turn, the status flip — is
+      // rolled back with it. The order is Session → Task, matching `complete`/`delete` and the
+      // revive path itself; 0130's guard takes the Task from a Session write for the same reason.
+      // The commit-point half, and it reaches only a REVIVAL — the live path returned above through
+      // `createTurn`. A revival is judged categorically; see the pre-check for why.
+      if (current.taskId) {
+        const refusal = await this.taskWorkRefusalFor(tx, current.taskId, true);
+        if (refusal) {
+          throw new ConflictException(`this session's run may not be resumed: ${refusal}`);
+        }
+      }
+      // The runtime repair, now that nothing after it can refuse. Written on the locked row, in the
+      // transaction that also writes the turn, so the two are one act.
+      if (opts?.startsTaskWork && !current.startsTaskWork) {
+        await tx.session.update({ where: { id }, data: { startsTaskWork: true } });
+        current.startsTaskWork = true;
+      }
+      if (needsRuntimeRepair && !current.runtimeSessionId) {
+        await tx.session.update({
+          where: { id },
+          data: { runtimeSessionId: session.runtimeSessionId, numTurns: 0 },
+        });
+        current.runtimeSessionId = session.runtimeSessionId;
+        current.numTurns = 0;
+      }
       const capabilities = deriveSessionCapabilities(current);
       if (capabilities.resumeBlockedReason === 'TRASHED') {
         throw SessionsService.resumeBlocked('TRASHED');

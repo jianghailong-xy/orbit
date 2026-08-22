@@ -57,7 +57,14 @@ import {
   supersededByAbsentReason,
   supersessionRefusal,
   taskOutcome,
+  isLockNotAvailable,
+  dependenciesSatisfiedSql,
+  taskFenceConflictMessage,
+  taskNotObsoleteSql,
+  taskRetirement,
+  taskWorkRefusal,
 } from './task-supersession';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/project-coordinator-session';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -208,6 +215,20 @@ export const TASK_LIST_SELECT = {
  * Kept literally in step with the Run button's own gate (see `canRun` and the execute
  * path) — the Ready tab must never offer a run the API would reject.
  */
+/**
+ * Was this duplicate-key error the SESSION EXECUTION CLAIM, and not some other unique index?
+ *
+ * Prisma reports the conflicting index in `meta.target` — for a partial unique index on one column
+ * that is the column list. Narrowed here because the caller reads a duplicate as "somebody else is
+ * already running this task", and a collision on an idempotency key, a dependency edge or anything
+ * else is a different fact entirely.
+ */
+function isExecutionClaimConflict(error: unknown): boolean {
+  const target = (error as { meta?: { target?: unknown } })?.meta?.target;
+  const named = Array.isArray(target) ? target.join(',') : String(target ?? '');
+  return /task_id/.test(named);
+}
+
 const RUNNABLE_TASK_SQL = Prisma.sql`
   t.status <> 'DONE'::task_status
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
@@ -215,11 +236,8 @@ const RUNNABLE_TASK_SQL = Prisma.sql`
     SELECT 1 FROM session s
     WHERE s.task_id = t.id AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
   )
-  AND NOT EXISTS (
-    SELECT 1 FROM task_dependency d
-    JOIN task p ON p.id = d.depends_on_task_id
-    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
-  )`;
+  AND ${Prisma.raw(dependenciesSatisfiedSql('t'))}
+  AND ${Prisma.raw(taskNotObsoleteSql('t'))}`;
 
 /**
  * The auto-run sweep's candidate predicate (see reconcileReadyTasks), correlated to an outer
@@ -262,16 +280,22 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- just the one that motivated it. NULL — no schedule at all — permits, which is what every
   -- task that predates the column is.
   AND (t.run_at IS NULL OR t.run_at <= now())
-  AND EXISTS (
-    SELECT 1 FROM task_dependency d
-    JOIN task p ON p.id = d.depends_on_task_id
-    WHERE d.task_id = t.id AND p.status = 'DONE'::task_status
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM task_dependency d
-    JOIN task p ON p.id = d.depends_on_task_id
-    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
-  )
+  -- The auto-run sweep is for tasks that have prerequisites AT ALL: it is the "a dependency just
+  -- completed, start what it released" pass, not a general starter. So it anchors on the task
+  -- HAVING an edge, and the satisfaction of those edges is the clause below.
+  --
+  -- It used to anchor on having a DONE prerequisite, which was the same thing only while an edge
+  -- could be satisfied by nothing else. §13.6 SU9 makes a chain-tail satisfy one, so a task whose
+  -- single prerequisite was replaced — chain tail DONE, the named row CANCELLED — passed the
+  -- satisfaction clause and failed the anchor, and the sweep never selected it.
+  AND EXISTS (SELECT 1 FROM task_dependency d WHERE d.task_id = t.id)
+  -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
+  -- replaced attempt's work is held by its successor. Read as a plain DONE check this is a
+  -- prerequisite nothing can ever complete, and everything downstream of it waits for good.
+  AND ${Prisma.raw(dependenciesSatisfiedSql('t'))}
+  -- ...and a retired task is not a candidate at all: enumerating one every minute only to have
+  -- execute() refuse it is a sweep arguing with itself.
+  AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
@@ -314,11 +338,13 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
   AND t.dispatch_hold = false
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
-  AND NOT EXISTS (
-    SELECT 1 FROM task_dependency d
-    JOIN task p ON p.id = d.depends_on_task_id
-    WHERE d.task_id = t.id AND p.status <> 'DONE'::task_status
-  )
+  -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
+  -- replaced attempt's work is held by its successor. Read as a plain DONE check this is a
+  -- prerequisite nothing can ever complete, and everything downstream of it waits for good.
+  AND ${Prisma.raw(dependenciesSatisfiedSql('t'))}
+  -- ...and a retired task is not a candidate at all: enumerating one every minute only to have
+  -- execute() refuse it is a sweep arguing with itself.
+  AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
     SELECT 1 FROM session s
     WHERE s.task_id = t.id
@@ -1346,6 +1372,257 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return { type: CreatorType.AGENT, id: workspace.id };
   }
 
+  /**
+   * §13.6 SU7: make THIS new task the successor of an attempt that already stopped, in the same
+   * transaction that created it.
+   *
+   * Why this exists as a write and not as advice
+   * -------------------------------------------
+   * The relation SU1 froze has, until now, only had a two-step entrance: create the replacement,
+   * then remember to go back and PATCH the attempt it replaced. This deployment's own incident is
+   * what that costs. The fresh review 6R was created with "replacement for the earlier attempt"
+   * written in its DESCRIPTION and nothing else; the old task kept a terminal status and an empty
+   * `superseded_by_task_id`, because the second step is a thing a person or an agent has to
+   * remember at a moment when the interesting work is already done. Nothing anywhere read the
+   * description, so every gate downstream — the boot recovery scan, §7.8's pass, §9.2 — saw an
+   * ordinary unfinished failure and eventually acted on it.
+   *
+   * A prompt cannot fix that, and neither can a docs line: they are both the same reminder, and
+   * the failure mode is forgetting. One call that cannot create the successor WITHOUT recording
+   * what it replaces is a different shape of thing.
+   *
+   * Concurrency (SU7-b)
+   * -------------------
+   * Two agents both deciding to redo the same attempt is the ordinary case, not the exotic one.
+   * The link is written as a compare-and-set against "nothing has claimed this attempt yet", so
+   * exactly one of them wins and the loser is told which task took over instead of quietly
+   * overwriting a pointer — the fact being recorded is WHO replaced it, and last-write-wins would
+   * make that answer depend on scheduling. The row is locked FOR UPDATE first so the two
+   * transactions serialize on the predecessor rather than both reading it unlinked.
+   *
+   * Nothing here writes `status` (SU4): the predecessor keeps the CANCELLED or FAILED it already
+   * had, which is the fact being preserved.
+   */
+  /**
+   * §13.6 SU7-c: the replay contract. What "this create already happened" is allowed to mean when
+   * the create also claimed to replace something.
+   *
+   * A task create is idempotent on `(session, turn, title, description)` — a redelivered turn
+   * re-runs and must not write the task twice. That key deliberately does NOT carry
+   * `supersedesTaskId`, and it must not start to: two creates with the same title in the same turn
+   * ARE the same create, and letting a different predecessor mint a second key would turn one
+   * redelivery into two tasks.
+   *
+   * But "the task already exists" is not the same claim as "the supersession already happened", and
+   * the early return that answers the first was silently answering the second. Three ways in:
+   *
+   *  - a re-run whose first attempt did not pass `supersedesTaskId` and whose second does;
+   *  - two creates with the same title and description in one turn naming DIFFERENT predecessors;
+   *  - the duplicate-key race, where the loser reads back the winner's row.
+   *
+   * In each, the caller was told the create succeeded and no link exists. That is the exact failure
+   * this whole unit is about — a replacement that nothing structured connects to what it replaced —
+   * arriving through the door built to prevent it.
+   *
+   * So the existing row is CHECKED rather than assumed: the predecessor must already name this very
+   * task and already be terminal-consistent. Anything else is a typed 409, never a quiet success.
+   */
+  private async assertSupersessionAlreadyRecorded(
+    db: Prisma.TransactionClient,
+    ownerId: string,
+    predecessorId: string,
+    successorId: string,
+  ): Promise<void> {
+    const predecessor = await db.task.findFirst({
+      where: { id: predecessorId, ownerId },
+      select: { id: true, supersededByTaskId: true, terminalReason: true },
+    });
+    if (!predecessor) throw new NotFoundException('the task being superseded was not found');
+    if (predecessor.supersededByTaskId === successorId
+        && predecessor.terminalReason === 'SUPERSEDED') {
+      return;
+    }
+    throw new ConflictException(
+      `task ${uuidToBase62(successorId)} already exists but does not supersede ` +
+        `${uuidToBase62(predecessorId)}` +
+        (predecessor.supersededByTaskId
+          ? ` — that attempt was superseded by ${uuidToBase62(predecessor.supersededByTaskId)}`
+          : ' — that attempt has no successor recorded') +
+        '. Record the supersession explicitly with task_update rather than through a create that ' +
+        'has already happened',
+    );
+  }
+
+  /**
+   * §13.6 SU8: an attempt somebody is RUNNING right now may not be retired.
+   *
+   * The other direction of the race 0130's Session guard closes, and it is reachable without any
+   * mixed-version binary. A legacy execute commits its Session first and flips the task's status
+   * second (`clearFailedForRetry`); a supersession that lands in that window takes the task row
+   * while it still reads `FAILED`, sees no reason to refuse, and commits. What is left is a PENDING
+   * Session executing a task the control plane has marked as replaced — the Session guard cannot
+   * help, because the Session was inserted before the link existed.
+   *
+   * Read AFTER the predecessor's row is locked `FOR UPDATE` by the caller, which is what makes this
+   * a fence rather than a check: `session_dispatch_authority_guard` and 0130's own guard both take
+   * `FOR SHARE` on that same task row before inserting, so the two orders are the only two, and
+   * each has a typed answer —
+   *
+   *   Session commits first → its `FOR SHARE` is released, this UPDATE proceeds, and the read below
+   *     sees the live Session and refuses the link;
+   *   link commits first → the insert's `FOR SHARE` waits on this UPDATE's row lock, then sees the
+   *     retirement and refuses the Session.
+   *
+   * Neither can observe the other as absent, and neither outcome is a half-written world.
+   *
+   * All four live statuses (§4.2 guard 5), not the two the claim index used to carry: a run paused
+   * at `AWAITING_INPUT` is a conversation somebody is in the middle of, and retiring its task out
+   * from under it is the same accident with a person watching.
+   */
+  /**
+   * §13.6 SU8's lock, taken NOWAIT — and why it is not an ordinary `FOR UPDATE`.
+   *
+   * There are two orders in which this pair of rows is taken, and they are opposite:
+   *
+   *   Project → Task   this path. The supersession columns are inputs to §13.4's acceptance, so
+   *                    0130 puts them on `project_acceptance_task_fact_update`, which reaches
+   *                    `project_acceptance_reopen` and takes the PROJECT row. The prelock above
+   *                    takes it first so that AFTER trigger is not the thing that takes it.
+   *   Task → Project   a Session INSERT. Its `BEFORE INSERT` triggers fire in NAME order:
+   *                    `session_dispatch_authority_guard` takes the task `FOR SHARE`, and then
+   *                    `session_project_capacity_serialize` updates the project row.
+   *
+   * Interleaved, that is a cycle: this transaction holds the project and wants the task, the insert
+   * holds the task and wants the project. PostgreSQL resolves it — by killing whichever it likes,
+   * with a 40P01 that reaches a caller as a 500 and reaches an operator as noise. "Deterministic"
+   * is the whole property this unit is about, and a deadlock detector picking a victim is the
+   * opposite of it.
+   *
+   * NOWAIT makes the outcome a function of who committed first rather than of who was scheduled:
+   *
+   *   the Session got there first → this fails IMMEDIATELY with 55P03, and the caller is told a run
+   *     is starting on that attempt (the same sentence `assertNotRunningBeforeRetiring` gives when
+   *     the run is already visible — one refusal, two ways of arriving at it);
+   *   this got there first → the insert's `FOR SHARE` waits on this transaction, and when it wakes
+   *     up `session_superseded_task_guard` sees the retirement and refuses the Session.
+   *
+   * Neither side ever waits on a lock the other side is waiting on, so no cycle can form and the
+   * caller always receives a refusal it can act on. Reversing this path to Task → Project instead
+   * would mean the acceptance reopen took the project from inside an AFTER trigger, which is the
+   * inversion against the Coordinator's own project-lease-then-task order that the prelock exists
+   * to remove — the cycle would move rather than close.
+   */
+  private async lockTaskForSupersessionWrite(
+    tx: Prisma.TransactionClient,
+    taskId: string,
+  ): Promise<void> {
+    try {
+      await tx.$queryRaw`SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR UPDATE NOWAIT`;
+    } catch (error) {
+      // 55P03 from either side of the fence: this statement's own NOWAIT, or 0130's
+      // `task_supersession_project_lock_order` refusing because the project is being reconciled.
+      // Both mean the same thing to a caller — nothing was written, and retrying is the answer.
+      if (!isLockNotAvailable(error)) throw error;
+      throw new ConflictException(
+        `task ${uuidToBase62(taskId)} is being written by a run starting on it right now, so its ` +
+          'supersession cannot be recorded in this request — nothing was written; retry once that ' +
+          'run has been created, and record the supersession after it reaches a terminal status',
+      );
+    }
+  }
+
+  private async assertNotRunningBeforeRetiring(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+  ): Promise<void> {
+    const live = await tx.$queryRaw<Array<{ id: string; status: string }>>(Prisma.sql`
+      SELECT s."id", s."status"::text AS "status" FROM "session" s
+       WHERE s."task_id" = ${taskId}::uuid AND s."owner_id" = ${ownerId}::uuid
+         AND s."deleted_at" IS NULL
+         -- Every task-linked session this release creates starts the task's work, so "any live
+         -- run" and "any live work run" are the same set today; the two diverge in the follow-up
+         -- migration that also narrows the execution claim.
+         AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)})
+       ORDER BY s."id"
+       LIMIT 1
+    `);
+    if (live[0]) {
+      // The guidance has to be reachable from the predicate that produced it. INTERRUPTED is one
+      // of the four statuses counted as live above, so "interrupt it" would name an action that
+      // leaves this check refusing for the same reason — and cancelling or force-ending a run to
+      // clear a bookkeeping refusal is the thing this project does not do: a session that is
+      // stopped to make a write succeed loses whatever it was in the middle of. What actually
+      // frees the task is the run REACHING a terminal status of its own.
+      throw new ConflictException(
+        `task ${uuidToBase62(taskId)} still has a live session (${uuidToBase62(live[0].id)}, ` +
+          `${live[0].status}) — wait for it to reach a terminal status of its own (SUCCEEDED, ` +
+          'FAILED or CANCELLED), or drive it there through the work itself, and then record the ' +
+          'supersession. Interrupting it does not release the task: INTERRUPTED is still a live, ' +
+          'resumable run',
+      );
+    }
+  }
+
+  private async linkSupersededBy(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    predecessorId: string,
+    successor: { id: string; projectId: string | null },
+    now: Date,
+  ): Promise<void> {
+    // NOWAIT, then read. See `lockTaskForSupersessionWrite` for the cycle this refuses to join.
+    await this.lockTaskForSupersessionWrite(tx, predecessorId);
+    const [predecessor] = await tx.$queryRaw<Array<{
+      id: string; status: string; projectId: string | null;
+      supersededByTaskId: string | null; terminalReason: string | null;
+    }>>(Prisma.sql`
+      SELECT t."id", t."status"::text AS "status", t."project_id" AS "projectId",
+             t."superseded_by_task_id" AS "supersededByTaskId",
+             t."terminal_reason" AS "terminalReason"
+        FROM "task" t
+       WHERE t."id" = ${predecessorId}::uuid AND t."owner_id" = ${ownerId}::uuid
+    `);
+    if (!predecessor) throw new NotFoundException('the task being superseded was not found');
+    // The same sentences `update` answers with, from the same function, so one rule cannot be
+    // phrased two ways depending on which door the caller came through.
+    const refusal = supersessionRefusal({
+      taskId: predecessorId,
+      status: predecessor.status,
+      successor: { id: successor.id, ownerId, projectId: successor.projectId ?? null },
+      ownerId,
+      projectId: predecessor.projectId ?? null,
+    });
+    if (refusal) throw new BadRequestException(refusal);
+    const already = taskRetirement(predecessor);
+    if (already) {
+      throw new ConflictException(
+        already === 'SUPERSEDED' && predecessor.supersededByTaskId
+          ? `task ${uuidToBase62(predecessorId)} has already been superseded by ` +
+            `${uuidToBase62(predecessor.supersededByTaskId)}`
+          : `task ${uuidToBase62(predecessorId)} is already ${already} — unlink it first if this ` +
+            'is genuinely the attempt that took over',
+      );
+    }
+    await this.assertNotRunningBeforeRetiring(tx, ownerId, predecessorId);
+    // One statement for all three columns: 0128's `task_superseded_link_check` is about the three
+    // of them at once and PostgreSQL evaluates a CHECK per statement. The predicate repeats the
+    // read above as a CAS, so the loser of a race writes nothing rather than overwriting.
+    const linked = await tx.$executeRaw`
+      UPDATE "task"
+         SET "superseded_by_task_id" = ${successor.id}::uuid,
+             "superseded_at"         = ${now},
+             "terminal_reason"       = 'SUPERSEDED'
+       WHERE "id" = ${predecessorId}::uuid AND "owner_id" = ${ownerId}::uuid
+         AND "superseded_by_task_id" IS NULL AND "terminal_reason" IS NULL`;
+    if (linked !== 1) {
+      throw new ConflictException(
+        `task ${uuidToBase62(predecessorId)} was superseded by another attempt while this one was ` +
+          'being created',
+      );
+    }
+  }
+
   async create(ownerId: string, dto: CreateTaskDto, creator?: Creator, creatorSessionId?: string) {
     if (!dto.title) throw new BadRequestException('title is required');
     await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
@@ -1364,7 +1641,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, dto.title, dto.description) : undefined;
     if (idempotencyKey) {
       const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
-      if (existing) return existing;
+      if (existing) {
+        // SU7-c: "already created" may not stand in for "already linked". See
+        // `assertSupersessionAlreadyRecorded`.
+        if (dto.supersedesTaskId) {
+          await this.assertSupersessionAlreadyRecorded(
+            this.prisma, ownerId, dto.supersedesTaskId, existing.id,
+          );
+        }
+        return existing;
+      }
     }
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
@@ -1390,9 +1676,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let task: Task;
     try {
       task =
-        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId
+        dependsOnTaskIds.length || dto.parentTaskId || dto.verifiesTaskId || dto.supersedesTaskId
           ? await this.prisma.$transaction(async (tx) => {
               await this.lockDependencyGraph(tx, ownerId);
+              // §13.6 SU7 + AE6-a's lock order, stated rather than left to the triggers.
+              //
+              // Two things in this transaction reach `project_acceptance_reopen`, and both take the
+              // PROJECT row: the task INSERT (0127's `task.created` fact) and the predecessor's
+              // retirement (0130 adds the two supersession columns to the same trigger). The
+              // Coordinator's dispatch takes project-then-task, so this has to as well or the two
+              // wait on each other. Taken here — after the owner lock, before any task row — so the
+              // order through this path is always user → project → task, and SU3 guarantees there
+              // is exactly ONE project involved: the successor must be in the predecessor's.
+              if (dto.supersedesTaskId && dto.projectId) {
+                await tx.$queryRaw`
+                  SELECT 1 FROM "project" WHERE "id" = ${dto.projectId}::uuid FOR NO KEY UPDATE`;
+              }
               if (dto.parentTaskId) {
                 await this.assertParentEligible(
                   tx,
@@ -1423,6 +1722,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   })),
                 });
               }
+              // §13.6 SU7, inside the transaction that created the successor: either both facts
+              // land or neither does. A refusal here — the attempt is still OPEN, it belongs to
+              // another project, somebody else already replaced it — rolls the new task back
+              // rather than leaving a successor nothing points at, which is exactly the half-done
+              // state the two-step entrance produced by accident.
+              if (dto.supersedesTaskId) {
+                await this.linkSupersededBy(
+                  tx, ownerId, dto.supersedesTaskId,
+                  { id: created.id, projectId: created.projectId }, new Date(),
+                );
+              }
               return created;
             })
           : await this.prisma.task.create({ data });
@@ -1431,7 +1741,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
       if (idempotencyKey && this.isDuplicateKey(e)) {
         const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
-        if (existing) return existing;
+        if (existing) {
+          // The concurrent half of the same rule: this transaction rolled back, so whatever link it
+          // was going to write does not exist. The winner's row is the only authority on whether
+          // the supersession happened, and it is read rather than assumed.
+          if (dto.supersedesTaskId) {
+            await this.assertSupersessionAlreadyRecorded(
+              this.prisma, ownerId, dto.supersedesTaskId, existing.id,
+            );
+          }
+          return existing;
+        }
       }
       // And the project's own pre-check has the same shape of gap — see translateProjectFk.
       throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
@@ -1447,10 +1767,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // ALL_CHILDREN_DONE had already completed leaves the parent DONE over work that has not
     // started, and a verification filed at a VERIFICATION_PASSED parent leaves it DONE over a
     // check that has not run.
-    if (task.parentTaskId || task.verifiesTaskId) {
+    // The predecessor is seeded alongside the new task's own links because the link this create
+    // just wrote RETIRED it, and §13.6 SU6 makes a retired child settle and a retired verifier stop
+    // counting — so its parent and its subject both have a new answer as of this write. The closure
+    // walks up from it; naming the predecessor itself is enough.
+    if (task.parentTaskId || task.verifiesTaskId || dto.supersedesTaskId) {
       await this.recomputeAggregates(
         ownerId,
-        [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
+        [task.parentTaskId, task.verifiesTaskId, dto.supersedesTaskId].filter(
+          (id): id is string => !!id,
+        ),
       ).catch((e) =>
         this.logger.warn(`aggregation after create of ${task.id} failed: ${e?.message ?? e}`),
       );
@@ -1836,13 +2162,36 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // for the lock or the DB check below to protect; its rules were settled in assertBatchValid,
     // where both sides of the pair were in the request.
     const hasParents = items.some((item) => !!item.parentTaskId || !!item.verifiesTaskId);
+    // §13.6 SU7. A batch whose only cross-row work is a supersession took NO owner lock: each item
+    // read `existing` on its own, two concurrent runs of one turn could both miss it, and the loser
+    // surfaced a raw P2002 instead of the replay contract below. Several predecessors made it worse
+    // — they were locked in item order, so two batches naming the same pair in opposite orders
+    // deadlocked on the task rows. Folding it into the SAME owner lock the other two take gives one
+    // serialization point and one order for all three.
+    const hasSupersessions = items.some((item) => !!item.supersedesTaskId);
     const heldListIds = await this.pausedListIds(ownerId, items.map((item) => item.listId));
     const created = await this.prisma.$transaction(async (tx) => {
       // Same owner lock as create: the tasks and their edges must become visible together, or a
       // concurrent reverse-edge write could see a task before its prerequisites and close a cycle.
       // A batch naming parents takes it for the matching reason — each parent's project is read
       // here and relied on by the rows written next.
-      if (hasDependencies || hasParents) await this.lockDependencyGraph(tx, ownerId);
+      if (hasDependencies || hasParents || hasSupersessions) {
+        await this.lockDependencyGraph(tx, ownerId);
+      }
+      // The project prelock `create` takes, for the same reason and in the same order: the task
+      // INSERT and the predecessor's retirement both reach `project_acceptance_reopen`, which takes
+      // the PROJECT row, and the Coordinator holds project-then-task. Sorted by UUID (§8.6 LO2), so
+      // two batches touching the same two projects in opposite item orders cannot make a cycle.
+      if (hasSupersessions) {
+        const projectIds = [...new Set(items
+          .filter((item) => item.supersedesTaskId)
+          .map((item) => item.projectId)
+          .filter((projectId): projectId is string => !!projectId))].sort();
+        for (const projectId of projectIds) {
+          await tx.$queryRaw`
+            SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
+        }
+      }
       // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
       // parent in item 40 must not leave items 1-39 written.
       if (hasParents) await this.assertBatchHierarchy(tx, ownerId, items);
@@ -1907,10 +2256,69 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               dependsOnTaskId,
             })),
           });
+        // §13.6 SU7 in a batch, and only for a task this call actually created: a re-delivered
+        // turn resolved `existing` to the row the first run wrote, and that run already linked the
+        // predecessor. Attempting it again would hit the CAS and turn an idempotent re-run into a
+        // conflict about a link this very batch established.
+        if (item.supersedesTaskId) {
+          if (existing) {
+            // SU7-c, and a batch is all-or-nothing: a refusal here rolls back every item, which is
+            // the only honest answer when one of them claimed a replacement that is not recorded.
+            await this.assertSupersessionAlreadyRecorded(
+              tx, ownerId, item.supersedesTaskId, task.id,
+            );
+          } else {
+            await this.linkSupersededBy(
+              tx, ownerId, item.supersedesTaskId,
+              { id: task.id, projectId: task.projectId }, new Date(),
+            );
+          }
+        }
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
       return rows;
     }).catch(async (e) => {
+      // The concurrent half of SU7-c. Two runs of one turn can both miss `existing` and race to the
+      // same idempotency key; the loser's whole transaction rolls back, so any link it was about to
+      // write does not exist. Re-checking the winner's rows turns that into either a clean
+      // idempotent answer or a typed 409 — never a batch that reports success over a supersession
+      // nobody recorded. Read AFTER the rollback, deliberately: the winner is the only authority.
+      if (hasSupersessions && this.isDuplicateKey(e)) {
+        // Rebuilt in INPUT ORDER, with each item's `ref` echoed, because this returns in place of
+        // the batch's own result and a caller wiring refs to ids cannot tell the two apart. Every
+        // item is reconstructed, not only the ones claiming a supersession: a partial answer would
+        // be a batch that reported some of what it was asked for.
+        const replayed: Array<Task & { ref?: string }> = [];
+        for (const item of items) {
+          const key = sessionId && turnId
+            ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description)
+            : undefined;
+          const winner = key
+            ? await this.prisma.task.findUnique({ where: { idempotencyKey: key } })
+            : null;
+          if (!winner) {
+            // No key (outside a turn) or no winner: this batch cannot be shown to have happened,
+            // and its own transaction has already rolled back, so nothing of it exists. Saying so
+            // is the only honest answer — the alternative is reporting success for rows nobody
+            // can name.
+            throw new ConflictException(
+              'this batch lost a concurrent create and the winning tasks cannot all be identified, ' +
+                'so the supersession it claimed cannot be confirmed — nothing from this call was ' +
+                'written; retry',
+            );
+          }
+          if (item.supersedesTaskId) {
+            // SU7-c: the winner's rows are the only authority on whether the link happened. A
+            // mismatch throws, and since this whole batch has already rolled back, throwing leaves
+            // the database exactly as the winner left it.
+            await this.assertSupersessionAlreadyRecorded(
+              this.prisma, ownerId, item.supersedesTaskId, winner.id,
+            );
+          }
+          replayed.push(item.ref === undefined ? winner : { ...winner, ref: item.ref });
+        }
+        return replayed;
+      }
       // A batch is all-or-nothing, so one item's project vanishing mid-write fails the whole call —
       // and it should say so in the language of the request, not as a 500 (see translateProjectFk).
       throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
@@ -1920,9 +2328,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Same as create: rows arriving under a parent, or pointed at one, are a change to what that
     // parent's status is allowed to claim. Seeded from the links rather than from the new rows —
     // the parents and subjects are what get recomputed, and half of them are in this batch.
-    const touched = created.flatMap((task) =>
-      [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
-    );
+    const touched = [
+      ...created.flatMap((task) =>
+        [task.parentTaskId, task.verifiesTaskId].filter((id): id is string => !!id),
+      ),
+      // Same reason as create: each predecessor this batch retired has a parent and a subject whose
+      // answers moved.
+      ...items.map((item) => item.supersedesTaskId).filter((id): id is string => !!id),
+    ];
     if (touched.length) {
       await this.recomputeAggregates(ownerId, touched).catch((e) =>
         this.logger.warn(`aggregation after batch create failed: ${e?.message ?? e}`),
@@ -3568,6 +3981,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
       }
     }
+    // §13.6 SU4, the direction only a status write can break.
+    //
+    // The supersession block below validates when the REQUEST mentions those fields. A PATCH that
+    // mentions only `status` does not reach it, and 0128's trigger returns early whenever
+    // `superseded_by_task_id IS NULL` — so on the two retirements that have no pointer (ABANDONED,
+    // and SUPERSEDED whose successor was deleted) a plain reopen was accepted by both. Before this
+    // release it produced an odd row; after it, every gate here reads that row as retired and never
+    // dispatches it, while its status says OPEN. Nothing would move it again and nothing would say
+    // why. 0130's `task_retirement_status_check` refuses it at the database; this exists so the
+    // caller is told what to pass instead of being handed a constraint name.
+    if (dto.status !== undefined
+        && dto.supersededByTaskId === undefined && dto.terminalReason === undefined
+        && !TASK_SUPERSEDABLE_STATUSES.has(dto.status)
+        && taskRetirement(before) != null) {
+      throw new BadRequestException(
+        `task ${uuidToBase62(id)} is recorded as ${before.terminalReason ?? 'SUPERSEDED'}` +
+          (before.supersededByTaskId
+            ? ` by ${uuidToBase62(before.supersededByTaskId)}`
+            : ' (its successor has since been deleted)') +
+          `, so it cannot become ${dto.status} while that stands. Clear the retirement in the ` +
+          'SAME request — supersededByTaskId: null with terminalReason: null — if this attempt is ' +
+          'genuinely being picked up again',
+      );
+    }
     // §13.6: record that this attempt was replaced, without touching how it ended.
     //
     // The status this is judged against is the one AFTER the write, because the natural call is one
@@ -3684,21 +4121,111 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // both commit and leave a DONE project asserting a verdict it never saw. Taken after
             // the owner lock and before the task write, so the order here is always
             // user -> project -> task and two of these can never wait on each other backwards.
-            if (concludesVerdict && before.projectId) {
-              await tx.$queryRaw`
-                SELECT 1 FROM "project" WHERE "id" = ${before.projectId}::uuid FOR NO KEY UPDATE`;
-            }
-            if (touchesHierarchy) {
-              // Re-read INSIDE the lock. `before` was loaded before it was held, so by now another
-              // request may have moved this task's project or given it subtasks — and judging
-              // against that stale copy is precisely how two writes that are each legal separately
-              // commit an illegal state together.
-              const current = await tx.task.findFirst({
+            //
+            // §13.6 SU6 joins it, and had to: 0130 adds `terminal_reason` and
+            // `superseded_by_task_id` to `project_acceptance_task_fact_update`, so a
+            // supersession-only PATCH now reaches `project_acceptance_reopen` from an AFTER trigger
+            // — which takes the PROJECT row while this transaction already holds the TASK row. The
+            // Coordinator's own dispatch takes them the other way (project lease, then the task),
+            // so without this prelock the two wait on each other. Same lock, same place, one order.
+            //
+            // A PATCH that also MOVES the project touches two of them, and AE10 already fixed what
+            // to do about that: both, in UUID order, so a concurrent A→B and B→A cannot make a
+            // cycle out of each other. That ordering is the trigger's own (§8.6 LO2) and is
+            // reproduced here rather than reinvented.
+            //
+            // Re-read INSIDE the owner lock, and prelock from THAT. `before` was loaded before the
+            // lock was held, so by now another request may have moved this task into a different
+            // project — and locking the project `before` named would leave the AFTER trigger to
+            // take the real one, which is the task→project order this prelock exists to avoid.
+            // The same stale copy is what `touchesHierarchy` has always re-read for, so one read
+            // serves both rather than two reads disagreeing about one row.
+            const needsCurrent = touchesHierarchy || concludesVerdict || !!supersession;
+            const current = needsCurrent
+              ? await tx.task.findFirst({
                 where: { id, ownerId },
                 select: { projectId: true, parentTaskId: true, verifiesTaskId: true },
+              })
+              : null;
+            if (needsCurrent && !current) throw new NotFoundException('task not found');
+            // A pure project MOVE belongs here too, and the comment above already said why without
+            // the code doing it: 0127's `project_acceptance_task_fact` reopens BOTH projects from
+            // an AFTER trigger, so a move takes the task row first and the two projects second —
+            // against every Coordinator path's project-then-task. The old condition
+            // (`concludesVerdict || supersession`) left exactly that case with an empty list.
+            const movesProject = dto.projectId !== undefined
+              && (dto.projectId ?? null) !== current!.projectId;
+            const acceptanceProjects = concludesVerdict || supersession || movesProject
+              ? [...new Set([
+                current!.projectId,
+                dto.projectId === undefined ? current!.projectId : (dto.projectId ?? null),
+              ].filter((projectId): projectId is string => !!projectId))].sort()
+              : [];
+            for (const projectId of acceptanceProjects) {
+              await tx.$queryRaw`
+                SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
+            }
+            // ...and the task row IMMEDIATELY after, before anything else in this transaction
+            // touches it. `tx.task.update` below takes the same row with an ordinary blocking lock,
+            // so a NOWAIT taken only at `writeSupersession` would be reached AFTER the wait it was
+            // meant to prevent — the cycle would already have formed. Every supersession PATCH runs
+            // that Prisma UPDATE, including the common `{status: CANCELLED, terminalReason:
+            // ABANDONED}`, so this is the first thing after the project.
+            // ...and the task row NOWAIT after them, on either path. `tx.task.update` below takes
+            // this row with an ordinary blocking lock, so a move that skipped this would hold two
+            // projects and then WAIT for a task — the cycle, assembled out of the very locks taken
+            // to avoid it.
+            if (supersession || movesProject) await this.lockTaskForSupersessionWrite(tx, id);
+            if (touchesHierarchy) {
+              await this.assertHierarchyConsistent(tx, ownerId, id, current!, dto);
+            }
+            // §13.6 SU3, the direction nothing checked: this task may be somebody's SUCCESSOR, and
+            // moving it out of their project would leave a supersession pointing across the line
+            // SU3 draws — the predecessor's project would count its own failure as history while
+            // the replacement had left that project's authority entirely. 0128's guard cannot see
+            // this: it fires on the row that HOLDS the pointer, and that row is not the one moving.
+            //
+            // Read under the owner lock taken at the top of this transaction, which is also what
+            // the link path takes — so a concurrent link and a concurrent move serialize there and
+            // neither can read the other's rows as absent. `supersedes` is a set, not a single row:
+            // several attempts can name one successor, and all of them have to still be legal.
+            if (dto.projectId !== undefined && dto.projectId !== current!.projectId) {
+              // §12.3 D3's claim guard, as a sentence rather than as a constraint name. A task
+              // whose run is live belongs to the project that dispatched it: the action, the
+              // authorization and both projects' concurrency counts are all scoped there. All four
+              // live statuses, matching the trigger this mirrors — a conversation paused at
+              // AWAITING_INPUT is as much a claim as a running one.
+              await this.assertNotRunningBeforeRetiring(tx, ownerId, id).catch((error) => {
+                if (!(error instanceof ConflictException)) throw error;
+                throw new ConflictException(
+                  `task ${uuidToBase62(id)} has a live run, so it cannot be moved to another ` +
+                    'project — the run, the action that started it and both projects\' capacity ' +
+                    'counts all belong to the project it is in. Move it once that run has reached ' +
+                    'a terminal status of its own',
+                );
               });
-              if (!current) throw new NotFoundException('task not found');
-              await this.assertHierarchyConsistent(tx, ownerId, id, current, dto);
+            }
+            if (dto.projectId !== undefined) {
+              const projectAfter = dto.projectId ?? null;
+              const stranded = await tx.task.findMany({
+                where: {
+                  ownerId,
+                  supersededByTaskId: id,
+                  NOT: { projectId: projectAfter },
+                },
+                select: { id: true, projectId: true },
+                orderBy: { id: 'asc' },
+              });
+              if (stranded.length > 0) {
+                throw new BadRequestException(
+                  `task ${uuidToBase62(id)} is the successor of ` +
+                    `${stranded.map((row) => uuidToBase62(row.id)).join(', ')}, and a successor ` +
+                    'must stay in the same project as the attempt it replaced — a replacement in ' +
+                    'another project is work towards a different goal, which no acceptance read ' +
+                    "could count. Unlink or re-point those attempts first (task_update " +
+                    '--clear-superseded), then move this one',
+                );
+              }
             }
             if (dependsOnTaskIds?.length) {
               const edges = await tx.taskDependency.findMany({
@@ -3721,6 +4248,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // intermediate state that no committed row would ever have held.
             const writeSupersession = async () => {
               if (!supersession) return;
+              // §13.6 SU8, the same fence `linkSupersededBy` takes and for the same reason: this is
+              // the OTHER public door onto the link, and a rule enforced at one door is a rule with
+              // a way round it.
+              //
+              // Scoped to the FIRST RETIREMENT TRANSITION, exactly as 0130's trigger is: a task
+              // that was already retired is not being taken away from anybody by a re-point, a
+              // restatement, or a successor the FK cleared — and since a person is deliberately
+              // allowed to open a USER session on a retired attempt to read or salvage it, checking
+              // those would let that session block the correction. Un-retiring is never checked
+              // either; refusing it because a session is running would make a mistake permanent.
+              //
+              // The row lock is ALREADY held — taken NOWAIT right after the project prelock, before
+              // the Prisma UPDATE above could wait on it. Re-taking it here would be a second
+              // acquisition of a lock this transaction owns: harmless, and a place for the two
+              // spellings to drift apart. The live-session CHECK below is the part scoped to a
+              // first retirement.
+              const retiredBefore = taskRetirement(before) != null;
+              if (!retiredBefore && supersession.reason != null) {
+                await this.assertNotRunningBeforeRetiring(tx, ownerId, id);
+              }
               await tx.$executeRaw`
                 UPDATE "task"
                    SET "superseded_by_task_id" = ${supersession.successorId}::uuid,
@@ -3728,12 +4275,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                        "terminal_reason"       = ${supersession.reason}
                  WHERE "id" = ${id}::uuid`;
             };
-            if (supersession?.successorId == null) await writeSupersession();
+            // WHICH SIDE of the status write this goes on is decided by the retirement this PATCH
+            // is LEAVING BEHIND, not by whether a successor is named. Keying it on the successor
+            // was wrong for the shape that has a reason and no pointer: one legal PATCH saying
+            // `{status: CANCELLED, terminalReason: ABANDONED}` has a null successor, so it took the
+            // unlink order and wrote ABANDONED onto a row that was still OPEN — which 0130's
+            // `task_retirement_status_check` refuses, per statement, before the status write that
+            // would have made it legal arrives.
+            //
+            //   retiring   → status first, then the three columns. A retirement on a non-terminal
+            //                row is refused, so the status has to have moved already.
+            //   un-retiring→ the three columns first, then the status. Reopening a row that still
+            //                claims to be retired is refused, so the claim has to be gone already.
+            const retiresAfter = supersession != null
+              && (supersession.reason != null || supersession.successorId != null);
+            if (supersession && !retiresAfter) await writeSupersession();
             // Delete before re-inserting so a retained prerequisite cannot collide with the
             // (taskId, dependsOnTaskId) unique key. The transaction keeps the scalar update and
             // full dependency replacement atomic; [] intentionally stops after the delete.
             let task = await tx.task.update({ where: { id }, data });
-            if (supersession?.successorId != null) {
+            if (retiresAfter) {
               await writeSupersession();
               task = await tx.task.findUniqueOrThrow({ where: { id } });
             }
@@ -3751,6 +4312,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write is the caller's race to hear about, not a server fault (see translateProjectFk). Only
     // an update that named a project can be relabelled, so every other FK failure is untouched.
     ).catch(async (e) => {
+      // One of 0130's typed fences — a project being reconciled, a task being written, work that
+      // has been replaced. Each has a name, a cause and a remedy, and each would otherwise reach
+      // the caller as a 500. Anything this does not recognise is rethrown untouched.
+      const fenced = taskFenceConflictMessage(e);
+      if (fenced) throw new ConflictException(fenced);
       throw await this.translateProjectFk(e, ownerId, [dto.projectId]);
     });
     // A dependency replacement may target a web-created task, which has no creator session to
@@ -3792,13 +4358,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dto.completionPolicy !== undefined ||
       dto.verdict !== undefined ||
       dto.parentTaskId !== undefined ||
-      dto.verifiesTaskId !== undefined;
+      dto.verifiesTaskId !== undefined ||
+      // §13.6 SU6 made these two inputs to §13.1: a retired child settles like a cancelled one and
+      // a retired verifier stops being an outstanding check. So linking or unlinking a supersession
+      // changes what its parent's status is allowed to claim, exactly as writing `status` does —
+      // and a PATCH that ONLY links (the common shape: the successor already exists, somebody is
+      // recording the relation afterwards) would otherwise leave the parent asserting the old
+      // answer until some unrelated write happened to recompute it.
+      dto.supersededByTaskId !== undefined ||
+      dto.terminalReason !== undefined;
     if (movesAggregationInput) {
       await this.recomputeAggregates(
         ownerId,
-        [id, before.parentTaskId, before.verifiesTaskId, dto.parentTaskId, verifiesTaskId].filter(
-          (taskId): taskId is string => !!taskId,
-        ),
+        [
+          id,
+          before.parentTaskId,
+          before.verifiesTaskId,
+          dto.parentTaskId,
+          verifiesTaskId,
+          // §13.6 SU9: both ends of the supersession edge this write may have moved. The closure
+          // walks the chain from a seed, so seeding the predecessor as well as the successor is
+          // what makes a parent at the START of a chain recompute when a link at its END changes.
+          before.supersededByTaskId,
+          dto.supersededByTaskId ?? undefined,
+        ].filter((taskId): taskId is string => !!taskId),
       ).catch((e) => this.logger.warn(`aggregation after update of ${id} failed: ${e?.message ?? e}`));
     }
     if (before.status === 'DONE' && dto.status !== undefined && dto.status !== TaskStatus.DONE && before.listId) {
@@ -5017,6 +5600,118 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * the full task + comments via the orbit MCP (task_get) and replies via task_comment.
    * Workspaces with no runner can't run a session, so they're skipped (comment still posts).
    */
+  /**
+   * Create the Session for a task run, or read back the one that won the race.
+   *
+   * §7.7 D6's execution claim — widened by 0130 to all four live statuses — makes "one live run per
+   * task" a property of the database, so two callers arriving together produce one insert and one
+   * duplicate-key error. That error is not the answer either of them wanted: both asked for the
+   * task to be running, and it is. The loser reads the winner and returns it, which is the same
+   * idempotent shape the occupying-session fast path above already has.
+   *
+   * Anything the index did not refuse is rethrown untouched — a duplicate on some other unique key
+   * is a different bug and must not be swallowed as a race.
+   */
+  private async createTaskSessionOrReadWinner(
+    ownerId: string,
+    task: TaskRunTarget,
+    workspace: { id: string; runnerId: string | null },
+    dto: Parameters<SessionsService['create']>[1],
+    opts: Parameters<SessionsService['create']>[2],
+  ): Promise<{ id: string }> {
+    try {
+      return await this.sessions.create(ownerId, dto, opts);
+    } catch (e) {
+      // ...and only the EXECUTION CLAIM. Prisma names the conflicting index in `meta.target`, and a
+      // duplicate on any other unique key is a different bug that must not be read as "somebody
+      // else started this task".
+      if (!this.isDuplicateKey(e) || !isExecutionClaimConflict(e)) throw e;
+      const winner = await this.prisma.session.findFirst({
+        where: {
+          taskId: task.id,
+          ownerId,
+          deletedAt: null,
+          // PENDING or RUNNING only, and this workspace only. A paused run — or a run belonging to
+          // the workspace this task USED to be assigned to — was already there before this call
+          // began: it did not win a race with it, and it will never receive the prompt this call
+          // was carrying. Reporting it as success is a start that did not happen. The candidate has
+          // to be a row a concurrent create could actually have produced, which is one just
+          // inserted by somebody doing the same thing this call was doing.
+          workspaceId: workspace.id,
+          status: { in: SINGLE_RUN_DEDUP },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true, startsTaskWork: true, cancelRequestedAt: true, provider: true, model: true,
+        },
+      });
+      if (!winner) {
+        // Something holds the claim, and it is not a concurrent run of this same call — a paused
+        // run, or one on another workspace after a reassignment. Named rather than reported as
+        // success, and rather than as a duplicate-key error nobody can read.
+        const holder = await this.prisma.session.findFirst({
+          where: {
+            taskId: task.id,
+            ownerId,
+            deletedAt: null,
+            status: {
+              in: [...SINGLE_RUN_DEDUP, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED],
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, status: true, workspaceId: true },
+        });
+        if (!holder) throw e;
+        throw new ConflictException(
+          `task ${uuidToBase62(task.id)} could not be started: session ` +
+            `${uuidToBase62(holder.id)} (${holder.status}` +
+            (holder.workspaceId === workspace.id ? '' : ', on a different agent') +
+            ') holds its execution claim. Let that run reach a terminal status of its own, then ' +
+            'start the task again',
+        );
+      }
+      // Not any duplicate, and not any winner. The claim index is the only one this insert can
+      // collide on for a task run, so a collision with nothing live behind it is a different bug
+      // and is rethrown. And the winner has to be the thing the caller asked for: a run that is
+      // DOING the work and is not on its way out. A salvage session or an ending run holding the
+      // claim means the task is NOT running, and reporting success would spend the schedule and
+      // record a manual request for work nothing is doing — the same half-success the fast path
+      // above refuses, reached by the other door. Same predicate, deliberately.
+      if (!winner) throw e;
+      // A run's provider is fixed for its lifetime, so a winner on another one is not this task's
+      // work being done — it is the previous pin still running. This deployment has shipped a
+      // provider mix-up before; reporting that as success is how it happens again.
+      if (task.provider && winner.provider !== task.provider) {
+        throw new ConflictException(
+          `task ${uuidToBase62(task.id)} is pinned to ${task.provider}, but session ` +
+            `${uuidToBase62(winner.id)} holds its execution claim on ${winner.provider}. Let that ` +
+            'run reach a terminal status of its own; the next attempt starts on the pinned provider',
+        );
+      }
+      if (task.model != null && winner.model !== task.model) {
+        throw new ConflictException(
+          `task ${uuidToBase62(task.id)} is pinned to model ${task.model}, but session ` +
+            `${uuidToBase62(winner.id)} holds its execution claim on ` +
+            `${winner.model ?? 'the agent default'}. A running session's model is not switched ` +
+            'under it; let it finish and the next attempt starts on the pinned model',
+        );
+      }
+      if (!winner.startsTaskWork || winner.cancelRequestedAt) {
+        throw new ConflictException(
+          `task ${uuidToBase62(task.id)} could not be started: session ` +
+            `${uuidToBase62(winner.id)} holds its execution claim and is ` +
+            (winner.cancelRequestedAt ? 'ending' : 'a session opened to look at the task, not run it') +
+            '. Wait for it to reach a terminal status of its own, then start the task again',
+        );
+      }
+      this.logger.log(
+        `task ${uuidToBase62(task.id)}: lost the execution claim to session ` +
+          `${uuidToBase62(winner.id)}; returning it`,
+      );
+      return winner;
+    }
+  }
+
   private async triggerMentionedWorkspace(
     ownerId: string,
     task: TaskRunTarget,
@@ -5028,7 +5723,69 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       `你在任务「${task.title}」的评论区被 @ 提到。\n\n` +
       `评论内容：\n${body}\n\n` +
       `请用 task_get 查看该任务的完整信息与历史评论，并用 task_comment 在该任务下回复。`;
-    await this.runWorkspaceOnTask(ownerId, task, workspace, prompt, `回应评论：${task.title}`);
+    // §13.6 SU6: a mention is a CONVERSATION about the task, not a run of it.
+    //
+    // It does not go through `runWorkspaceOnTask`, and the difference is not cosmetic. That method
+    // is "start this task's work", so it declares `starts_task_work` — which would make a reply to
+    // a comment be refused on a replaced attempt (the one place a person most wants to ask about),
+    // and would make the reaper close the conversation the moment the task settled. It also short-
+    // circuits on an occupying run and returns its id, which for a mention means the comment is
+    // persisted and the agent is never told.
+    //
+    // So: deliver into whatever live run this workspace has on the task, and open a conversation
+    // session only when there is none.
+    const live = await this.prisma.session.findFirst({
+      where: {
+        taskId: task.id,
+        workspaceId: workspace.id,
+        ownerId,
+        deletedAt: null,
+        status: { in: [...SINGLE_RUN_DEDUP, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    if (live) {
+      // A turn into the run that is already there, with `startsTaskWork` deliberately NOT passed:
+      // a mention must not relabel somebody else's run, in either direction.
+      await this.sessions.resume(ownerId, live.id, {
+        clientTurnId: randomUUID(),
+        content: prompt,
+      });
+      return;
+    }
+    await this.sessions.create(
+      ownerId,
+      {
+        prompt,
+        workspaceId: workspace.id,
+        taskId: task.id,
+        title: `回应评论：${task.title}`,
+        ...(task.provider ? { provider: task.provider } : {}),
+        ...(task.model != null ? { model: task.model } : {}),
+      } as never,
+      {
+        source: 'user',
+        dispatchOrigin: SessionDispatchOrigin.USER,
+        runSource: SessionRunSource.MANUAL,
+        // TRUE, and deliberately — this is the value a mention session gets in THIS release even
+        // though answering a comment is not doing the task.
+        //
+        // The distinction is real and every reader added here uses it, but a task-linked row
+        // carrying `false` is a row the 0.1.130 binary cannot see: during a rolling deploy its
+        // `runWorkspaceOnTask` would treat that PENDING session as the task already running,
+        // report success, spend the schedule and deliver no prompt — and its `resume` would push
+        // the task's prompt into the conversation. `DEFAULT true` protects an old binary's WRITES;
+        // nothing protects its READS.
+        //
+        // So the column ships with one value for task-linked sessions this release creates, and the
+        // communication/execution split lands in the follow-up migration that also narrows the
+        // execution claim — after no binary predating the column can still be running. Until then a
+        // mention delivers into the live run when there is one (above) and otherwise opens a
+        // session the old code understands.
+        startsTaskWork: true,
+      },
+    );
   }
 
   /**
@@ -5053,6 +5810,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     provenance?: {
       dispatchOrigin: SessionDispatchOrigin;
       runSource: SessionRunSource;
+      /** §13.6 SU6. True on every path through here: this method IS "run the task's work". */
+      startsTaskWork?: boolean;
     },
   ): Promise<string | undefined> {
     if (!workspace.runnerId) return undefined;
@@ -5065,40 +5824,121 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // the resume path and the trigger delivers its prompt as a new turn rather than
     // no-oping (which is why "开始执行" on a parked task used to do nothing).
     const occupying = await this.prisma.session.findFirst({
-      where: { taskId: task.id, status: { in: SINGLE_RUN_DEDUP } },
+      where: { taskId: task.id, status: { in: SINGLE_RUN_DEDUP }, startsTaskWork: true },
       orderBy: { createdAt: 'desc' },
-      select: { id: true },
+      select: { id: true, startsTaskWork: true, cancelRequestedAt: true },
     });
-    if (occupying) return occupying.id;
+    // §13.6 SU6, and the strongest half-success this unit found. Returning the occupying session's
+    // id means "the work is already under way, this call is idempotent" — which is true of a run
+    // that IS the work, and false of a session somebody opened against the task to look at it. A
+    // salvage session left this branch reporting success: no prompt was sent, nothing started, and
+    // the caller went on to record a manual request and spend the task's schedule.
+    //
+    // So the flag decides. A run doing the work is the idempotent answer it always was; a session
+    // that is not is a refusal with a name, before any of those writes.
+    // ...and only when it is genuinely going. A run with `cancel_requested_at` set is on its way to
+    // a terminal status: it will not receive this prompt, and returning its id reports a start that
+    // is about to become a CANCELLED row — while the caller goes on to record a manual request and
+    // spend the task's schedule for work nothing did.
+    if (occupying?.startsTaskWork && !occupying.cancelRequestedAt) return occupying.id;
+    if (occupying?.cancelRequestedAt && occupying.startsTaskWork) {
+      throw new ConflictException(
+        `task ${uuidToBase62(task.id)} has a run that is ending (session ` +
+          `${uuidToBase62(occupying.id)}); wait for it to reach its terminal status, then start ` +
+          'the task again',
+      );
+    }
+    // A CONVERSATION session on this task is not a reason to refuse: since 0130 the execution claim
+    // covers work sessions only, so it holds nothing and a run can start beside it. That is what
+    // lets an @-mention and a run coexist, and what lets two agents each hold their own
+    // conversation about one task.
+    // The candidate to CONTINUE is a run that is still going, never one that has ended.
+    //
+    // This used to be "the latest session on this task", terminal or not, and a terminal one was
+    // resumed — a real FAILED, SUCCEEDED or CANCELLED row written back to live, with its status,
+    // its `finished_at` and its runtime thread rewritten. That contradicts the rule this whole unit
+    // is built on: a failure keeps the status its run left, a replacement is a NEW attempt, and the
+    // old run stays readable as what it was. It is also the mechanism §13.6 SU6 kept having to
+    // defend against from the other side — every "can this revive be refused" question exists
+    // because a revive was reachable here at all.
+    //
+    // So a new attempt gets a new Session, related to the old one through the Task and, when it is
+    // a replacement, through the supersession link. Only `AWAITING_INPUT` / `INTERRUPTED` — a run
+    // that is paused, not finished — receives the prompt as a new turn, which is what "开始执行 on
+    // a parked task" has always meant and the one case where continuing is continuing.
     const latest = await this.prisma.session.findFirst({
-      where: { taskId: task.id, workspaceId: workspace.id, ownerId },
+      where: {
+        taskId: task.id,
+        workspaceId: workspace.id,
+        ownerId,
+        deletedAt: null,
+        status: { in: [RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+        // A paused WORK run is the one this call continues. A paused conversation is somebody
+        // else's thread about the task, and handing it the task's prompt would hijack it.
+        startsTaskWork: true,
+      },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, provider: true },
+      select: { id: true, provider: true, numTurns: true },
     });
     // A session's provider is fixed for its lifetime — its runtime thread belongs to the CLI that
     // created it — so a task re-pinned to a different provider can't be continued on the old
     // session. Falling through to create() is what makes re-pinning take effect on the next run;
     // resuming instead would silently keep running the previous provider forever. A model change
     // needs no such split: resume() re-spawns the runtime and applies it.
-    if (latest && (!task.provider || task.provider === latest.provider)) {
+    if (latest && task.provider && task.provider !== latest.provider) {
+      // A session's provider is fixed for its lifetime, and the task has since been re-pinned. The
+      // old behaviour fell through to create() — which, now that the execution claim covers all
+      // four live statuses, cannot succeed: the paused run still holds the task. Say so instead of
+      // failing on a unique index.
+      throw new ConflictException(
+        `task ${uuidToBase62(task.id)} has a paused run on ${latest.provider} and is now pinned to ` +
+          `${task.provider}; a run cannot change provider. Let that run reach a terminal status of ` +
+          'its own, and the next attempt will start on the new provider',
+      );
+    }
+    if (latest) {
       try {
         await this.sessions.resume(
           ownerId,
           latest.id,
           {
-            clientTurnId: randomUUID(),
+            // A STABLE key, not a fresh uuid. Two Run Now clicks landing together — or a manual
+            // click racing the schedule sweep — both read this same paused run and both used to
+            // enqueue a turn, so the agent received the task's prompt twice and did the work twice.
+            // `conversation_turn (session_id, client_turn_id)` is unique, so one key means one turn
+            // and the loser returns the winner's.
+            //
+            // `numTurns` is what makes it collapse concurrent duplicates without collapsing a
+            // deliberate re-run: two requests that read the same paused run agree on it, and a
+            // click after that turn has been answered reads a higher one and gets its own key.
+            clientTurnId: `task-run:${task.id}:${latest.numTurns}`,
             content: prompt,
             ...(task.model != null ? { model: task.model } : {}),
           },
-          { batch: batch ?? null },
+          // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
+          // row says so — otherwise a session first opened to look at the task keeps the salvage
+          // exemption while executing it, and the reaper never follows the task's lifecycle for it.
+          { batch: batch ?? null, startsTaskWork: true },
         );
         return latest.id;
       } catch (e) {
-        if (!(e instanceof ConflictException)) throw e;
+        // Rethrown, always. This used to swallow a ConflictException and fall through to create() —
+        // which made sense when the claim index covered two statuses and a second Session beside a
+        // paused one was possible. It is not any more: the paused run holds the task, so the create
+        // would fail on the unique index and reach the caller as a raw duplicate-key error instead
+        // of the reason the resume was refused (ending, a pending worktree operation, a
+        // supersession). The refusal IS the answer.
+        throw e;
       }
     }
-    const session = await this.sessions.create(
+    // A fresh Session, and the execution claim decides the race. Two callers with no live run both
+    // reach here; the unique index lets exactly one insert, and the loser reads back the winner
+    // rather than surfacing a duplicate-key error — the outcome either of them wanted is "the task
+    // is running", and it is.
+    const session = await this.createTaskSessionOrReadWinner(
       ownerId,
+      task,
+      workspace,
       {
         prompt,
         workspaceId: workspace.id,
@@ -5117,6 +5957,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         batch,
         dispatchOrigin: provenance?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: provenance?.runSource ?? SessionRunSource.MANUAL,
+        // Unconditionally true. Every caller of this method is starting the task's work — Run Now,
+        // the schedule sweep, the dependency sweep, a batch — and none of them is somebody opening
+        // a window onto a run that already happened. That is the distinction 0130's guard needs,
+        // and asserting it here rather than per-caller is what keeps a future fifth caller from
+        // quietly inheriting the salvage exemption.
+        startsTaskWork: true,
       },
     );
     return session.id;
@@ -5172,11 +6018,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dispatchHold: true,
         dispatchAuthority: true,
         runAt: true,
+        supersededByTaskId: true,
+        terminalReason: true,
+        // §13.6 SU6's derived half: a check of replaced work is obsolete even when the check itself
+        // is healthy. Read here so the refusal is a sentence, not a raw constraint violation from
+        // 0130's guard several layers down.
+        verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { maxConcurrent: true, instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    // §13.6 SU6, BEFORE anything with an effect. Run Now used to reach the Session insert — which
+    // 0130's guard deliberately allows, because the origin is USER and a person may open a run on a
+    // replaced attempt — and only then reach `clearFailedForRetry`, whose `FAILED → IN_PROGRESS` a
+    // retired row cannot legally take. The caller got a 500 with a Session already started against
+    // it: the worst outcome available, since it is a half-success that looks like a failure.
+    //
+    // The exception this does NOT close is the deliberate one: an explicit session_create against a
+    // retired task still works. Reading a replaced attempt or salvaging something from it is a
+    // decision somebody is making. "Run this task's work again", which is what execute means, is
+    // the claim SU6 refuses — the work is being done by the successor.
+    const refusal = taskWorkRefusal({
+      supersededByTaskId: task.supersededByTaskId,
+      terminalReason: task.terminalReason,
+      subjectSupersededByTaskId: task.verifies?.supersededByTaskId ?? null,
+      subjectTerminalReason: task.verifies?.terminalReason ?? null,
+    }, uuidToBase62);
+    if (refusal) {
+      if (auto) return { ok: false as const, skipped: 'superseded' as const };
+      throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
+    }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
       return { ok: false as const, skipped: 'coordinator-authority' as const };
     }
@@ -5207,17 +6079,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!task.assignee) throw new BadRequestException('Assign a responsible workspace to the task first');
     if (!task.assignee.runnerId) throw new BadRequestException('The responsible workspace is not bound to a runner, cannot run');
     // The click is itself a durable semantic request to the Project coordinator. Record it only
-    // after every synchronous run gate above passed, and before dispatch: if this write fails no
-    // session is started, while a later dispatch race still leaves a truthful request for the
-    // coordinator to answer. Automatic sweeps carry `auto` and deliberately produce no USER event.
-    if (!auto && task.projectId) {
-      await this.recordManualProjectTriggers(ownerId, [task.projectId]);
-    }
+    // after the run exists, NOT before it.
+    //
+    // It used to be written first, on the reasoning that a dispatch race would still leave a
+    // truthful request for the coordinator. §13.6 SU6 makes that reasoning false: the run gates
+    // above read the task before the transaction that starts it, and a supersession committing in
+    // between makes the dispatch itself be refused — by 0130's guard, deterministically. Writing
+    // the event first would then leave a durable USER request, and a Coordinator wake to answer it,
+    // for a run that does not exist and never will. "Nothing happened" has to include the audit.
+    //
+    // Moved below the dispatch, the two failure directions are both honest: a refused dispatch
+    // records nothing, and an event that fails to write leaves a session that is already running
+    // and already announces itself through its own creation.
     const prompt = this.buildExecutePrompt(task);
-    const sessionId = await this.runWorkspaceOnTask(
+    // The commit-point half of the pre-check above. A supersession — or a lock this transaction
+    // cannot have — landing between them is refused by the database, and arrives here as a typed
+    // marker rather than as a session. Translated so the caller sees the same 409 either way,
+    // instead of a 500 that depends on how narrowly it lost the race.
+    const sessionId = await this.runTaskWorkTranslatingFences(() => this.runWorkspaceOnTask(
       ownerId,
       task,
-      { id: task.assignee.id, runnerId: task.assignee.runnerId },
+      { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
       prompt,
       `执行任务：${task.title}`,
       // The list doubles as a durable batch so its cap is enforced by the claim transaction's
@@ -5231,19 +6113,43 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ? {
             dispatchOrigin: SessionDispatchOrigin.LEGACY_SWEEP,
             runSource: SessionRunSource.TASK_LIST_AUTO,
+            startsTaskWork: true,
           }
         : {
+            // Run Now. `USER` because a person asked, `startsTaskWork` because what they asked for
+            // is the WORK — which is exactly the pair 0130's guard reads to tell this apart from an
+            // explicit session_create against the same task.
             dispatchOrigin: SessionDispatchOrigin.USER,
             runSource: SessionRunSource.MANUAL,
+            startsTaskWork: true,
           },
-    );
-    if (task.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, task.id);
+    ));
+    // Everything below this line is a POST-COMMIT step, and the session already exists.
+    //
+    // A failure in any of them used to fail the whole call, which turned a live run into a 500 the
+    // caller would retry — starting a second one. The Session commit is the authoritative success;
+    // these three are idempotent recomputations of facts that follow from it (a compare-and-set on
+    // the status, a compare-and-set on the schedule, an outbox row keyed by this request), and the
+    // reconcile sweep re-derives any that did not land. So they are attempted, logged if they fail,
+    // and never allowed to contradict a run that is already going.
+    // The click is a durable semantic request to the Project coordinator, and it is recorded here —
+    // after `runWorkspaceOnTask` returned a session id, so it describes a run that exists.
+    // Automatic sweeps carry `auto` and deliberately produce no USER event.
+    if (!auto && task.projectId) {
+      await this.recordManualProjectTriggers(ownerId, [task.projectId]).catch((e) =>
+        this.logger.warn(`manual project trigger for task ${id} failed: ${e?.message ?? e}`));
+    }
+    if (task.status === TaskStatus.FAILED) {
+      await this.clearFailedForRetry(ownerId, task.id).catch((e) =>
+        this.logger.warn(`clearFailedForRetry for task ${id} failed: ${e?.message ?? e}`));
+    }
     // The run is away, so the appointment has been kept — including when this call IS the button
     // that superseded it. A future run_at is deliberately not a veto on this path: "the earliest
     // time it starts by itself" says nothing about a person deciding to start it now, and a Run
     // button that refused would leave the only way to run a scheduled task early being to cancel
     // its schedule first.
-    await this.consumeRunAt(ownerId, task.id, task.runAt);
+    await this.consumeRunAt(ownerId, task.id, task.runAt).catch((e) =>
+      this.logger.warn(`consumeRunAt for task ${id} failed: ${e?.message ?? e}`));
     return { ok: true as const, sessionId };
   }
 
@@ -5293,8 +6199,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * its own outcome is never dragged backwards.
    */
   private async clearFailedForRetry(ownerId: string, taskId: string): Promise<void> {
+    // §13.6 SU6 in the WHERE clause, as a backstop rather than as the gate: `execute` refuses a
+    // retired task before it has done anything, and this is what makes a supersession that landed
+    // between that refusal and this write a no-op instead of a constraint violation. Matching zero
+    // rows is already a normal outcome here (the task may have been retried by something else), so
+    // there is nothing new to handle — which is the point of putting it here and not in a check.
     const res = await this.prisma.task.updateMany({
-      where: { id: taskId, ownerId, status: TaskStatus.FAILED },
+      where: {
+        id: taskId,
+        ownerId,
+        status: TaskStatus.FAILED,
+        terminalReason: null,
+        supersededByTaskId: null,
+      },
       data: { status: TaskStatus.IN_PROGRESS },
     });
     if (res.count > 0) {
@@ -5341,6 +6258,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * It is NOT written to any runner, so a batch run never disturbs a runner's persistent
    * slots. The rest queue and start as batch (and runner) slots free.
    */
+  /**
+   * Run a task-work call, turning migration 0130's typed fences into 409s.
+   *
+   * The pre-checks in `execute` and `batchExecute` are the friendly half; this is what happens when
+   * a supersession, or a lock this transaction cannot have, lands between the check and the write.
+   * The database refuses by name, and without this the caller would get a 500 whose text is a
+   * PostgreSQL constraint message — for a condition with a remedy they can act on.
+   */
+  private async runTaskWorkTranslatingFences<T>(run: () => Promise<T>): Promise<T> {
+    try {
+      return await run();
+    } catch (error) {
+      const fenced = taskFenceConflictMessage(error);
+      if (fenced) throw new ConflictException(fenced);
+      throw error;
+    }
+  }
+
   async batchExecute(ownerId: string, taskIds: string[], maxConcurrent?: number) {
     const tasks = await this.prisma.task.findMany({
       where: { id: { in: taskIds }, ownerId },
@@ -5357,6 +6292,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // different prompt depending on which button started it.
         isForeman: true,
         verifiesTaskId: true,
+        // §13.6 SU6, read here so a retired task — or a check of replaced work — is CLASSIFIED
+        // before anything with an effect. See the skip below.
+        supersededByTaskId: true,
+        terminalReason: true,
+        verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
@@ -5387,7 +6327,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const skipped: { id: string; title: string; reason: string }[] = [];
     for (const t of tasks) {
       const state = states.get(t.id) ?? 'NONE';
-      if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
+      const workRefusal = taskWorkRefusal({
+        supersededByTaskId: t.supersededByTaskId,
+        terminalReason: t.terminalReason,
+        subjectSupersededByTaskId: t.verifies?.supersededByTaskId ?? null,
+        subjectTerminalReason: t.verifies?.terminalReason ?? null,
+      }, uuidToBase62);
+      const retirement = taskRetirement(t);
+      // §13.6 SU6, first and by itself. A retired task must not reach the Project trigger set, the
+      // dispatch pool, `clearFailedForRetry` or `consumeRunAt` — every one of those is a side
+      // effect, and its dispatch is going to be refused by the database anyway. Classified rather
+      // than dropped, so a person who selected fifty tasks is told which of them were already
+      // re-done and by what.
+      if (workRefusal) {
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: retirement
+            ? (t.supersededByTaskId
+              ? `Superseded by ${uuidToBase62(t.supersededByTaskId)}`
+              : retirement === 'SUPERSEDED'
+                ? 'Superseded (its successor has been deleted)'
+                : 'Abandoned')
+            : 'Obsolete: it checks work that was replaced',
+        });
+      } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId)
         skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
       else if (!canRun(state))
@@ -5406,29 +6370,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // One id ties this batch's sessions together; the queue counts live siblings by it.
     const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
 
-    // One explicit request per affected Project, not one per task. The helper writes every row in
-    // one transaction and one request id names the whole click, so a fifty-task batch satisfies
-    // the event contract even though the session dispatches themselves use a bounded worker pool.
-    await this.recordManualProjectTriggers(
-      ownerId,
-      runnable.map((task) => task.projectId),
-    );
-
     const dispatch = async (t: (typeof runnable)[number]) => {
       try {
-        const sessionId = await this.runWorkspaceOnTask(
+        const sessionId = await this.runTaskWorkTranslatingFences(() => this.runWorkspaceOnTask(
           ownerId,
           t,
           { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
           this.buildExecutePrompt(t),
           `执行任务：${t.title}`,
           batch,
-        );
-        if (t.status === TaskStatus.FAILED) await this.clearFailedForRetry(ownerId, t.id);
+        ));
+        // Post-commit, exactly as the single Run treats them: the Session is the authoritative
+        // success, and neither of these may turn a live run into a reported failure. Both are
+        // compare-and-sets that the reconcile sweep re-derives, so a failure here is degraded
+        // bookkeeping about a run that is already going — not a run that did not start.
+        if (t.status === TaskStatus.FAILED) {
+          await this.clearFailedForRetry(ownerId, t.id).catch((e) =>
+            this.logger.warn(`batchExecute: clearFailedForRetry for ${t.id} failed: ${e}`));
+        }
         // A bulk Run keeps the appointment the same way the single one does. Without this a task
         // started here would keep its schedule and be started again by the clock afterwards —
         // "one-shot" has to mean one run, not one run per way of starting it.
-        await this.consumeRunAt(ownerId, t.id, t.runAt);
+        await this.consumeRunAt(ownerId, t.id, t.runAt).catch((e) =>
+          this.logger.warn(`batchExecute: consumeRunAt for ${t.id} failed: ${e}`));
         return { id: t.id, ok: true as const, sessionId };
       } catch (e) {
         this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
@@ -5452,6 +6416,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         () => worker(),
       ),
     );
+
+    // One explicit request per affected Project, not one per task, and only for the tasks that
+    // actually started. Written AFTER the pool, for the same reason the single-task Run writes it
+    // after its own dispatch: a task whose supersession commits between the classification above
+    // and its dispatch is refused by the database, and an event recorded beforehand would leave a
+    // durable USER request — and a Coordinator wake to answer it — for a run that never existed.
+    // One transaction and one request id still name the whole click.
+    // ...and it may not fail the call either. Several worker Sessions are live by now; a 500 here
+    // would tell the caller nothing started, and a retry would start them all again.
+    await this.recordManualProjectTriggers(
+      ownerId,
+      results
+        .filter((result) => result.ok)
+        .map((result) => runnable.find((task) => task.id === result.id)?.projectId ?? null),
+    ).catch((e) =>
+      this.logger.warn(`batchExecute: manual project triggers failed: ${e?.message ?? e}`));
 
     return {
       dispatched: results.filter((r) => r.ok).length,

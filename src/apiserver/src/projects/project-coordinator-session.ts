@@ -34,6 +34,24 @@ export function isLiveSessionStatus(status: string): boolean {
   return PROJECT_LIVE_SESSION_STATUSES.includes(status);
 }
 
+/**
+ * The same four statuses as a SQL literal list, so a raw gate cannot quietly hold a fifth opinion.
+ *
+ * It had three. `project_reconcile` and the boot recovery scan asked for all four; the three
+ * authorization counts — project concurrency, agent concurrency and §7.4 precondition 4's own
+ * `hasLiveSession` — asked for `('PENDING', 'RUNNING')` only. A task paused at `AWAITING_INPUT`
+ * therefore read as having no live session AT THE COMMIT POINT while every pure gate above read it
+ * as occupied, and the disagreement is a second Session on a conversation somebody paused: the
+ * partial unique index `session_task_execution_claim_idx` covers the same two statuses, so nothing
+ * below the service would have refused it either.
+ *
+ * Interpolated as a literal rather than parameterised because it is a fixed list this file owns,
+ * and because a gate is then greppable for the exact string.
+ */
+export const PROJECT_LIVE_SESSION_STATUS_SQL: string = PROJECT_LIVE_SESSION_STATUSES
+  .map((status) => `'${status}'`)
+  .join(', ');
+
 /** Why this project needs a new coordination run. Closed set; it enters the action audit. */
 export type CoordinatorRotationTrigger =
   /** The project names no coordinator session at all — a first binding, or one that was cleared. */
@@ -263,12 +281,31 @@ export function rotationReasonCode(reasonDigest: string): string {
  * condition would go false on the next pass, the row would clear, and the loop would rotate again.
  */
 export function rotationReasonDigest(input: ProjectDecisionInput): string {
+  // §13.6 SU6. The task projection was `id:status`, and supersession moves NEITHER of them — SU1's
+  // whole point is that linking a successor writes no `status`. So a project whose last coordination
+  // run ended, and whose work graph then changed only by an attempt being replaced, hashed to the
+  // same digest and was told NO_PROGRESS: the coordinator would not rotate for a change that is
+  // exactly the kind of change a coordinator exists to notice.
+  //
+  // The version is CONDITIONAL, and that is the mixed-version rule rather than a preference. A
+  // decision captured before 0129 has no such columns on any of its tasks; hashing it at v2 with
+  // two empty strings appended would give a different digest for the same recorded world, and TR3
+  // compares this against a digest stored in an action row a previous binary wrote — every one of
+  // those projects would rotate once, spuriously, on deploy. So a snapshot that carries the fields
+  // is hashed at v2 and one that does not replays byte-identically at v1.
+  const carriesSupersession = input.world.tasks.some(
+    (task) => 'terminalReason' in task || 'supersededByTaskId' in task,
+  );
   const facts = {
-    v: 1,
+    v: carriesSupersession ? 2 : 1,
     reasonCode: COORDINATOR_ROTATION_REASON_CODE,
     configRevision: input.world.project.configRevision,
     tasks: input.world.tasks
-      .map((task) => `${task.id}:${task.status}`)
+      .map((task) => (carriesSupersession
+        // `supersededAt` is deliberately absent, the same decision the acceptance digest makes: it
+        // is audit, not semantics, and nothing decides anything from it.
+        ? `${task.id}:${task.status}:${task.terminalReason ?? ''}:${task.supersededByTaskId ?? ''}`
+        : `${task.id}:${task.status}`))
       .sort(),
     blockers: (input.world.blockers ?? [])
       .filter((blocker) => blocker.kind !== 'COORDINATOR_NO_PROGRESS')

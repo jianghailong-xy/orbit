@@ -56,11 +56,17 @@ function schema(forShare: boolean): string {
       status            text NOT NULL,
       deleted_at        timestamptz,
       dispatch_origin   text NOT NULL DEFAULT 'LEGACY_SWEEP',
+      starts_task_work  boolean NOT NULL DEFAULT true,
       project_action_id text
     );
+    -- The four live statuses (§4.2 guard 5), matching migration 0130's production index EXACTLY.
+    -- The ON CONFLICT ... WHERE below has to name the same predicate to infer this index at all,
+    -- so a fixture that carried the older two-status version would make that INSERT raise rather
+    -- than return zero rows — and the assertion it feeds would be measuring the fixture.
     CREATE UNIQUE INDEX session_task_execution_claim_idx
         ON session (task_id)
-     WHERE task_id IS NOT NULL AND deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+     WHERE task_id IS NOT NULL AND deleted_at IS NULL
+       AND status IN ('PENDING','RUNNING','AWAITING_INPUT','INTERRUPTED');
 
     CREATE OR REPLACE FUNCTION session_dispatch_authority_guard() RETURNS trigger AS $fn$
     DECLARE authority text;
@@ -248,7 +254,8 @@ test('PC-CX-09 on real Postgres: the guard still refuses and still admits the tw
     const second = await c.query(
       `INSERT INTO session (id, task_id, status, dispatch_origin, project_action_id)
        VALUES ('s4','X','PENDING','COORDINATOR','act-1')
-       ON CONFLICT (task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND status IN ('PENDING','RUNNING')
+       ON CONFLICT (task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL
+                 AND status IN ('PENDING','RUNNING','AWAITING_INPUT','INTERRUPTED')
        DO NOTHING RETURNING id`,
     );
     assert.equal(second.rowCount, 0, 'zero rows back, no exception — the coordinator commits the rest of its outcome');
@@ -883,10 +890,11 @@ function authoritySchema(projection: boolean): string {
     CREATE TABLE session (
       id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id),
       status text NOT NULL, deleted_at timestamptz,
-      dispatch_origin text NOT NULL DEFAULT 'LEGACY_SWEEP'
+      dispatch_origin text NOT NULL DEFAULT 'LEGACY_SWEEP',
+      starts_task_work boolean NOT NULL DEFAULT true
     );
     CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
-      WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+      WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING','AWAITING_INPUT','INTERRUPTED');
 
     -- D6, unchanged: the insert-time admission that makes I12-B true.
     CREATE OR REPLACE FUNCTION session_dispatch_authority_guard() RETURNS trigger AS $fn$
@@ -1046,9 +1054,9 @@ const GATE_SCHEMA = isolated(`
     config_revision bigint NOT NULL DEFAULT 0
   );
   CREATE TABLE task (id text PRIMARY KEY, project_id text NOT NULL REFERENCES project(id));
-  CREATE TABLE session (id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id), status text NOT NULL, deleted_at timestamptz);
+  CREATE TABLE session (id text PRIMARY KEY, task_id text NOT NULL REFERENCES task(id), status text NOT NULL, deleted_at timestamptz, starts_task_work boolean NOT NULL DEFAULT true);
   CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
-    WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+    WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING','AWAITING_INPUT','INTERRUPTED');
   INSERT INTO project VALUES ('p1', true, 'AUTO', 1, 7);
   INSERT INTO task VALUES ('A', 'p1'), ('B', 'p1');
 `);
@@ -1240,7 +1248,7 @@ const CAP_SCHEMA_V15 = isolated15(`
     admitted_max int NOT NULL
   );
   CREATE UNIQUE INDEX session_task_execution_claim_idx ON session (task_id)
-    WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING');
+    WHERE deleted_at IS NULL AND status IN ('PENDING','RUNNING','AWAITING_INPUT','INTERRUPTED');
   CREATE TABLE cap_write (id bigserial PRIMARY KEY, old_max int NOT NULL, new_max int NOT NULL, in_flight_at_write int NOT NULL);
   INSERT INTO project VALUES ('p1', 2, 7);
   INSERT INTO task VALUES ('A', 'p1'), ('B', 'p1'), ('C', 'p1');
