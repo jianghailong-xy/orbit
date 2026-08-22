@@ -772,6 +772,68 @@ export interface ApprovalInfo {
   decidedAt?: string;
 }
 
+/** What a pending approval is actually asking for, derived from its tool name. claude routes
+ *  plan confirmation and its own question tool through the same permission tool as any gated
+ *  call, so the tool name is the only thing that tells them apart. Deliberately the same split
+ *  the in-session ApprovalPanel makes, so a card cannot mean one thing in the inbox and another
+ *  in the session it came from. */
+export type InboxApprovalKind = 'permission' | 'plan' | 'question';
+
+/** Why the session that is asking exists — what an inbox card shows instead of the workspace
+ *  name, since across projects "which agent" is less use than "which part of the work".
+ *  Derived in the order written here: a coordinator that also carries a task is still the
+ *  coordinator. `user` is a session nobody dispatched — someone opened it and typed. */
+export type InboxSessionRole = 'coordinator' | 'verification' | 'execution' | 'user';
+
+/** One thing waiting on a human, wherever in the account it is. The cross-workspace,
+ *  cross-project counterpart of ApprovalInfo, which only ever names one session's approvals:
+ *  everything a card needs to be actionable without first loading the session it belongs to. */
+export interface InboxApprovalItem {
+  approvalId: string;
+  kind: InboxApprovalKind;
+  toolName: string;
+  /** One line naming what is being asked — the bash command, the file, the plan's first line,
+   *  the first question — truncated. '' when the tool's input carries nothing summarizable;
+   *  a card falls back to `toolName` then. Never the whole input: an inbox lists many of these
+   *  and a plan runs to thousands of characters. */
+  summary: string;
+  sessionId: string;
+  sessionTitle: string;
+  /** Absent for a session that belongs to no workspace (Session.workspaceId is nullable). */
+  workspaceId?: string;
+  taskId?: string;
+  taskTitle?: string;
+  /** Resolved through the session's task, or — for a coordinator session, which carries no
+   *  task — by looking the session up as some project's coordinator. There is no projectId
+   *  column on Session, by design. */
+  projectId?: string;
+  projectTitle?: string;
+  role: InboxSessionRole;
+  /** approval.createdAt: how long this has been waiting, which is what the inbox sorts on
+   *  (oldest first) and what a card counts up from. */
+  waitingSince: string;
+}
+
+/** An approval the human already answered, for the inbox's "Resolved" section. Carries the
+ *  same identity as while it waited — `waitingSince` still says how long it sat there — plus
+ *  how it was settled. */
+export interface InboxResolvedItem extends InboxApprovalItem {
+  status: ApprovalStatus;
+  /** The decision in the same vocabulary the decision endpoint takes. */
+  decision: 'allow' | 'deny';
+  /** approval.decidedAt. */
+  resolvedAt: string;
+  /** The note left with the decision, when there was one. */
+  message?: string;
+}
+
+/** GET /inbox. `resolved` is [] unless the request asked for a window with `resolvedSince`, and
+ *  carries at most the 200 most recently settled approvals inside it. */
+export interface InboxResponse {
+  pending: InboxApprovalItem[];
+  resolved: InboxResolvedItem[];
+}
+
 /** Runner (orbit MCP permission tool) → control plane: register a pending tool
  *  approval. Idempotent on (sessionId, toolUseId). */
 export interface ApprovalCreateRequest {

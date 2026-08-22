@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
+import { InboxModule } from './inbox/inbox.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
 import { ProjectsModule } from './projects/projects.module';
@@ -33,6 +34,7 @@ import { ProvidersModule } from './providers/providers.module';
     WorkspacesModule,
     SessionsModule,
     SessionTagsModule,
+    InboxModule,
     TasksModule,
     TaskListsModule,
     ProjectsModule,
