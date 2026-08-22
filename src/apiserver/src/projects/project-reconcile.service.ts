@@ -33,6 +33,11 @@ import {
   raiseBlockerIdempotencyKey,
 } from './project-blocker';
 import type { PlannedCoordinatorRotation } from './project-coordinator-session';
+import { PlannedCoordinatorTurn, coordinatorTurnGeneration } from './project-turn-reason';
+import {
+  ProjectAutomationPolicyValue,
+  projectPolicyCell,
+} from './project-authorization.service';
 import {
   PlannedVerificationVerdict,
   verificationVerdictActionKey,
@@ -184,6 +189,32 @@ export interface ProjectVerdictExecutor {
 }
 
 /**
+ * What the ledger needs from §7.6's turn, and nothing else.
+ *
+ * Same terms as the two executors above. Until this existed, §7.2's total order ended in a plan
+ * nobody claimed: the pass committed a decision saying "wake the coordinator" and the coordinator
+ * was never woken — the ledger's `planned` gate only refuses a claim that no decision proposed, so
+ * a proposal nobody claims is silent by construction.
+ */
+export interface ProjectTurnExecutor {
+  idempotencyKey(projectId: string, generation: string, reasonDigest: string): string;
+  actionDetail(planned: PlannedCoordinatorTurn): Prisma.InputJsonValue;
+  openInTransaction(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    command: { decisionId: string; planned: PlannedCoordinatorTurn },
+    actionId: string,
+    now: Date,
+  ): Promise<void | ProjectActionEffectRefusal>;
+  /** Post-commit only: the committed turn, read back from the ledger. */
+  deliveredTurn(
+    actionId: string,
+  ): Promise<{ sessionId: string; status: string; turnId: string } | null>;
+  /** Post-commit only: wake the runner for a turn that is already committed PENDING. */
+  announce(sessionId: string, status: string): void;
+}
+
+/**
  * What the ledger needs from §7.8's dispatch pass, and nothing else.
  *
  * Stated here rather than imported for the reason `ProjectRotationExecutor` is: the ledger must not
@@ -221,8 +252,10 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private _backstopHits = 0;
   private rotationExecutor?: ProjectRotationExecutor;
   private verdictExecutor?: ProjectVerdictExecutor;
+  private turnExecutor?: ProjectTurnExecutor;
   private dispatchPass?: ProjectDispatchPassExecutor;
   private readonly pendingRotations: string[] = [];
+  private readonly pendingTurns: string[] = [];
 
   constructor(
     private readonly prisma: PrismaService,
@@ -261,6 +294,19 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     this.verdictExecutor = executor;
     return () => {
       if (this.verdictExecutor === executor) this.verdictExecutor = undefined;
+    };
+  }
+
+  /**
+   * Install the sole §7.6 turn executor, on the terms the rotation executor is installed on.
+   */
+  registerTurnExecutor(executor: ProjectTurnExecutor): () => void {
+    if (this.turnExecutor && this.turnExecutor !== executor) {
+      throw new Error('a Project turn executor is already registered');
+    }
+    this.turnExecutor = executor;
+    return () => {
+      if (this.turnExecutor === executor) this.turnExecutor = undefined;
     };
   }
 
@@ -304,6 +350,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     try {
       await this.events.drainAvailable();
       await this.flushPendingRotations();
+      await this.flushPendingTurns();
       await this.enqueueScheduledWakes(now);
       if (now.getTime() - this.lastBackstopAt >= PROJECT_RECONCILE_BACKSTOP_MS) {
         this.lastBackstopAt = now.getTime();
@@ -315,6 +362,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // inside the ten-second path even if PostgreSQL NOTIFY is lost.
       await this.events.drainAvailable();
       await this.flushPendingRotations();
+      await this.flushPendingTurns();
     } catch (cause) {
       this.log.error(`Project reconcile recovery tick failed: ${errorText(cause)}`);
     } finally {
@@ -370,6 +418,8 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     let state: ProjectReconcileRunState;
     let nextWakeAt: Date | null;
     let nextWakeReason: string | null;
+    let held: ProjectEventHandleResult['hold'];
+    let answered: ProjectEventHandleResult['answered'];
     if (this.decisions) {
       const captured = await this.decisions.capture(tx, projectId, now);
       const decisionId = createDecisionId();
@@ -407,6 +457,20 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       const verdictsLeft = await this.applyVerificationVerdicts(
         tx, lease, decisionId, pending, rotationAttempted, now,
       );
+      // §7.6, third in the same one-gated-write-per-pass chain, and LAST of the three on purpose:
+      // a verdict rewrites the very task rows a turn's facts are computed from, so waking the
+      // coordinator on the world the verdict PRODUCED — next pass, under a different digest if the
+      // facts moved — is the correct order rather than merely a legal one. A rotation never
+      // competes with a turn at all: TU7 makes `ROTATE` and `OPEN` mutually exclusive on one
+      // snapshot, because a turn needs a live run to land in and a rotation means there is none.
+      const turn = await this.applyCoordinatorTurn(
+        tx, lease, decisionId, outcome,
+        {
+          gatedWriteTaken: rotationAttempted || pending.length > 0,
+          automationPolicy: captured.input.world.project.automationPolicy,
+        },
+        now,
+      );
       await this.applyAggregations(tx, projectId, outcome.aggregations, now);
       await this.applyBlockers(tx, projectId, lease, decisionId, outcome.blockers, now);
       state = outcome.runStateAfter;
@@ -415,9 +479,33 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       // §10.4 chose a wake for a world that has one more thing to do in it. Floor it — never
       // push it out — and only take the reason when this is genuinely the earlier alarm, so a
       // blocker's own recheck keeps its explanation when it was already due.
-      if (verdictsLeft > 0 && !(nextWakeAt && nextWakeAt <= now)) {
+      if ((verdictsLeft > 0 || turn === 'DEFERRED') && !(nextWakeAt && nextWakeAt <= now)) {
         nextWakeAt = now;
-        nextWakeReason = `${verdictsLeft} verification verdict(s) awaiting consequences`;
+        nextWakeReason = verdictsLeft > 0
+          ? `${verdictsLeft} verification verdict(s) awaiting consequences`
+          : 'coordinator turn awaiting a pass of its own';
+      }
+      // §7.6 TR2-c: an explicit request's `consumed_at` is written only when it is ANSWERED, and
+      // the only answer this pass can give is a committed `MANUAL` turn. Rate-limited, in flight,
+      // no live run, refused at the commit point — all of them mean the request has not happened
+      // yet, and consuming it would delete a person's "run it now" with nothing to show for it
+      // (`PC-CX-31`). It is not a failed delivery either, so `attempts` is untouched: it is put
+      // back with a retry instant, which is TR2-b ③ when a window is holding it and this pass's
+      // own wake otherwise.
+      const requests = captured.input.signals.map((signal) => base62ToUuid(signal.eventId));
+      if (requests.length > 0) {
+        // TF5: the one turn answers EVERY request outstanding at the time, so they are consumed
+        // together — including ones an earlier window held, which is why this is not just "the
+        // batch that was delivered".
+        if (turn === 'APPLIED' && outcome.turnReason === 'MANUAL') answered = requests;
+        else {
+          held = {
+            eventIds: requests,
+            nextAttemptAt: outcome.turn?.verdict === 'RATE_LIMITED' && outcome.turn.windowEndsAt
+              ? new Date(outcome.turn.windowEndsAt)
+              : nextWakeAt ?? new Date(now.getTime() + PROJECT_RECONCILE_BACKSTOP_MS),
+          };
+        }
       }
     } else {
       state = await this.runStateOf(tx, projectId);
@@ -442,7 +530,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
          AND "fencing_token" = ${lease.fencingToken}
     `);
     if (updated !== 1) throw new ProjectLeaseLostError(projectId);
-    return { disposition: 'RECONCILED' };
+    return { disposition: 'RECONCILED', hold: held, answered };
   }
 
   /**
@@ -462,6 +550,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
    */
   async afterCommit(result?: ProjectEventDeliveryResult): Promise<void> {
     await this.flushPendingRotations();
+    await this.flushPendingTurns();
     if (!this.dispatchPass || result?.status !== 'CONSUMED') return;
     // Never load-bearing, exactly as above: the delivery has committed, and a pass that threw must
     // not turn a durable reconcile into a retried one. The next wake runs it again.
@@ -1081,6 +1170,120 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     // snapshot hash is computed over. Reporting "no" here would hand the verdict below a snapshot
     // that its own predecessor had already invalidated.
     return true;
+  }
+
+  /**
+   * §7.6's turn, applied from the pass that decided it.
+   *
+   * `deferred` is not a refusal and takes no key: this pass has already spent its one
+   * staleness-gated write, so the turn would be refused `STALE_SNAPSHOT` by the effects of the
+   * write that went first — and a `STALE_SNAPSHOT` row is a permanent claim on the key, which
+   * would make TR3 read the NEXT identical snapshot as "the coordinator already looked at this and
+   * changed nothing". Leaving the key unspent and flooring the wake is what keeps the episode
+   * intact; the caller does the flooring.
+   */
+  private async applyCoordinatorTurn(
+    tx: Prisma.TransactionClient,
+    lease: ProjectReconcileLease,
+    decisionId: string,
+    outcome: ProjectDecisionOutcome,
+    context: { gatedWriteTaken: boolean; automationPolicy: string },
+    now: Date,
+  ): Promise<'APPLIED' | 'ENTERED' | 'DEFERRED' | 'NEEDS_APPROVAL' | 'NOT_PLANNED'> {
+    const planned = outcome.turn;
+    if (planned?.verdict !== 'OPEN') return 'NOT_PLANNED';
+    const action = outcome.actions.find((candidate) =>
+      candidate.type === 'OPEN_COORDINATOR_TURN');
+    if (!action) return 'NOT_PLANNED';
+    if (!this.turnExecutor) {
+      // Nest always registers one. Warn rather than throw, exactly as the rotation does: a
+      // deployment that somehow has none must still publish its run state and consume its events,
+      // and the next pass re-plans the same turn from the same facts under the same key.
+      this.log.warn(`Project ${lease.projectId} planned a coordinator turn with no executor`);
+      return 'NOT_PLANNED';
+    }
+    if (context.gatedWriteTaken) return 'DEFERRED';
+    // §9.2's cell, asked from the SNAPSHOT before a permanent key is spent — the gate itself is
+    // still the commit-time adapter inside the effect, which re-reads the policy under the project
+    // row lock and is what actually decides. This is the same rule `pendingVerificationVerdicts`
+    // follows for a different reason: do not put an unclaimable key in the audit. The turn key's
+    // epoch is `coordinator_generation`, which a refusal does NOT advance (unlike a dispatch's
+    // attempt), so claiming under MANUAL would burn this episode's only name on an answer that
+    // cannot change until a person acts — and then the turn could never open even after they
+    // switched the project to GUARDED_AUTO. §7.2 TU6's `REQUEST_APPROVAL` is not implemented here,
+    // so what MANUAL gets instead is: no turn, no spent key, an unconsumed request (TR2-c) and a
+    // line in the log — never a silent execution and never a silently dropped request.
+    if (projectPolicyCell(
+      context.automationPolicy as ProjectAutomationPolicyValue, 'COORDINATOR_ROUTINE') !== 'ALLOW') {
+      this.log.warn(
+        `Project ${uuidToBase62(lease.projectId)} needs approval to open a `
+        + `${planned.reasonCode} coordinator turn under ${context.automationPolicy}`,
+      );
+      return 'NEEDS_APPROVAL';
+    }
+    const result = await this.applyDecisionActionInTransaction(
+      tx,
+      lease,
+      decisionId,
+      {
+        type: 'OPEN_COORDINATOR_TURN',
+        idempotencyKey: this.turnExecutor.idempotencyKey(
+          lease.projectId,
+          coordinatorTurnGeneration(planned.idempotencyKey) ?? '',
+          planned.reasonDigest,
+        ),
+        subject: { type: 'PROJECT', id: lease.projectId },
+        detail: this.turnExecutor.actionDetail(planned),
+      },
+      async (effectTx, actionId) => this.turnExecutor!.openInTransaction(effectTx, lease, {
+        decisionId, planned,
+      }, actionId, now),
+      now,
+    );
+    if (result.status === 'APPLIED') {
+      // Post-commit, and re-read from the ledger before anything is sent: a rollback after this
+      // point leaves a row that says nothing was applied, and no notification goes out for it.
+      this.pendingTurns.push(result.actionId);
+      this.log.log(
+        `Project ${uuidToBase62(lease.projectId)} opened a ${planned.reasonCode} coordinator turn`,
+      );
+      return 'APPLIED';
+    }
+    // §8.2's keys are permanent, including for a row that was REFUSED — so a turn key spent on a
+    // refusal can never be claimed again, while TR1 keeps proposing it (it looks for an APPLIED
+    // row, and there is none). The loop does not reach that state: it takes at most one
+    // staleness-gated write per pass, and the two that could invalidate this one are checked
+    // above. If it is ever reached anyway, say so out loud rather than going quiet — going quiet
+    // on an undeliverable turn is the exact shape of the defect this unit exists to close.
+    if (result.status === 'ALREADY_APPLIED'
+      && (result.actionStatus === 'REFUSED' || result.actionStatus === 'SUPERSEDED')) {
+      this.log.error(
+        `Project ${uuidToBase62(lease.projectId)} cannot open its ${planned.reasonCode} turn: `
+        + `key ${planned.idempotencyKey} is spent on a ${result.actionStatus} row`,
+      );
+    }
+    return 'ENTERED';
+  }
+
+  /**
+   * Fire the post-commit notifications an opened turn owes the runner.
+   *
+   * Called after the delivery transaction has returned. Everything here is an accelerator over a
+   * poll that already finds the turn: `claimSessionForRunner` retries every five seconds for a run
+   * left `PENDING`, and the inbox long poll re-reads on the same cadence for one already `RUNNING`.
+   */
+  private async flushPendingTurns(): Promise<void> {
+    const actionIds = this.pendingTurns.splice(0, this.pendingTurns.length);
+    for (const actionId of actionIds) {
+      try {
+        const delivered = await this.turnExecutor?.deliveredTurn(actionId);
+        if (delivered) this.turnExecutor?.announce(delivered.sessionId, delivered.status);
+      } catch (cause) {
+        // Never load-bearing (AC4): the turn is committed PENDING on a live coordination run, and
+        // both wake paths find it on their own within five seconds.
+        this.log.warn(`Project coordinator turn notification failed for ${actionId}: ${errorText(cause)}`);
+      }
+    }
   }
 
   /**

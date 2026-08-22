@@ -1468,6 +1468,10 @@ export class ProjectsService {
       select: {
         id: true,
         title: true,
+        // §9.2's policy is part of what a coordination run is opened WITH (v1.18, `PC-CX-65`):
+        // the opening tells the coordinator what the control loop does on its own, and that
+        // sentence is different under each of the three.
+        automationPolicy: true,
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
         coordinatorSession: { select: { id: true, deletedAt: true } },
@@ -1517,7 +1521,7 @@ export class ProjectsService {
         {
           workspaceId: runIn,
           title: coordinatorSessionTitle(project.title),
-          prompt: buildCoordinatorOpening(project.title, project.id),
+          prompt: buildCoordinatorOpening(project.title, project.id, project.automationPolicy),
         },
         { source: 'user' },
       );

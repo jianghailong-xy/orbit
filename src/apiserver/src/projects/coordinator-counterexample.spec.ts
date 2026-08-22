@@ -2774,9 +2774,11 @@ test('PC-CX-22 the decision input is complete, and the hash is over all of it', 
 });
 
 // ── PC-CX-23 ────────────────────────────────────────────────────────────────
-// §7.2 TU4/TU5 + §4.3 I15: a total order over the five reasons, at most one turn per input.
+// §7.2 TU4/TU5 + §4.3 I15: a total order over the six reasons, at most one turn per input.
+// v1.17 added `TASK_FAILURE` between VERDICT and BLOCKER_DECISION (`PC-CX-63`), which is the same
+// "cause before consequence" cell that already put VERDICT above the blocker it creates.
 
-const TURN_ORDER = ['MANUAL', 'VERDICT', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'] as const;
+const TURN_ORDER = ['MANUAL', 'VERDICT', 'TASK_FAILURE', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'] as const;
 type TurnReason = (typeof TURN_ORDER)[number];
 
 /** `v13` returned every reason whose guard was true; `v14` returns the first in the frozen order. */
@@ -2788,12 +2790,12 @@ function chooseTurnReasons(truths: Record<TurnReason, boolean>, version: Version
 }
 
 test('PC-CX-23 overlapping turn reasons are decided by one total order', () => {
-  // All 32 truth combinations of the five guards. The point of enumerating rather than listing the
+  // All 64 truth combinations of the six guards. The point of enumerating rather than listing the
   // two the review found is that a hand-written exclusion guard fails on the next combination —
   // the same argument §4.2 RS0 makes about the hand-written transition table.
-  const shuffled: readonly TurnReason[] = ['REPLAN', 'ACCEPTANCE', 'BLOCKER_DECISION', 'VERDICT', 'MANUAL'];
+  const shuffled: readonly TurnReason[] = ['REPLAN', 'ACCEPTANCE', 'BLOCKER_DECISION', 'TASK_FAILURE', 'VERDICT', 'MANUAL'];
   let overlaps = 0;
-  for (let mask = 0; mask < 32; mask++) {
+  for (let mask = 0; mask < 64; mask++) {
     const truths = Object.fromEntries(TURN_ORDER.map((r, i) => [r, Boolean(mask & (1 << i))])) as Record<TurnReason, boolean>;
     const chosen = chooseTurnReasons(truths, 'v14');
     assert.ok(chosen.length <= 1, `mask ${mask}: at most one semantic turn per input (I15)`);
@@ -2805,14 +2807,19 @@ test('PC-CX-23 overlapping turn reasons are decided by one total order', () => {
     }
     if (chooseTurnReasons(truths, 'v13').length > 1) overlaps++;
   }
-  assert.equal(overlaps, 26, 'negative control: 26 of the 32 combinations produced more than one turn under v1.3');
+  assert.equal(overlaps, 57, 'negative control: 57 of the 64 combinations produced more than one turn under v1.3');
 
   // The two the review published, as named regressions.
-  const allSettled: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: false, BLOCKER_DECISION: false, ACCEPTANCE: true, REPLAN: true };
+  const allSettled: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: false, TASK_FAILURE: false, BLOCKER_DECISION: false, ACCEPTANCE: true, REPLAN: true };
   assert.deepEqual(chooseTurnReasons(allSettled, 'v13'), ['ACCEPTANCE', 'REPLAN'], 'negative control: converged work hits REPLAN and ACCEPTANCE together');
   assert.deepEqual(chooseTurnReasons(allSettled, 'v14'), ['ACCEPTANCE'], 'ACCEPTANCE wins: §4.2 already puts it above the PLANNING fallback');
 
-  const verificationFailed: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false };
+  const verificationFailed: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: true, TASK_FAILURE: false, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false };
+
+  // PC-CX-63, as a third named regression on the same shape: a settled task failure is also the
+  // `TEST_FAILED`/`UNKNOWN_FAILURE` blocker it produces, and the cause wins for the same reason.
+  const taskFailed: Record<TurnReason, boolean> = { MANUAL: false, VERDICT: false, TASK_FAILURE: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false };
+  assert.deepEqual(chooseTurnReasons(taskFailed, 'v14'), ['TASK_FAILURE'], 'a settled failure outranks the blocker its own failure opened');
   assert.deepEqual(chooseTurnReasons(verificationFailed, 'v13'), ['VERDICT', 'BLOCKER_DECISION'], 'negative control: a FAIL is also the blocker it creates');
   assert.deepEqual(chooseTurnReasons(verificationFailed, 'v14'), ['VERDICT'], 'the cause wins over the consequence it created (§13.2 ④)');
 
@@ -3216,7 +3223,7 @@ test('mutation check: every fence added for PC-CX-21..27 is load-bearing', () =>
       finding: 'PC-CX-23',
       fence: 'the total order over the turn reasons (§7.2 TU4)',
       defectReappears: () =>
-        chooseTurnReasons({ MANUAL: false, VERDICT: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false }, 'v13').length === 2,
+        chooseTurnReasons({ MANUAL: false, VERDICT: true, TASK_FAILURE: false, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false }, 'v13').length === 2,
     },
     {
       finding: 'PC-CX-24',
@@ -3256,7 +3263,7 @@ test('mutation check: every fence added for PC-CX-21..27 is load-bearing', () =>
   assert.equal(i11Standing({ ...dispatched, runtimeToken: 43 }, 'v14'), true);
   assert.equal(moveTaskProject(dispatched, 'p2', true, 'v14').committed, false);
   assert.notEqual(decisionInputHash(withAttempt2, 'v14'), decisionInputHash(baseInput, 'v14'));
-  assert.equal(chooseTurnReasons({ MANUAL: false, VERDICT: true, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false }, 'v14').length, 1);
+  assert.equal(chooseTurnReasons({ MANUAL: false, VERDICT: true, TASK_FAILURE: false, BLOCKER_DECISION: true, ACCEPTANCE: false, REPLAN: false }, 'v14').length, 1);
   assert.notEqual(reasonDigest24('MERGE_CONFLICT', 's', 'A', 2, 'v14'), reasonDigest24('MERGE_CONFLICT', 's', 'A', 1, 'v14'));
   const clean = freshDb();
   writeTaskProject(clean, 't1', 'p1', 'v14', true);

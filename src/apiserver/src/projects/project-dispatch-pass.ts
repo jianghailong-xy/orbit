@@ -46,6 +46,7 @@ import {
   PROJECT_BLOCKER_RESOLUTION_CHAIN_KINDS,
   ProjectBlockerFact,
 } from './project-blocker';
+import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
 import { isLiveSessionStatus } from './project-coordinator-session';
 
 /** How many dispatches one pass may propose, however much capacity the project reports. */
@@ -80,6 +81,8 @@ export const PROJECT_DISPATCH_RETRY_WINDOW_MS = 60_000;
  */
 export type ProjectDispatchSkipReason =
   | 'TASK_NOT_OPEN'
+  /** §9.5 Q3's terminal cells: the failure is real and nothing mechanical advances it (`PC-CX-64`). */
+  | 'TASK_FAILED_TERMINAL'
   | 'NOT_COORDINATOR_AUTHORITY'
   | 'TASK_DISPATCH_HELD'
   | 'TASK_NOT_DUE'
@@ -174,7 +177,7 @@ export function selectDispatchableTasks(
     return {
       candidates: [],
       skipped: input.world.tasks
-        .filter((task) => task.status === 'OPEN')
+        .filter(consideredForDispatch)
         .map((task) => ({ taskId: task.id, reason: 'PROJECT_BLOCKED' as const }))
         .sort(byTaskId),
       freeSlots: 0,
@@ -211,7 +214,7 @@ export function selectDispatchableTasks(
     const due = input.evaluation.dueTasks[task.id];
     const reason = firstFailure(task, due, statusOf, blockers, latestDispatch.get(task.id), epochMs);
     if (reason) {
-      if (task.status === 'OPEN') skipped.push({ taskId: task.id, reason });
+      if (consideredForDispatch(task)) skipped.push({ taskId: task.id, reason });
       continue;
     }
     ready.push({ taskId: task.id, attempt: task.dispatchAttempt });
@@ -250,8 +253,22 @@ function firstFailure(
   latestDispatch: ProjectDecisionInput['world']['actions'][number] | undefined,
   epochMs: number,
 ): ProjectDispatchSkipReason | null {
-  // §7.4 precondition 1.
-  if (task.status !== 'OPEN') return 'TASK_NOT_OPEN';
+  // §7.4 precondition 1, v1.18 (`PC-CX-64`). `OPEN` is one of the two statuses a dispatchable task
+  // can be in, not the only one: a real failed run leaves `FAILED`, and §9.5 Q3's retry ladder is
+  // written for exactly that task. `failedTaskDisposition` is the single judgement — the same one
+  // §9.2 admits on, §7.2 TU2 reads to decide whether the coordinator hears about it, and §11.4
+  // turns into a row — so a task this pass calls retryable cannot be one the dispatcher refuses as
+  // exhausted, or one the turn planner simultaneously reports as beyond mechanical help.
+  if (task.status !== 'OPEN') {
+    const disposition = failedTaskDisposition(dispatchFailureFacts(task, due));
+    // The backoff arm falls through to the shared `RETRY_BACKOFF_ACTIVE` skip below, so one world
+    // reports one reason whichever status the task is in.
+    if (!loopCanRetryFailedTask(disposition)) {
+      return disposition === 'NOT_FAILED' || disposition === 'OCCUPIED'
+        ? 'TASK_NOT_OPEN'
+        : 'TASK_FAILED_TERMINAL';
+    }
+  }
   // §12.3: the authority column answers "whose task is this to dispatch", and a LEGACY one is the
   // three existing sweeps' to start. Proposing it here is the duplicate dispatch §12.3 exists to
   // prevent, and §7.7 D6's trigger would refuse the Session anyway.
@@ -292,6 +309,36 @@ function firstFailure(
     return 'RECENTLY_REFUSED';
   }
   return null;
+}
+
+/**
+ * Which tasks this pass owes an explanation for. `FAILED` joins `OPEN` in v1.18 for the reason the
+ * skip list exists at all: a task the loop stopped retrying is precisely the one whose absence from
+ * the candidate list a person needs a sentence about, and before `PC-CX-64` it was the one status
+ * that got none.
+ */
+function consideredForDispatch(task: { status: string }): boolean {
+  return task.status === 'OPEN' || task.status === 'FAILED';
+}
+
+/**
+ * §6.1's two halves of one judgement, put back together: the task row carries the failure history,
+ * `evaluation.dueTasks` carries the clock's answer about it (S5). `liveSessionIds` is the snapshot's
+ * own projection, so `OCCUPIED` here means exactly what precondition 4 means below.
+ */
+function dispatchFailureFacts(
+  task: ProjectDecisionInput['world']['tasks'][number],
+  due: { runAtDue: boolean; retryBackoffExpired: boolean } | undefined,
+) {
+  return {
+    status: task.status,
+    hasLiveSession: task.liveSessionIds.length > 0,
+    failureCount: task.failureCount,
+    failureAttributable: task.failureAttributable,
+    // An absent entry predates `dueTasks` and reads as "no backoff is holding it", which is what
+    // `selectDispatchableTasks` already assumes for `runAtDue` two lines below.
+    retryBackoffExpired: due?.retryBackoffExpired ?? true,
+  };
 }
 
 function byTaskId(a: { taskId: string }, b: { taskId: string }): number {

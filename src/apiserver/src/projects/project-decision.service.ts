@@ -40,6 +40,11 @@ import {
   rotateCoordinatorSessionIdempotencyKey,
 } from './project-coordinator-session';
 import {
+  PlannedCoordinatorTurn,
+  TurnReasonCode,
+  planCoordinatorTurn,
+} from './project-turn-reason';
+import {
   ProjectWakeCandidate,
   ProjectWakeDecision,
   PROJECT_WAKE_FALLBACK_MS,
@@ -344,6 +349,18 @@ export interface ProjectDecisionOutcome {
   aggregations: PlannedTaskAggregation[];
   /** Tasks on a `parentTaskId` cycle. Non-empty means aggregation was skipped for this pass (AG2). */
   aggregationCycleTaskIds: string[];
+  /**
+   * §6.2's `turnReason` — the one reasonCode §7.2 TU4 selected, or `null` when no reason held.
+   *
+   * Absent on decisions captured before v1.17's turn planner existed, which readers must treat as
+   * "this snapshot predates semantic turns" and NOT as "no reason was true": the binary that made
+   * those decisions evaluated none of §7.2's predicates, and a replay has to reproduce that.
+   */
+  turnReason?: TurnReasonCode | null;
+  /** §6.2 / TU5: reasons that were also true and lost the total order. Audit, never dropped. */
+  suppressedTurnReasons?: TurnReasonCode[];
+  /** §7.6's full answer for this snapshot: the digest, the key, and whether the turn may open. */
+  turn?: PlannedCoordinatorTurn;
   nextWakeAt: string | null;
   nextWakeReason: string | null;
   consumedEventIds: string[];
@@ -1288,6 +1305,20 @@ export function planProjectDecision(
   const coordinator = planCoordinatorSessionRotation(input);
   const blockerPlan = planBlockers(input, aggregation.cycleTaskIds, coordinator);
   const runStateAfter = runStateOf(input, blockerPlan?.openAfter ?? []);
+  // §7.2 / §7.6, after the blockers and the rotation because it reads both. A snapshot that
+  // predates either projection is NOT evaluated at all: those decisions were made by a binary that
+  // opened no semantic turn, and a replay has to reproduce what it decided rather than today's
+  // rules applied to yesterday's world — the same reading `world.blockers` already asks for.
+  const evaluatesTurns = blockerPlan !== null
+    && coordinator.status !== 'UNSUPPORTED'
+    && coordinator.status !== 'OUT_OF_LOOP';
+  const turn = evaluatesTurns
+    ? planCoordinatorTurn(input, {
+      openBlockers: blockerPlan.openAfter,
+      verdicts: verificationVerdictPlan(input),
+      coordinator,
+    })
+    : null;
   const wake = blockerPlan
     ? chooseProjectWake({ epoch: input.evaluation.epoch, runStateAfter }, collectProjectWakeCandidates({
       epoch: input.evaluation.epoch,
@@ -1315,7 +1346,7 @@ export function planProjectDecision(
     runStateAfter,
     decidedBy: options.decidedBy ?? 'ORCHESTRATOR',
     reason: wake.nextWakeReason ?? 'Project is outside the active coordination loop',
-    actions: options.actions ?? plannedActions(input, coordinator),
+    actions: options.actions ?? plannedActions(input, coordinator, turn),
     authorizations: options.authorizations ?? [],
     blockersOpened: blockerPlan?.raises.map((raise) => raise.dedupeKey) ?? [],
     blockersCleared: blockerPlan?.clears.map((clear) => clear.blockerId) ?? [],
@@ -1334,6 +1365,13 @@ export function planProjectDecision(
     ...(coordinator.status === 'UNSUPPORTED' ? {} : { coordinator }),
     aggregations: aggregation.aggregations,
     aggregationCycleTaskIds: aggregation.cycleTaskIds,
+    ...(evaluatesTurns
+      ? {
+        turnReason: turn?.reasonCode ?? null,
+        suppressedTurnReasons: turn?.suppressed ?? [],
+      }
+      : {}),
+    ...(turn ? { turn } : {}),
     nextWakeAt: wake.nextWakeAt,
     nextWakeReason: wake.nextWakeReason,
     consumedEventIds: options.consumedEventIds ?? [],
@@ -1343,10 +1381,13 @@ export function planProjectDecision(
 /**
  * The actions this snapshot itself proposes, for a caller that supplied none.
  *
- * Only §7.5's rotation today, and deliberately: every other action in §7.3's table is proposed by
- * the unit that applies it, which passes its own list. Planning it here is what makes the ledger's
- * `planned` gate meaningful — an action that no decision proposed may not be claimed against that
- * decision (§8.3), so the pass that decides and the pass that acts agree on one frozen list.
+ * §7.5's rotation and §7.2's semantic turn, and deliberately only those two: they are the two
+ * actions whose SUBJECT is the project itself and whose decision is this function's own (§7.5 and
+ * §7.2 TU4 are both pure functions of the snapshot). Every other action in §7.3's table is proposed
+ * by the unit that applies it, which passes its own list. Planning them here is what makes the
+ * ledger's `planned` gate meaningful — an action that no decision proposed may not be claimed
+ * against that decision (§8.3), so the pass that decides and the pass that acts agree on one
+ * frozen list.
  *
  * The key is spelled the way the AUDIT spells everything — Base62 — while the ledger stores the
  * same key with the raw project UUID, because a permanent action key is an internal identity that
@@ -1357,16 +1398,30 @@ export function planProjectDecision(
 function plannedActions(
   input: ProjectDecisionInput,
   coordinator: CoordinatorSessionPlan,
+  turn: PlannedCoordinatorTurn | null,
 ): ProjectDecisionOutcome['actions'] {
-  if (coordinator.status !== 'ROTATE') return [];
-  return [{
-    type: 'ROTATE_COORDINATOR_SESSION',
-    idempotencyKey: rotateCoordinatorSessionIdempotencyKey(
-      input.world.project.id,
-      coordinator.generation,
-    ),
-    subject: { type: 'PROJECT', id: input.world.project.id },
-  }];
+  const actions: ProjectDecisionOutcome['actions'] = [];
+  if (coordinator.status === 'ROTATE') {
+    actions.push({
+      type: 'ROTATE_COORDINATOR_SESSION',
+      idempotencyKey: rotateCoordinatorSessionIdempotencyKey(
+        input.world.project.id,
+        coordinator.generation,
+      ),
+      subject: { type: 'PROJECT', id: input.world.project.id },
+    });
+  }
+  // §7.2 TU5 / §4.3 I15: at most one, and only when §7.6's three preconditions all cleared. The
+  // other verdicts are decisions too — rate-limited, no-progress and no-live-run each have a
+  // defined consequence — but none of them is an ACTION, so none of them takes a key.
+  if (turn?.verdict === 'OPEN') {
+    actions.push({
+      type: 'OPEN_COORDINATOR_TURN',
+      idempotencyKey: turn.idempotencyKey,
+      subject: { type: 'PROJECT', id: input.world.project.id },
+    });
+  }
+  return actions;
 }
 
 /**
