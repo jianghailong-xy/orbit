@@ -584,10 +584,12 @@ test('§13.1 AG7 / §13.2 V8 on real PostgreSQL', { skip, concurrency: 1 }, asyn
       async (tx) => decisions.capture(tx, f.projectId, new Date()),
       { isolationLevel: 'RepeatableRead' },
     );
-    // The marker the capture stamps, without which the AG8 exception below is versioned off.
-    // Both capability markers this build stamps: AG7's gaps and §13.3 DEP's epoch.
+    // The markers the capture stamps, without which the AG8 exception below is versioned off.
+    // Three of them on a fully migrated database: AG7's gaps, §13.3 DEP's epoch, and `[K5]`'s
+    // findings — the last is stamped only where 0135 has been applied, which is what makes a
+    // binary one migration ahead of its database replay to the answer that database supports.
     assert.deepEqual(captured.input.world.protocol,
-      { completionGaps: true, verificationEpoch: true });
+      { completionGaps: true, verificationEpoch: true, findings: true });
     const selection = selectDispatchableTasks(captured.input);
     assert.deepEqual(selection.candidates.map((c) => c.taskId), [uuidToBase62(taskId)]);
     assert.equal(

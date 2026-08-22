@@ -857,7 +857,7 @@ test('V8: an unmarked snapshot proposes no filing either', () => {
     taskId: PARENT, status: 'OPEN', policy: 'VERIFICATION_PASSED', reason: 'NO_VERIFICATION_FILED',
     evidence: {
       children: { total: 1, done: 1, cancelled: 0, outstanding: 0, unresolvable: 0 },
-      verifications: { total: 0, passed: 0, outstanding: 0 },
+      verifications: { total: 0, passed: 0, outstanding: 0, unconcludable: 0 },
     },
   }).action, 'FILE_VERIFICATION', 'the disposition itself is unconditional…');
   // …and the gate is on the PLAN, which is the one place both consumers go through.

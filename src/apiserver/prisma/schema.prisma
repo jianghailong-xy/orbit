@@ -2494,6 +2494,9 @@ model Task {
   convergenceDecisions    TaskConvergenceDecision[]
   /// `[K3]`: every attempt spent on this task — one row per Session that ran it (migration 0133).
   attempts                TaskAttempt[]
+  /// `[K5]`: §6's findings ABOUT this task, and the ones whose one effect IS this task.
+  verificationFindings    TaskVerificationFinding[] @relation("FindingSubject")
+  filedByFinding          TaskVerificationFinding[] @relation("FindingEffectTask")
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -2590,6 +2593,7 @@ model TaskScopeRevision {
 
   decisions TaskConvergenceDecision[]
   attempts  TaskAttempt[]
+  findings  TaskVerificationFinding[]
 
   @@unique([taskId, revision])
   /// The composite key `TaskConvergenceDecision` points at. Naming the HASH as well as the revision
@@ -2681,6 +2685,10 @@ model TaskConvergenceDecision {
   /// the last row that progressed. Both are partial indexes, declared in migration 0134 (as with
   /// `actionIdempotencyKey`), because this schema cannot spell a WHERE clause.
   @@index([taskId, scopeRevision, actionIdentity])
+  /// `[K5]`: the findings this judgment was made about. At most one today — a finding commits with
+  /// its own decision — and a list rather than a single row because the ledger is append-only and
+  /// the shape of "which findings does this judgment answer for" must not need a migration to grow.
+  findings TaskVerificationFinding[]
   @@map("task_convergence_decision")
 }
 
@@ -2769,6 +2777,93 @@ model TaskAttempt {
   @@index([taskId, scopeRevision, attemptGeneration(sort: Desc)], map: "task_attempt_task_generation_idx")
   @@index([ownerId, createdAt(sort: Desc)], map: "task_attempt_owner_created_idx")
   @@map("task_attempt")
+}
+
+/// `[K5]` §6 (migration 0135): the only shape a verification Session may write.
+///
+/// §1 OW1 forbids a verifier from touching the subject's scope and OW2 forbids a worker from
+/// approving its own new acceptance criteria; this is the row both of them write INSTEAD. A finding
+/// changes nothing about the subject — it is a claim about it — and §3's frozen table turns exactly
+/// one claim into exactly one piece of work.
+///
+/// Append-only, and keyed twice. `dedupKey` is FD1's identity of the FINDING, so the same defect
+/// reported by a second check, after a restart, or out of order lands on the row that already
+/// exists. `effectIdempotencyKey` is the identity of its one EFFECT, so a crash between the row and
+/// the Task it files cannot produce two Tasks on replay. Both are needed: the first stops a second
+/// finding, the second stops a second consequence of one finding.
+model TaskVerificationFinding {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation("FindingSubject", fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  /// Denormalised from the task: FD1's key is scoped by project, and the finding must keep
+  /// answering for the project it was filed in even after the task is re-filed elsewhere.
+  projectId String? @map("project_id") @db.Uuid
+  /// Monotonic within a task, allocated `MAX + 1` under the task row lock — a replay ORDER that
+  /// does not depend on `createdAt`, which two writers can tie on.
+  seq     BigInt
+
+  scopeRevision Int               @map("scope_revision")
+  scopeHash     String            @map("scope_hash") @db.Char(64)
+  /// FD4 as a foreign key, hash included: a finding cannot be re-pointed at a scope that never had
+  /// the content it was measured against.
+  scope         TaskScopeRevision @relation(fields: [taskId, scopeRevision, scopeHash], references: [taskId, revision, scopeHash], onDelete: Cascade, map: "task_verification_finding_scope_fkey")
+
+  dedupKey String @unique @map("dedup_key")
+
+  /// §6's table, verbatim. Every column required, because every row of that table says 是.
+  severity            String
+  violatedInvariant   String @map("violated_invariant")
+  minimalRepro        String @map("minimal_repro")
+  failureFingerprint  String @map("failure_fingerprint") @db.Char(64)
+  scopeClassification String @map("scope_classification")
+  /// Base62 throughout: a finding is audit material a person reads and hands back, and an id
+  /// spelled as an internal UUID is neither.
+  evidence            Json
+  verdict             String
+
+  /// Who claimed it, and from where. No foreign keys on the two ids (migration 0120's rule):
+  /// deleting a session or rotating a task must not rewrite who reported an earlier finding.
+  reporter          String
+  reporterTaskId    String? @map("reporter_task_id") @db.Uuid
+  reporterSessionId String? @map("reporter_session_id") @db.Uuid
+
+  /// FD2's answer and how it was reached. `effectiveClassification` differs from what was submitted
+  /// only under CL2, and then `overrideReason` says so — a rewrite that left no trace would make
+  /// "it was called transient six times" unaskable.
+  effectiveClassification String  @map("effective_classification")
+  outcome                 String
+  overrideReason          String? @map("override_reason")
+  effectKind              String  @map("effect_kind")
+
+  effectIdempotencyKey String  @unique @map("effect_idempotency_key")
+  /// The Task this finding filed, for the three outcomes that file one. `SetNull` rather than
+  /// Cascade: deleting the defect must leave the finding saying it filed one that is now gone.
+  effectTaskId         String? @map("effect_task_id") @db.Uuid
+  effectTask           Task?   @relation("FindingEffectTask", fields: [effectTaskId], references: [id], onDelete: SetNull)
+  effectBlockerKind    String? @map("effect_blocker_kind")
+
+  /// finding → decision, and the reason this is not a second ledger: the judgment that turned this
+  /// finding into that effect lives in `[K2]`'s ledger with its counters and its input hash.
+  decisionId String?                  @map("decision_id") @db.Uuid
+  decision   TaskConvergenceDecision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+
+  /// §11.1's three questions, per finding. `nextCheckAt` is null wherever the owner is USER — a
+  /// wait that ends when a person decides has no clock.
+  requiredAction String    @map("required_action")
+  owner          String
+  nextCheckAt    DateTime? @map("next_check_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, seq], map: "task_verification_finding_seq_key")
+  @@index([taskId, seq(sort: Desc)], map: "task_verification_finding_task_idx")
+  @@index([ownerId, createdAt(sort: Desc)], map: "task_verification_finding_owner_idx")
+  /// FD3': "has this revision already been repaired, and how bad was it then" — one index scan on
+  /// the exact three columns the triage reads.
+  @@index([taskId, scopeRevision, seq(sort: Desc)], map: "task_verification_finding_repair_idx")
+  @@index([effectTaskId], map: "task_verification_finding_effect_task_idx")
+  @@map("task_verification_finding")
 }
 
 model TaskVerificationFailure {

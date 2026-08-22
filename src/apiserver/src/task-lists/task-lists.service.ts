@@ -15,6 +15,7 @@ import {
   canRun,
   computeDependencyState,
   dependencyEpochGate,
+  dependencyEpochStalled,
   type DependencyPrerequisiteFact,
 } from '../tasks/task-dependencies';
 import { loadVerificationEpochGates } from '../tasks/verification-epoch-read';
@@ -184,6 +185,7 @@ export class TaskListsService {
       facts.push({
         status: dependency.dependsOnTask.status as unknown as SharedTaskStatus,
         verificationGate: dependencyEpochGate(dependency.dependsOnTaskId, epochs),
+        verificationGateStalled: dependencyEpochStalled(dependency.dependsOnTaskId, epochs),
       });
       prerequisites.set(dependency.taskId, facts);
     }

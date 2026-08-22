@@ -449,8 +449,13 @@ export class ConvergenceLedgerService {
    * every write here is about one task, so one row lock serialises them, and `seq` can be allocated
    * as `MAX + 1` without a second writer computing the same one. Nothing takes a lock on `project`
    * — the policy is read, not written — so this adds no edge to the project/task lock order.
+   *
+   * Public for `[K5]`: a finding is triaged against the same committed state a decision is planned
+   * against, so it takes the SAME lock in the SAME transaction and reads the SAME row. Two readers
+   * with two spellings of "what does this task currently say" is how a finding comes to be filed
+   * against counters the ledger never had.
    */
-  private async lockAndRead(
+  async lockAndRead(
     tx: Prisma.TransactionClient,
     taskId: string,
     ownerId: string,

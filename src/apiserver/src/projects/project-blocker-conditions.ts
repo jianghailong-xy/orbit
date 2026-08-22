@@ -194,6 +194,7 @@ export function detectProjectBlockerConditions(
     ...mergeConditions(input),
     ...spentFailureBudgetConditions(input),
     ...verificationConditions(sources.verificationVerdicts),
+    ...findingConditions(input),
     ...budgetConditions(input),
     ...awaitingUserInputConditions(input),
     ...manualHoldConditions(input),
@@ -400,6 +401,64 @@ function verificationConditions(
         verdict: verdict.verdict,
         verdictRevision: verdict.verdictRevision,
         evidence: verdict.evidence,
+      },
+    }));
+}
+
+/**
+ * `[K5]` §3: the two classes whose one legal result is a §11 row.
+ *
+ * Recomputed from the finding rather than inserted alongside it, and that is the point rather than
+ * a compromise. A blocker is a statement about the world NOW (§11.4), so it has to be derivable
+ * from rows that are still true — which also gives it its exit for free: the finding stops being
+ * projected when its task settles or its scope revision moves, and §11.4 clears the row without
+ * anybody writing a second "resolve" path. An INSERT beside the finding would have produced a row
+ * that outlives the fact it asserts, which is exactly the obsolete-blocker shape `[H1]` had to go
+ * back and filter.
+ *
+ * `ENVIRONMENT` and `HUMAN_REQUIRED` and nothing else: those are the two rows of §3 whose outcome
+ * is a blocker. The other four produced a Task in the finding's own transaction, and a condition
+ * about them would be a second consequence for one finding (FD2).
+ *
+ * The subject is the TASK. §11 BL1 reads a PROJECT-subject blocker as "stop everything", and one
+ * task's broken environment is not that — the same trap `[H0]`'s AG7-c comment names.
+ */
+function findingConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
+  // Absent means "this snapshot predates finding-driven blockers", not "there were none": an old
+  // decision must replay to what its own binary produced.
+  const findings = input.world.findings;
+  if (findings === undefined) return [];
+  return findings
+    .filter((finding) => finding.blockerKind === 'ENVIRONMENT_BROKEN'
+      || finding.blockerKind === 'HUMAN_DECISION_REQUIRED')
+    // §13.6 SU6, the same clause every other detector here applies: a finding about work that was
+    // replaced is addressed to nobody.
+    .filter((finding) => !namedTaskObsolete(finding.taskId, input))
+    .map((finding) => ({
+      kind: finding.blockerKind as ObservedBlockerCondition['kind'],
+      subjectType: 'TASK' as const,
+      subjectId: finding.taskId,
+      // §11.3's default dedupe key (`kind:TASK:taskId`) applies, so one task holds one row per
+      // class however many findings of that class it collects. A NEW finding still says so: it
+      // changes `findingId`, therefore the TF2 fact digest, therefore `condition_version` — which
+      // is the mechanism that tells "the same environment failure again" from "a different one".
+      facts: {
+        findingId: finding.findingId,
+        taskId: finding.taskId,
+        classification: finding.classification,
+        violatedInvariant: finding.violatedInvariant,
+      },
+      detail: {
+        findingId: finding.findingId,
+        taskId: finding.taskId,
+        scopeRevision: finding.scopeRevision,
+        classification: finding.classification,
+        severity: finding.severity,
+        violatedInvariant: finding.violatedInvariant,
+        minimalRepro: finding.minimalRepro,
+        requiredAction: finding.requiredAction,
+        owner: finding.owner,
+        reportedAt: finding.createdAt,
       },
     }));
 }

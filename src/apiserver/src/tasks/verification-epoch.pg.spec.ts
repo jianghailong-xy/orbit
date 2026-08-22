@@ -189,16 +189,33 @@ async function addCheck(
   id?: string,
 ): Promise<string> {
   const revision = shape.verdictRevision ?? 1;
+  const status = shape.status ?? 'DONE';
+  const verdict = shape.verdict === undefined ? 'FAIL' : shape.verdict;
+  // `[K5]`: migration 0135 refuses a check REACHING `DONE` with no verdict, which is the shape
+  // several cases below exist to test the gate ON. Those rows are legacy data — written by a binary
+  // that predates the trigger, and still on disk — so the fixture creates them the way legacy data
+  // came to exist: with the trigger off. Turning it off around the INSERT and back on immediately
+  // is deliberate; leaving it off would stop this file testing the product's real table.
+  const legacyShape = status === 'DONE' && verdict === null;
+  if (legacyShape) {
+    await db.$executeRawUnsafe(
+      `ALTER TABLE "task" DISABLE TRIGGER "task_verification_verdict_atomic_insert"`);
+  }
   const checkId = await task(db, {
     id,
     projectId,
-    status: shape.status ?? 'DONE',
+    status,
     verifies: subjectId,
     assignee: agentId,
-    verdict: shape.verdict === undefined ? 'FAIL' : shape.verdict,
+    verdict,
     verdictRevision: revision,
     ...(shape.supersededBy !== undefined ? { supersededBy: shape.supersededBy } : {}),
     ...(shape.terminalReason !== undefined ? { terminalReason: shape.terminalReason } : {}),
+  }).finally(async () => {
+    if (legacyShape) {
+      await db.$executeRawUnsafe(
+        `ALTER TABLE "task" ENABLE TRIGGER "task_verification_verdict_atomic_insert"`);
+    }
   });
   const run = shape.run === undefined ? {} : shape.run;
   if (run) {

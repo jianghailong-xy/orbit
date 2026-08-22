@@ -159,7 +159,13 @@ export interface PlannedTaskAggregation {
   reason: TaskAggregationReason;
   evidence: {
     children: { total: number; done: number; cancelled: number; outstanding: number };
-    verifications: { total: number; passed: number; outstanding: number };
+    verifications: {
+      total: number;
+      passed: number;
+      outstanding: number;
+      /** Of `outstanding`, how many are DONE with no verdict — finished, and never concluding. */
+      unconcludable: number;
+    };
   };
 }
 
@@ -184,6 +190,16 @@ export interface PlannedTaskAggregation {
 export type TaskCompletionGapReason =
   | 'NO_CHILD_CAN_COMPLETE'
   | 'NO_VERIFICATION_FILED'
+  /**
+   * `[K5]` / `[H0V2]`: every check that is left FINISHED without concluding anything.
+   *
+   * Split out of `NO_VERIFICATION_FILED` rather than folded into it, although both mean "no check
+   * can conclude this". The two send a reader to different places and admit different answers: a
+   * subject with no check needs one FILED, which §13.2 V8 can do by itself, and a subject whose
+   * check ran and recorded nothing needs somebody to find out WHY before another one is filed —
+   * filing automatically here would mint one more check per pass, each able to end the same way.
+   */
+  | 'VERIFICATION_CANNOT_CONCLUDE'
   | 'SUCCESSOR_OUTSIDE_SUBTREE';
 
 /**
@@ -214,7 +230,13 @@ export interface TaskCompletionGap {
       /** Outstanding AND retired: counted as unfinished, and unfinishable where they now sit. */
       unresolvable: number;
     };
-    verifications: { total: number; passed: number; outstanding: number };
+    verifications: {
+      total: number;
+      passed: number;
+      outstanding: number;
+      /** Of `outstanding`, how many are DONE with no verdict — finished, and never concluding. */
+      unconcludable: number;
+    };
   };
 }
 
@@ -489,6 +511,17 @@ function recompute(
   // to give a replaced attempt a subtask is a request addressed to no one.
   if (obsolete.has(task.id)) return NOTHING;
   if (task.completionPolicy === 'MANUAL') return NOTHING;
+  // `[K5]`: aggregation may not COMPLETE a check that has concluded nothing.
+  //
+  // §13.2 V1 gives a check two carriers — its terminal status and its structured result — and
+  // aggregation can supply only the first. Writing DONE here would mint precisely the shape
+  // `[H0V2]` found and migration 0135 refuses (`VERDICT_REQUIRED_WITH_DONE`), and it would do it
+  // from the one writer no person is behind: the roll-up would be "finished" and the epoch it
+  // belongs to would still be shut, for ever. Reopening it (AG3) stays allowed — that direction
+  // never claims a conclusion — so a check dragged back to OPEN by a reopened child still works.
+  if (task.verifiesTaskId != null && task.verdict == null && task.status !== 'DONE') {
+    return NOTHING;
+  }
   // AG4. A policy on a childless task is inert, and stays inert rather than becoming inert-until-
   // someone-adds-a-child: nothing here writes when there is nothing to aggregate over. It is not a
   // gap either — AG6 does not refuse to dispatch it, so an ordinary leaf is exactly what it is.
@@ -564,6 +597,10 @@ function recompute(
 
   let passed = 0;
   let verificationsOutstanding = 0;
+  // `[K5]`: of the outstanding ones, those that have STOPPED without an answer. A DONE row is never
+  // dispatched again, so no run will ever give this check a verdict — it is outstanding in the same
+  // arithmetic as an unfinished one and in none of the ways that matter.
+  let verificationsUnconcludable = 0;
   for (const verifier of verifierTasks) {
     // A retired check is neither a pass nor an outstanding one: the re-run that replaced it is
     // itself pointed at this subject and is counted on its own row. Leaving it outstanding would
@@ -572,7 +609,10 @@ function recompute(
     const status = effective.get(verifier.id) ?? verifier.status;
     if (!verificationIsLive({ status, retired: obsolete.has(verifier.id) })) continue;
     if (status === 'DONE' && verifier.verdict === 'PASS') passed += 1;
-    else verificationsOutstanding += 1;
+    else {
+      verificationsOutstanding += 1;
+      if (status === 'DONE' && verifier.verdict == null) verificationsUnconcludable += 1;
+    }
   }
   // Same shape as AG4 and for the same reason: "every one of zero verifications passed" is true and
   // means nothing, so VERIFICATION_PASSED with nothing pointed at this task never completes it.
@@ -588,6 +628,7 @@ function recompute(
       total: verifierTasks.length,
       passed,
       outstanding: verificationsOutstanding,
+      unconcludable: verificationsUnconcludable,
     },
   };
 
@@ -627,6 +668,7 @@ function recompute(
       childrenSettled,
       passed,
       verificationsOutstanding,
+      verificationsUnconcludable,
     })
     : null;
   const gap: TaskCompletionGap | null = reason === null
@@ -682,6 +724,7 @@ function gapReason(counts: {
   childrenSettled: boolean;
   passed: number;
   verificationsOutstanding: number;
+  verificationsUnconcludable: number;
 }): TaskCompletionGapReason | null {
   const { policy, done, outstanding, unresolvable, childrenSettled } = counts;
   // Every child settled and not one of them finished. AG1's forward clause needs `done > 0`, and
@@ -697,6 +740,18 @@ function gapReason(counts: {
   if (policy === 'VERIFICATION_PASSED' && childrenSettled
       && counts.passed === 0 && counts.verificationsOutstanding === 0) {
     return 'NO_VERIFICATION_FILED';
+  }
+  // `[K5]` / `[H0V2]`'s residue, and the sentence one line up was wrong about. "A FAIL or an
+  // unfinished check counts as outstanding, and that is an ordinary wait" is true of a FAIL — §13.2
+  // raises its own condition row — and true of an unfinished check, which is still running. It is
+  // false of a check that reached DONE and recorded nothing: that row will never move again, and
+  // reading it as a wait is what left this shape with no write, no gap, no condition, and one WARN
+  // every sixty seconds. One live check is enough to make it an ordinary wait again, which is why
+  // this asks that EVERY outstanding one has stopped.
+  if (policy === 'VERIFICATION_PASSED' && childrenSettled && counts.passed === 0
+      && counts.verificationsOutstanding > 0
+      && counts.verificationsOutstanding === counts.verificationsUnconcludable) {
+    return 'VERIFICATION_CANNOT_CONCLUDE';
   }
   return null;
 }
