@@ -660,6 +660,39 @@ export class ProjectAcceptanceService {
         },
       );
     }
+    // Unit L2's epoch (migration 0150). `superseded_at` says the same thing along the paths that
+    // remember to write it — `ProjectsService.update`'s DONE → OPEN branch, and 0127's fact-change
+    // reopen — and says nothing along the ones that do not: a DONE → CANCELLED → OPEN route (that
+    // branch tests `status = DONE`), a raw UPDATE, or a binary that predates the column. The epoch
+    // is advanced by the database on every reopen whoever performs it, so this comparison holds
+    // where the flag does not.
+    //
+    // Checked BEFORE the digest because it is the more specific answer AND the one the digest
+    // cannot give: a reopen on its own moves none of the four projections, so a project reopened
+    // and left otherwise untouched has a PASS whose digest still matches perfectly.
+    //
+    // `ACCEPTANCE_EVIDENCE_STALE` rather than a new code: PAC §12 E2 forbids a synonym, and "your
+    // evidence is about a world that is no longer this one" is what that code already means. The
+    // run itself is not touched — a historical conclusion stops being current by being read, not
+    // by being rewritten (§13.4's audit is append-only).
+    const { acceptanceEpoch } = await tx.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { acceptanceEpoch: true },
+    });
+    if (live.acceptanceEpoch !== acceptanceEpoch) {
+      throw new AcceptanceRefusal(
+        ACCEPTANCE_EVIDENCE_STALE,
+        `acceptance run ${uuidToBase62(live.id)} passed in acceptance epoch ` +
+          `${live.acceptanceEpoch}, and this project is now in epoch ${acceptanceEpoch} — it was ` +
+          'reopened after that run, so what it concluded is history rather than a claim about now',
+        {
+          requiredAction: 'run acceptance again in the current epoch',
+          runId: live.id,
+          evidenceEpoch: String(live.acceptanceEpoch),
+          acceptanceEpoch: String(acceptanceEpoch),
+        },
+      );
+    }
     if (live.inputDigest !== digest) {
       throw new AcceptanceRefusal(
         ACCEPTANCE_EVIDENCE_STALE,
@@ -689,7 +722,7 @@ export class ProjectAcceptanceService {
   }
 
   static runRow(run: {
-    id: string; projectId: string; attempt: bigint; criteriaSnapshot: string;
+    id: string; projectId: string; attempt: bigint; acceptanceEpoch: bigint; criteriaSnapshot: string;
     criteriaRevision: string; inputDigest: string; resultDigest: string | null;
     verdict: ProjectAcceptanceVerdict | null; decidedBy: string;
     coordinatorAgentId: string | null; coordinatorSessionId: string | null;
@@ -706,6 +739,10 @@ export class ProjectAcceptanceService {
       id: run.id,
       projectId: run.projectId,
       attempt: String(run.attempt),
+      // Which acceptance this run belongs to (migration 0150). String, like `attempt` beside it:
+      // a BigInt has no JSON spelling, and a reader comparing it against the project's own epoch
+      // needs the two rendered the same way.
+      acceptanceEpoch: String(run.acceptanceEpoch),
       verdict: run.verdict,
       decidedBy: run.decidedBy,
       criteriaSnapshot: run.criteriaSnapshot,

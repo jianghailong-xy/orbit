@@ -122,6 +122,16 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'acceptedRunId',
   'evidenceTaskId',
   'evidenceSessionId',
+  // Unit L2's provenance columns on `task` (migration 0150): where a piece of work was NOTICED, as
+  // distinct from `projectId`, which says whose goal it counts towards. Addresses a reader follows
+  // — "show me the project that filed this", "open the session it came out of" — so they are
+  // rendered the way every other address is. `sourceTaskId` is already above; it is the same name
+  // the dependency graph uses for the same kind of thing, which is why L1 chose it.
+  //
+  // Being a public id says nothing about authority. They are evidence and no gate reads them
+  // (contract §3 SC7); what puts them here is that a person handed one has somewhere to hand it.
+  'discoveredFromProjectId',
+  'sourceSessionId',
   'parentTaskId',
   'batchId',
   'listId',

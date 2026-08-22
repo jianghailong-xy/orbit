@@ -1041,6 +1041,11 @@ model Session {
   inboxLeaseGenerations InboxLeaseGeneration[]
   // Tasks an agent created from within this session (cf. Task.creatorSession).
   createdTasks          Task[]                 @relation("TaskCreatorSession")
+  // Tasks that record this session as where the work was NOTICED (migration 0150). Overlaps
+  // `createdTasks` today and is not the same claim: that one says who authored the row, this one
+  // says where the work came from, and the two part company the moment anything files on behalf
+  // of something else.
+  discoveredTasks       Task[]                 @relation("TaskDiscoverySession")
   taskListRevisions     TaskListRevision[]     @relation("TaskListRevisionAuthorSession")
   consoleForLists       TaskList[]             @relation("TaskListConsole")
   // At most one, enforced by the unique index behind Project.coordinatorSessionId.
@@ -1521,6 +1526,23 @@ model Project {
   /// declares it `ON DELETE SET NULL`.
   acceptedRunId String? @map("accepted_run_id") @db.Uuid
 
+  /// Which acceptance this project is on (unit L2, migration 0150). Monotonic, never reused, and
+  /// advanced by exactly one every time the project is REOPENED — a settled status (DONE or
+  /// CANCELLED) moving back to OPEN.
+  ///
+  /// It answers the one question `project_runtime.acceptance_attempt` cannot: that counter moves
+  /// when acceptance is re-RUN and stands still when the project is reopened, which is the opposite
+  /// way round. A run records the epoch it was opened in, so "is this PASS the current one" is an
+  /// integer comparison the DONE gate makes — and a historical PASS stops being current by being
+  /// READ, not by being rewritten. That matters: `superseded_at` says the same thing along the one
+  /// service path that remembers to write it, and says nothing at all when a project is reopened by
+  /// a raw UPDATE, by a DONE → CANCELLED → OPEN route, or by a binary that predates this column.
+  ///
+  /// Maintained ENTIRELY by the database (`project_acceptance_advance_epoch`), which is what makes
+  /// the previous sentence true for writers that have never heard of it. No service writes it; a
+  /// value sent for this column is overwritten with the one the transition implies.
+  acceptanceEpoch BigInt @default(0) @map("acceptance_epoch")
+
   /// When this project was marked as carrying a DONE that predates native acceptance (§13.5 LG1).
   /// Migration 0127 stamps every project that was already DONE, which is what keeps AC11's promise
   /// here: an old DONE is not reopened, not invalidated and not silently re-labelled as evidence —
@@ -1528,6 +1550,10 @@ model Project {
   legacyAcceptedAt DateTime? @map("legacy_accepted_at")
 
   tasks   Task[]
+  /// Tasks this project's coordination scope NOTICED but does not necessarily own. Evidence, not
+  /// membership: `tasks` is the project's work, this is a list of writes that named it as where
+  /// they came from. Nothing that decides anything reads it (contract §3 SC7).
+  discoveredTasks Task[] @relation("TaskDiscoveredFrom")
   members ProjectMember[]
   runtime ProjectRuntime?
   events  ProjectEvent[]
@@ -1918,6 +1944,13 @@ model ProjectAcceptanceRun {
   /// reused, which is what makes `(projectId, attempt)` a permanent name for one attempt.
   attempt BigInt
 
+  /// The project's `acceptanceEpoch` when this run was opened (migration 0150), stamped by the
+  /// database rather than by whoever opened it — so a run opened by a binary that does not know the
+  /// column exists still lands in the epoch that is actually current, instead of fail-closing at 0.
+  /// Frozen for the life of the row, concluded or not: it is not a conclusion, it is the identity
+  /// of the world the conclusion is about.
+  acceptanceEpoch BigInt @default(0) @map("acceptance_epoch")
+
   /// The criteria this run actually judged, frozen at open: the raw text plus its sha256. A run is
   /// evidence about a stated condition, and a condition that can be edited afterwards is not one.
   criteriaSnapshot String  @map("criteria_snapshot")
@@ -1970,6 +2003,9 @@ model ProjectAcceptanceRun {
 
   @@unique([projectId, attempt])
   @@index([projectId, createdAt])
+  /// "Which epoch's evidence does this project have" — the read the DONE gate and the acceptance
+  /// face both make once a project has been reopened at least once.
+  @@index([projectId, acceptanceEpoch], map: "project_acceptance_run_epoch_idx")
   @@map("project_acceptance_run")
 }
 
@@ -2269,6 +2305,40 @@ model Task {
   /// past the check.
   projectId        String?     @map("project_id") @db.Uuid
   project          Project?    @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  /// Where this work was NOTICED, as opposed to which goal it counts towards (unit L2, migration
+  /// 0150; contract §2 and §3 SC7). Four columns, and none of them authority.
+  ///
+  /// The distinction is the whole unit. `projectId` above is the ONLY column that says whose goal
+  /// this task is work towards — scheduling, acceptance, liveness and concurrency read it and
+  /// nothing else. These four say where the write came from, so that a coordinator filing work into
+  /// a project it does not coordinate leaves a row that can be COMPARED rather than reconstructed
+  /// from session transcripts. The day a gate reads `discoveredFromProjectId` to decide anything,
+  /// "I found this" has quietly become "I may write here" — which is the incident, with paperwork.
+  ///
+  /// The referential actions are where that is stated in a language every writer meets: `projectId`
+  /// is Restrict (a project that OWNS work cannot be deleted), these are SetNull (a project, task
+  /// or session work was merely noticed in can be, and what survives is the absence). Written once,
+  /// at creation, and frozen afterwards by `task_provenance_immutable_guard` — the single exception
+  /// being the SetNull itself, which arrives as an UPDATE from the referenced row's delete.
+  ///
+  /// A handoff that moves `projectId` (unit L4) leaves all four untouched: where the work was
+  /// noticed did not change when it changed hands.
+  discoveredFromProjectId String?  @map("discovered_from_project_id") @db.Uuid
+  discoveredFromProject   Project? @relation("TaskDiscoveredFrom", fields: [discoveredFromProjectId], references: [id], onDelete: SetNull)
+  /// WHICH fact prompted the write, in the free-text vocabulary `project_acceptance_reopen(p_fact)`
+  /// already speaks — 'task.verdict_failed', 'merge_evidence', 'user.project_edited'. Deliberately
+  /// not an enum: L1 froze the column names and left the vocabulary open, and a closed set here
+  /// would need a migration for every new trigger, which is how a column stops being written.
+  triggerEvent            String?  @map("trigger_event")
+  /// The task being executed when this work was noticed, and the session it was noticed in.
+  /// Distinct from `creatorSessionId`, which is a fact about who authored the row; these are facts
+  /// about where the WORK came from, and the two differ the moment anything files on behalf of
+  /// something else.
+  sourceTaskId            String?  @map("source_task_id") @db.Uuid
+  sourceTask              Task?    @relation("TaskDiscoverySource", fields: [sourceTaskId], references: [id], onDelete: SetNull)
+  discovered              Task[]   @relation("TaskDiscoverySource")
+  sourceSessionId         String?  @map("source_session_id") @db.Uuid
+  sourceSession           Session? @relation("TaskDiscoverySession", fields: [sourceSessionId], references: [id], onDelete: SetNull)
   /// The task this one is a part of. Decomposition, not ordering: `TaskDependency` already says
   /// "B waits for A", and that is a different claim from "B is part of A" — a subtask can be
   /// unblocked and still belong to its parent, and a prerequisite can be finished work nobody
@@ -2482,6 +2552,14 @@ model Task {
   /// actually running, backward by the acyclicity trigger and by every list that wants to show a
   /// live task's abandoned predecessors.
   @@index([supersededByTaskId])
+  /// The provenance columns' lookup indexes, and the referencing side of their three foreign keys —
+  /// without them every project, task or session delete scans `task` to find the rows its SET NULL
+  /// applies to. All three are created PARTIAL (`WHERE ... IS NOT NULL`, migration 0150), which
+  /// this schema cannot spell, exactly as 0108's and 0110's are: the tasks with no provenance are
+  /// most of the table and belong in none of them.
+  @@index([discoveredFromProjectId], map: "task_discovered_from_project_idx")
+  @@index([sourceTaskId], map: "task_source_task_idx")
+  @@index([sourceSessionId], map: "task_source_session_idx")
   @@map("task")
 }
 

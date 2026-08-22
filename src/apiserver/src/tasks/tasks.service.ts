@@ -120,6 +120,22 @@ import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
 
+/**
+ * What the session a task is being filed FROM says about where the work was noticed — the four
+ * provenance columns of migration 0150, resolved server-side and never from a request body.
+ *
+ * `sessionId` is the session itself (also written to `creatorSessionId`, which is a different
+ * claim: who authored the row, not where the work came from). The other three are the scope the
+ * write happened under. All of them are evidence: no gate, dispatcher or acceptance read consults
+ * them, and the scope contract states that as an invariant (§3 SC7).
+ */
+export type CreationOrigin = {
+  sessionId: string;
+  discoveredFromProjectId: string | null;
+  triggerEvent: string;
+  sourceTaskId: string | null;
+};
+
 /** What runWorkspaceOnTask needs off a task to dispatch it: its identity, and the provider/model
  *  pin that overrides the assignee workspace's own (null on both = inherit from the workspace). */
 type TaskRunTarget = {
@@ -1869,7 +1885,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Link to the originating session only when it's one this owner has (the runner
     // injects its own session id, so this is a guard, not a trust boundary). A stale id
     // would otherwise fail the FK insert.
-    const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
+    const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
+    const sessionId = origin?.sessionId;
     // Best-effort idempotency: a redelivered turn re-runs and re-creates the same tasks. A key is
     // only formed inside a live turn; without one this stays exactly the old create path. Checking
     // first lets the common (sequential) re-run return the original task without a write attempt.
@@ -1897,7 +1914,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       ownerId,
       dto,
       creator,
-      sessionId,
+      origin,
       idempotencyKey,
       await this.pausedListIds(ownerId, [dto.listId]),
     );
@@ -2085,10 +2102,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     dto: CreateTaskDto,
     creator: Creator | undefined,
-    sessionId: string | undefined,
+    origin: CreationOrigin | undefined,
     idempotencyKey: string | undefined,
     heldListIds: ReadonlySet<string>,
   ): Prisma.TaskUncheckedCreateInput {
+    const sessionId = origin?.sessionId;
     return {
       dispatchHold: !!dto.listId && heldListIds.has(dto.listId),
       title: dto.title,
@@ -2119,6 +2137,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Omitted leaves the column default, MANUAL — the behaviour every task created before
       // migration 0123 has, and the one that never completes anything on its own.
       completionPolicy: dto.completionPolicy,
+      // Where this work was NOTICED (unit L2, migration 0150) — evidence beside `projectId`, never
+      // instead of it. Written here and nowhere else: the columns are frozen against UPDATE by
+      // `task_provenance_immutable_guard`, so this insert is the only moment they can be set, and
+      // the values come from the session rather than from the request (see `resolveOwnedSession`).
+      //
+      // A create outside any session leaves all four out of the INSERT entirely. That is the user
+      // API, and the user is the one principal the scope contract exempts (§4 R1): there is no
+      // scope to compare theirs against, so recording one would be recording a fiction. A session
+      // that HAS no scope writes an explicit null instead — both are NULL at rest, and the
+      // difference is only in what the statement claims to know.
+      discoveredFromProjectId: origin?.discoveredFromProjectId,
+      triggerEvent: origin?.triggerEvent,
+      sourceTaskId: origin?.sourceTaskId,
+      sourceSessionId: sessionId,
     };
   }
 
@@ -2426,7 +2458,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     creatorSessionId?: string,
   ) {
     const items = await this.assertBatchValid(ownerId, dto);
-    const sessionId = await this.resolveOwnedSession(ownerId, creatorSessionId);
+    const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
+    const sessionId = origin?.sessionId;
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
     // create collapses a re-run of a batch, item by item, without merging distinct items.
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
@@ -2531,7 +2564,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               ownerId,
               row,
               creator,
-              sessionId,
+              origin,
               idempotencyKey,
               heldListIds,
             ),
@@ -2655,14 +2688,51 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return created;
   }
 
-  /** Return the session id only if it exists under this owner; otherwise undefined. */
-  private async resolveOwnedSession(ownerId: string, sessionId?: string): Promise<string | undefined> {
+  /**
+   * The originating session, if it exists under this owner, and what it says about where the work
+   * being filed was NOTICED (unit L2, contract §2).
+   *
+   * One query, not two: the same row that answers "is this session yours" also carries the task it
+   * was executing and the project it coordinates, and those are precisely the provenance columns.
+   * Splitting it would add a round trip to every in-session create for facts already in hand.
+   *
+   * Everything here is SERVER-DERIVED, and that is the whole value of it. The incident these
+   * columns exist for is a coordinator session filing work into a project it does not coordinate;
+   * a `discoveredFromProjectId` the caller supplied would simply have said the target project, and
+   * the row would be as indistinguishable from a deliberate one as it is today. Nothing in the
+   * request can reach these columns.
+   */
+  private async resolveOwnedSession(
+    ownerId: string,
+    sessionId?: string,
+  ): Promise<CreationOrigin | undefined> {
     if (!sessionId) return undefined;
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { id: true },
+      select: {
+        id: true,
+        taskId: true,
+        task: { select: { projectId: true } },
+        coordinatorForProject: { select: { id: true } },
+      },
     });
-    return session?.id;
+    if (!session) return undefined;
+    return {
+      sessionId: session.id,
+      sourceTaskId: session.taskId,
+      // The scope the writer was acting under, in the order the contract derives it: the project
+      // this session coordinates, or failing that the project of the task it is executing. A
+      // session that is neither leaves it null rather than guessing — "I could not tell" and "it
+      // came from nowhere" are the same fact here, and inventing one would be the beginning of
+      // reading this column as authority.
+      discoveredFromProjectId:
+        session.coordinatorForProject?.id ?? session.task?.projectId ?? null,
+      triggerEvent: session.coordinatorForProject
+        ? 'coordinator.session_filed'
+        : session.taskId
+          ? 'task.session_filed'
+          : 'agent.session_filed',
+    };
   }
 
   /**
