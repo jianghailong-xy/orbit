@@ -269,6 +269,15 @@ function producedNothingBeforeFailing(
   return status === RunStatus.FAILED && numTurns === 0 && !dto.changedFiles?.length;
 }
 
+/**
+ * Whether a running-set survived a batch unchanged — the test that keeps an ordinary tool_result
+ * out of the Session write. Order matters: these arrays are append-on-launch, so a set that has
+ * the same members in a different order is a set the batch reordered and has to be stored.
+ */
+function sameIds(next: readonly string[], stored: readonly string[]): boolean {
+  return next.length === stored.length && next.every((v, i) => v === stored[i]);
+}
+
 @MachineProtocol()
 @Controller('runner')
 export class RunnerApiController {
@@ -2253,6 +2262,7 @@ export class RunnerApiController {
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
+      let clearsMergedState = false;
       if (dto.branchMerged === false && current.mergeStatus === 'merged') {
         if (current.mergedSourceSha && (!dto.branchSha || current.mergedSourceSha === dto.branchSha)) {
           // A rebase merge can produce a different patch-id from its source commit when it
@@ -2262,30 +2272,35 @@ export class RunnerApiController {
           // so it must not erase an exact marker captured by the successful merge.
           branchMerged = true;
         } else {
-          const mergedSourceSha = current.mergedSourceSha ?? null;
-          await tx.session.updateMany({
-            where: {
-              id: sessionId,
-              assignedRunnerId: runner.id,
-              mergeStatus: 'merged',
-              mergedSourceSha,
-            },
-            data: {
-              mergeStatus: null,
-              mergeOperationId: null,
-              mergeOperationOwner: null,
-              mergeError: null,
-              mergedSourceSha: null,
-            },
-          });
+          // Recorded, not written yet. This transaction gets one write of the Session row
+          // (common/lock-order.ts, I3): a second one re-runs every Session foreign key and takes
+          // FOR KEY SHARE on `user`, `workspace`, `runner` and `task` while holding the Session
+          // FOR UPDATE — the reverse of the order a Task write takes them in. The CAS this used
+          // to carry (`mergeStatus = 'merged'` at this exact `mergedSourceSha`, for this runner)
+          // is the state just read under that lock and cannot move underneath it, so evaluating
+          // it here is the same test.
+          clearsMergedState = true;
         }
       }
-      // Idempotent ack: only the first turn-complete for this turn applies.
+      const CLEARED_MERGE_STATE = {
+        mergeStatus: null,
+        mergeOperationId: null,
+        mergeOperationOwner: null,
+        mergeError: null,
+        mergedSourceSha: null,
+      } as const;
+      // Idempotent ack: only the first turn-complete for this turn applies. A duplicate
+      // completion still clears the stale merge state — that was true before this was folded
+      // into one write, and it is the reason the clear cannot simply ride along with the park
+      // below. Nothing has written the Session row on this path, so this IS the one write.
       const ack = await tx.conversationTurn.updateMany({
         where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
+        if (clearsMergedState) {
+          await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
+        }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
@@ -2364,9 +2379,17 @@ export class RunnerApiController {
           sumOutputTokens: { increment: usage?.output_tokens ?? 0 },
           sumCacheRead: { increment: usage?.cache_read_input_tokens ?? 0 },
           sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
+          // Folded into the park so the row is written once (I3). The park is conditional, so
+          // the branch below covers the case where it matched nothing.
+          ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
         },
       });
       if (parked.count === 0) {
+        // Nothing was written above — an UPDATE that matches no row leaves the tuple, and its
+        // xmin, exactly as it was — so this is still this transaction's first Session write.
+        if (clearsMergedState) {
+          await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
+        }
         const latest = await tx.session.findUnique({
           where: { id: sessionId },
           select: { status: true },
@@ -2498,7 +2521,16 @@ export class RunnerApiController {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
-        select: { status: true, runtimeSessionId: true },
+        select: {
+          status: true,
+          runtimeSessionId: true,
+          // Read under the row lock so the three conditional writes this transaction used to
+          // issue as separate guarded statements can be decided here instead. Nothing can move
+          // them between this read and the single write below: the row is held FOR UPDATE.
+          cancelRequestedAt: true,
+          runningBgShells: true,
+          runningSubagents: true,
+        },
       });
       // The owner fence alone is insufficient when the same runner process
       // survives a control-plane terminal transition. Reject before every event-
@@ -2507,6 +2539,17 @@ export class RunnerApiController {
       if (!OPEN.includes(session.status)) {
         throw new ConflictException('session is no longer open');
       }
+      // ONE write of this Session row, accumulated here and issued once at the end
+      // (common/lock-order.ts, I3). It used to be up to eight — a telemetry write, a runtime-id
+      // fill, the preview denormalisation and one per background/sub-agent id — and every write
+      // after the first re-ran EVERY Session foreign key, because PostgreSQL only skips the
+      // re-check when the row it is replacing was not written by the current transaction. Those
+      // re-checks took FOR KEY SHARE on `user`, `workspace`, `runner` and `task` while this
+      // transaction held the Session FOR UPDATE, which is the exact reverse of the order a Task
+      // write takes them in, and it is the third edge of the 2026-08-21 05:47:43 cycle. Written
+      // once, this transaction's lock set is the Session row and its own child rows, and nothing
+      // else. `lock-order.pg.spec.ts` reads those four locks out of pg_locks to keep it that way.
+      const sessionData: Prisma.SessionUpdateInput = {};
       if (durable.length > 0) {
         await tx.runEvent.createMany({
           data: durable.map((e) => ({
@@ -2524,15 +2567,10 @@ export class RunnerApiController {
         // and counting that handshake would move every waiting session to "now" and scramble the
         // recency sort. OPEN deliberately includes PENDING because a buffered tail from the prior
         // turn may arrive after a concurrent send moved AWAITING_INPUT -> PENDING.
-        if (hasSessionActivity(durable)) {
-          await tx.session.updateMany({
-            where: {
-              id: sessionId,
-              cancelRequestedAt: null,
-              status: { in: OPEN },
-            },
-            data: { lastTurnAt: new Date() },
-          });
+        // `status IN (OPEN)` was the other half of this write's old WHERE clause; it is the
+        // condition already asserted above off the same locked read.
+        if (hasSessionActivity(durable) && session.cancelRequestedAt == null) {
+          sessionData.lastTurnAt = new Date();
         }
       }
 
@@ -2545,12 +2583,7 @@ export class RunnerApiController {
       // stable per session), so this is a one-shot, retry-idempotent write.
       if (!session.runtimeSessionId) {
         const runtimeId = runtimeInitSessionId(durable);
-        if (runtimeId) {
-          await tx.session.updateMany({
-            where: { id: sessionId, runtimeSessionId: null },
-            data: { runtimeSessionId: runtimeId },
-          });
-        }
+        if (runtimeId) sessionData.runtimeSessionId = runtimeId;
       }
 
       // Denormalize the latest assistant reply onto the session for the list's preview
@@ -2637,22 +2670,17 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
-      if (lastAssistant || frontier || context || engineTurnActive !== undefined) {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: {
-            ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
-            ...(frontier ? { lastToolUse: frontier.tool } : {}),
-            ...(context ? { contextTokens: context.tokens } : {}),
-            ...(context?.window ? { contextWindow: context.window } : {}),
-            ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
-            // undefined = nothing in this batch either asked or answered; keep the stored
-            // message rather than writing null over it.
-            ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),
-            ...retry,
-          },
-        });
-      }
+      Object.assign(sessionData, {
+        ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
+        ...(frontier ? { lastToolUse: frontier.tool } : {}),
+        ...(context ? { contextTokens: context.tokens } : {}),
+        ...(context?.window ? { contextWindow: context.window } : {}),
+        ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        // undefined = nothing in this batch either asked or answered; keep the stored
+        // message rather than writing null over it.
+        ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),
+        ...retry,
+      });
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
       if (toolUses.length > 0) {
@@ -2774,33 +2802,34 @@ export class RunnerApiController {
           e.type === RunEventType.SYSTEM &&
           String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
       );
-      if (bgReset) {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: { runningBgShells: [], runningSubagents: [] },
-        });
-      }
-      for (const id of bgStarted) {
-        await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_append(array_remove("running_bg_shells", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
-      }
-      for (const id of subStarted) {
-        await tx.$executeRaw`UPDATE "session" SET "running_subagents" = array_append(array_remove("running_subagents", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
-      }
+      // The two running sets, folded in the order the separate statements used to apply them:
+      // reset, then the launches, then the terminal notifications, then the synchronous
+      // sub-workspace completions. Computed from the values read under the row lock rather than
+      // from the row itself, because this transaction gets exactly one write of it (I3) — and set
+      // semantics make that identical to the sequence of `array_append`/`array_remove` it
+      // replaces, including under an event-batch retry, which replays the same ids onto the same
+      // starting state.
+      let shells = bgReset ? [] : [...session.runningBgShells];
+      let subagents = bgReset ? [] : [...session.runningSubagents];
+      for (const id of bgStarted) shells = [...shells.filter((v) => v !== id), id];
+      for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
-      // array_remove is a no-op on the set that doesn't hold it, so clear from both.
+      // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {
-        await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_remove("running_bg_shells", ${id}), "running_subagents" = array_remove("running_subagents", ${id}) WHERE "id" = ${sessionId}::uuid`;
+        shells = shells.filter((v) => v !== id);
+        subagents = subagents.filter((v) => v !== id);
       }
-      // Clear synchronously-completed sub-workspaces in one guarded write. The `&&` overlap check means
-      // ordinary (non-sub-workspace) tool_results — the vast majority — match no rows and never rewrite
-      // the hot session row.
       if (subEnded.length > 0) {
-        await tx.$executeRaw`
-        UPDATE "session"
-        SET "running_subagents" = ARRAY(
-          SELECT unnest("running_subagents") EXCEPT SELECT unnest(${subEnded}::text[])
-        )
-        WHERE "id" = ${sessionId}::uuid AND "running_subagents" && ${subEnded}::text[]`;
+        const done = new Set(subEnded);
+        subagents = subagents.filter((v) => !done.has(v));
+      }
+      // Only when they actually moved, so an ordinary tool_result — the vast majority — does not
+      // put the hot Session row into this write at all.
+      if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
+      if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
+
+      if (Object.keys(sessionData).length > 0) {
+        await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
       return session;
     });
