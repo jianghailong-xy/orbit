@@ -10,6 +10,7 @@
 #   scripts/deadlock-barrier.sh session-scope  # the 0133 Session event-source scope regression
 #   scripts/deadlock-barrier.sh lock-order     # the canonical lock order, from both arrival orders
 #   scripts/deadlock-barrier.sh dependency-revision  # the 0132 dispatch boundary, both commit orders
+#   scripts/deadlock-barrier.sh reorder        # the reversed sidebar reorder, control and fix
 #   scripts/deadlock-barrier.sh all            # every gate above, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
 #
@@ -44,8 +45,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|all) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|all] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|reorder|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|dependency-revision|reorder|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -91,7 +92,7 @@ URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
 case "$TARGET" in
   # session-scope runs LAST because it rebuilds the pre-0133 trigger mid-test: an interrupted
   # run must never be able to leave a baseline executing against a schema it did not intend.
-  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry dependency-revision session-scope) ;;
+  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry reorder dependency-revision session-scope) ;;
   *)   TARGETS=("$TARGET") ;;
 esac
 
@@ -119,6 +120,11 @@ run_target() {
     # Like session-scope it rebuilds schema (the rollback case), so it does not run beside them.
     dependency-revision)
       CMD=("$NODE" --test --test-concurrency=1 build/deadlock/dependency-revision.pg.spec.js) ;;
+    # The multi-row write whose lock order the CALLER chooses. It runs its own control first — the
+    # pre-fix statement sequence, asserted to still deadlock — so a green ordered case cannot mean
+    # "the two transactions never met". Its rows are its own owner's, so it does not disturb the
+    # baselines and does not rebuild any schema.
+    reorder)     CMD=("$NODE" --test --test-concurrency=1 build/deadlock/reorder.pg.spec.js) ;;
   esac
   echo "==> $1"
   ( cd "$API" && COORDINATOR_PG_URL="$URL" \
