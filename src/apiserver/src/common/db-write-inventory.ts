@@ -1,0 +1,1004 @@
+/**
+ * Every place the API server writes to PostgreSQL, and what each one does about a database
+ * conflict.
+ *
+ * WHY A LIST AND NOT A RULE
+ * -------------------------
+ * "Retry a transaction the server threw away" is one sentence, and it is not enough on its own:
+ * whether re-running a unit of work is CORRECT depends on what else that unit did, what identity
+ * makes a re-run the same request rather than a second one, and whether anything outside the
+ * database was already told the first attempt happened. Those answers cannot be derived from the
+ * code's shape — they have to be stated. So they are stated here, once per write, and
+ * `db-write-inventory.spec.ts` re-scans the tree and fails when a write appears, moves or vanishes
+ * without its entry moving with it. A new `$transaction` cannot be merged without saying what it
+ * does about 40P01; a new autocommit statement cannot be merged without naming which of the five
+ * classes below it belongs to.
+ *
+ * THE THREE SHAPES
+ * ----------------
+ *  - **A unit of work** (`TRANSACTION_UNITS`) owns a transaction. This is where the retry decision
+ *    lives, because a transaction is the only thing that can be re-run: PostgreSQL aborts a
+ *    deadlock victim whole, so nothing it wrote is visible and nothing it read can be trusted.
+ *  - **A participant** (`TRANSACTION_PARTICIPANTS`) writes only through a transaction client its
+ *    caller hands it. It has no boundary of its own, so it has no retry decision of its own — it
+ *    is re-run when its owner is, and its lock order is its owner's.
+ *  - **A statement** (`STATEMENT_UNITS`) runs outside any transaction. PostgreSQL wraps each one
+ *    in an implicit transaction of exactly one statement, so there is no closure to re-run and no
+ *    unit of work to re-derive. These are NOT retried, deliberately; the argument is per class in
+ *    `STATEMENT_CLASSES`, and the answer when one of them does lose a conflict is the global
+ *    boundary's typed 503 (`transient-db-conflict.filter.ts`).
+ *
+ * WHAT "RETRIED" BUYS AND WHAT IT COSTS
+ * -------------------------------------
+ * Retrying is not free correctness. A unit is only safe to re-run when everything a second run
+ * must NOT re-derive already sits outside the closure — an idempotency key, a request id, a
+ * validated batch — and everything it MUST re-derive is read inside it, under the locks it takes.
+ * `identity` is the first half of that claim and `replay` is the second. `effects` is the third
+ * thing that decides it: an external action inside a retried closure would happen once per
+ * attempt, which is why every one of them in this codebase sits after the commit, and why the
+ * spec asserts that mechanically rather than trusting this sentence.
+ *
+ * ISOLATION
+ * ---------
+ * The deployment default is READ COMMITTED, so `isolation` is blank except where a unit asks for
+ * something else. The three that ask for REPEATABLE READ are the ones that can take a 40001 at all
+ * — under READ COMMITTED the only transient conflict PostgreSQL produces here is 40P01.
+ */
+
+/** How a write reaches the database. */
+export type WriteShape =
+  /** Owns a transaction, run through `withTransactionRetry`. */
+  | 'TX_RETRIED'
+  /** Owns a transaction and is deliberately NOT retried — `why` says so. */
+  | 'TX_BARE'
+  /** Writes only through a transaction client its caller owns. */
+  | 'INHERITED'
+  /** One or more statements, each its own implicit transaction. */
+  | 'AUTOCOMMIT';
+
+export interface TransactionUnit {
+  /** `<path under src/apiserver/src>#<method>`. */
+  at: string;
+  shape: 'TX_RETRIED' | 'TX_BARE';
+  /**
+   * The locks it takes, in the order it takes them, counting the ones no statement spells:
+   * foreign-key re-checks and trigger-taken rows (`common/lock-order.ts`,
+   * `docs/postgres-lock-order.md`).
+   */
+  locks: string;
+  /** What makes a re-run the same unit of work rather than a second one. */
+  identity: string;
+  /** Blank for the deployment default, READ COMMITTED. */
+  isolation: string;
+  /** Why re-running the whole closure reaches the same answer. */
+  replay: string;
+  /** Everything outside the database this method does, and where it sits relative to commit. */
+  effects: string;
+  /** What the caller gets when a conflict outlives the attempts. */
+  answer: string;
+}
+
+/**
+ * Every transaction boundary in the API server.
+ *
+ * All of them are retried. That is not a coincidence and not a policy applied without looking: a
+ * transaction boundary in this codebase exists to make several database statements atomic, and
+ * none of them does anything else — the spec proves the "anything else" half by scanning every
+ * closure for an external call. A unit that could not be re-run would appear here as `TX_BARE`
+ * with the reason in `replay`; there is currently none.
+ */
+export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
+  {
+    at: 'projects/project-acceptance.service.ts#openRun',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), then project_runtime / project_acceptance_run / _criterion child rows (rank 60).',
+    identity: 'The project and its open run. A second run cannot be opened while one is open — the locked read decides that, not the caller.',
+    isolation: '',
+    replay: 'The open run, the runtime row and the criteria are all read under the project lock inside the closure, so a re-run opens against the state the winner left. A victim opened nothing.',
+    effects: 'None. The gate result is returned and acted on by the caller after this resolves.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/project-acceptance.service.ts#finalizeRun',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), then project_acceptance_criterion and project_acceptance_run (rank 60).',
+    identity: 'The run id being finalized; the UPDATE is conditional on it still being open.',
+    isolation: '',
+    replay: 'The verdict is recomputed inside the closure from criteria read under the project lock, so a re-run recomputes rather than replaying a verdict derived from a snapshot the server discarded.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/project-acceptance.service.ts#recordMergeEvidence',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), then project_merge_evidence (rank 60).',
+    identity: 'The merge the evidence is about — the row is found-or-created by it, so a re-run writes the same row.',
+    isolation: '',
+    replay: 'Find-or-create under the project lock: idempotent by construction.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/project-acceptance.service.ts#evaluateGate',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40) and the task rows it reads under it (rank 50).',
+    identity: 'None needed — the gate reads and decides; what it writes is the verdict for the run it locked.',
+    isolation: '',
+    replay: 'Everything is read inside the closure under the project lock.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/project-dispatch-pass.service.ts#planOne',
+    shape: 'TX_RETRIED',
+    locks: 'The decision capture reads the project and its tasks; the lease fencing token is compared rather than locked.',
+    identity: '`decisionId`, minted ABOVE the closure. Every attempt writes the same decision and the same dispatch idempotency key rather than minting a second decision for one pass.',
+    isolation: 'REPEATABLE READ',
+    replay: 'The snapshot, the selection and the fencing-token check are re-derived inside. A snapshot invalidated by a concurrent writer is exactly the serialization failure the loop answers.',
+    effects: 'None. The dispatch itself is a later, separate unit.',
+    answer: 'Typed 503 from the global boundary; a lost lease is its own typed refusal and is not retried.',
+  },
+  {
+    at: 'projects/project-events.service.ts#deliverOnce',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE OF p SKIP LOCKED (rank 40), then the project_event rows FOR UPDATE (rank 60), then whatever the handler writes under the same transaction.',
+    identity: 'The event ids claimed by the locked read. A re-run re-claims from the pending set that actually exists.',
+    isolation: 'REPEATABLE READ',
+    replay: 'The handler contract forbids touching anything outside the database inside this transaction — `afterCommit` is where that goes — so a re-run re-reads the pending events and re-runs `handle` against the snapshot that commits.',
+    effects: '`afterCommit`, called by `drainOnce` AFTER this resolves and only for the attempt that committed.',
+    answer: 'Typed 503 to whoever triggered the drain; the events stay pending and the next drain takes them.',
+  },
+  {
+    at: 'projects/project-reconcile.service.ts#acquireLease',
+    shape: 'TX_RETRIED',
+    locks: 'project_runtime FOR NO KEY UPDATE (rank 40 family).',
+    identity: 'The lease holder id, passed in. A re-run competes for the same lease as the same holder.',
+    isolation: '',
+    replay: 'Compare-and-set: an attempt the server discarded took no lease, so a re-run competes from the state that exists.',
+    effects: 'None.',
+    answer: 'Typed 503; the caller treats a missing lease as "somebody else is reconciling".',
+  },
+  {
+    at: 'projects/project-reconcile.service.ts#applyAction',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), project_runtime lease fence, project_action claim/publish (rank 60), plus whatever `effect` writes.',
+    identity: "The action's permanent key. Claim and publish are conditional on it, so a re-run re-claims a key nobody took or finds the winner's.",
+    isolation: '',
+    replay: '`effect` is contractually database-only, and the claim/publish pair is re-read under the project lock inside the closure.',
+    effects: 'None — the API refuses to express one (`effect` is only given a transaction client).',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/project-reconcile.service.ts#repeatableRead',
+    shape: 'TX_RETRIED',
+    locks: "Its caller's — this is the wrapper `applyDecisionActionInTransaction` runs inside.",
+    identity: "The decision id and action key its caller computed, both outside the closure.",
+    isolation: 'REPEATABLE READ',
+    replay: 'The decision is re-read and re-compared against the lease fencing token on every attempt.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/projects.service.ts#update',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR UPDATE or FOR NO KEY UPDATE depending on what is written (rank 40), then project_acceptance_run and the project row (rank 40/60).',
+    identity: 'The project id and the DTO, both outside the closure.',
+    isolation: '',
+    replay: 'The row is re-read under its own lock and every derived decision — the acceptance recompute, the coordinator rebind — comes from that read.',
+    effects: 'None inside; the control-plane publish is after this resolves.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/projects.service.ts#triggerCoordinator',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), then the project_event the trigger function writes (rank 60).',
+    identity: 'A request id minted above the closure, which `project_event_manual_trigger` deduplicates on.',
+    isolation: '',
+    replay: 'Same request id every attempt, so a re-run records the same trigger rather than a second one.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'projects/projects.service.ts#remove',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR UPDATE (rank 40), then the DELETE and its cascades (rank 40/60).',
+    identity: 'The project id.',
+    isolation: '',
+    replay: 'The row is re-read under its lock; deleting something already gone is the same answer on any attempt.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'queue/queue.service.ts#trySessionClaim',
+    shape: 'TX_RETRIED',
+    locks: 'pg_advisory_xact_lock (the claim serializer), then session FOR UPDATE NOWAIT (rank 30).',
+    identity: 'The runner asking, and the session the claim lands on. A claim is a compare-and-set.',
+    isolation: '',
+    replay: 'An attempt the server discarded claimed nothing, so a re-run competes from the real state. The advisory lock is transaction-scoped, so it is released with the aborted attempt.',
+    effects: 'None. The claimed session is handed to the runner only once this returns.',
+    answer: 'Typed 503; the runner polls again.',
+  },
+  {
+    at: 'queue/queue.service.ts#buildSession',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then conversation_turn / attachment / session writes (rank 30/60).',
+    identity: "The session row's own id, allocated before the closure.",
+    isolation: '',
+    replay: 'The row an aborted attempt inserted does not exist, so a re-run inserts one session rather than a second, and the capacity fence is re-evaluated inside the closure.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'realtime/reaper.service.ts#forceFinalize',
+    shape: 'TX_RETRIED',
+    locks: 'session (rank 30) and its conversation_turn rows (rank 60), both by conditional UPDATE.',
+    identity: 'The session id and the status it is being moved out of — the UPDATE is conditional on it.',
+    isolation: '',
+    replay: 'A re-run either finds the same stalled run or finds that somebody finished it first, which is already an outcome this handles.',
+    effects: 'None inside; the notification is after.',
+    answer: 'Typed 503; the sweep runs again on its next tick.',
+  },
+  {
+    at: 'realtime/reaper.service.ts#endParked',
+    shape: 'TX_RETRIED',
+    locks: 'Same as forceFinalize.',
+    identity: 'Same as forceFinalize.',
+    isolation: '',
+    replay: 'Same as forceFinalize.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the sweep runs again.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#takeoverLeases',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then inbox_lease_generation and conversation_turn (rank 60). No task or workspace lock — one write of the Session row (lock-order.ts, I3).',
+    identity: 'The lease generation in the request body, parsed above the closure.',
+    isolation: '',
+    replay: "The ownership fence is re-read under the row lock on each attempt, so a re-run judges the state the winner left rather than replaying a takeover decided against a discarded snapshot.",
+    effects: 'None inside.',
+    answer: 'Typed 503; the runner retries its handshake.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#activateLeases',
+    shape: 'TX_RETRIED',
+    locks: 'Same as takeoverLeases.',
+    identity: 'Same as takeoverLeases.',
+    isolation: '',
+    replay: 'Same as takeoverLeases.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the runner retries.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#releaseLeases',
+    shape: 'TX_RETRIED',
+    locks: 'Same as takeoverLeases.',
+    identity: 'The generation being released.',
+    isolation: '',
+    replay: 'A release is idempotent: a re-run against a fresh snapshot either clears the ownership or finds it already clear.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the runner retries, and the reaper releases an abandoned lease anyway.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#dequeueTurn',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then conversation_turn FOR UPDATE SKIP LOCKED and the claim UPDATE (rank 60).',
+    identity: 'The runner and lease generation asking; the claimed turn is chosen inside.',
+    isolation: '',
+    replay: "A deadlock victim's claim never happened — the row is still queued — so a re-run claims from the state that exists rather than reporting a turn it does not own.",
+    effects: 'None. Nothing is sent to the runner until this returns.',
+    answer: 'Typed 503; the runner polls again and the turn is still queued.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#turnComplete',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then conversation_turn, llm_usage and session_diff (rank 60). One write of the Session row per transaction (I3).',
+    identity: 'The turn id and the usage in the request body, both outside the closure — so a retry books the same numbers, not a second set.',
+    isolation: '',
+    replay: 'The duplicate-ack check, the park, the merge-state clear and the billing accrual are all taken from the Session row read under its own lock inside the closure.',
+    effects: 'None inside; the wake-up and the realtime publish are after commit.',
+    answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#events',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call child rows (rank 60), then ONE session UPDATE (I3).',
+    identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates, tool_call outcomes are keyed by tool_use id, and the running sets are set-valued.',
+    isolation: '',
+    replay: 'Every write in it is already idempotent, `durable` and `events` are derived from the request body above the closure, and the single Session write is accumulated from a row re-read under its lock on every attempt.',
+    effects: 'The live broadcast, outside the loop — so a retried batch is published once, after the attempt that committed.',
+    answer: 'Typed 503; the runner re-sends the batch, which is idempotent.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#finalize',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then session_diff and conversation_turn (rank 60).',
+    identity: 'The lease owner and the terminal status in the request.',
+    isolation: '',
+    replay: 'One locked re-read decides the final status and the checkout lifetime. A session another writer finalized first is seen as finalized, which is an answer this already gives.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the runner re-posts.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#mergeResult',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the session row writes (rank 30).',
+    identity: 'The worktree-operation id the runner echoes back.',
+    isolation: '',
+    replay: 'The claim is re-read under the row lock, so a re-run either still owns the operation it is reporting on or finds it reclaimed — the same two outcomes a first attempt has.',
+    effects: 'None inside; the receipt publish is after.',
+    answer: 'Typed 503; the runner re-posts the result.',
+  },
+  {
+    at: 'runner-api/runner-api.controller.ts#commitResult',
+    shape: 'TX_RETRIED',
+    locks: 'Same as mergeResult.',
+    identity: 'Same as mergeResult.',
+    isolation: '',
+    replay: 'Same as mergeResult.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the runner re-posts.',
+  },
+  {
+    at: 'runners/runners.service.ts#reorderRunners',
+    shape: 'TX_RETRIED',
+    locks: 'runner rows, one UPDATE each, IN ID ORDER — which is what stops two opposite drags taking them backwards.',
+    identity: '`ranked` is computed above the closure, so every attempt writes the same positions to the same rows.',
+    isolation: '',
+    replay: 'Idempotent by construction: the same array written again produces the same order.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the client re-sends the order.',
+  },
+  {
+    at: 'session-tags/session-tags.service.ts#setForSession',
+    shape: 'TX_RETRIED',
+    locks: 'session_tag_link rows for this session, then session_tag FOR KEY SHARE through the link FK — the inserts are ordered by tag id.',
+    identity: '`linkIds`, computed and sorted above the closure.',
+    isolation: '',
+    replay: 'Delete-then-insert of the same set, so a re-run rewrites the same links.',
+    effects: 'None inside; the session-updated publish is after.',
+    answer: 'Typed 503; the picker re-sends its selection.',
+  },
+  {
+    at: 'sessions/merge-receipt.service.ts#record',
+    shape: 'TX_RETRIED',
+    locks: 'session_merge_receipt insert, then the session row denormalisation (rank 30).',
+    identity: '`idempotencyKey`, computed above the closure, so every attempt writes the same receipt.',
+    isolation: '',
+    replay: 'Only the branch that OWNS the transaction is retried. When a caller passes `tx` this is part of THEIR unit and theirs to re-run; a nested retry would re-run a closure inside a transaction the server has already discarded.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#insertTurn',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the conversation_turn insert (rank 60).',
+    identity: "The caller's `clientTurnId`, passed in.",
+    isolation: '',
+    replay: 'The seq is allocated from a row read under the Session lock inside the closure, so a re-run allocates from the sequence the winner left rather than reusing a number a discarded snapshot suggested.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#createTurn',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30) — deliberately blocking, because this is where a user turn serializes against the claim and against turnComplete — then conversation_turn (rank 60).',
+    identity: "The caller's `clientTurnId` and message, both above the closure.",
+    isolation: '',
+    replay: 'A victim wrote no turn, so a re-run enqueues once. Every lifecycle decision is taken from the Session row read under the lock inside the closure.',
+    effects: 'The delivery notice to the runner, outside the loop and after commit.',
+    answer: 'Typed 503; the client re-sends, and the client turn id keeps that from doubling.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#interrupt',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then conversation_turn deletes and the session write.',
+    identity: 'The session id.',
+    isolation: '',
+    replay: 'Decided from the Session row re-read under its lock.',
+    effects: 'None inside; the runner is told after commit.',
+    answer: 'Typed 503; the client re-presses.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#cancelQueuedTurn',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the conversation_turn delete.',
+    identity: 'The turn id being cancelled.',
+    isolation: '',
+    replay: 'A compare-and-set against a turn still queued: an attempt the server discarded cancelled nothing, so a re-run either still finds it queued or reports the same "already gone".',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#mergeToMain',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the session and workspace writes.',
+    identity: 'The worktree-operation id minted for this request.',
+    isolation: '',
+    replay: 'The claim is taken under the Session row lock inside the closure, so a re-run competes for it from the state that exists.',
+    effects: 'The runner is only told about the operation after this returns.',
+    answer: 'Typed 503; the button can be pressed again.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#adoptWorktreeBranch',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the session write.',
+    identity: 'The branch being adopted.',
+    isolation: '',
+    replay: 'One locked re-read decides whether the branch may be re-pointed.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#transitionEnd',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then conversation_turn and the session writes.',
+    identity: 'The end reason and the status being left.',
+    isolation: '',
+    replay: 'Every terminal transition is decided from the Session row under its lock, so a re-run sees whichever end actually committed rather than re-applying one that did not.',
+    effects: 'None inside; notification and publish are after.',
+    answer: 'Typed 503; the reaper force-finalizes an end nobody honoured.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#resume',
+    shape: 'TX_RETRIED',
+    locks: 'project FOR NO KEY UPDATE (rank 40), task FOR SHARE NOWAIT (rank 50), session FOR UPDATE NOWAIT (rank 30 taken last, NOWAIT, which is the declared way this path declines to wait rather than close a cycle).',
+    identity: 'The session id and the prompt, both above the closure.',
+    isolation: '',
+    replay: 'The session, its project capacity and its worktree state are all read under locks taken inside the closure and written from that read.',
+    effects: 'The runner is notified after this returns.',
+    answer: 'Typed 503; the resume can be re-issued.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#updateConfig',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the session write.',
+    identity: 'The config DTO, above the closure.',
+    isolation: '',
+    replay: 'A locked re-read decides what the new config may be.',
+    effects: 'The reload nudge, once, after commit.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#restore',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the session write.',
+    identity: 'The session id.',
+    isolation: '',
+    replay: 'Restoring something already restored is the same answer on any attempt.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'sessions/sessions.service.ts#purge',
+    shape: 'TX_RETRIED',
+    locks: 'session FOR UPDATE (rank 30), then the DELETE and its cascades.',
+    identity: 'The session id.',
+    isolation: '',
+    replay: 'Decided from a locked re-read; a purge of something already purged is the same answer.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'task-lists/task-lists.service.ts#writePolicy',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10, I1 — a pause writes every Task in the list), task_list FOR UPDATE (rank 20), then task_list_revision and the task sweep (rank 50/60).',
+    identity: 'The list id and the policy data, above the closure.',
+    isolation: '',
+    replay: 'The revision number, the seeded before-state and the dispatchHold sweep are all derived inside the closure from rows read under the two locks.',
+    effects: 'None inside; the list-changed publish is after.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'task-lists/task-lists.service.ts#remove',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10), then the multi-row task disarm and the list DELETE whose cascade nulls Task.listId (rank 50/20).',
+    identity: 'The list id.',
+    isolation: '',
+    replay: 'Two statements over rows selected by the list id; a re-run disarms and deletes the same set.',
+    effects: 'The in-flight run teardown, deliberately OUTSIDE the loop and outside the transaction — it talks to runners, and a retry must not send a second cancel.',
+    answer: 'Typed 503. Capped at 2 attempts with a 60s per-attempt deadline: a cascade this size should absorb one collision, not spend four deadlines on the same one.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#create',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10, only when it links), task_list FOR KEY SHARE (20), the creator and predecessor Sessions FOR KEY SHARE (30), project FOR NO KEY UPDATE (40, only when it retires a predecessor), then the task INSERT and its edges (50/60).',
+    identity: 'The idempotency key built from `(session, turn, title, description)` above the closure, so a retry re-inserts the same row rather than a second one.',
+    isolation: '',
+    replay: 'Everything the closure decides is re-read under the locks it takes; `data` and its key are computed once, outside.',
+    effects: 'The realtime publish, outside the loop, after the attempt that committed.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#createMany',
+    shape: 'TX_RETRIED',
+    locks: 'Same ranks as create, taken unconditionally: a batch writes several task rows in item order, which is not an order any other writer shares.',
+    identity: 'The per-item idempotency keys and the turn they are built from, all outside the closure; the find-or-create by key makes a half-committed attempt impossible to double up on.',
+    isolation: '',
+    replay: '`idByRef` and `rows` are rebuilt per attempt because they name rows an aborted attempt no longer has; everything else is outside.',
+    effects: 'One control-plane nudge per task, outside the loop.',
+    answer: 'Typed 503 from the global boundary; a lost duplicate-key race is answered as the batch replay, not a retry.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#update',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (10, when it restructures), task_list (20), creator Session (30, when it writes the task row twice), project FOR NO KEY UPDATE (40, when it names a column project_acceptance_task_fact_update is declared over), task NOWAIT (50, on the supersession/move paths), then the writes.',
+    identity: 'The task id and the DTO, above the closure.',
+    isolation: '',
+    replay: 'The closure re-reads the task inside the owner mutex on every attempt — `current`, the acceptance projects, the hierarchy check and the edge set are all derived there. The single-statement branch is NOT retried: it owns no transaction.',
+    effects: 'The realtime publish, after.',
+    answer: 'Typed 503 from the global boundary, including for the one-statement branch.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#applyDag',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10) and nothing else — since 0132 an edge write touches no task row. The revision row it advances is rank 70.',
+    identity: '`ops` and the human-facing `preview`, computed above the closure.',
+    isolation: '',
+    replay: 'The edge set is re-read under the owner mutex and re-checked for cycles, so a re-run judges the graph the winning transaction left.',
+    effects: 'The publish and the ready-task reconcile, both outside the loop.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#addDependency',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10), then the edge INSERT and the revision it advances (60/70).',
+    identity: 'The edge itself — `(taskId, dependsOnTaskId)` is unique.',
+    isolation: '',
+    replay: 'The cycle check re-reads the whole edge set under the owner mutex on every attempt. A duplicate edge arrives as P2002, which the classifier calls permanent and which is answered on the first attempt.',
+    effects: 'The publish, after.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#removeDependency',
+    shape: 'TX_RETRIED',
+    locks: 'Same as addDependency.',
+    identity: 'The edge being removed.',
+    isolation: '',
+    replay: 'Removing an edge that is already gone is the same answer either way.',
+    effects: 'The publish, after.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#batchAssign',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (rank 10, I1 — a multi-row task write), then the conditional updateMany over ids taken in sorted order.',
+    identity: '`ids`, sorted and computed above the closure.',
+    isolation: '',
+    replay: 'Every attempt names the same rows and writes the same value.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#deleteAndStopRuns',
+    shape: 'TX_RETRIED',
+    locks: 'user FOR UPDATE (10), the attached sessions FOR UPDATE (30, the order’s one declared exception), the projects FOR NO KEY UPDATE (40), the task rows FOR UPDATE (50), then the DELETE and its cascades.',
+    identity: 'The id list, above the closure.',
+    isolation: '',
+    replay: 'The surviving links, the occupying runs and the rows the DELETE names are all read inside the closure under the owner mutex.',
+    effects: 'The run teardown, deliberately outside the loop and the transaction: a retry must not send a second cancel for a run the first attempt never deleted.',
+    answer: 'Typed 503. Capped at 2 attempts with a 60s per-attempt deadline, for the reason TaskListsService.remove gives.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#recordManualProjectTriggers',
+    shape: 'TX_RETRIED',
+    locks: "Whatever `project_event_manual_trigger` takes — the project row and its outbox — over a project list sorted above the closure.",
+    identity: 'A request id minted above the closure, which that function deduplicates on.',
+    isolation: '',
+    replay: 'Same id and same sorted list on every attempt, so a re-run records the same trigger, not a second one.',
+    effects: 'None.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  {
+    at: 'workspaces/workspaces.service.ts#reorder',
+    shape: 'TX_RETRIED',
+    locks: 'workspace rows, one UPDATE each, IN ID ORDER. This is the fix the audit was looking for: the statements used to run in the caller’s drag order, so two drags that move the same workspaces opposite ways took the same rows backwards.',
+    identity: '`ranked` and the position map, computed above the closure.',
+    isolation: '',
+    replay: 'Idempotent: the same positions written again produce the same order.',
+    effects: 'None inside.',
+    answer: 'Typed 503; the client re-sends the order.',
+  },
+  {
+    at: 'workspaces/workspaces.service.ts#remove',
+    shape: 'TX_RETRIED',
+    locks: 'workspace FOR UPDATE, then an unlocked count and the update of that same row — no outgoing wait edge, which is why `workspace` is argued rather than ranked (LOCK_ORDER_COMPATIBLE).',
+    identity: 'The workspace id.',
+    isolation: '',
+    replay: 'The row is re-read under its own lock; a delete that already happened is the same answer.',
+    effects: 'None inside.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+];
+
+export interface TransactionParticipant {
+  /** `<path under src/apiserver/src>#<method>`. */
+  at: string;
+  /**
+   * The units whose transaction this runs inside. Its lock order, its isolation and its retry
+   * behaviour are theirs — this is the whole point of listing it separately rather than giving it
+   * a decision it does not get to make.
+   */
+  under: string;
+}
+
+/**
+ * Methods that write only through a transaction client somebody hands them.
+ *
+ * They are here so that "not in the inventory" cannot quietly mean "forgotten". A participant that
+ * started opening its own transaction would move to `TRANSACTION_UNITS` and have to state a retry
+ * decision; the spec detects the move by reading the method's signature, so it cannot be made
+ * silently.
+ */
+export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
+  { at: 'common/lock-order.ts#lockOwnerTaskGraph', under: 'every rank-10 caller (I1)' },
+  { at: 'common/lock-order.ts#lockCreatorSessions', under: 'every rank-30 caller (I2)' },
+  { at: 'common/lock-order.ts#lockTaskLists', under: 'every rank-20 caller (I2)' },
+  { at: 'common/session-inbox-fence.ts#retireSessionInboxGeneration', under: 'runner-api takeover/activate/release leases' },
+  { at: 'projects/project-acceptance.service.ts#writeAudit', under: 'projectAcceptance.openRun, .finalizeRun' },
+  { at: 'projects/project-authorization.service.ts#authorizeInTransaction', under: 'projectReconcile.applyAction' },
+  { at: 'projects/project-coordinator-session.service.ts#rotateInTransaction', under: 'projectReconcile.applyAction' },
+  { at: 'projects/project-coordinator-turn.service.ts#openInTransaction', under: 'projectReconcile.applyAction' },
+  { at: 'projects/project-decision.service.ts#persist', under: 'projectDispatch.planOne' },
+  { at: 'projects/project-events.service.ts#enqueue', under: 'projectReconcile.applyAction and the outbox writers' },
+  { at: 'projects/project-reconcile.service.ts#acquireLeaseInTransaction', under: 'projectReconcile.acquireLease' },
+  { at: 'projects/project-reconcile.service.ts#applyAggregations', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-reconcile.service.ts#applyBlockers', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-reconcile.service.ts#applyDecisionActionInTransaction', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-reconcile.service.ts#claimBlockerAction', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-reconcile.service.ts#deadLetter', under: 'projectEvents.deliverOnce' },
+  { at: 'projects/project-reconcile.service.ts#ensureRuntime', under: 'projectReconcile.acquireLease, .applyAction' },
+  { at: 'projects/project-reconcile.service.ts#handle', under: 'projectEvents.deliverOnce' },
+  { at: 'projects/project-reconcile.service.ts#raiseBlocker', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-task-dispatcher.service.ts#dispatchInTransaction', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-verification-verdict.service.ts#applyInTransaction', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-verification-verdict.service.ts#fileDefect', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/projects.service.ts#lockLiveAgent', under: 'projects.update, .remove' },
+  { at: 'projects/projects.service.ts#recordExplicitIdentity', under: 'projects.update' },
+  { at: 'projects/projects.service.ts#writeCoordinatorAgent', under: 'projects.update' },
+  { at: 'projects/task-aggregation-writer.ts#applyTaskAggregations', under: 'projectReconcile.repeatableRead' },
+  { at: 'runner-api/runner-api.controller.ts#lockSessionLeaseOwner', under: 'runnerApi.events, .turnComplete, .finalize' },
+  { at: 'sessions/merge-receipt.service.ts#fromRunnerMergeResult', under: 'runnerApi.mergeResult' },
+  { at: 'sessions/sessions.service.ts#ensurePromptSeeded', under: 'sessions.resume, queue.buildSession' },
+  { at: 'sessions/sessions.service.ts#insertTurnLocked', under: 'sessions.insertTurn, .createTurn, .resume' },
+  { at: 'sessions/sessions.service.ts#linkAttachments', under: 'sessions.createTurn, .resume' },
+  { at: 'sessions/sessions.service.ts#taskWorkRefusalFor', under: 'sessions.resume, queue.buildSession' },
+  { at: 'task-lists/list-events.service.ts#blockFor', under: 'taskLists.writePolicy' },
+  { at: 'tasks/reclaim-stalled-task.ts#reclaimStalledTask', under: 'runnerApi.finalize, reaper.forceFinalize' },
+  { at: 'tasks/reclaim-stalled-task.ts#postRunFailureComment', under: 'runnerApi.finalize, reaper.forceFinalize' },
+  { at: 'tasks/tasks.service.ts#linkSupersededBy', under: 'tasks.create, tasks.update' },
+  { at: 'tasks/tasks.service.ts#lockTaskForSupersessionWrite', under: 'tasks.update' },
+  // Test-only, and reachable only from the harness's own transaction.
+  { at: 'projects/project-e2e-harness.ts#world', under: 'projectE2eHarness.dispatch' },
+  { at: 'projects/project-e2e-harness.ts#task', under: 'projectE2eHarness.dispatch' },
+  { at: 'projects/project-e2e-harness.ts#session', under: 'projectE2eHarness.dispatch' },
+];
+
+/** The recurring shapes an autocommit write takes. */
+export type StatementClass =
+  /** One row named by primary or unique key. */
+  | 'ONE_ROW_BY_KEY'
+  /** One row, named by key AND a condition it must still satisfy — a compare-and-set. */
+  | 'ONE_ROW_CAS'
+  /** A predicate that can match many rows in one statement. */
+  | 'MANY_ROWS'
+  /** An INSERT, of one row or of a batch. */
+  | 'INSERT'
+  /** A hand-written conditional UPDATE used as a fence. */
+  | 'RAW_FENCE'
+  /** Not a row write at all. */
+  | 'NOT_A_ROW_WRITE';
+
+export interface StatementClassNote {
+  /** What PostgreSQL locks for a statement of this shape, including what no SQL here spells. */
+  locks: string;
+  /** Whether a statement of this shape can be a deadlock victim, and how. */
+  exposure: string;
+  /** Why it is not retried. */
+  why: string;
+  /** What the caller gets when it does lose one. */
+  answer: string;
+}
+
+/**
+ * Why none of these is retried, per shape.
+ *
+ * The short answer for all five is the same and is structural rather than a judgement call: an
+ * autocommit statement has no transaction to re-run. Wrapping one in `$transaction` purely so a
+ * retry loop had something to hold would change what the statement is — it would start holding its
+ * locks across a round trip — and would buy the appearance of coverage rather than the property.
+ * The long answer differs by shape, because the shapes differ in whether they can lose a conflict
+ * at all.
+ */
+export const STATEMENT_CLASSES: Record<StatementClass, StatementClassNote> = {
+  ONE_ROW_BY_KEY: {
+    locks: 'The row itself, plus FOR KEY SHARE on every foreign-key parent the statement names, plus any row an AFTER trigger declared over the written columns takes.',
+    exposure: 'Only when a trigger or a foreign key gives it a SECOND lock. With none, the statement takes one row lock and waits for nothing else, and a transaction with no outgoing wait edge cannot be an element of a cycle.',
+    why: 'No transaction to re-run. The caller re-issues the request, which is the same statement.',
+    answer: 'Typed 503, TRANSIENT_DB_CONFLICT, retryable=true, from the global boundary.',
+  },
+  ONE_ROW_CAS: {
+    locks: 'Same as ONE_ROW_BY_KEY. The extra predicate columns change what the statement WRITES, not what it locks.',
+    exposure: 'Same as ONE_ROW_BY_KEY.',
+    why: 'No transaction to re-run — and a CAS is the shape a caller can safely re-issue itself, because the second issue either still matches or reports the state it wanted.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  MANY_ROWS: {
+    locks: 'Every matched row, in whatever order the plan produced them, plus each row’s FK and trigger locks.',
+    exposure: 'Real. Two sweeps with overlapping selections can take the same rows in opposite orders, which is the one shape here that can deadlock without a trigger being involved.',
+    why: 'No transaction to re-run. Where the ordering matters and the caller controls it — the two reorder endpoints — the statements were made ordered instead, which removes the cycle rather than absorbing it (see `orderedIds`).',
+    answer: 'Typed 503 from the global boundary. The background sweeps among these (the reaper, the availability reaper, the auto-retry sweep) simply run again on their next tick.',
+  },
+  INSERT: {
+    locks: 'FOR KEY SHARE on every foreign-key parent, in the order the columns are checked, plus whatever an AFTER trigger takes.',
+    exposure: 'Only against a writer holding one of those parents FOR UPDATE. FOR KEY SHARE does not conflict with itself, so two INSERTs naming the same parents cannot deadlock with each other.',
+    why: 'No transaction to re-run.',
+    answer: 'Typed 503 from the global boundary; a duplicate key is a separate, permanent answer and is never retried.',
+  },
+  RAW_FENCE: {
+    locks: 'The rows the WHERE clause matches, plus their FK and trigger locks.',
+    exposure: 'Same as the Prisma equivalent — a fence is an UPDATE, and being hand-written changes nothing about its locks.',
+    why: 'No transaction to re-run. A fence is by construction safe for the caller to re-issue: it only fires against the state it names.',
+    answer: 'Typed 503 from the global boundary.',
+  },
+  NOT_A_ROW_WRITE: {
+    locks: 'None.',
+    exposure: 'None — it takes no row lock, so it cannot be in a lock cycle.',
+    why: 'Nothing to retry.',
+    answer: 'Its own error handling; it never reaches the conflict boundary.',
+  },
+};
+
+export interface StatementUnit {
+  /** `<path under src/apiserver/src>#<method>`. */
+  at: string;
+  class: StatementClass;
+  /**
+   * How many statements this method issues outside any transaction. Anything above 1 is a method
+   * whose writes are NOT atomic with each other — recorded because that is a fact a reader of this
+   * list should not have to re-derive, not because this audit changes it.
+   */
+  statements: number;
+  /** Only where this entry deviates from its class. */
+  note?: string;
+}
+
+/**
+ * Every write that runs outside a transaction, and the class whose argument covers it.
+ *
+ * None is retried; `STATEMENT_CLASSES` says why per shape, and the answer for all of them when a
+ * conflict does escape is the global boundary's typed 503. `statements` above 1 marks a method
+ * whose writes are not atomic with each other.
+ */
+export const STATEMENT_UNITS: readonly StatementUnit[] = [
+  { at: "attachments/attachments.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "auth/auth.service.ts#bootstrap", class: "INSERT", statements: 1 },
+  { at: "auth/auth.service.ts#changePassword", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "auth/auth.service.ts#issueRefreshToken", class: "INSERT", statements: 1 },
+  { at: "auth/auth.service.ts#logout", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "auth/auth.service.ts#refresh", class: "MANY_ROWS", statements: 2, note: "Two statements: the reuse-detection revoke of every live token for the user, then the CAS claim of this one. Not atomic with each other; the CAS is what makes the outcome unambiguous." },
+  { at: "projects/project-availability-reaper.service.ts#reapOnce", class: "MANY_ROWS", statements: 1 },
+  { at: "projects/project-failure-recovery.service.ts#scan", class: "RAW_FENCE", statements: 1 },
+  { at: "projects/project-reconcile.service.ts#enqueueBackstopWakes", class: "INSERT", statements: 1 },
+  { at: "projects/project-reconcile.service.ts#enqueueScheduledWakes", class: "INSERT", statements: 1 },
+  { at: "projects/project-reconcile.service.ts#releaseLease", class: "RAW_FENCE", statements: 1 },
+  { at: "projects/project-reconcile.service.ts#renewLease", class: "RAW_FENCE", statements: 1 },
+  { at: "projects/projects.service.ts#coordinator", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "projects/projects.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "providers/providers.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "providers/providers.service.ts#remove", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "providers/providers.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "push/push.controller.ts#register", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "push/push.controller.ts#unregister", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "push/push.service.ts#deliver", class: "ONE_ROW_CAS", statements: 1, note: "Runs inside the APNs delivery loop: the HTTP call is what decides the delete, so the write is a consequence of an external action rather than the other way round. Nothing about it is transactional and nothing re-sends the notification." },
+  { at: "realtime/realtime.service.ts#drainCommitRequests", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "realtime/realtime.service.ts#drainMergeRequests", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "realtime/realtime.service.ts#failAbandonedWorktreeOperations", class: "MANY_ROWS", statements: 2 },
+  { at: "realtime/realtime.service.ts#notifyRaw", class: "NOT_A_ROW_WRITE", statements: 1, note: "pg_notify, not a row write. Listed so the scan has somewhere to put it." },
+  { at: "realtime/reaper.service.ts#purgeTrash", class: "MANY_ROWS", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#artifactResult", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#createApproval", class: "INSERT", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#createDeviceSession", class: "INSERT", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#deregister", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#devicePoll", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#diffResult", class: "ONE_ROW_CAS", statements: 2 },
+  { at: "runner-api/runner-api.controller.ts#drainInstallRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#drainLoginRequest", class: "ONE_ROW_BY_KEY", statements: 2 },
+  { at: "runner-api/runner-api.controller.ts#drainRepoCleanupRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#heartbeat", class: "MANY_ROWS", statements: 4, note: "Four separate statements, deliberately: a heartbeat that half-lands is a heartbeat, and making them atomic would put the hot runner row in a transaction with a multi-row workspace sweep." },
+  { at: "runner-api/runner-api.controller.ts#installResult", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#loginResult", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#markOpenCodeUpgradeRequired", class: "MANY_ROWS", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#reclaim", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#reconcileReportedBranchMerged", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#register", class: "INSERT", statements: 3, note: "Three statements: the runner upsert and the enrollment-token burn. Re-registering is idempotent on the runner row." },
+  { at: "runner-api/runner-api.controller.ts#repoCleanupResult", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runner-api/runner-api.controller.ts#uploadAttachment", class: "INSERT", statements: 1 },
+  { at: "runner-api/service-token.authorizer.ts#mint", class: "INSERT", statements: 1 },
+  { at: "runner-api/service-token.authorizer.ts#revoke", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#approveDeviceEnrollment", class: "INSERT", statements: 3, note: "Three statements: the runner upsert and the enrollment approval." },
+  { at: "runners/runners.service.ts#cancelInstall", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#cancelLogin", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#createEnrollmentToken", class: "INSERT", statements: 1 },
+  { at: "runners/runners.service.ts#removeRunner", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#rotateToken", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#startEngineUpdate", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#startInstall", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#startLogin", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#submitLoginCode", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "runners/runners.service.ts#updateRunner", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "session-tags/session-tags.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "session-tags/session-tags.service.ts#ensureSystemTags", class: "INSERT", statements: 1 },
+  { at: "session-tags/session-tags.service.ts#remove", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "session-tags/session-tags.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/auto-retry.service.ts#disarm", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/auto-retry.service.ts#rearm", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/auto-retry.service.ts#sweep", class: "ONE_ROW_CAS", statements: 2 },
+  { at: "sessions/sessions.service.ts#applyAutoTags", class: "INSERT", statements: 1 },
+  { at: "sessions/sessions.service.ts#armAutoRetry", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/sessions.service.ts#beautifySessionLater", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/sessions.service.ts#cancelAutoRetry", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#commitWorktree", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/sessions.service.ts#create", class: "INSERT", statements: 2, note: "Two statements: the session INSERT, then the attachment adoption. An attachment left unadopted is orphaned rather than wrongly attached, which is why this has never needed to be atomic." },
+  { at: "sessions/sessions.service.ts#createAutoTags", class: "INSERT", statements: 1 },
+  { at: "sessions/sessions.service.ts#decideApproval", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "sessions/sessions.service.ts#disableShare", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#enableShare", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#enqueueLegacyArtifactRequest", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#persistLegacyArtifactAttachment", class: "INSERT", statements: 1 },
+  { at: "sessions/sessions.service.ts#pin", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#rememberForWorkspace", class: "INSERT", statements: 1 },
+  { at: "sessions/sessions.service.ts#rename", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#spawnFromSession", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "sessions/sessions.service.ts#unpin", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "task-lists/task-lists.service.ts#console", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "task-lists/task-lists.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "tasks/tasks.service.ts#addComment", class: "INSERT", statements: 1 },
+  { at: "tasks/tasks.service.ts#bindMentionTarget", class: "RAW_FENCE", statements: 1 },
+  { at: "tasks/tasks.service.ts#clearFailedForRetry", class: "ONE_ROW_CAS", statements: 1, note: "The documented residual (docs/postgres-lock-order.md §6): it writes `status`, so an AFTER trigger takes the project FOR NO KEY UPDATE while the task row is held — the project/task inversion. Left as one statement deliberately: the inversion is not resolvable from this side, and wrapping four of the fifteen single-statement status writers in transactions would buy the appearance of coverage rather than the property." },
+  { at: "tasks/tasks.service.ts#consumeRunAt", class: "ONE_ROW_CAS", statements: 1, note: "`run_at` is in no trigger's column list, so this takes exactly one row lock and waits for nothing." },
+  { at: "tasks/tasks.service.ts#deliverMentions", class: "RAW_FENCE", statements: 3 },
+  { at: "tasks/tasks.service.ts#deliverOneMention", class: "RAW_FENCE", statements: 1 },
+  { at: "tasks/tasks.service.ts#dispatchStalledListForemen", class: "INSERT", statements: 1 },
+  { at: "tasks/tasks.service.ts#fileVerification", class: "INSERT", statements: 1 },
+  { at: "tasks/tasks.service.ts#parkMentionDelivery", class: "RAW_FENCE", statements: 1 },
+  { at: "tasks/tasks.service.ts#recordListEvent", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "tasks/tasks.service.ts#removeComment", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "users/admin.controller.ts#deleteUser", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "users/admin.controller.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },
+  { at: "workspaces/workspaces.service.ts#create", class: "INSERT", statements: 1 },
+  { at: "workspaces/workspaces.service.ts#removePermissionRule", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "workspaces/workspaces.service.ts#requestRepoCleanup", class: "ONE_ROW_CAS", statements: 1 },
+  { at: "workspaces/workspaces.service.ts#setOrchestrationForAll", class: "MANY_ROWS", statements: 1, note: "A whole-owner sweep. It is the widest single statement here and the one most able to be a deadlock victim; there is no ordering to impose because it names no ids." },
+  { at: "workspaces/workspaces.service.ts#update", class: "ONE_ROW_BY_KEY", statements: 1 },
+];
+
+export interface TriggerWriteSource {
+  /** The relation the trigger fires on. */
+  table: string;
+  trigger: string;
+  /** `AFTER UPDATE OF "a", "b"` — the declaration, because the column list is what decides. */
+  event: string;
+  /** `CONSTRAINT` for a deferrable constraint trigger, which runs at COMMIT rather than inline. */
+  kind: 'ROW/STATEMENT' | 'CONSTRAINT';
+  /** The migration that installed the version currently live. */
+  since: string;
+  /**
+   * The rows in OTHER relations this trigger locks or writes, transitively through the functions
+   * it calls. Empty means it only touches the row that fired it — a trigger that takes no second
+   * relation cannot turn a one-lock statement into a two-lock one, which is what makes it unable
+   * to put a statement in a lock cycle it was not already in.
+   */
+  takes: readonly string[];
+}
+
+/**
+ * Every trigger the migration history leaves installed, and what each one reaches for.
+ *
+ * This is the half of the audit no source scan of the TypeScript could find. Both production
+ * deadlocks this project started from had at least one edge that appeared in no statement anybody
+ * wrote: a foreign key's internal constraint trigger in one, an AFTER trigger reaching for a
+ * project row in the other. So the triggers are enumerated the same way the code is — derived,
+ * not remembered — by replaying every CREATE and DROP in migration order and following each
+ * trigger function's calls. `db-write-inventory.spec.ts` re-derives the whole set from
+ * `prisma/migrations` and fails when it stops matching, so a migration cannot add a trigger, widen
+ * one's column list, or give one a new cross-relation lock without this list moving with it.
+ *
+ * `takes` is the deadlock-relevant field. A trigger with an empty `takes` adds no wait edge; the
+ * ones that do are exactly the entries `docs/postgres-lock-order.md` derives the canonical order
+ * from — most visibly `project_acceptance_task_fact_update`, whose project lock is why a plain
+ * `status` write on a task is a two-lock operation and has to pre-lock the project.
+ */
+export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
+  { table: "approval", trigger: "project_approval_event_source", event: "AFTER INSERT OR UPDATE OF \"status\", \"decided_by_id\"", kind: "ROW/STATEMENT", since: "0117_project_event_sources", takes: ["project_event WRITE"] },
+  { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_delete", event: "BEFORE DELETE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
+  { table: "model_provider", trigger: "model_provider_builtin_opencode_guard_rename", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
+  { table: "model_provider", trigger: "project_model_provider_availability_event_source", event: "AFTER INSERT OR UPDATE OF \"enabled\" OR DELETE", kind: "ROW/STATEMENT", since: "0118_project_availability_event_sources", takes: ["project_event WRITE"] },
+  { table: "project", trigger: "project_acceptance_criteria_fact", event: "AFTER UPDATE OF \"acceptance_criteria\"", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: ["project_acceptance_audit WRITE", "project_acceptance_run WRITE", "project_event WRITE"] },
+  { table: "project", trigger: "project_acceptance_done_gate", event: "BEFORE UPDATE OF \"status\", \"accepted_run_id\"", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
+  { table: "project", trigger: "project_coordinator_companions_bind", event: "AFTER UPDATE OF \"coordinator_workspace_id\"", kind: "CONSTRAINT", since: "0113_project_coordinator_final_row", takes: ["project_member WRITE", "project_runtime WRITE", "workspace LOCK"] },
+  { table: "project", trigger: "project_coordinator_companions_insert", event: "AFTER INSERT", kind: "CONSTRAINT", since: "0113_project_coordinator_final_row", takes: ["project_member WRITE", "project_runtime WRITE", "workspace LOCK"] },
+  { table: "project", trigger: "project_coordinator_identity_window_repair", event: "BEFORE UPDATE OF \"coordinator_workspace_id\"", kind: "ROW/STATEMENT", since: "0115_project_coordinator_identity_window_repair", takes: [] },
+  { table: "project", trigger: "project_coordinator_pointer_guard", event: "BEFORE INSERT OR UPDATE OF \"coordinator_session_id\", \"coordinator_workspace_id\"", kind: "ROW/STATEMENT", since: "0126_project_coordinator_session_lifecycle", takes: [] },
+  { table: "project", trigger: "project_coordinator_rotation_count", event: "AFTER UPDATE OF \"coordinator_session_id\"", kind: "CONSTRAINT", since: "0113_project_coordinator_final_row", takes: ["project_member WRITE", "project_runtime WRITE", "workspace LOCK"] },
+  { table: "project", trigger: "project_coordinator_session_event_source", event: "AFTER UPDATE OF \"coordinator_session_id\"", kind: "ROW/STATEMENT", since: "0126_project_coordinator_session_lifecycle", takes: ["project_event WRITE"] },
+  { table: "project", trigger: "project_dispatch_authority_fanout", event: "AFTER UPDATE OF \"coordinator_enabled\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["task WRITE"] },
+  { table: "project", trigger: "project_user_edit_event_source", event: "AFTER INSERT OR UPDATE", kind: "ROW/STATEMENT", since: "0117_project_event_sources", takes: ["project_event WRITE"] },
+  { table: "project_acceptance_audit", trigger: "project_acceptance_audit_append_only", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
+  { table: "project_acceptance_criterion", trigger: "project_acceptance_criterion_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
+  { table: "project_acceptance_run", trigger: "project_acceptance_run_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
+  { table: "project_action", trigger: "project_action_decision_link_guard", event: "BEFORE UPDATE OF \"decision_id\", \"project_id\"", kind: "ROW/STATEMENT", since: "0120_project_decision_audit", takes: [] },
+  { table: "project_action", trigger: "project_action_dispatch_immutable", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "project_action", trigger: "project_action_dispatch_result_check", event: "AFTER INSERT OR UPDATE OF \"status\", \"result_session_id\"", kind: "CONSTRAINT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "project_blocker", trigger: "project_blocker_escalation_once", event: "BEFORE UPDATE OF \"escalated_at\"", kind: "ROW/STATEMENT", since: "0125_project_blocker", takes: [] },
+  { table: "project_blocker", trigger: "project_blocker_resolution_final", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0125_project_blocker", takes: [] },
+  { table: "project_decision", trigger: "project_decision_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0120_project_decision_audit", takes: [] },
+  { table: "project_event", trigger: "project_event_notify_pending", event: "AFTER INSERT OR UPDATE OF \"occurrences\", \"next_attempt_at\"", kind: "ROW/STATEMENT", since: "0116_project_event_outbox", takes: [] },
+  { table: "project_merge_evidence", trigger: "project_acceptance_merge_fact", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: ["project LOCK", "project WRITE", "project_acceptance_audit WRITE", "project_acceptance_run WRITE", "project_event WRITE"] },
+  { table: "runner", trigger: "project_runner_availability_event_source", event: "AFTER UPDATE OF \"status\", \"labels\", \"max_concurrent\", \"min_free_disk_mb\", \"plan_usage\", \"model_catalog\", \"runtime_default_models\", \"runs_as_root\", \"engines\"", kind: "ROW/STATEMENT", since: "0118_project_availability_event_sources", takes: ["project_event WRITE"] },
+  { table: "session", trigger: "project_session_event_source", event: "AFTER INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0133_session_event_source_update_scope", takes: ["project_event WRITE"] },
+  { table: "session", trigger: "project_session_event_source_update", event: "AFTER UPDATE OF \"status\", \"deleted_at\", \"merge_status\"", kind: "ROW/STATEMENT", since: "0133_session_event_source_update_scope", takes: ["project_event WRITE"] },
+  { table: "session", trigger: "session_admission_lock_order_insert_delete", event: "BEFORE INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["project LOCK", "task LOCK"] },
+  { table: "session", trigger: "session_admission_lock_order_update", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["project LOCK", "task LOCK"] },
+  { table: "session", trigger: "session_completed_at_compat", event: "BEFORE INSERT OR UPDATE OF \"completed_at\", \"archived_at\"", kind: "ROW/STATEMENT", since: "0076_session_completed_semantics", takes: [] },
+  { table: "session", trigger: "session_coordinator_snapshot_guard", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "session", trigger: "session_coordinator_snapshot_immutable", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "session", trigger: "session_dispatch_attribution_check", event: "AFTER INSERT", kind: "CONSTRAINT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "session", trigger: "session_dispatch_authority_guard", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["task LOCK"] },
+  { table: "session", trigger: "session_dispatch_dependency_check", event: "AFTER INSERT", kind: "CONSTRAINT", since: "0132_task_dependency_revision", takes: [] },
+  { table: "session", trigger: "session_opencode_runner_claim_guard", event: "BEFORE UPDATE OF \"status\"", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
+  { table: "session", trigger: "session_project_capacity_serialize_insert_delete", event: "BEFORE INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["project WRITE"] },
+  { table: "session", trigger: "session_project_capacity_serialize_update", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["project WRITE"] },
+  { table: "session", trigger: "session_superseded_task_guard", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["task LOCK"] },
+  { table: "session", trigger: "session_superseded_task_revive_guard", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"dispatch_origin\", \"deleted_at\", \"starts_task_work\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["task LOCK"] },
+  { table: "session_merge_receipt", trigger: "session_merge_receipt_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0128_task_supersession_merge_receipt", takes: [] },
+  { table: "task", trigger: "project_acceptance_task_fact", event: "AFTER INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: ["project LOCK", "project WRITE", "project_acceptance_audit WRITE", "project_acceptance_run WRITE", "project_event WRITE"] },
+  { table: "task", trigger: "project_acceptance_task_fact_update", event: "AFTER UPDATE OF \"status\", \"completion_policy\", \"project_id\", \"verdict\", \"verifies_task_id\", \"terminal_reason\", \"superseded_by_task_id\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["project LOCK", "project WRITE", "project_acceptance_audit WRITE", "project_acceptance_run WRITE", "project_event WRITE"] },
+  { table: "task", trigger: "project_task_event_source", event: "AFTER INSERT OR UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0117_project_event_sources", takes: ["project_event WRITE"] },
+  { table: "task", trigger: "task_claimed_project_move_guard", event: "BEFORE UPDATE OF \"project_id\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "task", trigger: "task_dependency_revision_seed", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision WRITE"] },
+  { table: "task", trigger: "task_dispatch_authority_derive", event: "BEFORE INSERT OR UPDATE OF \"project_id\", \"dispatch_authority\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
+  { table: "task", trigger: "task_supersession_guard_insert", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0128_task_supersession_merge_receipt", takes: [] },
+  { table: "task", trigger: "task_supersession_guard_update", event: "BEFORE UPDATE OF \"superseded_by_task_id\", \"status\", \"owner_id\", \"project_id\"", kind: "ROW/STATEMENT", since: "0128_task_supersession_merge_receipt", takes: [] },
+  { table: "task", trigger: "task_supersession_live_session_guard", event: "BEFORE UPDATE OF \"superseded_by_task_id\", \"terminal_reason\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: [] },
+  { table: "task", trigger: "task_supersession_project_lock_order", event: "BEFORE UPDATE OF \"superseded_by_task_id\", \"terminal_reason\", \"project_id\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: ["project LOCK"] },
+  { table: "task", trigger: "task_supersession_successor_move_guard", event: "BEFORE UPDATE OF \"project_id\", \"owner_id\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: [] },
+  { table: "task", trigger: "task_verdict_revision_advance", event: "BEFORE INSERT OR UPDATE OF \"verdict\"", kind: "ROW/STATEMENT", since: "0124_task_verification_verdict", takes: [] },
+  { table: "task", trigger: "task_verdict_revision_monotonic", event: "BEFORE UPDATE OF \"verdict_revision\"", kind: "ROW/STATEMENT", since: "0124_task_verification_verdict", takes: [] },
+  { table: "task", trigger: "task_verdict_revoked_on_reopen", event: "BEFORE UPDATE OF \"status\"", kind: "ROW/STATEMENT", since: "0124_task_verification_verdict", takes: [] },
+  { table: "task", trigger: "task_verification_subject_guard", event: "BEFORE INSERT OR UPDATE OF \"verifies_task_id\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: [] },
+  { table: "task_comment", trigger: "task_comment_mention_delivery_file", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0131_task_comment_mention_delivery", takes: ["task_comment_mention_delivery WRITE"] },
+  { table: "task_dependency", trigger: "project_task_dependency_event_source", event: "AFTER INSERT OR UPDATE OR DELETE", kind: "ROW/STATEMENT", since: "0117_project_event_sources", takes: ["project_event WRITE"] },
+  { table: "task_dependency", trigger: "task_dependency_revision_delete", event: "AFTER DELETE", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision LOCK"] },
+  { table: "task_dependency", trigger: "task_dependency_revision_insert", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision LOCK"] },
+  { table: "task_dependency", trigger: "task_dependency_revision_update", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision LOCK"] },
+  { table: "workspace", trigger: "project_workspace_availability_event_source", event: "AFTER UPDATE OF \"enabled\", \"deleted_at\", \"runner_id\", \"work_dir_exists\", \"work_dir_free_bytes\"", kind: "ROW/STATEMENT", since: "0118_project_availability_event_sources", takes: ["project_event WRITE"] },
+];
+
+export interface ExcludedSource {
+  path: string;
+  why: string;
+}
+
+/**
+ * Sources the scan skips, and the argument for each.
+ *
+ * "Not in the inventory" has to mean "argued", not "forgotten" — the same rule
+ * `LOCK_ORDER_COMPATIBLE` follows. The spec asserts these files exist and that nothing else was
+ * skipped, so an exclusion cannot be widened by accident.
+ */
+export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
+  {
+    path: 'common/transaction-retry.ts',
+    why: 'The retry loop itself. Its `$transaction` call IS the mechanism this inventory is about; listing it as a unit of work would make the loop a member of the set it implements.',
+  },
+  {
+    path: 'deadlock/',
+    why: 'Barrier fixtures and baselines. They open their own connections to a disposable server that `coordinator-pg-test-safety` refuses to point at a business database, and they run only from scripts/deadlock-barrier.sh.',
+  },
+  {
+    path: 'projects/project-e2e-harness.ts',
+    why: 'A test harness. Its one transaction seeds a world for the Project specs and is never reachable from an HTTP route; its three writer helpers are listed as participants so the exclusion is of the boundary only.',
+  },
+];
