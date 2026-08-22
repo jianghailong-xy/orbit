@@ -127,10 +127,15 @@ run_target() {
     reorder)     CMD=("$NODE" --test --test-concurrency=1 build/deadlock/reorder.pg.spec.js) ;;
   esac
   echo "==> $1"
+  # Every target here makes real deadlocks on purpose. This is how the counters in
+  # src/apiserver/src/common/db-conflict-metrics.ts say so: a run of this script labels its
+  # conflicts `origin="fault_injection"`, so an operator reading a graph can subtract the
+  # deliberate ones instead of paging on a barrier fixture doing its job.
   ( cd "$API" && COORDINATOR_PG_URL="$URL" \
       COORDINATOR_PG_EXPECTED_DATABASE="$DB" \
       COORDINATOR_PG_EXPECTED_USER="$ADMIN" \
       COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID" \
+      ORBIT_DB_CONFLICT_ORIGIN=fault_injection \
       timeout -k 20 "$RUN_TIMEOUT" "${CMD[@]}" )
   local rc=$?
   if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then

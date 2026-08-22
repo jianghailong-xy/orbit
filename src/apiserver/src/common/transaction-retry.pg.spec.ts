@@ -10,6 +10,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { dbConflictMetricsSnapshot, resetDbConflictMetrics } from './db-conflict-metrics';
 import {
   TransactionOutcomeEvent,
   classifyTransactionError,
@@ -306,5 +307,83 @@ test('a real 40001 is retried, and a real 40001 storm is given up on', { skip: !
     assert.deepEqual(outcomes.map((o) => o.outcome), ['RETRYING', 'RETRYING', 'EXHAUSTED']);
     // Three competitor increments and nothing else: every aborted attempt rolled back whole.
     assert.equal(await read('rr-exhaust'), 3);
+  });
+
+  await t.test('what an operator sees, on conflicts PostgreSQL itself raised', async () => {
+    // `db-conflict-metrics.spec.ts` proves the counting given a classified error. This proves the
+    // classification the counting is given is the one a REAL server and a REAL driver adapter
+    // produce: the SQLSTATE that ends up in a label is the one PostgreSQL raised, not a phrase
+    // recovered from a message, and the two situations an operator has to tell apart — a conflict
+    // absorbed, a conflict that outlived the attempts — end up as two different rows.
+    await seed('metrics-absorbed', 'metrics-exhausted');
+    resetDbConflictMetrics();
+
+    let attempt = 0;
+    await withTransactionRetry(
+      prisma,
+      async (tx) => {
+        attempt += 1;
+        await tx.$queryRawUnsafe(`SELECT n FROM ${SCHEMA}.counter WHERE k = $1`, 'metrics-absorbed');
+        if (attempt === 1) await competingBump('metrics-absorbed');
+        await tx.$executeRawUnsafe(`UPDATE ${SCHEMA}.counter SET n = n + 1 WHERE k = $1`, 'metrics-absorbed');
+        return attempt;
+      },
+      {
+        label: 'pg.metricsAbsorbed',
+        transaction: { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 30_000 },
+        baseDelayMs: 1,
+        jitterRatio: 0,
+      },
+    );
+
+    await assert.rejects(
+      withTransactionRetry(
+        prisma,
+        async (tx) => {
+          await tx.$queryRawUnsafe(`SELECT n FROM ${SCHEMA}.counter WHERE k = $1`, 'metrics-exhausted');
+          await competingBump('metrics-exhausted');
+          await tx.$executeRawUnsafe(`UPDATE ${SCHEMA}.counter SET n = n + 1 WHERE k = $1`, 'metrics-exhausted');
+          return 'unreachable';
+        },
+        {
+          label: 'pg.metricsExhausted',
+          transaction: { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 30_000 },
+          maxAttempts: 2,
+          baseDelayMs: 1,
+          jitterRatio: 0,
+        },
+      ),
+    );
+
+    const counted = dbConflictMetricsSnapshot().units.map((series) => series.labels);
+    assert.deepEqual(counted, [
+      {
+        operation: 'pg.metricsAbsorbed',
+        outcome: 'committed',
+        handling: 'absorbed',
+        origin: 'fault_injection',
+        classifier: 'serialization',
+        sqlstate: '40001',
+        attempt: '2',
+      },
+      {
+        operation: 'pg.metricsExhausted',
+        outcome: 'conflict',
+        handling: 'exhausted',
+        origin: 'fault_injection',
+        classifier: 'serialization',
+        sqlstate: '40001',
+        attempt: '2',
+      },
+    ]);
+    // `origin` above is not decoration. This whole file runs under
+    // `scripts/deadlock-barrier.sh`, which makes conflicts on purpose and says so in the
+    // environment; a graph that could not subtract these would page on a test suite passing.
+    assert.equal(process.env.ORBIT_DB_CONFLICT_ORIGIN, 'fault_injection');
+
+    // And the duration is the caller's, not one attempt's: it spans both attempts and the backoff
+    // between them, which is the number that answers "what did the retry cost".
+    const [absorbed] = dbConflictMetricsSnapshot().durations;
+    assert.ok(absorbed.count >= 1 && absorbed.sum > 0, 'no wall time was recorded for a retried unit');
   });
 });
