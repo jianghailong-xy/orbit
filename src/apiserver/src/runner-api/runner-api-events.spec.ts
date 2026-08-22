@@ -426,6 +426,46 @@ test('an interrupt before any reply keeps the pending user message', async () =>
   assert.equal(preview.lastToolUse, null, 'the turn ended, so no tool is in flight');
 });
 
+/**
+ * A tool is not an answer. While one is in flight the row shows it (`lastToolUse` outranks the
+ * message), but between tools the workspace is still working on that message — and clearing there
+ * dropped the row back to the PREVIOUS turn's reply for the rest of a tool-heavy turn, which is
+ * exactly the "it already answered me" misreading the preview exists to prevent.
+ */
+test('a tool does not answer the pending message', async () => {
+  const { calls, controller } = makeController(RunStatus.RUNNING);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 1,
+        type: RunEventType.USER,
+        ts: '2026-08-04T01:21:58.000Z',
+        turnId: 'turn-1',
+        payload: { text: 'read png behaves differently on iOS and web' },
+      },
+      {
+        seq: 2,
+        type: RunEventType.TOOL_USE,
+        ts: '2026-08-04T01:22:01.000Z',
+        turnId: 'turn-1',
+        payload: { id: 'tool-1', name: 'Bash', input: {} },
+      },
+      {
+        seq: 3,
+        type: RunEventType.TOOL_RESULT,
+        ts: '2026-08-04T01:22:03.000Z',
+        turnId: 'turn-1',
+        payload: { toolUseId: 'tool-1', output: 'ok' },
+      },
+    ],
+  });
+
+  const preview = previewUpdate(calls);
+  assert.equal(preview.lastUserText, 'read png behaves differently on iOS and web');
+  assert.equal(preview.lastToolUse, null, 'the tool finished, so none is in flight');
+});
+
 test('a reply answers the pending message and clears it', async () => {
   const { calls, controller } = makeController(RunStatus.RUNNING);
 

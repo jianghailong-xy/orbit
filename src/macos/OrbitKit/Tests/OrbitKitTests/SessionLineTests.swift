@@ -52,13 +52,14 @@ final class SessionLineTests: XCTestCase {
         XCTAssertEqual(SessionLine.make(for: bare, live: true), .init(text: "Running…", tone: .running))
     }
 
-    /// A turn just started (RUNNING) but the agent hasn't replied yet: the row shows the message
-    /// you just sent, not the now-stale previous reply. A tool/approval frontier still outranks it.
+    /// A turn is running but the agent hasn't answered yet: the row shows the message you sent —
+    /// marked as yours, since unmarked it reads exactly like a reply to it — not the previous
+    /// turn's reply. A tool/approval frontier still outranks it.
     func testRunningShowsPendingUserMessageBeforeStaleReply() {
         let awaiting = session(status: .running, lastAssistantText: "previous reply",
                                lastUserText: "fix the drawer shadow")
         XCTAssertEqual(SessionLine.make(for: awaiting, live: true),
-                       .init(text: "fix the drawer shadow", tone: .preview))
+                       .init(text: "You: fix the drawer shadow", tone: .preview))
 
         // Once the agent picks up a tool, the tool status wins over the pending message.
         let tooling = session(status: .running, lastToolUse: "Bash", lastUserText: "fix the drawer shadow")
@@ -66,7 +67,7 @@ final class SessionLineTests: XCTestCase {
 
         // Markdown in the sent message is flattened, like a reply preview.
         let md = session(status: .running, lastUserText: "please `run` the **tests**")
-        XCTAssertEqual(SessionLine.make(for: md, live: true).text, "please run the tests")
+        XCTAssertEqual(SessionLine.make(for: md, live: true).text, "You: please run the tests")
     }
 
     func testPendingAndBackground() {
@@ -91,7 +92,7 @@ final class SessionLineTests: XCTestCase {
         let interrupted = session(status: .interrupted, lastAssistantText: "previous reply",
                                   lastUserText: "设置按钮的底色很奇怪，请帮我 review")
         XCTAssertEqual(SessionLine.make(for: interrupted, live: true),
-                       .init(text: "设置按钮的底色很奇怪，请帮我 review", tone: .preview))
+                       .init(text: "You: 设置按钮的底色很奇怪，请帮我 review", tone: .preview))
 
         // A process left up outranks it — that's live status, not history.
         let bg = session(status: .awaitingInput, lastUserText: "run the tests", runningBgCount: 1)

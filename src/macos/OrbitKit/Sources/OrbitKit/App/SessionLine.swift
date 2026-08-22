@@ -28,11 +28,11 @@ public struct SessionLine: Equatable, Sendable {
         if live && s.isGenerating {
             if (s.pendingApprovals ?? 0) > 0 { return SessionLine(text: "Waiting for approval", tone: .approval) }
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
-            // A turn just started and the agent hasn't replied yet: show the message you just sent
-            // (server-set while the user turn is the frontier, cleared once a reply/tool lands)
-            // rather than the now-stale previous reply. Content, not status — the spinner already
-            // conveys "working" — so it takes the muted preview tone.
-            if let u = s.lastUserText, !u.isEmpty { return SessionLine(text: plainPreview(u), tone: .preview) }
+            // The agent hasn't answered yet: show the message you sent (server-kept from the moment
+            // it is enqueued until a reply lands) rather than the previous turn's reply, which
+            // would read as if this one had already been answered. Content, not status — the
+            // spinner already conveys "working" — so it takes the muted preview tone.
+            if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
             if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
             return SessionLine(text: "Running…", tone: .running)
         }
@@ -45,16 +45,24 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "\(bgRunningLabel(bg))…", tone: .background)
         }
         // A message that never got an answer — the turn was interrupted, or failed, before any
-        // reply or tool landed — outranks the previous turn's reply: it's the newer of the two,
-        // and it's what the session is left waiting on. The server only keeps it while it stands
+        // reply landed — outranks the previous turn's reply: it's the newer of the two, and it's
+        // what the session is left waiting on. The server only keeps it while it stands
         // unanswered, so a non-empty value here always means exactly that.
-        if let u = s.lastUserText, !u.isEmpty { return SessionLine(text: plainPreview(u), tone: .preview) }
+        if let u = s.lastUserText, !u.isEmpty { return sentLine(u) }
         if let a = s.lastAssistantText, !a.isEmpty { return SessionLine(text: plainPreview(a), tone: .preview) }
         // Nothing to preview at all (a run that died before even its user turn was recorded, or an
         // older row from before the server kept the pending message). Fall back to the run's own
         // state word — the same one the console header shows — so the row still says what happened
         // instead of collapsing.
         return SessionLine(text: SessionHeader.statusWord(for: s), tone: .preview)
+    }
+
+    /// The line for a message of YOURS the agent hasn't answered yet. Prefixed, because the preview
+    /// line is otherwise the agent's voice: unmarked, a message you sent and a reply to it read
+    /// exactly alike, and "has it answered me yet?" is the one question the list has to answer
+    /// while a turn is running. Same flattening as a reply — a sent message may be markdown too.
+    static func sentLine(_ text: String) -> SessionLine {
+        SessionLine(text: "You: \(plainPreview(text))", tone: .preview)
     }
 
     /// Flatten an assistant reply into a single prose line: drop code blocks and the common

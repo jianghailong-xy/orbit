@@ -108,6 +108,32 @@ test('a turn sent while RUNNING stays behind the slot already being used', async
   assert.deepEqual(h.wakes(), { queue: 0, inbox: 1 });
 });
 
+/**
+ * The list previews the message from the moment it is accepted, not from the runner's first event
+ * for it. Everything in between — the wait for a slot, and for a message queued behind a running
+ * turn the rest of that turn — is time the row would otherwise spend previewing the PREVIOUS
+ * reply, which reads as if this message had already been answered.
+ */
+test('the sent message becomes the row preview at enqueue', async () => {
+  const queued = makeService(RunStatus.AWAITING_INPUT);
+  await queued.service.createTurn(queued.session.ownerId, queued.session.id, {
+    clientTurnId: 'client-1',
+    content: 'read png behaves differently on iOS and web',
+  });
+  assert.equal(
+    queued.updateWrites[0]?.data.lastUserText,
+    'read png behaves differently on iOS and web',
+  );
+
+  // Same for one that queues behind a turn already running — the longest of those waits.
+  const behindTurn = makeService(RunStatus.RUNNING);
+  await behindTurn.service.createTurn(behindTurn.session.ownerId, behindTurn.session.id, {
+    clientTurnId: 'client-1',
+    content: 'and the screenshot became photo.png',
+  });
+  assert.equal(behindTurn.updateWrites[0]?.data.lastUserText, 'and the screenshot became photo.png');
+});
+
 test('an idempotent retry returns its linked turn before revalidating attachments', async () => {
   const h = makeService(RunStatus.PENDING, { existing: true });
 

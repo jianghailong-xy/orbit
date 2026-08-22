@@ -665,6 +665,15 @@ type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
 };
+// The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
+// line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
+// exactly alike, and "has it answered me yet?" is the one question the list has to answer while a
+// turn is running. Same flattening as a reply preview — it may be markdown too.
+const sentLine = (text: string): SessionLine => ({
+  text: `You: ${plainPreview(text)}`,
+  tone: 'preview',
+});
+
 export const sessionLine = (s: any, live: boolean): SessionLine => {
   const state = sessionRunStateOf(s);
   if (live && isGenerating(s, state)) {
@@ -675,11 +684,11 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
     // through to the muted last-reply preview, which reads as idle.
     if ((s.runningSubagentCount ?? 0) > 0)
       return { text: `${subagentRunningLabel(s.runningSubagentCount)}…`, tone: 'running' };
-    // A turn just started and the workspace hasn't replied yet: show the message you just sent (the
-    // server sets lastUserText while the user turn is the frontier and clears it the moment a
-    // reply or tool lands) instead of the now-stale previous reply. It's content, not status —
-    // the spinner already carries "working" — so it takes the muted preview tone, not blue.
-    if (s.lastUserText) return { text: plainPreview(s.lastUserText), tone: 'preview' };
+    // The workspace hasn't answered yet: show the message you sent (the server keeps lastUserText
+    // from the moment it is enqueued until a reply lands) instead of the previous turn's reply,
+    // which would read as if this one had already been answered. It's content, not status — the
+    // spinner already carries "working" — so it takes the muted preview tone, not blue.
+    if (s.lastUserText) return sentLine(s.lastUserText);
     if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
     return { text: 'Running…', tone: 'running' };
   }
@@ -692,9 +701,9 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   if (parked)
     return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
-  // or tool landed — outranks the previous turn's reply: it's the newer of the two, and it's what
-  // the session is left waiting on. The server only keeps lastUserText while it stands unanswered.
-  if (s.lastUserText) return { text: plainPreview(s.lastUserText), tone: 'preview' };
+  // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
+  // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
+  if (s.lastUserText) return sentLine(s.lastUserText);
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.

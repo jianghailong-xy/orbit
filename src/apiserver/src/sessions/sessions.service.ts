@@ -2974,6 +2974,14 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          // The message the list previews while it waits to be answered. Written here, at
+          // enqueue, rather than when the runner reports the user turn: between the two lies the
+          // whole wait — for a runner slot, and for a message queued behind a running turn the
+          // rest of that turn — and throughout it the row previewed the PREVIOUS reply, which is
+          // the one thing that reads as "already answered". The runner's own `user` event rewrites
+          // the same value; only a reply clears it (ANSWERS_USER_TURN). An attachment-only send
+          // carries no text to preview and so leaves the column as it found it.
+          ...(dto.content ? { lastUserText: dto.content } : {}),
           // A message on this session disarms any auto-retry waiting on it — whether it
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
@@ -3158,6 +3166,9 @@ export class SessionsService {
         data: {
           status: nextStatus,
           lastTurnAt: new Date(),
+          // The redirected message is what the session is waiting on now — previewed from here
+          // exactly as in createTurn.
+          ...(content ? { lastUserText: content } : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
           // second, unasked-for turn behind the one they just redirected to.
           retryAt: null,
@@ -3975,6 +3986,9 @@ export class SessionsService {
           error: null,
           result: null,
           lastTurnAt: new Date(),
+          // Previewed from enqueue, as in createTurn: a revive waits for a slot like any other
+          // turn, and until the runner reports it the row would show the reply from before.
+          ...(dto.content ? { lastUserText: dto.content } : {}),
           mergeStatus: null,
           mergeOperationId: null,
           mergeOperationOwner: null,

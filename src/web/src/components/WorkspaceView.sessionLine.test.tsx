@@ -50,6 +50,30 @@ describe('sessionLine', () => {
     ).toEqual({ text: 'All done.', tone: 'preview' });
   });
 
+  /**
+   * The whole point of the line while a turn runs: it says whether what you sent has been answered
+   * yet. The message is server-kept from the moment it is enqueued (SessionsService.createTurn) —
+   * so it stands through the wait for a slot and through the tool phase — and it is marked as
+   * yours, because unmarked it reads exactly like a reply to it.
+   */
+  it('shows the message you sent, marked as yours, until a reply lands', () => {
+    expect(
+      sessionLine(
+        { status: 'RUNNING', lastAssistantText: 'previous reply', lastUserText: 'fix the drawer shadow' },
+        true,
+      ),
+    ).toEqual({ text: 'You: fix the drawer shadow', tone: 'preview' });
+    // A tool in flight still outranks it — that's what the session is doing right now.
+    expect(
+      sessionLine({ status: 'RUNNING', lastToolUse: 'Bash', lastUserText: 'fix the drawer shadow' }, true),
+    ).toEqual({ text: 'Running Bash…', tone: 'running' });
+    // The server clears it once the workspace answers, and the reply takes the line back.
+    expect(sessionLine({ status: 'RUNNING', lastAssistantText: 'On it — reading the CSS.' }, true)).toEqual({
+      text: 'On it — reading the CSS.',
+      tone: 'preview',
+    });
+  });
+
   it('flattens the last reply into one prose line', () => {
     expect(
       sessionLine({ status: 'AWAITING_INPUT', lastAssistantText: '## Done\n\nFixed `Session`.' }, true),
@@ -71,7 +95,7 @@ describe('sessionLine', () => {
         },
         true,
       ),
-    ).toEqual({ text: '设置按钮的底色很奇怪，请帮我 review', tone: 'preview' });
+    ).toEqual({ text: 'You: 设置按钮的底色很奇怪，请帮我 review', tone: 'preview' });
   });
 
   /**

@@ -380,7 +380,14 @@ test('publishSessionUpdated surfaces as session.updated with the current summary
   assert.equal((got[0].data as Record<string, unknown>).title, 'Fix bug');
 });
 
-test('queued-turn changes reach the focused transcript stream but not the control stream', async () => {
+/**
+ * A queued turn has no transcript event until the runner leases it, so this nudge is the only
+ * thing that says a message was sent at all. The focused client re-fetches the queue from it; the
+ * owner's OTHER clients need it as a plain session update, or a message sent on web reaches the
+ * phone's list only once the runner gets round to its first event — the far side of a whole turn,
+ * for a message queued behind one.
+ */
+test('a queued-turn change reaches the focused transcript stream and the control stream', async () => {
   const svc = svcWith({ sessA: rowA }, 0);
   const transcript: Array<{ type: string }> = [];
   const control: ControlEvent[] = [];
@@ -393,7 +400,9 @@ test('queued-turn changes reach the focused transcript stream but not the contro
   controlSub.unsubscribe();
 
   assert.deepEqual(transcript.map((e) => e.type), ['queued_turns_changed']);
-  assert.deepEqual(control, []);
+  assert.equal(control.length, 1);
+  assert.equal(control[0].type, 'session.updated');
+  assert.equal((control[0].data as Record<string, unknown>).id, 'sessA');
 });
 
 test('lifecycle signals never enter a per-session transcript stream', async () => {

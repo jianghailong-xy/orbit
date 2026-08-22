@@ -58,10 +58,19 @@ test('controlTypeFor drops transcript/data-plane events', () => {
     RunEventType.USER,
     RunEventType.RESULT,
     RunEventType.BACKGROUND_OUTPUT,
-    RunEventType.QUEUED_TURNS_CHANGED,
   ]) {
     assert.equal(controlTypeFor(t), null, `${t} should be dropped`);
   }
+});
+
+/** A queued turn has no transcript event until the runner leases it, so this nudge is the only
+ *  thing that tells the owner's other clients a message was sent (or withdrawn) at all. It maps to
+ *  a plain session update: the row's status and preview line are what changed. */
+test('controlTypeFor forwards a queued-turn change as a session update', () => {
+  assert.equal(
+    controlTypeFor(RunEventType.QUEUED_TURNS_CHANGED),
+    ControlEventType.SESSION_UPDATED,
+  );
 });
 
 test('errorPayloadOf extracts message and defaults recoverable to false', () => {

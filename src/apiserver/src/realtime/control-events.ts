@@ -41,6 +41,14 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.AGENT_CHANGED;
     case RunEventType.SESSION_UPDATED:
       return ControlEventType.SESSION_UPDATED;
+    case RunEventType.QUEUED_TURNS_CHANGED:
+      // A turn was queued or withdrawn. Forwarded as a plain session update because that is what
+      // it is to a list: the row's status and preview line both change with it. Nothing else
+      // announces a send to the owner's OTHER clients — a queued turn has no transcript event
+      // until the runner leases it — so without this a message sent on web reached the phone's
+      // list only when the runner got round to its first event, which for a message queued behind
+      // a running turn is the far side of that whole turn.
+      return ControlEventType.SESSION_UPDATED;
     case RunEventType.TASK_LIST_CHANGED:
       return ControlEventType.TASK_LIST_CHANGED;
     case RunEventType.TAG_CHANGED:

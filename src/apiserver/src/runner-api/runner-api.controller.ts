@@ -175,10 +175,12 @@ const OPEN = OPEN_SESSION_STATUSES;
 // denormalized `lastUserText` the session list previews. Deliberately narrow: a turn ending, a
 // user interrupt, an error or a system/status handshake all end the turn without answering, and
 // clearing on those left a session interrupted before its first reply with nothing to preview.
+// A tool is not an answer either: while one is in flight the row shows it (`lastToolUse` outranks
+// the message), but the gaps between tools are the workspace still working on that message, and
+// clearing there dropped the row back to the PREVIOUS turn's reply for the rest of the turn —
+// the one thing that reads as "already answered".
 const ANSWERS_USER_TURN: ReadonlySet<RunEventType> = new Set([
   RunEventType.ASSISTANT,
-  RunEventType.TOOL_USE,
-  RunEventType.TOOL_RESULT,
   RunEventType.RESULT,
 ]);
 const RUNNER_CAPABILITIES_HEADER = 'x-orbit-runner-capabilities';
