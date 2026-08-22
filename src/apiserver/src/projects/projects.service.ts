@@ -31,6 +31,7 @@ import {
 } from '../tasks/tasks.service';
 import { CreateProjectDto, UpdateProjectDto } from './dto';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
+import { parseWindowHours, readDispatchHealth } from './project-panorama-dispatch-health';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import {
@@ -936,6 +937,20 @@ export class ProjectsService {
         detail: row.detail,
       })),
     };
+  }
+
+  /**
+   * Why ready work is not running (panorama): the dispatch ledger over a window, beside what is
+   * open against this project right now.
+   *
+   * `/blockers` says what is stopping the project and `/coordinator/status` says what the last
+   * pass decided. Neither answers "it says READY, so why has nothing started" — that answer is a
+   * count of refusals per PAC §12 code, which until now was a GROUP BY nobody was serving and
+   * every reader was reconstructing from the raw audit by eye.
+   */
+  async dispatchHealth(ownerId: string, projectId: string, windowHours?: string) {
+    await this.assertOwned(ownerId, projectId);
+    return readDispatchHealth(this.prisma, projectId, parseWindowHours(windowHours));
   }
 
   /**

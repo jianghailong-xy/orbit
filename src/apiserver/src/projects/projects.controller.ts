@@ -131,6 +131,22 @@ export class ProjectsController {
   }
 
   /**
+   * Why ready tasks are not running, over `?windowHours=` (default 24, half-open `[now - h, now)`).
+   *
+   * The dispatch ledger's two terminal outcomes for the window, the PAC §12 refusal codes behind
+   * the refused ones ranked by how often each fired, and the blockers open against this project
+   * right now. A refusal with no code is counted under `UNSPECIFIED` rather than dropped.
+   */
+  @Get(':id/panorama/dispatch-health')
+  dispatchHealth(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('windowHours') windowHours?: string,
+  ) {
+    return this.projects.dispatchHealth(user.userId, id, windowHours);
+  }
+
+  /**
    * Everything the control loop knows about this project, in one read (contract AC10).
    *
    * The endpoint that answers "why is this project not moving": lifecycle and run state, who
