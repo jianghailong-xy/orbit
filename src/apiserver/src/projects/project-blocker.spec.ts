@@ -593,3 +593,45 @@ test('§13.1 AG6: the refusal is non-blocking, and its wire code is one old read
   // Every other code is passed through untouched.
   assert.equal(wireRefusalCode('RUNNER_UNAVAILABLE'), 'RUNNER_UNAVAILABLE');
 });
+
+// ---------------------------------------------------------------------------------------------
+// The mixed-version half of adding a kind, which only the OLDER replica can get wrong.
+// ---------------------------------------------------------------------------------------------
+
+test('a kind this build has never heard of is left alone, not auto-cleared', () => {
+  // BL3's auto-clear is "the recomputation no longer holds this condition". A kind this binary has
+  // no detector for is one it did not RECOMPUTE, so its silence is ignorance rather than absence —
+  // and clearing on ignorance is how a rolling deploy deletes a row a person is being asked to act
+  // on, only for the newer replica to raise it again a generation later.
+  //
+  // This is exactly the shape migration 0135 creates: it teaches the database two kinds that only
+  // the new code writes, so during the deploy an old reconciler sees them open and unexplained.
+  // A kind THIS build has no detector for. `AGGREGATE_PARENT_UNSATISFIABLE` would not do: 0135
+  // ships its detector alongside it, so this binary recomputes it and clearing it is correct. The
+  // case that matters is the one an OLDER replica is in, which is a name it has never seen.
+  const fromTheFuture = {
+    ...fact('PROVIDER_UNAVAILABLE'),
+    id: 'blocker-from-a-newer-replica',
+    kind: 'A_KIND_FROM_A_LATER_RELEASE' as never,
+    dedupeKey: 'a-kind-from-a-later-release:TASK:' + TASK,
+  };
+
+  const plan = planProjectBlockers({ epoch: EPOCH, open: [fromTheFuture], observed: [] });
+
+  assert.deepEqual(plan.clears, [], 'an unrecognised kind must not be resolved as AUTO');
+  // ...and it still STOPS what it says it stops: §4.2 and §11 BL1 read `openAfter`, so a row this
+  // build cannot evaluate has to stay in it or the guards downstream silently stop honouring it.
+  assert.deepEqual(
+    plan.openAfter.map((b) => b.kind),
+    ['A_KIND_FROM_A_LATER_RELEASE'],
+    'the row a build cannot judge must still count as open',
+  );
+});
+
+test('a kind this build DOES know is still auto-cleared when nothing observes it', () => {
+  // The other half, so the rule above cannot be satisfied by never clearing anything.
+  const known = fact('PROVIDER_UNAVAILABLE');
+  const plan = planProjectBlockers({ epoch: EPOCH, open: [known], observed: [] });
+  assert.deepEqual(plan.clears.map((c) => c.blockerId), [known.id]);
+  assert.deepEqual(plan.openAfter, []);
+});

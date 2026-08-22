@@ -155,9 +155,6 @@ async function reset(client: Client): Promise<void> {
       "deleted_at" TIMESTAMP(3),
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "error" TEXT,
-      -- Read by the admission counts since 0131: a session that does not start task work is not
-      -- an in-flight task.
-      "starts_task_work" BOOLEAN NOT NULL DEFAULT true,
       -- §13.3 DEP3's three: a check's conclusion counts only behind a run that ended as the worker
       -- finishing the task -- SUCCEEDED, end reason task_done, and 4.2's COMPLETED lifecycle.
       "end_reason" TEXT,
