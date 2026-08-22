@@ -2543,6 +2543,88 @@ body {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+/* Recency headings nested inside the Unfiled group. Indented under their group header and not
+   sticky: the group header owns the sticky slot at the top of the column, and two headings
+   competing for it stack into each other on the way past. */
+.session-section-head.nested {
+  position: static;
+  padding-left: 12px;
+  color: var(--text-3);
+  font-weight: 500;
+}
+/* Project group header in the Open list: name over rollup, whole line a toggle. Heavier than a
+   recency heading — this is the list's primary structure now, and the thing rows hide behind. */
+.session-group-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 10px 4px 6px;
+  background: var(--bg-base);
+  cursor: pointer;
+  user-select: none;
+}
+.session-group-head:hover .session-group-title {
+  color: var(--text-1);
+}
+.session-group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* Points right when the group is rolled up, down when it is open — the rotation is the
+   affordance, so the same glyph reads as both states. */
+.session-group-caret {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-3);
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+.session-group-head.collapsed .session-group-caret {
+  transform: rotate(0deg);
+}
+.session-group-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The row count Pinned and Unfiled show in place of a rollup they have no project to compute. */
+.session-group-count {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-4);
+}
+/* "2 needs you · 1 running · 5/9 done", on its own line under the name: at the column's width a
+   long project name and the rollup cannot share one, and the rollup is what the user scans. */
+.session-group-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-height: 15px;
+  padding-left: 16px;
+  font-size: 11px;
+  color: var(--text-4);
+}
+.session-group-stat + .session-group-stat::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--text-4);
+}
+/* Amber for waiting-on-you, the same language the sidebar's attention badge speaks. */
+.session-group-stat.needsYou {
+  color: var(--warning);
+  font-weight: 600;
+}
+.session-group-stat.running {
+  color: var(--brand);
+}
 /* Foot of the list while the next page loads. */
 .session-list-more {
   display: flex;
