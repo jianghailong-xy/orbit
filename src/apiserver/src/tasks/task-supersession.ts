@@ -445,28 +445,20 @@ export function taskFenceConflictMessage(error: unknown): string | null {
     return 'this task changed project while the request was being prepared — nothing was changed; '
       + 'retry';
   }
-  // §8.6 LO1's own refusals, from migration 0134 and from `task-lock-order.ts`. Same clause as
-  // every entry above and for the same reason: each is a genuinely concurrent write the service
-  // pre-checks cannot see, and each has a name, a cause and a remedy. Left untranslated the two
-  // database markers reach the caller as a raw `lock_not_available` 500, and the two service ones
-  // as an unclassified Error — for the exact condition the production reports of this bug had in
-  // common, which was a 500 nobody could attribute.
-  if (/TASK_FACT_PROJECT_BUSY|TASK_DEPENDENCY_PROJECT_BUSY/.test(message)) {
+  // The acceptance-fact guard's refusals, from migration 0136 and from `task-lock-order.ts`. Same
+  // clause as every entry above and for the same reason: each is a genuinely concurrent write the
+  // service pre-checks cannot see, and each has a name, a cause and a remedy.
+  //
+  // They are translated here rather than retried, and that is `classifyTransactionError`'s own
+  // decision: both are `lock_not_available` (`55P03`), which it deliberately excludes from the
+  // transient set because a NOWAIT that declined to wait is a control-flow signal, not a fault.
+  // Re-running the transaction would spend its attempts re-earning the same correct refusal.
+  if (/TASK_FACT_PROJECT_BUSY/.test(message)) {
     return "this task's project is being written right now — nothing was changed; retry";
-  }
-  if (/TASK_DEPENDENCY_TASK_BUSY/.test(message)) {
-    return 'a task this dependency edge names is being written right now — nothing was changed; '
-      + 'retry';
   }
   if (/TASK_FACT_SCOPE_MOVED/.test(message)) {
     return 'a task involved in this write changed project while it was being prepared — nothing '
       + 'was changed; retry';
-  }
-  // The one that is NOT a single refusal: the bounded retry above it is already spent. Said in
-  // those words on purpose — "retry" alone would be advice this service has just taken four times.
-  if (/PROJECT_FACT_WRITE_CONTENDED/.test(message)) {
-    return "this project's tasks are being written by something else right now — every attempt was "
-      + 'rolled back whole, so nothing was changed. Try again in a moment';
   }
   return null;
 }

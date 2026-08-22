@@ -442,7 +442,7 @@ BEGIN
   ELSE
     -- (a) The row's PARENT LINK moved, or the row moved between owner sets. Both change which
     --     children a parent has, and `owner_id` is the one that does it without naming the parent:
-    --     a task whose owner becomes its parent's owner JOINS that parent's children, and 0132's
+    --     a task whose owner becomes its parent's owner JOINS that parent's children, and this migration's
     --     child lookup is owner-scoped because `collectAggregationScope` is. Without this branch a
     --     raw `UPDATE task SET owner_id = ...` walks a task into a running parent's subtree with
     --     no guarded column touched at all.

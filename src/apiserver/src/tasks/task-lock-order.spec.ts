@@ -14,14 +14,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ACCEPTANCE_FACT_TASK_COLUMNS,
-  LOCK_ORDER_RETRY_ATTEMPTS,
-  LockOrderContendedError,
-  PROJECT_FACT_WRITE_CONTENDED,
   TASK_FACT_SCOPE_MOVED,
   TaskScopeMovedError,
-  isLockOrderContention,
   touchesAcceptanceFact,
-  withLockOrderRetry,
 } from './task-lock-order';
 import { taskFenceConflictMessage } from './task-supersession';
 
@@ -64,7 +59,7 @@ test('a PATCH that writes no acceptance-fact column is left on the fast path', (
 
 const MIGRATION = readFileSync(
   join(__dirname, '..', '..', 'prisma', 'migrations',
-    '0134_task_acceptance_fact_lock_order', 'migration.sql'),
+    '0136_task_acceptance_fact_lock_order', 'migration.sql'),
   'utf8',
 );
 
@@ -104,12 +99,15 @@ test('the DTO predicate covers exactly the columns the constant names', () => {
   }
 });
 
-test('the migration installs a guard on the dependency table too', () => {
-  // The other half of the same order. An edge write locks two task rows without naming either —
-  // the FK takes `FOR KEY SHARE` on the prerequisite and 0122's touch trigger UPDATEs the dependent
-  // — so without this the order was whatever the planner chose.
-  assert.match(MIGRATION, /CREATE TRIGGER "task_dependency_project_lock_order"/);
-  assert.match(MIGRATION, /BEFORE INSERT OR UPDATE OR DELETE ON "task_dependency"/);
+test('the migration deliberately guards nothing on the dependency table', () => {
+  // 0132 removed the cause rather than ordering it: `task_dependency_dispatch_touch` is DROPped and
+  // an edge write advances `task_dependency_revision` (rank 70) instead, so a pure edge path takes
+  // the owner mutex and nothing else. A guard here would pre-take `task` rows NOWAIT from a path
+  // that no longer touches them — turning edge writes that cannot deadlock into refusable ones.
+  assert.doesNotMatch(MIGRATION, /CREATE TRIGGER "task_dependency_project_lock_order"/);
+  assert.doesNotMatch(MIGRATION, /ON "task_dependency"/);
+  // And the reason is written down where the next reader will look for it.
+  assert.match(MIGRATION, /task_dependency_revision/);
 });
 
 test('every acquisition the migration adds on a row it already holds is NOWAIT', () => {
@@ -118,147 +116,49 @@ test('every acquisition the migration adds on a row it already holds is NOWAIT',
   // waiting there is the edge that closes the cycle. One `FOR NO KEY UPDATE` without NOWAIT on
   // those paths would put the inversion back and nothing else in the suite would notice.
   //
-  // INSERT is the exception, and it is 0132's exception: the row does not exist yet and the FK
+  // INSERT is the exception, and it is 0134's exception: the row does not exist yet and the FK
   // checks are on the AFTER side, so nothing below the project is held and a waiter that holds
-  // nothing cannot be in a cycle. It is excluded by name below rather than by the regex, so that
-  // adding a THIRD waiting acquisition has to be an edit to this test.
-  const guards = MIGRATION.slice(
+  // nothing cannot be in a cycle.
+  const guard = MIGRATION.slice(
     MIGRATION.indexOf('CREATE OR REPLACE FUNCTION "task_acceptance_fact_lock_order"'),
-    MIGRATION.indexOf('-- 3. The two column lists are one list'),
+    MIGRATION.indexOf('-- 2. The dependency side needs nothing'),
   )
-    // Comment lines out first. Both guards EXPLAIN the acquisitions they are removing — the FK's
-    // `FOR KEY SHARE`, the touch trigger's `FOR NO KEY UPDATE` — and scanning prose for lock modes
-    // finds the ones being described rather than the ones being taken.
+    // Comment lines out first: the guard EXPLAINS the acquisitions it is removing, and scanning
+    // prose for lock modes finds the ones being described rather than the ones being taken.
     .split('\n').filter((line) => !line.trimStart().startsWith('--')).join('\n');
-  const acquisitions = [...guards.matchAll(/FOR (?:NO KEY UPDATE|UPDATE|SHARE|KEY SHARE)[^;]*/g)]
+  const acquisitions = [...guard.matchAll(/FOR (?:NO KEY UPDATE|UPDATE|SHARE|KEY SHARE)[^;]*/g)]
     .map((m) => m[0]);
-  assert.ok(acquisitions.length >= 3, 'expected the guards to take project and task rows');
+  assert.equal(acquisitions.length, 2, `expected the waiting and the NOWAIT branch: ${acquisitions}`);
   const waiting = acquisitions.filter((a) => !/NOWAIT/.test(a));
   assert.equal(waiting.length, 1,
     `exactly one waiting acquisition is allowed (the INSERT branch); found: ${waiting.join(' | ')}`);
-  // ...and it is under `TG_OP = 'INSERT'`, not somewhere else that happens to have been written
-  // without NOWAIT.
-  const at = guards.indexOf("IF TG_OP = 'INSERT' THEN");
+  const at = guard.indexOf("IF TG_OP = 'INSERT' THEN");
   assert.notEqual(at, -1, 'the guard no longer has an INSERT branch');
-  // Searched FORWARD from the branch, not from the start of the text: `ELSE` occurs earlier in the
-  // function body, so anchoring on its first occurrence produced an empty slice and a test that
-  // asserted nothing about anything.
-  assert.match(guards.slice(at, guards.indexOf('ELSE', at)), /FOR NO KEY UPDATE;/);
+  assert.match(guard.slice(at, guard.indexOf('ELSE', at)), /FOR NO KEY UPDATE;/);
 });
 
 // ---------------------------------------------------------------------------------------------
-// LO4: what a caller is told, and how many times the server tries before saying it.
+// The door out: the guard's refusal reaches an HTTP caller as a sentence, never as a SQLSTATE.
 // ---------------------------------------------------------------------------------------------
 
-const deadlock = () => Object.assign(new Error('deadlock detected'), { code: '40P01' });
-
-test('a contended write is retried, with a fresh attempt each time', async () => {
-  let attempts = 0;
-  const result = await withLockOrderRetry(async () => {
-    attempts += 1;
-    if (attempts < 3) throw deadlock();
-    return 'committed';
-  }, { sleep: async () => {}, random: () => 0.5 });
-  assert.equal(result, 'committed');
-  assert.equal(attempts, 3);
-});
-
-test('the retries are bounded, and what is left is a named condition rather than a 500', async () => {
-  let attempts = 0;
-  const error = await withLockOrderRetry(async () => {
-    attempts += 1;
-    throw deadlock();
-  }, { sleep: async () => {}, random: () => 0.5 }).catch((e: unknown) => e);
-  assert.equal(attempts, LOCK_ORDER_RETRY_ATTEMPTS);
-  assert.ok(error instanceof LockOrderContendedError);
-  assert.equal(error.code, PROJECT_FACT_WRITE_CONTENDED);
-  // The cause is kept, so the log line still says which SQLSTATE it was.
-  assert.equal((error.cause as { code: string }).code, '40P01');
-  // ...and the caller is told nothing was written, because nothing was: PostgreSQL rolled each
-  // attempt back whole. This sentence is the difference between "retry" and "check what happened".
-  assert.match(error.message, /every one was rolled back whole/);
-});
-
-test('the backoff doubles and is jittered, so collided writers do not re-collide in lockstep', async () => {
-  const slept: number[] = [];
-  await withLockOrderRetry(async () => { throw deadlock(); }, {
-    baseDelayMs: 100,
-    sleep: async (ms) => { slept.push(ms); },
-    random: () => 0,      // the bottom of the jitter window
-  }).catch(() => {});
-  assert.deepEqual(slept, [75, 150, 300]);          // 100·2^n · 0.75
-  const top: number[] = [];
-  await withLockOrderRetry(async () => { throw deadlock(); }, {
-    baseDelayMs: 100,
-    sleep: async (ms) => { top.push(ms); },
-    random: () => 1,      // the top of it
-  }).catch(() => {});
-  assert.deepEqual(top, [125, 250, 500]);           // 100·2^n · 1.25
-  // One sleep FEWER than attempts: the last failure is reported, not slept on.
-  assert.equal(slept.length, LOCK_ORDER_RETRY_ATTEMPTS - 1);
-});
-
-test('only contention is retried; a refusal is a refusal', async () => {
-  let attempts = 0;
-  const error = await withLockOrderRetry(async () => {
-    attempts += 1;
-    throw Object.assign(new Error('duplicate key'), { code: '23505' });
-  }, { sleep: async () => {} }).catch((e: unknown) => e);
-  // Retrying a rule violation would turn one clear 409 into four identical failures and a delay.
-  assert.equal(attempts, 1);
-  assert.equal((error as { code: string }).code, '23505');
-});
-
-test('the conditions counted as contention are the ones that roll back whole', () => {
-  for (const code of ['40P01', '40001', '55P03']) {
-    assert.equal(isLockOrderContention(Object.assign(new Error('x'), { code })), true, code);
-  }
-  // The database's own typed markers say the same thing out loud, so they are recognised by name —
-  // 0134 raises them with `lock_not_available`, which is `55P03`, but the marker is what survives
-  // being wrapped by Prisma.
-  for (const marker of ['TASK_FACT_PROJECT_BUSY', 'TASK_DEPENDENCY_PROJECT_BUSY']) {
-    assert.equal(isLockOrderContention(new Error(`${marker}: project x is busy`)), true, marker);
-  }
-  assert.equal(isLockOrderContention(new Error(`${TASK_FACT_SCOPE_MOVED}: a task's project`)), true);
-  // A serialization failure is retryable; a constraint violation and an ordinary error are not.
-  assert.equal(isLockOrderContention(Object.assign(new Error('x'), { code: '23514' })), false);
-  assert.equal(isLockOrderContention(new Error('something else')), false);
-});
-
-test('a scope that moved is a retry, not a failure', () => {
-  const moved = new TaskScopeMovedError("a task's project");
-  assert.equal(isLockOrderContention(moved), true);
-  // Nothing was written — the check happens under the locks and before the write — so the caller's
-  // whole remedy is a fresh snapshot.
-  assert.match(moved.message, /nothing was written; retry/);
-});
-
-// ---------------------------------------------------------------------------------------------
-// The door out: every marker reaches an HTTP caller as a sentence, never as a SQLSTATE.
-// ---------------------------------------------------------------------------------------------
-
-test('every condition this unit can raise is translated into a 409 sentence', () => {
-  const raised = [
+test('the guard\'s refusal is translated into a 409 sentence', () => {
+  for (const message of [
     'TASK_FACT_PROJECT_BUSY: project p is being written right now',
-    'TASK_DEPENDENCY_PROJECT_BUSY: project p is being written right now',
-    'TASK_DEPENDENCY_TASK_BUSY: a task this dependency edge names',
     `${TASK_FACT_SCOPE_MOVED}: a task's project changed`,
-    `${PROJECT_FACT_WRITE_CONTENDED}: this project's tasks are being written`,
-  ];
-  for (const message of raised) {
+  ]) {
     const translated = taskFenceConflictMessage(new Error(message));
     assert.ok(translated, `untranslated marker would reach the caller as a 500: ${message}`);
-    assert.doesNotMatch(translated, /_BUSY|_MOVED|_CONTENDED|40P01/,
+    assert.doesNotMatch(translated, /_BUSY|_MOVED|55P03|lock_not_available/,
       'the translation should be a sentence, not the marker repeated');
+    assert.match(translated, /retry/i, 'and it should say what to do');
   }
 });
 
-test('the spent-retry sentence does not advise the remedy the server just exhausted', () => {
-  const translated = taskFenceConflictMessage(new LockOrderContendedError(4, deadlock()));
-  assert.ok(translated);
-  // Every other marker here ends "retry", because one retry is genuinely the remedy. This one has
-  // already been retried four times, so telling the caller to retry would be advice the server took
-  // on their behalf and does not want repeated immediately.
-  assert.match(translated, /Try again in a moment/);
-  assert.match(translated, /nothing was changed/);
+test('a scope that moved says nothing was written', () => {
+  const moved = new TaskScopeMovedError("a task's project");
+  assert.match(moved.message, /nothing was written; retry/);
+  // NOT retried by `withTransactionRetry`, deliberately: this is raised before any write, and
+  // `classifyTransactionError` treats `lock_not_available` and this marker as decisions rather
+  // than faults. Re-running would spend the attempts re-earning the same correct refusal.
+  assert.ok(taskFenceConflictMessage(moved));
 });

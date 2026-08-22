@@ -84,6 +84,11 @@ import {
   taskRetirement,
   taskWorkRefusal,
 } from './task-supersession';
+import {
+  assertAcceptanceScopeUnmoved,
+  cascadedTaskClosure,
+  touchesAcceptanceFact,
+} from './task-lock-order';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/project-coordinator-session';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -4497,13 +4502,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // then asks for the project, which is the reverse of the order the Project authorization
     // adapter takes them in (project first, then the task FOR SHARE).
     //
-    // The five columns below are exactly the ones that trigger is declared over.
-    const touchesAcceptanceFacts =
-      dto.status !== undefined ||
-      dto.completionPolicy !== undefined ||
-      dto.verdict !== undefined ||
-      dto.projectId !== undefined ||
-      dto.verifiesTaskId !== undefined;
+    // ...and the set of columns is read from `ACCEPTANCE_FACT_TASK_COLUMNS`, not spelled again.
+    //
+    // Spelled here it was FIVE, and the trigger is declared over SEVEN: 0130 added
+    // `terminal_reason` and `superseded_by_task_id` to it. Both happen to be covered anyway,
+    // because a write to either sets `supersession` and that forces the transaction branch through
+    // `restructures` — so the gap was real and invisible, held shut by a second condition that has
+    // nothing to do with acceptance facts. `touchesAcceptanceFact` asks the closed set directly,
+    // and `task-lock-order.spec.ts` checks that set against migration 0136's trigger text, so the
+    // next column added to the trigger cannot be forgotten here.
+    const touchesAcceptanceFacts = touchesAcceptanceFact(dto);
     // Restructuring is what rank 10 is for. A status write moves one row and no edge, so it must
     // not queue behind another request's DAG rewrite — the same reasoning that keeps a rename off
     // the lock entirely, applied to the writes that now need rank 40.
@@ -4605,6 +4613,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             for (const projectId of acceptanceProjects) {
               await tx.$queryRaw`
                 SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
+            }
+            // ...and the read that chose them was taken before the first of them was held, so it
+            // was a guess. Between it and the lock this task can be re-filed into another project
+            // — nothing above serializes a single-row status write against a move — and this
+            // transaction would then hold the OLD project while the AFTER trigger reaches for the
+            // new one. Deadlocking would be the loud version; committing on the guess is the quiet
+            // one. Checked here, after rank 40 and before the first task write, so a refusal costs
+            // nothing that has been written.
+            if (acceptanceProjects.length > 0) {
+              await assertAcceptanceScopeUnmoved(
+                tx, ownerId, [id],
+                [...acceptanceProjects, ...(dto.projectId ? [dto.projectId] : [])],
+              );
             }
             // ...and the task row IMMEDIATELY after, before anything else in this transaction
             // touches it. `tx.task.update` below takes the same row with an ordinary blocking lock,
@@ -5985,9 +6006,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // ordered, puts the ordinary case back in rank order. It cannot be complete (a dispatch
         // that commits between this statement and the task lock attaches a run this did not see),
         // which is exactly why the task lock below still comes before the run scan.
+        //
+        // `verifies_task_id` CASCADEs, so the rows this DELETE writes include the checks pointed at
+        // these tasks — and their sessions are written by the same cascade. Taking only the named
+        // tasks' sessions here left those out of rank 30 entirely.
         await tx.$queryRaw`
           SELECT "id" FROM "session"
-          WHERE "task_id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+          WHERE "owner_id" = ${ownerId}::uuid AND "task_id" IN (
+            WITH RECURSIVE cascaded AS (
+              SELECT t."id" FROM "task" t
+               WHERE t."id" = ANY(${ids}::uuid[]) AND t."owner_id" = ${ownerId}::uuid
+              UNION
+              SELECT v."id" FROM cascaded c
+                JOIN "task" v ON v."verifies_task_id" = c."id"
+                             AND v."owner_id" = ${ownerId}::uuid
+            )
+            SELECT "id" FROM cascaded
+          )
           ORDER BY "id"
           FOR UPDATE`;
         // Rank 40, and the same lock `project_acceptance_reopen` takes from an AFTER trigger on
@@ -6018,8 +6053,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           WHERE id = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
           ORDER BY id
           FOR UPDATE`;
+        // The runs to end are the runs on every task this DELETE actually REMOVES, which is more
+        // than the ids it names: `verifies_task_id` is `ON DELETE CASCADE`, so deleting a subject
+        // takes its checks with it, and a check of a check goes too.
+        //
+        // Scanning only `ids` left a live run sitting on a cascaded check. `session.task_id` is SET
+        // NULL by the delete, so that run finishes its turn, parks at AWAITING_INPUT and stays
+        // there: it holds no slot, nothing can recognise it as a task run any more, and the
+        // reaper's rule for a task that goes terminal under a live run cannot reach it because by
+        // then there is no task to read a status from. This is the last moment the link exists.
+        //
+        // A read, not a lock: the rank-30 statement above already took the session rows, and this
+        // widens which of them the scan reports rather than adding an acquisition of its own.
+        const doomed = await cascadedTaskClosure(tx, ownerId, ids);
         const occupying = await tx.session.findMany({
-          where: { ownerId, taskId: { in: ids }, status: { in: TASK_OCCUPYING } },
+          where: { ownerId, taskId: { in: doomed }, status: { in: TASK_OCCUPYING } },
           select: { id: true },
         });
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });

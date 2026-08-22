@@ -3,7 +3,7 @@
  *
  * `task-lock-order.spec.ts` proves the rule is stated correctly. `tools/lock-order/barriers.mjs`
  * proves the ORDER is the right one, by driving raw statements and showing the same five barriers
- * deadlock without migration 0134 and do not with it. Neither of them proves the thing that actually broke, which
+ * deadlock without migration 0136 and do not with it. Neither of them proves the thing that actually broke, which
  * is that `TasksService` TAKES the order — the production incident was not a wrong rule, it was
  * four write paths that each took part of it and one that took none.
  *
@@ -124,7 +124,7 @@ async function withDeadline<T>(work: Promise<T>, what: string): Promise<T> {
  * §8.6 LO1 level 1 — while `run` starts, and letting go `HOLD_MS` later.
  *
  * This is the whole point of the file. A service call that takes the project FIRST waits for this
- * holder, gets it when the holder commits, and finishes. One that takes the TASK first meets 0134's
+ * holder, gets it when the holder commits, and finishes. One that takes the TASK first meets 0136's
  * BEFORE guard, which refuses NOWAIT. So the two outcomes this can produce are "it worked" and "a
  * typed 409", and the one it can no longer produce is the deadlock that reached production.
  *

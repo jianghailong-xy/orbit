@@ -58,7 +58,7 @@ const BLOCKER = migration('0125_project_blocker');
  * invalid" rather than "the fixture is old". Only the two `ALTER TABLE` statements are taken — the
  * same file's `ALTER TYPE` touches an enum this subset does not build.
  */
-const KIND_CHECK = migration('0133_project_task_completion_gap')
+const KIND_CHECK = migration('0135_project_task_completion_gap')
   .split(';')
   .filter((statement) => /project_blocker_kind_chk/.test(statement))
   .map((statement) => `${statement};`)

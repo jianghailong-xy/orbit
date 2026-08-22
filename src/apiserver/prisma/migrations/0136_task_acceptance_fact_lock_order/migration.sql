@@ -21,15 +21,14 @@
 --   * that same replacement against a status PATCH on one of its prerequisites — a mutual wait that
 --     only `statement_timeout` broke.
 --
--- This migration finishes the job on both tables, with no new mechanism: the same BEFORE trigger,
--- the same NOWAIT, the same typed marker, extended to the whole closed set.
+-- This migration finishes the job on `task`, with no new mechanism: the same BEFORE trigger, the
+-- same NOWAIT, the same typed marker, extended to the whole closed set.
 --
 --   1. `task_acceptance_fact_lock_order` covers ALL SEVEN acceptance-fact columns plus INSERT and
 --      DELETE, so no write can reach `project_acceptance_reopen` without the project already held.
---   2. `task_dependency_project_lock_order` pre-takes both endpoints of an edge, projects first and
---      then the task rows in id order — the order the FK's own `FOR KEY SHARE` and the AFTER
---      `task_dependency_dispatch_touch` UPDATE would otherwise take in whatever order the planner
---      picked, which is what turned two ordinary edge writes into a mutual wait.
+--   2. Nothing on `task_dependency`. The inversion that used to live there was removed by 0132's
+--      revision mechanism rather than ordered — see §2 below, which says why guarding it now would
+--      make edge writes refusable for no gain.
 --   3. A drift assertion, run at migration time: the guard's column list and the AFTER trigger's
 --      column list are compared as sets and this migration refuses to install if they differ. A
 --      column added to one and not the other is a write path that reaches a project from an AFTER
@@ -88,7 +87,7 @@ BEGIN
      ORDER BY candidate.id
   LOOP
     IF TG_OP = 'INSERT' THEN
-      -- WAITING is safe here, and only here — 0132's split, for 0132's reason. On INSERT this
+      -- WAITING is safe here, and only here — 0134's split, for 0134's reason. On INSERT this
       -- transaction holds no task row when a BEFORE ROW trigger runs: the row does not exist yet
       -- and the foreign-key checks are on the AFTER side. So taking the project first makes this
       -- path project → task like every other writer, and a waiter that holds nothing below the
@@ -141,85 +140,24 @@ CREATE TRIGGER "task_acceptance_fact_lock_order_update"
   FOR EACH ROW EXECUTE FUNCTION "task_acceptance_fact_lock_order"();
 
 -- ---------------------------------------------------------------------------------------------
--- 2. The dependency side: one sorted acquisition instead of two the planner ordered.
+-- 2. The dependency side needs nothing from this migration, and that is a decision.
 -- ---------------------------------------------------------------------------------------------
 --
--- An edge write touches two task rows without ever naming them in a lock clause:
+-- An earlier draft of this migration guarded `task_dependency` the same way, because an edge write
+-- used to lock two `task` rows without naming either: the foreign key took `FOR KEY SHARE` on the
+-- prerequisite, and 0122's `task_dependency_dispatch_touch` UPDATEd the dependent's `updated_at`.
+-- Two of those in opposite orders is a cycle, and it is the shape that reached production twice.
 --
---   * the FK on `depends_on_task_id` takes `FOR KEY SHARE` on the prerequisite, from an AFTER
---     trigger, after the row is in;
---   * `task_dependency_dispatch_touch` (0122) UPDATEs the dependent's `updated_at`, which takes
---     `FOR NO KEY UPDATE` on it;
---   * and the service's own `tx.task.update` may already hold the dependent.
+-- Migration 0132 removed the cause rather than ordering it: the touch trigger is DROPped, and an
+-- edge write now advances `task_dependency_revision` instead — rank 70 in `common/lock-order.ts`,
+-- below the edges themselves, taken last by everybody and taken by the dispatch decision in the
+-- same direction. A pure edge path therefore takes the owner graph mutex (rank 10) and nothing
+-- else, and has no Task row of its own to hold while reaching for anything.
 --
--- Two of those in opposite orders is repro 3 and repro 4. Neither is written in any SQL a reader
--- can see, which is why fixing it at the call site alone was never going to hold: `createMany` over
--- several edges hands PostgreSQL a set, and the order within the set is the planner's.
---
--- So both endpoints are taken HERE, before the row exists — a BEFORE trigger runs ahead of the FK
--- check, which is an AFTER trigger — projects first and then the tasks, both in id order, both
--- NOWAIT. `FOR NO KEY UPDATE` on the task rows and not `FOR UPDATE`: it is the exact mode the touch
--- UPDATE takes and a superset of the FK's `FOR KEY SHARE`, so it covers both acquisitions this
--- statement is going to make without blocking a concurrent reader that only needs the key.
-CREATE OR REPLACE FUNCTION "task_dependency_project_lock_order"() RETURNS trigger AS $$
-DECLARE
-  endpoints UUID[];
-  target    UUID;
-BEGIN
-  endpoints := ARRAY(
-    SELECT DISTINCT candidate.id FROM (
-      VALUES
-        (CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD."task_id" END),
-        (CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD."depends_on_task_id" END),
-        (CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE NEW."task_id" END),
-        (CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE NEW."depends_on_task_id" END)
-    ) AS candidate(id)
-     WHERE candidate.id IS NOT NULL
-     ORDER BY candidate.id
-  );
-
-  -- The projects are read from an UNLOCKED snapshot, which is a guess — and a guess is all that is
-  -- needed here, because §2's own confirmation is not this trigger's job. If a task moves between
-  -- this read and the edge write, the acceptance-fact guard above runs on the row that moves and
-  -- takes the project it moved to. What this loop removes is the common case: the edge's own
-  -- project already held, so the AFTER `project_task_dependency_event_source` insert finds its FK's
-  -- project row in hand rather than reaching for it behind a task lock.
-  FOR target IN
-    SELECT DISTINCT t."project_id" FROM "task" t
-     WHERE t."id" = ANY (endpoints) AND t."project_id" IS NOT NULL
-     ORDER BY t."project_id"
-  LOOP
-    BEGIN
-      PERFORM 1 FROM "project" p WHERE p."id" = target FOR NO KEY UPDATE NOWAIT;
-    EXCEPTION WHEN lock_not_available THEN
-      RAISE EXCEPTION
-        'TASK_DEPENDENCY_PROJECT_BUSY: project % is being written right now, so this dependency edge cannot be recorded in this transaction — nothing was written; retry',
-        target
-        USING ERRCODE = 'lock_not_available';
-    END;
-  END LOOP;
-
-  -- One statement, `ORDER BY id`: the LockRows node sits above the sort, so the rows come out — and
-  -- are locked — in id order. Two of these over overlapping endpoint sets therefore take the shared
-  -- rows in the same order and cannot invert against each other.
-  BEGIN
-    PERFORM 1 FROM "task" t WHERE t."id" = ANY (endpoints)
-     ORDER BY t."id" FOR NO KEY UPDATE NOWAIT;
-  EXCEPTION WHEN lock_not_available THEN
-    RAISE EXCEPTION
-      'TASK_DEPENDENCY_TASK_BUSY: a task this dependency edge names is being written right now — nothing was written; retry'
-      USING ERRCODE = 'lock_not_available';
-  END;
-
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS "task_dependency_project_lock_order" ON "task_dependency";
-CREATE TRIGGER "task_dependency_project_lock_order"
-  BEFORE INSERT OR UPDATE OR DELETE ON "task_dependency"
-  FOR EACH ROW EXECUTE FUNCTION "task_dependency_project_lock_order"();
+-- Guarding it here would now do harm rather than nothing: it would pre-take `task` rows NOWAIT
+-- from a path that no longer touches them, turning edge writes that cannot deadlock into edge
+-- writes that can be refused. So this migration guards `task` and leaves `task_dependency` to the
+-- revision mechanism that replaced the problem.
 
 -- ---------------------------------------------------------------------------------------------
 -- 3. The two column lists are one list. Checked here, so drift cannot ship.

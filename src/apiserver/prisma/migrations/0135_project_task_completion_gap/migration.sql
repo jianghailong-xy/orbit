@@ -17,7 +17,7 @@
 --      once action rather than a side effect of a reconcile that may run twice.
 --
 -- DEPLOYMENT ORDER — this migration goes FIRST, before the replicas that write either value.
--- That is the opposite order from 0132's, and for the mirror-image reason: 0132 taught the DATABASE
+-- That is the opposite order from 0134's, and for the mirror-image reason: 0134 taught the DATABASE
 -- to refuse something the old code did, so the code had to stop doing it first. This teaches the
 -- database to ACCEPT two values only the new code writes, so an old replica cannot be harmed by it
 -- and a new replica that ran first would take a `23514` on the blocker insert and a `22P02` on the
