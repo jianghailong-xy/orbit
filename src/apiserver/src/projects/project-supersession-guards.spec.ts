@@ -348,7 +348,7 @@ test('no blocker is raised about a retired attempt, so acceptance is not held by
   for (const shape of RETIREMENTS) {
     const conditions = detectProjectBlockerConditions(
       input([task(OLD, { status: 'FAILED', failureCount: 5, failureAttributable: false, ...shape.facts })]),
-      { verificationVerdicts: [], aggregationCycleTaskIds: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
+      { verificationVerdicts: [], aggregationCycleTaskIds: [], aggregationCompletionGaps: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
     );
     assert.deepEqual(
       conditions.filter((condition) => condition.subjectId === OLD), [],
@@ -358,7 +358,7 @@ test('no blocker is raised about a retired attempt, so acceptance is not held by
   // Negative: the same history with nothing replacing it still raises its row.
   const raised = detectProjectBlockerConditions(
     input([task(OLD, { status: 'FAILED', failureCount: 5, failureAttributable: false })]),
-    { verificationVerdicts: [], aggregationCycleTaskIds: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
+    { verificationVerdicts: [], aggregationCycleTaskIds: [], aggregationCompletionGaps: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
   );
   assert.deepEqual(raised.map((condition) => condition.kind), ['UNKNOWN_FAILURE']);
 });

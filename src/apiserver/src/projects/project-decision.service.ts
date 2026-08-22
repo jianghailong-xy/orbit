@@ -13,6 +13,8 @@ import {
   AggregationTaskFact,
   AggregationTaskStatus,
   PlannedTaskAggregation,
+  TaskAggregationPlan,
+  TaskCompletionGap,
   TaskCompletionPolicyValue,
   TaskVerdictValue,
   planTaskAggregation,
@@ -256,6 +258,25 @@ export interface ProjectDecisionInput {
      * snapshot predates blockers" and NOT as "there were none": an old decision has to replay to
      * the outcome it originally produced, not to today's rules applied to yesterday's world.
      */
+    /**
+     * §13.1 AG7's protocol marker: this snapshot was captured by a binary that computes completion
+     * gaps, and its outcome may therefore contain the two things older ones cannot — a gap blocker
+     * and a `FILE_VERIFICATION_TASK` proposal.
+     *
+     * Absent means "captured before AG7", NOT "this project has no gaps". A decision has to replay
+     * to what it originally produced rather than to today's rules applied to yesterday's world, and
+     * without this marker every decision taken before this build would replay with gap blockers
+     * that the binary which made it could not have raised — reported by `replay` as the control
+     * loop having acted on its own. `world.blockers` carries the same shape for the same reason;
+     * this one is spelled as a capability rather than as data because the answer for an old
+     * snapshot is "do not evaluate", not "evaluate over nothing".
+     *
+     * It also marks the wider `providers` projection V8 needs (a slug a team member configured as
+     * a fallback, which no task or session in this project has used yet). That widening changes
+     * only what a NEW capture contains, so it needs no gate of its own — an old snapshot is
+     * replayed from its own stored bytes.
+     */
+    protocol?: { completionGaps: true };
     blockers?: ProjectBlockerFact[];
     /**
      * §5.4 F22's UNACKNOWLEDGED dead letters — events this project lost for good, minus the ones
@@ -778,13 +799,20 @@ export class ProjectDecisionService {
            )
          ORDER BY r."id"
       `);
+    // §13.2 V8's third source, beside the two references: a slug some team member has explicitly
+    // configured as a fallback. Sorted and de-duplicated so the same team always produces the same
+    // snapshot. The OWNER clause below is untouched — this widens which slugs get answered, never
+    // whose providers are visible.
+    const fallbackProviderSlugs = [...new Set(teamRows.flatMap((row) =>
+      parseProviderFallbacks(row.providerFallbacks).map((fallback) => fallback.provider)))].sort();
     const providerRows = await tx.$queryRaw<ProviderRow[]>(Prisma.sql`
         SELECT mp."id" AS "providerId", mp."slug", mp."runtime", mp."enabled", mp."models",
                mp."default_model" AS "defaultModel", mp."owner_id" AS "ownerId"
           FROM "model_provider" mp
          WHERE (mp."owner_id" IS NULL OR mp."owner_id" = ${project.ownerId}::uuid)
            AND (
-             EXISTS (SELECT 1 FROM "task" t
+             mp."slug" = ANY(${fallbackProviderSlugs}::text[])
+             OR EXISTS (SELECT 1 FROM "task" t
                       WHERE t."project_id" = ${projectId}::uuid
                         AND t."owner_id" = ${project.ownerId}::uuid AND t."provider" = mp."slug")
              OR EXISTS (SELECT 1 FROM "session" s JOIN "task" t ON t."id" = s."task_id"
@@ -957,9 +985,23 @@ export class ProjectDecisionService {
       }
     }
     const customProviderSlugs = new Set(providerRows.map((row) => row.slug));
+    // Every slug this decision could have to answer about, and the third source is the one AG7/V8
+    // needs: §13.2 V8 picks the engine for a filed check from the VERIFIER's own configured
+    // fallbacks, so the first check a project ever files usually names a provider no task or
+    // session in it has used yet. Projected only from what tasks and sessions REFERENCE, that
+    // provider is simply absent from the snapshot, and "absent" is read fail-closed as
+    // `NO_RUNNABLE_VERIFIER_COMBINATION` — a project whose team is configured correctly would be
+    // told, for ever, that it has no verifier.
+    //
+    // Widening the projection is not widening the SCOPE: a configured provider still has to be one
+    // `providerRows` returned (this owner's or shared), and a built-in still has to be a real
+    // runtime that an ONLINE runner reports models for. What changes is only which slugs get
+    // ANSWERED, and answering one nobody uses costs one row.
     const referencedProviderSlugs = new Set([
       ...taskRows.map((row) => row.provider),
       ...sessionRows.map((row) => row.provider),
+      ...teamRows.flatMap((row) =>
+        parseProviderFallbacks(row.providerFallbacks).map((fallback) => fallback.provider)),
     ].filter((slug): slug is string => Boolean(slug)));
     const builtinProviders: ProjectDecisionInput['world']['providers'] =
       [...referencedProviderSlugs]
@@ -1069,6 +1111,9 @@ export class ProjectDecisionService {
         detailHash: sha256(jsonValue(row.detail)),
         createdAt: isoRequired(row.createdAt),
       })),
+      // §13.1 AG7's capability marker, stamped by the binary that captured this world. Constant by
+      // construction — it says what THIS build computes, not what the project contains.
+      protocol: { completionGaps: true },
       blockers: blockerRows.map((row) => ({
         id: toPublicId(row.id),
         kind: row.kind as ProjectBlockerFact['kind'],
@@ -1329,7 +1374,7 @@ export function planProjectDecision(
   }
   const aggregation = planTaskAggregation(aggregationFacts(input));
   const coordinator = planCoordinatorSessionRotation(input);
-  const blockerPlan = planBlockers(input, aggregation.cycleTaskIds, coordinator);
+  const blockerPlan = planBlockers(input, aggregation, coordinator);
   const runStateAfter = runStateOf(input, blockerPlan?.openAfter ?? []);
   // §7.2 / §7.6, after the blockers and the rotation because it reads both. A snapshot that
   // predates either projection is NOT evaluated at all: those decisions were made by a binary that
@@ -1463,7 +1508,7 @@ function plannedActions(
  */
 function planBlockers(
   input: ProjectDecisionInput,
-  aggregationCycleTaskIds: readonly string[],
+  aggregation: TaskAggregationPlan,
   coordinatorSession: CoordinatorSessionPlan,
 ): ProjectBlockerPlan | null {
   const open = input.world.blockers;
@@ -1471,7 +1516,12 @@ function planBlockers(
   let observed: ObservedBlockerCondition[];
   try {
     observed = detectProjectBlockerConditions(input, {
-      aggregationCycleTaskIds,
+      aggregationCycleTaskIds: aggregation.cycleTaskIds,
+      // AG7's marker, checked here rather than inside the detector: an old snapshot must produce
+      // the outcome its own binary produced, and "no gaps observed" is what that binary observed.
+      aggregationCompletionGaps: input.world.protocol?.completionGaps
+        ? aggregation.completionGaps
+        : [],
       verificationVerdicts: verificationVerdictPlan(input),
       coordinatorSession,
     });
@@ -1499,6 +1549,16 @@ export function verificationVerdictPlan(
 ): PlannedVerificationVerdict[] {
   const facts = verificationVerdictFacts(input);
   return planVerificationVerdicts(facts.verifications, facts.subjects).verdicts;
+}
+
+/** §13.1 AG7's shapes for this snapshot, shared by §11's blocker face and §13.2 V8's filing action
+ *  the way `verificationVerdictPlan` is shared, so the two cannot disagree about which gaps the
+ *  loop closes itself and which ones it hands to a person. */
+export function completionGapPlan(input: ProjectDecisionInput): TaskCompletionGap[] {
+  // The marker, not a try/catch and not a feature flag: a decision captured before this build has
+  // to keep replaying to its own outcome. Both consumers go through here so neither can forget.
+  if (!input.world.protocol?.completionGaps) return [];
+  return planTaskAggregation(aggregationFacts(input)).completionGaps;
 }
 
 /**
@@ -1578,7 +1638,7 @@ function canonicalValue(value: unknown): unknown {
  * A pre-0123 snapshot has neither column. Defaulting them here rather than at the database keeps
  * one rule in one place: no policy means MANUAL means no aggregation.
  */
-function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
+export function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
   return input.world.tasks.map((task) => ({
     id: task.id,
     status: task.status as AggregationTaskStatus,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -26,10 +26,32 @@ import {
 
 const REPO = path.resolve(__dirname, '../../../..');
 const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
+const MIGRATIONS = path.join(REPO, 'src/apiserver/prisma/migrations');
 const MIGRATION = readFileSync(
-  path.join(REPO, 'src/apiserver/prisma/migrations/0125_project_blocker/migration.sql'),
+  path.join(MIGRATIONS, '0125_project_blocker/migration.sql'),
   'utf8',
 );
+/**
+ * The kind CHECK as it stands after every migration, not as 0125 first wrote it.
+ *
+ * A closed set that can only ever be read from the migration that CREATED it is a set that can
+ * never grow: adding a kind means a later migration drops and re-adds the constraint (an applied
+ * migration may not be edited), and a test pinned to the first one would then be asserting a
+ * historical fact about a database nobody runs. Directory order is deployment order, so the last
+ * file that declares the constraint is the one in force.
+ */
+function kindCheckInForce(): string[] {
+  const declared = readdirSync(MIGRATIONS)
+    .filter((entry) => /^\d{4}_/.test(entry))
+    .sort()
+    .map((entry) => path.join(MIGRATIONS, entry, 'migration.sql'))
+    .filter((file) => existsSync(file))
+    .map((file) => readFileSync(file, 'utf8'))
+    .map((sql) => /project_blocker_kind_chk[\s\S]*?CHECK \("kind" IN \(([\s\S]*?)\)\)/.exec(sql))
+    .filter((match): match is RegExpExecArray => match !== null);
+  assert.ok(declared.length > 0, 'no migration declares the project_blocker kind CHECK');
+  return [...declared.at(-1)![1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+}
 // Read from the repo, not from `__dirname`: these specs run compiled, out of `build/`.
 const SRC = path.join(REPO, 'src/apiserver/src/projects');
 const AUTHORIZATION = readFileSync(path.join(SRC, 'project-authorization.service.ts'), 'utf8');
@@ -87,10 +109,9 @@ test('§11.2: the implemented kind set IS the document\'s, in the document\'s or
 });
 
 test('§11.2: the migration CHECK freezes exactly the same closed set', () => {
-  const check = /project_blocker_kind_chk[\s\S]*?CHECK \("kind" IN \(([\s\S]*?)\)\)/.exec(MIGRATION);
-  assert.ok(check, 'migration 0125 no longer declares the kind CHECK');
-  const declared = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(declared.sort(), [...PROJECT_BLOCKER_KINDS].sort());
+  assert.deepEqual(kindCheckInForce().sort(), [...PROJECT_BLOCKER_KINDS].sort());
+  // …and 0125 is still where it started, so a rewrite of history would be visible here too.
+  assert.match(MIGRATION, /project_blocker_kind_chk/);
 });
 
 test('§11.2: every kind carries the document\'s owner and recovery', () => {

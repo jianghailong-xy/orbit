@@ -29,11 +29,16 @@ import {
   compare,
   projectDeadLetterCondition,
 } from './project-blocker';
+import { planCompletionGaps } from './project-completion-gap';
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 import { failedTaskBlockerKind } from './project-failed-retry';
 import { TaskRetirement, taskIsObsolete, taskRetirement } from '../tasks/task-supersession';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
-import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
+import {
+  TaskCompletionGap,
+  TaskCompletionPolicyValue,
+  isAggregateParent,
+} from './task-aggregation';
 
 /** §9.4: the rolling window `sessionBudgetPerDay` is measured over. */
 export const PROJECT_SESSION_BUDGET_WINDOW_MS = 24 * 60 * 60_000;
@@ -92,6 +97,14 @@ function outsideBlockerScope(
 export interface ProjectBlockerConditionSources {
   /** §13.1's cycle set, computed once by the aggregation planner rather than twice. */
   aggregationCycleTaskIds: readonly string[];
+  /**
+   * §13.1 AG7's shapes, from the same `planTaskAggregation` pass that produced the writes.
+   *
+   * Passed in rather than recomputed for the reason the cycle ids are: one recomputation answers
+   * for the whole snapshot, and a second reading of the same tasks is a second opinion waiting to
+   * differ from the first.
+   */
+  aggregationCompletionGaps: readonly TaskCompletionGap[];
   /** §13.2's plan for this same snapshot, computed once by the decision planner. */
   verificationVerdicts: readonly PlannedVerificationVerdict[];
   /**
@@ -116,6 +129,12 @@ export function detectProjectBlockerConditions(
     ...awaitingUserInputConditions(input),
     ...manualHoldConditions(input),
     ...dependencyCycleConditions(input, sources.aggregationCycleTaskIds),
+    // §13.1 AG7. Only the gaps a person has to close land here; the ones §13.2 V8 can close by
+    // filing the missing check are proposed as an action instead, by the same function. No
+    // `outsideBlockerScope` filter: a gap is only ever reported for a status aggregation could
+    // still move the task out of, and `recompute` answers nothing at all for a retired one — the
+    // two exclusions this file applies everywhere else are already in the shape.
+    ...planCompletionGaps(input, sources.aggregationCompletionGaps).conditions,
     ...coordinatorConditions(input, sources.coordinatorSession),
     ...coordinatorProgressConditions(input, sources.coordinatorSession),
     ...workspaceConditions(input),
