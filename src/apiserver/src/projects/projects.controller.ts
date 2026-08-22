@@ -85,6 +85,25 @@ export class ProjectsController {
   }
 
   /**
+   * What the control loop has been doing, newest first — `?limit=` (default 20) and `?cursor=`.
+   *
+   * The outbox, the decision audit and the action ledger as ONE stream: `kind` is the closed
+   * vocabulary all three map into rather than any of their raw enums, `outcome` is the four values
+   * a row's colour is chosen from, and `subjectTaskId` is the task to open when the row is about
+   * one. The cursor is `(timestamp, id)`, because a pass writes its decision and its actions in
+   * one transaction and a page boundary lands inside such a group routinely. Ids are Base62.
+   */
+  @Get(':id/panorama/activity')
+  activity(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.projects.activity(user.userId, id, { limit, cursor });
+  }
+
+  /**
    * What is currently stopping this project (contract §11), newest episode first.
    *
    * `?history=1` also returns the resolved ones — they are never deleted, so this is where "what
