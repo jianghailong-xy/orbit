@@ -22,6 +22,7 @@ import {
   runnersQuery,
   workspacesQuery,
 } from '../lib/queries';
+import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import {
   RUN_AT_IMPOSSIBLE,
   runAtIso,
@@ -533,6 +534,16 @@ interface ProjectTask {
   runAt?: string | null;
   assignee?: { id: string; name: string } | null;
   childCount: number;
+  /** Prerequisites that are neither DONE nor CANCELLED — what this task is still waiting on. */
+  unmetCount: number;
+  /** Tasks that name this one as a prerequisite: what finishing it would release. */
+  blocksCount: number;
+  /** Longest prerequisite path to this task INSIDE this project. A source sits at 0, and tasks
+   *  sharing a level share the property this list is sorted to show: they can run in parallel. */
+  topoLevel: number;
+  /** The same three words the task list uses, with `NONE` collapsed onto `READY` by the endpoint —
+   *  a task nothing holds back and a task with no prerequisites at all read identically here. */
+  dependencyState: 'READY' | 'BLOCKED' | 'BLOCKED_FAILED';
 }
 
 /** A task has a status a project does not (IN_PROGRESS), so it gets its own map rather than a
@@ -543,6 +554,117 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
   DONE: 'green',
   CANCELLED: 'default',
 };
+
+/**
+ * The same status, carried by a SHAPE rather than by colour alone.
+ *
+ * Four shapes for four statuses, spelled the way the panorama header's KPI row spells its four —
+ * disc, triangle, square, check — so a reader moving between the two surfaces is not learning a
+ * second vocabulary. Blocked-ness deliberately gets no fifth shape: it is already said in words by
+ * the `waits N` badge, and a mark that meant two things at once would say neither.
+ */
+type TaskStatusGlyph = 'disc' | 'triangle' | 'square' | 'check';
+
+const TASK_STATUS_MARK: Record<ProjectTask['status'], { glyph: TaskStatusGlyph; color: string }> = {
+  IN_PROGRESS: { glyph: 'disc', color: 'var(--brand)' },
+  OPEN: { glyph: 'triangle', color: 'var(--warning-solid)' },
+  DONE: { glyph: 'check', color: 'var(--success)' },
+  CANCELLED: { glyph: 'square', color: 'var(--text-3)' },
+};
+
+/** `aria-hidden` on purpose: the row's own status Tag already spells the status out, so a second
+ *  reading of it is noise. The shape is here for the eye — the text is what the screen reader
+ *  gets. `data-glyph` is what makes the four marks tellable apart without reading their colour. */
+function TaskStatusMark({ status }: { status: ProjectTask['status'] }) {
+  const { glyph, color } = TASK_STATUS_MARK[status];
+  return (
+    <svg
+      data-glyph={glyph}
+      width={12}
+      height={12}
+      viewBox="0 0 12 12"
+      aria-hidden="true"
+      focusable="false"
+      style={{ color, flex: 'none' }}
+    >
+      {glyph === 'disc' ? (
+        <circle cx="6" cy="6" r="5" fill="currentColor" />
+      ) : glyph === 'triangle' ? (
+        <polygon points="2.5,1 11,6 2.5,11" fill="currentColor" />
+      ) : glyph === 'square' ? (
+        <rect
+          x="1.5"
+          y="1.5"
+          width="9"
+          height="9"
+          rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+      ) : (
+        <path
+          d="M1.5 6.4 L4.6 9.5 L10.5 2.6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
+}
+
+/** One band of the list: the tasks sharing a topological level, or the trailing bucket of finished
+ *  work. `level` is null only on that bucket, which is what the render dims. */
+export interface ProjectTaskGroup {
+  key: string;
+  level: number | null;
+  heading: string;
+  tasks: ProjectTask[];
+}
+
+/**
+ * One page of tasks, banded by topological level.
+ *
+ * The bands are the whole point and they say exactly one thing: everything inside a band can run
+ * at the same time. Level 0 is what is not waiting on anything in this project; level N is what
+ * cannot start until level N-1 has landed. Creation order — the axis this list used to be sorted
+ * on — says nothing a reader can act on, and a parent/child tree says something else entirely
+ * (what a task is PART OF, not when it can run), which is why neither is the axis any more.
+ *
+ * Order inside a band is the server's, untouched: this function only partitions, it never sorts
+ * rows, so whatever the page decided is what a reader sees.
+ *
+ * DONE tasks leave their level and collect at the end. A finished task's level is a fact about a
+ * graph that has already moved past it, and leaving it in a band would pad "what can run now" with
+ * work that already ran.
+ */
+export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
+  const byLevel = new Map<number, ProjectTask[]>();
+  const done: ProjectTask[] = [];
+  for (const task of items) {
+    if (task.status === 'DONE') {
+      done.push(task);
+      continue;
+    }
+    const band = byLevel.get(task.topoLevel);
+    if (band) band.push(task);
+    else byLevel.set(task.topoLevel, [task]);
+  }
+
+  const groups: ProjectTaskGroup[] = [...byLevel.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([level, tasks]) => ({
+      key: `level-${level}`,
+      level,
+      heading: level === 0 ? 'Level 0 · ready now' : `Level ${level} · waits on level ${level - 1}`,
+      tasks,
+    }));
+  if (done.length > 0) groups.push({ key: 'done', level: null, heading: 'Done', tasks: done });
+  return groups;
+}
 
 /**
  * The project's top-level tasks, read-only: the first page of them, each of which can be opened
@@ -557,8 +679,12 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
  * Only this level is fetched here. A row's own children are read by that row, and only once it is
  * opened — so a project with a deep tree still costs exactly one request until the reader asks for
  * more.
+ *
+ * Exported for tests, on the same terms as ProjectTaskLevel: mounting the section on its own is
+ * what lets a page of tasks be handed in directly, without a project document standing in front
+ * of it deciding whether the section renders at all.
  */
-function ProjectTasks({ projectId }: { projectId: string }) {
+export function ProjectTasks({ projectId }: { projectId: string }) {
   // The dialog is opened from here rather than owning its own trigger, so the section that lists
   // the level a new task lands in is also the thing that offers to add one to it.
   const [creating, setCreating] = useState(false);
@@ -598,11 +724,34 @@ function ProjectTasks({ projectId }: { projectId: string }) {
         />
       ) : tasks.data && tasks.data.items.length > 0 ? (
         <>
-          <List
-            dataSource={tasks.data.items}
-            rowKey="id"
-            renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
-          />
+          {projectTaskGroups(tasks.data.items).map((group) => (
+            // The finished band is dimmed rather than dropped: it is still the answer to "did that
+            // land?", just not to "what can run now", which is what the levels above it answer.
+            <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
+              <div
+                data-topo-group={group.key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  marginTop: 16,
+                }}
+              >
+                <Typography.Text strong={group.level !== null} type="secondary">
+                  {group.heading}
+                </Typography.Text>
+                <Typography.Text type="secondary">
+                  {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
+                </Typography.Text>
+              </div>
+              <List
+                dataSource={group.tasks}
+                rowKey="id"
+                renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
+              />
+            </div>
+          ))}
           {/* Said outright rather than shown as a button: this unit reads one page and sends no
               cursor, so a silent stop here would read as "that is all of them". */}
           {tasks.data.nextCursor ? (
@@ -646,7 +795,18 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
           // different task. The long-form field underneath is what gets cut instead.
           title={
             <span>
-              {task.title} <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
+              <TaskStatusMark status={task.status} /> {task.title}{' '}
+              <Tag color={TASK_STATUS_COLOR[task.status]}>{task.status}</Tag>
+              {/* Both badges are omitted at zero rather than shown as `waits 0`. Most rows in a
+                  real project have nothing on either side, and a list where every row carries two
+                  zeroes is a list where the rows that do carry a number stop standing out. */}
+              {task.unmetCount > 0 ? <Tag color="gold">waits {task.unmetCount}</Tag> : null}
+              {task.blocksCount > 0 ? <Tag color="blue">blocks {task.blocksCount}</Tag> : null}
+              {/* The one thing a tree could never say. `waits 3` names a count; WHICH three is
+                  what a reader has to know to go unblock them, and on a hand-drawn graph it is
+                  exactly where the escape lines get drawn. Only for two or more: at one, the
+                  prerequisite is a click away and a second request per row is not worth it. */}
+              {task.unmetCount >= 2 ? <ProjectTaskPrerequisites task={task} /> : null}
               {/* Only on a task that actually has one — an unscheduled task is the normal case,
                   and a "not scheduled" chip on every row would drown the few that are. Said as
                   "Starts", never "Due": this is the trigger the server acts on, and the row
@@ -695,6 +855,58 @@ function ProjectTaskRow({ projectId, task }: { projectId: string; task: ProjectT
         </div>
       ) : null}
     </List.Item>
+  );
+}
+
+/**
+ * WHICH prerequisites a multi-prerequisite row is still waiting on, named inline.
+ *
+ * Mounted only by a row with two or more unmet prerequisites, and that placement is the budget:
+ * a query registers when the component renders, so the rows that need nothing extra cost nothing
+ * extra — no `enabled: false` entry sitting in the cache for the ~82% of tasks that wait on one
+ * prerequisite or none.
+ *
+ * One level up, and only one: `maxDepth=1` asks for the direct prerequisites, which is what
+ * "waiting on" means here. Anything further is the dependency graph's job, not a row's.
+ *
+ * Every state but "answered" renders nothing at all. The `waits N` badge beside this has already
+ * told the reader the count; a spinner or an error strip inside a list row would be a second thing
+ * to read for information the row is not really missing.
+ */
+function ProjectTaskPrerequisites({ task }: { task: ProjectTask }) {
+  const graph = useQuery({
+    queryKey: ['task', task.id, 'prerequisites'],
+    queryFn: () =>
+      api<TaskDependencyGraphResponse>(
+        `/tasks/${encodeURIComponent(encodeId(task.id))}/dependency-graph?direction=upstream&maxDepth=1`,
+      ),
+  });
+
+  // Read off the EDGES, not off `depth` or `isDirect`: an edge is the relationship itself, so
+  // "source of an edge whose target is the focus" cannot mean anything but a direct prerequisite.
+  // The focus is taken from the response rather than from `task.id` so the two ids being compared
+  // always came from the same payload, whichever spelling of them the server is handing out.
+  const waitingOn = useMemo(() => {
+    if (!graph.data) return [];
+    const byId = new Map(graph.data.nodes.map((node) => [node.id, node]));
+    return graph.data.edges
+      .filter((edge) => edge.targetTaskId === graph.data.focusTaskId)
+      .map((edge) => byId.get(edge.sourceTaskId))
+      .filter((node) => node && node.status !== 'DONE' && node.status !== 'CANCELLED')
+      .map((node) => node!.title);
+  }, [graph.data]);
+
+  if (waitingOn.length === 0) return null;
+  // The count comes from the page payload and the titles from the graph, so they can disagree —
+  // a server that collapsed a branch, or a graph read a moment later than the page. Saying how
+  // many are unaccounted for is the honest version; silently listing four of six is not.
+  const missing = task.unmetCount - waitingOn.length;
+  return (
+    <Typography.Text type="secondary">
+      {' → '}
+      {waitingOn.join(', ')}
+      {missing > 0 ? `, +${missing} more` : ''}
+    </Typography.Text>
   );
 }
 
