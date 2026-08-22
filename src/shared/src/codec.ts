@@ -133,6 +133,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'approvalId',
   'projectActionId',
   'decisionId',
+  // The same row as `decisionId`, under the name `[K2]`'s task ledger uses for it: a convergence
+  // decision names the project-level pass that produced it, and a caller may hand that back to
+  // `/projects/:id/coordinator/status`. Two names because the two ledgers are joined by a reader,
+  // not by a foreign key — a task's judgment must stay readable after the pass that made it is gone.
+  'projectDecisionId',
   'resultSessionId',
   // ProjectAction subjects are currently tasks. Keep the generic wire name classified so an
   // action returned by the coordinator API can be handed back in either public-id spelling.

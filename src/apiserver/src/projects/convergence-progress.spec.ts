@@ -111,7 +111,10 @@ test('§4 PV2: improvement needs one dimension better and none worse', () => {
 test('§4 PV2: a known-good checkpoint appearing is progress; losing one is not', () => {
   assert.equal(strictlyImproves(vector(), vector({ knownGoodSha: 'abc' })), true);
   assert.equal(strictlyImproves(vector({ knownGoodSha: 'abc' }), vector()), false);
-  assert.equal(strictlyImproves(vector({ knownGoodSha: 'abc' }), vector({ knownGoodSha: 'def' })), true);
+  // §4's table and PV5: `非 null → 另一个非 null 不是`. Moving a checkpoint is the only dimension
+  // with no edge to walk toward, so counting it would make a revision's strict-progress count
+  // unbounded and TH6's bound false — push a commit, zero the four counters, repeat.
+  assert.equal(strictlyImproves(vector({ knownGoodSha: 'abc' }), vector({ knownGoodSha: 'def' })), false);
 });
 
 test('§4 PV3: changing the target is not approaching it', () => {

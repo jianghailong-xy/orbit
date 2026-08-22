@@ -1507,6 +1507,22 @@ model Project {
   /// ever allowed to go up.
   configRevision      BigInt                  @default(0) @map("config_revision")
 
+  /// `[K2]` / convergence §8: this project's OVERRIDES of the bounded-convergence thresholds and
+  /// of one attempt's resource budget. Null means the frozen `GUARDED_AUTO` defaults, which is why
+  /// migration 0132 changes no project's behaviour on the day it lands — an existing project keeps
+  /// finite limits without anybody having chosen them.
+  ///
+  /// Read through `resolveThresholds` / `resolveAttemptBudget` and never directly: those are where
+  /// an override that is not an integer, or a `null` nobody signed for, falls back to the default.
+  convergenceThresholds Json? @map("convergence_thresholds")
+  attemptBudget         Json? @map("attempt_budget")
+
+  /// OW4's signature: `{ actor: 'USER', principal }`, and the only thing that makes an unbounded
+  /// threshold mean unbounded. An agent's own authorization is not a weaker authorization; it is
+  /// not one, and migration 0132's CHECK refuses to store it — so a stray PATCH or a migration
+  /// cannot switch the breaker off for every project at once.
+  unboundedAuthorizedBy Json? @map("unbounded_authorized_by")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -2420,6 +2436,34 @@ model Task {
   // gives a Postgres unique index, which by default treats NULLs as distinct — so the many tasks
   // created outside any turn (user API, headless) coexist freely while an in-turn re-run collides.
   idempotencyKey   String?     @unique @map("idempotency_key")
+
+  /// `[K2]`: the task's pointer into the bounded-convergence ledger (migration 0132).
+  ///
+  /// Columns rather than a derived read, because §8 TH4 needs the counters to be COMMITTED facts:
+  /// a restart that recomputed them in memory is how the incident's budget never ran out. The
+  /// ledger can rebuild every one of them (`recoverConvergenceState`), and the pg spec checks that
+  /// it does — the columns are the fast path, not a second source of truth.
+  ///
+  /// A task is under convergence management exactly when it has a `TaskScopeRevision` row, and
+  /// none of these have any effect until it does. That is the whole compatibility story: every
+  /// task filed before `[K2]` keeps its defaults and behaves exactly as it did.
+  scopeRevision      Int      @default(1) @map("scope_revision")
+  /// Which attempt on the CURRENT revision. One generation is one Session (§1); steering an
+  /// existing one is not a new attempt and resets nothing (TH3).
+  attemptGeneration  BigInt   @default(0) @map("attempt_generation")
+  /// §2's state. A CHECK rather than a Prisma enum: the seven values are frozen in
+  /// `convergence-contract.ts` and a second enum spelling them is a second place to drift from.
+  progressState      String   @default("CONVERGING") @map("progress_state")
+  /// §8's seven counters. Migration 0132's trigger refuses any UPDATE that walks one DOWN without
+  /// strict progress or a new scope revision — which is every shape a budget has ever escaped by.
+  convergenceCounters Json    @default("{\"attemptsOnRevision\":0,\"attemptsWithoutProgress\":0,\"sameFingerprintRepeats\":0,\"decisionsWithoutProgress\":0,\"verificationRounds\":0,\"transientRetries\":0,\"scopeExpansionRequests\":0}") @map("convergence_counters")
+  /// §4 PV4: moved ONLY by strict improvement toward acceptance. Producing an action, opening a
+  /// session, writing a commit or burning a token does not touch it (RL0).
+  lastProgressAt     DateTime? @map("last_progress_at")
+  /// §7: the commit this task is known good at. The checkpoint TABLE and the merge gate that reads
+  /// it are a later unit; this is the pointer the progress vector's one identity dimension carries.
+  knownGoodSha       String?  @map("known_good_sha")
+
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
 
@@ -2441,6 +2485,9 @@ model Task {
   verdictFailuresRepaired TaskVerificationFailure[] @relation("VerificationFailureDefect")
   /// Merges recorded against this task's branches (§13.7 MR1).
   mergeReceipts           SessionMergeReceipt[]    @relation("TaskMergeReceipt")
+  /// `[K2]`: every version of what this task asked for, and every judgment made about it.
+  scopeRevisions          TaskScopeRevision[]
+  convergenceDecisions    TaskConvergenceDecision[]
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -2479,6 +2526,10 @@ model Task {
   /// actually running, backward by the acyclicity trigger and by every list that wants to show a
   /// live task's abandoned predecessors.
   @@index([supersededByTaskId])
+  /// The tenancy fence `[K2]`'s two ledger tables hang off: a child row names BOTH the task and
+  /// the owner, so it cannot disagree with its parent about whose it is. The same device migration
+  /// 0120 used for (decision, project).
+  @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
 }
 
@@ -2491,6 +2542,127 @@ model Task {
 /// Identity is `(verifierTaskId, verdictRevision)`, the same pair the action key is built from, so
 /// the same conclusion delivered any number of times leaves exactly one row — while a genuinely
 /// new conclusion, which by V7 carries a new revision, leaves a new one.
+/// `[K2]` / convergence §1: one version of what a task is asking for, frozen.
+///
+/// The table exists because the incident's scope grew from "fix one bug" into "AutoRetry + deploy +
+/// lock ordering" without a single one of those expansions ever being a decision somebody made.
+/// A revision row is that decision, with a name on it — and the OLD rows are the audit: after an
+/// expansion you can still read what the task used to ask for, and therefore whether the attempts
+/// charged to that revision were spent on the thing that was asked.
+///
+/// Immutable and never deleted except with the task (migration 0132's trigger). Editing a version
+/// in place would destroy the only evidence that earlier attempts answered a different question.
+///
+/// Having a row here is what puts a task under convergence management. Revision 1 is unsigned —
+/// `authorizedByActor` null, meaning "as found" — because the task's original statement of scope is
+/// not something anybody revised into being. Revisions 2 and up must name a signatory, and §1's
+/// authority table decides who may be one.
+model TaskScopeRevision {
+  id       String @id @default(uuid(7)) @db.Uuid
+  taskId   String @map("task_id") @db.Uuid
+  ownerId  String @map("owner_id") @db.Uuid
+  task     Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  revision Int
+
+  /// §1's digest of the three columns below. It is the identity a progress vector (§4 PV3) and a
+  /// failure fingerprint (§5 FP3) are measured against; the text is kept verbatim beside it so the
+  /// audit can answer "what did it say", not only "did it change".
+  scopeHash          String  @map("scope_hash") @db.Char(64)
+  title              String
+  description        String?
+  acceptanceCriteria String? @map("acceptance_criteria")
+
+  /// WHO signed for this version, and under WHICH policy. The policy is recorded rather than looked
+  /// up later, because `automationPolicy` is mutable and an audit that re-reads today's value
+  /// cannot answer whether a coordinator was allowed to do this at the time it did it.
+  authorizedByActor     String? @map("authorized_by_actor")
+  authorizedByPrincipal String? @map("authorized_by_principal")
+  automationPolicy      String? @map("automation_policy")
+  reason                String
+  supersedesRevision    Int?    @map("supersedes_revision")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  decisions TaskConvergenceDecision[]
+
+  @@unique([taskId, revision])
+  /// The composite key `TaskConvergenceDecision` points at. Naming the HASH as well as the revision
+  /// is what stops a judgment from claiming to have been measured against a scope that never had
+  /// that content (§6 FD4).
+  @@unique([taskId, revision, scopeHash], map: "task_scope_revision_identity_key")
+  @@index([ownerId])
+  @@map("task_scope_revision")
+}
+
+/// `[K2]` / convergence: one coordination judgment about one task, append-only.
+///
+/// Everything §8 reads is here rather than in a process: the snapshot the judgment was a function
+/// of and its hash, the attempt generation, the failure fingerprint, the progress vector, the
+/// decision, the action and the key it was applied under, the known-good checkpoint, and what has
+/// to happen next / who can do it / when to look again. `[K1]`'s functions decide; this is what
+/// they decide FROM after a restart, a takeover or a redelivered event (RL3).
+///
+/// `idempotencyKey` is keyed on the FACT's own identity, not on the reader's snapshot — a snapshot
+/// changes the moment the first delivery commits, so hashing it would give a redelivery a different
+/// key and write the same fact twice. That is AC1: however many times and in whatever order an
+/// event arrives, at most one logical decision and one logical action land.
+model TaskConvergenceDecision {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  /// Monotonic within a task, allocated `MAX + 1` under the task row lock. It gives the ledger a
+  /// replay ORDER that does not depend on `createdAt`, which two writers can tie on.
+  seq     BigInt
+
+  scopeRevision     Int               @map("scope_revision")
+  scopeHash         String            @map("scope_hash") @db.Char(64)
+  scope             TaskScopeRevision @relation(fields: [taskId, scopeRevision, scopeHash], references: [taskId, revision, scopeHash], onDelete: Cascade)
+  attemptGeneration BigInt            @map("attempt_generation")
+
+  idempotencyKey String @unique @map("idempotency_key")
+  inputHash      String @map("input_hash") @db.Char(64)
+  input          Json
+
+  event          String
+  fromState      String  @map("from_state")
+  toState        String  @map("to_state")
+  classification String?
+  decision       String
+
+  /// What the judgment DID, and under which key. Both or neither: an action without a key is one a
+  /// takeover cannot recognise as already done, which is how one decision becomes two dispatches.
+  action               String?
+  actionIdempotencyKey String? @map("action_idempotency_key")
+
+  failureFingerprint   String?  @map("failure_fingerprint") @db.Char(64)
+  progressVector       Json     @map("progress_vector")
+  progressVectorDigest String   @map("progress_vector_digest") @db.Char(64)
+  progressed           Boolean
+  counters             Json
+  nonConvergenceReason String?  @map("non_convergence_reason")
+  knownGoodSha         String?  @map("known_good_sha")
+
+  /// §11.1's three questions, asked per task rather than per project: what has to happen, who can
+  /// make it happen, and when this is worth looking at again. `nextCheckAt` is null wherever the
+  /// owner is USER — a wait that ends when a person decides has no clock.
+  requiredAction String?   @map("required_action")
+  owner          String?
+  nextCheckAt    DateTime? @map("next_check_at")
+
+  /// Historical attribution, deliberately without foreign keys (migration 0120's rule): deleting or
+  /// rotating a session must not rewrite which run made an earlier judgment.
+  decidedBy         String  @map("decided_by")
+  sessionId         String? @map("session_id") @db.Uuid
+  projectDecisionId String? @map("project_decision_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@unique([taskId, seq], map: "task_convergence_decision_seq_key")
+  @@index([taskId, seq(sort: Desc)])
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([taskId, scopeRevision, failureFingerprint])
+  @@map("task_convergence_decision")
+}
+
 model TaskVerificationFailure {
   id              String  @id @default(uuid(7)) @db.Uuid
   projectId       String  @map("project_id") @db.Uuid

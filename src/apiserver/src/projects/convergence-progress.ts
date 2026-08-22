@@ -91,9 +91,17 @@ export function strictlyImproves(before: ProgressVector, after: ProgressVector):
       if (to < from) better = true;
     }
   }
-  // A known-good checkpoint appearing, or moving to a different commit while nothing regressed, is
-  // improvement on its own: it is the one dimension whose value is an identity rather than a count.
-  if (before.knownGoodSha !== after.knownGoodSha && after.knownGoodSha !== null) better = true;
+  // §4's table, exactly: `null → 非 null 是进展；非 null → 另一个非 null 不是`. A checkpoint APPEARING
+  // is improvement on its own — it is the one dimension whose value is an identity rather than a
+  // count — and MOVING one is not.
+  //
+  // PV5 is why the second half is not a detail. Every other dimension is bounded (a count that can
+  // only walk toward its edge), so the number of times a revision can strictly improve is finite
+  // and TH6's bound holds. A checkpoint that could be moved would be the one dimension with no
+  // edge: push another commit, claim progress, zero the four counters, repeat. That is the shape
+  // the incident actually had — 「又推了一个提交」— and it is what makes the attempt budget
+  // unreachable rather than merely generous.
+  if (before.knownGoodSha === null && after.knownGoodSha !== null) better = true;
   // Losing one is the reverse, and disqualifies the step for the same reason a rising P0 count does.
   if (before.knownGoodSha !== null && after.knownGoodSha === null) return false;
   return better;

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectDecisionService } from './project-decision.service';
@@ -24,6 +25,7 @@ import { ProjectsService } from './projects.service';
   controllers: [ProjectsController],
   providers: [
     ProjectsService,
+    ConvergenceLedgerService,
     ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,
@@ -39,6 +41,7 @@ import { ProjectsService } from './projects.service';
   ],
   exports: [
     ProjectsService,
+    ConvergenceLedgerService,
     ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,

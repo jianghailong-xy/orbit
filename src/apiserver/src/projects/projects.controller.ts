@@ -23,6 +23,7 @@ import {
   TriggerProjectCoordinatorDto,
   UpdateProjectDto,
 } from './dto';
+import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 
@@ -34,6 +35,7 @@ export class ProjectsController {
   constructor(
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
+    private readonly convergence: ConvergenceLedgerService,
   ) {}
 
   @Post()
@@ -70,6 +72,31 @@ export class ProjectsController {
     @Query('status') status?: string,
   ) {
     return this.projects.taskPage(user.userId, id, { parentId, cursor, limit, status });
+  }
+
+  /**
+   * Why this TASK is or is not still being attempted (`[K2]`, convergence contract §1/§4/§8).
+   *
+   * `/coordinator/status` answers the same question for the project; this is the per-task half, and
+   * the one that can distinguish the two things a stopped task looks identical from the outside:
+   * a task that is converging slowly, and a task whose breaker tripped and is waiting for a person.
+   *
+   * It serves the RESOLVED thresholds rather than the project's override columns — a caller asking
+   * why a task stopped needs the limit that applied, not a null that means "the default did". Every
+   * scope revision is returned, superseded ones included: the old rows are the audit that says what
+   * the task was asking for while the attempts charged to that revision were being spent.
+   *
+   * Ids leave as Base62, including the ones buried inside the two machine keys, which the
+   * interceptor cannot see into.
+   */
+  @Get(':id/tasks/:taskId/convergence')
+  async convergenceLedger(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.convergence.describe(user.userId, taskId);
   }
 
   /**
