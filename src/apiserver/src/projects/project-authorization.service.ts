@@ -451,7 +451,19 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
 } | null {
   const task = input.task;
   if (!task) return { decision: 'DENY', reasonCode: 'TASK_NOT_OPEN' };
-  if (task.status !== 'OPEN') return { decision: 'DEFER', reasonCode: 'TASK_NOT_OPEN' };
+  // §7.4 precondition 1, v1.18 (`PC-CX-64`): `FAILED` is a status this gate ADMITS ON, not one it
+  // refuses out of hand. WHICH of §9.5 Q3's rows the task is on is then settled by clauses this
+  // function already had, and that is deliberate — they are where `failedTaskBlockerKind` took its
+  // precedence FROM: a live session below is `TASK_ALREADY_RUNNING`, an unexpired backoff is
+  // `RETRY_BACKOFF_ACTIVE`, and both terminal cells are `classifyPolicyRow`'s
+  // `DISPATCH_MAX_ATTEMPTS` row, which answers `MAX_ATTEMPTS_REACHED` or — when nothing attributed
+  // the failure — `UNKNOWN_FAILURE`, and therefore opens a row somebody can act on.
+  //
+  // `TASK_NOT_OPEN` was the silent fallback: it is in §11.2's non-blocking list, so a `FAILED` task
+  // got no dispatch, no blocker and nothing to read.
+  if (task.status !== 'OPEN' && task.status !== 'FAILED') {
+    return { decision: 'DEFER', reasonCode: 'TASK_NOT_OPEN' };
+  }
   if (task.dispatchHold) return { decision: 'DEFER', reasonCode: 'TASK_DISPATCH_HELD' };
   if (!task.runAtDue) return { decision: 'DEFER', reasonCode: 'TASK_NOT_DUE' };
   // §7.4's third precondition is one bullet with two halves — prerequisites DONE, and a subject

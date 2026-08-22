@@ -6,7 +6,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { statusAfterTurnEnqueued } from '../common/session-scheduling';
-import { ProjectAuthorizationService } from './project-authorization.service';
+import {
+  ProjectAuthorizationService,
+  ProjectAutomationPolicyValue,
+} from './project-authorization.service';
 import {
   ProjectActionApplyResult,
   ProjectActionEffectRefusal,
@@ -47,6 +50,8 @@ interface TurnRow {
   coordinatorGeneration: bigint;
   seatAgentId: string | null;
   sourceDecisionInputHash: string;
+  /** §9.2's policy, read in the SAME transaction that writes the turn (v1.18, `PC-CX-65`). */
+  automationPolicy: ProjectAutomationPolicyValue;
 }
 
 interface CoordinatorRunRow {
@@ -211,6 +216,7 @@ implements ProjectTurnExecutor, OnModuleInit, OnModuleDestroy {
     const rows = await tx.$queryRaw<TurnRow[]>(Prisma.sql`
       SELECT p."owner_id" AS "ownerId",
              p."coordinator_session_id" AS "coordinatorSessionId",
+             p."automation_policy"::text AS "automationPolicy",
              r."coordinator_generation" AS "coordinatorGeneration",
              seat."agent_id" AS "seatAgentId",
              d."decision_input_hash" AS "sourceDecisionInputHash"
@@ -308,6 +314,10 @@ implements ProjectTurnExecutor, OnModuleInit, OnModuleDestroy {
       reasonDigest: planned.reasonDigest,
       turnFacts: planned.turnFacts,
       suppressed: planned.suppressed,
+      // The row this transaction locked, not the one the snapshot froze: a message that told the
+      // coordinator about a policy the project has since left would be wrong in the one paragraph
+      // that says what it may do without asking.
+      automationPolicy: row.automationPolicy,
       decisionId: uuidToBase62(command.decisionId),
       actionId: uuidToBase62(actionId),
     });

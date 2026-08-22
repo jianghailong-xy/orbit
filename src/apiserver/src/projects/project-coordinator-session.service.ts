@@ -14,7 +14,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { makeBranchName } from '../sessions/naming';
-import { ProjectAuthorizationService, ProjectApprovalState } from './project-authorization.service';
+import {
+  ProjectApprovalState,
+  ProjectAuthorizationService,
+  ProjectAutomationPolicyValue,
+} from './project-authorization.service';
 import {
   ProjectActionApplyResult,
   ProjectActionEffectRefusal,
@@ -49,6 +53,8 @@ export interface RotateCoordinatorSessionResult {
 interface RotationRow {
   ownerId: string;
   title: string;
+  /** §9.2's policy, so the run that replaces this one opens on the project's CURRENT terms. */
+  automationPolicy: ProjectAutomationPolicyValue;
   coordinatorSessionId: string | null;
   coordinatorWorkspaceId: string | null;
   coordinatorGeneration: bigint;
@@ -181,6 +187,7 @@ implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
     // never the signal that woke it.
     const rows = await tx.$queryRaw<RotationRow[]>(Prisma.sql`
       SELECT p."owner_id" AS "ownerId", p."title",
+             p."automation_policy"::text AS "automationPolicy",
              p."coordinator_session_id" AS "coordinatorSessionId",
              p."coordinator_workspace_id" AS "coordinatorWorkspaceId",
              r."coordinator_generation" AS "coordinatorGeneration",
@@ -373,7 +380,7 @@ implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
         "execution_pin_generation", "updated_at"
       ) VALUES (
         ${sessionId}::uuid, ${title}, ${row.enableWorktree ? makeBranchName(title) : null},
-        ${buildCoordinatorOpening(row.title, lease.projectId)}, 'PENDING',
+        ${buildCoordinatorOpening(row.title, lease.projectId, row.automationPolicy)}, 'PENDING',
         ${provider}, ${providerBuiltin},
         ${runtime === AgentProvider.CLAUDE ? runtimeSessionId : null}::uuid, ${null}, true,
         ${permissionMode}, ${null},

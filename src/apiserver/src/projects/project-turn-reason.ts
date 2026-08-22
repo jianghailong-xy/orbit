@@ -30,6 +30,7 @@ import { base62ToUuid } from '@orbit/shared';
 import type { ProjectDecisionInput } from './project-decision.service';
 import type { CoordinatorSessionPlan } from './project-coordinator-session';
 import type { ProjectBlockerProjection } from './project-blocker';
+import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
 import { PROJECT_BLOCKER_POLICY } from './project-blocker';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
 
@@ -209,10 +210,38 @@ export function turnReasonFactsOf(
  *
  * A task with a live session is excluded for the same reason §4.2 guard 5 exists: somebody is
  * working on it, and the failure being asked about is not settled yet.
+ *
+ * v1.18 (`PC-CX-64`): the predicate is `failedTaskDisposition`, not `status = FAILED`
+ * ----------------------------------------------------------------------------------
+ * TU2 is a two-state table and its judgement has always been one sentence — **控制环自己还能不能动
+ * 它**. v1.17 answered it with the status alone because on that deployment the answer was the same:
+ * §7.4 refused every `FAILED` task, so `FAILED` meant "the loop cannot move this". `PC-CX-64` gives
+ * the loop §9.5 Q3's ladder back on that status, and the two stop being the same question. Reading
+ * the status here now would open a turn for every ordinary failure the loop is ALREADY retrying —
+ * the coordinator asked to look at a task that will be running again before it answers — which is
+ * the "协调器不是重试机制" property TU2 was written to protect, failing in the other direction.
+ *
+ * So the reason fires on exactly the two arms nothing mechanical advances: an exhausted attempt
+ * budget and a failure nothing attributed. Those are the worlds where "not opening a turn" is
+ * silence rather than restraint, which is `PC-CX-63`'s sentence, unchanged.
  */
 function failureEpisodes(input: ProjectDecisionInput): string[] {
   return input.world.tasks
-    .filter((task) => task.status === 'FAILED' && task.liveSessionIds.length === 0)
+    .filter((task) => {
+      const disposition = failedTaskDisposition({
+        status: task.status,
+        hasLiveSession: task.liveSessionIds.length > 0,
+        failureCount: task.failureCount,
+        failureAttributable: task.failureAttributable,
+        // S5: the snapshot's own answer, never a clock read here. Absent on decisions captured
+        // before `dueTasks` existed, which read as "nothing is holding it" — the same default
+        // §7.8's pass uses for the same field.
+        retryBackoffExpired: input.evaluation.dueTasks[task.id]?.retryBackoffExpired ?? true,
+      });
+      return disposition !== 'NOT_FAILED'
+        && disposition !== 'OCCUPIED'
+        && !loopCanRetryFailedTask(disposition);
+    })
     .map((task) => `${task.id}#${task.dispatchAttempt}`)
     .sort();
 }

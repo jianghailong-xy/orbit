@@ -30,6 +30,7 @@ import {
   projectDeadLetterCondition,
 } from './project-blocker';
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
+import { failedTaskBlockerKind } from './project-failed-retry';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
 
 /** §9.4: the rolling window `sessionBudgetPerDay` is measured over. */
@@ -61,7 +62,7 @@ export function detectProjectBlockerConditions(
   const conditions: ObservedBlockerCondition[] = [
     ...refusedDispatchConditions(input),
     ...mergeConditions(input),
-    ...exhaustedRetryConditions(input),
+    ...spentFailureBudgetConditions(input),
     ...verificationConditions(sources.verificationVerdicts),
     ...budgetConditions(input),
     ...awaitingUserInputConditions(input),
@@ -183,28 +184,52 @@ function mergeConditions(input: ProjectDecisionInput): ObservedBlockerCondition[
 }
 
 /**
- * §9.5 Q3's LAST row, and only that row.
+ * §9.5 Q3's terminal rows — **one** condition per task, never two (v1.18, `PC-CX-64`).
  *
  * Inside the backoff there is deliberately no blocker: nobody needs to do anything and the loop has
  * not stopped — it scheduled a definite retry, which shows up as §10.4's clause 3 wake and a NOOP
  * audit line (Q3-a). `failureCount` is a persisted fact that advances only on a real failure, so it
  * belongs in the digest; it is not one of TF1's delivery counters.
+ *
+ * Which row a spent budget lands on is `failedTaskBlockerKind`'s to say, and it is asked ONCE for
+ * both. The two conditions are not mutually exclusive in the world — a task whose five failures all
+ * died without an error holds `failureCount >= MAX` and "nothing attributed it" simultaneously — and
+ * §11.3's dedupe key carries the KIND, so two detectors reading the raw facts would open two rows
+ * for one failure rather than deduplicating to one. See that function for which row wins and why.
  */
-function exhaustedRetryConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
-  return input.world.tasks
-    .filter((task) => !SETTLED_TASK_STATUSES.has(task.status)
-      && task.failureCount >= MAX_AUTO_RUN_FAILURES)
-    .map((task) => ({
-      kind: 'TEST_FAILED' as const,
+function spentFailureBudgetConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
+  const conditions: ObservedBlockerCondition[] = [];
+  for (const task of input.world.tasks) {
+    if (SETTLED_TASK_STATUSES.has(task.status)) continue;
+    const kind = failedTaskBlockerKind(task);
+    if (!kind) continue;
+    conditions.push({
+      kind,
       subjectType: 'TASK' as const,
       subjectId: task.id,
-      facts: { taskId: task.id, failureCount: task.failureCount },
-      detail: {
+      // TF2: the facts, not the attempts. Both rows are digested over the same two properties of
+      // the run history, so a task that crosses from one row to the other — the sixth failure
+      // finally records an error — is a genuinely different condition and says so.
+      facts: {
         taskId: task.id,
         failureCount: task.failureCount,
-        maxAutoRunFailures: MAX_AUTO_RUN_FAILURES,
+        failureAttributable: task.failureAttributable,
       },
-    }));
+      detail: kind === 'TEST_FAILED'
+        ? {
+            taskId: task.id,
+            failureCount: task.failureCount,
+            maxAutoRunFailures: MAX_AUTO_RUN_FAILURES,
+          }
+        : {
+            taskId: task.id,
+            failureCount: task.failureCount,
+            reason: 'this task\'s failed runs recorded no error, so nothing can say whether a '
+              + 'retry would do anything different',
+          },
+    });
+  }
+  return conditions;
 }
 
 /**

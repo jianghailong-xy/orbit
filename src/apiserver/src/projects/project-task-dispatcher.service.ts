@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
   ROOT_FALLBACK_PERMISSION_MODE,
+  RunEventType,
   permissionModeAvailableOnRunner,
 } from '@orbit/shared';
 import {
@@ -126,13 +127,25 @@ export class ProjectTaskDispatcherService {
       ),
       now,
     );
-    const result = await this.prisma.projectAction.findUnique({
-      where: { id: action.actionId },
-      select: { resultSessionId: true },
-    });
+    const [result] = await this.prisma.$queryRaw<Array<{
+      resultSessionId: string | null; ownerId: string; retriedFromFailed: boolean | null;
+    }>>(Prisma.sql`
+      SELECT a."result_session_id" AS "resultSessionId", p."owner_id" AS "ownerId",
+             (a."detail" ->> 'retriedFromFailed')::boolean AS "retriedFromFailed"
+        FROM "project_action" a JOIN "project" p ON p."id" = a."project_id"
+       WHERE a."id" = ${action.actionId}::uuid
+    `);
     if (action.status === 'APPLIED' && result?.resultSessionId) {
       this.queue.notifySessionQueued();
       this.realtime.publishSessionCreated(result.resultSessionId);
+      // Read back from the ledger, never from a flag this process kept: the flip and the row that
+      // records it commit together, so a rolled-back dispatch cannot announce a retry that did not
+      // happen. Without this the task keeps its Failed pill and its Failed filter position on every
+      // open client until something else happens to refetch it — the retry looks like it never ran,
+      // which is the same invisibility `clearFailedForRetry` publishes against on the legacy path.
+      if (result.retriedFromFailed) {
+        this.realtime.publishForUser(result.ownerId, RunEventType.TASK_CHANGED, command.taskId);
+      }
     }
     return { action, sessionId: result?.resultSessionId ?? null };
   }
@@ -408,8 +421,34 @@ export class ProjectTaskDispatcherService {
         resolution,
       }, now);
     }
+    // §9.5 Q3 row 3, the write half (`PC-CX-64`). A retry that leaves the task at `FAILED` is a
+    // retry nobody can see: the row keeps the status of the run that died while a live Session sits
+    // on it, it stays counted under Failed, and §7.2 TU2 would read the same episode as still
+    // unmoved. `IN_PROGRESS` and not `OPEN` is the target for the reason the legacy sweep already
+    // picked it (`clearFailedForRetry`): it is the status `reclaimStalledTask` rewrites when a run
+    // ends badly, so a retry that fails again lands back at `FAILED` instead of silently parking as
+    // actionable.
+    //
+    // In THIS transaction, next to the Session insert, because the two are one act: §8.3's
+    // exactly-once-effect is a property of the action's effect, and a flip committed separately
+    // could survive a rolled-back dispatch (a task marked running with nothing running) or be lost
+    // by one (a running task marked failed). Conditional on `FAILED` so a status somebody else
+    // wrote in the meantime — a person cancelling it, the run itself reporting — is never dragged
+    // backwards, which is the same compare-and-set `clearFailedForRetry` uses.
+    //
+    // The failed Session is deliberately untouched. It is the evidence §6.1 counts failures from
+    // and §9.5's ladder is measured in; rewriting it would reset the very budget this dispatch is
+    // spending, and the run's own history would say it never failed.
+    const retried = await tx.$executeRaw(Prisma.sql`
+      UPDATE "task" SET "status" = 'IN_PROGRESS', "updated_at" = ${now}
+       WHERE "id" = ${command.taskId}::uuid AND "owner_id" = ${row.ownerId}::uuid
+         AND "status" = 'FAILED'
+    `);
     await tx.$executeRaw(Prisma.sql`
-      UPDATE "project_action" SET "result_session_id" = ${sessionId}::uuid, "updated_at" = ${now}
+      UPDATE "project_action"
+         SET "result_session_id" = ${sessionId}::uuid,
+             "detail" = "detail" || ${JSON.stringify({ retriedFromFailed: retried > 0 })}::jsonb,
+             "updated_at" = ${now}
        WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
     `);
   }

@@ -7,6 +7,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { Prisma, ProjectAutomationPolicy, RunStatus, TaskStatus } from '@prisma/client';
 import type { Client } from 'pg';
+import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 import {
   E2eServices,
   World,
@@ -81,18 +82,29 @@ async function turns(client: Client, sessionId: string): Promise<Array<{
 }
 
 /**
- * A project whose coordination run is live and whose only task has settled FAILED.
+ * A project whose coordination run is live and whose only task has settled FAILED, past the point
+ * where the control loop can move it.
  *
  * The run is opened by the loop's own `ROTATE_COORDINATOR_SESSION` rather than written here, so
  * every scenario below starts from a coordination run production could actually have produced —
  * including the fact that it has never been claimed and therefore has no turn 1 yet.
+ *
+ * `MAX_AUTO_RUN_FAILURES` failures rather than one (v1.18, `PC-CX-64`), and the assertions below
+ * are unchanged by it. §7.2 TU2 has always asked one question — **can the control loop still move
+ * this by itself** — and this file is about what happens when the answer is no: one delivered
+ * `message` turn, exactly once per episode, surviving replay, takeover and a SIGKILL on either side
+ * of the commit. When the file was written, `FAILED` alone meant "the loop cannot move it", because
+ * §7.4 refused every `FAILED` task; v1.18 gives the retry ladder back to that status, so the world
+ * where the loop is genuinely out of moves is the one where the ladder is SPENT. Leaving the
+ * fixture at one attributable failure would test the delivery of a turn the loop no longer decides
+ * to open — it would be a fixture asserting the reason, not the delivery.
  */
 async function failedProjectWithLiveCoordinator(
   services: E2eServices,
 ): Promise<{ target: World; taskId: string; coordinatorSessionId: string }> {
   const target = await world(services.db, 'pcc27');
   const taskId = await task(services.db, target, 'the task that failed');
-  await failTask(services.db, target, taskId, 1);
+  await failTask(services.db, target, taskId, MAX_AUTO_RUN_FAILURES);
   await services.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.FAILED } });
   // Pass 1 has no live coordination run, so TU7 answers NO_LIVE_RUN and §7.5's rotation goes
   // first; pass 2 finds the run it opened and is the one that may open a turn.
@@ -241,7 +253,7 @@ test('AC1: an idle coordination run becomes claimable; a busy one keeps its slot
       data: { status: RunStatus.AWAITING_INPUT, numTurns: 1 },
     });
     const idleTask = await task(services.db, target, 'failed while the coordinator was idle');
-    await failTask(services.db, target, idleTask, 1);
+    await failTask(services.db, target, idleTask, MAX_AUTO_RUN_FAILURES);
     await services.db.task.update({ where: { id: idleTask }, data: { status: TaskStatus.FAILED } });
     await deliver(services, target.projectId, 'task.updated');
     await drainToIdle(services);
@@ -273,7 +285,7 @@ test('AC1: an idle coordination run becomes claimable; a busy one keeps its slot
               "lease_deadline_at" = now() + interval '10 minutes' WHERE "session_id" = $1`,
       [coordinatorSessionId]);
     const busyTask = await task(services.db, target, 'failed while the coordinator was busy');
-    await failTask(services.db, target, busyTask, 1);
+    await failTask(services.db, target, busyTask, MAX_AUTO_RUN_FAILURES);
     await services.db.task.update({ where: { id: busyTask }, data: { status: TaskStatus.FAILED } });
     await deliver(services, target.projectId, 'task.updated');
     await drainToIdle(services);
@@ -318,7 +330,7 @@ test('§9.2 under MANUAL: no turn, and no permanent key spent on an answer only 
     });
 
     const taskId = await task(services.db, target, 'the task that failed');
-    await failTask(services.db, target, taskId, 1);
+    await failTask(services.db, target, taskId, MAX_AUTO_RUN_FAILURES);
     await services.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.FAILED } });
     await services.projects.triggerCoordinator(target.ownerId, target.projectId);
     await drainToIdle(services);
@@ -442,7 +454,7 @@ test('AC4: a post-commit notification that throws leaves the turn durable and ex
     await emptyWorld(client);
     const target = await world(services.db, 'pcc27-notify');
     const taskId = await task(services.db, target, 'the task that failed');
-    await failTask(services.db, target, taskId, 1);
+    await failTask(services.db, target, taskId, MAX_AUTO_RUN_FAILURES);
     await services.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.FAILED } });
     // Every announcement this loop makes now fails, which is the whole scenario: §8.3 says a
     // notification is an accelerator, so losing one may cost latency and nothing else.
@@ -664,7 +676,7 @@ async function armedFailure(
     where: { id: target.projectId }, select: { coordinatorSessionId: true },
   })).coordinatorSessionId!;
   const taskId = await task(services.db, target, 'the task that failed');
-  await failTask(services.db, target, taskId, 1);
+  await failTask(services.db, target, taskId, MAX_AUTO_RUN_FAILURES);
   await services.db.task.update({ where: { id: taskId }, data: { status: TaskStatus.FAILED } });
   return { target, coordinatorSessionId };
 }
