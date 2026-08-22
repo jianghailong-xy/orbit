@@ -261,26 +261,31 @@ BEGIN
   END IF;
 
   BEGIN
-    IF new_work_live THEN
-      -- §13.1 AG6's linearization point, and the only place the mode differs. Held until COMMIT, so
-      -- from here on no child may be inserted under this task and no `completion_policy` write may
-      -- land on it — the two facts the check below reads cannot move underneath it.
-      PERFORM 1 FROM "task" t
-       WHERE t."id" IN (
-         CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD."task_id" END,
-         CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE NEW."task_id" END
-       )
-       ORDER BY t."id"
-       FOR UPDATE NOWAIT;
-    ELSE
-      PERFORM 1 FROM "task" t
-       WHERE t."id" IN (
-         CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD."task_id" END,
-         CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE NEW."task_id" END
-       )
-       ORDER BY t."id"
-       FOR SHARE NOWAIT;
-    END IF;
+    -- §13.1 AG6's linearization point, at 0130's mode and NOT a stronger one.
+    --
+    -- An earlier draft upgraded this to `FOR UPDATE` when the session starts task work, reasoning
+    -- that admission has to exclude a child arriving and a `completion_policy` write landing. It
+    -- does — but the exclusion is already provided from the OTHER side, and taking it from here as
+    -- well cost something unrelated.
+    --
+    -- `task_aggregate_parent_shape_guard` (this migration, §4) fires on exactly those two writes
+    -- and takes the parent `FOR UPDATE` itself. `FOR SHARE` conflicts with `FOR UPDATE`, so a
+    -- child insert and a policy flip still cannot interleave with an admission: whichever arrives
+    -- second waits or is refused, which is all the linearization needs.
+    --
+    -- What `FOR UPDATE` here DID do is conflict with `FOR KEY SHARE`, which is the mode an edge
+    -- write's foreign keys take on the very same rows. Since 0132 an edge write holds those FK
+    -- locks while it queues on `task_dependency_revision`, so a Coordinator dispatch inserting its
+    -- Session mid-decision was refused `SESSION_TASK_BUSY` by a lock it did not need — measured,
+    -- not argued: `dependency-revision.pg.spec.ts` is 10/10 with `FOR SHARE` and 7/10 with
+    -- `FOR UPDATE`, and the two it loses are the dispatch-versus-edge barriers.
+    PERFORM 1 FROM "task" t
+     WHERE t."id" IN (
+       CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE OLD."task_id" END,
+       CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE NEW."task_id" END
+     )
+     ORDER BY t."id"
+     FOR SHARE NOWAIT;
   EXCEPTION WHEN lock_not_available THEN
     RAISE EXCEPTION
       'SESSION_TASK_BUSY: this session''s task is being written right now, so the session cannot be admitted in this transaction — nothing was written; retry'
