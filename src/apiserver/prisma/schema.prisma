@@ -2404,6 +2404,8 @@ model Task {
   dependsOn    TaskDependency[] @relation("DependencyFromTask")
   // Dependency edges where THIS task is the prerequisite: tasks blocked until it's DONE.
   dependedOnBy TaskDependency[] @relation("DependencyToTask")
+  /// The dispatch version of this task's prerequisite set (0131). Always present.
+  dependencyRevision TaskDependencyRevision?
   /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
   /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
@@ -2545,6 +2547,22 @@ model TaskDependency {
   @@unique([taskId, dependsOnTaskId])
   @@index([dependsOnTaskId])
   @@map("task_dependency")
+}
+
+/// The dispatch version boundary for one task's prerequisite set (migration 0131).
+///
+/// An edge carries no version and an empty edge set has no row to lock, so a dispatch decision
+/// had nothing to hold while it read the prerequisites — 0122 borrowed the dependent Task's row
+/// for that, at the cost of an unrelated `updated_at` write, its creator-session FK re-check and
+/// every Task trigger. This row is the thing to hold instead: one per task, created with the task
+/// and advanced once per statement that changes any of its edges, entirely in the database
+/// (`task_dependency_revision_advance`). No application code writes it.
+model TaskDependencyRevision {
+  taskId   String @id @map("task_id") @db.Uuid
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  revision BigInt @default(0)
+
+  @@map("task_dependency_revision")
 }
 
 // A control-plane-configured model provider (e.g. DeepSeek) that borrows a built-in

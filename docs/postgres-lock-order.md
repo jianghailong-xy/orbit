@@ -11,10 +11,11 @@
 | 修复后的 barrier 回归（正反两个到达顺序） | `src/apiserver/src/deadlock/lock-order.pg.spec.ts` |
 | 回归用的修复后剧本 | `src/apiserver/src/deadlock/lock-order-fixture.ts` |
 | 两条生产基线（**保持原样**，仍是修复前证据） | `src/apiserver/src/deadlock/orbit-lock-fixture.ts` |
+| 秩 70 的来历与它替换掉的东西（0131） | `docs/task-dependency-revision.md` |
 
 ```
 scripts/deadlock-barrier.sh lock-order   # 只跑本文件的回归
-scripts/deadlock-barrier.sh all          # harness 自检 + 两条基线 + 本回归 + 0130 事件域回归
+scripts/deadlock-barrier.sh all          # harness 自检 + 两条基线 + 本回归 + 0131 边界 + 0130 事件域回归
 ```
 
 ## 0. 为什么锁序必须写成"关系级"而且必须算上隐式锁
@@ -50,8 +51,9 @@ UPDATE "session" SET last_assistant_text = …          → 持有 session "user
 | 20 | `task_list` | `FOR UPDATE`（列表策略写）· `FOR KEY SHARE`（`task.list_id` 外键） | 暂停一个列表要先写列表行、再写列表里的每个 Task，所以列表在 Task 之前。 |
 | 30 | `session` | `FOR UPDATE`（runner lease fence / inbox / lifecycle）· `FOR KEY SHARE`（`task.creator_session_id` 外键） | 见 I2、I3。也是 runner events 事务的**全部**锁集合。 |
 | 40 | `project` | `FOR NO KEY UPDATE`（容量 fence、verdict 门、acceptance reopen、reconcile）· `FOR KEY SHARE`（外键、outbox） | 在 `session` 之下：`session_project_capacity_serialize` 是 Session 写入的 BEFORE 触发器，那时 Session 行已经在手。在 `task` 之上：Project 授权适配器本来就是这个顺序（project `FOR NO KEY UPDATE` → task `FOR SHARE`）。 |
-| 50 | `task` | `FOR UPDATE`（删除）· `FOR NO KEY UPDATE`（更新、dispatch touch）· `FOR SHARE`（session 派发守卫、授权适配器）· `FOR KEY SHARE`（边、`session.task_id` 外键） | 多行一律 `ORDER BY id`。 |
+| 50 | `task` | `FOR UPDATE`（删除）· `FOR NO KEY UPDATE`（更新）· `FOR SHARE`（session 派发守卫、授权适配器）· `FOR KEY SHARE`（边、`session.task_id` 外键） | 多行一律 `ORDER BY id`。 |
 | 60 | `task_dependency` / `conversation_turn` / `run_event` / `tool_call` / `attachment` / `project_event` / `project_action` | 只插入/更新/删除 | 子行：到这一步它们的外键父行都已经在手，不会引入新的等待边。 |
+| 70 | `task_dependency_revision` | `FOR NO KEY UPDATE`（0131：边写之后推进）· `FOR SHARE`（dispatch 决策在它之下读边集） | 最后一把。在边（60）**之下**，因为写入方是"先改边再推进"，而决策也按同一方向取（前置 50 → 边 60 → revision 70），两边不可能反序。它让**空边集**可锁，这正是 0122 去 touch dependent Task 的全部理由。见 `docs/task-dependency-revision.md`。 |
 
 ### 三条让它可执行的不变量
 
@@ -60,14 +62,25 @@ UPDATE "session" SET last_assistant_text = …          → 持有 session "user
 哪些行都不可能互相死锁**，于是整张锁图只剩下"Task 写入方 vs Session 写入方"和"Task 写入方 vs Project
 协调方"两类需要推理。
 
-**I2 — Session 行在第一条 Task/edge 写之前锁掉。** 一次 `task` 写会重查
-`task_creator_session_id_fkey` 并取该 Task 的 creator Session 的 `FOR KEY SHARE`；
-`task_dependency_dispatch_touch` 会让一次边写做同样的事。把这些锁**提前、排序、一条语句**取到，
-就是二方 05:53:11 那个环消失的原因——那个环的形状正是"一个事务在自己的 Task 写之间穿插着取 Session 锁"。
+**I2 — Session 行在第一条 Task 写之前锁掉。** 一次 `task` 写会重查
+`task_creator_session_id_fkey` 并取该 Task 的 creator Session 的 `FOR KEY SHARE`。把这些锁**提前、
+排序、一条语句**取到，就是二方 05:53:11 那个环消失的原因——那个环的形状正是"一个事务在自己的 Task 写
+之间穿插着取 Session 锁"。
+
+**边写曾经也算在内**（`task_dependency_dispatch_touch` 让一次边写去重写它的 dependent Task），
+**0131 之后不再是**：边写改为推进 `task_dependency_revision`（秩 70），一个 `task` 行都不写，因此纯边
+路径只剩秩 10。
 
 `FOR KEY SHARE` 恰好就是外键本来会取的模式，所以这条预锁**没有加强也没有削弱**任何东西，它只改变
 **什么时候**取：它挡不住读者、挡不住另一个 Task 事务（同模式相容），只与一样东西冲突——runner 持有该
 Session 时的那把 `FOR UPDATE`。
+
+**I4 — dispatch 必须先拿到秩 10 的 owner 行，才能去要秩 70。**（0131 加）边写入方从第一条语句就持有
+`lockOwnerTaskGraph`（10，`FOR UPDATE`），到最后一条语句才推进 `task_dependency_revision`（70）；
+dispatch 天生是反的——它在决策期间就要 revision，而 owner 行要等到几条语句之后 Session INSERT 的
+`session_owner_id_fkey` 才**隐式**取到。所以 `ProjectTaskDispatcherService.dispatchInTransaction` 在
+**第一条**语句里就 `FOR KEY SHARE OF u`：同一行、同一模式、只是提前，和 I2 对 Task 写做的事一模一样。
+实测：`dependency-revision.pg.spec.ts` 把这一句删掉重跑同一对事务，拿到 `40P01`。
 
 **I3 — 一个事务对同一行 `session` 只写一次。** 理由见 §0。修复前 `POST /runner/sessions/:id/events`
 一个批次最多写八次同一行（telemetry 一次、runtime id 一次、预览反规范化一次、每个后台 shell / 子 Agent
@@ -84,11 +97,11 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 |---|---|---|---|---|---|
 | `TasksService.create` | 仅当有依赖/父/verifies | ✔ | ✔ | — | 单纯改名式的 create 不该排在别人的 DAG 重写后面 |
 | `TasksService.createMany` | ✔ 无条件 | ✔ | ✔ | — | 批量按 item 顺序写多行 `task`，别人无法共享这个顺序 |
-| `TasksService.update` | 仅当重构 | 仅当改 `listId` | 仅当会**两次**写该行 | 仅当写 acceptance-fact 列 | 四个秩里唯一可能全都要的 |
+| `TasksService.update` | 仅当重构 | 仅当改 `listId` | 仅当会**两次**写该行（0131 起只剩 supersession；依赖替换不再算） | 仅当写 acceptance-fact 列 | 四个秩里唯一可能全都要的 |
 | `TasksService.fileVerification` | — | — | — | — | 裸 INSERT，见下方"为什么 INSERT 不需要 40" |
 | `TasksService.dispatchStalledListForemen` | — | — | — | — | 同上 |
-| `TasksService.applyDag` | ✔ | — | ✔（全部 op 的 taskId） | — | 同一个 dependent 上一删一加 ⇒ 该行被写两次 ⇒ 外键重查 |
-| `TasksService.addDependency` / `removeDependency` | ✔ | — | ✔ | — | 两侧触发同一个 dispatch touch |
+| `TasksService.applyDag` | ✔ | — | — | — | 0131 起只写边，一个 `task` 行都不写 ⇒ 没有第二次写、没有外键重查 |
+| `TasksService.addDependency` / `removeDependency` | ✔ | — | — | — | 同上；两侧推进同一个 revision 行（秩 70） |
 | `TasksService.deleteAndStopRuns` | ✔ | — | ✔（附着的 run） | ✔（这些 task 的 project） | 锁序**唯一声明的例外**，见 §5 |
 | `TasksService.consumeRunAt` | — | — | — | — | 单行单语句；`run_at` 不在任何触发器的列表里 |
 | `TasksService.clearFailedForRetry` | — | — | — | **残留** | 单语句写 `status` ⇒ 触发器随后取 project，见 §6 |
@@ -110,6 +123,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `POST /runner/sessions/:id/inbox`（dequeue） | `session`(30) → conversation_turn(60) | 不写 `session` 行 |
 | `QueueService.trySessionClaim` | advisory → `session`(30) → `project`(40，容量 fence) | 顺序合规 |
 | `SessionsService` 生命周期（cancel/end/complete/delete） | `session`(30) → `project`(40，容量 fence) | 每条分支都只写一次 `session` 行（分支互斥） |
+| `ProjectTaskDispatcherService.dispatchInTransaction`（0131 起） | `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | I4。`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。表里唯一的 40→10 倒序由 `applyDecisionAction` 先取 project 造成，与 0131 无关，属于 §6 那条未解的 `project ↔ task` 序 |
 
 ## 4. 逐项审查：trigger / constraint trigger / fencing
 
@@ -117,14 +131,16 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 |---|---|---|---|
 | `task_creator_session_id_fkey`（内部约束触发器） | 目标 `session` 行 `FOR KEY SHARE` | **保留**（本来也删不掉） | 它是 I2 的全部动机：把这把锁提前、排序、一次取到。 |
 | `session_owner_id_fkey` 等 Session 外键 | `user`/`workspace`/`runner`/`task` 行 `FOR KEY SHARE` | **保留，靠 I3 让它不再重复触发** | 首次写一行不重查；只有第二次写才重查。答案是"写一次"，不是"去掉外键"。 |
-| `task_dependency_dispatch_touch`（普通触发器） | 被 touch 的 `task` 行 `FOR NO KEY UPDATE`（外加该行被本事务写过时的全部外键重查） | **保留（本任务不动它）** | 它是 dispatch 快照的版本边界：边本身没有 `updated_at`，touch 给了决策一行可锁、可比版本的东西。它扩大锁域这件事由 I2 中和（被 touch 的 Task 的 creator Session 已经预锁）。用 revision 取代它是下游任务 `用 dependency revision 取代无关 Task updated_at touch` 的交付物，本任务只把接口钉住：**它一次只写一行**（`INSERT`/`DELETE` 时 `NEW.task_id`/`OLD.task_id` 之一为 `NULL`，而 `task_dependency.task_id` 没有任何写路径会 `UPDATE`），实测确认（见 §7 探针）。 |
+| ~~`task_dependency_dispatch_touch`~~ | — | **已删除（0131）** | 它一直是 dispatch 快照的版本边界，但起作用的是它那条 `UPDATE` 取的**行锁**而不是 `updated_at` 的值——仓库里没有一处读过那个值。0131 把这把锁挪到 `task_dependency_revision`（秩 70）上：同样的互斥、同样能锁住空边集，但不写 `task` 行，于是既不重查 `task_creator_session_id_fkey`、也不重跑 `task` 上的每个行级触发器。见 `docs/task-dependency-revision.md`。 |
+| `task_dependency_revision_insert/update/delete`（语句级 + transition table） | 相关 dependent 的 `task_dependency_revision` 行 `FOR NO KEY UPDATE`，**按 Task UUID 排序、每个 Task 一次** | **新增（0131）** | 秩 70，在边（60）之下。排序由显式 `ORDER BY … FOR NO KEY UPDATE` 保证（`LockRows` 在 `Sort` 之上），所以两个重叠批量不可能反序取同一对行。 |
+| `session_dispatch_dependency_check`（0131，DEFERRABLE INITIALLY DEFERRED，AFTER INSERT ON session） | 不取行锁，只在 COMMIT 重读 | **新增（0131）** | 提交边界那一半，也是滚动升级期间**旧副本**绕不过去的网：旧副本不知道要取 revision，它的错误 dispatch 会在 COMMIT 拿到 `DISPATCH_DEPENDENCY_CHANGED` 并整笔回滚。只对 `dispatch_origin = 'PROJECT_COORDINATOR'` 生效。 |
 | `session_project_capacity_serialize`（0122，BEFORE INSERT/DELETE + BEFORE UPDATE OF `status`,`task_id`,`deleted_at`） | 该 Session 的 Task 所属 `project` 行 `FOR NO KEY UPDATE` | **保留，不再收窄** | 它是 Project/Agent 准入线性化的那把锁：准入按 Session 行计数，进出"活跃认领集合"的变化必须和授权适配器取的 project 行锁排成序。它已经是**秩 30 → 秩 40**，即**顺序内**的一步，不是倒序；而且 0122 的 `UPDATE OF` + 函数开头的提前返回已经把 telemetry 写完全挡在外面（`lock-order.pg.spec.ts` 的 `a telemetry-only Session write takes no Project lock` 实测锁集合只有 `session`）。正反两个到达顺序都有回归（`capacityFenceScenario`）。 |
 | `project_session_event_source` / `_update`（0117/0130） | `task`/`project` 的 `AccessShareLock` + `project_event` 插入 | **已在 0130 收窄，保持** | 见 `docs/session-event-trigger-scope.md`。telemetry 写既不查 `task` 也不查 `project`。 |
 | `project_task_event_source` / `project_task_dependency_event_source`（outbox） | `project` 行 `FOR KEY SHARE`（`project_event` 的外键） | **保留** | `FOR KEY SHARE` 只与 `FOR UPDATE` 冲突，而 project 上唯一的 `FOR UPDATE` 持有者（`ProjectAcceptanceService.lockProject('FOR UPDATE')`、`ProjectsService`）在持有期间不会去等任何 `task`/`session` 行——所以这条 50 → 40 的倒序没有对手，见 `LOCK_ORDER_EXCEPTIONS`。 |
 | `session_dispatch_authority_guard`（0122，BEFORE INSERT ON session） | 被派发 `task` 行 `FOR SHARE` | **保留** | 它是派发权限的插入时门。Session INSERT 因此是 50 → 30 的形状；但一次 Session INSERT 持有的 Session 行同样是别人看不见的新行，与 §2 的 INSERT 论证同构。 |
 | `project_acceptance_task_fact` / `_update`（0127） | 该 Task 的 `project` 行 `FOR NO KEY UPDATE` | **保留；它是 §6 那条倒序的来源** | 见 §6。 |
 | `project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project） | 该 project 下**全部** `task` 行 | **保留** | 40 → 50，顺序内。只在协调开关翻转时发生。 |
-| `Task.updated_at` 作为版本边界 | — | **保留（当前任务），已标注替换路径** | 同上 `task_dependency_dispatch_touch` 行。 |
+| `Task.updated_at` 作为版本边界 | — | **已取消（0131）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
 | `Session.inbox_lease_owner` / `inbox_lease_generation` fencing | 与 `SELECT … FOR UPDATE` 同一条语句 | **保留，未触碰** | 本次没有任何改动会改变 lease fencing 的语义：`lockSessionLeaseOwner` 一字未动，`runner-write-lease-owner.spec.ts` 与 `inbox-lease-generation.spec.ts` 全绿。 |
 
 ## 5. 声明的例外（两条，各自附论证）
@@ -156,7 +172,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 
 ```
 task status UPDATE while project FNKU held     -> 55P03   ← 会等
-task updated_at-only UPDATE (dispatch touch)   -> committed
+task updated_at-only UPDATE                    -> committed
 task title UPDATE                              -> committed
 task INSERT into the project                   -> 55P03   ← 会等
 task DELETE from the project                   -> 55P03   ← 会等
@@ -193,6 +209,8 @@ INSERT 类来源（`create`/`createMany`/`fileVerification`/foreman）由 §2 �
 ✔ one Task create against a runner events batch (task-first / runner-first)
 ✔ createMany against a runner events batch (task-first / runner-first)
 ✔ a dependency mutation against two runner transactions (task-first / runner-first)
+  —— 0131 之后这两条的断言变了：不再是"链而不是环"，而是**根本不相交**（依赖事务的 `pg_locks` 里
+  没有 `session`，有 `task_dependency_revision`），只剩"两个写同一 Session 行"那一条等待边。
 ✔ the Project capacity fence still serializes admission (task-first / runner-first)
 ✔ a telemetry-only Session write takes no Project lock
 ✔ the owner graph mutex serializes two reverse edge writes
@@ -225,14 +243,20 @@ INSERT 类来源（`create`/`createMany`/`fileVerification`/foreman）由 §2 �
 BEGIN; SELECT … FOR UPDATE; UPDATE session …              → session
        ; UPDATE session …（第二次）                        → session "user" runner task workspace
 
-# §4：dispatch touch 一次只写一行
+# §4：0131 之前，dispatch touch 一次只写一行
 INSERT task_dependency(dependent, prerequisite)           → dependent.updated_at 变，prerequisite 不变
+# §4：0131 之后，它一行都不写（读 xmin，不读 updated_at——见 dependency-revision.pg.spec.ts）
+INSERT task_dependency(dependent, prerequisite)           → dependent.xmin 不变，revision +1
 
 # §6：project ↔ task
 （见 §6 的五行输出）
 ```
 
 ## 8. 上线与回滚
+
+> **0131 之后**：`用 dependency revision 取代无关 Task updated_at touch` 在本文件之上加了一个
+> migration（`0131_task_dependency_revision`）。它的上线、回滚与混版说明在
+> `docs/task-dependency-revision.md` §5，不在本节——本节说的仍然是锁序那次纯应用层改动。
 
 **没有 migration。** 本次改动全在应用层：预锁语句、写语句的合并、以及两处事务边界。数据库 schema、
 触发器、外键一个都没动。

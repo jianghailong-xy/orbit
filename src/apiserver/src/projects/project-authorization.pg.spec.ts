@@ -103,6 +103,14 @@ async function reset(client: Client): Promise<void> {
       "depends_on_task_id" UUID NOT NULL,
       PRIMARY KEY ("task_id", "depends_on_task_id")
     );
+    -- 0131's dispatch version boundary. The adapter takes FOR SHARE on this row before it reads
+    -- the prerequisite set, so the harness has to have it or the read under test never runs. The
+    -- rows are seeded beside the tasks below; the real schema does that from a trigger, which
+    -- this stand-in has no reason to reproduce.
+    CREATE TABLE "task_dependency_revision" (
+      "task_id" UUID PRIMARY KEY,
+      "revision" BIGINT NOT NULL DEFAULT 0
+    );
     -- §13.2's condition row, in the shape the guard reads it: the commit-time gate answers "is a
     -- failed check still holding this task" from here, so the harness has to have it for the
     -- guard to be exercised at all.
@@ -193,6 +201,10 @@ async function reset(client: Client): Promise<void> {
       ($1, $2, $3, $4),
       ($5, $2, $3, $4)
   `, [TASK_A, OWNER, PROJECT, AGENT_A, TASK_B]);
+  // The real schema seeds these from a trigger on `task` (0131); this stand-in has no reason to
+  // reproduce the trigger, only the invariant it keeps — every Task has a revision row to lock.
+  await client.query(
+    `INSERT INTO "task_dependency_revision" ("task_id") VALUES ($1), ($2)`, [TASK_A, TASK_B]);
 }
 
 function command(taskId: string, overrides: Partial<ProjectAuthorizationTransactionCommand> = {})

@@ -725,8 +725,24 @@ export class ProjectAuthorizationService {
         `);
     const targetAgent = targetAgents[0];
 
-    // Lock the current edge/prerequisite set before interpreting it. Migration 0122 touches the
-    // dependent Task on edge insert/delete, closing the otherwise-unlockable empty-set phantom.
+    // Lock the current edge/prerequisite set before interpreting it: rank 50 for the prerequisite
+    // Tasks whose status decides readiness, then rank 70 for this Task's dependency revision.
+    //
+    // The revision row is what makes the EMPTY edge set lockable, which the edge rows cannot be —
+    // 0122 borrowed the dependent Task's own row for that by touching its `updated_at`, and 0131
+    // replaced it with a row that belongs to the edge set. Every dependency change advances it, so
+    // holding it FOR SHARE means no edge of this Task can commit between here and this
+    // transaction's own commit: the counts read below stay true for as long as they are used.
+    //
+    // Rank order, and why it is safe to hold a rank-70 row all the way through the Session insert:
+    // by the time this runs the caller has already taken rank 10 (the owner, FOR KEY SHARE — I4 in
+    // common/lock-order.ts, and the thing that makes rank 70 reachable without a cycle), rank 40
+    // (the project, above) and rank 50 (this Task, FOR SHARE, taken by the dispatcher before it
+    // called here). Everything the dispatch does after this point — the Session insert and its
+    // capacity/authority triggers, the Task status write — asks only for rows it is already
+    // holding. The one writer that takes a `task` row BEFORE it advances a revision,
+    // TasksService.update rewriting dependencies alongside a scalar write, is excluded by that
+    // rank-50 FOR SHARE rather than able to meet this transaction head-on.
     if (command.taskId != null) {
       await tx.$queryRaw(Prisma.sql`
         SELECT d."task_id", prerequisite."id"
@@ -735,6 +751,11 @@ export class ProjectAuthorizationService {
          WHERE d."task_id" = ${command.taskId}::uuid
          ORDER BY prerequisite."id"
          FOR SHARE OF d, prerequisite
+      `);
+      await tx.$queryRaw(Prisma.sql`
+        SELECT r."revision" FROM "task_dependency_revision" r
+         WHERE r."task_id" = ${command.taskId}::uuid
+         FOR SHARE
       `);
     }
 

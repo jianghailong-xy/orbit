@@ -153,18 +153,38 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       await seedThreePartyFixture(admin, ids);
       const outcome = await runScenario(url, orderedDependencyScenario(ids, arrival), 30_000);
       assertAllCommitted(outcome);
-      // Two waits, and they are a chain rather than a ring: the baseline's three edges are two
-      // now, because the dependency mutation never asks for a Session it does not already hold
-      // and the telemetry transaction never asks for the owner at all.
-      assert.equal(outcome.waitEdges.length, 2, `${outcome.name}: a chain, not a ring`);
-      const { rows } = await admin.query<{ status: string; n: string }>(
+      // One wait, and it is the one the fix never claimed to remove: two writers of one Session
+      // row. The baseline's other two edges are not merely re-ordered, they do not exist —
+      // since 0131 the dependency mutation touches no Session at all.
+      assert.equal(outcome.waitEdges.length, 1, `${outcome.name}: one wait, and not a ring`);
+      assert.deepEqual(edges(outcome), ['runner-inbox -> telemetry']);
+
+      // The claim 0131 makes, read out of `pg_locks` rather than argued: at the moment the runner
+      // pair contended, the dependency transaction was open, had written its Task and its edge,
+      // and held no `session` lock of any kind. Under 0122 this list contained `session`, taken
+      // by the dispatch touch's UPDATE through `task_creator_session_id_fkey`.
+      const held = [...new Set(
+        outcome.waitEdges[0].locks
+          .filter((l) => l.pid === outcome.pids.dependency && l.locktype === 'relation'
+            && ['RowShareLock', 'RowExclusiveLock'].includes(l.mode))
+          .map((l) => (l.relation ?? '').replace(/"/g, '')),
+      )].sort();
+      assert.equal(held.includes('session'), false,
+        `the dependency transaction took a Session lock (held: ${held.join(', ')})`);
+      assert.ok(held.includes('task_dependency_revision'),
+        `the edge write did not advance the revision (held: ${held.join(', ')})`);
+
+      const { rows } = await admin.query<{ status: string; n: string; revision: string }>(
         `SELECT t."status"::text AS status,
-                (SELECT count(*) FROM "task_dependency" d WHERE d."id" = $2::uuid)::text AS n
+                (SELECT count(*) FROM "task_dependency" d WHERE d."id" = $2::uuid)::text AS n,
+                (SELECT r."revision"::text FROM "task_dependency_revision" r
+                  WHERE r."task_id" = t."id") AS revision
            FROM "task" t WHERE t."id" = $1::uuid`,
         [ids.dependentTaskId, ids.dependencyId],
       );
       assert.equal(rows[0].status, 'IN_PROGRESS', 'the dependency transaction committed its status write');
       assert.equal(Number(rows[0].n), 1, 'and its edge');
+      assert.equal(rows[0].revision, '1', 'and the revision the edge advanced');
     });
 
     await t.test(`the Project capacity fence still serializes admission (${arrival})`, async () => {

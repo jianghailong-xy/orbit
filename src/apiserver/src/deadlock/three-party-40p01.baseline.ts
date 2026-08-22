@@ -11,6 +11,10 @@ import {
   threePartyDeadlockScenario,
 } from './orbit-lock-fixture';
 import { runScenario, type LockRow, type ScenarioOutcome } from './pg-barrier';
+import {
+  dropHistoricalDispatchTouch,
+  installHistoricalDispatchTouch,
+} from './pre-0131-dispatch-touch';
 
 /**
  * BASELINE COMMAND — proves what the UNREPAIRED code does today, and nothing else.
@@ -116,6 +120,11 @@ async function main(): Promise<void> {
   const admin = new Client({ connectionString: url });
   await admin.connect();
   await verifyCoordinatorPgIdentity(admin);
+  // The cycle this baseline is evidence for ran through `task_dependency_dispatch_touch`, which
+  // 0131 removed. The replayed statements are unchanged; the schema they were issued against is
+  // rebuilt here and dropped again in the `finally`, so the baseline stays what it was without
+  // holding the schema still. See pre-0131-dispatch-touch.ts.
+  await installHistoricalDispatchTouch(admin);
   const sources = await assertProductionLockSourcesStillExist(admin);
   console.log(`three-party 40P01 baseline · ${ROUNDS} rounds`);
   for (const s of sources) console.log(`  lock source · ${s}`);
@@ -235,6 +244,7 @@ async function main(): Promise<void> {
       console.log('\n--- round 1 evidence ---');
       console.log(JSON.stringify(firstEvidence, null, 2));
     }
+    await dropHistoricalDispatchTouch(admin).catch(() => undefined);
     await admin.end().catch(() => undefined);
   }
   console.log(

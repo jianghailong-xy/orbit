@@ -30,11 +30,6 @@ const LOCK_OWNER = 'SELECT "id" FROM "user" WHERE "id" = $1::uuid FOR UPDATE';
 const LOCK_CREATOR_SESSIONS =
   'SELECT "id" FROM "session" WHERE "id" = ANY($1::uuid[]) ORDER BY "id" FOR KEY SHARE';
 
-/** `creatorSessionsOf` — the unlocked read that tells the pre-lock which Sessions to take. */
-const READ_CREATOR_SESSIONS =
-  'SELECT "creator_session_id" AS "creatorSessionId" FROM "task" ' +
-  'WHERE "id" = ANY($1::uuid[]) AND "creator_session_id" IS NOT NULL';
-
 const INSERT_TASK = `
   INSERT INTO "task" ("id", "title", "owner_id", "creator_type", "creator_id",
                       "creator_session_id", "project_id", "updated_at")
@@ -246,10 +241,18 @@ function twoPartyPlan(
  * and the second write re-checked `session_owner_id_fkey` onto the owner row the dependency
  * transaction held FOR UPDATE.
  *
- * Post-fix, two of the three edges are gone by construction: the dependency mutation takes the
- * contended Session before it writes a Task (so it is never caught holding a Task while asking
- * for a Session), and the telemetry transaction writes its row once (so it never asks for the
- * owner at all). What remains is a chain, and a chain drains.
+ * Post-0131, all three edges are gone, and two of them for a stronger reason than "taken in a
+ * better order": the dependency mutation no longer touches a Session AT ALL. 0122's
+ * `task_dependency_dispatch_touch` was what made an edge write re-write its dependent Task and so
+ * re-check `task_creator_session_id_fkey`; 0131 advances `task_dependency_revision` instead, and
+ * that row's only parent is the Task. The telemetry transaction writes its Session row once, so
+ * it never asks for the owner either.
+ *
+ * So the shape this proves is not a drained chain but a DISJOINT one: the dependency party and
+ * the two runner parties contend for nothing, and the only wait left in the plan is the one the
+ * fix never claimed to remove — two writers of one Session row. `lock-order.pg.spec.ts` reads the
+ * dependency backend's held relations out of that observation and asserts `session` is not among
+ * them, which is the claim 0131 actually makes.
  */
 export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): ScenarioSpec {
   const parties = [
@@ -257,30 +260,23 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
     { name: 'runner-inbox', deadlockTimeout: '2s' },
     { name: 'telemetry', deadlockTimeout: '2s' },
   ];
-  const dependencyPreLocks: PlanStep[] = [
+  const dependencyWrites: PlanStep[] = [
     { op: 'run', party: 'dependency', label: 'D1 lock-owner-graph',
       sql: LOCK_OWNER, values: [ids.ownerId] },
-    { op: 'run', party: 'dependency', label: 'D2 read-creator-sessions',
-      sql: READ_CREATOR_SESSIONS, values: [[ids.dependentTaskId]] },
-  ];
-  const lockSessions = {
-    label: 'D3 lock-creator-sessions',
-    sql: LOCK_CREATOR_SESSIONS,
-    values: [[ids.contendedSessionId]],
-  };
-  const dependencyWrites: PlanStep[] = [
     // Rank 40. The status write below fires `project_acceptance_task_fact_update`, which takes
     // this exact lock from an AFTER trigger; taking it here is what stops the transaction being
     // caught holding the Task while the Project authorization adapter waits for it.
-    { op: 'run', party: 'dependency', label: 'D4 lock-project',
+    { op: 'run', party: 'dependency', label: 'D2 lock-project',
       sql: 'SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', values: [ids.projectId] },
-    { op: 'run', party: 'dependency', label: 'D5 update-task',
+    { op: 'run', party: 'dependency', label: 'D3 update-task',
       sql: UPDATE_TASK_STATUS, values: [ids.dependentTaskId, 'IN_PROGRESS', ids.telemetryTurnAt] },
-    // The edge insert still fires `task_dependency_dispatch_touch`, whose UPDATE still re-checks
-    // `task_creator_session_id_fkey` — D5 left the Task's xmin current, exactly as in the
-    // baseline. The difference is that the Session it asks for is already held by D3, so the
-    // re-check is satisfied out of this transaction's own locks instead of waiting on somebody.
-    { op: 'run', party: 'dependency', label: 'D6 insert-task-dependency',
+    // The step the baseline died on, and the reason the pre-lock that used to precede it is gone.
+    // In the baseline this INSERT fired the dispatch touch, the touch re-wrote a Task row D3 had
+    // already written, and that second write re-checked `task_creator_session_id_fkey` onto a
+    // Session somebody else held. After 0131 it writes the edge and advances
+    // `task_dependency_revision` — a row whose only foreign key is the Task this transaction is
+    // already holding — so no Session is asked for and none is pre-locked.
+    { op: 'run', party: 'dependency', label: 'D4 insert-task-dependency',
       sql: INSERT_DEPENDENCY, values: [ids.dependencyId, ids.dependentTaskId, ids.prerequisiteTaskId] },
   ];
   const inboxHead = {
@@ -295,23 +291,23 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
       name: 'ordered-dependency/dependency-first',
       parties,
       plan: [
-        ...dependencyPreLocks,
-        { op: 'run', party: 'dependency', ...lockSessions },
-        // Same edge as the baseline's D3 → I1, now pointing the other way: the dependency
-        // mutation got the Session first, so the inbox waits instead of the mutation.
-        { op: 'block', party: 'runner-inbox', ...inboxHead, blockedBy: ['dependency'] },
-        { op: 'run', party: 'telemetry', label: 'P1 session-batch-update',
-          sql: SESSION_BATCH_UPDATE, values: telemetryArgs(ids.telemetryTurnAt, `${ids.label}-telemetry`) },
+        // The dependency mutation goes ALL the way through — owner, project, Task, edge — while
+        // the inbox owns the contended Session. In the baseline it could not: its edge insert
+        // wanted that Session. Nothing here waits for anything the runner holds.
         ...dependencyWrites,
-        { op: 'finish', party: 'dependency', action: 'COMMIT' },
-        { op: 'settle', party: 'runner-inbox' },
+        { op: 'run', party: 'runner-inbox', ...inboxHead },
         { op: 'run', party: 'runner-inbox', label: 'I2 insert-run-event',
           sql: INSERT_RUN_EVENT, values: [ids.runEventId, ids.contendedSessionId] },
+        { op: 'run', party: 'telemetry', label: 'P1 session-batch-update',
+          sql: SESSION_BATCH_UPDATE, values: telemetryArgs(ids.telemetryTurnAt, `${ids.label}-telemetry`) },
         // The one edge the fix does not remove, and must not: two writers of the same Session
-        // row. It is an ordinary FOR NO KEY UPDATE conflict with no trigger or FK in it.
+        // row. It is an ordinary FOR NO KEY UPDATE conflict with no trigger or FK in it. It is
+        // also the observation the spec reads the dependency backend's lock set out of, which is
+        // why it is taken while that transaction is still open.
         { op: 'block', party: 'runner-inbox', label: 'I3 session-batch-update',
           sql: SESSION_BATCH_UPDATE, values: telemetryArgs(ids.inboxTurnAt, `${ids.label}-inbox`),
           blockedBy: ['telemetry'] },
+        { op: 'finish', party: 'dependency', action: 'COMMIT' },
         { op: 'finish', party: 'telemetry', action: 'COMMIT' },
         { op: 'settle', party: 'runner-inbox' },
         { op: 'finish', party: 'runner-inbox', action: 'COMMIT' },
@@ -327,21 +323,20 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
         sql: INSERT_RUN_EVENT, values: [ids.runEventId, ids.contendedSessionId] },
       { op: 'run', party: 'telemetry', label: 'P1 session-batch-update',
         sql: SESSION_BATCH_UPDATE, values: telemetryArgs(ids.telemetryTurnAt, `${ids.label}-telemetry`) },
+      // The baseline's closing edge came from here: the dependency mutation, arriving last,
+      // asked for the Session the inbox owns and closed the ring. It does not ask any more — it
+      // runs straight through with both runner transactions already holding their Sessions.
+      ...dependencyWrites,
+      // Taken after those writes, and before either side commits, so the observation carries the
+      // dependency backend's lock set — which is the assertion this arrival exists to make from
+      // the other direction.
       { op: 'block', party: 'runner-inbox', label: 'I3 session-batch-update',
         sql: SESSION_BATCH_UPDATE, values: telemetryArgs(ids.inboxTurnAt, `${ids.label}-inbox`),
         blockedBy: ['telemetry'] },
-      ...dependencyPreLocks,
-      // The baseline's closing edge, from the other direction: the dependency mutation holds the
-      // owner row and waits for the Session the inbox owns. In the baseline the telemetry
-      // transaction was at that moment waiting for this owner row, which is what made the ring.
-      // It writes its Session row once now, so it waits for nothing and the chain drains.
-      { op: 'block', party: 'dependency', ...lockSessions, blockedBy: ['runner-inbox'] },
+      { op: 'finish', party: 'dependency', action: 'COMMIT' },
       { op: 'finish', party: 'telemetry', action: 'COMMIT' },
       { op: 'settle', party: 'runner-inbox' },
       { op: 'finish', party: 'runner-inbox', action: 'COMMIT' },
-      { op: 'settle', party: 'dependency' },
-      ...dependencyWrites,
-      { op: 'finish', party: 'dependency', action: 'COMMIT' },
     ],
   };
 }

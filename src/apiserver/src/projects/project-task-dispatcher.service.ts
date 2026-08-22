@@ -157,6 +157,17 @@ export class ProjectTaskDispatcherService {
     actionId: string,
     now: Date,
   ) {
+    // `FOR KEY SHARE OF u` is I2 applied to this transaction (common/lock-order.ts): the Session
+    // this dispatch is about to insert takes exactly that lock on exactly that row through
+    // `session_owner_id_fkey`/`session_creator_id_fkey`, several statements from now. Taking it
+    // HERE neither strengthens nor weakens anything — it only stops this transaction from being
+    // caught holding a later rank while it asks for rank 10.
+    //
+    // Which matters since 0131, because the later rank is `task_dependency_revision` (70): an edge
+    // writer holds the owner graph mutex (10, FOR UPDATE) from its first statement and advances
+    // that revision from its last, so a dispatch that reached rank 70 before rank 10 would meet it
+    // head-on. Measured, not assumed — `dependency-revision.pg.spec.ts` takes this line out and
+    // gets a 40P01.
     const rows = await tx.$queryRaw<DispatchRow[]>(Prisma.sql`
       SELECT p."owner_id" AS "ownerId", t."title", t."description", t."provider", t."model",
              t."is_foreman" AS "isForeman", t."verifies_task_id" AS "verifiesTaskId",
@@ -179,7 +190,7 @@ export class ProjectTaskDispatcherService {
         LEFT JOIN "runner" r ON r."id" = w."runner_id" AND r."owner_id" = p."owner_id"
        WHERE d."id" = ${command.decisionId}::uuid
          AND d."project_id" = ${lease.projectId}::uuid
-       FOR SHARE OF t
+       FOR KEY SHARE OF u FOR SHARE OF t
     `);
     const row = rows[0];
     if (!row) {
