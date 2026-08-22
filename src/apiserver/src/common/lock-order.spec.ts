@@ -13,6 +13,7 @@ const runnerApi = read('src/runner-api/runner-api.controller.ts');
 const workspacesService = read('src/workspaces/workspaces.service.ts');
 const dispatchBoundary = read('prisma/migrations/0122_project_dispatch_boundary/migration.sql');
 const acceptanceRun = read('prisma/migrations/0127_project_acceptance_run/migration.sql');
+const dependencyRevision = read('prisma/migrations/0132_task_dependency_revision/migration.sql');
 
 /**
  * Every statement in this repo that writes a `task` or `task_dependency` row, and what each one
@@ -33,6 +34,18 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   holds: string[];
   note: string;
 }> = [
+  {
+    file: 'tasks.service.ts',
+    method: 'linkSupersededBy',
+    statements: ['UPDATE "task"'],
+    holds: ['await this.lockTaskForSupersessionWrite(tx, predecessorId);'],
+    note:
+      'The predecessor\'s retirement, reached from `create` and from `update`. Its own rank-50 lock ' +
+      'is NOWAIT rather than blocking, which is the one place in this inventory where a lock is ' +
+      'declined rather than waited for: the caller already holds the project (rank 40), so waiting ' +
+      'here for a dispatch that holds the task and wants the project would be the cycle. Ranks 10 ' +
+      'and 40 are taken by both callers before this runs.',
+  },
   {
     file: 'tasks.service.ts',
     method: 'create',
@@ -74,13 +87,13 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'if (restructures) await this.lockDependencyGraph(tx, ownerId);',
       'await lockTaskLists(tx, [dto.listId]);',
       'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);',
-      'if (before.projectId && touchesAcceptanceFacts) {',
+      'const acceptanceProjects = touchesAcceptanceFacts || supersession || movesProject',
     ],
     note:
       'The only Task write that can need all four ranks, and each is conditional on the write ' +
       'actually reaching that relation: 10 when it restructures, 20 when it re-files, 30 when it ' +
-      'writes the task row twice (a dependency replacement through the dispatch touch, or a ' +
-      'supersession), 40 when it names a column project_acceptance_task_fact_update is declared over.',
+      'writes the task row twice (a supersession, which is its own statement beside task.update), ' +
+      '40 when it names a column project_acceptance_task_fact_update is declared over.',
   },
   {
     file: 'tasks.service.ts',
@@ -103,34 +116,26 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     file: 'tasks.service.ts',
     method: 'applyDag',
     statements: ['taskDependency.deleteMany', 'taskDependency.createMany'],
-    holds: [
-      'await this.lockDependencyGraph(tx, ownerId);',
-      'await this.preLockCreatorSessions(tx, [], ops.map((op) => op.taskId));',
-    ],
+    holds: ['await this.lockDependencyGraph(tx, ownerId);'],
     note:
-      'A restructure removes and adds edges on the same dependent, so the dispatch touch writes ' +
-      'that Task twice and the second write re-checks task_creator_session_id_fkey. One ordered ' +
-      'rank-30 statement for every Task the batch names.',
+      'Rank 10 and nothing else since 0132. A restructure writes only edges, and an edge write no ' +
+      'longer re-writes its dependent Task, so there is no second write of a task row to ' +
+      're-check task_creator_session_id_fkey against and no creator Session to pre-lock. The ' +
+      'dispatch boundary it used to buy is task_dependency_revision, advanced at rank 70.',
   },
   {
     file: 'tasks.service.ts',
     method: 'addDependency',
     statements: ['taskDependency.create'],
-    holds: [
-      'await this.lockDependencyGraph(tx, ownerId);',
-      'await this.preLockCreatorSessions(tx, [], [taskId]);',
-    ],
-    note: 'Rank 10 for the cycle check, rank 30 for the dispatch touch the edge fires.',
+    holds: ['await this.lockDependencyGraph(tx, ownerId);'],
+    note: 'Rank 10 for the cycle check. The INSERT itself advances the revision at rank 70.',
   },
   {
     file: 'tasks.service.ts',
     method: 'removeDependency',
     statements: ['taskDependency.deleteMany'],
-    holds: [
-      'await this.lockDependencyGraph(tx, ownerId);',
-      'await this.preLockCreatorSessions(tx, [], [taskId]);',
-    ],
-    note: 'The DELETE fires the same touch as the INSERT, so it takes the same locks.',
+    holds: ['await this.lockDependencyGraph(tx, ownerId);'],
+    note: 'The DELETE advances the same revision row as the INSERT, so it takes the same locks.',
   },
   {
     file: 'tasks.service.ts',
@@ -204,13 +209,20 @@ const TASK_WRITE =
 const METHOD = /^ {2}(?:private |protected |public |static )*(?:async )?([A-Za-z0-9_]+)\s*\(/;
 const NOT_A_METHOD = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'constructor']);
 
-/** Every Task write statement in one file, paired with the class method it sits in. */
+/**
+ * Every Task write statement in one file, paired with the class method it sits in.
+ *
+ * Comment lines are skipped before the match. The comments in these files NAME the statements they
+ * are about — "`tx.task.update` below takes the same row" — and counting those as writes would ask
+ * the inventory to carry a lock plan for a sentence.
+ */
 function scanTaskWrites(source: string): Array<{ method: string; statement: string }> {
   const found: Array<{ method: string; statement: string }> = [];
   let method = '(top-level)';
   for (const line of source.split('\n')) {
     const declared = METHOD.exec(line);
     if (declared && !NOT_A_METHOD.has(declared[1])) method = declared[1];
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
     const write = TASK_WRITE.exec(line);
     if (write) {
       found.push({
@@ -329,9 +341,26 @@ test('the compatibility arguments still describe the code they are about', () =>
 });
 
 test('the triggers the order is derived from are still declared the way it assumes', () => {
-  // Rank 30 exists because this touch re-writes the dependent Task, which re-checks its creator
-  // Session's foreign key whenever the transaction already wrote that row.
-  assert.match(dispatchBoundary, /CREATE TRIGGER "task_dependency_dispatch_touch"\s+AFTER INSERT OR UPDATE OR DELETE ON "task_dependency"/);
+  // Rank 70 is a relation of its own because an edge write advances it and the dispatch decision
+  // reads the edge set under it — and because 0132 REMOVED the touch that used to serve as the
+  // boundary, which is what took rank 30 off the pure edge paths.
+  assert.equal(/CREATE TRIGGER "task_dependency_dispatch_touch"/.test(dependencyRevision), false);
+  assert.match(dependencyRevision, /DROP TRIGGER "task_dependency_dispatch_touch" ON "task_dependency"/);
+  for (const event of ['INSERT', 'UPDATE', 'DELETE']) {
+    assert.match(
+      dependencyRevision,
+      new RegExp(`CREATE TRIGGER "task_dependency_revision_${event.toLowerCase()}"\\s+AFTER ${event} ON "task_dependency"`),
+      `the ${event} half of the revision boundary is not declared the way rank 70 assumes`,
+    );
+  }
+  // Statement-level with a transition table, which is what "once per Task per batch" means.
+  assert.equal(/FOR EACH ROW EXECUTE FUNCTION "task_dependency_revision/.test(dependencyRevision), false);
+  assert.match(dependencyRevision, /REFERENCING NEW TABLE AS new_edges/);
+  // Sorted acquisition, in one statement, above the UPDATE that advances them.
+  assert.match(dependencyRevision, /ORDER BY r\."task_id" FOR NO KEY UPDATE/);
+  // Every Task has a row, or the empty edge set would have nothing to lock again.
+  assert.match(dependencyRevision, /AFTER INSERT ON "task" REFERENCING NEW TABLE AS new_tasks/);
+  assert.match(dependencyRevision, /INSERT INTO "task_dependency_revision" \("task_id"\) SELECT "id" FROM "task"/);
   // Rank 40 is below `session` because the capacity fence is a BEFORE trigger on a Session write,
   // and it is narrowed to the three columns that can move the live-claim set — which is what keeps
   // it out of a telemetry batch entirely.

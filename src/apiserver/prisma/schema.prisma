@@ -793,7 +793,7 @@ model Session {
   /// A conversation opened by an @-mention carries this and leaves `taskId` null, so it takes no
   /// execution claim, occupies no project slot, does not follow the task's lifecycle — and is
   /// invisible as a task session to a binary that predates the column, which is what makes it safe
-  /// to create during a rolling deploy. Mutually exclusive with `taskId` (migration 0131's CHECK).
+  /// to create during a rolling deploy. Mutually exclusive with `taskId` (migration 0132's CHECK).
   mentionDeliveries    TaskCommentMentionDelivery[] @relation("MentionDeliveryTarget")
   contextTaskId        String?          @map("context_task_id") @db.Uuid
   contextTask          Task?            @relation("SessionContextTask", fields: [contextTaskId], references: [id], onDelete: SetNull)
@@ -2427,13 +2427,15 @@ model Task {
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
-  /// these do neither (migration 0131).
+  /// these do neither (migration 0132).
   contextSessions Session[]     @relation("SessionContextTask")
   mentionDeliveries TaskCommentMentionDelivery[]
   // Dependency edges where THIS task is the dependent: the prerequisites it waits on.
   dependsOn    TaskDependency[] @relation("DependencyFromTask")
   // Dependency edges where THIS task is the prerequisite: tasks blocked until it's DONE.
   dependedOnBy TaskDependency[] @relation("DependencyToTask")
+  /// The dispatch version of this task's prerequisite set (0132). Always present.
+  dependencyRevision TaskDependencyRevision?
   /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
   /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
@@ -2551,7 +2553,7 @@ model TaskComment {
   // Agent ids @-mentioned in this comment (web composer). Each mention notifies and
   // triggers that agent on this task; resolved to names in the UI. No FK (cf. authorId).
   mentions   String[]    @default([]) @db.Uuid
-  /// Which mention-delivery contract this comment was written under (migration 0131). 0 is the
+  /// Which mention-delivery contract this comment was written under (migration 0132). 0 is the
   /// inline best-effort loop a binary predating the ledger used, and is what an absent value means;
   /// 1 files a `TaskCommentMentionDelivery` row per mentioned agent in the same transaction. The
   /// column exists so a rolling deploy cannot deliver one comment twice or lose one entirely.
@@ -2566,7 +2568,7 @@ model TaskComment {
 
 /// One @-mention's delivery, from the comment that made it to the turn that carried it.
 ///
-/// Written in the same transaction as the comment (0131's trigger), worked off by a sweep that
+/// Written in the same transaction as the comment (0132's trigger), worked off by a sweep that
 /// retries with backoff. `(commentId, workspaceId)` is unique, so a mention is delivered at most
 /// once however many workers or retries touch it, and `status` is the answer to "did that agent
 /// ever hear about this" that a log line could never give.
@@ -2578,17 +2580,17 @@ model TaskCommentMentionDelivery {
   task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   /// The agent that was mentioned, as an immutable snapshot. No relation and no cascade on
   /// purpose: deleting a runner cascades to its workspaces, and a ledger row that vanished with
-  /// them would take the record of an undelivered mention with it (migration 0131).
+  /// them would take the record of an undelivered mention with it (migration 0132).
   workspaceId     String   @map("workspace_id") @db.Uuid
   ownerId         String   @map("owner_id") @db.Uuid
   owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   status          TaskCommentMentionDeliveryStatus @default(PENDING)
   /// The delivery budget: tries that failed for a reason belonging to this delivery. Availability
-  /// failures (no runner, provider down) refund it — see migration 0131.
+  /// failures (no runner, provider down) refund it — see migration 0132.
   attempts        Int      @default(0)
   /// Leases that expired while still DELIVERING — a worker died mid-flight. Bounds that loop, and
-  /// deliberately not advanced by an ordinary poll (see migration 0131).
+  /// deliberately not advanced by an ordinary poll (see migration 0132).
   claims          Int      @default(0)
   /// Availability and polling generations: no runner yet, no turn seeded yet. Drives the backoff
   /// and nothing else — no cap, because a machine being down is not a reason to throw away a
@@ -2605,7 +2607,7 @@ model TaskCommentMentionDelivery {
   lastError       String?  @map("last_error")
   /// The session id this delivery INTENDS to use, written before that session exists so a crash in
   /// between retries with the same id rather than opening a second conversation. No FK, and that
-  /// is the point (migration 0131).
+  /// is the point (migration 0132).
   desiredSessionId String? @map("desired_session_id") @db.Uuid
   /// Where the message actually landed, once that session exists.
   targetSessionId String?  @map("target_session_id") @db.Uuid
@@ -2656,6 +2658,22 @@ model TaskDependency {
   @@unique([taskId, dependsOnTaskId])
   @@index([dependsOnTaskId])
   @@map("task_dependency")
+}
+
+/// The dispatch version boundary for one task's prerequisite set (migration 0132).
+///
+/// An edge carries no version and an empty edge set has no row to lock, so a dispatch decision
+/// had nothing to hold while it read the prerequisites — 0122 borrowed the dependent Task's row
+/// for that, at the cost of an unrelated `updated_at` write, its creator-session FK re-check and
+/// every Task trigger. This row is the thing to hold instead: one per task, created with the task
+/// and advanced once per statement that changes any of its edges, entirely in the database
+/// (`task_dependency_revision_advance`). No application code writes it.
+model TaskDependencyRevision {
+  taskId   String @id @map("task_id") @db.Uuid
+  task     Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  revision BigInt @default(0)
+
+  @@map("task_dependency_revision")
 }
 
 // A control-plane-configured model provider (e.g. DeepSeek) that borrows a built-in

@@ -110,10 +110,13 @@ test('update atomically replaces and deduplicates an existing task dependency se
     dependsOnTaskIds: [TASK_B, TASK_B, TASK_C],
   });
 
+  // No 'creator-sessions': since 0132 a dependency replacement writes the task row exactly once
+  // (`task.update`), because the edge write advances `task_dependency_revision` instead of
+  // re-writing the dependent Task. One write of a row does not re-check its foreign keys, so
+  // there is no creator Session to pre-lock (common/lock-order.ts, I2).
   assert.deepEqual(fixture.calls, [
     'transaction',
     'lock',
-    'creator-sessions',
     'update',
     'delete',
     'create',
@@ -130,7 +133,7 @@ test('an empty dependency replacement clears all prerequisites', async () => {
 
   await fixture.service.update('owner', TASK_A, { dependsOnTaskIds: [] });
 
-  assert.deepEqual(fixture.calls, ['transaction', 'lock', 'creator-sessions', 'update', 'delete']);
+  assert.deepEqual(fixture.calls, ['transaction', 'lock', 'update', 'delete']);
   assert.deepEqual(fixture.createdEdges(), []);
   assert.equal(fixture.dependencyReads(), 0);
   assert.deepEqual(fixture.published, [['owner', 'task_changed', TASK_A]]);
@@ -159,7 +162,7 @@ test('dependency replacement rejects self-dependencies and cycles before writing
     cycle.service.update('owner', TASK_A, { dependsOnTaskIds: [TASK_B] }),
     /would create a cycle/,
   );
-  assert.deepEqual(cycle.calls, ['transaction', 'lock', 'creator-sessions']);
+  assert.deepEqual(cycle.calls, ['transaction', 'lock']);
 });
 
 test('dependency replacement rejects a task outside the owner scope', async () => {
@@ -171,17 +174,18 @@ test('dependency replacement rejects a task outside the owner scope', async () =
   assert.deepEqual(fixture.calls, []);
 });
 
-// Both sides fire `task_dependency_dispatch_touch`, which re-writes the dependent Task and
-// therefore re-checks `task_creator_session_id_fkey` — so both take the same rank-30 pre-lock
-// ahead of the edge write, not just the same rank-10 mutex (common/lock-order.ts, I2).
+// Both sides take the rank-10 owner mutex and nothing else. Under 0122 they also took a rank-30
+// pre-lock, because `task_dependency_dispatch_touch` re-wrote the dependent Task and so re-checked
+// `task_creator_session_id_fkey`; 0132 advances `task_dependency_revision` instead, and an edge
+// write now touches no Session at all (common/lock-order.ts, I2).
 test('single-edge add and remove use the same owner-scoped graph lock', async () => {
   const add = taskServiceFixture();
   await add.service.addDependency('owner', TASK_A, TASK_B);
-  assert.deepEqual(add.calls, ['transaction', 'lock', 'creator-sessions', 'create']);
+  assert.deepEqual(add.calls, ['transaction', 'lock', 'create']);
   assert.deepEqual(add.published, [['owner', 'task_changed', TASK_A]]);
 
   const remove = taskServiceFixture([{ taskId: TASK_A, dependsOnTaskId: TASK_B }]);
   await remove.service.removeDependency('owner', TASK_A, TASK_B);
-  assert.deepEqual(remove.calls, ['transaction', 'lock', 'creator-sessions', 'delete']);
+  assert.deepEqual(remove.calls, ['transaction', 'lock', 'delete']);
   assert.deepEqual(remove.published, [['owner', 'task_changed', TASK_A]]);
 });

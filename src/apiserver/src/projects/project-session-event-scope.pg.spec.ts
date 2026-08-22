@@ -13,7 +13,7 @@ import {
 } from './coordinator-pg-test-safety';
 
 /**
- * Migration 0132 — `project_session_event_source` stops running on Session writes that cannot
+ * Migration 0133 — `project_session_event_source` stops running on Session writes that cannot
  * produce an event.
  *
  * Two things have to be true at once, and this file proves them against the REAL migrated
@@ -30,7 +30,7 @@ import {
  *      the five status transitions, coordinator-session lifecycle, soft delete, merge success
  *      and merge conflict, hard delete — with the outbox row still atomic with the business row.
  *
- * The barrier is deliberately run against the PRE-0132 shape first (0126's function plus the
+ * The barrier is deliberately run against the PRE-0133 shape first (0126's function plus the
  * `AFTER INSERT OR UPDATE OR DELETE` trigger it was installed with) and asserted to TIME OUT
  * there. Without that half, a green barrier would only prove that nothing in the environment
  * happens to block — not that the narrowing is what unblocked it.
@@ -42,10 +42,10 @@ const skip = URL ? false : 'set COORDINATOR_PG_URL to run';
 const MIGRATIONS = path.resolve(__dirname, '../../prisma/migrations');
 const read = (dir: string): string => readFileSync(path.join(MIGRATIONS, dir, 'migration.sql'), 'utf8');
 /** The migration under test. Applied by `prisma migrate deploy`; re-applied here to prove it re-runs. */
-const NARROWED = read('0132_session_event_source_update_scope');
-/** The function body 0132 inherits. Re-applied to rebuild the pre-fix state for the control. */
+const NARROWED = read('0133_session_event_source_update_scope');
+/** The function body 0133 inherits. Re-applied to rebuild the pre-fix state for the control. */
 const PRE_FIX_FUNCTION = read('0126_project_coordinator_session_lifecycle');
-/** The trigger 0117 installed and 0132 replaces: every UPDATE, whatever it wrote. */
+/** The trigger 0117 installed and 0133 replaces: every UPDATE, whatever it wrote. */
 const PRE_FIX_TRIGGER = `
   DROP TRIGGER IF EXISTS "project_session_event_source" ON "session";
   DROP TRIGGER IF EXISTS "project_session_event_source_update" ON "session";
@@ -242,7 +242,7 @@ test('with Task or Project locked, a telemetry-only Session UPDATE still commits
     const ids = await seed(client, 'scope-barrier');
     const write = telemetryWrites(ids, new Date('2026-08-22T01:00:00.000Z'))[0];
 
-    // 1 · The control: the pre-0132 trigger, on the same schedule, times out on both relations.
+    // 1 · The control: the pre-0133 trigger, on the same schedule, times out on both relations.
     await client.query(PRE_FIX_FUNCTION);
     await client.query(PRE_FIX_TRIGGER);
     for (const relation of ['task', 'project'] as const) {
@@ -448,7 +448,7 @@ test('the Session row and its Project signal still commit or roll back together'
   }
 });
 
-test('0132 re-applies cleanly and leaves exactly the two declared triggers', { skip }, async () => {
+test('0133 re-applies cleanly and leaves exactly the two declared triggers', { skip }, async () => {
   const client = await connect();
   try {
     // Applied once by `prisma migrate deploy`; twice more here. Nothing it contains depends on

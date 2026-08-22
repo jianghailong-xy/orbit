@@ -1,4 +1,4 @@
-# Narrowing the Session Project-event trigger (migration 0132)
+# Narrowing the Session Project-event trigger (migration 0133)
 
 `project_session_event_source` turns a Session's lifecycle into a `project_event` signal. Since
 migration 0117 it has been installed as `AFTER INSERT OR UPDATE OR DELETE ON "session"`, so every
@@ -16,12 +16,12 @@ Everything else a `session` row carries is telemetry the runner writes at conver
 `context_tokens`, `updated_at` — and one `/events` ingest batch issues several of those UPDATEs
 (`runner-api.controller.ts`).
 
-Migration `0132_session_event_source_update_scope` declares the UPDATE half over exactly those
+Migration `0133_session_event_source_update_scope` declares the UPDATE half over exactly those
 three columns.
 
 ## What it changes
 
-| | before 0132 | after 0132 |
+| | before 0133 | after 0133 |
 | --- | --- | --- |
 | INSERT / DELETE | trigger `project_session_event_source` | unchanged, same trigger name |
 | UPDATE | same trigger, every column | trigger `project_session_event_source_update`, `UPDATE OF status, deleted_at, merge_status` + `WHEN` those values actually move |
@@ -47,7 +47,7 @@ migration, a hand-installed trigger or a future event type cannot silently resto
 ## Why the lock set matters
 
 An `AccessShareLock` on `task` conflicts with exactly one thing: `AccessExclusiveLock`, which is
-what `ALTER TABLE`, `REINDEX` and `VACUUM FULL` take. Before 0132 every telemetry write queued
+what `ALTER TABLE`, `REINDEX` and `VACUUM FULL` take. Before 0133 every telemetry write queued
 behind such a statement, and each one queued while already holding its own `session` row lock — so
 a sub-second DDL during a deploy fanned out into blocked runner transactions. A *row* lock on the
 associated Task was never the problem (MVCC reads straight through one); the regression asserts
@@ -75,7 +75,7 @@ regression is `src/apiserver/src/projects/project-session-event-scope.pg.spec.ts
    declared over (0122's capacity fence is `UPDATE OF status, task_id, deleted_at`), so the
    `task`/`project` locks it leaves behind are this trigger's and nobody else's.
 2. **Barrier.** One connection holds `task` (then `project`) in `ACCESS EXCLUSIVE MODE` while a
-   second does the telemetry write under `lock_timeout = 2s`. It is run against the **pre-0132
+   second does the telemetry write under `lock_timeout = 2s`. It is run against the **pre-0133
    shape first** — 0126's function plus the `AFTER INSERT OR UPDATE OR DELETE` trigger — and
    asserted to fail with `55P03` there. Without that half a green barrier would only prove that
    nothing happens to block, not that the narrowing is what unblocked it.
@@ -100,21 +100,21 @@ brief locks on `session` and can be re-applied any number of times.
 A **mixed-version window is safe in both directions**, because the trigger is the whole contract
 and it lives in the database:
 
-* an old apiserver against a 0132 database writes the same UPDATEs it always did; the ones that
+* an old apiserver against a 0133 database writes the same UPDATEs it always did; the ones that
   carry an event still carry it;
-* a new apiserver against a pre-0132 database gets the old, unconditional trigger — slower, never
+* a new apiserver against a pre-0133 database gets the old, unconditional trigger — slower, never
   wrong.
 
 ## Rolling back
 
 Reverting the application does **not** require reverting the migration; the trigger's behaviour is
 a strict subset of the old one's. If the trigger itself must be restored (say, to bisect a signal
-that appears to be missing), reinstall the pre-0132 shape:
+that appears to be missing), reinstall the pre-0133 shape:
 
 ```sql
--- 1. the pre-0132 function body: re-apply
+-- 1. the pre-0133 function body: re-apply
 --    prisma/migrations/0126_project_coordinator_session_lifecycle/migration.sql
--- 2. the pre-0132 trigger:
+-- 2. the pre-0133 trigger:
 DROP TRIGGER IF EXISTS "project_session_event_source" ON "session";
 DROP TRIGGER IF EXISTS "project_session_event_source_update" ON "session";
 CREATE TRIGGER "project_session_event_source"
@@ -122,9 +122,9 @@ AFTER INSERT OR UPDATE OR DELETE ON "session"
 FOR EACH ROW EXECUTE FUNCTION "project_session_event_source"();
 ```
 
-Re-applying `0132_session_event_source_update_scope/migration.sql` moves back. Neither direction
+Re-applying `0133_session_event_source_update_scope/migration.sql` moves back. Neither direction
 touches a row, so no data check is needed after either; `_prisma_migrations` is not rewritten by a
-manual `CREATE OR REPLACE`, so a later `migrate deploy` will not try to re-run 0132 on its own.
+manual `CREATE OR REPLACE`, so a later `migrate deploy` will not try to re-run 0133 on its own.
 
 If a Project ever *does* look stuck after this change, the question is whether a signal is missing,
 and it is answerable directly:

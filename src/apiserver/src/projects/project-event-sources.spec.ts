@@ -14,7 +14,7 @@ const tasksService = readFileSync(
 const sessionScope = readFileSync(
   path.resolve(
     __dirname,
-    '../../prisma/migrations/0132_session_event_source_update_scope/migration.sql',
+    '../../prisma/migrations/0133_session_event_source_update_scope/migration.sql',
   ),
   'utf8',
 );

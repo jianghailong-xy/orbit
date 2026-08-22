@@ -1288,11 +1288,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * locked ahead of the first Task/edge write in one ordered `FOR KEY SHARE` statement.
    *
    * `sessionIds` are the ones the caller already knows (a create's own creator Session);
-   * `taskIds` are Tasks whose rows this transaction will write or make
-   * `task_dependency_dispatch_touch` re-write, whose creator Sessions are read here because the
-   * caller cannot know them. Both sets go into one sorted statement, so a transaction touching
-   * several Sessions can never take them in a different order from another that touches the
-   * same ones.
+   * `taskIds` are Tasks whose rows this transaction will write more than once, whose creator
+   * Sessions are read here because the caller cannot know them. Both sets go into one sorted
+   * statement, so a transaction touching several Sessions can never take them in a different
+   * order from another that touches the same ones.
    */
   private async preLockCreatorSessions(
     tx: Prisma.TransactionClient,
@@ -4371,9 +4370,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       concludesVerdict ||
       !!supersession ||
       dto.listId !== undefined;
-    // The FK re-check only fires on a SECOND write of this task's row, which is what a dependency
-    // replacement (through the dispatch touch) and a supersession (a separate statement) each do.
-    const rewritesTaskRow = dependsOnTaskIds !== undefined || !!supersession;
+    // The FK re-check only fires on a SECOND write of this task's row. A supersession is that
+    // second write (its own statement, beside `task.update`). A dependency replacement no longer
+    // is: since 0132 the edge write advances `task_dependency_revision` instead of re-writing the
+    // dependent Task, so replacing prerequisites alone leaves the row written exactly once.
+    const rewritesTaskRow = !!supersession;
     const updated = await (
       !restructures && !(touchesAcceptanceFacts && before.projectId)
         ? this.prisma.task.update({ where: { id }, data })
@@ -4383,8 +4384,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // task write below. The list is the FK endpoint a concurrent pause holds FOR UPDATE;
             // the Session is the one `task_creator_session_id_fkey` re-checks — and it IS
             // re-checked here even though nothing about it changes, because this transaction
-            // writes the task row and any second write of that row (the dependency touch, the
-            // supersession statement) re-runs every one of its foreign keys.
+            // writes the task row and the supersession statement writes it a second time, which
+            // re-runs every one of its foreign keys.
             await lockTaskLists(tx, [dto.listId]);
             if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);
             // §13.4 AE6-a. A verdict is one of the facts a project's acceptance is computed from,
@@ -4424,6 +4425,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // take the real one, which is the task→project order this prelock exists to avoid.
             // The same stale copy is what `touchesHierarchy` has always re-read for, so one read
             // serves both rather than two reads disagreeing about one row.
+            // `touchesAcceptanceFacts`, not `concludesVerdict`: the prelock below is taken for
+            // EVERY project-filed update, because `project_acceptance_reopen` takes this exact
+            // lock from an AFTER trigger on any status, policy, project or verification-link write
+            // too — so pre-locking changes nothing about WHICH locks this transaction ends up
+            // holding, only when. Rank 40, and after the rank-30 Session prelock above, so it can
+            // never hold the project while waiting for a Session a runner owns.
             const needsCurrent = touchesHierarchy || touchesAcceptanceFacts || !!supersession;
             const current = needsCurrent
               ? await tx.task.findFirst({
@@ -5640,13 +5647,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const applied = await this.prisma.$transaction(async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
-      // Rank 30 before any edge write: every edge this batch writes makes
-      // `task_dependency_dispatch_touch` re-write its dependent Task, and a Task written twice in
-      // one transaction (a remove and an add on the same dependent, which a restructure routinely
-      // produces) re-runs `task_creator_session_id_fkey` and takes FOR KEY SHARE on that Task's
-      // creator Session. One ordered statement for the whole batch, so a restructure and another
-      // owner's request can never take two Sessions in opposite orders.
-      await this.preLockCreatorSessions(tx, [], ops.map((op) => op.taskId));
+      // No rank-30 pre-lock any more. This batch writes edges and nothing else: since 0132 an edge
+      // write no longer re-writes its dependent Task, so it no longer re-checks
+      // `task_creator_session_id_fkey` and no longer takes FOR KEY SHARE on that Task's creator
+      // Session — a lock that conflicts with the FOR UPDATE a runner holds while it owns the
+      // Session, and so made a restructure wait on unrelated live runs. The dispatch boundary the
+      // pre-lock was protecting is now `task_dependency_revision`, advanced at rank 70 below.
       // The graph is re-read inside the lock and re-checked whole. The preview above is for the
       // human; this is the one that decides, and between them a concurrent edit may have made the
       // batch illegal.
@@ -5701,10 +5707,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.prisma.$transaction(async (tx) => {
         await this.lockDependencyGraph(tx, ownerId);
-        // Rank 30, before the edge write: `task_dependency_dispatch_touch` re-writes the
-        // dependent Task, which re-checks `task_creator_session_id_fkey` and takes FOR KEY SHARE
-        // on that Task's creator Session (common/lock-order.ts, I2).
-        await this.preLockCreatorSessions(tx, [], [taskId]);
+        // Rank 10 only. Since 0132 the edge write touches no `task` row, so there is no second
+        // write to re-check `task_creator_session_id_fkey` against and no creator Session to
+        // pre-lock (common/lock-order.ts, I2); the dispatch boundary is the revision row the
+        // INSERT's statement trigger advances at rank 70.
         // Cycle check over this owner's whole dependency subgraph (both endpoints are
         // same-owner by construction, so filtering by the dependent's owner is enough).
         const edges = await tx.taskDependency.findMany({
@@ -5736,8 +5742,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!UUID_RE.test(dependsOnTaskId)) throw new NotFoundException('task not found');
     await this.prisma.$transaction(async (tx) => {
       await this.lockDependencyGraph(tx, ownerId);
-      // Same rank-30 pre-lock as the add: the DELETE fires the same dispatch touch.
-      await this.preLockCreatorSessions(tx, [], [taskId]);
+      // Same shape as the add: the DELETE advances the same revision row and writes no `task`.
       await tx.taskDependency.deleteMany({ where: { taskId, dependsOnTaskId } });
     });
     this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, taskId);

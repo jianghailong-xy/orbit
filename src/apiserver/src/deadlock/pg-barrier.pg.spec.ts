@@ -12,6 +12,10 @@ import {
   type FixtureIds,
 } from './orbit-lock-fixture';
 import { runScenario, type ScenarioSpec } from './pg-barrier';
+import {
+  dropHistoricalDispatchTouch,
+  installHistoricalDispatchTouch,
+} from './pre-0132-dispatch-touch';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -254,28 +258,40 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
     ],
   });
 
+  // The harness property this case reads out — a statement naming no Session queueing on one —
+  // was observed through `task_dependency_dispatch_touch`, and 0132 removed that trigger. The
+  // trigger is rebuilt for the case and dropped again, exactly as the three-party baseline does:
+  // what is being asserted is the HARNESS's ability to see a lock nobody wrote, and the touch is
+  // the sharpest instrument for it that this repo ever shipped.
   await t.test('the dispatch touch takes a Session row lock only once the task row is ours', async () => {
-    const armed = newFixtureIds('touch-armed');
-    await seedThreePartyFixture(admin, armed);
-    const outcome = await runScenario(url, dispatchTouchSpec(armed, true), 30_000);
-    const edge = outcome.waitEdges[0];
-    assert.ok(edge, 'the edge insert never blocked');
-    assert.deepEqual(edge.blockingPids, [outcome.pids.holder]);
-    // The waiter is queued on a `session` row, from a statement that names no session at all.
-    assert.deepEqual(
-      edge.locks.filter((l) => l.pid === outcome.pids.dependency && l.locktype === 'tuple')
-        .map((l) => l.relation),
-      ['session'],
-    );
+    await installHistoricalDispatchTouch(admin);
+    try {
+      const armed = newFixtureIds('touch-armed');
+      await seedThreePartyFixture(admin, armed);
+      const outcome = await runScenario(url, dispatchTouchSpec(armed, true), 30_000);
+      const edge = outcome.waitEdges[0];
+      assert.ok(edge, 'the edge insert never blocked');
+      assert.deepEqual(edge.blockingPids, [outcome.pids.holder]);
+      // The waiter is queued on a `session` row, from a statement that names no session at all.
+      assert.deepEqual(
+        edge.locks.filter((l) => l.pid === outcome.pids.dependency && l.locktype === 'tuple')
+          .map((l) => l.relation),
+        ['session'],
+      );
 
-    // The control: drop the arming UPDATE and the same insert takes no Session lock whatsoever.
-    const control = newFixtureIds('touch-control');
-    await seedThreePartyFixture(admin, control);
-    await assert.rejects(
-      () => runScenario(url, dispatchTouchSpec(control, false), 5_000),
-      /finished without ever blocking/,
-      'without the earlier task UPDATE the foreign key must not be re-checked',
-    );
+      // The control: drop the arming UPDATE and the same insert takes no Session lock whatsoever.
+      const control = newFixtureIds('touch-control');
+      await seedThreePartyFixture(admin, control);
+      await assert.rejects(
+        () => runScenario(url, dispatchTouchSpec(control, false), 5_000),
+        /finished without ever blocking/,
+        'without the earlier task UPDATE the foreign key must not be re-checked',
+      );
+    } finally {
+      // Dropped here rather than at the end of the file's `after`: every later case in this run
+      // must measure the schema 0132 leaves behind, not the one this case rebuilt.
+      await dropHistoricalDispatchTouch(admin);
+    }
   });
 
   await t.test('a Session write re-checks its owner foreign key only when it is the second one', async () => {

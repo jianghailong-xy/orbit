@@ -19,12 +19,24 @@ import type { Prisma } from '@prisma/client';
  *  cannot deadlock with each other no matter which rows they go on to touch, which is why the
  *  rest of this order only has to reason about Task-writer vs Session-writer.
  *
- *  **I2 — Session rows are locked before the first Task/edge write.** A `task` write re-checks
- *  `task_creator_session_id_fkey` and takes `FOR KEY SHARE` on the creator Session, and
- *  `task_dependency_dispatch_touch` makes an edge write do the same for the Task it touches.
- *  Taking those locks up front, sorted, at the strongest mode the transaction will need, is what
- *  stops a Task transaction from interleaving Session locks with Task locks — the shape of the
- *  2026-08-21 05:53:11 two-party cycle.
+ *  **I2 — Session rows are locked before the first Task write.** A `task` write re-checks
+ *  `task_creator_session_id_fkey` and takes `FOR KEY SHARE` on the creator Session. Taking those
+ *  locks up front, sorted, at the strongest mode the transaction will need, is what stops a Task
+ *  transaction from interleaving Session locks with Task locks — the shape of the 2026-08-21
+ *  05:53:11 two-party cycle. An EDGE write used to need this too, because
+ *  `task_dependency_dispatch_touch` made it re-write its dependent Task; since 0132 it advances
+ *  `task_dependency_revision` (rank 70) instead and takes no Session lock at all, so the pure
+ *  edge paths take rank 10 and nothing else.
+ *
+ *  **I4 — a dispatch takes the owner row at rank 10 before it reaches rank 70.** An edge writer
+ *  holds `lockOwnerTaskGraph` (10, `FOR UPDATE`) from its first statement and advances
+ *  `task_dependency_revision` (70) from its last. A dispatch does the reverse by nature: it wants
+ *  the revision during its decision, and it takes the owner row only IMPLICITLY, several
+ *  statements later, when `session_owner_id_fkey` fires on its Session insert. So
+ *  `ProjectTaskDispatcherService.dispatchInTransaction` takes `FOR KEY SHARE` on the owner in its
+ *  FIRST statement — the same mode and the same row that insert would have taken anyway, moved
+ *  earlier, exactly as I2 does for a Task write. Measured, not assumed:
+ *  `dependency-revision.pg.spec.ts` runs the same pair with that clause removed and gets a 40P01.
  *
  *  **I3 — one write per Session row per transaction.** PostgreSQL skips a foreign key's re-check
  *  when no key column changed, *except* when the row being updated was written by the current
@@ -72,7 +84,7 @@ export const LOCK_ORDER = [
   {
     rank: 50,
     relation: 'task',
-    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update, dispatch touch) · FOR SHARE (session dispatch guard, authorization) · FOR KEY SHARE (edge + session.task_id FK)',
+    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (session dispatch guard, authorization) · FOR KEY SHARE (edge + session.task_id FK)',
     why: 'Multi-row selections are always taken sorted by id (orderedIds).',
   },
   {
@@ -80,6 +92,19 @@ export const LOCK_ORDER = [
     relation: 'task_dependency, conversation_turn, run_event, tool_call, attachment, project_event, project_action',
     modes: 'INSERT/UPDATE/DELETE only',
     why: 'Child rows whose FK parents are already held by this point, so they add no wait edge of their own.',
+  },
+  {
+    rank: 70,
+    relation: 'task_dependency_revision',
+    modes: 'FOR NO KEY UPDATE (0132 advances it after an edge write) · FOR SHARE (the dispatch decision reads the edge set under it)',
+    why:
+      'The dispatch version boundary for one Task\'s prerequisite set, and the last lock anybody ' +
+      'takes. BELOW the edges (60) because a writer changes edges and then advances the revision, ' +
+      'and the dispatch decision reads them in that same order — locking the prerequisites at 50, ' +
+      'the edges at 60, the revision at 70 — so the two can never take the pair in opposite ' +
+      'directions. It is what makes an EMPTY edge set lockable, which is the whole reason 0122 ' +
+      'was touching the dependent Task instead. Rows are advanced sorted by Task uuid and once ' +
+      'per statement, in the database (`task_dependency_revision_advance`). See I4.',
   },
 ] as const;
 
@@ -211,10 +236,9 @@ export async function lockTaskLists(
  * The creator Sessions of a set of Tasks — what I2 needs before touching those Tasks.
  *
  * Read rather than assumed, because the Session a Task's foreign key names is not something the
- * caller usually has: a dependency edit knows task ids, and the row it will make
- * `task_dependency_dispatch_touch` re-write carries whatever creator Session it was born with.
- * Read inside the same transaction and under the owner graph mutex, so the answer is still true
- * when the write lands.
+ * caller usually has: a caller knows task ids, and each of those rows carries whatever creator
+ * Session it was born with. Read inside the same transaction and under the owner graph mutex, so
+ * the answer is still true when the write lands.
  */
 export async function creatorSessionsOf(
   tx: Prisma.TransactionClient,
