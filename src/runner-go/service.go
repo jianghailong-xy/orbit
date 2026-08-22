@@ -39,7 +39,9 @@ func setupService(orbitHome string, proxyVars []envVar) error {
 
 	switch runtime.GOOS {
 	case "linux":
-		return installSystemd(exe, orbitHome, systemdService, proxyVars)
+		return setupServiceLinux(hostdSocketPath, proxyVars, func() error {
+			return installSystemd(exe, orbitHome, systemdService, proxyVars)
+		})
 	case "darwin":
 		return installLaunchd(exe, orbitHome, launchdLabel, proxyVars)
 	default:
@@ -47,31 +49,24 @@ func setupService(orbitHome string, proxyVars []envVar) error {
 	}
 }
 
+// setupServiceLinux installs the runner service the best way this host allows. With
+// `orbit host setup` done, that is the machine broker: enabling this user's instance is
+// a socket call that needs no root at all. Anything else — no broker, or a broker that
+// will not answer — installs a unit of our own through sudo, so a host that was never
+// set up (or was set up badly) still ends a registration with a live runner.
+func setupServiceLinux(socketPath string, proxyVars []envVar, installLegacy func() error) error {
+	if registerViaHostd(socketPath, proxyVars) {
+		return nil
+	}
+	return installLegacy()
+}
+
 // uninstallService stops and removes the machine's runner service, for
 // `orbit unregister`. Best-effort: it reports problems but never aborts.
 func uninstallService() {
 	switch runtime.GOOS {
 	case "linux":
-		// Remove this OS user's per-user unit (orbit-runner-<user>); fall back to the
-		// bare legacy name if the user can't be resolved.
-		svc, username := systemdService, ""
-		if u, err := registeringUser(); err == nil {
-			username = u.Username
-			svc = systemdServiceFor(username)
-		}
-		if os.Geteuid() != 0 {
-			fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
-			return
-		}
-		runQuiet("systemctl", "disable", "--now", svc)
-		_ = os.Remove("/etc/systemd/system/" + svc + ".service")
-		// Also drop a leftover legacy single-runner unit, but only if it's this user's.
-		if svc != systemdService && unitRunsAsUser(systemdService, username) {
-			runQuiet("systemctl", "disable", "--now", systemdService)
-			_ = os.Remove("/etc/systemd/system/" + systemdService + ".service")
-		}
-		runQuiet("systemctl", "daemon-reload")
-		fmt.Printf("✓ removed the %s service\n", svc)
+		uninstallServiceLinux(hostdSocketPath, uninstallSystemd)
 	case "darwin":
 		label := launchdLabel
 		home := os.Getenv("HOME")
@@ -91,6 +86,40 @@ func uninstallService() {
 		}
 		fmt.Println("✓ removed the LaunchAgent")
 	}
+}
+
+// uninstallServiceLinux is setupServiceLinux's counterpart: ask the broker to take this
+// user's instance down, and only reach for sudo when it cannot.
+func uninstallServiceLinux(socketPath string, removeLegacy func()) {
+	if unregisterViaHostd(socketPath) {
+		return
+	}
+	removeLegacy()
+}
+
+// uninstallSystemd is the pre-broker removal path, unchanged: it needs root, because
+// the unit it is removing is one `orbit register` wrote into /etc/systemd/system.
+func uninstallSystemd() {
+	// Remove this OS user's per-user unit (orbit-runner-<user>); fall back to the
+	// bare legacy name if the user can't be resolved.
+	svc, username := systemdService, ""
+	if u, err := registeringUser(); err == nil {
+		username = u.Username
+		svc = systemdServiceFor(username)
+	}
+	if os.Geteuid() != 0 {
+		fmt.Fprintf(os.Stderr, "note: removing the systemd service needs root — run: sudo systemctl disable --now %s\n", svc)
+		return
+	}
+	runQuiet("systemctl", "disable", "--now", svc)
+	_ = os.Remove("/etc/systemd/system/" + svc + ".service")
+	// Also drop a leftover legacy single-runner unit, but only if it's this user's.
+	if svc != systemdService && unitRunsAsUser(systemdService, username) {
+		runQuiet("systemctl", "disable", "--now", systemdService)
+		_ = os.Remove("/etc/systemd/system/" + systemdService + ".service")
+	}
+	runQuiet("systemctl", "daemon-reload")
+	fmt.Printf("✓ removed the %s service\n", svc)
 }
 
 func installSystemd(exe, orbitHome, svc string, proxyVars []envVar) error {
@@ -466,7 +495,10 @@ func renderLaunchdPlist(exe, orbitHome, label, home, pathEnv, logPath string, pr
 `, label, exe, orbitHome, home, pathEnv, launchdProxyEnv(proxyVars), logPath, logPath)
 }
 
-func run(name string, args ...string) error {
+// run and runQuiet are vars, not plain funcs, so a test can record what a path shells
+// out to. That the broker path shells out to nothing at all — no sudo, no systemctl —
+// is the property worth guarding: it is the whole reason that path exists.
+var run = func(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -476,7 +508,7 @@ func run(name string, args ...string) error {
 // runQuiet runs a best-effort command, discarding its output and result — for
 // steps like a pre-unload that legitimately fail (and complain) when there's
 // nothing to undo.
-func runQuiet(name string, args ...string) {
+var runQuiet = func(name string, args ...string) {
 	_ = exec.Command(name, args...).Run()
 }
 
