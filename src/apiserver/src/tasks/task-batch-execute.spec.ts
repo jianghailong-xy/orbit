@@ -20,6 +20,11 @@ function makeService(count: number, sessions: { taskId: string; status: string }
     id: `task-${index}`,
     title: `Task ${index}`,
     description: null,
+    // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf, which is what these
+    // tests are about; the aggregate-parent skip has its own coverage in
+    // `task-aggregate-parent-execute.spec.ts` and against real PostgreSQL.
+    completionPolicy: 'MANUAL' as const,
+    children: [] as Array<{ id: string }>,
     assignee: { id: `workspace-${index}`, runnerId: 'runner-1' },
   }));
   const prisma = {
@@ -173,6 +178,9 @@ test('a bulk run carries the list instructions the single-task Run would have', 
           title: 'Task 0',
           description: '下载 000_00008.parquet',
           ...(args?.select?.list ? { list: { instructions } } : {}),
+          // §13.1 AG6's two facts; an ordinary leaf, like every task in this file.
+          completionPolicy: 'MANUAL' as const,
+          children: [] as Array<{ id: string }>,
           assignee: { id: 'workspace-0', runnerId: 'runner-1' },
         },
       ],

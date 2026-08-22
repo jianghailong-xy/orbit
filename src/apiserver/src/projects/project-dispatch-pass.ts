@@ -47,6 +47,7 @@ import {
   ProjectBlockerFact,
 } from './project-blocker';
 import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
+import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
 import {
   TaskRetirement,
   dependencySatisfied,
@@ -93,6 +94,17 @@ export type ProjectDispatchSkipReason =
    * task that had been re-done read as an ordinary retryable failure and was dispatched again.
    */
   | 'TASK_SUPERSEDED'
+  /**
+   * §13.1 AG6: this task has direct children and a policy that completes it FROM them, so the only
+   * thing that may finish it is the recomputation — a Session on it has no completion condition.
+   *
+   * Judged immediately after the two supersession answers and BEFORE the failure ladder, because
+   * every clause below it would answer first for an aggregate parent that had already been
+   * dispatched once and failed: it would read as an ordinary retryable failure, be retried, fail
+   * the same way, and eventually earn a `TEST_FAILED` blocker about a task that was never work.
+   * Its role is not a precondition that can lift, so it is asked before any that can.
+   */
+  | 'TASK_AGGREGATE_PARENT'
   /** §9.5 Q3's terminal cells: the failure is real and nothing mechanical advances it (`PC-CX-64`). */
   | 'TASK_FAILED_TERMINAL'
   | 'NOT_COORDINATOR_AUTHORITY'
@@ -209,6 +221,14 @@ export function selectDispatchableTasks(
   const obsoleteSubjects = new Set(
     [...retirementOf].filter(([, retired]) => retired != null).map(([id]) => id),
   );
+  // §13.1 AG6's first clause, over the same set `planTaskAggregation` counts children in: a
+  // `parentTaskId` naming a task outside this Project's snapshot matches nothing here, which is
+  // exactly how aggregation reads it — the half of a tree this snapshot cannot see is not guessed
+  // at. Built with the indexes above rather than per task, so the predicate stays O(1) per row and
+  // both gates read one definition of "has a direct child".
+  const parentsWithChildren = new Set(
+    input.world.tasks.map((task) => task.parentTaskId).filter((id): id is string => id != null),
+  );
 
   // §4.2's `run_state` is deliberately absent from this predicate; see `dispatchStoppedByRunState`.
   const blockers = input.world.blockers ?? [];
@@ -251,7 +271,7 @@ export function selectDispatchableTasks(
   for (const task of [...input.world.tasks].sort((a, b) => compare(a.id, b.id))) {
     const due = input.evaluation.dueTasks[task.id];
     const reason = firstFailure(
-      task, due, statusOf, successorOf, retirementOf, blockers,
+      task, due, statusOf, successorOf, retirementOf, parentsWithChildren, blockers,
       latestDispatch.get(task.id), epochMs,
     );
     if (reason) {
@@ -292,6 +312,7 @@ function firstFailure(
   statusOf: Map<string, string>,
   successorOf: Map<string, string | null>,
   retirementOf: Map<string, TaskRetirement | null>,
+  parentsWithChildren: ReadonlySet<string>,
   blockers: readonly ProjectBlockerFact[],
   latestDispatch: ProjectDecisionInput['world']['actions'][number] | undefined,
   epochMs: number,
@@ -313,6 +334,16 @@ function firstFailure(
   // An obsolete task is not a task whose preconditions failed; it is not a step at all.
   if (task.verifiesTaskId && retirementOf.get(task.verifiesTaskId) != null) {
     return 'VERIFICATION_SUBJECT_SUPERSEDED';
+  }
+  // §13.1 AG6, third — after the two answers about whether this row is still the work at all, and
+  // before every clause that could lift. See `TASK_AGGREGATE_PARENT` for why the order is the rule
+  // rather than a preference. `completionPolicy` absent (pre-0123) reads as MANUAL, which is what
+  // those rows held: an old snapshot reaches the answer it originally did.
+  if (isAggregateParent({
+    completionPolicy: (task.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
+    hasDirectChildren: parentsWithChildren.has(task.id),
+  })) {
+    return 'TASK_AGGREGATE_PARENT';
   }
   // §7.4 precondition 1, v1.18 (`PC-CX-64`). `OPEN` is one of the two statuses a dispatchable task
   // can be in, not the only one: a real failed run leaves `FAILED`, and §9.5 Q3's retry ladder is

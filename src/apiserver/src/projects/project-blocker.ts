@@ -386,6 +386,20 @@ export const PROJECT_BLOCKER_NON_BLOCKING_REFUSALS: ReadonlySet<string> = new Se
   // successor holds the work — so a row here would be a request addressed to no one, and §13.4's
   // DONE gate would hold the whole project open on it.
   'TASK_SUPERSEDED',
+  // §13.1 AG6: the task is completed by aggregating its children, so it is not work that failed to
+  // start — it is not work. A blocker here is wrong in all three of BL1's axes at once: it names
+  // no owner (nobody is being asked for anything), no required action (the children are already
+  // moving on their own account), and §13.4's DONE gate would hold the whole project open on a
+  // parent whose entire completion condition is those children finishing.
+  //
+  // Leaving it out is not a cosmetic miss, and this is the line that says why: BL2 fails an
+  // unlisted code CLOSED to `UNKNOWN_FAILURE`, whose subject is the PROJECT, and §11 BL1 reads a
+  // PROJECT-subject row as "stop everything". One aggregate parent that the commit gate correctly
+  // refused would therefore stop every OTHER task in the project, permanently — the planner would
+  // skip from then on and nothing clears the row automatically (§11.4 needs an attempt that is not
+  // refused, and this one always will be). The refusal and this entry are one change, and the
+  // deployment order in §13.1 AG6 puts this list ahead of anything that can emit the code.
+  'TASK_AGGREGATE_PARENT',
 ]);
 
 /**

@@ -22,6 +22,10 @@ function runnableTask(id: string, projectId: string) {
     verifiesTaskId: null,
     dispatchHold: false,
     runAt: null,
+    // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+    // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+    completionPolicy: 'MANUAL',
+    children: [],
     assignee: { id: `workspace-${id}`, runnerId: 'runner-1' },
   };
 }

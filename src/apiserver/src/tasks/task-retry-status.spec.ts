@@ -21,6 +21,10 @@ function retryFixture(status: string, updated = 1) {
         provider: null,
         model: null,
         status,
+        // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+        // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+        completionPolicy: 'MANUAL',
+        children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
       updateMany: async (args: any) => {
@@ -87,6 +91,10 @@ test('batch-running a FAILED task clears it the same way', async () => {
           provider: null,
           model: null,
           status: 'FAILED',
+          // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+          // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+          completionPolicy: 'MANUAL',
+          children: [],
           assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
         {
@@ -96,6 +104,10 @@ test('batch-running a FAILED task clears it the same way', async () => {
           provider: null,
           model: null,
           status: 'OPEN',
+          // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+          // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+          completionPolicy: 'MANUAL',
+          children: [],
           assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
       ],

@@ -8,7 +8,8 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { taskRetirement } from '../tasks/task-supersession';
+import { isLockNotAvailable, taskRetirement } from '../tasks/task-supersession';
+import { TaskCompletionPolicyValue, isAggregateParent } from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
@@ -53,6 +54,17 @@ const MAX_PER_SWEEP = 50;
  * with a conditional update before the resume, so a concurrent user message or a second
  * sweep loses the race rather than producing a second turn.
  */
+/**
+ * What one §13.1 AG6 settle concluded.
+ *
+ * Three answers, not a row count, because the caller has to do three different things. `SETTLED`
+ * wrote — the retry is over. `RELEASED` means the world moved (the shape lifted, the row changed
+ * hands, the claim is not the one this sweep observed) and the session is an ordinary due row
+ * again. `BUSY` means nothing was judged at all: somebody else holds a lock, so the sweep must
+ * leave the arm exactly as it found it rather than treat "could not look" as "nothing there".
+ */
+type AggregateSettleOutcome = 'SETTLED' | 'RELEASED' | 'BUSY';
+
 @Injectable()
 export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   private readonly log = new Logger('AutoRetry');
@@ -106,11 +118,20 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         prompt: true,
         numTurns: true,
         retryAttempts: true,
+        // The instant this sweep saw armed. It goes into the settle's compare-and-set: a cancel
+        // followed by a re-arm to a NEW time is a different retry, and clearing it on the strength
+        // of the old reading would delete a countdown somebody just set. G3 owns the full durable
+        // generation; this is the narrow version that keeps THIS path from adding the same bug.
+        retryAt: true,
         assignedRunnerId: true,
         status: true,
         // §13.6 SU6's two columns, so the sweep can answer "is this task's work still this task's
         // to do" itself instead of finding out from a trigger that refuses the write.
         taskId: true,
+        // §13.1 AG6 applies to a retry of the task's WORK and to nothing else. A salvage or
+        // conversation session that happens to hang off a roll-up node is a legitimate run and
+        // keeps the ordinary retry semantics.
+        startsTaskWork: true,
         task: {
           select: {
             terminalReason: true,
@@ -137,6 +158,27 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (due.length === 0) return;
+
+    // §13.1 AG6's first clause, for this whole batch, in ONE query and in the canonical spelling.
+    //
+    // Not a Prisma `children: { take: 1 }` include: a parent's children are the tasks that share
+    // its OWNER (that is the scope `collectAggregationScope` walks), and `take: 1` cannot express
+    // that — it would return whatever row came first, so a cross-owner child written by raw SQL
+    // would read as "this is an aggregate parent" and permanently disarm a retry that is perfectly
+    // legal. Filtering after `take: 1` is the same bug with an extra step. The correlated EXISTS
+    // below is the same predicate the guard, the pass and the commit gate all use.
+    const workTaskIds = [...new Set(due
+      .filter((session) => session.startsTaskWork && session.taskId)
+      .map((session) => session.taskId!))];
+    const aggregateParents = new Set(workTaskIds.length === 0 ? [] : (
+      await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT t."id" FROM "task" t
+         WHERE t."id" IN (${Prisma.join(workTaskIds.map((id) => Prisma.sql`${id}::uuid`))})
+           AND t."completion_policy"::text <> 'MANUAL'
+           AND EXISTS (SELECT 1 FROM "task" c
+                        WHERE c."parent_task_id" = t."id" AND c."owner_id" = t."owner_id")
+      `)
+    ).map((row) => row.id));
 
     const released = new Map<string, number>();
     for (const session of due) {
@@ -166,7 +208,40 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             `task was ${retirement.toLowerCase()}; the attempt that replaced it holds this work`);
           continue;
         }
+        // §13.1 AG6, in the same position and disarmed for the same reason: this is not a deferral.
+        // The task's completion belongs to its subtasks now, so `resume` will refuse this run on
+        // every sweep from here to the end of time. Re-arming would spend the whole retry budget on
+        // a refusal that cannot lift, and each spent attempt is one the RUN never got.
+        //
+        // The failed Session keeps its real FAILED status and its error — this only stops the
+        // retry, and AG6-d's recomputation is what moves the TASK on.
+        if (session.taskId && aggregateParents.has(session.taskId)) {
+          const outcome = session.retryAt == null ? 'RELEASED' as const
+            : await this.disarmIfStillAggregateParent(
+                session.id, session.status, session.taskId, attempts, session.retryAt,
+              );
+          if (outcome === 'SETTLED') {
+            this.log.warn(`auto-retry of ${session.id} disarmed: task is completed by `
+              + 'aggregating its subtasks, so it has no work of its own to retry');
+            this.announceSettled(session.id, session.status);
+            continue;
+          }
+          // ANY other answer leaves this row exactly as it was found and waits for the next sweep
+          // (at most one interval away). Falling through to claim it would be reading "I could not
+          // judge this" and "the world moved" as "go ahead", and the claim below only asserts
+          // `retry_at IS NOT NULL` — so a cancel followed by a re-arm to a FUTURE instant would be
+          // stolen by this pass on the strength of a decision made about the retry it replaced.
+          continue;
+        }
 
+        // What this sweep read, for every write below that has NOT claimed the row: a deferral
+        // must not overwrite a cancel-and-re-arm, a rebind or a demotion that landed in between.
+        const observed = {
+          taskId: session.taskId ?? null,
+          startsTaskWork: session.startsTaskWork,
+          retryAt: session.retryAt,
+          retryAttempts: attempts,
+        };
         const quotaKey = `${session.assignedRunnerId ?? 'none'}:${session.provider}`;
         if ((released.get(quotaKey) ?? 0) >= PER_QUOTA_PER_SWEEP) continue;
 
@@ -187,6 +262,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               session.status,
               new Date(now.getTime() + SWEEP_INTERVAL_MS),
               attempts,
+              observed,
             );
           }
           continue;
@@ -205,7 +281,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           now,
         );
         if (blockedUntil) {
-          await this.rearm(session.id, session.status, blockedUntil, attempts);
+          await this.rearm(session.id, session.status, blockedUntil, attempts, observed);
           continue;
         }
 
@@ -233,10 +309,26 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // already the "somebody else owns this retry" path — no new branch, and no revive of
         // replaced work. `retry_at` is cleared by that same statement only when it wins, so a
         // loser leaves the row for the next sweep, which disarms it above.
+        // A row whose arm has already gone is not this sweep's to claim. `due` selects on
+        // `retry_at <= now`, so in production this is only reachable when the claim was lost
+        // between that read and here — and claiming on a null would match exactly the row somebody
+        // else just took.
+        if (session.retryAt == null) continue;
         const claimed = await this.prisma.session.updateMany({
           where: {
             id: session.id,
-            retryAt: { not: null },
+            // The EXACT instant this sweep saw, not merely "some arm". A cancel and a re-arm to
+            // a new time is a different retry, and claiming it here would spend an attempt on a
+            // countdown somebody had just replaced. (G3's durable generation supersedes this; it is
+            // the narrow version that keeps this path honest in the meantime.)
+            retryAt: session.retryAt,
+            // ...and the rest of the row this sweep decided about. A claim that asserted only the
+            // instant could still land on a session that had been re-pointed at another task,
+            // demoted to a salvage conversation, or moved to a different parked status in between.
+            status: session.status,
+            retryAttempts: attempts,
+            taskId: session.taskId ?? null,
+            startsTaskWork: session.startsTaskWork,
             OR: [
               { taskId: null },
               { task: { terminalReason: null, supersededByTaskId: null } },
@@ -266,11 +358,22 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           const [current] = await this.prisma.$queryRaw<Array<{
             terminalReason: string | null; supersededByTaskId: string | null;
             subjectTerminalReason: string | null; subjectSupersededByTaskId: string | null;
+            completionPolicy: string; hasDirectChildren: boolean; startsTaskWork: boolean;
           }>>(Prisma.sql`
             SELECT t."terminal_reason" AS "terminalReason",
                    t."superseded_by_task_id" AS "supersededByTaskId",
                    subject."terminal_reason" AS "subjectTerminalReason",
-                   subject."superseded_by_task_id" AS "subjectSupersededByTaskId"
+                   subject."superseded_by_task_id" AS "subjectSupersededByTaskId",
+                   t."completion_policy"::text AS "completionPolicy",
+                   EXISTS (SELECT 1 FROM "task" c
+                            WHERE c."parent_task_id" = t."id" AND c."owner_id" = t."owner_id")
+                     AS "hasDirectChildren",
+                   -- Re-read, never taken from the due-snapshot. Between that read and this
+                   -- catch the row's own role can change: a session promoted to the task's work
+                   -- would be re-armed on a stale false and quietly spend attempts, and one
+                   -- demoted to a salvage conversation would be PERMANENTLY disarmed on a stale
+                   -- true for a transient error that had nothing to do with AG6.
+                   s."starts_task_work" AS "startsTaskWork"
               FROM "task" t
               JOIN "session" s ON s."task_id" = t."id"
               LEFT JOIN "task" subject ON subject."id" = t."verifies_task_id"
@@ -283,14 +386,69 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                 terminalReason: current.subjectTerminalReason,
               }))
             : null;
-          if (!retiredNow) throw error;
-          const refunded = await this.prisma.session.updateMany({
-            where: { id: session.id, retryAt: null, retryAttempts: attempts + 1 },
-            data: { retryAttempts: attempts },
+          // §13.1 AG6's commit-race half. The claim and the resume are two transactions, so the
+          // task can become an aggregate parent between them — and then `resume` refuses, correctly,
+          // while the ordinary catch below would call it transient, re-arm for two minutes and keep
+          // the attempt it spent. Re-read rather than matched on the message, exactly as the
+          // supersession branch is and for the same reason: a refusal that merely mentions the words
+          // must not be able to end a retry.
+          const aggregateNow = current != null && current.startsTaskWork && isAggregateParent({
+            completionPolicy: current.completionPolicy as TaskCompletionPolicyValue,
+            hasDirectChildren: current.hasDirectChildren,
           });
-          this.log.log(
-            `session ${session.id} retry abandoned: task was ${retiredNow.toLowerCase()}`,
-          );
+          if (!retiredNow && !aggregateNow && !(session.startsTaskWork && session.taskId)) {
+            throw error;
+          }
+          // The same TOCTOU as the pre-claim branch, and closed the same way. `retiredNow` is a
+          // fact that cannot un-happen, but the aggregate shape can be RELEASED between the re-read
+          // above and this refund — and refunding on a stale reading would leave a row with no
+          // claim, no countdown and an attempt silently handed back, which reads as a retry that
+          // never existed. So when the aggregate shape is what ended this retry, the shape is
+          // re-asserted inside the write; a retirement keeps the plain compare-and-set it had.
+          // The locked helper decides the aggregate question, not the unlocked re-read above: a
+          // shape that reads MANUAL here and becomes aggregating a moment later would otherwise be
+          // re-armed and charged an attempt for a refusal that is about to be permanent. So any
+          // non-retired, task-linked WORK session goes through it and takes its answer.
+          const settle = !retiredNow && session.taskId && session.startsTaskWork
+            ? await this.refundIfStillAggregateParent(
+                session.id, session.taskId, attempts, session.status,
+              )
+            : 'RELEASED' as const;
+          if (settle === 'BUSY') {
+            // Judged nothing at all — somebody else holds a lock. The claim above already cleared
+            // `retry_at` and spent an attempt, so leaving it there would strand the row. Put both
+            // back, compare-and-set on exactly what this sweep wrote, and let the next tick decide.
+            if (session.retryAt != null) {
+              await this.rearm(session.id, session.status, session.retryAt, attempts, {
+                taskId: session.taskId ?? null,
+                startsTaskWork: session.startsTaskWork,
+                retryAt: null,
+                retryAttempts: attempts + 1,
+              });
+            }
+            continue;
+          }
+          if (settle === 'RELEASED' && !retiredNow) {
+            // Not an aggregate parent after all, under the lock. This is an ordinary transient
+            // failure and gets the ordinary backoff, with the attempt it spent.
+            throw error;
+          }
+          const refundedCount = settle === 'SETTLED' ? 1
+            : (await this.prisma.session.updateMany({
+                where: {
+                  id: session.id,
+                  status: session.status,
+                  taskId: session.taskId ?? null,
+                  startsTaskWork: session.startsTaskWork,
+                  retryAt: null,
+                  retryAttempts: attempts + 1,
+                },
+                data: { retryAttempts: attempts },
+              })).count;
+          const refunded = { count: refundedCount };
+          this.log.log(`session ${session.id} retry abandoned: ${retiredNow
+            ? `task was ${retiredNow.toLowerCase()}`
+            : 'task is completed by aggregating its subtasks'}`);
           // The same settlement `disarm` publishes, and for the same reason: the clients have been
           // drawing this row as "Retrying" off a `retryAt` the claim above already removed, and no
           // future sweep will select it again. Without this the card waits forever for a countdown
@@ -316,9 +474,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // try again rather than dropping the retry: the message is still unanswered.
         const spent = attempts + 1;
         const delay = BACKOFF_MS[Math.min(spent, BACKOFF_MS.length) - 1];
-        await this.rearm(session.id, session.status, new Date(now.getTime() + delay), spent).catch(
-          () => {},
-        );
+        // The claim above wrote `retry_at = NULL, retry_attempts = spent`; anything else on the row
+        // now is somebody else's, and this backoff must not land on top of it.
+        await this.rearm(session.id, session.status, new Date(now.getTime() + delay), spent, {
+          taskId: session.taskId ?? null,
+          startsTaskWork: session.startsTaskWork,
+          retryAt: null,
+          retryAttempts: spent,
+        }).catch(() => 0);
         this.log.warn(
           `auto-retry of ${session.id} failed (attempt ${spent}): ${
             e instanceof Error ? e.message : e
@@ -358,16 +521,45 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * waiting on us. Passing it in rather than re-asserting one status is what keeps a FAILED
    * row's backoff from being dropped by a filter it can never satisfy.
    */
+  /**
+   * @param expect the row this sweep believes it is writing to, when it has already CLAIMED it.
+   *
+   * `id + status` alone is not enough after a claim. Between clearing `retry_at` and putting a new
+   * one back, the row can be re-pointed at another task, demoted to a salvage conversation, or
+   * armed by hand to a future instant — and a rearm that asserts only the status would overwrite
+   * any of those with a decision made about the retry they replaced. The deferral paths that run
+   * BEFORE the claim pass nothing and keep their old behaviour, because there the arm they are
+   * preserving is still the one they read.
+   *
+   * The full durable retry generation is G3's; this is the narrow compare-and-set that keeps the
+   * paths H0 touches from writing over somebody else's newer fact.
+   */
   private async rearm(
     sessionId: string,
     parkedAs: RunStatus,
     at: Date,
     attempts: number,
-  ): Promise<void> {
-    await this.prisma.session.updateMany({
-      where: { id: sessionId, status: parkedAs },
+    expect?: {
+      taskId: string | null; startsTaskWork: boolean;
+      retryAt: Date | null; retryAttempts: number;
+    },
+  ): Promise<number> {
+    const claimed = await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        status: parkedAs,
+        ...(expect
+          ? {
+              taskId: expect.taskId,
+              startsTaskWork: expect.startsTaskWork,
+              retryAt: expect.retryAt,
+              retryAttempts: expect.retryAttempts,
+            }
+          : {}),
+      },
       data: { retryAt: at, retryAttempts: attempts },
     });
+    return claimed.count;
   }
 
   /**
@@ -380,6 +572,184 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * quotaBlockedRunners) that resumes such work on its own, and failing the task would hand it
    * to the auto-run backoff — a second retry mechanism racing this one.
    */
+  /**
+   * §13.1 AG6's stand-down, decided under the lock that the release directions have to take.
+   *
+   * `disarm` below clears `retry_at` on the strength of a decision made earlier in the sweep. That
+   * is a weaker guarantee than it looks — a retirement can be undone and a session can be re-armed
+   * or re-pointed between the batch read and the clear, so the retirement path has the same class
+   * of window. Closing it properly needs a durable retry generation, which is G3's unit and is
+   * deliberately NOT rebuilt here; what this path owes is not to ADD another instance of it.
+   *
+   * The aggregate shape makes that duty concrete: switching the policy back to MANUAL and deleting
+   * the last
+   * same-owner child are both ordinary, supported writes (§13.1 AG6-c calls them the release
+   * directions), and so is demoting the session to a salvage conversation or re-arming it by hand.
+   * Clearing `retry_at` on a stale reading throws away a retry that is legal again, permanently,
+   * with no attempt spent and nothing left to re-arm it.
+   *
+   * A single conditional `UPDATE ... WHERE EXISTS (SELECT ... FROM task)` does NOT close that, and
+   * it is worth being exact about why, because it reads as though it should: one statement has one
+   * snapshot, but it takes no lock on `task`, and the row it updates is not the row that changed —
+   * so there is no EPQ re-evaluation. A release committing after that snapshot is simply invisible,
+   * and the clear lands anyway. READ COMMITTED gives atomicity of the WRITE, never linearizability
+   * across two tables.
+   *
+   * So this takes the same lock the release directions must: `project` then `task`, the order
+   * §7.7 and 0132 both impose, and `FOR UPDATE` on the task because that is the mode
+   * `task_aggregate_parent_shape_guard` conflicts with. Whichever of the two gets there first
+   * commits, and the other reads its committed effect. Every acquisition is NOWAIT, like the rest
+   * of that protocol — a sweep that cannot have the row simply leaves the retry armed and looks
+   * again next tick, which is strictly better than waiting inside a background pass.
+   *
+   * Zero rows is the normal outcome whenever the world moved, not an error.
+   */
+  /**
+   * The refund half of the same rule, under the same lock and for the same reason.
+   *
+   * The claim and the resume are two transactions, so the aggregate shape can be released between
+   * the re-read that ended this retry and the refund that records it. Handing the attempt back on a
+   * stale reading leaves a row with no claim, no countdown and a budget quietly restored — a retry
+   * that reads as though it never existed.
+   */
+  private async refundIfStillAggregateParent(
+    sessionId: string,
+    taskId: string,
+    attempts: number,
+    parkedAs: RunStatus,
+  ): Promise<AggregateSettleOutcome> {
+    return this.underAggregateParentLock(
+      taskId, sessionId,
+      { parkedAs, attempts: attempts + 1, observedRetryAt: null, requireArmed: false },
+      (tx) => tx.$executeRaw(Prisma.sql`
+        UPDATE "session" SET "retry_attempts" = ${attempts}, "updated_at" = CURRENT_TIMESTAMP
+         WHERE "id" = ${sessionId}::uuid
+      `),
+    );
+  }
+
+  private async disarmIfStillAggregateParent(
+    sessionId: string,
+    parkedAs: RunStatus,
+    taskId: string,
+    attempts: number,
+    observedRetryAt: Date,
+  ): Promise<AggregateSettleOutcome> {
+    return this.underAggregateParentLock(
+      taskId, sessionId,
+      { parkedAs, attempts, observedRetryAt, requireArmed: true },
+      (tx) => tx.$executeRaw(Prisma.sql`
+        UPDATE "session" SET "retry_at" = NULL, "updated_at" = CURRENT_TIMESTAMP
+         WHERE "id" = ${sessionId}::uuid
+      `),
+    );
+  }
+
+  /**
+   * project -> task -> session, and NOWAIT at EVERY step including the session row.
+   *
+   * The session lock is not decoration. A plain `UPDATE "session" ... WHERE id = ...` at the end of
+   * this walk takes a row lock by WAITING, and a concurrent writer that goes session-first — a
+   * resume, a status write, an arm — would then hold the session and wait for this task, while this
+   * transaction holds the task and waits for that session. That is a real `40P01`, and catching it
+   * here does not repair it: PostgreSQL may pick the OTHER transaction as the victim, so a
+   * background sweep would be killing a user's request. Taking the session `FOR UPDATE NOWAIT`
+   * first turns the same situation into "somebody else has it, look again next tick".
+   *
+   * Everything the caller's compare-and-set depends on is re-read INSIDE these locks — the task's
+   * project (so a task moved between the scope read and the lock cannot leave this holding the old
+   * project), the task's shape, and the session's own task, role, status and claim. `null` means
+   * the world moved; the caller leaves the retry armed.
+   */
+  private async underAggregateParentLock(
+    taskId: string,
+    sessionId: string,
+    expect: {
+      parkedAs: RunStatus; attempts: number; observedRetryAt: Date | null;
+      requireArmed: boolean;
+    },
+    write: (tx: Prisma.TransactionClient) => Promise<number>,
+  ): Promise<AggregateSettleOutcome> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const [scope] = await tx.$queryRaw<Array<{ projectId: string | null }>>(Prisma.sql`
+          SELECT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ${taskId}::uuid
+        `);
+        if (!scope) return 'RELEASED';
+        // The project is taken first even though nothing here reads it: 0132's shape guard takes it
+        // before the task, and an acquisition order that disagreed would be the inversion the whole
+        // protocol exists to avoid.
+        if (scope.projectId) {
+          await tx.$queryRaw(Prisma.sql`
+            SELECT 1 FROM "project" p WHERE p."id" = ${scope.projectId}::uuid
+             FOR NO KEY UPDATE NOWAIT
+          `);
+        }
+        // TAKE the row first, and read the predicate in a SEPARATE statement afterwards. Both in
+        // one `SELECT ... FOR UPDATE` would evaluate the predicate against that statement's
+        // snapshot, which was taken BEFORE the lock was granted — so a release that committed while
+        // this was waiting would be invisible and the stale answer would win. A second statement
+        // gets a fresh snapshot, and by then the lock is held, so what it reads cannot move.
+        const [locked] = await tx.$queryRaw<Array<{ projectId: string | null }>>(Prisma.sql`
+          SELECT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ${taskId}::uuid
+           FOR UPDATE NOWAIT
+        `);
+        if (!locked) return 'RELEASED';
+        const [task] = await tx.$queryRaw<Array<{ projectId: string | null; aggregate: boolean }>>(
+          Prisma.sql`
+            SELECT t."project_id" AS "projectId",
+                   (t."completion_policy"::text <> 'MANUAL'
+                    AND EXISTS (SELECT 1 FROM "task" c
+                                 WHERE c."parent_task_id" = t."id"
+                                   AND c."owner_id" = t."owner_id")) AS "aggregate"
+              FROM "task" t WHERE t."id" = ${taskId}::uuid
+          `,
+        );
+        if (!task?.aggregate) return 'RELEASED';
+        // The scope read above was a guess: the task could have been re-filed between it and this
+        // lock, leaving this transaction holding the OLD project while the guard takes the new one.
+        if (task.projectId !== scope.projectId) return 'RELEASED';
+
+        const [session] = await tx.$queryRaw<Array<{
+          taskId: string | null; startsTaskWork: boolean; status: string; retryAt: Date | null;
+          retryAttempts: number;
+        }>>(Prisma.sql`
+          SELECT s."task_id" AS "taskId", s."starts_task_work" AS "startsTaskWork",
+                 s."status"::text AS "status", s."retry_at" AS "retryAt",
+                 s."retry_attempts" AS "retryAttempts"
+            FROM "session" s WHERE s."id" = ${sessionId}::uuid
+           FOR UPDATE NOWAIT
+        `);
+        if (!session) return 'RELEASED';
+        if (session.taskId !== taskId || !session.startsTaskWork) return 'RELEASED';
+        if (session.status !== expect.parkedAs) return 'RELEASED';
+        if (session.retryAttempts !== expect.attempts) return 'RELEASED';
+        // A cancel followed by a re-arm to a NEW instant is a different retry, and the claim this
+        // sweep observed is what says so. (The full durable generation is G3's; this is the narrow
+        // version that keeps THIS path from adding the same class of mis-clear.)
+        if (expect.requireArmed) {
+          if (session.retryAt == null || expect.observedRetryAt == null) return 'RELEASED';
+          if (session.retryAt.getTime() !== expect.observedRetryAt.getTime()) return 'RELEASED';
+        } else if (session.retryAt != null) {
+          return 'RELEASED';
+        }
+        return (await write(tx)) > 0 ? 'SETTLED' : 'RELEASED';
+      });
+    } catch (error) {
+      // `lock_not_available` (55P03) and a serialization failure both mean the same thing here:
+      // somebody else is writing one of these rows right now. Leave the retry armed and look again.
+      //
+      // Read through the repo's extractor rather than off `error.code`: Prisma wraps a failed raw
+      // query as `P2010` and carries the driver's SQLSTATE in `meta`, so a bare `code` comparison
+      // recognises the shape a test sees through `pg` and NOT the one production raises.
+      if (isLockNotAvailable(error)) return 'BUSY';
+      const code = (error as { code?: unknown; meta?: { code?: unknown } });
+      if (code.code === '40001' || code.meta?.code === '40001'
+          || code.code === '40P01' || code.meta?.code === '40P01') return 'BUSY';
+      throw error;
+    }
+  }
+
   private async disarm(sessionId: string, parkedAs: RunStatus, why: string): Promise<void> {
     const cleared = await this.prisma.session.updateMany({
       where: { id: sessionId, status: parkedAs },
@@ -387,6 +757,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     });
     this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
     if (cleared.count === 0) return;
+    this.announceSettled(sessionId, parkedAs);
+  }
+
+  /** What a row that has stopped waiting owes its clients; see `disarm` for why it is published. */
+  private announceSettled(sessionId: string, parkedAs: RunStatus): void {
     // Giving up is the moment the failure becomes the outcome, so this is where it is announced.
     // The row moves no status — it has been FAILED since the turn died — but the clients have
     // been drawing it as "Retrying" off the `retryAt` that just went away, so they need to be

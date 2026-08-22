@@ -381,6 +381,43 @@ export function taskFenceConflictMessage(error: unknown): string | null {
   if (/SESSION_TASK_BUSY|TASK_VERIFICATION_SUBJECT_BUSY/.test(message)) {
     return 'this task is being written right now — nothing was changed; retry';
   }
+  // §13.1 AG6's write-time constraint, reached by any writer that did not ask first — an internal
+  // creator, a binary that predates the service guard, a raw UPDATE, or a race between two writes
+  // that were each legal alone. Prisma surfaces a CHECK violation as `P2010`/`23514` carrying the
+  // constraint name, so the name is what is matched; without this the caller gets a 500 whose body
+  // is a constraint identifier.
+  if (/task_foreman_manual_policy/.test(message)) {
+    return 'a coordinating (foreman) task is finished by its own run, so it cannot also be '
+      + 'completed by aggregating subtasks — clear the foreman role, or leave completionPolicy '
+      + 'as MANUAL';
+  }
+  // §13.1 AG6's lock-order refusals. Typed and retryable rather than a deadlock victim: every
+  // acquisition in `task_aggregate_parent_shape_guard` is NOWAIT precisely so a caller is told to
+  // retry instead of being killed at random by `40P01`.
+  if (/TASK_AGGREGATE_PROJECT_BUSY/.test(message)) {
+    return "this task's project is being reconciled right now — nothing was changed; retry";
+  }
+  if (/TASK_AGGREGATE_PARENT_BUSY/.test(message)) {
+    return "this task's parent is being written right now — nothing was changed; retry";
+  }
+  if (/TASK_AGGREGATE_SCOPE_MOVED/.test(message)) {
+    return 'a task involved in this write changed project while it was being prepared — nothing '
+      + 'was changed; retry';
+  }
+  // §13.1 AG6's two database refusals. Translated here for the reason every other entry in this
+  // function is: the guard is the last line, so the shape it catches is the one every service-side
+  // pre-check MISSED — a genuinely concurrent write, or a binary that predates the gates. Left
+  // untranslated it reaches the caller as a raw `check_violation`, which the API surfaces as a 500:
+  // the run did not start AND the reason is unreadable, which is the worst of the two.
+  if (/TASK_AGGREGATE_PARENT_ACTIVATION/.test(message)) {
+    return 'this task is running work right now, so its completion cannot be handed to subtasks '
+      + 'yet — let that run reach a terminal status of its own, or set the completion policy to '
+      + 'MANUAL';
+  }
+  if (/TASK_AGGREGATE_PARENT/.test(message)) {
+    return 'this task is completed by aggregating its subtasks, so it has no work of its own to '
+      + 'run — run its subtasks, or set its completion policy to MANUAL';
+  }
   if (/SESSION_TASK_MOVED/.test(message)) {
     return 'this task changed project while the request was being prepared — nothing was changed; '
       + 'retry';

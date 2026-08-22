@@ -9,6 +9,7 @@ import {
   publicIdempotencyKey,
 } from './project-decision.service';
 import { ProjectBlockerFact } from './project-blocker';
+import { detectProjectBlockerConditions } from './project-blocker-conditions';
 import {
   PROJECT_DISPATCH_PASS_MAX_PER_WAKE,
   PROJECT_DISPATCH_RETRY_WINDOW_MS,
@@ -506,4 +507,108 @@ test('a snapshot taken before migration 0125 has no blockers and is read as such
   const legacy = input();
   assert.equal(legacy.world.blockers, undefined);
   assert.deepEqual(chosen(legacy), [taskId(1)]);
+});
+
+// ---------------------------------------------------------------------------------------------
+// §13.1 AG6 — the aggregate parent is not a next step at all.
+// ---------------------------------------------------------------------------------------------
+
+test('§13.1 AG6: a parent with children and an aggregating policy is never proposed', () => {
+  for (const policy of ['ALL_CHILDREN_DONE', 'VERIFICATION_PASSED']) {
+    const selection = selectDispatchableTasks(input({
+      tasks: [
+        task(taskId(1), { completionPolicy: policy }),
+        task(taskId(2), { parentTaskId: taskId(1) }),
+      ],
+    }));
+    // The child is the work, and it is still chosen — the parent is the only thing removed.
+    assert.deepEqual(selection.candidates.map((c) => c.taskId), [taskId(2)],
+      `${policy}: the leaf must still be dispatched`);
+    assert.deepEqual(
+      selection.skipped.filter((s) => s.taskId === taskId(1)),
+      [{ taskId: taskId(1), reason: 'TASK_AGGREGATE_PARENT' }],
+      `${policy}: and the parent must say why it was not`,
+    );
+  }
+});
+
+test('§13.1 AG6: the skip is judged BEFORE the failure ladder, so a FAILED parent is not retried', () => {
+  const selection = selectDispatchableTasks(input({
+    tasks: [
+      // Exactly the world §9.5 Q3's retry row would fire on — one attributable failure, no backoff.
+      task(taskId(1), {
+        status: 'FAILED', completionPolicy: 'ALL_CHILDREN_DONE',
+        failureCount: 1, failureAttributable: true,
+      }),
+      task(taskId(2), { parentTaskId: taskId(1) }),
+    ],
+  }));
+  assert.equal(selection.candidates.some((c) => c.taskId === taskId(1)), false,
+    'a FAILED aggregate parent must not be re-dispatched by AutoRetry');
+  assert.deepEqual(
+    selection.skipped.filter((s) => s.taskId === taskId(1)),
+    [{ taskId: taskId(1), reason: 'TASK_AGGREGATE_PARENT' }],
+    'and the reason must be its ROLE, not a retry verdict that could later change',
+  );
+});
+
+test('§13.1 AG6: the three compatibility boundaries stay dispatchable', () => {
+  // AG4: the policy is inert without children, so this is an ordinary leaf.
+  const childless = selectDispatchableTasks(input({
+    tasks: [task(taskId(1), { completionPolicy: 'ALL_CHILDREN_DONE' })],
+  }));
+  assert.deepEqual(childless.candidates.map((c) => c.taskId), [taskId(1)],
+    'a childless non-MANUAL task is still a candidate');
+
+  const manualParent = selectDispatchableTasks(input({
+    tasks: [
+      task(taskId(1), { completionPolicy: 'MANUAL' }),
+      task(taskId(2), { parentTaskId: taskId(1) }),
+    ],
+  }));
+  assert.deepEqual(manualParent.candidates.map((c) => c.taskId), [taskId(1), taskId(2)],
+    'a MANUAL parent with children keeps the pre-§13.1 contract');
+
+  // An effective Foreman is MANUAL (0132's `task_foreman_manual_policy`), so the shape that
+  // reaches this pass is a MANUAL one — and it is dispatchable for that reason, not by exemption.
+  const foreman = selectDispatchableTasks(input({
+    tasks: [
+      task(taskId(1), { completionPolicy: 'MANUAL' }),
+      task(taskId(2), { parentTaskId: taskId(1) }),
+    ],
+  }));
+  assert.equal(foreman.candidates.some((c) => c.taskId === taskId(1)), true,
+    'a MANUAL foreman with children is dispatchable');
+});
+
+test('§13.1 AG6: a snapshot with no completionPolicy at all reads as MANUAL', () => {
+  // Pre-0123 decisions carry no policy. Those rows WERE MANUAL, so an old snapshot must replay to
+  // what it originally produced rather than to today's rules applied to yesterday's world.
+  const selection = selectDispatchableTasks(input({
+    tasks: [task(taskId(1)), task(taskId(2), { parentTaskId: taskId(1) })],
+  }));
+  assert.deepEqual(selection.candidates.map((c) => c.taskId), [taskId(1), taskId(2)]);
+});
+
+test('§13.1 AG6: a MANUAL project never asks a person to Run an aggregate parent by hand', () => {
+  // §11.2's `POLICY_MANUAL_HOLD` names the tasks a person could start, and the control plane shows
+  // them as the next action. An aggregate parent is not one: every gate refuses it, so listing it
+  // asks somebody to do a thing the product will not let them do. The observation surface and the
+  // admission surface have to answer this question the same way.
+  const manual = input({
+    tasks: [
+      task(taskId(1), { completionPolicy: 'ALL_CHILDREN_DONE' }),
+      task(taskId(2), { parentTaskId: taskId(1) }),
+    ],
+  });
+  manual.world.project.automationPolicy = 'MANUAL';
+  const held = detectProjectBlockerConditions(manual, {
+    aggregationCycleTaskIds: [],
+    verificationVerdicts: [],
+    coordinatorSession: { status: 'UNSUPPORTED' },
+  }).filter((condition) => condition.kind === 'POLICY_MANUAL_HOLD');
+
+  assert.equal(held.length, 1, 'the project does hold real work');
+  assert.deepEqual((held[0].facts as { taskIds: string[] }).taskIds, [taskId(2)],
+    'and it is the leaf, never the roll-up node above it');
 });

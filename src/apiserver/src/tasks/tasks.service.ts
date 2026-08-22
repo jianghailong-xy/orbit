@@ -46,7 +46,11 @@ import {
   agentProviderSeed,
   lastProviderByWorkspace,
 } from '../workspaces/workspace-provider';
-import { planTaskAggregation } from '../projects/task-aggregation';
+import {
+  foremanPolicyConflict,
+  isAggregateParent,
+  planTaskAggregation,
+} from '../projects/task-aggregation';
 import {
   AGGREGATION_SCOPE_MAX_TASKS,
   applyTaskAggregations,
@@ -1906,6 +1910,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         this.transientWriteRetry('tasks.create'),
       );
     } catch (e) {
+      // §13.1 AG6's activation guard, FIRST, because it is the one refusal here that is not about
+      // this write racing itself. 0132 refuses a child whose arrival would hand a RUNNING parent's
+      // completion to its subtasks, and left untranslated that reaches the caller as a raw
+      // `check_violation` — an unreadable 500 for a request the product deliberately refused.
+      // Ahead of the idempotency branch on purpose: a refused write created no row, so there is no
+      // winner to read back, and `isDuplicateKey` would not match this error anyway.
+      const fenced = taskFenceConflictMessage(e);
+      if (fenced) throw new ConflictException(fenced);
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
       if (idempotencyKey && this.isDuplicateKey(e)) {
@@ -2467,6 +2479,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       return rows;
     }, this.transientWriteRetry('tasks.createMany')).catch(async (e) => {
+      // §13.1 AG6's activation guard, FIRST and for the same reason `create` puts it first: 0132
+      // refuses a child whose arrival would hand a RUNNING parent's completion to its subtasks, and
+      // that refusal is about the request rather than about losing a race. Ahead of the idempotency
+      // replay because a refused batch wrote nothing — there is no winner to reconstruct, and the
+      // replay below would throw a misleading "cannot all be identified" over a plain 409.
+      //
+      // Outside the retry, not inside it: the guard raises `lock_not_available`, which
+      // `classifyTransactionError` deliberately does not call transient — it is a control-flow
+      // signal a path handles itself, and re-running the transaction would spend four attempts
+      // re-earning the same correct refusal.
+      const fenced = taskFenceConflictMessage(e);
+      if (fenced) throw new ConflictException(fenced);
       // The concurrent half of SU7-c. Two runs of one turn can both miss `existing` and race to the
       // same idempotency key; the loser's whole transaction rolls back, so any link it was about to
       // write does not exist. Re-checking the winner's rows turns that into either a clean
@@ -4178,6 +4202,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    // §13.1 AG6's other end, refused here so the API answers in a sentence rather than letting
+    // `task_foreman_manual_policy` answer with a constraint name. `is_foreman` says "this task's
+    // SESSION is the work"; a non-MANUAL policy says "the children decide when it is finished". A
+    // row asserting both has two completion owners — a worker writing DONE and `planTaskAggregation`
+    // writing DONE or dragging it back OPEN — and AG3's reopen makes whichever loses permanent.
+    //
+    // Read with its own query because `isForeman` is deliberately not in the list projection, and
+    // only when this write actually asks for the combination: an update that leaves the policy
+    // alone pays nothing.
+    if (dto.completionPolicy != null) {
+      const row = await this.prisma.task.findFirst({
+        where: { id, ownerId },
+        select: { isForeman: true },
+      });
+      // EFFECTIVE values, not "what this PATCH mentions": the conflict is a property of the row
+      // this write LEAVES BEHIND, so each field is the one being set if the request names it and
+      // the stored one otherwise. `isForeman` is not on the update DTO today, so its effective
+      // value is always the stored one — written this way so that adding it to the DTO cannot
+      // silently leave a half-checked guard behind. `task_foreman_manual_policy` is the backstop
+      // for every writer that does not come through here.
+      if (row && foremanPolicyConflict({
+        isForeman: row.isForeman,
+        completionPolicy: dto.completionPolicy,
+      })) {
+        throw new BadRequestException(
+          'This task is a coordinating (foreman) task, so its own run is what finishes it — it ' +
+            'cannot also be completed by aggregating subtasks. Clear the foreman role, or leave ' +
+            'completionPolicy as MANUAL',
+        );
+      }
+    }
     // §13.1's other half: a policy that decides a parent's completion decides it, and a status
     // write is not a way around it. Refused rather than written-then-recomputed, because a DONE
     // that survives for one reconcile is a DONE somebody can read, quote and act on.
@@ -5803,8 +5858,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // against the state the winning transaction left. The run teardown below is deliberately
     // OUTSIDE the loop and outside the transaction: it talks to runners, and a retry must not be
     // able to send a second cancel for a run the first attempt never actually deleted.
-    const { deleted, runs, links } = await withTransactionRetry(
-      this.prisma,
+    //
+    // ...and the fence translation sits OUTSIDE the retry, because the two answer different
+    // conditions. §13.1 AG6 reaches this path without naming it: deleting a parent fires the FK's
+    // `ON DELETE SET NULL` on every child's `parent_task_id`, a column
+    // `task_aggregate_parent_shape_guard` is declared on, so a delete overlapping a reconcile that
+    // holds the project gets that guard's typed `TASK_AGGREGATE_PROJECT_BUSY`. That is a
+    // `lock_not_available`, which `classifyTransactionError` deliberately does not call transient —
+    // it is a decision, not a fault. Retrying it would spend the attempts re-earning the same
+    // correct refusal; untranslated it reaches the caller as a 500 with a SQLSTATE in it.
+    const { deleted, runs, links } = await this.runTaskWorkTranslatingFences(
+      () => withTransactionRetry(
+        this.prisma,
       async (tx) => {
         // Rank 10. A delete is a graph mutation — it cascades edges away and fires the dispatch
         // touch on whatever depended on these tasks — and it writes many `task` rows, so it takes
@@ -5858,17 +5923,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const res = await tx.task.deleteMany({ where: { ownerId, id: { in: ids } } });
         return { deleted: res.count, runs: occupying.map((s) => s.id), links: locked };
       },
-      this.transientWriteRetry('tasks.delete', {
-        // The delete used to be one implicit statement under no client deadline. Inside an
-        // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
-        // cascade through thousands of comments and edges would hit — turning deletes that used
-        // to work into P2028. The locks are held for as long as the delete takes either way.
-        // Handed to every attempt, not only the first.
-        transaction: { timeout: 60_000, maxWait: 10_000 },
-        // Two, for the reason TaskListsService.remove gives: a cascade this size should absorb
-        // one collision, not spend four deadlines on the same one.
-        maxAttempts: 2,
-      }),
+        this.transientWriteRetry('tasks.delete', {
+          // The delete used to be one implicit statement under no client deadline. Inside an
+          // interactive transaction Prisma's default aborts it at 5s, which a batch large enough to
+          // cascade through thousands of comments and edges would hit — turning deletes that used
+          // to work into P2028. The locks are held for as long as the delete takes either way.
+          // Handed to every attempt, not only the first.
+          transaction: { timeout: 60_000, maxWait: 10_000 },
+          // Two, for the reason TaskListsService.remove gives: a cascade this size should absorb
+          // one collision, not spend four deadlines on the same one.
+          maxAttempts: 2,
+        }),
+      ),
     );
     for (const sessionId of runs) {
       // Each end is its own transaction, and one that fails must not take the delete with it:
@@ -6921,6 +6987,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runAt: true,
         supersededByTaskId: true,
         terminalReason: true,
+        // §13.1 AG6's two columns, plus the existence of one direct child. `take: 1` because the
+        // question is existence, not a count — the parent of a hundred subtasks reads one row.
+        completionPolicy: true,
+        children: { where: { ownerId }, select: { id: true }, take: 1 },
         // §13.6 SU6's derived half: a check of replaced work is obsolete even when the check itself
         // is healthy. Read here so the refusal is a sentence, not a raw constraint violation from
         // 0130's guard several layers down.
@@ -6949,6 +7019,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (refusal) {
       if (auto) return { ok: false as const, skipped: 'superseded' as const };
       throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
+    }
+    // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
+    // authorization commit point: after the two answers about whether this row is still the work,
+    // before every clause that can lift.
+    //
+    // The door this method IS: Run Now, `task_start`, `orbit task start`, the dependency-unlock
+    // trigger, the auto-run sweep, the scheduled sweep, the foreman sweep and the verification
+    // filer all reach the Session through here. `batchExecute` does NOT — it classifies and calls
+    // `runWorkspaceOnTask` itself, so it carries the same predicate in its own skip loop. The one
+    // gate neither can bypass is migration 0132's trigger on the Session insert.
+    //
+    // An automatic caller SKIPS, like every other automatic stand-down here; a person gets a 409
+    // with the sentence, because a manual Run on an aggregate parent is a real request that cannot
+    // be honoured rather than a sweep that has nothing to do.
+    if (isAggregateParent({
+      completionPolicy: task.completionPolicy,
+      hasDirectChildren: task.children.length > 0,
+    })) {
+      if (auto) return { ok: false as const, skipped: 'aggregate-parent' as const };
+      throw new ConflictException(
+        `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
+        + `(${task.completionPolicy}), so it has no work of its own to run — `
+        + 'run its subtasks, or set its completion policy to MANUAL',
+      );
     }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
       return { ok: false as const, skipped: 'coordinator-authority' as const };
@@ -7197,6 +7291,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // before anything with an effect. See the skip below.
         supersededByTaskId: true,
         terminalReason: true,
+        // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
+        // about whether a row is work. Owner-scoped like every other reader of this predicate.
+        completionPolicy: true,
+        children: { where: { ownerId }, select: { id: true }, take: 1 },
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
@@ -7251,6 +7349,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 ? 'Superseded (its successor has been deleted)'
                 : 'Abandoned')
             : 'Obsolete: it checks work that was replaced',
+        });
+      } else if (isAggregateParent({
+        completionPolicy: t.completionPolicy,
+        hasDirectChildren: t.children.length > 0,
+      })) {
+        // §13.1 AG6, second and in the same position `execute` puts it: after the two answers about
+        // whether the row is still the work, before every clause that can lift. Classified rather
+        // than dropped, so somebody who selected fifty tasks is told which of them are roll-up
+        // nodes rather than watching them silently not start.
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: `Completed by aggregating its subtasks (${t.completionPolicy}) — run those instead`,
         });
       } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId)

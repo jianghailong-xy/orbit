@@ -33,6 +33,7 @@ import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 import { failedTaskBlockerKind } from './project-failed-retry';
 import { TaskRetirement, taskIsObsolete, taskRetirement } from '../tasks/task-supersession';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
+import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
 
 /** §9.4: the rolling window `sessionBudgetPerDay` is measured over. */
 export const PROJECT_SESSION_BUDGET_WINDOW_MS = 24 * 60 * 60_000;
@@ -525,6 +526,15 @@ function eligibleTaskIds(input: ProjectDecisionInput): string[] {
   const done = new Set(input.world.tasks
     .filter((task) => task.status === 'DONE')
     .map((task) => task.id));
+  // §13.1 AG6, from the same snapshot index §7.8's pass builds. An aggregate parent is not an
+  // executable next step under ANY policy, so listing one here would ask a person to Run by hand
+  // exactly the task every gate refuses — and on a MANUAL project that request is the whole
+  // content of the `POLICY_MANUAL_HOLD` row. The observation surface and the admission surface
+  // have to answer the same question the same way, or the control plane tells people to do
+  // something the product will not let them do.
+  const parentsWithChildren = new Set(
+    input.world.tasks.map((task) => task.parentTaskId).filter((id): id is string => id != null),
+  );
   return input.world.tasks
     .filter((task) => task.status === 'OPEN'
       && !task.dispatchHold
@@ -532,6 +542,11 @@ function eligibleTaskIds(input: ProjectDecisionInput): string[] {
       && task.dependsOnTaskIds.every((id) => done.has(id))
       && (input.evaluation.dueTasks[task.id]?.retryBackoffExpired ?? true)
       && (input.evaluation.dueTasks[task.id]?.runAtDue ?? true)
+      && !isAggregateParent({
+        // Absent (pre-0123) reads as MANUAL, which is what those rows held.
+        completionPolicy: (task.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
+        hasDirectChildren: parentsWithChildren.has(task.id),
+      })
       // §13.6 SU6, and it is the same predicate every other detector in this file uses. A manual
       // hold is a required action addressed to a person; an obsolete task asks nothing of anyone,
       // and a hold on one can never be discharged — while §13.4's DONE gate refuses a project that

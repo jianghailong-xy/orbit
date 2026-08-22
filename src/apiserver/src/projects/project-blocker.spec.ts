@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { wireRefusalCode } from './project-task-dispatcher.service';
 import { bare, column, section, tables } from './contract-doc';
 import {
   ObservedBlockerCondition,
@@ -556,3 +557,18 @@ function fact(kind: ProjectBlockerKind, overrides: Partial<ProjectBlockerFact> =
 function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
+
+test('§13.1 AG6: the refusal is non-blocking, and its wire code is one old readers know', () => {
+  // If this code ever became a blocker it would be a PROJECT-subject `UNKNOWN_FAILURE`, §11 BL1
+  // would read that as "stop everything", and §11.4 could never clear it — the attempt it needs to
+  // let through will always be refused for the same reason.
+  assert.equal(blockerKindForRefusal('TASK_AGGREGATE_PARENT'), null);
+  assert.ok(PROJECT_BLOCKER_NON_BLOCKING_REFUSALS.has('TASK_AGGREGATE_PARENT'));
+
+  // ...and the durable column carries a code a replica that predates this release also classifies
+  // as non-blocking, because adding it to THIS build's list does nothing for the one beside it.
+  assert.equal(wireRefusalCode('TASK_AGGREGATE_PARENT'), 'STALE_SNAPSHOT');
+  assert.equal(blockerKindForRefusal(wireRefusalCode('TASK_AGGREGATE_PARENT')), null);
+  // Every other code is passed through untouched.
+  assert.equal(wireRefusalCode('RUNNER_UNAVAILABLE'), 'RUNNER_UNAVAILABLE');
+});

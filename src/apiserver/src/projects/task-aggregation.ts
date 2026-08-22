@@ -55,6 +55,82 @@ export interface AggregationTaskFact {
   retirement?: TaskRetirement | null;
 }
 
+/**
+ * AG6 — the shape of a task that ONLY aggregation may finish, and which therefore may never be
+ * dispatched as work.
+ *
+ * §13.1's three policies answer "when does this parent become DONE". `ALL_CHILDREN_DONE` and
+ * `VERIFICATION_PASSED` both answer it with *other rows*: the parent's status is a function of its
+ * children and of the checks pointed at it, recomputed by `planTaskAggregation` and written by a
+ * CAS (AG5). Nothing about that answer involves the parent doing any work, and there is no state
+ * a Session on the parent could reach that would satisfy it — an aggregate parent that runs is a
+ * Session with no completion condition of its own.
+ *
+ * That is not a hypothetical. Dispatching one produces a real agent, in a real workspace, told to
+ * execute a task whose entire content is the summary of work its children are doing concurrently:
+ * it duplicates the children's work, races them for the same branch, and cannot report done —
+ * because the only thing that may set this row DONE is the recomputation, which is watching the
+ * children and not the Session.
+ *
+ * The two clauses, and why each is exactly where the line falls:
+ *
+ *  - **A direct child exists.** This is AG4 read forwards. A policy on a childless task is inert
+ *    (`recompute` returns null for it), so nothing but a status write can ever complete it — it is
+ *    an ordinary leaf that happens to carry a policy for the children it will have later, and
+ *    refusing to run it would strand it. The two rules therefore share one predicate: aggregation
+ *    is what completes this task **iff** the loop must not dispatch it.
+ *  - **The policy is not `MANUAL`.** A MANUAL parent is completed by an explicit status write and
+ *    by nothing else (AG1's table, first row), so a person or an agent is expected to act on it.
+ *    That is the pre-§13.1 contract for every parent task in the product, and it stays.
+ *
+ * What is deliberately NOT a third clause: `task.isForeman`. An explicit Foreman is a task somebody
+ * filed as the coordinating RUN for a list's work, so exempting it here reads as the obvious kindness
+ * — and it is incoherent. `recompute` above does not exempt it: a Foreman with children and a
+ * non-MANUAL policy is still recomputed FROM those children, so exempting it at the dispatch gate
+ * produces a task with TWO completion owners — a Worker that runs it and writes DONE, and an
+ * aggregation that writes DONE or drags it back OPEN from the children. They race, and AG3's
+ * reopen makes the loser permanent.
+ *
+ * The invariant is therefore closed at the other end: **an effective Foreman is MANUAL.** The
+ * combination is refused where it would be written (`TasksService`, and `task_foreman_manual_policy`
+ * for writers this build does not contain), so for every task created from here on "not an explicit
+ * Foreman" is implied by "the policy is not MANUAL" and needs no clause. A row that already carries
+ * the combination — written before the constraint existed — is refused by this predicate like any
+ * other aggregate parent, which is the structured refusal a mixed-version deployment needs rather
+ * than a silent dispatch into a two-owner race.
+ *
+ * Deliberately NOT part of it either: `autoRunWhenReady`, a null assignee, and `dispatchHold`. All
+ * three would express "do not run this" in a column a person or another sweep may legitimately
+ * rewrite, turning a role invariant into a setting — and §2 B3 and §12.3 D4 forbid two of them by
+ * name. The invariant is a property of the task's SHAPE, so it is re-derived from that shape at
+ * every gate rather than stored.
+ */
+export interface AggregateParentFact {
+  completionPolicy: TaskCompletionPolicyValue;
+  /** At least one task names this one as its `parentTaskId`, within the same Project. */
+  hasDirectChildren: boolean;
+}
+
+/** AG6: true when the ONLY thing that may complete this task is the recomputation above. */
+export function isAggregateParent(fact: AggregateParentFact): boolean {
+  if (fact.completionPolicy === 'MANUAL') return false;
+  return fact.hasDirectChildren;
+}
+
+/**
+ * AG6's other end: the combination that would give one task two completion owners.
+ *
+ * `true` means the write must be refused — an explicit Foreman is a task whose SESSION is the work,
+ * and a non-MANUAL policy says the children decide when it is finished. One task cannot be both.
+ * Shared by `TasksService` and by the `task_foreman_manual_policy` constraint so the API and the
+ * database refuse the same pair.
+ */
+export function foremanPolicyConflict(
+  fact: { isForeman: boolean; completionPolicy: TaskCompletionPolicyValue },
+): boolean {
+  return fact.isForeman && fact.completionPolicy !== 'MANUAL';
+}
+
 export type TaskAggregationReason =
   | 'ALL_CHILDREN_DONE'
   | 'VERIFICATION_PASSED'
@@ -91,10 +167,31 @@ export interface TaskAggregationPlan {
   cycleTaskIds: string[];
 }
 
-/** Statuses a parent may be moved OUT of by aggregation. */
+/**
+ * Statuses a parent may be moved OUT of by aggregation.
+ *
+ * `FAILED` is in the set and `CANCELLED` is not, and the difference is who said it. CANCELLED is a
+ * statement somebody made ABOUT the parent — aggregation only ever answers for the children, so it
+ * leaves that alone. `FAILED` on an aggregate parent is not a statement anybody made: it is the
+ * residue of a run that AG6 says should never have been started, and it is the exact shape this
+ * project's own incident left behind on three roll-up nodes.
+ *
+ * Leaving it out is a wedge with no exit, which is why it had to move. AG6's gates skip a FAILED
+ * aggregate parent before the retry ladder, and `TASK_AGGREGATE_PARENT` is a NON-blocking refusal —
+ * so nothing retries it, nothing opens a row about it, and if aggregation also refuses to touch it,
+ * its children can all reach DONE and the parent sits FAILED for ever with no next step anywhere.
+ * That is §10.3's silent idling with a status on it.
+ *
+ * Recovery is therefore the aggregation role simply taking the status back: a FAILED parent whose
+ * children are settled becomes DONE, and one whose children are outstanding becomes OPEN, both
+ * derived from the same recomputation as every other transition here. The failed Session is NOT
+ * touched — it keeps its real result, its error and its place in `failureCount`. What is corrected
+ * is only the claim the TASK row was making, which was never its to make.
+ */
 const AGGREGATABLE_FROM: ReadonlySet<AggregationTaskStatus> = new Set<AggregationTaskStatus>([
   'OPEN',
   'IN_PROGRESS',
+  'FAILED',
 ]);
 
 /**
@@ -270,8 +367,9 @@ function recompute(
   };
 
   if (satisfied) {
-    // CANCELLED and FAILED parents are left alone. Both are statements somebody made about the
-    // parent itself, and aggregation only ever answers for the children.
+    // A CANCELLED parent is left alone: that is a statement somebody made about the parent itself,
+    // and aggregation only ever answers for the children. See `AGGREGATABLE_FROM` for why FAILED
+    // is not in the same sentence any more.
     if (!AGGREGATABLE_FROM.has(task.status)) return null;
     return {
       taskId: task.id,
@@ -288,10 +386,15 @@ function recompute(
   // AG3. The reverse direction is the half that keeps this a recomputation: without it a reopened
   // child, a new child, a revoked verdict or a verification that came back FAIL would leave the
   // parent asserting a completion its own subtree no longer supports.
-  if (task.status !== 'DONE') return null;
+  //
+  // `FAILED` joins `DONE` here for the reason `AGGREGATABLE_FROM` gives: it is the other status an
+  // aggregate parent can be stuck in while its children are still moving, and the only difference
+  // is which wrong claim the row is making. OPEN is what both become — the children are
+  // outstanding, so the parent is outstanding.
+  if (task.status !== 'DONE' && task.status !== 'FAILED') return null;
   return {
     taskId: task.id,
-    from: 'DONE',
+    from: task.status,
     to: 'OPEN',
     policy: task.completionPolicy,
     reason: childrenSettled ? 'VERIFICATION_OUTSTANDING' : 'CHILDREN_OUTSTANDING',

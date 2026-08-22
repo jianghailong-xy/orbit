@@ -97,12 +97,18 @@ async function reset(client: Client): Promise<void> {
       "dispatch_hold" BOOLEAN NOT NULL DEFAULT false,
       "run_at" TIMESTAMP(3),
       "assignee_id" UUID,
+      -- The columns the commit gate reads off the task row it locks. A hand-built subset only ever
+      -- agrees with ITSELF, which is how this table came to be missing columns the adapter had been
+      -- selecting since §13.6 landed — the whole spec failed on the first query rather than on
+      -- anything it was written to check. They are here so the gate can actually run.
+      "parent_task_id" UUID,
       "verifies_task_id" UUID,
-      -- §13.6's columns, which the adapter reads since 0130: a stand-in schema that omits a
-      -- column the code under test selects fails on the column, not on the property.
       "superseded_by_task_id" UUID,
       "superseded_at" TIMESTAMP(3),
-      "terminal_reason" TEXT
+      "terminal_reason" TEXT,
+      -- §13.1 AG6's column. Defaulted to MANUAL like the real schema, so every existing fixture in
+      -- this file keeps meaning what it meant.
+      "completion_policy" TEXT NOT NULL DEFAULT 'MANUAL'
     );
     CREATE TABLE "task_dependency" (
       "task_id" UUID NOT NULL,
@@ -136,6 +142,9 @@ async function reset(client: Client): Promise<void> {
       "id" UUID PRIMARY KEY,
       "owner_id" UUID NOT NULL,
       "task_id" UUID,
+      -- §9.4 counts the sessions that OCCUPY a task as work; the adapter has selected on this
+      -- column since that rule landed, and the subset never grew it.
+      "starts_task_work" BOOLEAN NOT NULL DEFAULT true,
       "status" TEXT NOT NULL,
       "deleted_at" TIMESTAMP(3),
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
