@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { type LoginEngine } from '@orbit/shared';
 import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
@@ -73,6 +74,28 @@ function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boo
  *   - the runner is offline: its last report describes whenever it was last alive, and a session
  *     queued for a machine that is coming back is ordinary use.
  */
+/**
+ * The refusal above, as a type a caller can recognise without matching on prose.
+ *
+ * It reads as a hard failure — a 409 — but it is an AVAILABILITY condition: the engine is signed
+ * out on a machine that is otherwise up, and signing in clears it with nothing else changing. A
+ * caller that retries (the @-mention delivery ledger) has to be able to tell that apart from a
+ * refusal that will never succeed, and matching on the message text is how that comes undone the
+ * next time the wording is improved.
+ */
+export class EngineSignedOutConflict extends ConflictException {
+  readonly engineSignedOut = true;
+
+  constructor(readonly runtime: string, message: string) {
+    super(message);
+  }
+}
+
+/** Recognise the refusal above without importing Nest's exception hierarchy or matching prose. */
+export function isEngineSignedOut(error: unknown): error is EngineSignedOutConflict {
+  return error instanceof EngineSignedOutConflict;
+}
+
 export function signedOutEngineRefusal(args: {
   /** The built-in runtime that will actually execute this session (not the provider identity). */
   runtime: string;

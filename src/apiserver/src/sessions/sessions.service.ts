@@ -105,7 +105,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import { truncatePayload } from './truncate-payload';
-import { signedOutEngineRefusal } from './engine-signin-preflight';
+import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
 import {
   deriveSessionCapabilities,
   withSessionCapabilities,
@@ -328,6 +328,31 @@ export class SessionsService {
       dispatchOrigin?: SessionDispatchOrigin;
       runSource?: SessionRunSource;
       /**
+       * §13.8: open this session with no worktree, whatever its workspace's default is.
+       *
+       * A conversation about a task does not change code, so a branch and a worktree for it are an
+       * unmerged branch left behind by a reply to a comment — which reads as work somebody
+       * abandoned. Internal, and set only by the @-mention delivery sweep.
+       */
+      noWorktree?: boolean;
+      /**
+       * §13.8: the task this session is ABOUT rather than one it executes.
+       *
+       * INTERNAL, and deliberately not on `CreateSessionDto`: a public field would need Base62
+       * decoding and an owner check of its own, and the only writer is the @-mention delivery
+       * sweep, which already knows the task is the one it read the comment from. Mutually exclusive
+       * with `dto.taskId` at the database (0131's CHECK).
+       */
+      contextTaskId?: string;
+      /**
+       * §13.8: the id this session must be created WITH.
+       *
+       * Also internal. The delivery ledger binds a target id BEFORE creating the session, so a
+       * worker that dies between the two retries with the SAME id — and the create either succeeds
+       * or collides with the row it already wrote, instead of opening a second conversation.
+       */
+      id?: string;
+      /**
        * §13.6 SU6: this Session exists to DO the task's work, not to look at it.
        *
        * Only the paths that start work set it — Run Now, the sweeps, the Project dispatcher — and
@@ -499,7 +524,7 @@ export class SessionsService {
     const explicitTitle = dto.title ?? undefined;
     const hasExplicitTitle = explicitTitle !== undefined;
     const title = explicitTitle ?? titleFromPrompt(dto.prompt);
-    const branch = enableWorktree ? makeBranchName(title) : null;
+    let branch = enableWorktree ? makeBranchName(title) : null;
     // provider is the identity stored on the row; runtime is which built-in CLI actually
     // drives it (a custom provider borrows Claude/Codex/Kimi), and decides the pre-generated
     // session-id and effort normalization. A borrowed runtime is authoritative here: giving a
@@ -524,10 +549,20 @@ export class SessionsService {
         workspaceEnv,
         runner: targetRunner,
       });
-    if (refusal) throw new ConflictException(refusal);
+    // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
+    // machine that is up — and a caller that retries has to be able to tell it from a refusal that
+    // will never succeed. See `EngineSignedOutConflict`.
+    if (refusal) throw new EngineSignedOutConflict(runtime, refusal);
+    // §13.8: a conversation gets no worktree. Applied after the workspace's default is read, so it
+    // is a deliberate override rather than a second source of the default.
+    if (opts?.noWorktree) {
+      enableWorktree = false;
+      branch = null;
+    }
     const runtimeSessionId = randomUUID();
     const session = await this.prisma.session.create({
       data: {
+        ...(opts?.id ? { id: opts.id } : {}),
         title,
         branch,
         prompt: dto.prompt,
@@ -546,6 +581,9 @@ export class SessionsService {
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
+        // §13.8: what this session is ABOUT, when it is not executing it. Mutually exclusive with
+        // `taskId` at the database (0131), so the two cannot both be set by accident.
+        contextTaskId: opts?.contextTaskId ?? null,
         dispatchOrigin: opts?.dispatchOrigin ?? SessionDispatchOrigin.USER,
         runSource: opts?.runSource ?? SessionRunSource.MANUAL,
         startsTaskWork: opts?.startsTaskWork ?? false,
@@ -2653,7 +2691,7 @@ export class SessionsService {
   // needs a short prefix of the (potentially multi-KB) denormalized preview text.
   private static readonly PREVIEW_LEN = 200;
 
-  private static readonly LIVE: RunStatus[] = [
+  static readonly LIVE: RunStatus[] = [
     RunStatus.RUNNING,
     RunStatus.AWAITING_INPUT,
     RunStatus.INTERRUPTED,
@@ -2754,7 +2792,7 @@ export class SessionsService {
   /** The fixed clientTurnId of the seeded first turn (the prompt) — see ensurePromptSeeded
    *  / queue.service.buildSession. It's a real PENDING message turn but isn't a withdrawable
    *  queued follow-up, so the queued-turn list/cancel paths exclude it. */
-  private static initialTurnClientId(sessionId: string): string {
+  static initialTurnClientId(sessionId: string): string {
     return `initial-${sessionId}`;
   }
 

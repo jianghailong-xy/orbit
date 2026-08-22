@@ -95,6 +95,18 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // §13.5's supersession link: the later attempt that took a cancelled one's place. An address a
   // reader hands straight to task_get, exactly like `parentTaskId` beside it.
   'supersededByTaskId',
+  // §13.8: the task a session is ABOUT rather than one it executes — an @-mention's reply thread.
+  // Named in a session payload beside `taskId`, and handed to task_get by whoever reads it.
+  'contextTaskId',
+  // §13.8's mention-delivery ledger: the comment that made the mention, and the session the
+  // message landed in. Both are addresses a client follows — "show me that comment", "open that
+  // conversation" — so both are rendered the way every other address is.
+  'commentId',
+  'targetSessionId',
+  // The session id a delivery INTENDS to use before it exists. Public for the same reason as the
+  // one above: a stuck delivery's detail names it, and a reader who looks it up should find the
+  // conversation once it has been created.
+  'desiredSessionId',
   // §13.2's verification-failure record names four rows a caller reads and looks up: the check
   // that concluded, the task it concluded about, the defect subtask filed to fix it, and the
   // later check that cleared it. Every one of them is an address somebody hands to task_get.

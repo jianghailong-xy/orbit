@@ -263,6 +263,7 @@ model User {
   agents           Agent[] // Agent identities this user owns (tenant scope)
 
   @@map("user")
+  mentionDeliveries TaskCommentMentionDelivery[]
 }
 
 /// A long-lived opaque refresh token a client swaps for a fresh short-lived access JWT via
@@ -788,6 +789,14 @@ model Session {
   /// safe reading of those is "this starts work", so the guard refuses rather than exempts. The
   /// service is explicit on every path, so this default is only ever reached by an older writer.
   startsTaskWork       Boolean          @default(true) @map("starts_task_work")
+  /// The task this session is ABOUT, as distinct from `taskId`, which means it EXECUTES that task.
+  /// A conversation opened by an @-mention carries this and leaves `taskId` null, so it takes no
+  /// execution claim, occupies no project slot, does not follow the task's lifecycle — and is
+  /// invisible as a task session to a binary that predates the column, which is what makes it safe
+  /// to create during a rolling deploy. Mutually exclusive with `taskId` (migration 0131's CHECK).
+  mentionDeliveries    TaskCommentMentionDelivery[] @relation("MentionDeliveryTarget")
+  contextTaskId        String?          @map("context_task_id") @db.Uuid
+  contextTask          Task?            @relation("SessionContextTask", fields: [contextTaskId], references: [id], onDelete: SetNull)
   // Frozen dispatcher result. The coordinator path writes all four atomically with the Session;
   // legacy rows keep NULL/empty defaults and continue to use their existing columns.
   resolution           Json?
@@ -2416,6 +2425,11 @@ model Task {
 
   comments     TaskComment[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
+  /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
+  /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
+  /// these do neither (migration 0131).
+  contextSessions Session[]     @relation("SessionContextTask")
+  mentionDeliveries TaskCommentMentionDelivery[]
   // Dependency edges where THIS task is the dependent: the prerequisites it waits on.
   dependsOn    TaskDependency[] @relation("DependencyFromTask")
   // Dependency edges where THIS task is the prerequisite: tasks blocked until it's DONE.
@@ -2537,10 +2551,91 @@ model TaskComment {
   // Agent ids @-mentioned in this comment (web composer). Each mention notifies and
   // triggers that agent on this task; resolved to names in the UI. No FK (cf. authorId).
   mentions   String[]    @default([]) @db.Uuid
+  /// Which mention-delivery contract this comment was written under (migration 0131). 0 is the
+  /// inline best-effort loop a binary predating the ledger used, and is what an absent value means;
+  /// 1 files a `TaskCommentMentionDelivery` row per mentioned agent in the same transaction. The
+  /// column exists so a rolling deploy cannot deliver one comment twice or lose one entirely.
+  mentionDeliveryVersion Int    @default(0) @map("mention_delivery_version") @db.SmallInt
   createdAt  DateTime    @default(now()) @map("created_at")
+
+  deliveries TaskCommentMentionDelivery[]
 
   @@index([taskId, createdAt])
   @@map("task_comment")
+}
+
+/// One @-mention's delivery, from the comment that made it to the turn that carried it.
+///
+/// Written in the same transaction as the comment (0131's trigger), worked off by a sweep that
+/// retries with backoff. `(commentId, workspaceId)` is unique, so a mention is delivered at most
+/// once however many workers or retries touch it, and `status` is the answer to "did that agent
+/// ever hear about this" that a log line could never give.
+model TaskCommentMentionDelivery {
+  id              String   @id @default(uuid(7)) @db.Uuid
+  commentId       String   @map("comment_id") @db.Uuid
+  comment         TaskComment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  taskId          String   @map("task_id") @db.Uuid
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// The agent that was mentioned, as an immutable snapshot. No relation and no cascade on
+  /// purpose: deleting a runner cascades to its workspaces, and a ledger row that vanished with
+  /// them would take the record of an undelivered mention with it (migration 0131).
+  workspaceId     String   @map("workspace_id") @db.Uuid
+  ownerId         String   @map("owner_id") @db.Uuid
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  status          TaskCommentMentionDeliveryStatus @default(PENDING)
+  /// The delivery budget: tries that failed for a reason belonging to this delivery. Availability
+  /// failures (no runner, provider down) refund it — see migration 0131.
+  attempts        Int      @default(0)
+  /// Leases that expired while still DELIVERING — a worker died mid-flight. Bounds that loop, and
+  /// deliberately not advanced by an ordinary poll (see migration 0131).
+  claims          Int      @default(0)
+  /// Availability and polling generations: no runner yet, no turn seeded yet. Drives the backoff
+  /// and nothing else — no cap, because a machine being down is not a reason to throw away a
+  /// message somebody sent.
+  waits           Int      @default(0)
+  nextAttemptAt   DateTime @default(now()) @map("next_attempt_at")
+  leaseHolder     String?  @map("lease_holder")
+  leaseExpiresAt  DateTime? @map("lease_expires_at")
+  /// The closed name of the condition holding this delivery — what a client switches on.
+  errorCode       String?  @map("error_code")
+  /// What would clear it, addressed to whoever can do it.
+  requiredAction  String?  @map("required_action")
+  /// The underlying message, for the case nobody anticipated. Shown, not just logged.
+  lastError       String?  @map("last_error")
+  /// The session id this delivery INTENDS to use, written before that session exists so a crash in
+  /// between retries with the same id rather than opening a second conversation. No FK, and that
+  /// is the point (migration 0131).
+  desiredSessionId String? @map("desired_session_id") @db.Uuid
+  /// Where the message actually landed, once that session exists.
+  targetSessionId String?  @map("target_session_id") @db.Uuid
+  targetSession   Session? @relation("MentionDeliveryTarget", fields: [targetSessionId], references: [id], onDelete: SetNull)
+  turnId          String?  @map("turn_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([commentId, workspaceId])
+  @@index([taskId, createdAt])
+  @@map("task_comment_mention_delivery")
+}
+
+/// §13.8: what has happened to one @-mention. PENDING and BLOCKED are both "not yet"; only
+/// DELIVERED and DEAD are terminal, and DEAD is deliberately loud.
+enum TaskCommentMentionDeliveryStatus {
+  PENDING
+  DELIVERING
+  /// The conversation exists and carries the prompt, but the runner has not claimed it yet, so no
+  /// `ConversationTurn` does. Revisited until one appears.
+  SESSION_CREATED
+  /// The turn exists and is still PENDING — durably queued, not yet handed to the engine. A queued
+  /// turn can still be lost (its session can fail before reaching it), so this is deliberately not
+  /// DELIVERED.
+  QUEUED
+  DELIVERED
+  BLOCKED
+  DEAD
+
+  @@map("task_comment_mention_delivery_status")
 }
 
 // A "B depends on A" edge: the dependent task (`taskId`) may only run once its

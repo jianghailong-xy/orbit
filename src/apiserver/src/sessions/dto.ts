@@ -21,6 +21,7 @@ export interface CreateSessionDto {
   agentId?: string;
   /** Optional parent work item this session runs under. */
   taskId?: string;
+
   /** Per-session provider override, picked on the New Session screen: a built-in engine
    *  ("claude"/"codex"/"kimi"/"opencode") or one of the caller's configured ModelProvider
    *  slugs. Omitted keeps the historical behaviour — the session inherits its workspace's

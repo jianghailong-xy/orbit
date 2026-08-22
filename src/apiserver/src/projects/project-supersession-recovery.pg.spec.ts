@@ -1210,3 +1210,662 @@ test('unit E: a finding from a replaced check is audit, not a current block', { 
       await services.dispose();
     }
   });
+
+// ---------------------------------------------------------------------------------------------
+// 8. §13.8: @-mention delivery is a ledger, not a loop
+// ---------------------------------------------------------------------------------------------
+
+test('unit E: every @-mention gets exactly one delivery, and says what happened to it', { skip },
+  async (t) => {
+    const services = servicesOn(URL!);
+    const client = await connectIsolatedPg(URL);
+
+    interface DeliveryRow {
+      id: string; workspaceId: string; status: string;
+      attempts: number; claims: number; waits: number;
+      desiredSessionId: string | null; targetSessionId: string | null;
+      turnId: string | null; lastError: string | null;
+      errorCode: string | null; requiredAction: string | null;
+    }
+
+    async function deliveries(taskTarget: string): Promise<DeliveryRow[]> {
+      return services.db.$queryRawUnsafe(
+        `SELECT "id", "workspace_id" AS "workspaceId", "status"::text AS status, "attempts",
+                "claims", "waits", "desired_session_id" AS "desiredSessionId",
+                "target_session_id" AS "targetSessionId", "turn_id" AS "turnId",
+                "last_error" AS "lastError", "error_code" AS "errorCode",
+                "required_action" AS "requiredAction"
+           FROM "task_comment_mention_delivery"
+          WHERE "task_id" = $1::uuid ORDER BY "workspace_id"`,
+        taskTarget,
+      );
+    }
+
+    /** Every session that executes this task or is a conversation about it. */
+    async function sessionsFor(taskTarget: string): Promise<Array<{
+      id: string; workspaceId: string | null; status: string; branch: string | null;
+      bound: string | null; about: string | null; startsTaskWork: boolean;
+    }>> {
+      return services.db.$queryRawUnsafe(
+        `SELECT "id", "workspace_id" AS "workspaceId", "status"::text AS status, "branch",
+                "task_id" AS bound, "context_task_id" AS about,
+                "starts_task_work" AS "startsTaskWork"
+           FROM "session"
+          WHERE "task_id" = $1::uuid OR "context_task_id" = $1::uuid
+          ORDER BY "created_at"`,
+        taskTarget,
+      );
+    }
+
+    async function turnsIn(sessionId: string): Promise<string[]> {
+      const rows = await services.db.$queryRawUnsafe<Array<{ clientTurnId: string }>>(
+        `SELECT "client_turn_id" AS "clientTurnId" FROM "conversation_turn"
+          WHERE "session_id" = $1::uuid ORDER BY "seq"`, sessionId,
+      );
+      return rows.map((row) => row.clientTurnId);
+    }
+
+    /**
+     * File a comment WITHOUT the service's post-commit kick.
+     *
+     * `addComment` fires the sweep in the background, which races anything a test does next and
+     * would make every assertion below depend on scheduling. The ledger rows are written by 0131's
+     * trigger inside the comment's own statement, so writing the comment directly is the same
+     * durable state a crashed process leaves — and the test drives the sweep itself.
+     */
+    async function comment(target: World, taskTarget: string, mentions: string[]): Promise<string> {
+      const row = await services.db.taskComment.create({
+        data: {
+          taskId: taskTarget, authorType: 'USER', authorId: target.ownerId,
+          body: '@please look', mentions, mentionDeliveryVersion: 1,
+        },
+      });
+      return row.id;
+    }
+
+    async function secondAgent(target: World, label: string): Promise<string> {
+      const id = randomUUID();
+      await services.db.workspace.create({
+        data: {
+          id, ownerId: target.ownerId, runnerId: target.runnerId, name: label, enabled: true,
+        },
+      });
+      return id;
+    }
+
+    try {
+      await t.test('two mentioned agents each get their own conversation', async () => {
+        // The bug this replaces: a mention opened a session BOUND to the task, so the first agent
+        // took the execution claim and the second could not be created at all — its comment was
+        // persisted, its delivery failed, and one `logger.warn` was the only trace.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-two-agents');
+        const other = await secondAgent(target, 'su8-second');
+        const subject = await task(services.db, target, 'the work');
+        await comment(target, subject, [target.agentId, other]);
+
+        await services.tasks.deliverMentions();
+
+        const rows = await deliveries(subject);
+        assert.equal(rows.length, 2, 'one ledger row per mentioned agent');
+        for (const row of rows) {
+          assert.ok(['DELIVERED', 'QUEUED', 'SESSION_CREATED'].includes(row.status), row.status);
+          assert.ok(row.targetSessionId, 'each landed somewhere');
+        }
+        assert.equal(new Set(rows.map((row) => row.targetSessionId)).size, 2,
+          'and in two different places');
+
+        const opened = await sessionsFor(subject);
+        assert.equal(opened.length, 2);
+        assert.deepEqual(opened.map((row) => row.bound), [null, null],
+          'neither takes the task execution claim');
+        assert.deepEqual(opened.map((row) => row.about), [subject, subject],
+          'both are recorded as ABOUT it');
+        assert.deepEqual(opened.map((row) => row.startsTaskWork), [false, false]);
+        assert.deepEqual(opened.map((row) => row.branch), [null, null],
+          'a conversation leaves no branch behind');
+        assert.deepEqual(
+          new Set(opened.map((row) => row.workspaceId)),
+          new Set([target.agentId, other]),
+          'and each belongs to the agent it was addressed to',
+        );
+      });
+
+      await t.test('a mention delivers into the agent\'s live work run when it has one', async () => {
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-live-run');
+        const subject = await task(services.db, target, 'the work');
+        const run = await session(services.db, target, {
+          taskId: subject, status: RunStatus.AWAITING_INPUT, finishedAt: null,
+        });
+        const commentId = await comment(target, subject, [target.agentId]);
+
+        await services.tasks.deliverMentions();
+
+        const [row] = await deliveries(subject);
+        // QUEUED, not DELIVERED: the turn exists and the engine has not read it yet. The two are
+        // different facts, and collapsing them retires the ledger on a message nobody has seen.
+        assert.equal(row.status, 'QUEUED');
+        assert.equal(row.targetSessionId, run, 'the turn went to the run already in this context');
+        // Exactly one turn under the DELIVERY key. The session's own opening prompt is beside it
+        // and is not this delivery's business — asserting the whole list would be asserting that a
+        // work run has no work in it.
+        const keys = await turnsIn(run);
+        assert.equal(keys.filter((key) => key === `task-comment-mention:${row.id}`).length, 1,
+          'the mention landed exactly once');
+        assert.equal(row.turnId != null, true, 'and the ledger names the turn that carried it');
+        void commentId;
+      });
+
+      await t.test('no runner is a WAIT, not a failure: the budget is untouched', async () => {
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-blocked');
+        const orphan = await secondAgent(target, 'su8-no-runner');
+        await services.db.workspace.update({ where: { id: orphan }, data: { runnerId: null } });
+        const subject = await task(services.db, target, 'the work');
+        await comment(target, subject, [orphan]);
+
+        await services.tasks.deliverMentions();
+        const [first] = await deliveries(subject);
+        assert.equal(first.status, 'BLOCKED', 'a state, not a failure');
+        assert.equal(first.attempts, 0, 'the delivery budget is NOT spent on a machine being down');
+        assert.equal(first.waits, 1, 'the backoff generation is what moved');
+        assert.equal(first.errorCode, 'NO_RUNNER');
+        assert.match(first.requiredAction ?? '', /bind this agent to a runner/);
+
+        // ...and it stays that way however long the runner is away: this must never reach DEAD.
+        for (let round = 0; round < 3; round += 1) {
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+              WHERE "task_id" = $1::uuid`, subject,
+          );
+          await services.tasks.deliverMentions();
+        }
+        const [after] = await deliveries(subject);
+        assert.equal(after.status, 'BLOCKED');
+        assert.equal(after.attempts, 0);
+        assert.equal(after.waits, 4, 'each wait advances the backoff and nothing else');
+
+        // Bind a runner and it delivers itself, with no intervention.
+        await services.db.workspace.update({
+          where: { id: orphan }, data: { runnerId: target.runnerId },
+        });
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+        await services.tasks.deliverMentions();
+        const [recovered] = await deliveries(subject);
+        assert.ok(['DELIVERED', 'QUEUED', 'SESSION_CREATED'].includes(recovered.status), recovered.status);
+      });
+
+      await t.test('a crash after the comment commits loses nothing', async () => {
+        // The comment and its ledger rows are one statement (0131's trigger), so "the comment
+        // exists" and "somebody owes this agent a message" cannot disagree.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-crash');
+        const subject = await task(services.db, target, 'the work');
+        await comment(target, subject, [target.agentId]);
+
+        assert.deepEqual((await deliveries(subject)).map((row) => row.status), ['PENDING']);
+        await services.tasks.deliverMentions();
+        const [row] = await deliveries(subject);
+        assert.ok(['DELIVERED', 'QUEUED', 'SESSION_CREATED'].includes(row.status), row.status);
+      });
+
+      await t.test('a crash between binding and creating reuses the same id', async () => {
+        // The window the two id columns exist for. `desired_session_id` is written before the
+        // session, so this is exactly the state a worker that died in between leaves behind.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-crash-bind');
+        const subject = await task(services.db, target, 'the work');
+        await comment(target, subject, [target.agentId]);
+        const intended = randomUUID();
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery"
+              SET "desired_session_id" = $2::uuid, "status" = 'BLOCKED', "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject, intended,
+        );
+
+        await services.tasks.deliverMentions();
+
+        const opened = await sessionsFor(subject);
+        assert.equal(opened.length, 1, 'one conversation, not a second one');
+        assert.equal(opened[0].id, intended, 'and it is the id the crashed attempt intended');
+        const [row] = await deliveries(subject);
+        assert.equal(row.targetSessionId, intended);
+      });
+
+      await t.test('a crash between delivering and settling writes no second turn', async () => {
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-crash-settle');
+        const subject = await task(services.db, target, 'the work');
+        const run = await session(services.db, target, {
+          taskId: subject, status: RunStatus.AWAITING_INPUT, finishedAt: null,
+        });
+        await comment(target, subject, [target.agentId]);
+        await services.tasks.deliverMentions();
+        const before = await turnsIn(run);
+        const mentionKeys = (keys: string[]) => keys.filter((key) => key.startsWith('task-comment-mention:'));
+        assert.equal(mentionKeys(before).length, 1, 'delivered once to start with');
+
+        // The shape a worker that wrote the turn and died before marking the ledger leaves.
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery"
+              SET "status" = 'PENDING', "next_attempt_at" = now(),
+                  "lease_holder" = NULL, "lease_expires_at" = NULL, "turn_id" = NULL
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+        await services.tasks.deliverMentions();
+
+        assert.deepEqual(await turnsIn(run), before,
+          'the fixed delivery key means a re-run writes no second turn');
+        assert.equal(mentionKeys(await turnsIn(run)).length, 1);
+        const [row] = await deliveries(subject);
+        assert.ok(['QUEUED', 'DELIVERED'].includes(row.status), row.status);
+        assert.equal(row.targetSessionId, run, 'and it did not move to a new session');
+        assert.equal((await sessionsFor(subject)).length, 1);
+      });
+
+      await t.test('a remembered conversation that ENDED is never revived', async () => {
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-terminal');
+        const subject = await task(services.db, target, 'the work');
+        await comment(target, subject, [target.agentId]);
+        await services.tasks.deliverMentions();
+        const [first] = await sessionsFor(subject);
+
+        // It ended without ever seeding a turn, and the ledger is asked to try again.
+        await services.db.session.update({
+          where: { id: first.id },
+          data: { status: RunStatus.FAILED, finishedAt: new Date(), error: 'runner died' },
+        });
+        const frozen = await services.db.session.findUniqueOrThrow({ where: { id: first.id } });
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery"
+              SET "status" = 'BLOCKED', "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+
+        await services.tasks.deliverMentions();
+
+        const after = await services.db.session.findUniqueOrThrow({ where: { id: first.id } });
+        assert.equal(after.status, RunStatus.FAILED, 'the ended run is what it was');
+        assert.deepEqual(after.finishedAt, frozen.finishedAt);
+        assert.equal(after.error, frozen.error);
+        const opened = await sessionsFor(subject);
+        assert.equal(opened.length, 2, 'a NEW conversation was opened instead');
+        const [row] = await deliveries(subject);
+        assert.notEqual(row.targetSessionId, first.id, 'and the binding moved to it');
+      });
+
+      await t.test('a disabled agent BLOCKS without spending the budget', async () => {
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-disabled');
+        const subject = await task(services.db, target, 'the work');
+        await services.db.workspace.update({
+          where: { id: target.agentId }, data: { enabled: false },
+        });
+        await comment(target, subject, [target.agentId]);
+
+        await services.tasks.deliverMentions();
+
+        const [row] = await deliveries(subject);
+        assert.equal(row.status, 'BLOCKED');
+        assert.equal(row.errorCode, 'WORKSPACE_DISABLED');
+        assert.equal(row.attempts, 0, 'a switch somebody flips back is not a failed delivery');
+        assert.match(row.requiredAction ?? '', /re-enable/);
+
+        await services.db.workspace.update({
+          where: { id: target.agentId }, data: { enabled: true },
+        });
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+        await services.tasks.deliverMentions();
+        const [after] = await deliveries(subject);
+        assert.ok(['DELIVERED', 'QUEUED', 'SESSION_CREATED'].includes(after.status), after.status);
+        assert.equal((await sessionsFor(subject)).length, 1, 'and exactly one conversation');
+      });
+
+      await t.test('a worker whose lease expired cannot overwrite what its successor wrote',
+        async () => {
+          // The CAS on every ledger write, exercised through the SERVICE rather than by a hand
+          // written statement — a test that issues its own SQL would pass even if the fence were
+          // deleted from the code it claims to be about.
+          //
+          // Worker A claims. Its lease expires. Worker B takes over and finishes. A then comes back
+          // and tries to park and to re-bind, exactly as it would after a long GC pause.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-lease-steal');
+          const subject = await task(services.db, target, 'the work');
+          await comment(target, subject, [target.agentId]);
+          const [filed] = await deliveries(subject);
+
+          // A's claim, then A's death: DELIVERING with an expired lease.
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery"
+                SET "status" = 'DELIVERING', "lease_holder" = 'worker-A',
+                    "lease_expires_at" = now() - interval '1 minute'
+              WHERE "id" = $1::uuid`, filed.id,
+          );
+          // B takes over and finishes, through the real sweep.
+          await services.tasks.deliverMentions();
+          const [byB] = await deliveries(subject);
+          assert.notEqual(byB.status, 'DELIVERING', 'B reached a decision');
+
+          const worker = services.tasks as unknown as {
+            parkMentionDelivery(
+              row: { id: string; attempts: number; ownerId: string; taskId: string },
+              holder: string, error: unknown,
+            ): Promise<void>;
+            bindMentionTarget(id: string, holder: string, sessionId: string): Promise<void>;
+          };
+          // A comes back. Both of its writes go through the production CAS.
+          await worker.parkMentionDelivery(
+            { id: filed.id, attempts: 0, ownerId: target.ownerId, taskId: subject },
+            'worker-A',
+            new Error('late failure from a worker that no longer owns this'),
+          );
+          await assert.rejects(
+            () => worker.bindMentionTarget(filed.id, 'worker-A', randomUUID()),
+            /another worker owns this delivery/,
+          );
+
+          const [after] = await deliveries(subject);
+          assert.deepEqual(
+            {
+              status: after.status, errorCode: after.errorCode,
+              target: after.targetSessionId, attempts: after.attempts,
+            },
+            {
+              status: byB.status, errorCode: byB.errorCode,
+              target: byB.targetSessionId, attempts: byB.attempts,
+            },
+            'the row is exactly as its owner left it',
+          );
+        });
+
+      await t.test('deleting the runner keeps the record of the mention it could not deliver',
+        async () => {
+          // The cascade that made this ledger necessary: runner → workspace → (before this) the
+          // delivery row, so a comment mentioning an agent whose machine was later removed lost
+          // every trace of why nobody replied.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-runner-gone');
+          const subject = await task(services.db, target, 'the work');
+          await comment(target, subject, [target.agentId]);
+          // The workspace is this project's coordinator, so its membership has to go first — the
+          // cascade under test is runner → workspace → (previously) the ledger row.
+          await services.db.session.deleteMany({ where: { ownerId: target.ownerId } });
+          await services.db.projectMember.deleteMany({ where: { agentId: target.agentId } });
+          await services.db.project.updateMany({
+            where: { id: target.projectId },
+            data: { coordinatorWorkspaceId: null, coordinatorSessionId: null },
+          });
+          await services.db.runner.delete({ where: { id: target.runnerId } });
+          assert.equal(
+            await services.db.workspace.count({ where: { id: target.agentId } }), 0,
+            'the workspace went with its runner, which is the cascade this is about',
+          );
+
+          await services.tasks.deliverMentions();
+
+          const rows = await deliveries(subject);
+          assert.equal(rows.length, 1, 'the ledger survived the cascade');
+          assert.equal(rows[0].status, 'DEAD');
+          assert.equal(rows[0].errorCode, 'WORKSPACE_GONE');
+          assert.equal(rows[0].workspaceId, target.agentId, 'and still names who was asked');
+        });
+
+      await t.test('a conversation claimed but not yet seeded is waited on, not re-delivered',
+        async () => {
+          // The window between the runner claiming a session (PENDING → RUNNING) and
+          // `ensurePromptSeeded` writing the opening turn. A sweep landing there must recognise
+          // the session as ITS OWN and wait — resuming would put the same text in twice.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-claim-window');
+          const subject = await task(services.db, target, 'the work');
+          await comment(target, subject, [target.agentId]);
+          await services.tasks.deliverMentions();
+          const [opened] = await sessionsFor(subject);
+          await services.db.$executeRawUnsafe(
+            `DELETE FROM "conversation_turn" WHERE "session_id" = $1::uuid`, opened.id,
+          );
+          await services.db.session.update({
+            where: { id: opened.id }, data: { status: RunStatus.RUNNING },
+          });
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+              WHERE "task_id" = $1::uuid`, subject,
+          );
+
+          await services.tasks.deliverMentions();
+
+          assert.equal((await sessionsFor(subject)).length, 1, 'no second conversation');
+          assert.deepEqual(await turnsIn(opened.id), [], 'and no turn was forced into it');
+          const [row] = await deliveries(subject);
+          assert.equal(row.status, 'SESSION_CREATED', 'it is still waiting, and says so');
+          assert.equal(row.targetSessionId, opened.id);
+        });
+
+      await t.test('a rotation that crashes before creating still opens exactly one conversation',
+        async () => {
+          // Terminal target → rotate to a new desired id → crash. The retry must finish THAT
+          // rotation rather than mint a third id.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-rotate-crash');
+          const subject = await task(services.db, target, 'the work');
+          await comment(target, subject, [target.agentId]);
+          await services.tasks.deliverMentions();
+          const [first] = await sessionsFor(subject);
+          await services.db.session.update({
+            where: { id: first.id },
+            data: { status: RunStatus.FAILED, finishedAt: new Date() },
+          });
+          await services.db.$executeRawUnsafe(
+            `DELETE FROM "conversation_turn" WHERE "session_id" = $1::uuid`, first.id,
+          );
+
+          // The EXACT mid-rotation state, written rather than hoped for: the old target cleared,
+          // a new desired id published, and no session behind it. That is what a worker that died
+          // between the rotation UPDATE and the create leaves, and the retry must ADOPT that id
+          // rather than mint a third.
+          const intended = randomUUID();
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery"
+                SET "status" = 'BLOCKED', "next_attempt_at" = now(),
+                    "target_session_id" = NULL, "turn_id" = NULL,
+                    "desired_session_id" = $2::uuid
+              WHERE "task_id" = $1::uuid`, subject, intended,
+          );
+          assert.equal(
+            await services.db.session.count({ where: { id: intended } }), 0,
+            'the id names nothing yet — this is the window',
+          );
+
+          await services.tasks.deliverMentions();
+
+          const [rotated] = await deliveries(subject);
+          const opened = await sessionsFor(subject);
+          assert.equal(opened.length, 2, 'the ended one, and exactly one replacement');
+          assert.equal(rotated.targetSessionId, intended,
+            'the retry finished the rotation it found rather than starting another');
+          assert.ok(opened.some((row) => row.id === intended));
+
+          // ...and a further retry adds nothing.
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery"
+                SET "status" = 'BLOCKED', "next_attempt_at" = now()
+              WHERE "task_id" = $1::uuid`, subject,
+          );
+          await services.tasks.deliverMentions();
+          assert.equal((await sessionsFor(subject)).length, 2, 'still two');
+        });
+
+      await t.test('a conversation waiting to be claimed backs off instead of hot-polling',
+        async () => {
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-backoff');
+          const subject = await task(services.db, target, 'the work');
+          await comment(target, subject, [target.agentId]);
+          await services.tasks.deliverMentions();
+
+          const [first] = await deliveries(subject);
+          if (first.status !== 'SESSION_CREATED') return; // the runner seeded it already
+          const gaps: number[] = [];
+          for (let round = 0; round < 3; round += 1) {
+            const [before] = await services.db.$queryRawUnsafe<Array<{ next: Date }>>(
+              `SELECT "next_attempt_at" AS next FROM "task_comment_mention_delivery"
+                WHERE "task_id" = $1::uuid`, subject,
+            );
+            gaps.push(before.next.getTime() - Date.now());
+            await services.db.$executeRawUnsafe(
+              `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+                WHERE "task_id" = $1::uuid`, subject,
+            );
+            await services.tasks.deliverMentions();
+          }
+          assert.ok(gaps[1] > gaps[0] && gaps[2] > gaps[1],
+            `each wait is longer than the last: ${gaps.join(', ')}`);
+          const [after] = await deliveries(subject);
+          assert.equal(after.attempts, 0, 'and waiting spends no delivery budget');
+          assert.equal(after.claims, 0, 'nor the crash budget');
+        });
+
+      await t.test('a signed-out engine BLOCKS as availability, and delivers on sign-in',
+        async () => {
+          // `SessionsService.create` refuses this with a 409 — but it is availability, not a
+          // failure: signing in clears it. Recognised by TYPE, so the mapping survives the message
+          // being reworded.
+          await emptyWorld(client);
+          const target = await world(services.db, 'su8-signed-out');
+          const subject = await task(services.db, target, 'the work');
+          await services.db.runner.update({
+            where: { id: target.runnerId },
+            data: {
+              status: 'ONLINE',
+              lastHeartbeatAt: new Date(),
+              engines: [{ engine: 'claude', installed: true, auth: 'no' }],
+            },
+          });
+          await comment(target, subject, [target.agentId]);
+
+          await services.tasks.deliverMentions();
+
+          const [row] = await deliveries(subject);
+          assert.equal(row.status, 'BLOCKED');
+          assert.equal(row.errorCode, 'PROVIDER_UNAVAILABLE');
+          assert.equal(row.attempts, 0, 'a sign-out is not a failed delivery');
+          assert.match(row.requiredAction ?? '', /sign in to claude/);
+          assert.deepEqual(await sessionsFor(subject), [], 'and nothing was created');
+
+          await services.db.runner.update({
+            where: { id: target.runnerId },
+            data: { engines: [{ engine: 'claude', installed: true, auth: 'yes' }] },
+          });
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+              WHERE "task_id" = $1::uuid`, subject,
+          );
+          await services.tasks.deliverMentions();
+
+          const [after] = await deliveries(subject);
+          assert.ok(['DELIVERED', 'QUEUED', 'SESSION_CREATED'].includes(after.status), after.status);
+          assert.equal((await sessionsFor(subject)).length, 1, 'delivered once, on recovery');
+        });
+
+      await t.test('a turn queued into a run that then FAILS is not called delivered', async () => {
+        // The distinction QUEUED exists for. A work session carries the task prompt at seq 1 and
+        // this mention at seq 2; seq 1 fails and takes the session with it. The mention's row is
+        // right there in the table and the agent never read a word of it — so the ledger must not
+        // retire, and the message must land somewhere else.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-stranded');
+        const subject = await task(services.db, target, 'the work');
+        const run = await session(services.db, target, {
+          taskId: subject, status: RunStatus.AWAITING_INPUT, finishedAt: null,
+        });
+        await comment(target, subject, [target.agentId]);
+        await services.tasks.deliverMentions();
+
+        const [queued] = await deliveries(subject);
+        assert.equal(queued.status, 'QUEUED', 'durably queued, not yet read');
+
+        // The run dies with the mention still PENDING behind it.
+        await services.db.session.update({
+          where: { id: run },
+          data: { status: RunStatus.FAILED, finishedAt: new Date(), error: 'seq 1 died' },
+        });
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+        await services.tasks.deliverMentions();
+
+        const [stranded] = await deliveries(subject);
+        assert.notEqual(stranded.status, 'DELIVERED', 'nobody read it, so nobody may say they did');
+        assert.equal(stranded.attempts, 0, 'and it is availability, not a failed delivery');
+
+        // The next sweep puts it somewhere it can be read.
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+        await services.tasks.deliverMentions();
+        const [rehomed] = await deliveries(subject);
+        assert.notEqual(rehomed.targetSessionId, run, 'it moved off the dead run');
+        const conversations = await sessionsFor(subject);
+        assert.equal(conversations.filter((row) => row.about === subject).length, 1,
+          'into exactly one fresh conversation');
+        // ...and the failed run is exactly what it was.
+        const after = await services.db.session.findUniqueOrThrow({ where: { id: run } });
+        assert.equal(after.status, RunStatus.FAILED);
+        assert.equal(after.error, 'seq 1 died');
+      });
+
+      await t.test('a 0.1.130 comment gets no ledger row and is left to the old path', async () => {
+        // The rolling-deploy rule: an old binary omits `mention_delivery_version`, it defaults to
+        // 0, and this sweep must not deliver a comment that binary already delivered inline.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-legacy');
+        const subject = await task(services.db, target, 'the work');
+        await client.query(
+          `INSERT INTO "task_comment" ("id","task_id","author_type","author_id","body","mentions")
+           VALUES ($1::uuid,$2::uuid,'USER',$3::uuid,'@agent',ARRAY[$4::uuid])`,
+          [randomUUID(), subject, target.ownerId, target.agentId],
+        );
+
+        assert.deepEqual(await deliveries(subject), [], 'no ledger row for a version-0 comment');
+        await services.tasks.deliverMentions();
+        assert.deepEqual(await sessionsFor(subject), [], 'and the new sweep delivers nothing');
+      });
+
+      await t.test('a worker that keeps dying reaches DEAD instead of looping for ever', async () => {
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-claim-loop');
+        const subject = await task(services.db, target, 'the work');
+        await comment(target, subject, [target.agentId]);
+        // The shape a worker that died mid-flight leaves: DELIVERING with an expired lease. Held
+        // just under the cap, so one more sweep must end it rather than lease it again.
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery"
+              SET "status" = 'DELIVERING', "claims" = 64,
+                  "lease_holder" = 'dead-worker', "lease_expires_at" = now() - interval '1 minute',
+                  "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+
+        await services.tasks.deliverMentions();
+
+        const [row] = await deliveries(subject);
+        assert.equal(row.status, 'DEAD', 'a crash loop is terminal and visible');
+        assert.equal(row.errorCode, 'CLAIM_LOOP');
+        assert.deepEqual(await sessionsFor(subject), [], 'and it started nothing');
+      });
+    } finally {
+      await client.end();
+      await services.dispose();
+    }
+  });

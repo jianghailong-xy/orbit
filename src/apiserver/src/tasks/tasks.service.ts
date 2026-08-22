@@ -29,7 +29,11 @@ import {
   type PlanUsage,
 } from '@orbit/shared';
 import { createHash, randomUUID } from 'crypto';
-import { DEFAULT_AGENT_PROVIDER, lastProviderByWorkspace } from '../workspaces/workspace-provider';
+import {
+  DEFAULT_AGENT_PROVIDER,
+  agentProviderSeed,
+  lastProviderByWorkspace,
+} from '../workspaces/workspace-provider';
 import { planTaskAggregation } from '../projects/task-aggregation';
 import {
   AGGREGATION_SCOPE_MAX_TASKS,
@@ -39,6 +43,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
 import {
   CreateTaskBatchItemDto,
@@ -130,6 +135,73 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // this set so it falls through to the resume path, where the trigger delivers its prompt
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
+
+/**
+ * §13.8: the delivery contract a comment written by THIS binary is under.
+ *
+ * Written explicitly on every comment create. The column defaults to 0 — the inline best-effort
+ * loop a binary predating the ledger used — so a rolling deploy cannot have one comment delivered
+ * by both mechanisms, or by neither.
+ */
+export const TASK_COMMENT_MENTION_DELIVERY_VERSION = 1;
+
+/**
+ * §13.8: a delivery that cannot land, with the shape a reader can act on.
+ *
+ * `availability` is the distinction that decides whether the attempt budget is spent. A runner that
+ * is not bound, a provider that is down, a lease that was stolen — none of those is a property of
+ * the message, and all of them clear without anybody touching the mention. Spending the budget on
+ * them means a message is abandoned because a machine was rebooting.
+ */
+class MentionUndeliverable extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly availability = false,
+    /** What would clear this, addressed to whoever can do it. Stored, not just logged. */
+    readonly requiredAction: string | null = null,
+  ) {
+    super(message);
+    this.name = 'MentionUndeliverable';
+  }
+}
+
+/** How many delivery attempts a mention gets before it is DEAD and somebody has to look. Spent only
+ *  by failures belonging to the delivery — availability refunds; see `MentionUndeliverable`. */
+const MENTION_DELIVERY_MAX_ATTEMPTS = 8;
+
+/**
+ * How many times a delivery may be LEASED before it is DEAD regardless of why.
+ *
+ * The other loop: a row whose worker dies before it decides anything spends no attempt, so the
+ * attempt budget alone can never end it. Generous relative to the attempt budget, because a lease
+ * is also taken to poll a SESSION_CREATED row for its turn — this bounds a pathology, it is not a
+ * second retry policy.
+ */
+const MENTION_DELIVERY_MAX_CLAIMS = 64;
+
+/** How long to wait before looking again for the turn a created conversation has not seeded yet. */
+const MENTION_DELIVERY_TURN_POLL_MS = 15_000;
+
+/** How long a worker's claim on a delivery row is good for. A worker that dies frees it by expiry
+ *  rather than by leaving it stranded. */
+const MENTION_DELIVERY_LEASE_MS = 60_000;
+
+/** Conditions that will not change by waiting: the row ends here rather than spending its budget
+ *  on retries nobody expects to succeed. */
+const MENTION_DELIVERY_TERMINAL_CODES = ['WORKSPACE_GONE', 'COMMENT_GONE'];
+
+/** Codes that mean "this landing is spent, take the next one": the ledger drops its binding so the
+ *  retry chooses again rather than coming back to a session that can no longer carry the message. */
+const MENTION_DELIVERY_REBIND_CODES = ['TURN_STRANDED'];
+
+/** Backoff ceiling. Deliberately half an hour rather than longer: a runner that comes back after a
+ *  day should deliver its messages within the half hour, not on the next deploy. */
+const MENTION_DELIVERY_MAX_BACKOFF_MS = 30 * 60_000;
+
+/** How many deliveries one sweep takes. Bounded so a burst of mentions cannot monopolise the tick
+ *  the other three sweeps share. */
+const MENTION_DELIVERY_PER_SWEEP = 20;
 
 /**
  * How far `assertNoParentCycle` walks up a subtask chain before it refuses to judge.
@@ -822,6 +894,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         .then(() => this.dispatchStalledListForemen())
         .catch((e) =>
           this.logger.error(`foreman sweep failed: ${e instanceof Error ? e.message : e}`),
+        )
+        // §13.8: the @-mention delivery ledger. On this timer and not one of its own, for the
+        // reason written above — a second `setInterval` is how this service once ran its sweeps
+        // twice a minute. The comment write kicks this directly too; the kick is the latency and
+        // the timer is the guarantee.
+        .then(() => this.deliverMentions())
+        .catch((e) =>
+          this.logger.error(`mention delivery sweep failed: ${e instanceof Error ? e.message : e}`),
         );
     }, RECONCILE_INTERVAL_MS);
     this.reconcileTimer.unref(); // don't keep the process alive just for this timer
@@ -3688,7 +3768,33 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       include: {
         assignee: { select: { id: true, name: true, model: true } },
         // author is polymorphic (no FK), so names are resolved separately below.
-        comments: { orderBy: { createdAt: 'asc' } },
+        comments: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            // §13.8: what happened to each @-mention this comment made. Included on the read
+            // because the whole point of the ledger is that a stuck delivery is VISIBLE — a status
+            // nobody can see is a `logger.warn` with a table behind it.
+            //
+            // `mentionDeliveryVersion` 0 means the comment predates the ledger and was delivered by
+            // the inline loop, which recorded nothing: clients render that as LEGACY_UNTRACKED
+            // rather than as delivered or failed, because neither was ever established.
+            deliveries: {
+              orderBy: { createdAt: 'asc' },
+              select: {
+                id: true,
+                workspaceId: true,
+                status: true,
+                attempts: true,
+                errorCode: true,
+                requiredAction: true,
+                lastError: true,
+                nextAttemptAt: true,
+                targetSessionId: true,
+                turnId: true,
+              },
+            },
+          },
+        },
         sessions: {
           orderBy: { createdAt: 'desc' },
           select: {
@@ -5553,8 +5659,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async addComment(ownerId: string, id: string, dto: CreateTaskCommentDto, author?: Creator) {
     const task = await this.get(ownerId, id);
     if (!dto.body) throw new BadRequestException('body is required');
-    // Keep only ids that resolve to a workspace this user owns (drop unknown/cross-tenant).
-    const mentioned = await this.resolveMentionedWorkspaces(ownerId, dto.mentions);
+    // Every mentioned id has to resolve, and one that does not is REFUSED rather than dropped.
+    //
+    // Silently filtering was the old behaviour, and it has no honest outcome under §13.8: the
+    // comment commits, the trigger files a ledger row for each id that survived, and the agent the
+    // caller actually named gets nothing with nothing recorded. Refusing keeps the two halves
+    // together — either the comment and all its deliveries exist, or neither does — and it names
+    // which id was the problem, which "we dropped one" never could.
+    //
+    // The ids are not stored unresolved, so nothing cross-tenant reaches the row: this check is
+    // what keeps the ledger's snapshot column honest without it having to hold a foreign id.
+    const requested = [...new Set(dto.mentions ?? [])];
+    const mentioned = await this.resolveMentionedWorkspaces(ownerId, requested);
+    if (mentioned.length !== requested.length) {
+      const resolved = new Set(mentioned.map((workspace) => workspace.id));
+      const missing = requested.filter((id) => !resolved.has(id));
+      throw new BadRequestException(
+        `these mentioned agents do not exist or are not yours: ` +
+          `${missing.map((id) => uuidToBase62(id)).join(', ')}. ` +
+          'Remove them from the mention list and post again — a comment is not filed with a ' +
+          'mention nobody can be given',
+      );
+    }
     const comment = await this.prisma.taskComment.create({
       data: {
         taskId: id,
@@ -5563,24 +5689,29 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         authorId: author?.id ?? ownerId,
         body: dto.body,
         mentions: mentioned.map((a) => a.id),
+        // §13.8. Version 1 is what makes 0131's trigger file the delivery ledger for this comment,
+        // and it is written EXPLICITLY: the column defaults to 0 so a comment written by a binary
+        // predating the ledger keeps the old inline contract and is not delivered twice by a sweep
+        // that knows nothing about it.
+        mentionDeliveryVersion: TASK_COMMENT_MENTION_DELIVERY_VERSION,
       },
     });
     // A new comment changes the list's comment count and the open detail view, so give it the
     // same live-refresh nudge as create()/update() — routed via the task's creator session.
     if (task.creatorSessionId) this.realtime.publishTaskChanged(task.creatorSessionId, id);
-    // Notify & trigger each mentioned workspace. Best-effort: a trigger failure (e.g. the
-    // workspace has no runner) must never fail the comment write.
-    for (const workspace of mentioned) {
-      await this.triggerMentionedWorkspace(
-        ownerId,
-        { id: task.id, title: task.title, provider: task.provider, model: task.model },
-        workspace,
-        dto.body,
-      ).catch(
-        (e) =>
-          this.logger.warn(`mention trigger failed for workspace ${workspace.id} on task ${id}: ${e?.message ?? e}`),
-      );
-    }
+    // §13.8: delivery is a LEDGER, not a loop.
+    //
+    // 0131's trigger filed one `task_comment_mention_delivery` row per mentioned agent in the SAME
+    // statement that wrote this comment, because `mentionDeliveryVersion` is 1. Nothing is
+    // delivered inline any more: the old loop ran after the commit, caught its own failures and
+    // logged them, so a crash, an offline runner or a second mentioned agent produced a comment
+    // that looked delivered and an agent that never heard about it.
+    //
+    // All this does is wake the sweep. A lost wake costs one tick — which is the difference
+    // between an optimisation and a mechanism.
+    void this.deliverMentions().catch((e) =>
+      this.logger.warn(`mention delivery kick after comment ${comment.id} failed: ${e?.message ?? e}`),
+    );
     return comment;
   }
 
@@ -5595,22 +5726,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Notify & trigger a mentioned workspace on the task: continue its latest resumable
-   * session for this task when one exists, otherwise start a fresh one. The workspace reads
-   * the full task + comments via the orbit MCP (task_get) and replies via task_comment.
-   * Workspaces with no runner can't run a session, so they're skipped (comment still posts).
-   */
-  /**
    * Create the Session for a task run, or read back the one that won the race.
    *
-   * §7.7 D6's execution claim — widened by 0130 to all four live statuses — makes "one live run per
-   * task" a property of the database, so two callers arriving together produce one insert and one
-   * duplicate-key error. That error is not the answer either of them wanted: both asked for the
-   * task to be running, and it is. The loser reads the winner and returns it, which is the same
-   * idempotent shape the occupying-session fast path above already has.
-   *
-   * Anything the index did not refuse is rethrown untouched — a duplicate on some other unique key
-   * is a different bug and must not be swallowed as a race.
+   * §7.7 D6's execution claim makes "one live run per task" a property of the database, so two
+   * callers arriving together produce one insert and one duplicate-key error. That error is not the
+   * answer either of them wanted: both asked for the task to be running, and it is.
    */
   private async createTaskSessionOrReadWinner(
     ownerId: string,
@@ -5712,81 +5832,554 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async triggerMentionedWorkspace(
-    ownerId: string,
-    task: TaskRunTarget,
-    workspace: { id: string; runnerId: string | null },
-    body: string,
-  ): Promise<void> {
-    if (!workspace.runnerId) return;
-    const prompt =
-      `你在任务「${task.title}」的评论区被 @ 提到。\n\n` +
-      `评论内容：\n${body}\n\n` +
-      `请用 task_get 查看该任务的完整信息与历史评论，并用 task_comment 在该任务下回复。`;
-    // §13.6 SU6: a mention is a CONVERSATION about the task, not a run of it.
-    //
-    // It does not go through `runWorkspaceOnTask`, and the difference is not cosmetic. That method
-    // is "start this task's work", so it declares `starts_task_work` — which would make a reply to
-    // a comment be refused on a replaced attempt (the one place a person most wants to ask about),
-    // and would make the reaper close the conversation the moment the task settled. It also short-
-    // circuits on an occupying run and returns its id, which for a mention means the comment is
-    // persisted and the agent is never told.
-    //
-    // So: deliver into whatever live run this workspace has on the task, and open a conversation
-    // session only when there is none.
-    const live = await this.prisma.session.findFirst({
-      where: {
-        taskId: task.id,
-        workspaceId: workspace.id,
-        ownerId,
-        deletedAt: null,
-        status: { in: [...SINGLE_RUN_DEDUP, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true },
-    });
-    if (live) {
-      // A turn into the run that is already there, with `startsTaskWork` deliberately NOT passed:
-      // a mention must not relabel somebody else's run, in either direction.
-      await this.sessions.resume(ownerId, live.id, {
-        clientTurnId: randomUUID(),
-        content: prompt,
-      });
-      return;
+  /**
+   * §13.8: work off the @-mention delivery ledger.
+   *
+   * At-least-once with an idempotent landing. Three things make it exactly-once in effect:
+   *
+   *  - `(comment_id, workspace_id)` is unique, so there is one row per mention however many
+   *    comments, retries or workers exist;
+   *  - the turn carries a FIXED `clientTurnId` derived from the delivery id, and
+   *    `conversation_turn (session_id, client_turn_id)` is unique — so a worker that crashes
+   *    between writing the turn and marking the row DELIVERED writes no second turn on retry;
+   *  - the session it lands in is remembered on the row, so a retry continues the same
+   *    conversation instead of opening another.
+   *
+   * Runs on the same timer as the other three sweeps (see `onModuleInit`) and is kicked directly
+   * after a comment commits. The kick is an optimisation; the timer is the guarantee.
+   */
+  async deliverMentions(now = new Date()): Promise<void> {
+    const holder = `${process.pid}:${randomUUID()}`;
+    // Claim with SKIP LOCKED so two apiservers sweep the same table without either waiting, and
+    // with a lease so a worker that dies mid-delivery frees its rows by expiry rather than
+    // stranding them. `attempts` is spent HERE, on the claim: an attempt is a try, and a worker
+    // that died having tried is not entitled to an unlimited number of them.
+    // A delivery whose worker keeps dying before it can decide anything spends no budget and would
+    // be re-leased for ever. `claims` bounds that: at the cap the row goes DEAD here, in the same
+    // statement that would otherwise have handed it out again, so the loop cannot outlive it.
+    await this.prisma.$executeRaw`
+      UPDATE "task_comment_mention_delivery"
+         SET "status" = 'DEAD',
+             "error_code" = 'CLAIM_LOOP',
+             "required_action" = 'inspect why the delivery worker is dying on this row, then re-file the mention',
+             "last_error" = 'leased ' || "claims" ||
+               ' times without reaching a decision — a worker is dying on this delivery',
+             "lease_holder" = NULL, "lease_expires_at" = NULL, "updated_at" = ${now}
+       WHERE "status" IN ('PENDING', 'DELIVERING', 'SESSION_CREATED', 'QUEUED', 'BLOCKED')
+         AND "claims" >= ${MENTION_DELIVERY_MAX_CLAIMS}
+         AND ("lease_expires_at" IS NULL OR "lease_expires_at" <= ${now})`;
+
+    // ONE ROW PER CLAIM. A batch of twenty delivered serially would let the tail's lease expire
+    // while the head was still working, and a second sweep would take rows this one still believes
+    // it owns. Claiming one at a time makes the lease cover exactly the work it is protecting.
+    const claimed: Array<{
+      id: string; commentId: string; taskId: string; workspaceId: string; ownerId: string;
+      attempts: number; desiredSessionId: string | null; targetSessionId: string | null;
+    }> = [];
+    for (let taken = 0; taken < MENTION_DELIVERY_PER_SWEEP; taken += 1) {
+      const [row] = await this.prisma.$queryRaw<Array<{
+        id: string; commentId: string; taskId: string; workspaceId: string; ownerId: string;
+        attempts: number; desiredSessionId: string | null; targetSessionId: string | null;
+      }>>(Prisma.sql`
+        UPDATE "task_comment_mention_delivery" d
+           SET "status" = 'DELIVERING',
+               -- Only a lease that expired while still DELIVERING is a crash. A poll of a
+               -- SESSION_CREATED row, or a retry of a BLOCKED one, is this system working — and
+               -- counting those would drive a healthy delivery to DEAD by waiting for a runner.
+               "claims" = d."claims" + CASE WHEN d."status" = 'DELIVERING' THEN 1 ELSE 0 END,
+               "lease_holder" = ${holder},
+               "lease_expires_at" = ${new Date(Date.now() + MENTION_DELIVERY_LEASE_MS)},
+               "updated_at" = ${new Date()}
+         WHERE d."id" = (
+           SELECT c."id" FROM "task_comment_mention_delivery" c
+            WHERE c."status" IN ('PENDING', 'DELIVERING', 'SESSION_CREATED', 'QUEUED', 'BLOCKED')
+              AND c."next_attempt_at" <= ${now}
+              AND c."claims" < ${MENTION_DELIVERY_MAX_CLAIMS}
+              AND (c."lease_expires_at" IS NULL OR c."lease_expires_at" <= ${new Date()})
+              AND NOT (c."id" = ANY (${claimed.map((d) => d.id)}::uuid[]))
+            ORDER BY c."next_attempt_at", c."created_at"
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+         )
+        RETURNING d."id", d."comment_id" AS "commentId", d."task_id" AS "taskId",
+                  d."workspace_id" AS "workspaceId", d."owner_id" AS "ownerId",
+                  d."attempts", d."desired_session_id" AS "desiredSessionId",
+                  d."target_session_id" AS "targetSessionId"
+      `);
+      if (!row) break;
+      claimed.push(row);
+      try {
+        const landed = await this.deliverOneMention(row, holder);
+        // CAS on the lease. Zero rows means this worker's lease expired and somebody else owns the
+        // row now — its DELIVERED, its DEAD or its target must not be overwritten by a worker that
+        // has already been replaced. Stand down; the owner finishes the job.
+        //
+        // SESSION_CREATED, not DELIVERED, when the conversation exists but no turn does: the
+        // runner has not claimed it yet, and 0131's CHECK refuses a DELIVERED with no turn.
+        const settled = await this.prisma.$executeRaw`
+          UPDATE "task_comment_mention_delivery"
+             SET "status" = ${landed.consumed
+                   ? 'DELIVERED'
+                   : landed.turnId ? 'QUEUED' : 'SESSION_CREATED'}
+                   ::"task_comment_mention_delivery_status",
+                 "turn_id" = ${landed.turnId}::uuid,
+                 "target_session_id" = ${landed.sessionId}::uuid,
+                 -- The conversation exists; what has not happened yet is the runner claiming it
+                 -- and seeding the prompt turn. That is waiting, not failing, so waits advances the
+                 -- backoff and neither budget is touched. claims resets: this worker settled.
+                 -- Anything short of consumed is a wait: the turn is queued, or the session has
+                 -- not been claimed. Both advance the backoff and spend no budget.
+                 "waits" = CASE WHEN ${landed.consumed} THEN "waits" ELSE "waits" + 1 END,
+                 "claims" = 0,
+                 "error_code" = NULL, "required_action" = NULL, "last_error" = NULL,
+                 "lease_holder" = NULL, "lease_expires_at" = NULL,
+                 -- Backoff on the wait generation, not a fixed poll. A runner that is offline, or
+                 -- a queue that has stalled, would otherwise be asked every fifteen seconds for
+                 -- ever — a hot loop whose only output is load. Waiting still costs no budget.
+                 "next_attempt_at" = CASE WHEN ${landed.consumed} THEN "next_attempt_at"
+                   ELSE now() + make_interval(secs =>
+                     LEAST(${MENTION_DELIVERY_MAX_BACKOFF_MS} / 1000.0,
+                           ${MENTION_DELIVERY_TURN_POLL_MS} / 1000.0
+                             * power(2, LEAST(12, "waits")))) END,
+                 "updated_at" = ${new Date()}
+           WHERE "id" = ${row.id}::uuid
+             AND "status" = 'DELIVERING' AND "lease_holder" = ${holder}`;
+        if (settled === 0) {
+          this.logger.warn(`mention delivery ${row.id} was taken over mid-flight; standing down`);
+        } else {
+          // §13.8's state is shown on the task, so a change to it is a change to the task. Without
+          // this an open panel only refreshes while a session is busy, and a delivery that went
+          // BLOCKED or DELIVERED in between would sit there stale — a status nobody sees change is
+          // barely better than the log line it replaced.
+          this.realtime.publishForUser(row.ownerId, RunEventType.TASK_CHANGED, row.taskId);
+        }
+      } catch (error) {
+        await this.parkMentionDelivery(row, holder, error);
+      }
     }
+    return;
+
+  }
+
+  /**
+   * Record why a delivery did not land, and when to try again.
+   *
+   * Two kinds of "not now", and only one of them spends the budget:
+   *
+   *   AVAILABILITY — no runner bound, a provider down, a project mid-reconcile. None of these is
+   *     the mention's fault and all clear by themselves, so the attempt is REFUNDED. Eight tries at
+   *     a rising backoff is about twenty minutes, and a runner being down for an afternoon is not
+   *     a reason to give up on a message somebody sent;
+   *   everything else — a real refusal. The budget is finite so a permanently undeliverable row
+   *     ends up DEAD and visible rather than retried for ever.
+   *
+   * The park itself is CAS'd on the lease for the same reason the success path is.
+   */
+  private async parkMentionDelivery(
+    delivery: { id: string; attempts: number; ownerId: string; taskId: string },
+    holder: string,
+    error: unknown,
+  ): Promise<void> {
+    const reason = error instanceof Error ? error.message : String(error);
+    const code = error instanceof MentionUndeliverable ? error.code : 'DELIVERY_FAILED';
+    const availability = error instanceof MentionUndeliverable && error.availability;
+    const requiredAction = error instanceof MentionUndeliverable ? error.requiredAction : null;
+    // Both counters move INSIDE the CAS, and DEAD is decided from what the database actually wrote.
+    // Computing either from the value this worker read would be a lost update the moment two
+    // workers touch one row — and would put "is the budget spent" a generation behind the counter
+    // that answers it.
+    //
+    // Availability advances `waits` (the backoff) and leaves `attempts` alone, so a runner that is
+    // down for an afternoon costs a message nothing. Everything else spends the budget.
+    const [parked] = await this.prisma.$queryRaw<Array<{ attempts: number; status: string }>>(
+      Prisma.sql`
+        UPDATE "task_comment_mention_delivery"
+           SET "attempts" = "attempts" + ${availability ? 0 : 1},
+               "waits" = "waits" + ${availability ? 1 : 0},
+               "status" = CASE
+                 -- A condition that cannot change ends it now. Retrying a deleted agent seven more
+                 -- times is a spinner pretending to be a mechanism.
+                 WHEN ${MENTION_DELIVERY_TERMINAL_CODES.includes(code)}
+                   THEN 'DEAD'::"task_comment_mention_delivery_status"
+                 WHEN ${availability} THEN 'BLOCKED'::"task_comment_mention_delivery_status"
+                 WHEN "attempts" + 1 >= ${MENTION_DELIVERY_MAX_ATTEMPTS}
+                   THEN 'DEAD'::"task_comment_mention_delivery_status"
+                 ELSE 'BLOCKED'::"task_comment_mention_delivery_status"
+               END,
+               -- A landing that is spent releases its binding, so the retry picks a new one
+               -- instead of returning to a session that has already ended with the message unread.
+               "desired_session_id" = CASE WHEN ${MENTION_DELIVERY_REBIND_CODES.includes(code)}
+                 THEN NULL ELSE "desired_session_id" END,
+               "target_session_id" = CASE WHEN ${MENTION_DELIVERY_REBIND_CODES.includes(code)}
+                 THEN NULL ELSE "target_session_id" END,
+               "turn_id" = CASE WHEN ${MENTION_DELIVERY_REBIND_CODES.includes(code)}
+                 THEN NULL ELSE "turn_id" END,
+               "error_code" = ${code},
+               "required_action" = ${requiredAction},
+               "last_error" = ${reason.slice(0, 2_000)},
+               "next_attempt_at" = now() + make_interval(secs =>
+                 LEAST(${MENTION_DELIVERY_MAX_BACKOFF_MS} / 1000.0,
+                       10 * power(2, LEAST(20, ${availability ? 0 : 1} * "attempts" + "waits")))),
+               -- Reaching a decision is proof this worker did not crash, so the CONSECUTIVE
+               -- crash count starts again. Without the reset, sixty-four ordinary waits for a
+               -- runner would eventually be indistinguishable from sixty-four dying workers.
+               "claims" = 0,
+               "lease_holder" = NULL, "lease_expires_at" = NULL, "updated_at" = ${new Date()}
+         WHERE "id" = ${delivery.id}::uuid
+           AND "status" = 'DELIVERING' AND "lease_holder" = ${holder}
+        RETURNING "attempts", "status"::text AS "status"
+      `,
+    );
+    if (!parked) return;
+    this.realtime.publishForUser(delivery.ownerId, RunEventType.TASK_CHANGED, delivery.taskId);
+    this.logger.warn(
+      `mention delivery ${delivery.id} ${parked.status === 'DEAD' ? 'gave up' : 'parked'} ` +
+        `(${code}) after ${parked.attempts} attempt(s): ${reason}`,
+    );
+  }
+
+  /**
+   * Put one mention in front of one agent, at-least-once with an idempotent landing.
+   *
+   * The ORDER is the whole design, and every step is written so a crash between any two of them
+   * leaves a state the next attempt reads correctly:
+   *
+   *  1. bind the target session id FIRST, under the lease. A crash after this leaves a binding and
+   *     no session; the retry creates the session with the SAME id. A crash after the create
+   *     leaves both, and the retry finds the session. Binding afterwards — which is what this did
+   *     first — meant a crash in between opened a second conversation on every retry;
+   *  2. deliver the turn under a FIXED `clientTurnId` derived from the delivery id. A crash before
+   *     the ledger is marked writes no second turn, because `(session_id, client_turn_id)` is
+   *     unique;
+   *  3. the caller marks DELIVERED, CAS'd on the lease.
+   *
+   * A remembered target that has since ENDED is never revived — §13.6's rule about history applies
+   * to conversations too. If the fixed turn is already in it the delivery is simply complete; if
+   * not, a new conversation is opened and the binding moves.
+   */
+  private async deliverOneMention(
+    // Reassigned once: a remembered target that ended is rotated away from, and the fresh-create
+    // path below must not then reuse its id.
+    // eslint-disable-next-line no-param-reassign
+    delivery: {
+      id: string; commentId: string; taskId: string; workspaceId: string; ownerId: string;
+      desiredSessionId: string | null; targetSessionId: string | null;
+    },
+    holder: string,
+  ): Promise<{ sessionId: string; turnId: string | null; consumed: boolean }> {
+    // LEFT JOIN on the workspace, scoped to the owner: the mentioned id is a snapshot and may name
+    // an agent that has since been deleted, or (on a hand-written comment) one belonging to
+    // somebody else. Either is a fact to record, not a row to skip.
+    const [comment] = await this.prisma.$queryRaw<Array<{
+      body: string; taskTitle: string; workspaceModel: string | null; runnerId: string | null;
+      workspaceExists: boolean; workspaceEnabled: boolean;
+    }>>(Prisma.sql`
+      SELECT c."body", t."title" AS "taskTitle",
+             w."model" AS "workspaceModel", w."runner_id" AS "runnerId",
+             (w."id" IS NOT NULL) AS "workspaceExists",
+             COALESCE(w."enabled", false) AS "workspaceEnabled"
+        FROM "task_comment" c
+        JOIN "task" t ON t."id" = c."task_id"
+        LEFT JOIN "workspace" w
+          ON w."id" = ${delivery.workspaceId}::uuid
+         AND w."owner_id" = ${delivery.ownerId}::uuid
+         AND w."deleted_at" IS NULL
+       WHERE c."id" = ${delivery.commentId}::uuid
+    `);
+    if (!comment) throw new MentionUndeliverable('COMMENT_GONE', 'the comment no longer exists');
+    if (!comment.workspaceExists) {
+      // Terminal, and NOT an availability wait: a deleted agent does not come back, so retrying is
+      // pretending. The row stays as the record that this mention was made and could not be
+      // delivered — which is precisely what the old cascade destroyed.
+      throw new MentionUndeliverable(
+        'WORKSPACE_GONE',
+        'the mentioned agent no longer exists',
+        false,
+        'mention an agent that still exists, in a new comment',
+      );
+    }
+    if (!comment.workspaceEnabled) {
+      // Availability: an agent can be disabled and re-enabled, and `SessionsService.create` refuses
+      // one with a plain Forbidden. Left unmapped that reads as a delivery failure and spends the
+      // budget — eight tries and DEAD — for a switch somebody flips back.
+      throw new MentionUndeliverable(
+        'WORKSPACE_DISABLED',
+        'the mentioned agent is disabled',
+        true,
+        're-enable this agent; the mention then delivers itself with no further action',
+      );
+    }
+    if (!comment.runnerId) {
+      // Availability, not failure: binding a runner clears it, and the budget is not spent.
+      throw new MentionUndeliverable(
+        'NO_RUNNER',
+        'the mentioned agent is not bound to a runner',
+        true,
+        'bind this agent to a runner; the mention then delivers itself with no further action',
+      );
+    }
+
+    const clientTurnId = `task-comment-mention:${delivery.id}`;
+    // The task id is spelled out, in Base62, in the instruction itself — not left to
+    // `ORBIT_TASK_ID`. The runner does inject it for a conversation session (queue.service reads
+    // `context_task_id` for exactly this), and belt-and-braces is right here: an agent that answers
+    // a comment against the wrong task, or asks which task this is, is a delivery that arrived and
+    // still failed.
+    const publicTaskId = uuidToBase62(delivery.taskId);
+    const prompt =
+      `你在任务「${comment.taskTitle}」(${publicTaskId}) 的评论区被 @ 提到。\n\n` +
+      `评论内容：\n${comment.body}\n\n` +
+      `请用 task_get(taskId: "${publicTaskId}") 查看该任务的完整信息与历史评论，` +
+      `并用 task_comment(taskId: "${publicTaskId}", body: ...) 在该任务下回复。`;
+
+    // Step 0: where this is going. A remembered binding wins, then the agent's own live run on the
+    // task, then a new conversation.
+    // Either column can name the session a previous attempt used: `target_session_id` once it
+    // existed, `desired_session_id` from the moment it was intended. Both are consulted so a crash
+    // in the window between them still finds the same conversation.
+    // DESIRED WINS. Both columns can name a session, and when they differ the desired one is the
+    // newer intent: a rotation away from an ended conversation writes the new id there and clears
+    // the old target in the same statement. Reading `target` first would make a crash between that
+    // rotation and the create come back to the row it had already rotated away from — and mint a
+    // third id.
+    let rememberedId = delivery.desiredSessionId ?? delivery.targetSessionId;
+    const remembered = rememberedId
+      ? await this.prisma.session.findFirst({
+        where: { id: rememberedId, ownerId: delivery.ownerId },
+        select: { id: true, status: true, deletedAt: true, contextTaskId: true },
+      })
+      : null;
+    if (remembered) {
+      // WHOSE session this is decides everything below, and it is read off the row rather than
+      // inferred from its status.
+      //
+      // `context_task_id` is set only on a conversation this delivery opened. Such a session
+      // ALREADY CARRIES the message — it is the opening prompt — and the ONLY turn that can be this
+      // delivery's receipt is that opening one. A pre-existing WORK run is the opposite: its
+      // opening prompt is the task's own instructions, and reading it as a receipt would mark the
+      // mention delivered without ever having sent it. So each shape recognises exactly one key.
+      const ours = remembered.contextTaskId === delivery.taskId;
+      const receiptKey = ours
+        ? SessionsService.initialTurnClientId(remembered.id)
+        : clientTurnId;
+      const already = await this.prisma.conversationTurn.findFirst({
+        where: { sessionId: remembered.id, clientTurnId: receiptKey },
+        select: { id: true, status: true },
+      });
+      if (already) {
+        // EXISTING is not DELIVERED. A turn still `PENDING` is durably queued and nothing more —
+        // its session can fail before the engine ever reads it, and a work session that dies on
+        // seq 1 leaves this one sitting in the table unread for ever. Only a turn the engine has
+        // taken (IN_FLIGHT) or answered is a message that arrived.
+        //
+        // And a session that has ENDED with the turn still pending is the case that must never
+        // read as success: the ledger says so, and the sweep rotates to a new conversation.
+        const consumed = already.status !== 'PENDING';
+        if (consumed) return { sessionId: remembered.id, turnId: already.id, consumed: true };
+        const alive = !remembered.deletedAt
+          && (SessionsService.LIVE.includes(remembered.status)
+            || remembered.status === RunStatus.PENDING);
+        if (alive) return { sessionId: remembered.id, turnId: already.id, consumed: false };
+        throw new MentionUndeliverable(
+          'TURN_STRANDED',
+          `the run this mention was queued in (${uuidToBase62(remembered.id)}) ended before ` +
+            'reading it',
+          true,
+          'no action needed — the mention will be re-delivered into a fresh conversation',
+        );
+      }
+
+      // No receipt yet.
+      //
+      // Ours, and still going: WAIT. The prompt is on the row, and `ensurePromptSeeded` writes the
+      // turn when the runner claims the session. Between the claim (PENDING → RUNNING) and that
+      // seed the row is live and turn-less, and sending into it there would deliver the same text a
+      // second time, beside the opening prompt it is about to grow.
+      const live = !remembered.deletedAt
+        && (SessionsService.LIVE.includes(remembered.status)
+          || remembered.status === RunStatus.PENDING);
+      if (ours && live) return { sessionId: remembered.id, turnId: null, consumed: false };
+      if (live) {
+        // A run that existed BEFORE this delivery. The comment is owed a turn of its own under the
+        // fixed key — `createTurn` rather than `resume`, because this session is live and a revive
+        // is not what is wanted; `resume` delegates to exactly that for a live row, and would
+        // refuse a PENDING one outright.
+        const turn = await this.sessions.createTurn(delivery.ownerId, remembered.id, {
+          clientTurnId, content: prompt,
+        } as never);
+        // Just written, so it is PENDING by construction: queued, not yet seen.
+        return { sessionId: remembered.id, turnId: turn.turnId, consumed: false };
+      }
+      // Terminal, or trashed, with nothing delivered into it. A terminal Session is what that run
+      // WAS, and reviving it to carry a comment rewrites that record. Rotate: mint the next id and
+      // publish it — clearing the old target in the SAME statement, so a crash immediately after
+      // comes back to the rotation rather than to the row it rotated away from.
+      const rotated = randomUUID();
+      const moved = await this.prisma.$executeRaw`
+        UPDATE "task_comment_mention_delivery"
+           SET "desired_session_id" = ${rotated}::uuid,
+               "target_session_id" = NULL, "turn_id" = NULL,
+               "last_error" = ${`ROTATED: ${uuidToBase62(remembered.id)} ended (${remembered.status}) before carrying this mention`},
+               "updated_at" = ${new Date()}
+         WHERE "id" = ${delivery.id}::uuid
+           AND "status" = 'DELIVERING' AND "lease_holder" = ${holder}`;
+      if (moved === 0) {
+        throw new MentionUndeliverable('LEASE_LOST', 'another worker owns this delivery now', true);
+      }
+      delivery = { ...delivery, desiredSessionId: rotated, targetSessionId: null };
+      rememberedId = null;
+    }
+
+    // Only when nothing has been intended yet. A delivery that already has a desired id is
+    // finishing that create, not choosing a different landing.
+    if (!rememberedId) {
+      const liveWork = await this.prisma.session.findFirst({
+        where: {
+          taskId: delivery.taskId,
+          workspaceId: delivery.workspaceId,
+          ownerId: delivery.ownerId,
+          deletedAt: null,
+          startsTaskWork: true,
+          status: { in: [...SINGLE_RUN_DEDUP, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true },
+      });
+      if (liveWork) {
+        // BIND FIRST, then deliver. The other order loses the binding to a crash and sends the
+        // mention into a second session on the retry.
+        await this.bindMentionTarget(delivery.id, holder, liveWork.id);
+        // `createTurn`, not `resume`: this row is live, the turn belongs on the running
+        // conversation, and `startsTaskWork` is deliberately not passed — answering a comment never
+        // relabels somebody else's run as the task's work.
+        const turn = await this.sessions.createTurn(delivery.ownerId, liveWork.id, {
+          clientTurnId, content: prompt,
+        } as never);
+        return { sessionId: liveWork.id, turnId: turn.turnId, consumed: false };
+      }
+    }
+
+    // A conversation of its own. `taskId` is deliberately NULL — see this method's doc — and the id
+    // is REUSED from a previous attempt when there was one: `desired_session_id` is written before
+    // the session exists, so a crash between the two retries with the same id and the create either
+    // succeeds or collides with the row it already wrote.
+    const seed = await agentProviderSeed(this.prisma, delivery.workspaceId);
+    // The agent's provider has to be one it can actually run on RIGHT NOW. A configured provider
+    // that has since been disabled or deleted must stop this delivery, not be quietly dropped from
+    // the create — omitting it would inherit the default and answer the comment on Claude in an
+    // agent's name, which is a worse outcome than waiting.
+    //
+    // Availability, so the delivery budget is untouched: re-enabling the provider clears it.
+    if (!Object.values(AgentProvider).includes(seed.provider as AgentProvider)) {
+      const usable = await this.prisma.modelProvider.findFirst({
+        where: {
+          slug: seed.provider, enabled: true,
+          OR: [{ ownerId: null }, { ownerId: delivery.ownerId }],
+        },
+        select: { slug: true },
+      });
+      if (!usable) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          `this agent runs on "${seed.provider}", which is disabled or no longer configured`,
+          true,
+          `re-enable the "${seed.provider}" provider, or point this agent at one that is enabled; ` +
+            'the mention then delivers itself',
+        );
+      }
+    }
+    const sessionId = delivery.desiredSessionId ?? randomUUID();
+    await this.bindMentionTarget(delivery.id, holder, sessionId);
+    try {
+      await this.createMentionSession(
+        delivery, sessionId, prompt, comment.taskTitle, seed, comment.workspaceModel,
+      );
+    } catch (error) {
+      // The engine is signed out on a machine that is otherwise up. A 409, but an AVAILABILITY
+      // one: signing in clears it and the mention delivers itself. Recognised by type — matching
+      // the message would break the first time somebody improved the wording.
+      if (isEngineSignedOut(error)) {
+        throw new MentionUndeliverable(
+          'PROVIDER_UNAVAILABLE',
+          `the ${error.runtime} engine is signed out on this agent's runner`,
+          true,
+          `sign in to ${error.runtime} on that runner; the mention then delivers itself`,
+        );
+      }
+      throw error;
+    }
+    // A fresh session's opening prompt IS the delivery, and its first turn is seeded by the runner
+    // when it claims the session — so `turn_id` stays NULL and the row sits at SESSION_CREATED
+    // until it appears. A column that names a turn must name one that exists.
+    return { sessionId, turnId: null, consumed: false };
+  }
+
+  /** The conversation itself, split out so the availability mapping above reads as one thing. */
+  private async createMentionSession(
+    delivery: { ownerId: string; workspaceId: string; taskId: string },
+    sessionId: string,
+    prompt: string,
+    taskTitle: string,
+    seed: { provider: string },
+    model: string | null,
+  ): Promise<void> {
     await this.sessions.create(
-      ownerId,
+      delivery.ownerId,
       {
         prompt,
-        workspaceId: workspace.id,
-        taskId: task.id,
-        title: `回应评论：${task.title}`,
-        ...(task.provider ? { provider: task.provider } : {}),
-        ...(task.model != null ? { model: task.model } : {}),
+        workspaceId: delivery.workspaceId,
+        title: `回应评论：${taskTitle}`,
+        // The MENTIONED AGENT's own seed, never the task's. This session is not running the task,
+        // and pinning it to the task's engine would answer a comment on a runtime the agent was
+        // never configured for.
+        //
+        // A workspace holds no provider column (migration 0088): the seed is derived from that
+        // agent's own last session, which is exactly what the New Session screen shows for it.
+        ...(seed ? { provider: seed.provider } : {}),
+        ...(model != null ? { model } : {}),
       } as never,
       {
         source: 'user',
         dispatchOrigin: SessionDispatchOrigin.USER,
         runSource: SessionRunSource.MANUAL,
-        // TRUE, and deliberately — this is the value a mention session gets in THIS release even
-        // though answering a comment is not doing the task.
-        //
-        // The distinction is real and every reader added here uses it, but a task-linked row
-        // carrying `false` is a row the 0.1.130 binary cannot see: during a rolling deploy its
-        // `runWorkspaceOnTask` would treat that PENDING session as the task already running,
-        // report success, spend the schedule and deliver no prompt — and its `resume` would push
-        // the task's prompt into the conversation. `DEFAULT true` protects an old binary's WRITES;
-        // nothing protects its READS.
-        //
-        // So the column ships with one value for task-linked sessions this release creates, and the
-        // communication/execution split lands in the follow-up migration that also narrows the
-        // execution claim — after no binary predating the column can still be running. Until then a
-        // mention delivers into the live run when there is one (above) and otherwise opens a
-        // session the old code understands.
-        startsTaskWork: true,
+        startsTaskWork: false,
+        contextTaskId: delivery.taskId,
+        id: sessionId,
+        // A conversation about a task needs no branch and no worktree. Creating one would leave an
+        // unmerged branch behind for a reply to a comment, which reads as work nobody finished.
+        noWorktree: true,
       },
     );
   }
+
+  /**
+   * Remember where a delivery is going, BEFORE it goes there.
+   *
+   * Writes `desired_session_id`, which carries no foreign key — deliberately, because the row it
+   * names does not exist yet, and that is the entire point: a crash between this and the create
+   * retries with the same id instead of opening a second conversation. `target_session_id` is the
+   * FK'd column and is written once the session is real.
+   *
+   * CAS'd on the lease like every other ledger write: a worker whose lease expired must not move a
+   * target the new owner is already using.
+   */
+  private async bindMentionTarget(
+    deliveryId: string,
+    holder: string,
+    sessionId: string,
+  ): Promise<void> {
+    const bound = await this.prisma.$executeRaw`
+      UPDATE "task_comment_mention_delivery"
+         SET "desired_session_id" = ${sessionId}::uuid, "updated_at" = ${new Date()}
+       WHERE "id" = ${deliveryId}::uuid
+         AND "status" = 'DELIVERING' AND "lease_holder" = ${holder}`;
+    if (bound === 0) {
+      throw new MentionUndeliverable(
+        'LEASE_LOST', 'another worker owns this delivery now', true,
+      );
+    }
+  }
+
 
   /**
    * Run a workspace against a task: continue the workspace's most recent session for this task
