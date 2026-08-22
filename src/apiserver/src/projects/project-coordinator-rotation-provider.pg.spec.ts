@@ -430,4 +430,3 @@ test('a first binding falls back to the Agent default and records that it did',
       await h.dispose();
     }
   });
-
