@@ -31,6 +31,11 @@
 # 40001s counted as `origin="service"`, the value that means a real incident. transaction-retry.pg is
 # the spec that asserts the label, and without this it reports 4/6 for a property of this script.
 #
+# The reporter every child prints its summary with, and the parser that reads it, are pinned in
+# `scripts/pg-matrix-summary.lib.sh` — Node 23 made `spec` the default and the TAP counters this
+# script reads went to zero without anything going red. Nothing about that is the caller's to
+# choose, so the child's `--test*` NODE_OPTIONS are dropped and argv says `--test-reporter=tap`.
+#
 # A spec FAILS if node exits non-zero for any reason — a failing assertion, a crash, a timeout, or a
 # process that will not exit because something left a handle open. The timeout is a backstop and
 # never a pass; the script exits non-zero if anything was red.
@@ -38,6 +43,8 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API="$REPO/src/apiserver"
+# shellcheck source=scripts/pg-matrix-summary.lib.sh
+. "$REPO/scripts/pg-matrix-summary.lib.sh" || exit 1
 CONTAINER="${PCC_PG_CONTAINER:-pcc-matrix-pg16}"
 PORT="${PCC_PG_PORT:-55490}"
 ADMIN="${PCC_PG_USER:-pcc_matrix_admin}"
@@ -96,7 +103,7 @@ echo "==> building the fault-injection tree"
 ( cd "$API" && "$TSC" -p tsconfig.project-reconcile-faults.json )
 
 cd "$API"
-n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; RED=()
+n=0; TOTAL=0; PASS=0; FAIL=0; SKIP=0; MISSING=0; RED=()
 for f in $(ls build/**/*.pg.spec.js | sort); do
   n=$((n+1)); DB="pcc_matrix_s$n"; base="$(basename "$f")"
   [ "$base" = "project-reconcile-fault-injection.pg.spec.js" ] &&
@@ -115,16 +122,15 @@ for f in $(ls build/**/*.pg.spec.js | sort); do
         ORBIT_TEST_PG_URL="$URL" \
         COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER" \
         ORBIT_DB_CONFLICT_ORIGIN=fault_injection \
-        timeout -k 20 "$SPEC_TIMEOUT" "$NODE" --test --test-concurrency=1 "$f" 2>&1)
+        NODE_OPTIONS="$(pg_matrix_child_node_options)" \
+        timeout -k 20 "$SPEC_TIMEOUT" "$NODE" "${PG_MATRIX_NODE_TEST_ARGS[@]}" "$f" 2>&1)
   rc=$?
-  t=$(echo "$out" | sed -n 's/^# tests \([0-9]*\)/\1/p' | tail -1); t=${t:-0}
-  p=$(echo "$out" | sed -n 's/^# pass \([0-9]*\)/\1/p' | tail -1); p=${p:-0}
-  fl=$(echo "$out" | sed -n 's/^# fail \([0-9]*\)/\1/p' | tail -1); fl=${fl:-0}
-  sk=$(echo "$out" | sed -n 's/^# skipped \([0-9]*\)/\1/p' | tail -1); sk=${sk:-0}
+  IFS=$'\t' read -r t p fl sk unreadable < <(printf '%s\n' "$out" | pg_matrix_summary)
   TOTAL=$((TOTAL+t)); PASS=$((PASS+p)); FAIL=$((FAIL+fl)); SKIP=$((SKIP+sk))
   why=""
   if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then why="TIMEOUT/KILLED rc=$rc (hang or leaked handle)"
   elif [ "$rc" != "0" ]; then why="rc=$rc"; fi
+  if [ -n "$unreadable" ]; then MISSING=$((MISSING+1)); why="${why:+$why; }$unreadable"; fi
   [ -n "$why" ] && RED+=("$base: $why")
   printf '%-58s tests=%-4s pass=%-4s fail=%-3s skip=%-3s %s\n' "$base" "$t" "$p" "$fl" "$sk" "$why"
   [ -n "${PCC_PG_LOG_DIR:-}" ] && echo "$out" > "$PCC_PG_LOG_DIR/$base.txt"
@@ -135,7 +141,7 @@ done
 # keeps `git status` after an acceptance run showing source changes and nothing else.
 rm -rf "$API/build-project-reconcile-faults"
 
-echo "==== tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP spec-level-red=${#RED[@]} ===="
+echo "==== tests=$TOTAL pass=$PASS fail=$FAIL skipped=$SKIP missing-summary=$MISSING spec-level-red=${#RED[@]} ===="
 for r in "${RED[@]:-}"; do [ -n "$r" ] && echo "RED: $r"; done
 if [ "$FAIL" -gt 0 ] || [ "${#RED[@]}" -gt 0 ]; then exit 1; fi
 echo "==> OK"
