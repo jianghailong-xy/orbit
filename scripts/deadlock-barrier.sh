@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # A disposable PostgreSQL 16 with Orbit's migrations on it, for the lock-order barrier fixture.
 #
-#   scripts/deadlock-barrier.sh              # the two-party 40P01 baseline (default)
-#   scripts/deadlock-barrier.sh three-party  # the three-party 40P01 baseline
-#   scripts/deadlock-barrier.sh spec         # the harness's own pg spec
-#   scripts/deadlock-barrier.sh retry        # the shared transaction-retry pg spec
-#   scripts/deadlock-barrier.sh boundary     # the API's 503 answer to a real conflict
-#   scripts/deadlock-barrier.sh all          # spec, retry, boundary, then both baselines
+#   scripts/deadlock-barrier.sh                # the two-party 40P01 baseline (default)
+#   scripts/deadlock-barrier.sh three-party    # the three-party 40P01 baseline
+#   scripts/deadlock-barrier.sh spec           # the harness's own pg spec
+#   scripts/deadlock-barrier.sh retry          # the shared transaction-retry pg spec
+#   scripts/deadlock-barrier.sh boundary       # the API's 503 answer to a real conflict
+#   scripts/deadlock-barrier.sh session-scope  # the 0130 Session event-source scope regression
+#   scripts/deadlock-barrier.sh lock-order     # the canonical lock order, from both arrival orders
+#   scripts/deadlock-barrier.sh all            # every gate above, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
 #
 # Why its own server rather than `db:up` or the deployment's postgres: the fixture deliberately
@@ -40,8 +42,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|three-party|spec|retry|boundary|all) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|all] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|retry|boundary|session-scope|lock-order|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|session-scope|lock-order|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -85,7 +87,9 @@ URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
 # The whole point of `all`: one provisioned server, every gate, and a non-zero exit if any of
 # them fails. Rounds are serialized, so a later target never observes an earlier one's backends.
 case "$TARGET" in
-  all) TARGETS=(spec retry boundary baseline three-party) ;;
+  # session-scope runs LAST because it rebuilds the pre-0130 trigger mid-test: an interrupted
+  # run must never be able to leave a baseline executing against a schema it did not intend.
+  all) TARGETS=(spec retry boundary baseline three-party lock-order session-scope) ;;
   *)   TARGETS=("$TARGET") ;;
 esac
 
@@ -96,6 +100,13 @@ run_target() {
     spec)        CMD=("$NODE" --test --test-concurrency=1 build/deadlock/pg-barrier.pg.spec.js) ;;
     retry)       CMD=("$NODE" --test --test-concurrency=1 build/common/transaction-retry.pg.spec.js) ;;
     boundary)    CMD=("$NODE" --test --test-concurrency=1 build/common/transient-db-conflict.pg.spec.js) ;;
+    # The regression the narrowing owns. It rebuilds the pre-0130 trigger to prove its own
+    # barrier discriminates, then re-applies 0130 — so it must not run beside the baselines.
+    session-scope) CMD=("$NODE" --test --test-concurrency=1 build/projects/project-session-event-scope.pg.spec.js) ;;
+    # The post-fix regression: the same two barrier timings, both arrival orders, every party
+    # committing. It runs AFTER the baselines so a run that stops early has still proven the
+    # cycles it is the answer to, and BEFORE session-scope, which rebuilds a trigger mid-test.
+    lock-order)  CMD=("$NODE" --test --test-concurrency=1 build/deadlock/lock-order.pg.spec.js) ;;
   esac
   echo "==> $1"
   ( cd "$API" && COORDINATOR_PG_URL="$URL" \

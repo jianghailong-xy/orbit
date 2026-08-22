@@ -46,6 +46,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [PostgreSQL lock-order barrier fixture](postgres-deadlock-barrier.md) — the isolated multi-connection
   harness that reproduces the two 2026-08-21 `40P01` deadlocks deterministically, their lock graphs and
   `pg_locks`/`pg_blocking_pids` evidence, and how the fix regression reuses the same schedule.
+- [Session Project-event trigger scope](session-event-trigger-scope.md) — why migration 0130 declares the
+  Session event source over `status`/`deleted_at`/`merge_status` only, what that removes from a
+  telemetry write's lock set, and how to upgrade, roll back and tell a missing signal from an absent one.
 
 Design notes capture the reasoning and implementation state at the time they were written. When a design note
 conflicts with current code or a current operator guide, the code and operator guide are authoritative. Notes
