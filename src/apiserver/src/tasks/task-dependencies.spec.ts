@@ -70,7 +70,11 @@ test('dependencyStateFromCounts agrees with computeDependencyState on every mult
         terminal: prerequisites.filter((s) => s === TaskStatus.CANCELLED || s === TaskStatus.FAILED).length,
         done: prerequisites.filter((s) => s === TaskStatus.DONE).length,
       }),
-      computeDependencyState(prerequisites),
+      // `statusPrerequisites`, not the bare status array: this rule now reads a verification
+      // gate beside each status, and a plain array reaches it as four facts with no `status` at
+      // all — which answers BLOCKED for every multiset and would have made this agreement test
+      // pass by accident on nothing.
+      computeDependencyState(statusPrerequisites(prerequisites)),
       prerequisites.join(',') || '(no prerequisites)',
     );
   }
