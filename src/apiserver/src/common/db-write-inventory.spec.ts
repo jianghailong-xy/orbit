@@ -215,6 +215,37 @@ test('every retried unit really is retried, and every statement really is not', 
 });
 
 /**
+ * Every retry says which operation it is.
+ *
+ * An unlabelled retry absorbs a conflict and leaves no record that it did, which is the one
+ * failure mode a retry loop can have that looks exactly like health. The label is also what the
+ * metrics and the runbook aggregate on, so it has to exist at the call site rather than be
+ * recovered from a stack.
+ */
+test('every retry names the operation it is retrying', () => {
+  const LABEL = /loggedRetry\(this\.(?:log|logger),|this\.transientWriteRetry\('/g;
+  const mismatched: string[] = [];
+  for (const file of sources(SRC)) {
+    const rel = path.relative(SRC, file).split(path.sep).join('/');
+    if (rel === 'common/transaction-retry.ts') continue;
+    if (EXCLUDED_SOURCES.some((excluded) => rel === excluded.path || rel.startsWith(excluded.path))) continue;
+    const code = withoutComments(readFileSync(file, 'utf8'));
+    const calls = code.match(/withTransactionRetry\(/g)?.length ?? 0;
+    if (calls === 0) continue;
+    // `tasks.service.ts` has one more label expression than calls: the private helper that
+    // forwards to `loggedRetry` is itself one.
+    const labels = (code.match(LABEL)?.length ?? 0) - (/private transientWriteRetry\(/.test(code) ? 1 : 0);
+    if (labels !== calls) mismatched.push(`${rel}: ${calls} retries, ${labels} labels`);
+  }
+  assert.deepEqual(
+    mismatched,
+    [],
+    'a retry was added without an operation name — it would absorb conflicts silently and appear ' +
+      'in no metric',
+  );
+});
+
+/**
  * Nobody else answers the question the classifier answers.
  *
  * The failure this prevents is not a duplicated constant — it is two places deciding what
