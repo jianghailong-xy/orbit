@@ -50,13 +50,30 @@ public enum NeedsYouLogic {
     ///     at itself. Pass nil from a list, which shows no single session.
     public static func banner(waiting: [Session], excluding focused: String? = nil) -> NeedsYouBanner? {
         let elsewhere = waiting.filter { $0.id != focused }
-        // Longest-waiting first (FIFO). Ordered on the same parsed recency key Recents uses rather
-        // than on the server's array order, so a re-sorted or locally-upserted snapshot can't
-        // quietly change which session a tap opens.
-        guard let target = elsewhere.min(by: { RecentsLogic.recency($0) < RecentsLogic.recency($1) })
-        else { return nil }
+        // Longest-waiting first (FIFO), on the same key the inbox is ordered by: when the approval
+        // was raised (`oldestPendingApprovalAt` — web's `waitingSince` ASC), so the bar and the
+        // inbox cannot disagree about which one is most overdue. A row from a server that doesn't
+        // serve that timestamp falls back to the parsed recency key Recents uses, and sorts behind
+        // every row that does carry a real wait — ordering here rather than on the server's array
+        // order, so a re-sorted or locally-upserted snapshot can't quietly change which session a
+        // tap opens.
+        guard let target = elsewhere.min(by: { waitedLonger($0, than: $1) }) else { return nil }
         return NeedsYouBanner(count: elsewhere.count, target: target,
                               text: text(count: elsewhere.count, target: target))
+    }
+
+    /// Whether `a` has been blocked on a human longer than `b`. A row that says since when beats one
+    /// that doesn't, whatever their recency: an approval raised two hours ago on a session that has
+    /// been streaming output since is the one being forgotten.
+    private static func waitedLonger(_ a: Session, than b: Session) -> Bool {
+        let wa = a.oldestPendingApprovalAt.flatMap(RelativeTime.parse)
+        let wb = b.oldestPendingApprovalAt.flatMap(RelativeTime.parse)
+        switch (wa, wb) {
+        case (let x?, let y?): return x < y
+        case (_?, nil):        return true
+        case (nil, _?):        return false
+        case (nil, nil):       return RecentsLogic.recency(a) < RecentsLogic.recency(b)
+        }
     }
 
     /// One session names its workspace; several collapse to a count. The workspace name (not the

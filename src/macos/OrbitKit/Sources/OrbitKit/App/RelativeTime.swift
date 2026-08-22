@@ -49,4 +49,11 @@ public enum RelativeTime {
     public static func parse(_ iso: String) -> Date? {
         iso8601Fractional.date(from: iso) ?? iso8601Whole.date(from: iso)
     }
+
+    /// The same format going out — the instant a query parameter or an optimistic local record needs
+    /// to be written in (`GET /inbox?resolvedSince=`, a card settled before the server confirms it).
+    /// Whole seconds: the server parses both, and this is read back by `parse` above.
+    public static func iso(_ date: Date) -> String {
+        iso8601Whole.string(from: date)
+    }
 }

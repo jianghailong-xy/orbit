@@ -79,7 +79,8 @@ public extension Session {
                          // Doubly optional so a caller can clear it: `nil` keeps the row's value,
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
                          retryAt: String?? = nil) -> Session {
-        Session(id: id,
+        let approvals = pendingApprovals ?? self.pendingApprovals
+        return Session(id: id,
                 title: title ?? self.title,
                 status: status ?? self.status,
                 runStatus: runStatus ?? self.runStatus,
@@ -92,9 +93,18 @@ public extension Session {
                 agentId: agentId ?? self.agentId,
                 assignedRunnerId: assignedRunnerId,
                 provider: provider,
-                pendingApprovals: pendingApprovals ?? self.pendingApprovals,
+                pendingApprovals: approvals,
                 branch: branch,
                 updatedAt: updatedAt,
+                // Cleared with the count it timestamps: an `approval.resolved` event that empties a
+                // row's approvals must not leave it claiming to have been waiting since an hour ago,
+                // which is what the attention orderings sort on.
+                oldestPendingApprovalAt: (approvals ?? 0) > 0 ? oldestPendingApprovalAt : nil,
+                taskId: taskId,
+                taskTitle: taskTitle,
+                projectId: projectId,
+                projectTitle: projectTitle,
+                role: role,
                 model: model,
                 permissionMode: permissionMode,
                 effort: effort,

@@ -117,6 +117,8 @@ struct AgentPanes: View {
                         tagSectionHeader(section.tag)
                     }
                 }
+            } else if groupsByProject {
+                projectSections
             } else {
                 ForEach(SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)) { section in
                     Section {
@@ -127,10 +129,14 @@ struct AgentPanes: View {
                 }
             }
             #else
-            ForEach(agents.agentSessions) { s in
-                AgentSessionRow(session: s, deleted: view == .trash,
-                                showsPin: view == .open).tag(s.id)
-                    .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+            if groupsByProject {
+                projectSections
+            } else {
+                ForEach(agents.agentSessions) { s in
+                    AgentSessionRow(session: s, deleted: view == .trash,
+                                    showsPin: view == .open).tag(s.id)
+                        .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+                }
             }
             #endif
         }
@@ -307,6 +313,40 @@ struct AgentPanes: View {
     private var shownSessions: [Session] {
         guard let f = tagFilter else { return agents.agentSessions }
         return SessionFilter.withTag(agents.agentSessions, tagID: f)
+    }
+
+    /// Whether this list files its rows under the projects they serve rather than under the day they
+    /// last ran. Open only, and only once something in it actually belongs to a project: a filed
+    /// session's project is history rather than structure, and an account that runs no projects must
+    /// see exactly the list it saw before.
+    private var groupsByProject: Bool {
+        view == .open && SessionProjectGrouping.hasProjects(shownSessions)
+    }
+
+    /// One section per project — each headed by its name and its server-counted rollup, and rolled up
+    /// to just that header when the user collapses it — then a trailing Unfiled section keeping the
+    /// recency runs it always had. The rollup is what makes rolling up safe: a group can hide twenty
+    /// rows and still say that two of them are waiting on you.
+    @ViewBuilder private var projectSections: some View {
+        ForEach(SessionProjectGrouping.sections(shownSessions,
+                                                counts: app.projectCounts,
+                                                collapsed: app.collapsedProjectGroups,
+                                                pinnedFirst: view == .open && tagFilter == nil)) { group in
+            Section {
+                ForEach(group.sections) { sub in
+                    // Unfiled's recency runs keep their own headings under the group header; a
+                    // project's single run needs none.
+                    if let title = sub.title {
+                        Text(title)
+                            .font(.orbitLabel).foregroundStyle(.secondary)
+                            .listRowSeparator(.hidden)
+                    }
+                    ForEach(sub.sessions) { sessionRow($0) }
+                }
+            } header: {
+                ProjectSectionHeader(group: group) { app.toggleProjectGroup(group.key) }
+            }
+        }
     }
 
     /// True while the list is showing search results in place of its sections. Always false on
@@ -672,6 +712,104 @@ struct NewSessionView: View {
     }
 }
 
+/// The chip that leads a row belonging to a project: Main / Exec / Verify.
+///
+/// Main is solid — the project's own conversation is the group's heading as much as a row, and an
+/// outline would read as one more peer — while its workers are outlined in the colours the lists
+/// already use for state: amber for the ones doing the work, blue for the ones checking it. A
+/// conversation the user started wears none (see `SessionRowTitle.chip`).
+struct SessionRoleChipView: View {
+    let chip: SessionRoleChip
+
+    var body: some View {
+        Text(chip.label)
+            .font(.orbitMeta.weight(.semibold))
+            .foregroundStyle(chip.tone == .main ? AnyShapeStyle(.white) : AnyShapeStyle(tint))
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background {
+                if chip.tone == .main {
+                    Capsule().fill(Color.secondary)
+                } else {
+                    Capsule().strokeBorder(tint.opacity(0.55))
+                }
+            }
+            .fixedSize()
+            .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var tint: Color {
+        switch chip.tone {
+        case .main:   return .secondary
+        case .exec:   return .orange
+        case .verify: return .blue
+        }
+    }
+
+    private var accessibilityLabel: String {
+        switch chip.tone {
+        case .main:   return "Project coordinator"
+        case .exec:   return "Project worker"
+        case .verify: return "Verification"
+        }
+    }
+}
+
+/// One project group's header in the session list: the project's name over its rollup, and a caret
+/// that rolls the whole group up to just this line.
+///
+/// The rollup is what makes rolling up safe. A recency heading says nothing about the rows it hides,
+/// so collapsing one would hide a waiting approval outright; "2 needs you · 1 running · 5/9 done" is
+/// counted over the project's whole session set server-side, so the header keeps speaking for rows
+/// this client never loaded and for rows the user has rolled away. Pinned and Unfiled are not
+/// projects and have no rollup, so they state their row count instead — every header carries a
+/// number either way.
+struct ProjectSectionHeader: View {
+    let group: ProjectSection
+    let toggle: () -> Void
+
+    var body: some View {
+        Button(action: toggle) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Image(systemName: group.collapsed ? "chevron.forward" : "chevron.down")
+                        .font(.orbitMeta).foregroundStyle(.tertiary)
+                    Text(group.title).textCase(nil).lineLimit(1)
+                    if group.projectId == nil {
+                        Text("\(group.count)").font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                if let counts = group.counts {
+                    HStack(spacing: 6) {
+                        ForEach(SessionProjectGrouping.badgeParts(counts)) { part in
+                            Text(part.text)
+                                .font(.orbitMeta)
+                                .fontWeight(part.kind == .needsYou ? .semibold : .regular)
+                                .foregroundStyle(color(part.kind))
+                        }
+                    }
+                    .padding(.leading, 16)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(group.title)
+        .accessibilityHint(group.collapsed ? "Expands this project" : "Collapses this project")
+    }
+
+    /// Amber for waiting-on-you, the same language every other attention surface speaks; blue for
+    /// working; the progress ratio stays quiet.
+    private func color(_ kind: ProjectBadgePart.Kind) -> Color {
+        switch kind {
+        case .needsYou: return .orange
+        case .running:  return .blue
+        case .done:     return .secondary
+        }
+    }
+}
+
 struct AgentSessionRow: View {
     let session: Session
     /// True when the Trash tab is showing this row; the preview goes static because nothing in
@@ -683,6 +821,12 @@ struct AgentSessionRow: View {
     // Second line: the last-reply / live-state preview (mirrors the web Agent console). `live` mirrors
     // web's `openable` — false on the Trash tab (a deleted session isn't live), true elsewhere.
     private var line: SessionLine { SessionLine.make(for: session, live: !deleted) }
+    // First line: what this conversation IS to its project, then the name the work is filed under.
+    // A dispatched session's own title is machine-written from the prompt that started it, so a
+    // project's rows all opened with the same nine characters; the task's title leads instead and
+    // the session's own steps down to the hover. Nothing here re-derives the role — the server
+    // serves it (see `SessionRowTitle`).
+    private var rowTitle: SessionRowTitle { SessionRowTitle.make(for: session) }
 
     var body: some View {
         #if os(iOS)
@@ -702,7 +846,8 @@ struct AgentSessionRow: View {
                 StatusGlyphView(glyph: .make(for: session))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(session.title ?? "Untitled session").lineLimit(1)
+                        if let chip = rowTitle.chip { SessionRoleChipView(chip: chip) }
+                        Text(rowTitle.text).lineLimit(1).help(rowTitle.tooltip ?? "")
                         SessionTagDots(tags: session.tags ?? [])
                     }
                     Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
@@ -735,8 +880,9 @@ struct AgentSessionRow: View {
     /// colour, so the heavy per-row glyph column is dropped for a calmer, more scannable list.
     private var compactRow: some View {
         VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Text(session.title ?? "Untitled session").lineLimit(1)
+            HStack(spacing: 6) {
+                if let chip = rowTitle.chip { SessionRoleChipView(chip: chip) }
+                Text(rowTitle.text).lineLimit(1)
                 Spacer(minLength: 8)
                 liveIndicator
                 if let rel = relTime {

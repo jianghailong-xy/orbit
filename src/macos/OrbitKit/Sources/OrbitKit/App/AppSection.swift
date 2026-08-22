@@ -4,12 +4,13 @@ import Foundation
 /// Symbol names are just strings — so it lives in OrbitKit and is unit-tested; the SwiftUI
 /// sidebar renders `visible(isAdmin:)`. Admin is role-gated like the web's route guard.
 public enum AppSection: String, CaseIterable, Sendable, Identifiable {
-    case tasks, agents, skills, runners, settings, admin
+    case inbox, tasks, agents, skills, runners, settings, admin
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
+        case .inbox:    return "Needs you"
         case .tasks:    return "Tasks"
         case .agents:   return "Workspaces"
         case .skills:   return "Skills"
@@ -22,6 +23,9 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// SF Symbol for the sidebar row.
     public var systemImage: String {
         switch self {
+        // A tray, as the inbox it is — filled, because the row is a destination whether or not
+        // anything is in it, and the badge beside it is what says how much.
+        case .inbox:    return "tray.full"
         case .tasks:    return "checklist"
         case .agents:   return "person.2"
         case .skills:   return "wand.and.stars"
@@ -34,10 +38,12 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// Admin-area sections are hidden from non-admins (mirrors the web route guard).
     public var adminOnly: Bool { self == .admin }
 
-    /// Sections to show in the nav, in display order. Runners leads; Skills is intentionally omitted
-    /// (its detail view still exists but is no longer a top-level destination). Admin is gated by role.
+    /// Sections to show in the nav, in display order. "Needs you" leads — it is the one destination
+    /// whose contents are, by definition, blocking somebody, and it is where the badge lives. Then
+    /// Runners; Skills is intentionally omitted (its detail view still exists but is no longer a
+    /// top-level destination). Admin is gated by role.
     public static func visible(isAdmin: Bool) -> [AppSection] {
-        let order: [AppSection] = [.runners, .agents, .tasks, .settings, .admin]
+        let order: [AppSection] = [.inbox, .runners, .agents, .tasks, .settings, .admin]
         return order.filter { !$0.adminOnly || isAdmin }
     }
 

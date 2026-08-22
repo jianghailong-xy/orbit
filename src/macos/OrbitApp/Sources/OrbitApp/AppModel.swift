@@ -379,6 +379,11 @@ final class AppModel {
         recentSessions = []
         needsYouSessions = []
         agentNeedsYou = [:]
+        // The inbox is the whole account's, so it must not survive into the next one — nor may its
+        // count keep badging a nav row for approvals the new user cannot see.
+        inbox = nil
+        inboxQuestions = [:]
+        projectCounts = [:]
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
@@ -508,6 +513,7 @@ final class AppModel {
                         // keep fresh (they have no poll at all) alongside the session snapshot.
                         scheduleLibraryRefresh(.agents)
                         scheduleLibraryRefresh(.tasks)
+                        scheduleLibraryRefresh(.inbox)
                     case .event(let ev):
                         apply(ev)
                     }
@@ -566,7 +572,12 @@ final class AppModel {
             if let summary = ev.payload(ControlSessionSummary.self),
                mergeSessionSummary(summary) { return }
             scheduleControlRefresh()
+        // An approval raised or answered anywhere in the account — by any client — changes two
+        // things at once: what the inbox lists, and the `pendingApprovals` count a session row draws
+        // its amber cue from. The row can be upserted in place; the inbox has no poll at all, so
+        // this stream is the only thing that moves it.
         case .approvalRequested, .approvalResolved:
+            scheduleLibraryRefresh(.inbox)
             if let approval = ev.payload(ControlApproval.self),
                mergePendingApprovals(sessionID: ev.sessionId, pending: approval.pendingApprovals) {
                 return
@@ -624,7 +635,7 @@ final class AppModel {
     }
 
     /// The owner-level lists a control event can dirty, each backed by its own model.
-    enum LibraryTarget { case agents, tasks }
+    enum LibraryTarget { case agents, tasks, inbox }
 
     /// Coalesce library reloads the same way `scheduleControlRefresh` coalesces list refreshes —
     /// an agent filing five tasks in a row should cost one reload, not five.
@@ -642,6 +653,7 @@ final class AppModel {
             if targets.contains(.tasks) {
                 await self.tasks?.refresh(selectedTaskID: self.selectedTaskID)
             }
+            if targets.contains(.inbox) { await self.loadInbox() }
         }
     }
 
@@ -747,6 +759,10 @@ final class AppModel {
         } catch {
             // Transient — keep the last good list.
         }
+        // The group headers' rollup, fetched with the snapshot it heads: the two are read together
+        // and a header a beat behind its rows reads as the column shifting. Gated on the snapshot
+        // actually carrying a project, so an account that runs none pays nothing for the feature.
+        if SessionProjectGrouping.hasProjects(sessions) { await loadProjectCounts() }
     }
 
     /// Adopt a new Open snapshot: the ONE place the list and everything derived from it are written,
@@ -978,6 +994,122 @@ final class AppModel {
         selectedAgentSessionID = s.id
     }
 
+    // MARK: inbox (cross-project "needs you")
+
+    /// Everything in the account waiting on this person (`GET /inbox`), in the server's order:
+    /// longest wait first. Nil until the first load answers — which is not the same as empty, and is
+    /// why the nav badge shows nothing rather than a confident "0" before it has asked.
+    ///
+    /// No poll of its own: the control-plane stream's approval events drive it (see `apply`), and a
+    /// reconnect re-reads it, exactly as web does.
+    private(set) var inbox: InboxResponse?
+    /// The options behind the question cards, by approval id. `GET /inbox` summarizes a question down
+    /// to one line, so answering one in place needs the session's own approval record — one read per
+    /// session that has a question waiting, which is usually none.
+    private(set) var inboxQuestions: [String: [AskQuestion]] = [:]
+    /// How many things are waiting, for the nav badge. Nil until the inbox has answered once.
+    var inboxCount: Int? { inbox?.pending.count }
+
+    func loadInbox() async {
+        guard let api else { return }
+        // Today's window, for the Resolved section. Re-derived per load so the section re-answers
+        // for the new day by itself once the clock passes midnight.
+        guard let fresh = try? await api.inbox(resolvedSince: InboxLogic.startOfToday()) else {
+            // A 404 is an older control plane with no inbox endpoint, and a transient failure is a
+            // transient failure: either way the last good answer stands rather than blanking.
+            return
+        }
+        inbox = fresh
+        await loadInboxQuestions(fresh.pending)
+    }
+
+    /// Fetch the picks for every question card on screen. Keyed by approval id, so a card renders its
+    /// options the moment they land; a card whose session read fails keeps its "Open session" way out.
+    private func loadInboxQuestions(_ pending: [InboxApprovalItem]) async {
+        guard let api else { return }
+        let sessionIDs = Set(pending.filter { $0.kind == .question }.map(\.sessionId))
+        guard !sessionIDs.isEmpty else {
+            if !inboxQuestions.isEmpty { inboxQuestions = [:] }
+            return
+        }
+        var questions: [String: [AskQuestion]] = [:]
+        for sessionID in sessionIDs {
+            guard let approvals = try? await api.approvals(sessionID: sessionID) else { continue }
+            for approval in approvals {
+                guard let input = approval.input else { continue }
+                let parsed = Approvals.parseQuestions(from: input)
+                if !parsed.isEmpty { questions[approval.id] = parsed }
+            }
+        }
+        inboxQuestions = questions
+    }
+
+    /// Answer an inbox card where it sits.
+    ///
+    /// Optimistic: the card goes the moment it is tapped, into Resolved where the user just sent it.
+    /// A refusal (a 409 because it was answered in the session view, a 5xx) puts it back exactly as
+    /// it was and says why — losing the card silently would be the worst of the three. Either way the
+    /// server is the authority on what is still waiting: an allow that landed may also have unblocked
+    /// the next ask in that session, which only a re-read can show.
+    func decideInbox(_ item: InboxApprovalItem, _ decision: ApprovalDecisionRequest) async {
+        guard let api else { return }
+        let snapshot = inbox
+        if let current = inbox {
+            inbox = InboxLogic.settle(current, approvalID: item.approvalId, decision: decision)
+        }
+        do {
+            try await api.decideApproval(sessionID: item.sessionId, approvalID: item.approvalId,
+                                         decision)
+        } catch {
+            inbox = snapshot
+            showToast("Couldn't \(decision.behavior.rawValue) \(InboxLogic.cardTitle(item))",
+                      detail: "\(error)", tone: .error)
+        }
+        await loadInbox()
+    }
+
+    /// Open the session an inbox card came from — the way out of every card, whatever its kind. The
+    /// card can name a session in any workspace, and one that isn't in the Open snapshot at all, so
+    /// this goes through the same cold-route resolve a deep link does.
+    func openInboxItem(_ item: InboxApprovalItem) {
+        selectedSection = .agents
+        openSession(item.sessionId)
+    }
+
+    // MARK: project grouping
+
+    /// Per-project session tallies for the list's group headers (`GET /sessions/project-counts`).
+    /// Counted server-side over each project's whole session set, because a header has to speak for
+    /// rows this client never loaded — Completed ones especially, which are the "x/y done" half.
+    private(set) var projectCounts: [String: ProjectSessionCounts] = [:]
+
+    private func loadProjectCounts() async {
+        guard let api else { return }
+        guard let rows = try? await api.projectSessionCounts() else { return }
+        let indexed = SessionProjectGrouping.countsById(rows)
+        if indexed != projectCounts { projectCounts = indexed }
+    }
+
+    /// Which project groups the user has rolled up, persisted across launches. Account-wide rather
+    /// than per-agent: one project's sessions are spread over several workspaces, so a group rolled
+    /// up in one and open in the next would read as the state not sticking.
+    var collapsedProjectGroups: Set<String> = Set(
+        UserDefaults.standard.stringArray(forKey: AppModel.collapsedGroupsKey) ?? []
+    ) {
+        didSet {
+            UserDefaults.standard.set(Array(collapsedProjectGroups), forKey: Self.collapsedGroupsKey)
+        }
+    }
+    private static let collapsedGroupsKey = "orbit.sessionProjectCollapsed"
+
+    func toggleProjectGroup(_ key: String) {
+        if collapsedProjectGroups.contains(key) {
+            collapsedProjectGroups.remove(key)
+        } else {
+            collapsedProjectGroups.insert(key)
+        }
+    }
+
     /// ⌘1…⌘9: select the agent at `index` (0-based) in sidebar order, navigating into the Agents
     /// section. Out of range (fewer agents than the digit pressed) is a no-op. Mirrors the sidebar's
     /// agent-selection binding.
@@ -1029,7 +1161,9 @@ final class AppModel {
         // Settings pushes its Runners sub-page (iOS); it's at root only when that isn't up, so the
         // pushed runner pages yield the edge to the system back-swipe.
         case .settings: return !settingsShowingRunners
-        case .skills, .admin: return true
+        // Single-pane sections push nothing, so their root always owns the left edge — the inbox
+        // included: a card is answered where it sits.
+        case .skills, .admin, .inbox: return true
         }
     }
 

@@ -282,6 +282,25 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/approvals/\(approvalID)/decision", body: req)
     }
 
+    // MARK: inbox (cross-project "needs you")
+
+    /// Everything in the account waiting on this person, oldest first — the read the per-session
+    /// `approvals` call cannot answer, since finding what has been blocked longest across twenty
+    /// projects otherwise means opening every session in turn. `resolvedSince` additionally asks for
+    /// what has been settled since that instant, for the Resolved section; omit it and `resolved`
+    /// comes back empty. The order is the server's and is rendered as received.
+    public func inbox(resolvedSince: String? = nil) async throws -> InboxResponse {
+        let query = resolvedSince.map { [URLQueryItem(name: "resolvedSince", value: $0)] } ?? []
+        return try await get("inbox", query: query)
+    }
+
+    /// Per-project session tallies for the list's group headers. Its own route rather than a shape
+    /// change to `/sessions/counts`: one project's sessions are spread over its coordinator's
+    /// workspace and every worker's, so neither grouping can be derived from the other.
+    public func projectSessionCounts() async throws -> [ProjectSessionCounts] {
+        try await get("sessions/project-counts")
+    }
+
     // MARK: agents / runners
 
     public func agents() async throws -> [Agent] { try await get("agents") }

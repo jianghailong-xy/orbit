@@ -5,9 +5,10 @@ final class NeedsYouLogicTests: XCTestCase {
 
     private func session(_ id: String, approvals: Int = 0, agentID: String? = nil,
                          agentName: String? = nil, title: String? = nil,
-                         lastTurnAt: String? = nil) -> Session {
+                         lastTurnAt: String? = nil, waitingSince: String? = nil) -> Session {
         Session(id: id, title: title, status: .running, agentId: agentID, assignedRunnerId: nil,
                 pendingApprovals: approvals, branch: nil, updatedAt: nil,
+                oldestPendingApprovalAt: waitingSince,
                 agent: agentName.map { SessionAgentRef(id: agentID ?? "a", name: $0, provider: nil,
                                                        model: nil, effort: nil) },
                 lastTurnAt: lastTurnAt)
@@ -99,5 +100,38 @@ final class NeedsYouLogicTests: XCTestCase {
                        "Backfill worktree fences needs you")
         let bare = session("s2", approvals: 1, agentID: "dev")
         XCTAssertEqual(NeedsYouLogic.banner(waiting: [bare])?.text, "A session needs you")
+    }
+
+    /// The bar and the cross-project inbox must agree about what is most overdue, so the target is
+    /// picked on the same key the inbox is ordered by: when the approval was raised, not when the
+    /// session last ran. A session streaming output since it asked is exactly the one whose recency
+    /// hides how long it has been blocked.
+    func testTargetIsTheLongestBLOCKEDSessionNotTheLeastRecentlyActive() {
+        let asked = [
+            session("recentlyActiveButOldAsk", approvals: 1, agentID: "a", agentName: "A",
+                    lastTurnAt: "2026-08-22T11:59:00.000Z",
+                    waitingSince: "2026-08-22T09:00:00.000Z"),
+            session("idleButFreshAsk", approvals: 1, agentID: "b", agentName: "B",
+                    lastTurnAt: "2026-08-22T08:00:00.000Z",
+                    waitingSince: "2026-08-22T11:00:00.000Z"),
+        ]
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: asked)?.target.id, "recentlyActiveButOldAsk")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: asked.reversed())?.target.id,
+                       "recentlyActiveButOldAsk")
+    }
+
+    /// An older control plane serves no wait timestamp; those rows keep the recency ordering, and
+    /// sort behind every row that does carry a real wait.
+    func testRowsWithNoWaitTimestampSortBehindThoseThatHaveOne() {
+        let stamped = session("stamped", approvals: 1, agentID: "a", agentName: "A",
+                              lastTurnAt: "2026-08-22T11:00:00.000Z",
+                              waitingSince: "2026-08-22T10:00:00.000Z")
+        let legacyOld = session("legacyOld", approvals: 1, agentID: "b", agentName: "B",
+                                lastTurnAt: "2026-08-22T07:00:00.000Z")
+        let legacyNew = session("legacyNew", approvals: 1, agentID: "c", agentName: "C",
+                                lastTurnAt: "2026-08-22T09:00:00.000Z")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [legacyOld, stamped, legacyNew])?.target.id,
+                       "stamped")
+        XCTAssertEqual(NeedsYouLogic.banner(waiting: [legacyNew, legacyOld])?.target.id, "legacyOld")
     }
 }

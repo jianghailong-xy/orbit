@@ -15,9 +15,12 @@ final class AppSectionTests: XCTestCase {
     }
 
     func testNavOrder() {
-        // Runners first, then Agents, then Tasks (where Skills used to sit), then Settings; Admin last for admins.
-        XCTAssertEqual(AppSection.visible(isAdmin: false), [.runners, .agents, .tasks, .settings])
-        XCTAssertEqual(AppSection.visible(isAdmin: true), [.runners, .agents, .tasks, .settings, .admin])
+        // "Needs you" leads (the cross-project inbox, and where the badge lives), then Runners, then
+        // Agents, then Tasks (where Skills used to sit), then Settings; Admin last for admins.
+        XCTAssertEqual(AppSection.visible(isAdmin: false),
+                       [.inbox, .runners, .agents, .tasks, .settings])
+        XCTAssertEqual(AppSection.visible(isAdmin: true),
+                       [.inbox, .runners, .agents, .tasks, .settings, .admin])
     }
 
     func testEverySectionHasTitleAndIcon() {

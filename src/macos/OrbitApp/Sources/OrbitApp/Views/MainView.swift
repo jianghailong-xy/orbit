@@ -76,6 +76,10 @@ struct SectionSidebar: View {
                     agentsDisclosure(shortcutIndex: shortcutIndex)
                 } else {
                     Label(section.title, systemImage: section.systemImage)
+                        // How many things are waiting on you, account-wide. `badge(0)` draws
+                        // nothing, so the row is bare until the inbox has something in it — and
+                        // until it has answered at all (nil), which is not the same as none.
+                        .badge(section == .inbox ? (model.inboxCount ?? 0) : 0)
                         .tag(SidebarSelection.section(section))
                 }
             }
@@ -180,6 +184,8 @@ struct SectionContent: View {
 
     var body: some View {
         switch section {
+        case .inbox:
+            InboxView()
         case .tasks:
             TasksListView()
         case .agents:
@@ -211,6 +217,11 @@ struct SectionDetail: View {
             RunnerDetailView()
         case .admin:
             AdminUserDetailView()
+        case .inbox:
+            // The cards are answered where they sit, so the inbox needs no detail pane. Its rows
+            // still lead somewhere — "Open session" switches to Agents and lands on the console.
+            ContentUnavailableView("Needs you", systemImage: AppSection.inbox.systemImage,
+                                   description: Text("Answer a card on the left, or open its session."))
         case .skills, .settings:
             // Single-pane sections render everything in the middle column.
             ContentUnavailableView(section.title, systemImage: section.systemImage,

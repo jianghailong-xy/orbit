@@ -201,6 +201,23 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let assignedRunnerId: String?
     public let provider: String?
     public let pendingApprovals: Int?
+    /// When the oldest of this session's live approvals started waiting on a human
+    /// (`approval.createdAt`, ISO-8601). A count cannot say it, and how long something has been
+    /// blocked is what the attention surfaces order by — two rows both reading "1 waiting" are a
+    /// five-second-old prompt and a two-hour-old one. Absent from older servers; see
+    /// `SessionProjectGrouping.ordered` and `NeedsYouLogic.banner`.
+    public let oldestPendingApprovalAt: String?
+    /// The task this session is working on, and the project that task belongs to — both served on
+    /// every list row. `projectId` is also set for a session that IS a project's coordinator (which
+    /// carries no task), because the server joins it back through `Project.coordinatorSessionId`.
+    public let taskId: String?
+    public let taskTitle: String?
+    public let projectId: String?
+    public let projectTitle: String?
+    /// What this session is to its project, derived server-side. Absent (nil) from older servers,
+    /// which is not the same as `.user` — a row with no role wears no chip rather than claiming to
+    /// be the user's own conversation.
+    public let role: SessionProjectRole?
     public let branch: String?
     public let updatedAt: String?
     /// When the session was created / last had a turn (ISO-8601 strings). These drive the Agent
@@ -319,6 +336,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         assignedRunnerId = try values.decodeIfPresent(String.self, forKey: .assignedRunnerId)
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
+        oldestPendingApprovalAt = try values.decodeIfPresent(String.self, forKey: .oldestPendingApprovalAt)
+        taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
+        taskTitle = try values.decodeIfPresent(String.self, forKey: .taskTitle)
+        projectId = try values.decodeIfPresent(String.self, forKey: .projectId)
+        projectTitle = try values.decodeIfPresent(String.self, forKey: .projectTitle)
+        role = try values.decodeIfPresent(SessionProjectRole.self, forKey: .role)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
         createdAt = try values.decodeIfPresent(String.self, forKey: .createdAt)
@@ -348,7 +371,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 agentId: String?,
                 assignedRunnerId: String?, provider: String? = nil,
                 pendingApprovals: Int?, branch: String?,
-                updatedAt: String?, model: String? = nil, permissionMode: String? = nil,
+                updatedAt: String?,
+                oldestPendingApprovalAt: String? = nil,
+                taskId: String? = nil, taskTitle: String? = nil,
+                projectId: String? = nil, projectTitle: String? = nil,
+                role: SessionProjectRole? = nil,
+                model: String? = nil, permissionMode: String? = nil,
                 effort: String? = nil, source: String? = nil, lastAssistantText: String? = nil,
                 lastToolUse: String? = nil, lastUserText: String? = nil, runningBgCount: Int? = nil,
                 engineTurnActive: Bool? = nil,
@@ -369,6 +397,12 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.assignedRunnerId = assignedRunnerId
         self.provider = provider
         self.pendingApprovals = pendingApprovals
+        self.oldestPendingApprovalAt = oldestPendingApprovalAt
+        self.taskId = taskId
+        self.taskTitle = taskTitle
+        self.projectId = projectId
+        self.projectTitle = projectTitle
+        self.role = role
         self.branch = branch
         self.updatedAt = updatedAt
         self.model = model

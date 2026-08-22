@@ -230,6 +230,11 @@ private struct CompactSections: View {
     var body: some View {
         @Bindable var model = model
         switch model.selectedSection {
+        // NEEDS YOU — the cross-project inbox. One pane: a card is answered where it sits, and
+        // "Open session" leaves for Agents rather than pushing a console under this section.
+        case .inbox:
+            NavigationStack { InboxView().drawerToggle(open: openDrawer) }
+
         // TASKS — task list → detail
         case .tasks:
             NavigationSplitView {
@@ -464,6 +469,8 @@ private struct NavigationDrawer: View {
                         agentsRows
                     } else if section == .tasks {
                         taskRows
+                    } else if section == .inbox {
+                        needsYouRow
                     } else {
                         sectionRow(section)
                     }
@@ -568,6 +575,42 @@ private struct NavigationDrawer: View {
             .background(selected ? Color.accentColor.opacity(0.14) : Color.clear,
                         in: RoundedRectangle(cornerRadius: DrawerMetrics.corner, style: .continuous))
             .contentShape(Rectangle())
+    }
+
+    /// The **Needs you** rail row: the same pill as any section, plus an amber count of everything
+    /// waiting on you across every project. The count is the inbox's own (`GET /inbox`), so the rail,
+    /// the screen it opens and the banner over the session list all state one number.
+    ///
+    /// Bare until the inbox has answered — nil is "not asked yet", which is not "nothing waiting" —
+    /// and bare again at zero, so an all-clear rail is quiet rather than confidently reporting 0.
+    @ViewBuilder private var needsYouRow: some View {
+        let count = model.inboxCount ?? 0
+        let selected = model.selectedSection == .inbox
+        Button {
+            model.selectedSection = .inbox
+            close()
+        } label: {
+            pill(selected: selected) {
+                HStack(spacing: 12) {
+                    Image(systemName: AppSection.inbox.systemImage)
+                        .frame(width: 24)
+                        .foregroundStyle(selected ? Color.accentColor : .primary)
+                    Text(AppSection.inbox.title)
+                        .fontWeight(selected ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 6)
+                    if count > 0 {
+                        Text("\(count)")
+                            .font(.orbitMeta.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(.orange, in: Capsule())
+                            .foregroundStyle(.white)
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .drawerRow()
     }
 
     /// A plain destination row: tapping switches section and closes the drawer.
@@ -748,7 +791,7 @@ private struct NavigationDrawer: View {
     @ViewBuilder
     private var recentsRows: some View {
         let recents = model.recentSessions
-        let shown = recents.prefix(recentsShown)
+        let shown = Array(recents.prefix(recentsShown))
         if !recents.isEmpty {
             Text("Recents")
                 .font(.subheadline.weight(.semibold))
@@ -760,17 +803,98 @@ private struct NavigationDrawer: View {
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
-            ForEach(shown) { session in
-                recentRow(session)
-                    .onAppear {
-                        guard session.id == shown.last?.id,
-                              let next = RecentsLogic.nextWindow(shown: recentsShown,
-                                                                 total: recents.count)
-                        else { return }
-                        recentsShown = next
-                    }
+            if SessionProjectGrouping.hasProjects(shown) {
+                projectGroupedRecents(shown, total: recents.count)
+            } else {
+                ForEach(shown) { session in
+                    recentRow(session)
+                        .onAppear {
+                            guard session.id == shown.last?.id else { return }
+                            extendRecents(total: recents.count)
+                        }
+                }
             }
         }
+    }
+
+    /// Recents, filed under the projects the sessions serve — the drawer's half of the same
+    /// structural move the session list makes. What the rail lists then grows with how many projects
+    /// are in flight rather than with how many sessions exist, and a project rolled up still says on
+    /// its header that two of its conversations are waiting on you.
+    ///
+    /// Grouped over the render window rather than the whole feed, so paging keeps meaning "rows
+    /// rendered": the groups describe what is in the window, and the last row in it still extends it.
+    @ViewBuilder
+    private func projectGroupedRecents(_ shown: [Session], total: Int) -> some View {
+        let groups = SessionProjectGrouping.sections(shown,
+                                                     counts: model.projectCounts,
+                                                     collapsed: model.collapsedProjectGroups,
+                                                     pinnedFirst: false)
+        // The last row actually on screen — paging hangs off it, and a collapsed tail group has none
+        // of its own, so this is read across the groups rather than from the window's last element.
+        let lastVisible = groups.flatMap { $0.sections.flatMap(\.sessions) }.last
+        ForEach(groups) { group in
+            recentsGroupHeader(group)
+            ForEach(group.sections) { sub in
+                ForEach(sub.sessions) { session in
+                    recentRow(session)
+                        .onAppear {
+                            guard session.id == lastVisible?.id else { return }
+                            extendRecents(total: total)
+                        }
+                }
+            }
+        }
+    }
+
+    /// A project group's header in the rail: a caret, the project's name, and its rollup. Same three
+    /// tallies as the session list's header (`SessionProjectGrouping.badgeParts`) in the drawer's own
+    /// quieter type; Unfiled is not a project and states its row count instead.
+    private func recentsGroupHeader(_ group: ProjectSection) -> some View {
+        Button { model.toggleProjectGroup(group.key) } label: {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Image(systemName: group.collapsed ? "chevron.forward" : "chevron.down")
+                        .font(.orbitMeta).foregroundStyle(.tertiary)
+                    Text(group.title)
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    if group.projectId == nil {
+                        Text("\(group.count)").font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                }
+                if let counts = group.counts {
+                    HStack(spacing: 6) {
+                        ForEach(SessionProjectGrouping.badgeParts(counts)) { part in
+                            Text(part.text)
+                                .font(.orbitMeta)
+                                .foregroundStyle(part.kind == .needsYou ? Color.orange
+                                                 : part.kind == .running ? Color.blue : Color.secondary)
+                        }
+                    }
+                    .padding(.leading, 18)
+                }
+            }
+            .padding(.leading, DrawerMetrics.textLeading)
+            .padding(.trailing, DrawerMetrics.hInset)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    /// Extend the render window — called when the last row on screen appears. The rows are all
+    /// already in memory (Recents is derived from the Open snapshot, not fetched), so this is a
+    /// layout window, not a fetch: no spinner, no latency.
+    private func extendRecents(total: Int) {
+        guard let next = RecentsLogic.nextWindow(shown: recentsShown, total: total) else { return }
+        recentsShown = next
     }
 
     /// One Recents row: the session title on a single lightweight line with a slim trailing live cue —

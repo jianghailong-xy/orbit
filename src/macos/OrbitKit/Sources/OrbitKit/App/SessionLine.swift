@@ -80,3 +80,63 @@ public struct SessionLine: Equatable, Sendable {
         n > 1 ? "\(n) background processes running" : "Background process running"
     }
 }
+
+/// The chip that leads a row belonging to a project. `tone` is the row's, not a colour — each client
+/// paints it in its own palette. Port of web's `sessionRoleChip`.
+public struct SessionRoleChip: Equatable, Sendable {
+    public enum Tone: String, Sendable { case main, exec, verify }
+    public let label: String
+    public let tone: Tone
+    public init(label: String, tone: Tone) {
+        self.label = label
+        self.tone = tone
+    }
+}
+
+/// What a session row is titled with: the role it plays in its project, then the name of the work.
+///
+/// A dispatched session's own title is machine-written from the prompt that started it ("执行任务：C2
+/// · Web：角色身份——…"), so a project's rows all opened with the same nine characters and differed only
+/// past the ellipsis the column truncates at. The task's title is the name the work is filed under
+/// everywhere else in the product, so it leads here too and the session's own title steps down to the
+/// tooltip — still one hover (or long-press) away, no longer the thing you scan.
+///
+/// A row with no task — a coordinator, or a conversation the user started — keeps its session title:
+/// that is the only name it has. Port of web's `sessionRowTitleParts`.
+public struct SessionRowTitle: Equatable, Sendable {
+    public let chip: SessionRoleChip?
+    public let text: String
+    /// The engine-written session title, when it says something `text` doesn't.
+    public let tooltip: String?
+
+    public init(chip: SessionRoleChip?, text: String, tooltip: String?) {
+        self.chip = chip
+        self.text = text
+        self.tooltip = tooltip
+    }
+
+    /// The chip for a role, or nil for a conversation the user started themselves: the unmarked row
+    /// IS "yours", and marking every row marks none of them. Nil too for a row from a server that
+    /// serves no role at all.
+    public static func chip(for role: SessionProjectRole?) -> SessionRoleChip? {
+        switch role {
+        // The project's own conversation — the one that files the work and answers for it.
+        case .coordinator:  return SessionRoleChip(label: "Main", tone: .main)
+        case .execution:    return SessionRoleChip(label: "Exec", tone: .exec)
+        case .verification: return SessionRoleChip(label: "Verify", tone: .verify)
+        case .user, nil:    return nil
+        }
+    }
+
+    /// Build a row's title line. `fallback` is what an untitled, task-less session shows.
+    public static func make(for s: Session, fallback: String = "Untitled session") -> SessionRowTitle {
+        let sessionTitle = (s.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let taskTitle = s.taskId == nil
+            ? ""
+            : (s.taskTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = taskTitle.isEmpty ? sessionTitle : taskTitle
+        return SessionRowTitle(chip: chip(for: s.role),
+                               text: text.isEmpty ? fallback : text,
+                               tooltip: sessionTitle.isEmpty || sessionTitle == text ? nil : sessionTitle)
+    }
+}
