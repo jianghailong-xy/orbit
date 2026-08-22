@@ -130,6 +130,15 @@ export class SessionsController {
     return this.sessions.workspaceSessionCounts(user.userId);
   }
 
+  // The same tallies per project, for the session list's group headers. Its own route rather than
+  // a shape change to `counts`: a project is not a workspace and the two groupings do not nest,
+  // so a client asking for one must not be made to parse the other. Above `@Get(':id')` for the
+  // same declaration-order reason.
+  @Get('project-counts')
+  projectCounts(@CurrentUser() user: AuthUser) {
+    return this.sessions.projectSessionCounts(user.userId);
+  }
+
   // Cross-scope search for the clients' ⌘K palette. MUST stay above `@Get(':id')` — Nest matches
   // routes in declaration order, so below it the literal path would be swallowed as an id.
   // An empty `q` returns recents, which is what makes the palette a session switcher too.
