@@ -28,14 +28,13 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
+import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { ConvergenceDecidedBy } from './convergence-ledger';
 import { EMPTY_PROGRESS_VECTOR } from './convergence-progress';
 import { ScopeActor } from './convergence-contract';
 import {
-  CLASSIFICATION_EVENT,
   EFFECT_BLOCKER_KIND,
   FindingAddress,
   FindingSeverity,
@@ -350,7 +349,12 @@ export class VerificationFindingService {
         ${acceptance(input, triage)}, 'OPEN', ${subject.ownerId}::uuid,
         ${subject.projectId}::uuid, ${subject.listId}::uuid,
         ${triage.effect === 'REPLAN_TASK' ? null : subject.assigneeId}::uuid,
-        ${parentTaskId}::uuid, 'AGENT', ${input.reporterTaskId ?? null},
+        -- The same creator pair §13.2's defect filer writes, and for its reason: creator_id is
+        -- NOT NULL and names a PRINCIPAL, so the owner is what goes in it. WHICH check reported the
+        -- finding is on the finding's own reporter_task_id column, where it cannot be mistaken for
+        -- the identity that filed this row. (No backticks in here: this is inside a template
+        -- literal, and one would close it -- see the TS1005 that points at the wrong line.)
+        ${parentTaskId}::uuid, 'USER', ${subject.ownerId}::uuid,
         'COORDINATOR', ${effectKey}, ${now}, ${now}
       )
       ON CONFLICT ("idempotency_key") DO NOTHING
@@ -481,5 +485,3 @@ function acceptance(input: SubmitFindingInput, triage: FindingTriage): string {
     + `${input.finding.violatedInvariant}, and the fingerprint `
     + `${input.finding.failureFingerprint} does not recur on the subject's re-verification.`;
 }
-
-export { findingDedupKey, findingEffectKey, CLASSIFICATION_EVENT, base62ToUuid };

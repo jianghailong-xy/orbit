@@ -131,7 +131,10 @@ async function reset(client: Client): Promise<void> {
       "verifies_task_id" UUID REFERENCES "task"("id"),
       "verdict" "task_verdict",
       "creator_type" TEXT NOT NULL DEFAULT 'USER',
-      "creator_id" TEXT,
+      -- NOT NULL, exactly as the real column is. A nullable copy here hid a defect that the
+      -- production schema would have refused on every finding that files a task: this fixture is a
+      -- SUBSET of the schema, and a subset that relaxes a constraint tests a database nobody runs.
+      "creator_id" UUID NOT NULL,
       "dispatch_authority" TEXT NOT NULL DEFAULT 'COORDINATOR',
       "idempotency_key" TEXT UNIQUE,
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -157,13 +160,13 @@ async function reset(client: Client): Promise<void> {
   await client.query(FINDING);
   await client.query(`
     INSERT INTO "project" ("id", "owner_id", "title") VALUES ('${PROJECT}', '${OWNER}', 'P');
-    INSERT INTO "task" ("id", "owner_id", "project_id", "title", "acceptance_criteria")
-      VALUES ('${PARENT}', '${OWNER}', '${PROJECT}', 'Parent', 'AC');
-    INSERT INTO "task" ("id", "owner_id", "project_id", "title", "acceptance_criteria",
-                        "parent_task_id")
-      VALUES ('${TASK}', '${OWNER}', '${PROJECT}', 'T', 'AC', '${PARENT}');
-    INSERT INTO "task" ("id", "owner_id", "project_id", "title", "acceptance_criteria")
-      VALUES ('${SUBJECT}', '${OWNER}', '${PROJECT}', 'S', 'AC');
+    INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title", "acceptance_criteria")
+      VALUES ('${PARENT}', '${OWNER}', '${OWNER}', '${PROJECT}', 'Parent', 'AC');
+    INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title",
+                        "acceptance_criteria", "parent_task_id")
+      VALUES ('${TASK}', '${OWNER}', '${OWNER}', '${PROJECT}', 'T', 'AC', '${PARENT}');
+    INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title", "acceptance_criteria")
+      VALUES ('${SUBJECT}', '${OWNER}', '${OWNER}', '${PROJECT}', 'S', 'AC');
   `);
 }
 
@@ -334,10 +337,11 @@ test('a crash between the Task and the finding does not produce two Tasks', { sk
     const ledger = new ConvergenceLedgerService(prisma(client));
     await ledger.ensureBaseline(tx, TASK, OWNER);
     await tx.$executeRaw(Prisma.sql`
-      INSERT INTO "task" ("id", "title", "status", "owner_id", "project_id", "parent_task_id",
-                          "creator_type", "dispatch_authority", "idempotency_key")
-      VALUES (gen_random_uuid(), 'Defect: T', 'OPEN', ${OWNER}::uuid, ${PROJECT}::uuid,
-              ${TASK}::uuid, 'AGENT', 'COORDINATOR',
+      INSERT INTO "task" ("id", "title", "status", "owner_id", "creator_id", "project_id",
+                          "parent_task_id", "creator_type", "dispatch_authority",
+                          "idempotency_key")
+      VALUES (gen_random_uuid(), 'Defect: T', 'OPEN', ${OWNER}::uuid, ${OWNER}::uuid,
+              ${PROJECT}::uuid, ${TASK}::uuid, 'USER', 'COORDINATOR',
               ${findingEffectKey(findingDedupKey(PROJECT, TASK, 1, FP))})
     `);
     await client.query('COMMIT');
@@ -564,8 +568,9 @@ test('a check cannot be finished without saying what it found', { skip }, async 
   try {
     await reset(client);
     await client.query(`
-      INSERT INTO "task" ("id", "owner_id", "project_id", "title", "verifies_task_id")
-      VALUES ('${VERIFIER}', '${OWNER}', '${PROJECT}', 'Check S', '${SUBJECT}')`);
+      INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title",
+                          "verifies_task_id")
+      VALUES ('${VERIFIER}', '${OWNER}', '${OWNER}', '${PROJECT}', 'Check S', '${SUBJECT}')`);
     assert.match(
       await refused(() => client.query(
         `UPDATE "task" SET "status" = 'DONE' WHERE "id" = '${VERIFIER}'`)),
@@ -584,8 +589,9 @@ test('…and the verdict first, the status after', { skip }, async () => {
   try {
     await reset(client);
     await client.query(`
-      INSERT INTO "task" ("id", "owner_id", "project_id", "title", "verifies_task_id")
-      VALUES ('${VERIFIER}', '${OWNER}', '${PROJECT}', 'Check S', '${SUBJECT}')`);
+      INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title",
+                          "verifies_task_id")
+      VALUES ('${VERIFIER}', '${OWNER}', '${OWNER}', '${PROJECT}', 'Check S', '${SUBJECT}')`);
     await client.query(`UPDATE "task" SET "verdict" = 'PASS' WHERE "id" = '${VERIFIER}'`);
     await client.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = '${VERIFIER}'`);
     assert.equal(await count(client, 'task', `"id" = '${VERIFIER}' AND "status" = 'DONE'`), 1);
@@ -600,8 +606,10 @@ test('an INSERT cannot smuggle the shape in either', { skip }, async () => {
     await reset(client);
     assert.match(
       await refused(() => client.query(`
-        INSERT INTO "task" ("id", "owner_id", "project_id", "title", "verifies_task_id", "status")
-        VALUES ('${VERIFIER}', '${OWNER}', '${PROJECT}', 'Check', '${SUBJECT}', 'DONE')`)),
+        INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title",
+                            "verifies_task_id", "status")
+        VALUES ('${VERIFIER}', '${OWNER}', '${OWNER}', '${PROJECT}', 'Check', '${SUBJECT}',
+                'DONE')`)),
       /VERDICT_REQUIRED_WITH_DONE/);
   } finally {
     await client.end();
@@ -616,8 +624,10 @@ test('a row that ALREADY carries the shape stays editable', { skip }, async () =
     // pre-0141 binary did every day.
     await client.query(`
       ALTER TABLE "task" DISABLE TRIGGER "task_verification_verdict_atomic_insert";
-      INSERT INTO "task" ("id", "owner_id", "project_id", "title", "verifies_task_id", "status")
-      VALUES ('${VERIFIER}', '${OWNER}', '${PROJECT}', 'Legacy check', '${SUBJECT}', 'DONE');
+      INSERT INTO "task" ("id", "owner_id", "creator_id", "project_id", "title",
+                          "verifies_task_id", "status")
+      VALUES ('${VERIFIER}', '${OWNER}', '${OWNER}', '${PROJECT}', 'Legacy check', '${SUBJECT}',
+              'DONE');
       ALTER TABLE "task" ENABLE TRIGGER "task_verification_verdict_atomic_insert";
     `);
     // Renaming it, re-parenting it, cancelling it — all still possible. Turning existing bad data
