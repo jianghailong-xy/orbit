@@ -128,27 +128,55 @@ struct UserBubbleView: View {
         { previewTarget = ImagePreviewTarget(index: i, id: images[i].id) }
     }
 
-    // Copy + relative time, hidden until hover (web's `.chat-user-meta`). While the turn is
-    // unconfirmed this shows "Queued" (a turn was already in flight) or "Sending…" in place of the
-    // time, and "Not delivered" once the run has ended without ever taking it. A message written
-    // into the running turn instead of queued behind it (a steer) shows how far it got there
-    // instead — see SteerDelivery. Always laid out so revealing it doesn't move the bubble. An
-    // image-only turn (empty text) has nothing to copy, so the row is suppressed — web parity
-    // (`{node.text && …}`).
+    /// Anything not yet (or never) confirmed keeps its label on screen permanently; a settled turn
+    /// shows its timestamp on hover alone.
+    /// A steer keeps its line up after it settles too: unlike a message, whose reply is its
+    /// receipt, "Sent into this turn" is the only thing that ever says the engine took it.
+    private var unconfirmed: Bool { bubble.pending || bubble.undelivered || bubble.steer }
+
+    /// Touch has no hover, so a hover-gated copy button can never be reached on iOS: the only user
+    /// turns copyable from a phone were the ones whose row is pinned up anyway (a steer, a send in
+    /// flight), which is why "Sent into this turn" carried a copy button and the message above it
+    /// didn't. On iOS it is simply always shown. The timestamp next to it stays hover-only — not
+    /// showing the time at rest is what was asked for, and it costs a platform with no hover
+    /// nothing it had before.
+    private var copyShown: Bool {
+        #if os(iOS)
+        true
+        #else
+        unconfirmed || hovering
+        #endif
+    }
+
+    /// Touch has no cursor to aim with, so on iOS the ~12pt glyph gets a wider (invisible) hit area.
+    /// Trailing-aligned where it's used, so the extra width falls in the empty space to the glyph's
+    /// left and nothing moves. nil on macOS — a mouse doesn't need it, and `.frame(width: nil)`
+    /// leaves the row exactly as it was.
+    #if os(iOS)
+    private let copyHitWidth: CGFloat? = 28
+    #else
+    private let copyHitWidth: CGFloat? = nil
+    #endif
+
+    // Copy + relative time (web's `.chat-user-meta`). While the turn is unconfirmed this shows
+    // "Queued" (a turn was already in flight) or "Sending…" in place of the time, and "Not
+    // delivered" once the run has ended without ever taking it. A message written into the running
+    // turn instead of queued behind it (a steer) shows how far it got there instead — see
+    // SteerDelivery. Always laid out so revealing it doesn't move the bubble. An image-only turn
+    // (empty text) has nothing to copy, so the row is suppressed — web parity (`{node.text && …}`).
     @ViewBuilder
     private var meta: some View {
-        // Anything not yet (or never) confirmed keeps its label on screen permanently; a settled
-        // turn shows its timestamp on hover alone.
-        // A steer keeps its line up after it settles too: unlike a message, whose reply is its
-        // receipt, "Sent into this turn" is the only thing that ever says the engine took it.
-        let unconfirmed = bubble.pending || bubble.undelivered || bubble.steer
         if !bubble.text.isEmpty || unconfirmed {
             HStack(spacing: 6) {
                 if !bubble.text.isEmpty {
                     Button { copy() } label: {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc").font(.orbitMeta)
+                            .frame(width: copyHitWidth, alignment: .trailing)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain).foregroundStyle(.secondary).help("Copy message")
+                    .opacity(copyShown ? 1 : 0)
+                    .allowsHitTesting(copyShown)
                 }
                 if bubble.undelivered {
                     // Amber, not red: nothing broke on this message — the run ended before its turn
@@ -177,14 +205,14 @@ struct UserBubbleView: View {
                         .padding(.leading, 2).contentShape(Rectangle())
                     }
                 } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
+                    // Hover-only, and only ever reached on a settled turn — every other branch above
+                    // is a state that stays on screen. Gated here rather than on the row so the copy
+                    // button beside it can be shown on its own (see `copyShown`).
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
+                        .opacity(hovering ? 1 : 0)
                 }
             }
             .frame(height: metaHeight)
-            // The unconfirmed indicator (Queued/Sending…/Not delivered) always shows; the copy/time
-            // row only on hover (web parity).
-            .opacity(unconfirmed || hovering ? 1 : 0)
-            .allowsHitTesting(unconfirmed || hovering)
             .animation(.easeOut(duration: 0.12), value: hovering)
         }
     }
