@@ -61,27 +61,56 @@ func TestHostdCallSeparatesARefusalFromNoAnswer(t *testing.T) {
 }
 
 // A broker that accepts the connection and then says nothing must not hold `orbit
-// register` open: the deadline ends the exchange and the caller falls back.
+// register` open: hostdCall's own deadline ends the exchange and hands the caller an
+// error to fall back on. Driven through hostdCall rather than re-performed here, so
+// that a deadline dropped from the product is a failure of this test and not of a
+// hand-rolled copy of it that still has one.
 func TestHostdCallGivesUpOnABrokerThatNeverAnswers(t *testing.T) {
-	done := make(chan struct{})
-	defer close(done)
+	silent := make(chan struct{})
+	defer close(silent)
 	path := serveRawHostd(t, func(conn net.Conn) {
-		<-done // accept, read nothing, answer nothing
+		<-silent // accept, read nothing, answer nothing
 	})
+	shortenHostdTimeout(t)
 
-	conn, err := net.Dial("unix", path)
-	if err != nil {
-		t.Fatal(err)
+	answers := make(chan error, 1)
+	if !mustGiveUp(t, "hostdCall", func() {
+		_, err := hostdCall(path, "enable")
+		answers <- err
+	}) {
+		return
 	}
-	// Same exchange hostdCall performs, with a deadline short enough to keep the test
-	// quick — hostdCallTimeout itself is a product decision, not one worth waiting out.
-	_ = conn.SetDeadline(time.Now().Add(200 * time.Millisecond))
-	_ = json.NewEncoder(conn).Encode(hostdRequest{V: hostdProtocolVersion, Verb: "enable"})
-	var resp hostdResponse
-	err = json.NewDecoder(conn).Decode(&resp)
-	conn.Close()
-	if err == nil {
-		t.Fatal("a silent broker must eventually fail the read, not block forever")
+	if err := <-answers; err == nil {
+		t.Fatal("a silent broker must eventually fail the read, not answer")
+	}
+}
+
+// shortenHostdTimeout cuts the product's exchange timeout to test speed. Five seconds
+// is the right wait for a real user in front of a wedged broker and the wrong one for a
+// suite; that hostdCall bounds the exchange *at all* is what these tests are about.
+func shortenHostdTimeout(t *testing.T) {
+	t.Helper()
+	prev := hostdCallTimeout
+	hostdCallTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { hostdCallTimeout = prev })
+}
+
+// mustGiveUp runs fn on its own goroutine and reports whether it returned well within
+// the shortened timeout, failing the test when it did not. A missing deadline does not
+// show up as a wrong answer, it shows up as no answer ever — and a test that simply
+// waits for one reports that as a package-wide panic ten minutes later instead of as
+// this line. Callers take results from fn through a buffered channel and only read them
+// when this returns true, so the goroutine left behind by a failure has nowhere to race.
+func mustGiveUp(t *testing.T, what string, fn func()) bool {
+	t.Helper()
+	returned := make(chan struct{})
+	go func() { defer close(returned); fn() }()
+	select {
+	case <-returned:
+		return true
+	case <-time.After(20 * hostdCallTimeout):
+		t.Errorf("%s never gave up on a broker that never answers — the exchange has no deadline", what)
+		return false
 	}
 }
 
