@@ -104,6 +104,14 @@ const task = (over: Record<string, unknown> = {}) => ({
   dueDate: null,
   assignee: null,
   childCount: 0,
+  // The four dependency facts the task page derives on every read. Spelled out here because the
+  // endpoint always sends all four — a row that is part of no dependency at all still carries
+  // them, which is what makes an absent key mean "this server does not report dependencies"
+  // rather than "this task has none". A fixture missing them would test a payload nobody sends.
+  unmetCount: 0,
+  blocksCount: 0,
+  topoLevel: 0,
+  dependencyState: 'READY',
   ...over,
 });
 
@@ -122,10 +130,10 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the two coordinator writes, the coordinator POST, the two task-page levels and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the two coordinator writes, the coordinator POST, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
-    // Fails if any call grows extra args or a query string, if a path changes, or if a seventh
+    // Fails if any call grows extra args or a query string, if a path changes, or if an eighth
     // api(...) call is added anywhere in the file. The arg pattern allows two levels of nesting so
     // that neither encodeURIComponent(...) nor the encodeId(...) inside it cuts the match short —
     // a call it cannot parse drops out of this list entirely, which fails the assertion too.
@@ -169,6 +177,13 @@ describe('ProjectsPage', () => {
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
       // of the URL that goes on the wire.
       '`/projects/${encodeURIComponent(projectId)}/tasks/page?limit=100`',
+      // WHICH prerequisites a multi-prerequisite row is waiting on, one level up and no further:
+      // `maxDepth=1` is the whole point, since a row states a direct relationship and anything
+      // deeper is the dependency graph's job. `direction=upstream` keeps the dependents out of a
+      // response this row would only discard. Held literally so a depth or direction added here
+      // cannot quietly turn a per-row read into a subtree walk — this is the one endpoint in the
+      // file that is fetched once PER ROW, and only by the rows that render it.
+      '`/tasks/${encodeURIComponent(encodeId(task.id))}/dependency-graph?direction=upstream&maxDepth=1`',
       // The level below a row: the same endpoint, plus exactly one `parentId`, carrying the id
       // through encodeId so the server is named a parent the way it names one itself, and escaped
       // like the path segment above. What each of these two fetches is asserted at runtime further
