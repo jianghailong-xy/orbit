@@ -223,11 +223,19 @@ export class VerificationFindingService {
           subjectKind: 'TASK',
           scopeHash: state.scopeHash,
           violatedInvariant: input.finding.violatedInvariant,
-          // The reporter's own fingerprint is authoritative (§5 FP1, and §6's table makes it a
-          // required field), so the message is carried for the audit and never re-fingerprinted
-          // into a second identity for one failure.
+          // Carried for the audit. It is NOT what identifies this failure — see the line below.
           message: input.finding.minimalRepro,
         },
+        // The reporter's own fingerprint, handed over rather than left to be re-derived (§5 FP1,
+        // and §6's table makes it a required field of the finding).
+        //
+        // This is the whole of FP1's "one failure, one identity". The finding row stores the
+        // reporter's fingerprint and `chargeFinding` compares it against `lastFingerprint`; the
+        // ledger row is where `lastFingerprint` comes from. Letting the ledger hash the facts above
+        // into a second value would make those two comparisons ask about different things, and
+        // §8's repeat line — the one that stops a loop re-filing the same defect — could never
+        // fire: every repetition of one failure would arrive looking new.
+        authoritativeFingerprint: input.finding.failureFingerprint,
         progressVector: { ...EMPTY_PROGRESS_VECTOR, scopeHash: state.scopeHash },
         observedAt: now,
         decidedBy: input.decidedBy ?? 'ORCHESTRATOR',
@@ -243,7 +251,7 @@ export class VerificationFindingService {
         // and an identity that carried it could never see a repeat (FP5).
         actionIdentity: input.finding.failureFingerprint,
         sessionId: input.reporterSessionId ?? null,
-      } as Parameters<ConvergenceLedgerService['record']>[3]);
+      });
 
       const seq = await this.nextSeq(tx, input.subjectTaskId);
       const id = randomUUID();

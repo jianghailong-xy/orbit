@@ -9,7 +9,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
-import { scopeHash } from './convergence-progress';
+import { EMPTY_PROGRESS_VECTOR, scopeHash } from './convergence-progress';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { VerificationFindingService } from './verification-finding.service';
 import { VerificationFinding, findingDedupKey, findingEffectKey } from './verification-finding';
@@ -688,6 +688,94 @@ test('the whole repair cycle: defect, then a repair that did not converge', { sk
     // And the audit can follow every step: two findings, two judgments, each naming the other.
     assert.equal(await count(client, 'task_verification_finding'), 2);
     assert.equal(await count(client, 'task_verification_finding', '"decision_id" IS NOT NULL'), 2);
+  } finally {
+    await client.end();
+  }
+});
+
+test('FP1: the finding and the judgment it produced carry ONE fingerprint', { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+    await submit(client, { failureFingerprint: FP });
+    // The reporter's, on both rows. It used to be the reporter's on one and a SHA of the failure
+    // facts on the other, which is two identities for one failure: every comparison that crossed
+    // the two — and §8's repeat line is one — asked about something that could never be equal.
+    const [finding] = rows<{ fp: string }>(await client.query(
+      `SELECT "failure_fingerprint" AS fp FROM "task_verification_finding"`));
+    const [judgment] = rows<{ fp: string }>(await client.query(
+      `SELECT "failure_fingerprint" AS fp FROM "task_convergence_decision"
+        WHERE "failure_fingerprint" IS NOT NULL`));
+    assert.equal(finding.fp, FP);
+    assert.equal(judgment.fp, FP, 'the ledger re-derived an identity the finding cannot equal');
+  } finally {
+    await client.end();
+  }
+});
+
+test("FP1: the value handed in is the one §8's repeat line compares", { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+    // The finding writes the first judgment. The second observation is the SAME failure seen
+    // again — a distinct fact, so a distinct `observationKey`, but one identity.
+    await submit(client, { failureFingerprint: FP });
+    const ledger = new ConvergenceLedgerService(prisma(client));
+    await client.query('BEGIN');
+    await ledger.record(transactionClient(client), TASK, OWNER, {
+      observationKey: 'verification:round-2',
+      event: 'VERIFICATION_FAILED_IN_SCOPE',
+      classification: 'IN_SCOPE_DEFECT',
+      failure: {
+        // Deliberately DIFFERENT facts from the ones the finding carried: a repeat is a repeat
+        // because the identities match, not because two failures were described the same way.
+        stage: 'VERIFY', subjectKind: 'TASK', scopeHash: SCOPE,
+        violatedInvariant: 'a different sentence', message: 'a different repro',
+      },
+      authoritativeFingerprint: FP,
+      progressVector: { ...EMPTY_PROGRESS_VECTOR, scopeHash: SCOPE },
+      observedAt: AT,
+      decidedBy: 'ORCHESTRATOR',
+      action: null,
+    });
+    await client.query('COMMIT');
+    const [task] = rows<{ counters: { sameFingerprintRepeats: number } }>(await client.query(
+      `SELECT "convergence_counters" AS counters FROM "task" WHERE "id" = '${TASK}'`));
+    // Derived on both sides this would be 0: the finding's fingerprint went into the row and a
+    // hash of its facts went into the ledger, so the comparison was never between two of the same
+    // kind of thing.
+    assert.equal(task.counters.sameFingerprintRepeats, 1,
+      'the same failure reported twice did not count as a repeat');
+  } finally {
+    await client.end();
+  }
+});
+
+test('a fingerprint the ledger could never equal is refused, not stored', { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+    // The other half of taking the caller's word for it. `record` is the door `[K5]` hands an
+    // identity through; a caller that handed it a message or a Base62 id would mint a value
+    // nothing in the system can compare, and the refusal has to happen before it commits.
+    const ledger = new ConvergenceLedgerService(prisma(client));
+    await client.query('BEGIN');
+    const message = await refused(() => ledger.record(transactionClient(client), TASK, OWNER, {
+      observationKey: 'finding:not-a-fingerprint',
+      event: 'VERIFICATION_FAILED_IN_SCOPE',
+      classification: 'IN_SCOPE_DEFECT',
+      failure: {
+        stage: 'VERIFY', subjectKind: 'TASK', scopeHash: SCOPE,
+        violatedInvariant: 'I', message: 'm',
+      },
+      authoritativeFingerprint: 'not-a-fingerprint',
+      progressVector: { ...EMPTY_PROGRESS_VECTOR, scopeHash: SCOPE },
+      observedAt: AT,
+      decidedBy: 'ORCHESTRATOR',
+      action: null,
+    }));
+    await client.query('ROLLBACK');
+    assert.match(message, /MALFORMED_FINGERPRINT/);
   } finally {
     await client.end();
   }

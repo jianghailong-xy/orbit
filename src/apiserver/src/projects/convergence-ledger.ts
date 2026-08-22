@@ -109,6 +109,25 @@ export interface ConvergenceObservation {
   classification: ConvergenceClassification | null;
   /** The failure, if this observation is one. Fingerprinted here rather than by the caller (§5 FP1). */
   failure: FailureFacts | null;
+  /**
+   * The failure's identity, when the OBSERVER already has an authoritative one.
+   *
+   * FP1 says one failure has one identity. It does not say the ledger is where that identity is
+   * computed — only that there is one. `[K5]`'s §6 makes `failureFingerprint` a required field of
+   * the finding, submitted by the reporter and written to `task_verification_finding`, so deriving
+   * a second one here from `failure` would give one failure two identities: §8's repeat line
+   * compares the finding's against `lastFingerprint`, which is the ledger's, and they would never
+   * be equal — a loop repeating the same defect for ever would read as a sequence of new ones.
+   *
+   * Absent on every observation whose failure has no identity of its own, which is `[K2]`'s
+   * original callers: they pass `failure` and the derivation below answers, exactly as before this
+   * field existed. Present means "I already know it", and it is taken verbatim.
+   *
+   * The 64-hex shape is required rather than trusted. A caller that passed a message, a key or a
+   * Base62 id here would silently make an identity nothing else in the system can equal, which is
+   * the same defect one layer up from the one this field exists to fix.
+   */
+  authoritativeFingerprint?: string | null;
   /** §4's measurement, taken now. Its `scopeHash` is what makes it comparable — or not (PV3). */
   progressVector: ProgressVector;
   /**
@@ -333,7 +352,8 @@ export function planConvergenceDecision(
   observation: ConvergenceObservation,
   thresholds: ConvergenceThresholds,
 ): PlannedConvergenceDecision {
-  const fingerprint = observation.failure ? failureFingerprint(observation.failure) : null;
+  const fingerprint = observation.authoritativeFingerprint
+    ?? (observation.failure ? failureFingerprint(observation.failure) : null);
   const classification = observation.classification
     ? reclassifyExhaustedTransient(observation.classification, state.counters, thresholds)
     : null;

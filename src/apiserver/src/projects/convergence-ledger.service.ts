@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,6 +55,9 @@ import {
  * because the writer that breaks an invariant is by definition the one that did not come through
  * here.
  */
+/** §5's identity, as `failureFingerprint` spells it: a SHA-256 in lower-case hex and nothing else. */
+const AUTHORITATIVE_FINGERPRINT = /^[0-9a-f]{64}$/;
+
 @Injectable()
 export class ConvergenceLedgerService {
   private readonly logger = new Logger(ConvergenceLedgerService.name);
@@ -133,6 +142,13 @@ export class ConvergenceLedgerService {
     ownerId: string,
     observation: ConvergenceObservation,
   ): Promise<{ decision: PlannedConvergenceDecision | null; id: string; duplicate: boolean }> {
+    // Checked before anything is read, because an identity nothing else can equal is not a value
+    // this method can recover from later: it would commit, and §8's repeat line would compare it
+    // against a real fingerprint for ever. `[K5]` is the one caller that supplies one.
+    if (observation.authoritativeFingerprint != null
+        && !AUTHORITATIVE_FINGERPRINT.test(observation.authoritativeFingerprint)) {
+      throw new BadRequestException('MALFORMED_FINGERPRINT');
+    }
     const state = await this.lockAndRead(tx, taskId, ownerId);
     // Judging a task is what puts it under management, so the baseline is written here rather than
     // left as a precondition a caller can forget: without the revision row the ledger's composite

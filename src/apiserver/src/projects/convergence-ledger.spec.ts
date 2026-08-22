@@ -7,7 +7,12 @@ import {
   ConvergenceCounters,
   ConvergenceThresholds,
 } from './convergence-contract';
-import { EMPTY_PROGRESS_VECTOR, ProgressVector, scopeHash } from './convergence-progress';
+import {
+  EMPTY_PROGRESS_VECTOR,
+  ProgressVector,
+  failureFingerprint,
+  scopeHash,
+} from './convergence-progress';
 import {
   ConvergenceLedgerEntry,
   ConvergenceObservation,
@@ -551,6 +556,41 @@ test('AC4: a task with no ledger recovers to the opening state, not to an error'
 // -------------------------------------------------------------------------------------------
 // OW4 — an unbounded threshold only exists with a user's signature.
 // -------------------------------------------------------------------------------------------
+
+// -------------------------------------------------------------------------------------------
+// FP1 — one failure, one identity, whoever computed it.
+// -------------------------------------------------------------------------------------------
+
+test('FP1: an observation with no identity of its own is still fingerprinted here', () => {
+  // The behaviour every `[K2]` caller has: pass the facts, get the hash. `authoritativeFingerprint`
+  // is optional precisely so that adding it changed nothing for them.
+  const plan = planConvergenceDecision(TASK, state(), observation(), T);
+  assert.equal(plan.failureFingerprint, failureFingerprint(observation().failure!));
+});
+
+test('FP1: an observer that already HAS the identity is believed, not second-guessed', () => {
+  // `[K5]`'s case. The finding row stores the reporter's fingerprint and §8's repeat line compares
+  // against the ledger's, so re-deriving one here would put two values where the contract says
+  // there is one — and every comparison across them would be false for ever.
+  const given = 'c'.repeat(64);
+  const plan = planConvergenceDecision(
+    TASK, state(), observation({ authoritativeFingerprint: given }), T,
+  );
+  assert.equal(plan.failureFingerprint, given);
+  assert.notEqual(plan.failureFingerprint, failureFingerprint(observation().failure!),
+    'the facts hash to something else — which is exactly why the caller had to be believed');
+});
+
+test('FP1: the identity handed in is the one the repeat line compares', () => {
+  const given = 'c'.repeat(64);
+  const repeat = planConvergenceDecision(
+    TASK,
+    state({ lastFingerprint: given, progressVector: vector() }),
+    observation({ authoritativeFingerprint: given, action: null }),
+    T,
+  );
+  assert.equal(repeat.counters.sameFingerprintRepeats, 1);
+});
 
 test('OW4: an unbounded threshold cannot stop the breaker without a USER behind it', () => {
   const unbounded: ConvergenceThresholds = { ...T, maxSameFingerprintRepeats: null };
