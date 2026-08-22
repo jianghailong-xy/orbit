@@ -3517,6 +3517,19 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
   v1.2 给它的键是 `aggregate:<taskId>:<childrenDigest>`，而 AG3 明确允许子任务 `DONE → OPEN → DONE`：第三次的 childrenDigest **回到**第一次的值，撞上历史 `APPLIED` 行，§8.5 C2 跳过副作用，父任务永久停在 `OPEN`。审查记为 `PC-CX-17`。**一个纯重算不需要幂等键**：幂等来自"重算"这个性质本身（AG1），给它加一个由可回环事实构成的永久键，反而把幂等变成了单次（§8.2 GE2）。审计仍在：每次实际改变父状态都落一条 `project_decision`，只是不占动作账本。
 
+- **AG6（聚合父节点不可派发，v1.18 新增，单元 H0）**：一个 Task 同时满足下面两条时，是**纯聚合父节点**，`DISPATCH_TASK` 对它永远不合法，任何入口都不得为它创建 `starts_task_work` 的 Session：
+
+  1. 至少有一个直接子任务（与它同 owner；这正是聚合重算所计的那一组，见 AG4 的反面）；
+  2. `completionPolicy ≠ MANUAL`。
+
+  **理由是角色，不是时机。** 这种行的状态由 AG1 的重算从子任务与验证结果算出，它自己没有任何可达的完成条件 —— 派发出去的 Session 拿到的是"把子任务正在做的事总结一遍"，会和子任务抢同一条分支，而且永远报不了 done，因为唯一能把这行改成 DONE 的是那个盯着子任务的重算。线上后果是 G/H/K 三个纯汇总节点各拿到一条真实工作 Session，控制环无法收口。
+
+  - **AG6-a（三道门，判据同一条）**：§7.8 的 pass 给出 `TASK_AGGREGATE_PARENT` skip；§9.2 的提交点适配器在 project 行锁之后**重新读取**权威的 `completion_policy` 与直接子节点，再拒一次（DENY，不是 DEFER —— 角色不会随时间解除）；`TasksService.execute` / `batchExecute` 覆盖 Run Now、`task_start`、依赖解锁、定时与旧计划、foreman 与验证入口。三处的判定位置相同：在 §13.6 SU6 的两条"这行还是不是这件工作"之后，在失败重试阶梯之前 —— 否则一个 FAILED 的聚合父节点会被读成可重试的失败。
+  - **AG6-b（线性化，不只是复核）**：父行的行锁不是子集合上的谓词锁。迁移 0132 因此把判定放进 `session_admission_lock_order`，对进入 live work 的行取 `FOR UPDATE`（子行插入的外键只取 `FOR KEY SHARE`，二者只在这一档冲突），并由 `task_aggregate_parent_shape_guard` 从 task 侧拒绝**反方向** —— 父任务持有 live work Session 时，任何把它变成聚合形状的写入（新增/改绑子任务、`MANUAL → 聚合`、owner 变化、self-parent）都被拒；解除方向（删子任务、移出、改回 MANUAL）全部放行。两侧取同一把 `FOR UPDATE`，因此两种先后都可线性化。
+  - **AG6-c（兼容边界，逐条冻结）**：**无子任务**的 non-MANUAL Task 仍可派发（AG4：策略对它无效，它就是一个普通叶子）；**MANUAL 父任务**仍按 §13.1 之前的契约由显式状态写完成；**有效 Foreman 一律是 MANUAL** —— `isForeman` 与聚合策略并存会让一行有两个完成所有者（Worker 写 DONE，重算也写），`task_foreman_manual_policy` 因此在数据库层禁止这一对，MANUAL 的 Foreman 不受任何影响。**不得**用 `autoRunWhenReady`、清空 assignee 或 `dispatchHold` 代替本条：那会把角色不变量降级成一个别人可以改写的设置，而 §2 B3 与 §12.3 D4 已经点名禁止其中两个。
+  - **AG6-d（FAILED 聚合父节点的恢复）**：AG6 的 skip 排在重试阶梯之前，而 `TASK_AGGREGATE_PARENT` 是 §11.2 的**非阻塞**拒绝，因此这种行既不会被重试也不会开 blocker。若聚合同时拒绝改写它，它就成了没有出口的死结。所以聚合**收回**这一行的状态所有权：`FAILED` 与 `OPEN`/`IN_PROGRESS` 同列（`CANCELLED` 不在其中 —— 那是人对这个父节点本身的判断），子任务已收敛则 DONE，未收敛则回 OPEN。失败的那条 Session 一个字不改，它仍是 §6.1 计 `failureCount` 的依据。
+  - **AG6-e（混合版本的 wire 词汇）**：`project_action.refusal_code` 是别的进程要读的持久列，而 §11.2 BL2 对不认识的码**失败关闭**成 `UNKNOWN_FAILURE`（PROJECT 主体，§11 BL1 读作"全停"，且 §11.4 永远解不开它）。滚动升级时新副本写一个旧副本没见过的码，会把整个项目停死。因此持久列写 `STALE_SNAPSHOT`（旧副本已知的非阻塞码，语义也确实成立：pass 会跳过聚合父节点，能走到提交点说明计划所依据的世界已经变了），精确原因放在 `reasonCode` 与授权审计里。发布顺序：**先部署带三道服务门的副本，再跑 0132**；反过来会让旧副本撞上数据库拒绝，那条派发事务整体回滚（`ProjectDispatchPassService.runFor` 在 post-commit 位置吞掉并记录，事件不重投也不进死信，reconcile 已持久化的 `nextWakeAt` 仍然有效），安全但会白跑一轮。
+
 ### 13.2 验证失败的原生退回（AC6）
 
 既有 `task.verifiesTaskId` 表达"这个任务验证那个任务"。v1 让 verdict 产生**原生**后果，而不是靠提示词约定：

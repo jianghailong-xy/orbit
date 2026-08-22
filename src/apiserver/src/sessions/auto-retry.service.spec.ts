@@ -18,34 +18,153 @@ type SessionRow = Record<string, unknown>;
 
 function makeService(
   rows: SessionRow[],
-  opts: { resume?: () => Promise<unknown>; events?: Array<{ type: string; payload: unknown }> } = {},
+  opts: {
+    resume?: () => Promise<unknown>;
+    events?: Array<{ type: string; payload: unknown }>;
+    /**
+     * §13.1 AG6: the task ids the owner-scoped EXISTS would return for this batch. Modelled as the
+     * ANSWER rather than as child rows, because the whole point of that query is that the predicate
+     * lives in SQL — a fixture that re-derived it here would be asserting against its own copy.
+     */
+    aggregateParentIds?: string[];
+    /** Runs AFTER the sweep's due read and BEFORE anything it writes: the race, expressed once. */
+    afterRead?: () => void;
+    /** What the locked settle raises instead of running — the lock-contention shapes. */
+    settleThrows?: unknown;
+    /**
+     * Whether the task is STILL an owner-scoped aggregate parent at the moment the conditional
+     * settle runs — which is a different question from what the batch snapshot said, and the
+     * difference is the whole point of that write being conditional. Defaults to agreeing with
+     * `aggregateParentIds`; set it to false to model the release directions (policy back to MANUAL,
+     * the last same-owner child deleted) landing in between.
+     */
+    aggregateAtSettle?: boolean;
+    /**
+     * The row's role as the LOCKED re-read sees it, when that differs from what the due snapshot
+     * carried — i.e. a demotion to a salvage conversation committing in between.
+     */
+    startsTaskWorkAtSettle?: boolean;
+    /** What the commit-race branch re-reads for this session AFTER a refused resume. */
+    raceReadRow?: {
+      terminalReason: string | null; supersededByTaskId: string | null;
+      subjectTerminalReason: string | null; subjectSupersededByTaskId: string | null;
+      completionPolicy: string; hasDirectChildren: boolean; startsTaskWork: boolean;
+    };
+  } = {},
 ) {
   const updates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }> = [];
   const resumed: Array<{ id: string; content: string }> = [];
   const prisma = {
+    // The only raw query this service makes is §13.1 AG6's batch EXISTS.
+    // §13.1 AG6's settles run inside a transaction that locks the task first, so the fake models
+    // the same two steps: what the LOCKED re-read of the task says, and then the conditional write.
+    // `aggregateAtSettle` is what that re-read answers — set it to false to model a release
+    // direction committing between the batch snapshot and the lock.
+    // §13.1 AG6's settles run inside a transaction that walks project -> task -> session, locking
+    // each with NOWAIT and re-reading everything the compare-and-set depends on. The fake models
+    // that walk: `aggregateAtSettle` is what the LOCKED task read answers (set it to false to model
+    // a release direction committing in between), and the session read answers from the live row,
+    // so a demotion or a re-arm applied to the fixture is seen exactly where production would.
+    $transaction: async (
+      run: (tx: {
+        $queryRaw: (q: unknown, ...v: unknown[]) => Promise<unknown[]>;
+        $executeRaw: (q: unknown, ...v: unknown[]) => Promise<number>;
+      }) => Promise<number>,
+    ) => {
+      if (opts.settleThrows) throw opts.settleThrows;
+      return run({
+      $queryRaw: async (query: unknown) => {
+        const text = String((query as { text?: string }).text ?? '');
+        if (text.includes('FROM "project"')) return [{}];
+        if (text.includes('FROM "session"')) {
+          const row = rows.find((r) => r.taskId != null);
+          return row ? [{
+            taskId: row.taskId,
+            startsTaskWork: opts.startsTaskWorkAtSettle ?? row.startsTaskWork,
+            status: row.status, retryAt: row.retryAt, retryAttempts: row.retryAttempts,
+          }] : [];
+        }
+        const target = rows.find((r) => r.taskId != null);
+        const stillAggregate = opts.aggregateAtSettle
+          ?? (target?.taskId != null
+            && (opts.aggregateParentIds ?? []).includes(target.taskId as string));
+        // The scope read and the locked task read are the same shape here; `project_id` is null in
+        // these fixtures, so the two agree by construction.
+        return [{ projectId: null, aggregate: stillAggregate }];
+      },
+      $executeRaw: async (query: unknown) => {
+        // `Prisma.sql` carries its own bindings on the object; a tagged-template call passes ONE
+        // argument, so reading rest-args here silently sees nothing and every write becomes a no-op.
+        const sql = query as { text?: string; values?: unknown[] };
+        const text = String(sql.text ?? '');
+        const bound = sql.values ?? [];
+        const row = rows.find((r) => r.id === bound[bound.length - 1]);
+        if (!row) return 0;
+        if (text.includes('"retry_at" = NULL')) row.retryAt = null;
+        else row.retryAttempts = bound[0] as number;
+        return 1;
+      },
+      });
+    },
+    $queryRaw: async (query: unknown) => {
+      // Two raw queries: §13.1 AG6's batch EXISTS over the due set, and the per-session re-read the
+      // commit-race branch makes after a refused resume. Told apart by what they select.
+      const text = String((query as { text?: string }).text ?? '');
+      if (text.includes('subjectSupersededByTaskId')) return opts.raceReadRow ? [opts.raceReadRow] : [];
+      return (opts.aggregateParentIds ?? []).map((id) => ({ id }));
+    },
     session: {
       // Honour the selection predicate rather than returning everything: the regression this
       // service shipped was a `where` that matched none of the sessions it exists for, and a
       // fake that ignores `where` cannot see that. Only the status/cancel branches are
       // evaluated — `retryAt` deliberately is not, so a fixture can model a row that was armed
       // when the query ran and lost the claim before this sweep reached it.
-      findMany: async (args: { where: { OR?: Array<Record<string, unknown>> } }) =>
-        rows.filter((r) =>
-          (args.where.OR ?? []).some((cond) =>
-            Object.entries(cond).every(([k, v]) => (r[k] ?? null) === v),
-          ),
-        ),
+      // A SNAPSHOT, not the live objects. The sweep decides from what it read here and writes
+      // later; handing it the mutable rows would make every "somebody changed it in between" test
+      // impossible to express, because the change would be visible to the read that preceded it.
+      findMany: async (args: { where: { OR?: Array<Record<string, unknown>> } }) => {
+        const snapshot = rows
+          .filter((r) =>
+            (args.where.OR ?? []).some((cond) =>
+              Object.entries(cond).every(([k, v]) => (r[k] ?? null) === v),
+            ),
+          )
+          .map((r) => ({ ...r }));
+        // The race lands here: after the sweep has read, before it has written anything.
+        opts.afterRead?.();
+        return snapshot;
+      },
+
       updateMany: async (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
         updates.push(args);
         // Honour the guards the service relies on: `retryAt: { not: null }` is the claim (a
         // fixture with retryAt null models a user message that already won it), and `status`
         // is the "nobody has taken over" gate the backoff path uses.
         const row = rows.find((r) => r.id === args.where.id);
-        const where = args.where as { status?: string; retryAt?: { not: null } };
+        // Every field the service names is honoured, not just the two this fake used to look at.
+        // A fake that ignored `retryAt`'s exact instant, the attempt count or the task/role could
+        // not see the bug those clauses exist for: a claim landing on a row somebody re-armed,
+        // re-pointed or demoted in between.
+        const where = args.where as {
+          status?: string; retryAt?: { not: null } | Date | null;
+          retryAttempts?: number; taskId?: string | null; startsTaskWork?: boolean;
+        };
+        const retryAtMatches = () => {
+          if (where.retryAt === undefined) return true;
+          if (where.retryAt === null) return row!.retryAt == null;
+          if (where.retryAt instanceof Date) {
+            return row!.retryAt instanceof Date
+              && (row!.retryAt as Date).getTime() === where.retryAt.getTime();
+          }
+          return row!.retryAt != null;   // the `{ not: null }` spelling
+        };
         const hit =
           !!row &&
-          (where.retryAt === undefined || row.retryAt != null) &&
-          (where.status === undefined || where.status === row.status);
+          retryAtMatches() &&
+          (where.status === undefined || where.status === row.status) &&
+          (where.retryAttempts === undefined || where.retryAttempts === row.retryAttempts) &&
+          (where.taskId === undefined || where.taskId === (row.taskId ?? null)) &&
+          (where.startsTaskWork === undefined || where.startsTaskWork === row.startsTaskWork);
         if (hit) Object.assign(row as object, args.data);
         return { count: hit ? 1 : 0 };
       },
@@ -318,4 +437,211 @@ test('loses the claim to a user message that lands first', async () => {
   const { service, resumed } = makeService([row({ retryAt: null })]);
   await service.sweep(NOW);
   assert.deepEqual(resumed, [], 'the user took over; a second turn must not appear behind them');
+});
+
+test('§13.1 AG6: a retry whose task became an aggregate parent stands down permanently', async () => {
+  // The liveness half. Without this the sweep re-arms, backs off and re-arms until the whole retry
+  // budget is gone — every attempt spent on a refusal that cannot lift, and none of them on the
+  // RUN. The task's completion belongs to its subtasks now, so no amount of waiting changes it.
+  const { service, resumed, rows } = makeService([
+    row({
+      status: RunStatus.FAILED,
+      taskId: 'task-1',
+      startsTaskWork: true,
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+    }),
+  ], { aggregateParentIds: ['task-1'] });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'nothing is resumed');
+  assert.equal(rows[0].retryAt, null, 'and it is DISARMED, not re-armed for another sweep');
+  assert.equal(rows[0].retryAttempts, 0,
+    'no attempt is spent: this retry never happened, so the budget is untouched');
+});
+
+test('§13.1 AG6: the compatibility boundaries still retry normally', async () => {
+  // The owner-scoped EXISTS answers for the whole batch, so "not an aggregate parent" is simply
+  // absence from its result — which is what a childless non-MANUAL task, a MANUAL parent and a
+  // parent whose only child belongs to somebody else all produce.
+  for (const name of ['childless non-MANUAL', 'MANUAL parent with children', 'cross-owner child']) {
+    const { service, resumed } = makeService(
+      [row({
+        status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
+        task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+      })],
+      { aggregateParentIds: [] },
+    );
+    await service.sweep(NOW);
+    assert.equal(resumed.length, 1, `${name} must still be retried`);
+  }
+});
+
+test('§13.1 AG6: a NON-work session on an aggregate parent retries normally', async () => {
+  // The negative control that matters. A salvage or conversation session hanging off a roll-up
+  // node is a legitimate run — it is not doing the task's work, so the role invariant says nothing
+  // about it, and standing it down would remove a way OUT of a stuck subtree rather than a way in.
+  const { service, resumed, rows } = makeService(
+    [row({
+      status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: false,
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+    })],
+    { aggregateParentIds: ['task-1'] },
+  );
+  await service.sweep(NOW);
+  assert.equal(resumed.length, 1, 'it is resumed like any other retry');
+  // A successful retry clears `retryAt` (the claim) and SPENDS an attempt. A stand-down clears it
+  // and spends nothing — so the attempt counter, not the countdown, is what tells the two apart.
+  assert.equal(rows[0].retryAttempts, 1, 'a real attempt was spent, not a permanent stand-down');
+});
+
+test('§13.1 AG6 commit race: the stand-down is decided by the CURRENT row, not the snapshot', async () => {
+  // The session was the task's work when the sweep selected it, and has since been demoted to a
+  // salvage conversation. The resume then fails for an unrelated, transient reason. Deciding on the
+  // stale `true` would disarm a legitimate session for ever over a blip; the re-read is what keeps
+  // that a normal backoff.
+  const { service, rows } = makeService(
+    [row({
+      status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+    })],
+    {
+      aggregateParentIds: [],
+      resume: () => Promise.reject(new Error('runner went away mid-resume')),
+      raceReadRow: {
+        terminalReason: null, supersededByTaskId: null,
+        subjectTerminalReason: null, subjectSupersededByTaskId: null,
+        completionPolicy: 'ALL_CHILDREN_DONE', hasDirectChildren: true,
+        startsTaskWork: false,
+      },
+    },
+  );
+  await service.sweep(NOW);
+  assert.notEqual(rows[0].retryAt, null,
+    'a transient failure on a non-work session is re-armed, not permanently disarmed');
+});
+
+test('§13.1 AG6: a shape released between the snapshot and the settle leaves the retry alone', async () => {
+  // The TOCTOU negative control. The batch read said "aggregate parent", and before the disarm
+  // lands somebody takes a release direction — policy back to MANUAL, or the last same-owner child
+  // deleted. Clearing `retry_at` on that stale reading would destroy a retry that is legal again,
+  // permanently and with no attempt spent. The condition lives in the WHERE clause precisely so
+  // this case writes nothing.
+  const { service, rows } = makeService(
+    [row({
+      status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+    })],
+    { aggregateParentIds: ['task-1'], aggregateAtSettle: false },
+  );
+  await service.sweep(NOW);
+  // Left exactly as it was found. The batch hint said "aggregate parent" and the locked settle
+  // disagreed, so this sweep knows only that its own reading is out of date — it does not get to
+  // convert that into a claim. The next sweep is at most one interval away and reads afresh.
+  assert.notEqual(rows[0].retryAt, null, 'still armed, on the same instant');
+  assert.equal(rows[0].retryAttempts, 0, 'and no attempt was spent on a decision it did not make');
+});
+
+test('§13.1 AG6: a session demoted to non-work between snapshot and settle is not disarmed', async () => {
+  // The same window, on the row's own role rather than the task's shape: the sweep selected a
+  // work session, and by the time the settle holds its locks the row is a salvage conversation.
+  const { service, rows } = makeService(
+    [row({
+      status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+    })],
+    { aggregateParentIds: ['task-1'], startsTaskWorkAtSettle: false },
+  );
+  await service.sweep(NOW);
+  assert.notEqual(rows[0].retryAt, null,
+    'the locked re-read sees the demotion, so nothing is disarmed and nothing is claimed');
+  assert.equal(rows[0].retryAttempts, 0, 'and no attempt is spent');
+});
+
+test('a retry re-armed to a NEW instant is not stolen by the sweep that saw the old one', async () => {
+  // cancel + re-arm. The sweep read an arm that has since been replaced; claiming on
+  // `retryAt: { not: null }` would take the countdown somebody just set and spend an attempt on it.
+  const session = row({ status: RunStatus.FAILED });
+  const replacement = new Date('2026-08-03T18:00:00Z');
+  const { service, resumed } = makeService([session], {
+    // Genuinely after the read: the sweep decided from the arm it saw, and this replaces it before
+    // the claim runs. Mutating the row before `sweep` would only change what the read itself saw.
+    afterRead: () => { session.retryAt = replacement; },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'the claim finds no row and nothing is resumed');
+  assert.equal((session.retryAt as Date).getTime(), replacement.getTime(),
+    'and the arm somebody set is exactly as they left it');
+  assert.equal(session.retryAttempts, 0, 'with no attempt spent against it');
+});
+
+test('a failure backoff does not land on a row that was re-armed after the claim', async () => {
+  // The other half: the claim succeeded, the resume failed, and between the two somebody armed the
+  // row to a new time. The backoff must not overwrite that with its own.
+  const session = row({ status: RunStatus.FAILED });
+  const armed = new Date('2026-08-03T19:00:00Z');
+  const { service } = makeService([session], {
+    resume: async () => {
+      session.retryAt = armed;         // lands between the claim and the failure
+      session.retryAttempts = 0;
+      throw new Error('runner went away');
+    },
+  });
+  await service.sweep(NOW);
+  assert.equal((session.retryAt as Date).getTime(), armed.getTime(),
+    'the newer arm survives the backoff that was computed for the older one');
+});
+
+test('a session re-pointed at another task after the read is not claimed by this sweep', async () => {
+  const session = row({ status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true });
+  const { service, resumed } = makeService([session], {
+    afterRead: () => { session.taskId = 'task-2'; },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'the claim asserts the task it decided about');
+  assert.notEqual(session.retryAt, null, 'and the arm is left where it was');
+});
+
+test('a session demoted to a salvage conversation after the read is not claimed either', async () => {
+  const session = row({ status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true });
+  const { service, resumed } = makeService([session], {
+    afterRead: () => { session.startsTaskWork = false; },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'the claim asserts the role it decided about');
+  assert.notEqual(session.retryAt, null);
+});
+
+test('a session whose attempt count moved after the read is not claimed', async () => {
+  const session = row({ status: RunStatus.FAILED, retryAttempts: 0 });
+  const { service, resumed } = makeService([session], {
+    afterRead: () => { session.retryAttempts = 2; },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [], 'somebody else advanced the generation; this sweep stands down');
+});
+
+test('§13.1 AG6: the lock refusal is recognised through the Prisma wrapper, not just the driver', async () => {
+  // `pg` raises `code = '55P03'`; Prisma wraps the same failure as `P2010` and carries the driver's
+  // SQLSTATE in `meta.code`. A predicate that knew only one shape would work in exactly one of
+  // production and this spec — see `isLockNotAvailable`.
+  for (const [name, error] of [
+    ['driver', Object.assign(new Error('lock'), { code: '55P03' })],
+    ['prisma wrapper', Object.assign(new Error('raw query failed'), {
+      code: 'P2010', meta: { code: '55P03' },
+    })],
+    ['serialization', Object.assign(new Error('conflict'), { code: 'P2010', meta: { code: '40001' } })],
+    ['deadlock', Object.assign(new Error('deadlock'), { code: 'P2010', meta: { code: '40P01' } })],
+  ] as const) {
+    const session = row({
+      status: RunStatus.FAILED, taskId: 'task-1', startsTaskWork: true,
+      task: { terminalReason: null, supersededByTaskId: null, verifies: null },
+    });
+    const { service, resumed } = makeService([session], {
+      aggregateParentIds: ['task-1'],
+      settleThrows: error,
+    });
+    await service.sweep(NOW);
+    assert.deepEqual(resumed, [], `${name}: BUSY leaves the row alone rather than claiming it`);
+    assert.notEqual(session.retryAt, null, `${name}: still armed`);
+    assert.equal(session.retryAttempts, 0, `${name}: and nothing spent`);
+  }
 });

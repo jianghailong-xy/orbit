@@ -201,3 +201,62 @@ test('fallback is selected only from the Agent order, gated by policy, approval-
   tampered.result.decision = 'DENY';
   assert.equal(replayProjectAuthorizationAudit(tampered), false);
 });
+
+// ---------------------------------------------------------------------------------------------
+// §13.1 AG6 — the commit-point half, and the wire code it is carried on.
+// ---------------------------------------------------------------------------------------------
+
+test('§13.1 AG6: the commit gate DENIES a plan whose task became an aggregate parent', () => {
+  for (const policy of ['ALL_CHILDREN_DONE', 'VERIFICATION_PASSED'] as const) {
+    // The race this exists for: §7.8's pass chose this task from a snapshot in which it had no
+    // children (or a MANUAL policy), and by the time the transaction runs it has both.
+    const stale = request('GUARDED_AUTO', {
+      task: {
+        ...request().task!,
+        aggregateParent: { completionPolicy: policy, hasDirectChildren: true },
+      },
+    });
+    const result = authorizeProjectAction(stale);
+    assert.equal(result.decision, 'DENY', `${policy}: a role is not a condition that lifts`);
+    assert.equal(result.reasonCode, 'TASK_AGGREGATE_PARENT');
+  }
+});
+
+test('§13.1 AG6: the commit gate answers the role BEFORE the failure ladder', () => {
+  // A FAILED aggregate parent must not be classified as a retry — `DISPATCH_MAX_ATTEMPTS` would
+  // answer `MAX_ATTEMPTS_REACHED` (a TEST_FAILED blocker) about a task that was never work.
+  const failed = request('GUARDED_AUTO', {
+    task: {
+      ...request().task!,
+      status: 'FAILED',
+      failureCount: 9,
+      failureAttributable: false,
+      aggregateParent: { completionPolicy: 'ALL_CHILDREN_DONE', hasDirectChildren: true },
+    },
+  });
+  const result = authorizeProjectAction(failed);
+  assert.equal(result.reasonCode, 'TASK_AGGREGATE_PARENT');
+  assert.notEqual(result.reasonCode, 'UNKNOWN_FAILURE');
+});
+
+test('§13.1 AG6: the three compatibility boundaries still reach ALLOW at the commit point', () => {
+  const boundaries: Array<[string, { completionPolicy: 'MANUAL' | 'ALL_CHILDREN_DONE'; hasDirectChildren: boolean }]> = [
+    ['childless non-MANUAL', { completionPolicy: 'ALL_CHILDREN_DONE', hasDirectChildren: false }],
+    ['MANUAL parent with children', { completionPolicy: 'MANUAL', hasDirectChildren: true }],
+    ['MANUAL, no children', { completionPolicy: 'MANUAL', hasDirectChildren: false }],
+  ];
+  for (const [name, aggregateParent] of boundaries) {
+    const result = authorizeProjectAction(request('GUARDED_AUTO', {
+      task: { ...request().task!, aggregateParent },
+    }));
+    assert.equal(result.decision, 'ALLOW', `${name} must still be admitted`);
+  }
+});
+
+test('§13.1 AG6: an audit captured before the facts existed reads as "not an aggregate parent"', () => {
+  // Absent means the caller did not supply them, which is what an audit from before AG6 meant —
+  // and it must replay to what it originally produced rather than to today's rules.
+  const old = request('GUARDED_AUTO', { task: { ...request().task!, aggregateParent: undefined } });
+  assert.equal(authorizeProjectAction(old).decision, 'ALLOW');
+  assert.equal(replayProjectAuthorizationAudit(createProjectAuthorizationAudit(old)), true);
+});

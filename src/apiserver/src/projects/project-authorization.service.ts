@@ -14,6 +14,7 @@ import {
   verificationFailureIsHistorySql,
 } from '../tasks/task-supersession';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
+import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
 
 export type ProjectAutomationPolicyValue = 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
 
@@ -73,6 +74,12 @@ export type ProjectAuthorizationReasonCode =
   // §13.6 SU6: this attempt was replaced or abandoned. DENY and not DEFER — a deferral says "not
   // yet", and there is no later instant at which a superseded attempt becomes the live one again.
   | 'TASK_SUPERSEDED'
+  // §13.1 AG6: this task has direct children and a policy that completes it FROM them. DENY and
+  // not DEFER, for the same reason `TASK_SUPERSEDED` is: a deferral says "not yet", and there is
+  // no later instant at which a task whose completion is a recomputation becomes work somebody
+  // could do. What lifts it is somebody CHANGING the task — removing its children or setting the
+  // policy back to MANUAL — and that is a new shape, not a later moment of this one.
+  | 'TASK_AGGREGATE_PARENT'
   | 'TASK_DISPATCH_HELD'
   | 'TASK_NOT_DUE'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
@@ -193,6 +200,23 @@ export interface ProjectActionAuthorizationInput {
      * a name rather than a Session for work that has already been re-done.
      */
     retirement?: TaskRetirement | null;
+    /**
+     * §13.1 AG6, as this gate READ IT AT THE COMMIT POINT, under the task row's `FOR SHARE`.
+     *
+     * The same race `retirement` above is here for, on a different pair of columns. §7.8's pass
+     * chose this task from a snapshot in which it had no children, or a MANUAL policy; between
+     * that snapshot and this transaction somebody filed a subtask under it or switched the policy
+     * to `ALL_CHILDREN_DONE`. The plan was correct when it was made and is wrong now, and the only
+     * place that can tell is a re-read inside the lock. Absent means the caller did not supply the
+     * facts — an audit captured before AG6, which read as "nothing about the shape stopped it",
+     * because that was true then.
+     */
+    aggregateParent?: {
+      /** `task.completion_policy` re-read at the commit point. */
+      completionPolicy: TaskCompletionPolicyValue;
+      /** Whether any task in this Project names it as `parentTaskId`, re-read at the commit point. */
+      hasDirectChildren: boolean;
+    } | null;
     /**
      * §13.6 SU6's derived half: the retirement of the task this one VERIFIES, when it verifies one.
      *
@@ -492,6 +516,17 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
   })) {
     return { decision: 'DENY', reasonCode: 'TASK_SUPERSEDED' };
   }
+  // §13.1 AG6, second and DENY, for the reason above and in the same position §7.8's pass puts it:
+  // before the status clause, because a FAILED aggregate parent is not a run to retry. This is the
+  // half of the gate that survives a plan made against an older shape — §7.8 chose from a snapshot,
+  // and children and policy are both columns somebody may write between that snapshot and here.
+  //
+  // Absent facts read as "not an aggregate parent", which is what an audit captured before AG6
+  // meant. A caller that supplies them cannot get that answer by omission: the adapter below fills
+  // the field for every DISPATCH_TASK it builds.
+  if (task.aggregateParent && isAggregateParent(task.aggregateParent)) {
+    return { decision: 'DENY', reasonCode: 'TASK_AGGREGATE_PARENT' };
+  }
   // §7.4 precondition 1, v1.18 (`PC-CX-64`): `FAILED` is a status this gate ADMITS ON, not one it
   // refuses out of hand. WHICH of §9.5 Q3's rows the task is on is then settled by clauses this
   // function already had, and that is deliberate — they are where `failedTaskBlockerKind` took its
@@ -750,12 +785,17 @@ export class ProjectAuthorizationService {
       assigneeAgentId: string | null;
       supersededByTaskId: string | null; terminalReason: string | null;
       verifiesTaskId: string | null;
+      completionPolicy: string;
     }>>(Prisma.sql`
       SELECT t."id", t."status"::text, t."dispatch_hold" AS "dispatchHold",
              t."run_at" AS "runAt", t."assignee_id" AS "assigneeAgentId",
              t."superseded_by_task_id" AS "supersededByTaskId",
              t."terminal_reason" AS "terminalReason",
-             t."verifies_task_id" AS "verifiesTaskId"
+             t."verifies_task_id" AS "verifiesTaskId",
+             -- §13.1 AG6's policy column, read from the row this statement already locks:
+             -- switching a policy is an UPDATE of exactly this row, so the lock that fences
+             -- supersession fences the policy flip too, with no second lock and no new lock order.
+             t."completion_policy"::text AS "completionPolicy"
         FROM "task" t
        WHERE t."id" = ${command.taskId}::uuid AND t."project_id" = ${command.projectId}::uuid
          AND t."owner_id" = ${command.ownerId}::uuid
@@ -779,6 +819,32 @@ export class ProjectAuthorizationService {
         FROM "task" t WHERE t."id" = ${task.verifiesTaskId}::uuid
        FOR SHARE
     `);
+
+    // §13.1 AG6's first clause, at the commit point. A THIRD statement, after the verifier and its
+    // subject, so the three keep one fixed order and cannot invert against 0130's session guard.
+    //
+    // OWNER-scoped, and deliberately not project-scoped: that is the scope
+    // `collectAggregationScope` walks, and the two rules are one predicate read in opposite
+    // directions — aggregation completes this task iff the loop must not dispatch it. The API
+    // refuses a cross-project parent (`assertParentEligible`), so the scopes differ only for rows
+    // raw SQL produced, and there the wider one is the fail-closed answer. `LIMIT 1`: existence.
+    //
+    // This read is NOT what makes the rule atomic, and it must not be mistaken for it. A row lock
+    // on a parent is not a predicate lock over its children — a child insert takes only the FK's
+    // `FOR KEY SHARE` on this row, which `FOR SHARE` does not conflict with. What this closes is
+    // the ordering §7.8's staleness leaves open: a child filed after the pass took its snapshot and
+    // committed before this transaction is seen HERE, and refused with a code a reader can act on.
+    // The genuinely concurrent case is closed one layer down, by migration 0132's pair of guards on
+    // a shared `FOR UPDATE` of this row — this gate exists so that the common case produces a
+    // refusal code rather than a raised exception.
+    const childRows = command.taskId == null ? [] : await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`
+        SELECT c."id" FROM "task" c
+         WHERE c."parent_task_id" = ${command.taskId}::uuid
+           AND c."owner_id" = ${command.ownerId}::uuid
+         LIMIT 1
+      `,
+    );
 
     const targetAgents = !task?.assigneeAgentId ? []
       : await tx.$queryRaw<AuthorizationAgentRow[]>(Prisma.sql`
@@ -1003,6 +1069,10 @@ export class ProjectAuthorizationService {
               },
               hasLiveSession: (liveTask?.count ?? 0) > 0,
               retirement: task == null ? null : taskRetirement(task),
+              aggregateParent: task == null ? null : {
+                completionPolicy: task.completionPolicy as TaskCompletionPolicyValue,
+                hasDirectChildren: childRows.length > 0,
+              },
               verificationSubjectRetirement: subjectRows[0]
                 ? taskRetirement(subjectRows[0])
                 : null,

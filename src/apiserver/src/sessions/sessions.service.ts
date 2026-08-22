@@ -104,6 +104,10 @@ import {
   pendingWorktreeOperationMayBeExecuting,
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
+import {
+  TaskCompletionPolicyValue,
+  isAggregateParent,
+} from '../projects/task-aggregation';
 import { truncatePayload } from './truncate-payload';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
 import {
@@ -2063,28 +2067,70 @@ export class SessionsService {
     // so the only lasting effect of the click is a countdown in the UI that expires into nothing.
     // Refused here, `retry_at`, `retry_attempts` and `updated_at` are all untouched. A supersession
     // that lands AFTER this is the sweep's to handle, and it does: one disarm, no attempt spent.
-    const [armTarget] = await this.prisma.$queryRaw<Array<{ taskId: string | null }>>(Prisma.sql`
-      SELECT s."task_id" AS "taskId" FROM "session" s
-       WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
-    `);
-    if (armTarget?.taskId) {
-      const refusal = await this.taskWorkRefusalFor(this.prisma, armTarget.taskId);
-      if (refusal) {
-        throw new ConflictException(`this retry cannot be armed: ${refusal}`);
+    // ONE transaction, project -> task -> session, so the refusal and the write are the same act.
+    //
+    // A read-then-write here is not enough, and §13.1 AG6 is the case that shows why: a FAILED work
+    // Session is not live, so nothing in 0132's activation fence stops its task becoming an
+    // aggregate parent — the pre-check can pass and the arm can land against a task that is a
+    // roll-up node by the time it commits, promising a retry the sweep will only ever refuse.
+    // Taking the task `FOR UPDATE` is what makes the two orders decide the same thing, and it is
+    // the mode the shape guard conflicts with.
+    const armed = await this.prisma.$transaction(async (tx) => {
+      const [target] = await tx.$queryRaw<Array<{
+        taskId: string | null; startsTaskWork: boolean; projectId: string | null;
+      }>>(Prisma.sql`
+        SELECT s."task_id" AS "taskId", s."starts_task_work" AS "startsTaskWork",
+               t."project_id" AS "projectId"
+          FROM "session" s LEFT JOIN "task" t ON t."id" = s."task_id"
+         WHERE s."id" = ${id}::uuid AND s."owner_id" = ${ownerId}::uuid
+      `);
+      if (target?.taskId) {
+        if (target.projectId) {
+          await tx.$queryRaw(Prisma.sql`
+            SELECT 1 FROM "project" p WHERE p."id" = ${target.projectId}::uuid FOR NO KEY UPDATE
+          `);
+        }
+        const [locked] = await tx.$queryRaw<Array<{ projectId: string | null }>>(Prisma.sql`
+          SELECT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ${target.taskId}::uuid
+           FOR UPDATE
+        `);
+        // The project taken above came from an unlocked read. Re-confirm it now that the task is
+        // held: a task re-filed in between would leave this holding the OLD project while every
+        // trigger behind the write reaches for the new one.
+        if ((locked?.projectId ?? null) !== (target.projectId ?? null)) {
+          throw new ConflictException(
+            'this task changed project while the request was being prepared — nothing was '
+            + 'changed; retry',
+          );
+        }
+        // Re-read under the lock, in its own statement: the facts are read from a snapshot taken
+        // after the row was granted, not from the one the lock request itself used.
+        // §13.1 AG6 applies only to a retry of the task's WORK — arming a retry on a conversation
+        // about a roll-up node is a normal thing to do and stays available.
+        const refusal = await this.taskWorkRefusalFor(
+          tx, target.taskId, false, target.startsTaskWork,
+        );
+        if (refusal) {
+          throw new ConflictException(`this retry cannot be armed: ${refusal}`);
+        }
       }
-    }
-    const armed = await this.prisma.session.updateMany({
-      where: {
-        id,
-        ownerId,
-        deletedAt: null,
-        completedAt: null,
-        OR: [
-          { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
-          { status: RunStatus.FAILED },
-        ],
-      },
-      data: { retryAt: at },
+      return tx.session.updateMany({
+        where: {
+          id,
+          ownerId,
+          deletedAt: null,
+          completedAt: null,
+          // The role the refusal above was decided against, so a demotion or promotion landing
+          // inside this transaction cannot leave the two disagreeing.
+          startsTaskWork: target?.startsTaskWork ?? false,
+          taskId: target?.taskId ?? null,
+          OR: [
+            { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+            { status: RunStatus.FAILED },
+          ],
+        },
+        data: { retryAt: at },
+      });
     });
     if (!armed.count) throw new BadRequestException('session is not waiting on a retry');
     return { retryAt: at };
@@ -3952,22 +3998,63 @@ export class SessionsService {
    * inside the revive transaction, a supersession committing concurrently either lands before this
    * read (and is seen) or waits for this transaction (and applies to a row already resumed).
    */
+  /**
+   * §13.1 AG6's sentence, and the marker AutoRetry keys its permanent stand-down on.
+   *
+   * A constant rather than a formatted string: `AutoRetryService` has to tell this refusal apart
+   * from the ordinary "it failed again" so it can DISARM instead of re-arming, and matching on a
+   * shared constant is the only version of that which cannot drift from what is thrown.
+   */
+  static readonly AGGREGATE_PARENT_REFUSAL =
+    'this task is completed by aggregating its subtasks, so it has no work of its own to run — '
+    + 'run its subtasks, or set its completion policy to MANUAL';
+
+  /**
+   * @param startsTaskWork whether the operation being judged is the TASK's work.
+   *
+   * §13.6 SU6's refusal is CATEGORICAL — reviving a replaced attempt is refused whoever asks and
+   * whatever the turn is for, because nothing on the row separates a person from the sweep. §13.1
+   * AG6's is not, and the difference is the whole reason this parameter exists: an aggregate parent
+   * is a row you may legitimately open a session ABOUT — read it, ask it a question, salvage
+   * something from a run that stopped. What it may not have is a session doing its WORK, because
+   * that is the thing its subtasks are for. Applying the aggregate arm unconditionally would refuse
+   * every conversation on a roll-up node, which is both wrong and the opposite of a wedge's exit.
+   */
   private async taskWorkRefusalFor(
     db: Prisma.TransactionClient | PrismaService,
     taskId: string,
     locked = false,
+    startsTaskWork = true,
   ): Promise<string | null> {
-    const [facts] = await db.$queryRaw<Array<TaskWorkFacts>>(Prisma.sql`
+    const [facts] = await db.$queryRaw<Array<TaskWorkFacts & {
+      completionPolicy: string; hasDirectChildren: boolean;
+    }>>(Prisma.sql`
       SELECT t."terminal_reason" AS "terminalReason",
              t."superseded_by_task_id" AS "supersededByTaskId",
              subject."terminal_reason" AS "subjectTerminalReason",
-             subject."superseded_by_task_id" AS "subjectSupersededByTaskId"
+             subject."superseded_by_task_id" AS "subjectSupersededByTaskId",
+             -- §13.1 AG6, on the same read. A resume that hands a task its own work is a dispatch
+             -- by another name: the row was a legal leaf when it ran and the task has since become
+             -- an aggregate parent, so reviving it would put a Worker back on a row whose
+             -- completion now belongs to the recomputation. Owner-scoped like every other reader
+             -- of this predicate, because that is the scope aggregation itself walks.
+             t."completion_policy"::text AS "completionPolicy",
+             EXISTS (SELECT 1 FROM "task" c
+                      WHERE c."parent_task_id" = t."id" AND c."owner_id" = t."owner_id")
+               AS "hasDirectChildren"
         FROM "task" t
         LEFT JOIN "task" subject ON subject."id" = t."verifies_task_id"
        WHERE t."id" = ${taskId}::uuid
        ${locked ? Prisma.sql`FOR SHARE OF t` : Prisma.empty}
     `);
-    return facts ? taskWorkRefusal(facts, uuidToBase62) : null;
+    if (!facts) return null;
+    if (startsTaskWork && isAggregateParent({
+      completionPolicy: facts.completionPolicy as TaskCompletionPolicyValue,
+      hasDirectChildren: facts.hasDirectChildren,
+    })) {
+      return SessionsService.AGGREGATE_PARENT_REFUSAL;
+    }
+    return taskWorkRefusal(facts, uuidToBase62);
   }
 
   async resume(
@@ -4023,7 +4110,13 @@ export class SessionsService {
       && !session.startsTaskWork
       && !opts?.startsTaskWork;
     if (session.taskId && !continuesSalvage) {
-      const refusal = await this.taskWorkRefusalFor(this.prisma, session.taskId);
+      // The two refusals part company here. Supersession is categorical — a terminal revival is
+      // refused whoever asks. §13.1 AG6 asks a narrower question: is THIS turn the task's work?
+      // A terminal non-work session revived to read or salvage is not, and must stay resumable.
+      const effectiveStartsTaskWork = session.startsTaskWork || opts?.startsTaskWork === true;
+      const refusal = await this.taskWorkRefusalFor(
+        this.prisma, session.taskId, false, effectiveStartsTaskWork,
+      );
       if (refusal) {
         throw new ConflictException(`this session's run may not be resumed: ${refusal}`);
       }
@@ -4187,7 +4280,9 @@ export class SessionsService {
       // The commit-point half, and it reaches only a REVIVAL — the live path returned above through
       // `createTurn`. A revival is judged categorically; see the pre-check for why.
       if (current.taskId) {
-        const refusal = await this.taskWorkRefusalFor(tx, current.taskId, true);
+        const refusal = await this.taskWorkRefusalFor(
+          tx, current.taskId, true, current.startsTaskWork || opts?.startsTaskWork === true,
+        );
         if (refusal) {
           throw new ConflictException(`this session's run may not be resumed: ${refusal}`);
         }

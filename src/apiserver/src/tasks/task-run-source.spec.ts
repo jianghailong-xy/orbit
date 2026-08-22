@@ -11,6 +11,10 @@ test('a fresh task run creates an Active-list session', async () => {
         id: 'task-1',
         title: 'Ship it',
         description: null,
+        // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+        // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+        completionPolicy: 'MANUAL',
+        children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
     },
@@ -48,6 +52,10 @@ test('an automatic Task List run carries distinct auditable provenance', async (
       findFirst: async () => ({
         id: 'task-1', title: 'Auto', description: null, status: 'OPEN', runAt: null,
         dispatchAuthority: 'LEGACY', dispatchHold: false,
+        // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+        // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+        completionPolicy: 'MANUAL',
+        children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
     },
@@ -76,7 +84,13 @@ test('an automatic Task List run carries distinct auditable provenance', async (
 test('legacy automatic dispatch stands down after Coordinator authority takes over', async () => {
   let creates = 0;
   const service = new TasksService({
-    task: { findFirst: async () => ({ id: 'task-1', dispatchAuthority: 'COORDINATOR' }) },
+    // §13.1 AG6 is judged before the authority stand-down — the role invariant holds the same
+    // position at all three gates — so even this deliberately minimal row carries its two facts.
+    task: {
+      findFirst: async () => ({
+        id: 'task-1', dispatchAuthority: 'COORDINATOR', completionPolicy: 'MANUAL', children: [],
+      }),
+    },
   } as never, { create: async () => { creates += 1; } } as never, {} as never);
 
   const result = await service.execute('owner-1', 'task-1', { observedRunAt: null });
