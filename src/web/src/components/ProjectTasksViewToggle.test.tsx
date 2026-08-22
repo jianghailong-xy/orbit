@@ -33,9 +33,23 @@ vi.mock('./ProjectDependencyGraph', async () => {
 
 let container: HTMLDivElement;
 let root: Root;
+const storageValues = new Map<string, string>();
+const storageStub: Storage = {
+  get length() {
+    return storageValues.size;
+  },
+  clear: () => storageValues.clear(),
+  getItem: (key) => storageValues.get(key) ?? null,
+  key: (index) => [...storageValues.keys()][index] ?? null,
+  removeItem: (key) => storageValues.delete(key),
+  setItem: (key, value) => storageValues.set(key, value),
+};
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Node 26 reserves a global localStorage slot that is undefined unless the process receives
+  // --localstorage-file. Supply the browser contract explicitly so CI exercises the same path.
+  vi.stubGlobal('localStorage', storageStub);
   localStorage.clear();
   // The module registry is reset per test so `graphModule.imported` measures THIS test's imports
   // rather than accumulating across the file — otherwise the "not until Graph is selected" claim
@@ -48,6 +62,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   localStorage.clear();
+  vi.unstubAllGlobals();
 });
 
 /** The component under test, re-imported per test so the reset registry above means something. */
