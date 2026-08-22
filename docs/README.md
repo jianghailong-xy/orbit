@@ -43,10 +43,13 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Codex `turn/steer` contract](codex-turn-steer-contract.md) — the frozen wire format, failure taxonomy,
   capability gating, and mixed-version rollout rules for steering a running Codex turn, with the
   [engine evidence](evidence/codex-turn-steer-0.149.0/transcript.md) behind them.
+- [The database write audit](db-write-audit.md) — every write in the API server with its lock order,
+  identity, replayability, effects and retry decision, the trigger set derived from the migrations,
+  and the static tests that fail when any of it stops being true.
 - [PostgreSQL lock-order barrier fixture](postgres-deadlock-barrier.md) — the isolated multi-connection
   harness that reproduces the two 2026-08-21 `40P01` deadlocks deterministically, their lock graphs and
   `pg_locks`/`pg_blocking_pids` evidence, and how the fix regression reuses the same schedule.
-- [Session Project-event trigger scope](session-event-trigger-scope.md) — why migration 0130 declares the
+- [Session Project-event trigger scope](session-event-trigger-scope.md) — why migration 0133 declares the
   Session event source over `status`/`deleted_at`/`merge_status` only, what that removes from a
   telemetry write's lock set, and how to upgrade, roll back and tell a missing signal from an absent one.
 - [Task dependency revision](task-dependency-revision.md) — why migration 0132 replaces the dispatch
