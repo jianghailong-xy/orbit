@@ -1,10 +1,10 @@
 import Foundation
 
-/// A `tool_result`'s `content`, which the engine delivers either as a plain string or as an array
-/// of blocks (`text`, `image`, …). Two places read the same shape — the reducer, which files the
-/// first copy from the server's preview, and a clipped card, which re-derives it from the untrimmed
-/// refetch — so the parsing lives here once. Web parity: `resultImages` / `hasResultImage` in
-/// `Transcript.tsx`.
+/// A `tool_result`'s `content` — a plain string, an array of blocks (`text`, `image`, …), or a whole
+/// MCP `CallToolResult` wrapper, depending on the engine. Two places read the same shapes: the
+/// reducer, which files the first copy from the server's preview, and a clipped card, which
+/// re-derives it from the untrimmed refetch — so the parsing lives here once. Web parity:
+/// `resultText` / `resultImages` / `hasResultImage` in `Transcript.tsx`.
 public enum ToolResultContent {
     /// A tool_result's `content` flattened to displayable text — the native half of web's
     /// `resultText`. Three shapes reach us and all three are web's: a plain string (Claude's own
