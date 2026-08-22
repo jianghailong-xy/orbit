@@ -123,6 +123,13 @@ export const PROJECT_TASK_TREE_SELECT = {
  * drifts. Clients are handed the fact, not the row: the team itself is not this phase's API, and a
  * `members` array in every project payload would be one.
  */
+/**
+ * The most tasks one project-graph response carries. Far above the size at which a node-link
+ * picture is still readable — the client refuses to draw long before this — so it is a fence
+ * against an unbounded response rather than a display limit.
+ */
+const PROJECT_DEPENDENCY_GRAPH_MAX_NODES = 500;
+
 const COORDINATION_INCLUDE = {
   members: { where: { role: ProjectRole.COORDINATOR }, select: { agentId: true } },
   runtime: { select: { coordinatorGeneration: true } },
@@ -1460,6 +1467,67 @@ export class ProjectsService {
     return {
       items,
       nextCursor: hasMore && page.length ? encodeTaskPageCursor(page[page.length - 1]) : null,
+    };
+  }
+
+  /**
+   * This project's dependency graph: every task filed under it, and every dependency edge whose
+   * BOTH ends are also filed under it.
+   *
+   * Its own endpoint rather than `GET /tasks/:id/dependency-graph` pointed at the project's first
+   * task, which was the cheaper option and was evaluated first. Three things make that endpoint
+   * answer a different question than this page asks:
+   *   - it is a breadth-first walk out of ONE focus, so what comes back is that task's weakly
+   *     connected component. A project's unconnected tasks are simply not in the picture, and a
+   *     picture that silently omits tasks is worse on a project page than no picture;
+   *   - its traversal is scoped by `ownerId` and never by project (`tasks.service.ts`), so a
+   *     dependency filed across a project boundary drags the neighbouring project's tasks in;
+   *   - its depth is capped at `MAX_DEPENDENCY_GRAPH_MAX_DEPTH` (32), and a chain-shaped project
+   *     of 118 tasks is 117 levels deep.
+   *
+   * The response deliberately reuses that endpoint's vocabulary — `nodes`, `edges` carrying
+   * `sourceTaskId` -> `targetTaskId` in prerequisite-to-dependent order, `truncated` — so the
+   * client reads both graphs with one set of words (`web/src/lib/taskDependencyGraph.ts`) instead
+   * of a second one that means the same things.
+   *
+   * An edge with one end outside the project is dropped rather than drawn to a stub node: it
+   * belongs to another project's plan, and a node this page cannot open is worse than a missing
+   * line. What a task waits on across that boundary is what the task page's `dependencyState`
+   * already reports.
+   */
+  async dependencyGraph(ownerId: string, projectId: string) {
+    await this.assertOwned(ownerId, projectId);
+
+    // One row past the cap, so a project too large to answer for is REPORTED as truncated rather
+    // than served short and read as the whole plan.
+    const rows = await this.prisma.task.findMany({
+      where: { ownerId, projectId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: PROJECT_DEPENDENCY_GRAPH_MAX_NODES + 1,
+      select: { id: true, title: true, status: true, parentTaskId: true },
+    });
+    const truncated = rows.length > PROJECT_DEPENDENCY_GRAPH_MAX_NODES;
+    const nodes = truncated ? rows.slice(0, PROJECT_DEPENDENCY_GRAPH_MAX_NODES) : rows;
+    const ids = nodes.map((node) => node.id);
+    const edges = ids.length
+      ? await this.prisma.taskDependency.findMany({
+          where: { taskId: { in: ids }, dependsOnTaskId: { in: ids } },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { taskId: true, dependsOnTaskId: true },
+        })
+      : [];
+
+    return {
+      nodes,
+      // `depends_on_task_id` is the PREREQUISITE and `task_id` is the task waiting on it — the
+      // opposite order to how the column names read, and the one thing here that is easy to get
+      // backwards. Arrows flow prerequisite -> dependent, so the prerequisite is the source.
+      edges: edges.map((edge) => ({
+        sourceTaskId: edge.dependsOnTaskId,
+        targetTaskId: edge.taskId,
+      })),
+      truncated,
+      limits: { maxNodes: PROJECT_DEPENDENCY_GRAPH_MAX_NODES },
     };
   }
 

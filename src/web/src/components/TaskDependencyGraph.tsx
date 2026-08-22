@@ -141,7 +141,7 @@ interface DependencyAggregateNodeData extends Record<string, unknown> {
 
 type DependencyAggregateFlowNode = Node<DependencyAggregateNodeData, 'taskDependencyAggregate'>;
 
-const EDGE_COLORS: Record<TaskDependencyVisualState, string> = {
+export const EDGE_COLORS: Record<TaskDependencyVisualState, string> = {
   complete: 'var(--success-solid)',
   active: 'var(--brand)',
   queued: 'var(--brand-border)',

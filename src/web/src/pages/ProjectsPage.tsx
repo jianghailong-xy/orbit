@@ -29,6 +29,7 @@ import {
   runAtProblem,
   scheduledStart,
 } from '../lib/taskSchedule';
+import { ProjectTasksViewToggle } from '../components/ProjectTasksViewToggle';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -274,7 +275,7 @@ export function ProjectDetailPage() {
               belongs to came back, so a project that 404s never puts a second doomed request on
               the wire. `id` is the normalized route id — the same spelling the project query
               above is keyed and fetched with. */}
-          <ProjectTasks projectId={id} />
+          <ProjectTasks projectId={id} taskCount={p._count.tasks} />
         </>
       ) : null}
     </div>
@@ -684,7 +685,7 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
  * what lets a page of tasks be handed in directly, without a project document standing in front
  * of it deciding whether the section renders at all.
  */
-export function ProjectTasks({ projectId }: { projectId: string }) {
+export function ProjectTasks({ projectId, taskCount }: { projectId: string; taskCount: number }) {
   // The dialog is opened from here rather than owning its own trigger, so the section that lists
   // the level a new task lands in is also the thing that offers to add one to it.
   const [creating, setCreating] = useState(false);
@@ -706,63 +707,68 @@ export function ProjectTasks({ projectId }: { projectId: string }) {
         </Button>
       </div>
 
-      {tasks.isLoading ? (
-        <div style={{ padding: 24, textAlign: 'center' }}>
-          <Spin />
-        </div>
-      ) : tasks.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="Tasks could not be loaded"
-          description={tasks.error instanceof Error ? tasks.error.message : undefined}
-          action={
-            <Button size="small" danger onClick={() => tasks.refetch()}>
-              Retry
-            </Button>
-          }
-        />
-      ) : tasks.data && tasks.data.items.length > 0 ? (
-        <>
-          {projectTaskGroups(tasks.data.items).map((group) => (
-            // The finished band is dimmed rather than dropped: it is still the answer to "did that
-            // land?", just not to "what can run now", which is what the levels above it answer.
-            <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
-              <div
-                data-topo-group={group.key}
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  gap: 16,
-                  marginTop: 16,
-                }}
-              >
-                <Typography.Text strong={group.level !== null} type="secondary">
-                  {group.heading}
-                </Typography.Text>
-                <Typography.Text type="secondary">
-                  {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
-                </Typography.Text>
+      {/* The list is this toggle's default and its `children`; Graph is the option beside it.
+          The heading and New task sit outside it on purpose — neither of them is a view of the
+          tasks, and both stay reachable whichever view is showing. */}
+      <ProjectTasksViewToggle projectId={projectId} taskCount={taskCount}>
+        {tasks.isLoading ? (
+          <div style={{ padding: 24, textAlign: 'center' }}>
+            <Spin />
+          </div>
+        ) : tasks.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Tasks could not be loaded"
+            description={tasks.error instanceof Error ? tasks.error.message : undefined}
+            action={
+              <Button size="small" danger onClick={() => tasks.refetch()}>
+                Retry
+              </Button>
+            }
+          />
+        ) : tasks.data && tasks.data.items.length > 0 ? (
+          <>
+            {projectTaskGroups(tasks.data.items).map((group) => (
+              // The finished band is dimmed rather than dropped: it is still the answer to "did that
+              // land?", just not to "what can run now", which is what the levels above it answer.
+              <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
+                <div
+                  data-topo-group={group.key}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    gap: 16,
+                    marginTop: 16,
+                  }}
+                >
+                  <Typography.Text strong={group.level !== null} type="secondary">
+                    {group.heading}
+                  </Typography.Text>
+                  <Typography.Text type="secondary">
+                    {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
+                  </Typography.Text>
+                </div>
+                <List
+                  dataSource={group.tasks}
+                  rowKey="id"
+                  renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
+                />
               </div>
-              <List
-                dataSource={group.tasks}
-                rowKey="id"
-                renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
-              />
-            </div>
-          ))}
-          {/* Said outright rather than shown as a button: this unit reads one page and sends no
-              cursor, so a silent stop here would read as "that is all of them". */}
-          {tasks.data.nextCursor ? (
-            <Typography.Text type="secondary">
-              More top-level tasks exist beyond this first page.
-            </Typography.Text>
-          ) : null}
-        </>
-      ) : (
-        <Empty description="No top-level tasks yet" />
-      )}
+            ))}
+            {/* Said outright rather than shown as a button: this unit reads one page and sends no
+                cursor, so a silent stop here would read as "that is all of them". */}
+            {tasks.data.nextCursor ? (
+              <Typography.Text type="secondary">
+                More top-level tasks exist beyond this first page.
+              </Typography.Text>
+            ) : null}
+          </>
+        ) : (
+          <Empty description="No top-level tasks yet" />
+        )}
+      </ProjectTasksViewToggle>
 
       <NewProjectTaskModal
         projectId={projectId}

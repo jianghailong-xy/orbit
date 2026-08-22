@@ -670,7 +670,10 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     // expandable row, so without this a reader tabbing through hears "Show subtasks" twice with
     // nothing to choose between them — and it stays the literal prefix of the name, so the button
     // is still reachable by what is written on it.
-    expect(out.match(/aria-label="[^"]*"/g)).toEqual([
+    // Matched against the disclosure labels specifically rather than every label on the page:
+    // the task section also carries the List | Graph group, which names itself and is not one of
+    // these controls.
+    expect(out.match(/aria-label="(?:Show|Hide) subtasks[^"]*"/g)).toEqual([
       'aria-label="Show subtasks for Has children"',
       'aria-label="Show subtasks for Also has children"',
     ]);
@@ -700,7 +703,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
     expect(out).toContain('0 subtasks');
     expect(out).not.toContain('Show subtasks');
     expect(out).not.toContain('aria-expanded');
-    expect(out).not.toContain('aria-label');
+    expect(out).not.toMatch(/aria-label="(?:Show|Hide) subtasks/);
   });
 
   it('mounts the opened level indented, and only inside the expanded branch', () => {
@@ -1036,7 +1039,7 @@ describe('ProjectDetailPage — coordinator', () => {
     // cannot fail the mutation, so this reads the two places that decide it.
     const control = source.indexOf('<ProjectCoordinatorControl');
     expect(control).toBeGreaterThan(-1);
-    expect(control).toBeLessThan(source.indexOf('<ProjectTasks projectId={id} />'));
+    expect(control).toBeLessThan(source.indexOf('<ProjectTasks projectId={id}'));
     // Nothing on the page is rendered conditionally on the coordinator's failure...
     expect(source).not.toMatch(/coordinator\.(isError|error)\s*\?/);
     // ...and the failed section still stands up whole on its own: heading, action and message.
@@ -1380,7 +1383,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     );
     // The project the task is created under is the page's own normalized id, handed down from the
     // route — never re-derived, and never picked in the form.
-    expect(source).toContain('<ProjectTasks projectId={id} />');
+    expect(source).toContain('<ProjectTasks projectId={id}');
     expect(source).toContain('projectId={projectId}');
   });
 

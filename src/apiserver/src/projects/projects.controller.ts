@@ -73,6 +73,19 @@ export class ProjectsController {
   }
 
   /**
+   * This project's dependency graph, whole: every task in it plus every in-project dependency
+   * edge, in the same `nodes` / `edges` vocabulary `GET /tasks/:id/dependency-graph` answers in.
+   *
+   * Unpaged and unparameterised on purpose. It is not a page of a tree — a graph served in pieces
+   * is not a graph — and it is bounded instead by a server-side node cap that reports itself as
+   * `truncated` when it bites.
+   */
+  @Get(':id/dependency-graph')
+  dependencyGraph(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.dependencyGraph(user.userId, id);
+  }
+
+  /**
    * What every verification in this project concluded, and what is still blocked by one (§13.2).
    *
    * The audit face for verdicts: each check's current conclusion and its `verdictRevision`, every
