@@ -792,6 +792,7 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 		doneTools:   map[string]bool{},
 	}
 	var mu sync.Mutex
+	gauge := &kimiUsageGauge{}
 	updates := []map[string]interface{}{
 		{
 			"sessionUpdate": "agent_thought_chunk",
@@ -815,7 +816,7 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 		},
 	}
 	for _, update := range updates {
-		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active)
+		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge)
 	}
 	if len(events) != 4 {
 		t.Fatalf("events = %#v", events)
@@ -832,7 +833,7 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 	}
 	// Terminal tool updates are replace-style and can be repeated by an ACP
 	// transport retry; Orbit must persist exactly one result.
-	handleKimiNotification("session-1", kimiNotification(t, "session-1", updates[3]), emit, &mu, &active)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", updates[3]), emit, &mu, &active, gauge)
 	if len(events) != 4 {
 		t.Fatalf("duplicate terminal update emitted another event: %#v", events)
 	}
@@ -856,6 +857,7 @@ func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
 		doneTools:   map[string]bool{},
 	}
 	var mu sync.Mutex
+	gauge := &kimiUsageGauge{}
 	plan := func(status string) map[string]interface{} {
 		return map[string]interface{}{
 			"sessionUpdate": "plan",
@@ -864,8 +866,8 @@ func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
 			},
 		}
 	}
-	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("pending")), emit, &mu, &active)
-	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("completed")), emit, &mu, &active)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("pending")), emit, &mu, &active, gauge)
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", plan("completed")), emit, &mu, &active, gauge)
 	if len(events) != 4 {
 		t.Fatalf("events = %#v, want a tool_use/tool_result pair per plan update", events)
 	}
@@ -883,7 +885,7 @@ func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
 	}
 	// An empty plan carries nothing to show and must not open a card.
 	handleKimiNotification("session-1", kimiNotification(t, "session-1",
-		map[string]interface{}{"sessionUpdate": "plan"}), emit, &mu, &active)
+		map[string]interface{}{"sessionUpdate": "plan"}), emit, &mu, &active, gauge)
 	if len(events) != 4 {
 		t.Fatalf("empty plan emitted %#v", events[4:])
 	}
@@ -896,15 +898,16 @@ func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
 	emit := func(string, map[string]interface{}) { events++ }
 	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
 	var mu sync.Mutex
+	gauge := &kimiUsageGauge{}
 
 	handleKimiNotification("session-1", kimiNotification(t, "session-1", map[string]interface{}{
 		"sessionUpdate": "usage_update",
 		"used":          21166,
 		"size":          1048576,
-	}), emit, &mu, &active)
+	}), emit, &mu, &active, gauge)
 
-	if active.contextTokens != 21166 || active.contextWindow != 1048576 {
-		t.Fatalf("reading = %d/%d, want 21166/1048576", active.contextTokens, active.contextWindow)
+	if tokens, window := gauge.read(); tokens != 21166 || window != 1048576 {
+		t.Fatalf("reading = %d/%d, want 21166/1048576", tokens, window)
 	}
 	// A usage report is a gauge reading, not transcript content.
 	if events != 0 {
@@ -916,9 +919,24 @@ func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
 		"sessionUpdate": "usage_update",
 		"used":          40000,
 		"size":          1048576,
-	}), emit, &mu, &active)
-	if active.contextTokens != 40000 {
-		t.Fatalf("second reading = %d, want 40000", active.contextTokens)
+	}), emit, &mu, &active, gauge)
+	if tokens, _ := gauge.read(); tokens != 40000 {
+		t.Fatalf("second reading = %d, want 40000", tokens)
+	}
+
+	// Kimi sends the report once the turn has settled, so it routinely arrives with no active
+	// turn at all. Hung on the turn, that is where it was silently dropped.
+	active = nil
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", map[string]interface{}{
+		"sessionUpdate": "usage_update",
+		"used":          51000,
+		"size":          1048576,
+	}), emit, &mu, &active, gauge)
+	if tokens, _ := gauge.read(); tokens != 51000 {
+		t.Fatalf("reading with no active turn = %d, want 51000 — it was dropped", tokens)
+	}
+	if events != 0 {
+		t.Fatalf("usage_update emitted %d transcript events", events)
 	}
 }
 
@@ -931,7 +949,7 @@ func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
 	})
 	job := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-k2.7"}}
 
-	got := kimiTurnEndPayload(&kimiActiveTurn{contextTokens: 21166, contextWindow: 1_048_576}, "completed", job)
+	got := kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166, window: 1_048_576}, "completed", job)
 	if got["contextTokens"] != 21166 {
 		t.Fatalf("contextTokens = %v, want 21166", got["contextTokens"])
 	}
@@ -944,7 +962,7 @@ func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
 
 	// Kimi said nothing about the window (an older build, or a turn with no usage report): the
 	// catalog answers, exactly as it does for the other engines.
-	got = kimiTurnEndPayload(&kimiActiveTurn{contextTokens: 21166}, "completed", job)
+	got = kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166}, "completed", job)
 	if got["contextWindow"] != 262_144 {
 		t.Fatalf("contextWindow = %v, want the catalog's 262144", got["contextWindow"])
 	}
@@ -952,9 +970,161 @@ func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
 	// Neither has an answer: the key is absent, which is what leaves the clients on their own
 	// fallback instead of dividing by zero.
 	byok := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-unlisted"}}
-	got = kimiTurnEndPayload(&kimiActiveTurn{contextTokens: 21166}, "completed", byok)
+	got = kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166}, "completed", byok)
 	if _, ok := got["contextWindow"]; ok {
 		t.Fatalf("unknown window reported anyway: %#v", got)
+	}
+}
+
+// kimiGatedReader replays a captured `kimi acp` stdout stream, holding its tail back until the
+// test releases it — which is where the engine puts it. A capture against 0.38.0 had usage_update
+// arrive ~10ms behind the session/prompt response that had already settled the turn.
+type kimiGatedReader struct {
+	gate <-chan struct{}
+	tail io.Reader
+}
+
+func (r *kimiGatedReader) Read(p []byte) (int, error) {
+	if r.gate != nil {
+		<-r.gate
+		r.gate = nil
+	}
+	return r.tail.Read(p)
+}
+
+// Kimi emits usage_update only once a turn has settled — its own 0.38.0 bundle says so, and the
+// capture above shows it landing behind the prompt response. Recorded on the active turn it was
+// dropped by the no-active-turn early return, so 0.1.131 shipped with every turn_end still
+// reporting contextTokens 0 and every Kimi context ring stuck at 0%. Replay that ordering off the
+// wire: response first, reading after, with the turn already closed.
+func TestKimiUsageUpdateAfterTheTurnSettlesReachesTheNextTurnEnd(t *testing.T) {
+	job := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-k2.7"}}
+	response := make(chan kimiRPCMessage, 1)
+	app := &kimiACPClient{
+		pending:       map[string]chan kimiRPCMessage{"prompt": response},
+		notifications: make(chan kimiInboundItem, 8),
+		done:          make(chan struct{}),
+		permissions:   map[string]context.CancelFunc{},
+	}
+	var activeMu sync.Mutex
+	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
+	gauge := &kimiUsageGauge{}
+
+	var eventMu sync.Mutex
+	var events []string
+	emit := func(eventType string, _ map[string]interface{}) {
+		eventMu.Lock()
+		defer eventMu.Unlock()
+		events = append(events, eventType)
+	}
+	// The session's single notification consumer, as runKimiSessionProcess runs it.
+	applied := make(chan struct{}, 8)
+	go func() {
+		for {
+			select {
+			case item := <-app.notifications:
+				if item.barrier != nil {
+					close(item.barrier)
+					continue
+				}
+				handleKimiNotification("session-1", *item.message, emit, &activeMu, &active, gauge)
+				applied <- struct{}{}
+			case <-app.done:
+				return
+			}
+		}
+	}()
+
+	settled := make(chan struct{})
+	var settleOnce sync.Once
+	settle := func() { settleOnce.Do(func() { close(settled) }) }
+	t.Cleanup(settle)
+	head := `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-1","update":` +
+		`{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"done"}}}}` + "\n" +
+		`{"jsonrpc":"2.0","id":"prompt","result":{"stopReason":"end_turn"}}` + "\n"
+	tail := `{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-1","update":` +
+		`{"sessionUpdate":"usage_update","used":33383,"size":262144}}}` + "\n"
+	go app.readLoop(io.MultiReader(strings.NewReader(head), &kimiGatedReader{gate: settled, tail: strings.NewReader(tail)}))
+
+	select {
+	case <-response:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for the prompt response")
+	}
+	<-applied // the barrier guarantees the delta before the response was applied first
+	// finishTurn, on that response: the turn closes before the reading for it exists.
+	activeMu.Lock()
+	active = nil
+	activeMu.Unlock()
+	first := kimiTurnEndPayload(gauge, "completed", job)
+	if first["contextTokens"] != 0 {
+		t.Fatalf("first turn_end = %v, want 0: Kimi has not reported anything yet", first["contextTokens"])
+	}
+
+	settle() // the engine reports, with no turn left to hang the reading on
+	select {
+	case <-applied:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the late usage_update never reached the handler")
+	}
+	if tokens, window := gauge.read(); tokens != 33383 || window != 262144 {
+		t.Fatalf("reading after the turn settled = %d/%d, want 33383/262144 — it was dropped", tokens, window)
+	}
+
+	// The next turn opens...
+	activeMu.Lock()
+	active = &kimiActiveTurn{orbitTurnID: "turn-2", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
+	activeMu.Unlock()
+	// ...and settles with no reading of its own — Kimi's for it will be just as late — so what it
+	// reports is the one the previous turn's tail left on the session.
+	activeMu.Lock()
+	active = nil
+	activeMu.Unlock()
+	second := kimiTurnEndPayload(gauge, "completed", job)
+	if second["contextTokens"] != 33383 {
+		t.Fatalf("second turn_end contextTokens = %v, want 33383", second["contextTokens"])
+	}
+	if second["contextWindow"] != 262144 {
+		t.Fatalf("second turn_end contextWindow = %v, want 262144", second["contextWindow"])
+	}
+
+	// A usage report is a gauge reading, not transcript content — even arriving between turns.
+	eventMu.Lock()
+	defer eventMu.Unlock()
+	if len(events) != 1 || events[0] != evTextDelta {
+		t.Fatalf("events = %v, want only the assistant delta", events)
+	}
+}
+
+// The mid-turn ping and turn_end read one session reading, so the numerator the clients see while
+// a long turn runs cannot disagree with the denominator it is divided by when the turn closes.
+func TestKimiContextPingReportsTheSameReadingAsTurnEnd(t *testing.T) {
+	t.Cleanup(func() { publishModelCatalog(nil) })
+	publishModelCatalog(&ModelCatalog{
+		Kimi: []ModelInfo{{Value: "kimi-k2.7", ContextWindow: 262_144}},
+	})
+	job := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-k2.7"}}
+	gauge := &kimiUsageGauge{}
+	// What a previous turn's tail left on the session, which is all a fresh turn has to ping with.
+	gauge.record(33383, 1_048_576)
+
+	var ctxPing contextPinger
+	var pings []map[string]interface{}
+	kimiPingContext(&ctxPing, gauge, job, func(eventType string, payload map[string]interface{}) {
+		if eventType != evSystem || payload["subtype"] != "context" {
+			t.Fatalf("ping emitted %s %#v", eventType, payload)
+		}
+		pings = append(pings, payload)
+	})
+	if len(pings) != 1 {
+		t.Fatalf("pings = %#v, want one", pings)
+	}
+	end := kimiTurnEndPayload(gauge, "completed", job)
+	if pings[0]["contextTokens"] != end["contextTokens"] || pings[0]["contextWindow"] != end["contextWindow"] {
+		t.Fatalf("ping %#v disagrees with turn_end %#v", pings[0], end)
+	}
+	if pings[0]["contextTokens"] != 33383 || pings[0]["contextWindow"] != 1_048_576 {
+		t.Fatalf("ping = %#v, want 33383 over Kimi's own 1048576 rather than the catalog's", pings[0])
 	}
 }
 
@@ -966,6 +1136,7 @@ func TestHandleKimiSessionScopedUpdatesAreNotReportedAsGaps(t *testing.T) {
 	}
 	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
 	var mu sync.Mutex
+	gauge := &kimiUsageGauge{}
 
 	reported := func(kind string) bool {
 		_, ok := unhandledStreamKinds.Load("kimi/" + kind)
@@ -973,7 +1144,7 @@ func TestHandleKimiSessionScopedUpdatesAreNotReportedAsGaps(t *testing.T) {
 	}
 	for _, kind := range []string{"config_option_update", "session_info_update"} {
 		handleKimiNotification("session-1", kimiNotification(t, "session-1",
-			map[string]interface{}{"sessionUpdate": kind}), emit, &mu, &active)
+			map[string]interface{}{"sessionUpdate": kind}), emit, &mu, &active, gauge)
 		if reported(kind) {
 			t.Fatalf("%s still reported as an unrendered stream kind", kind)
 		}
@@ -981,7 +1152,7 @@ func TestHandleKimiSessionScopedUpdatesAreNotReportedAsGaps(t *testing.T) {
 
 	// The report itself still works — otherwise the assertions above pass for the wrong reason.
 	handleKimiNotification("session-1", kimiNotification(t, "session-1",
-		map[string]interface{}{"sessionUpdate": "kimi_invented_this_kind"}), emit, &mu, &active)
+		map[string]interface{}{"sessionUpdate": "kimi_invented_this_kind"}), emit, &mu, &active, gauge)
 	t.Cleanup(func() { unhandledStreamKinds.Delete("kimi/kimi_invented_this_kind") })
 	if !reported("kimi_invented_this_kind") {
 		t.Fatal("an unknown kind went unreported")
