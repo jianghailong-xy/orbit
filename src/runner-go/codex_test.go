@@ -387,7 +387,7 @@ func TestCodexAppServerTokenUsageUpdatesActiveTurn(t *testing.T) {
 		},
 	})
 
-	handleCodexAppNotification("thread-1", codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
+	handleCodexAppNotification("thread-1", codexRPCMessage{Method: "thread/tokenUsage/updated", Params: raw}, nil, &mu, &active, func(codexTurnResult) {}, nil, nil, nil, nil)
 
 	if active.result.ContextTokens != 1_500 {
 		t.Fatalf("ContextTokens = %d, want latest request's 1500, not cumulative thread total 91000", active.result.ContextTokens)
@@ -429,7 +429,7 @@ func TestCodexAppServerIgnoresSubagentTurnCompletion(t *testing.T) {
 		})
 		handleCodexAppNotification(
 			"root-thread", codexRPCMessage{Method: "turn/completed", Params: raw}, nil,
-			&mu, &active, finalize, nil, nil, nil,
+			&mu, &active, finalize, nil, nil, nil, nil,
 		)
 	}
 
@@ -671,7 +671,7 @@ func TestCodexAppServerReasoningFlushesOnceOnComplete(t *testing.T) {
 	}
 	notify := func(method string, params interface{}) {
 		raw, _ := json.Marshal(params)
-		handleCodexAppNotification("thread-1", codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil, nil, nil)
+		handleCodexAppNotification("thread-1", codexRPCMessage{Method: method, Params: raw}, emit, &mu, &active, func(codexTurnResult) {}, nil, nil, nil, nil)
 	}
 
 	notify("item/reasoning/summaryTextDelta", map[string]interface{}{"delta": "Think"})
@@ -723,6 +723,7 @@ func TestCodexAppServerForwardsRateLimitUpdates(t *testing.T) {
 		nil,
 		nil,
 		func(snapshot map[string]interface{}) { got = snapshot },
+		nil,
 	)
 
 	if got == nil || firstString(got, "limitId") != "codex-other" {

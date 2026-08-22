@@ -80,3 +80,40 @@ test('a steer outranks the queued messages it was sent past', async () => {
   const sql = await leaseSQL();
   assert.match(sql, /ORDER BY \(CASE WHEN[\s\S]*?WHEN turn\."kind" IN \('reload', 'steer'\) THEN 1 ELSE 2 END\), turn\."seq" ASC/);
 });
+
+/**
+ * Knowing the kind and being able to deliver it are two different claims, and the second one
+ * is per runtime: every runner in the field sends acceptsSteer, and only some of them can
+ * write a message into a codex turn. Both travel on the poll — the capability on the header
+ * this runner already sends with every request — so the answer is about the process that will
+ * actually execute the turn, not about what its machine reported minutes ago.
+ */
+test('the poll carries both claims through to the gate, normalized as the stored ones are', async () => {
+  const controller = new RunnerApiController(
+    { $transaction: async () => null } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  const calls: unknown[][] = [];
+  (controller as unknown as { dequeueTurn: (...args: unknown[]) => unknown }).dequeueTurn = async (
+    ...args: unknown[]
+  ) => {
+    calls.push(args);
+    return { turnId: 'turn-1', seq: 2, kind: 'steer' };
+  };
+
+  await controller.inbox({ id: RUNNER_ID }, SESSION_ID, undefined, '1', ' Session-Codex-Steer-V1 ');
+
+  assert.equal(calls[0][3], true);
+  // Read the way Runner.capabilities is stored (parseRunnerCapabilities), so a header read and
+  // a heartbeat-snapshot read cannot disagree about the same runner.
+  assert.deepEqual(calls[0][4], ['session-codex-steer-v1']);
+
+  // A runner that sends no header at all declared nothing — never "everything".
+  await controller.inbox({ id: RUNNER_ID }, SESSION_ID, undefined, '1', undefined);
+  assert.deepEqual(calls[1][4], []);
+});

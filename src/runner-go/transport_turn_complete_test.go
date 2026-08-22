@@ -285,7 +285,8 @@ func TestRetryActivateTurnLeasesCallsEndpointUntilSuccess(t *testing.T) {
 	transport := NewTransport(srv.URL, "token")
 	leaseOwner = transport.leaseOwner
 	err := retryActivateTurnLeases(ctx, func(attemptCtx context.Context) error {
-		return transport.activateTurnLeases(attemptCtx, "s1", generation)
+		_, activateErr := transport.activateTurnLeases(attemptCtx, "s1", generation)
+		return activateErr
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -305,7 +306,8 @@ func TestRetryActivateTurnLeasesStopsOnOwnerConflict(t *testing.T) {
 	transport := NewTransport(srv.URL, "token")
 
 	err := retryActivateTurnLeases(context.Background(), func(ctx context.Context) error {
-		return transport.activateTurnLeases(ctx, "s1", "33333333-3333-4333-8333-333333333333")
+		_, activateErr := transport.activateTurnLeases(ctx, "s1", "33333333-3333-4333-8333-333333333333")
+		return activateErr
 	})
 	if !isTransportHTTPStatus(err, http.StatusConflict) {
 		t.Fatalf("activate error = %v, want HTTP 409", err)

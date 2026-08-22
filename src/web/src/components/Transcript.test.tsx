@@ -449,6 +449,109 @@ describe('a message steered into the running turn', () => {
   });
 });
 
+/**
+ * The same steer, delivered by codex instead of claude.
+ *
+ * Nothing about the bubble changes — one vocabulary, both engines (`lib/steerDelivery`) — but the
+ * ORDER the events arrive in does. claude's runner opens the bubble the moment it accepts the
+ * message, so it always starts at `enqueued` and walks forward. codex cannot: its steer is an RPC
+ * whose answer and whose echo are read by different goroutines, and re-filing a message the
+ * engine provably never read must leave no bubble behind at all (contract §4.7). So the `user`
+ * event is held back until the FIRST KNOWN OUTCOME, and a codex steer's bubble is born at
+ * whatever that outcome turned out to be — including, for a message that never landed, at the
+ * failure itself.
+ */
+describe('a codex steer, whose bubble opens at whatever happened first', () => {
+  const steerEvent = (seq: number, turnId: string, text: string, delivery: string): RunEvent => ({
+    seq,
+    type: 'user',
+    turnId,
+    payload: { text, delivery, steer: true },
+  });
+  const deliveryEvent = (seq: number, turnId: string, delivery: string, reason?: string): RunEvent => ({
+    seq,
+    type: 'user_delivery',
+    payload: { turnId, delivery, ...(reason ? { reason, retryable: true } : {}) },
+  });
+
+  it('opens straight at delivering when codex took it before anything was said', () => {
+    // `turn/steer` returned OK: codex has the message and the model has not read it yet. There
+    // was never an `enqueued` event for this one, and the bubble still has to read correctly.
+    const html = renderToStaticMarkup(
+      <Transcript events={[steerEvent(1, 't1', 'use the other endpoint', 'written')]} />,
+    );
+
+    expect(html).toContain('Delivering…');
+    expect(html).not.toContain('Sending…');
+  });
+
+  it('stays on delivering however long codex holds it before the model reads it', () => {
+    // Measured at 31 seconds against codex 0.149.0 (contract §4.6): codex buffers a steer until
+    // its next model request. Saying anything else for that stretch — "sent", or a failure —
+    // would be reporting something that has not happened.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[steerEvent(1, 't1', 'use the other endpoint', 'written')]}
+      />,
+    );
+
+    expect(html).toContain('Delivering…');
+    expect(html).not.toContain('Sent into this turn');
+    expect(html).not.toContain('Not delivered');
+  });
+
+  it('opens straight at sent when the echo beat the answer to the request', () => {
+    // codex has been seen echoing a steer back before the response to it was observed, so
+    // `acknowledged` can be the first word anyone says about the message.
+    const html = renderToStaticMarkup(
+      <Transcript events={[steerEvent(1, 't1', 'use the other endpoint', 'acknowledged')]} />,
+    );
+
+    expect(html).toContain('Sent into this turn');
+    expect(html).not.toContain('Sending…');
+    expect(html).not.toContain('Delivering…');
+  });
+
+  it('opens as the failure it is when codex never took it', () => {
+    // The refusals that never get as far as a record on the running turn — no active turn, a
+    // turn that ended under it, a runner killed while holding it (§4.8) — carry the failure on
+    // the `user` event itself. Without that the sender watches a bubble wait for nothing.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          steerEvent(1, 't1', 'use the other endpoint', 'failed'),
+          deliveryEvent(2, 't1', 'failed',
+            'the runner stopped while this message was on its way into the running turn'),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Not delivered');
+    expect(html).toContain('chat-undelivered');
+    expect(html).not.toContain('Sending…');
+    expect(html).not.toContain('chat-steer-state');
+  });
+
+  it('shows a re-filed steer once, as the ordinary message it became', () => {
+    // A steer codex provably never read is un-filed back onto the same row and runs as the next
+    // ordinary message (§4.7). That path publishes NOTHING — no `user`, no `user_delivery` —
+    // precisely so the delivery that eventually runs the row writes the one bubble the message
+    // ever gets. Two bubbles here, one of them stuck at "Sending…" forever, is what that buys.
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'user', turnId: 't1', payload: { text: 'use the other endpoint', delivery: 'enqueued' } },
+          deliveryEvent(2, 't1', 'acknowledged'),
+        ]}
+      />,
+    );
+
+    expect(html.split('use the other endpoint').length - 1).toBe(1);
+    expect(html).not.toContain('chat-steer-state');
+    expect(html).not.toContain('Sending…');
+  });
+});
+
 describe('engine stderr', () => {
   const stderrEvent = (seq: number, stderr: string): RunEvent => ({
     seq,

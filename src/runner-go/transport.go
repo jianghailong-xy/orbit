@@ -23,10 +23,34 @@ const (
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
-	runnerCapabilitiesV1             = sessionOrchestrationCredentialV1 + "," + sessionTerminalHandoffV1 + "," + sessionWorktreeOpsV1
-	orchestrationCredentialMissing   = "ORCHESTRATION_CREDENTIAL_MISSING"
-	orchestrationCredentialInvalid   = "ORCHESTRATION_CREDENTIAL_INVALID"
+	// Mid-turn delivery for the codex runtime (`turn/steer`). Declared from the runtime table
+	// rather than listed here — see declaredSteerCapabilities — because a runner that names
+	// it is telling the control plane to file codex steers for this machine, and one whose
+	// loop still refuses them would make every mid-turn message fail instead of queue.
+	sessionCodexSteerV1            = "session-codex-steer-v1"
+	orchestrationCredentialMissing = "ORCHESTRATION_CREDENTIAL_MISSING"
+	orchestrationCredentialInvalid = "ORCHESTRATION_CREDENTIAL_INVALID"
 )
+
+// runnerCapabilitiesV1 is what this binary declares on every call it makes: the fixed set of
+// runner-wide features, plus one token per runtime it can steer mid-turn. Sent on every
+// request rather than only on the heartbeat, so the control plane can answer both questions
+// it has to ask — what this machine could do when it last reported (which decides how a
+// message is filed) and what the process polling right now can do (which decides whether that
+// message is handed over).
+//
+// Built in init() rather than as a var initializer because the runtime table it reads holds
+// the session drivers, and those reach this header back through the transport: written as one
+// expression it is a package initialization cycle.
+var runnerCapabilitiesV1 string
+
+func init() {
+	runnerCapabilitiesV1 = strings.Join(append([]string{
+		sessionOrchestrationCredentialV1,
+		sessionTerminalHandoffV1,
+		sessionWorktreeOpsV1,
+	}, declaredSteerCapabilities()...), ",")
+}
 
 type transportHTTPError struct {
 	method     string
@@ -409,9 +433,16 @@ func (t *Transport) releaseTurnLeases(ctx context.Context, sessionID, leaseGener
 // activateTurnLeases makes a freshly reserved process generation the only inbox consumer.
 // The server accepts an idempotent retry for the same generation and rejects a different
 // generation until its predecessor has been released.
-func (t *Transport) activateTurnLeases(ctx context.Context, sessionID, leaseGeneration string) error {
+// activateTurnLeases makes this engine generation the session's sole inbox consumer, and returns
+// what the generation it replaces left behind: mid-turn messages that were leased by a process
+// which then died. The control plane cannot answer for those itself — a steer's whole outcome is
+// reported on the session's event stream, which only a live runner writes to — so it hands them
+// over here, to the one process that has both a stream and a reason to be looking.
+func (t *Transport) activateTurnLeases(ctx context.Context, sessionID, leaseGeneration string) (ActivateTurnLeasesResponse, error) {
 	body := map[string]string{"leaseGeneration": leaseGeneration, "leaseOwner": t.leaseOwner}
-	return t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/activate-leases", body, nil, 15*time.Second)
+	var out ActivateTurnLeasesResponse
+	err := t.do(ctx, "POST", "/runner/sessions/"+sessionID+"/activate-leases", body, &out, 15*time.Second)
+	return out, err
 }
 
 // retryReleaseTurnLeases is kept separate from process spawning so the ordering

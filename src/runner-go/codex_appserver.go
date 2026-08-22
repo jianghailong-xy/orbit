@@ -70,6 +70,12 @@ type codexAppServer struct {
 	// Set from the stderr reader when Codex died bringing up its SQLite state, which is the
 	// one start failure worth another attempt. Read only after close() has joined that reader.
 	stateInitFailed atomic.Bool
+
+	// Set the first time this build answers a turn/steer with "unknown variant", which is the
+	// authoritative signal that it predates the method. It is a property of the process, not of
+	// a version guess, so once it is set no later steer spends a round trip finding out again
+	// (docs/codex-turn-steer-contract.md §5.2).
+	steerUnsupported atomic.Bool
 }
 
 type codexAppActiveTurn struct {
@@ -83,6 +89,9 @@ type codexAppActiveTurn struct {
 	fullText           strings.Builder
 	deltaText          strings.Builder
 	thinkText          strings.Builder
+	// steers: the mid-turn messages written into this turn, keyed by the Orbit turn id sent as
+	// clientUserMessageId — the only key Codex echoes back (codex_steer.go).
+	steers map[string]*codexSteerDelivery
 }
 
 type codexAppTurnSnapshot struct {
@@ -90,6 +99,9 @@ type codexAppTurnSnapshot struct {
 	result      codexTurnResult
 	fullText    string
 	deltaText   string
+	// openSteers: mid-turn messages this turn was still holding when it ended. Codex discards a
+	// steer it never got to inject, silently, so they are this turn's to answer for.
+	openSteers []string
 }
 
 // beginCodexAppTurnFinalize makes completion single-flight while deliberately
@@ -109,6 +121,7 @@ func beginCodexAppTurnFinalize(activeMu *sync.Mutex, active **codexAppActiveTurn
 		result:      a.result,
 		fullText:    a.fullText.String(),
 		deltaText:   a.deltaText.String(),
+		openSteers:  takeOpenCodexSteers(a),
 	}, true
 }
 
@@ -220,10 +233,22 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		inflightMu.Unlock()
 	}
 
+	steerDispatch := &codexSteerDispatcher{
+		app: app, t: t, job: job, threadID: threadID,
+		activeMu: &activeMu, active: &active, emitFor: emitFor, completeTurn: completeTurn,
+	}
+
 	finalizeActive := func(result codexTurnResult) {
 		a, snapshot, ok := beginCodexAppTurnFinalize(&activeMu, &active)
 		if !ok {
 			return
+		}
+		// Every steer this turn was still holding is answered before the turn itself is, and
+		// individually: a failed turn seals the session's event stream, so a report filed after
+		// that settlement would be dropped and the message would go unaccounted for in the one
+		// place a person reads.
+		for _, steerTurnID := range snapshot.openSteers {
+			steerDispatch.fail(steerTurnID, errCodexSteerDropped)
 		}
 		if result.Status == "" {
 			result.Status = snapshot.result.Status
@@ -331,7 +356,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir, genImagesDir})
-				}, onRateLimits)
+				}, onRateLimits, steerDispatch.acknowledge)
 				activeMu.Lock()
 				tokens := 0
 				if active != nil {
@@ -354,6 +379,36 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		case <-shutdownCtx.Done():
 			pollCancel()
 		case <-workerCtx.Done():
+		}
+	}()
+
+	// Steers are delivered off the inbox loop, which has to stay free to take `interrupt` and
+	// `end` — a stop button that waits out a delivery is a broken stop button — but through a
+	// single worker, so they reach Codex in the order the inbox handed them out. Codex inserts
+	// them in arrival order, so two deliveries racing would reorder what the user wrote.
+	steerQueue := make(chan *RunInboxResponse, codexSteerQueueDepth)
+	asyncWg.Add(1)
+	go func() {
+		defer asyncWg.Done()
+		// Whatever is still queued when this generation ends is answered rather than dropped:
+		// the control plane never re-delivers a steer, so an unanswered one is simply gone.
+		defer func() {
+			for {
+				select {
+				case resp := <-steerQueue:
+					steerDispatch.refuse(resp, errCodexSteerEngineGone)
+				default:
+					return
+				}
+			}
+		}()
+		for {
+			select {
+			case <-workerCtx.Done():
+				return
+			case resp := <-steerQueue:
+				steerDispatch.deliver(workerCtx, resp)
+			}
 		}
 	}()
 
@@ -511,10 +566,15 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			pendingShellCtx = nil
 
 		case "steer":
-			// A message meant to join the turn already running. This engine's turn call is
-			// outstanding until the turn ends, so there is nothing to hand it to — refuse it
-			// where the sender can see it rather than let a leased turn go quiet.
-			refuseUnsupportedSteer(resp.TurnID, resp.Content, providerCodex, job, emitFor, completeTurn)
+			// A message meant to join the turn already running. Codex takes one natively —
+			// turn/steer writes it into the turn in progress, which produces no second turn and
+			// no reply of its own (codex_steer.go). It consumes no turn permit and never moves
+			// the session's turn cursor: the turn it joins owns both.
+			select {
+			case steerQueue <- resp:
+			default:
+				steerDispatch.refuse(resp, errCodexSteerBacklogged)
+			}
 
 		case "shell":
 			if !waitTurnPermit(ctx) {
@@ -1507,7 +1567,9 @@ func codexNotificationThreadID(msg codexRPCMessage) string {
 	return ""
 }
 
-func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{})) {
+// onSteerAck is called with the Orbit turn id of a mid-turn message Codex has just echoed back,
+// which is that message's only answer — it has no result of its own (codex_steer.go).
+func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
 	// Empty is accepted for compatibility with older app-server notifications that were not
 	// thread-scoped. Current turn/item notifications always carry threadId; when present it is
 	// authoritative and child-thread activity must stay out of the Orbit root session.
@@ -1559,13 +1621,19 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 			activeMu.Unlock()
 		}
 	case "item/started":
+		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
-			handleCodexItem(map[string]interface{}{"item": firstPresent(params, "item")}, emit, &(*active).result, &(*active).fullText, false, processAssistant)
+			handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant)
 		}
 		activeMu.Unlock()
+		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
 	case "item/completed":
 		item := mapValue(firstPresent(params, "item"))
+		// item/started and item/completed carry the same item id. Acknowledgement is
+		// single-flight, and the steer record remembers that id so this normal lifecycle pair is
+		// distinct from two actual items carrying one clientUserMessageId.
+		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
 		activeMu.Lock()
 		if *active != nil {
 			if strings.Contains(strings.ToLower(firstString(item, "type", "kind")), "reasoning") {

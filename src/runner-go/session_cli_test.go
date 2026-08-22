@@ -293,6 +293,73 @@ func TestSessionCLIExactRoutesHeadersBodiesAndJSON(t *testing.T) {
 	}
 }
 
+// What the server did with a mid-turn message is the server's answer, decided under the Session
+// row lock — `steer` (being written into the turn already running: no reply of its own, and not
+// withdrawable) or `message` (queued behind it). Both headless doors hand that answer back
+// untouched, exactly as the web console and the native clients read it off POST /turns; a door
+// that dropped `kind`, or invented one from what it believed the session was doing, would leave
+// its caller waiting for a reply that the running turn is going to give to something else.
+func TestSessionSendHandsBackTheServersKindUntouched(t *testing.T) {
+	for _, answer := range []struct {
+		name string
+		body string
+	}{
+		{"steer", `{"ok":true,"turnId":"turn-1","seq":7,"kind":"steer"}`},
+		{"queued message", `{"ok":true,"turnId":"turn-1","seq":7,"kind":"message"}`},
+		// An apiserver from before steer existed says nothing about the kind. Neither door may
+		// fill that in: absent means the pre-steer behaviour, and it is the caller's to read.
+		{"a server that predates the kind", `{"ok":true,"turnId":"turn-1","seq":7}`},
+	} {
+		t.Run(answer.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("content-type", "application/json")
+				_, _ = w.Write([]byte(answer.body))
+			}))
+			defer srv.Close()
+
+			configureCLITestRunner(t, srv.URL)
+			t.Setenv(envMCPOrchestration, "true")
+			t.Setenv("ORBIT_SESSION_ID", "parent-session")
+			t.Setenv(envOrchestrationToken, "session-token")
+
+			var out bytes.Buffer
+			if err := cmdSessionCLI([]string{"send", "child", "--message", "use the other endpoint", "--json"}, strings.NewReader(""), &out); err != nil {
+				t.Fatal(err)
+			}
+			if got := out.String(); got != answer.body+"\n" {
+				t.Errorf("orbit session send --json = %q, want %q", got, answer.body+"\n")
+			}
+
+			mcp := &mcpServer{
+				sessionID: "parent-session", orchestrationToken: "session-token",
+				allowOrchestration: true, t: NewTransport(srv.URL, "runner-secret"),
+			}
+			res := mcp.callTool("session_send", map[string]interface{}{
+				"sessionId": "child", "message": "use the other endpoint",
+			})
+			if res["isError"] == true {
+				t.Fatalf("session_send errored: %#v", res["content"])
+			}
+			content, ok := res["content"].([]map[string]interface{})
+			if !ok || len(content) == 0 {
+				t.Fatalf("session_send result content = %#v", res["content"])
+			}
+			text, _ := content[0]["text"].(string)
+			var got map[string]interface{}
+			if err := json.Unmarshal([]byte(text), &got); err != nil {
+				t.Fatalf("session_send result %q is not JSON: %v", text, err)
+			}
+			var want map[string]interface{}
+			if err := json.Unmarshal([]byte(answer.body), &want); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("session_send result = %#v, want %#v", got, want)
+			}
+		})
+	}
+}
+
 func TestSessionCLICreateUsesMCPAgentRoutingDefaults(t *testing.T) {
 	tests := []struct {
 		name     string

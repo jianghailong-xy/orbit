@@ -4,6 +4,7 @@ import {
   isRetiredModel,
   modelForProvider,
 } from '@orbit/shared';
+import { Prisma } from '@prisma/client';
 import { decryptSecret } from './provider-crypto';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
@@ -63,6 +64,32 @@ export function execRuntime(args: {
     return AgentProvider.KIMI;
   }
   return AgentProvider.CLAUDE;
+}
+
+/**
+ * The built-in runtime a session's turns actually execute on, resolving a configured (BYOK)
+ * slug to the runtime it borrows. The ModelProvider lookup happens only for a slug that needs
+ * one, so a built-in session costs nothing.
+ *
+ * Shared rather than re-derived so that everything asking a runtime-shaped question about a
+ * session — can it be steered, and may this poller be handed that steer — answers it from the
+ * same resolution dispatch itself uses. Two spellings of it would disagree on exactly the
+ * sessions that are hardest to notice: the configured ones.
+ */
+export async function sessionExecRuntime(
+  tx: Prisma.TransactionClient,
+  session: { provider: string; providerBuiltin?: boolean; ownerId: string },
+): Promise<AgentProvider> {
+  const customRow = isBuiltinProvider(session.provider, session.providerBuiltin)
+    ? null
+    : await tx.modelProvider.findFirst({
+        where: { slug: session.provider, OR: [{ ownerId: null }, { ownerId: session.ownerId }] },
+      });
+  return execRuntime({
+    declaredProvider: session.provider,
+    declaredProviderBuiltin: session.providerBuiltin,
+    customRow,
+  });
 }
 
 // Env injected so the borrowed runtime CLI talks to the provider's endpoint. Claude runtime →

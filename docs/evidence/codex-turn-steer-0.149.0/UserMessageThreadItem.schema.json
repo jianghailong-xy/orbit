@@ -1,0 +1,45 @@
+{
+  "$comment": "Extracted from `codex app-server generate-json-schema --out <dir>` on codex-cli 0.149.0. This is the item Codex echoes back for a user message; `clientId` is the echo of turn/start|turn/steer `clientUserMessageId`, which is the only correlation key Orbit has.",
+  "UserMessageThreadItem": {
+    "properties": {
+      "clientId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "content": {
+        "items": {
+          "$ref": "#/definitions/UserInput"
+        },
+        "type": "array"
+      },
+      "id": {
+        "type": "string"
+      },
+      "type": {
+        "enum": [
+          "userMessage"
+        ],
+        "title": "UserMessageThreadItemType",
+        "type": "string"
+      }
+    },
+    "required": [
+      "content",
+      "id",
+      "type"
+    ],
+    "title": "UserMessageThreadItem",
+    "type": "object"
+  },
+  "TurnStatus": {
+    "enum": [
+      "completed",
+      "interrupted",
+      "failed",
+      "inProgress"
+    ],
+    "type": "string"
+  }
+}

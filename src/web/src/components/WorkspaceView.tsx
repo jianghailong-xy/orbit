@@ -859,6 +859,27 @@ function TranscriptSkeleton() {
   );
 }
 
+/**
+ * The line under a message in the queued tail — the one thing that says which of the two kinds
+ * the server filed it as, and the only place the withdraw is offered.
+ *
+ * A queued message is waiting for its own turn: nothing has read it, so it can still be taken
+ * back. A steer is already on its way into the turn in progress, and the engine may be reading it
+ * as we ask — the server refuses to withdraw one (409, "being written into the running turn"), so
+ * offering the button would be offering one that always fails. `steer` is the server's `kind`,
+ * never a local guess: see `isSteerKind` and the queued-turns list it is read from.
+ */
+export function QueuedTurnMeta({ steer, onCancel }: { steer?: boolean; onCancel: () => void }) {
+  return (
+    <span className="chat-queued-meta">
+      <span className="chat-queued-tag">
+        {steer ? steerDeliveryState(undefined).label : 'Queued'}
+      </span>
+      {!steer && <a onClick={onCancel}>Cancel</a>}
+    </span>
+  );
+}
+
 // Remembers the session the user last had open per workspace (workspace id → session id). Switching
 // away to another workspace and back reopens that conversation instead of the workspace's most-recent
 // one. In-memory only (a full reload deep-links via the URL) and at module scope so it survives
@@ -4902,15 +4923,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   ) : (
                     q.content && <MD breaks>{q.content}</MD>
                   )}
-                  <span className="chat-queued-meta">
-                    {/* A steer is not waiting its turn — it is on its way into the one already
-                        running — so it says so, and offers no Cancel: the server refuses to
-                        withdraw a message the engine may already be reading. */}
-                    <span className="chat-queued-tag">
-                      {q.steer ? steerDeliveryState(undefined).label : 'Queued'}
-                    </span>
-                    {!q.steer && <a onClick={() => cancelQueued(q.turnId)}>Cancel</a>}
-                  </span>
+                  <QueuedTurnMeta steer={q.steer} onCancel={() => cancelQueued(q.turnId)} />
                 </div>
               ))}
               {placeholder === 'waiting' && <div className="chat-note">Waiting for the workspace…</div>}

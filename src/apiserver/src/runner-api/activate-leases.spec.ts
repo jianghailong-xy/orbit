@@ -25,6 +25,11 @@ interface HarnessOptions {
   currentRetired?: boolean;
   candidateRetired?: boolean;
   status?: RunStatus;
+  /** Mid-turn messages the generation being replaced left leased, which activation hands to
+   *  the incoming process rather than settling itself (see `abandonedSteers`). */
+  stranded?: Array<{ id: string; content: string | null }>;
+  /** Which of those already have a `user` event in the transcript. */
+  announced?: string[];
   /**
    * What the unlocked preflight read observes, when it must differ from the row the
    * `FOR UPDATE` read then returns — i.e. a concurrent activate landed in between.
@@ -42,9 +47,12 @@ function harness({
   currentRetired = false,
   candidateRetired = false,
   status = RunStatus.AWAITING_INPUT,
+  stranded = [],
+  announced = [],
   preflight,
 }: HarnessOptions) {
   const preflightCalls: unknown[] = [];
+  const strandedQueries: unknown[] = [];
   const queryCalls: unknown[][] = [];
   const executeCalls: unknown[][] = [];
   const tx = {
@@ -88,6 +96,16 @@ function harness({
         return { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status };
       },
     },
+    // Read outside the transaction, on every path including the preflight: a steer stranded by
+    // the process being replaced has to be handed over even when this activation is a retry of
+    // one that already committed.
+    conversationTurn: {
+      findMany: async (args: unknown) => {
+        strandedQueries.push(args);
+        return stranded;
+      },
+    },
+    runEvent: { findMany: async () => announced.map((turnId) => ({ turnId })) },
     $transaction: async (fn: (transaction: typeof tx) => Promise<unknown>) => fn(tx),
   } as never;
   return {
@@ -103,6 +121,7 @@ function harness({
     executeCalls,
     preflightCalls,
     queryCalls,
+    strandedQueries,
   };
 }
 
@@ -113,7 +132,7 @@ test('activate-leases registers and installs a generation under the owned Sessio
 
   assert.deepEqual(
     await h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request),
-    { ok: true },
+    { ok: true, abandonedSteers: [] },
   );
   assert.match(sql(h.queryCalls[0]), /"assigned_runner_id" = \?::uuid[\s\S]*FOR UPDATE/);
   assert.deepEqual(h.queryCalls[0].slice(1), [SESSION_ID, RUNNER_ID]);
@@ -132,7 +151,7 @@ test('an already-installed generation returns without taking the Session row loc
 
   assert.deepEqual(
     await h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request),
-    { ok: true },
+    { ok: true, abandonedSteers: [] },
   );
   assert.equal(h.preflightCalls.length, 1);
   assert.equal(h.queryCalls.length, 0);

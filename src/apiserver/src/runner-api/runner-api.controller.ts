@@ -77,6 +77,10 @@ import {
   WorktreesRemovableRequest,
   WorktreesRemovableResponse,
   gracefulEndStatus,
+  supportsMidTurnSteer,
+  TURN_COMPLETE_STEER_REQUEUE,
+  AbandonedSteer,
+  ActivateTurnLeasesResponse,
 } from '@orbit/shared';
 import { lastProviderByWorkspace, withProviderSeed } from '../workspaces/workspace-provider';
 import { generateToken, generateUserCode, sha256 } from '../common/crypto.util';
@@ -130,6 +134,7 @@ import {
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
 } from './runner-provider-support';
+import { sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1341,7 +1346,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string },
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ActivateTurnLeasesRequest,
-  ): Promise<{ ok: true }> {
+  ): Promise<ActivateTurnLeasesResponse> {
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     if (!generation) throw new BadRequestException('leaseGeneration is required');
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
@@ -1362,7 +1367,11 @@ export class RunnerApiController {
       preflight.inboxLeaseOwner === leaseOwner &&
       preflight.inboxLeaseGeneration === generation
     ) {
-      return { ok: true };
+      // Still answered with the handover: this path is also where a RETRY of a committed
+      // activation lands (the generation is installed, the response never arrived), and a
+      // stranded steer that is only reported on the attempt that installs the generation is
+      // one that is never reported at all.
+      return { ok: true, abandonedSteers: await this.abandonedSteers(sessionId, generation) };
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -1448,7 +1457,57 @@ export class RunnerApiController {
           AND "lease_generation" IS DISTINCT FROM ${generation}::uuid
       `;
     });
-    return { ok: true };
+    // A steer is deliberately NOT included above: expiring its lease would re-deliver it, and
+    // the one thing mid-turn delivery must never do is write a message the engine may already
+    // have acted on a second time. It is handed to the incoming process to report instead.
+    return { ok: true, abandonedSteers: await this.abandonedSteers(sessionId, generation) };
+  }
+
+  /**
+   * The mid-turn messages a dying process left leased, for the process replacing it to answer.
+   *
+   * A steer is delivered exactly once and never re-leased, so a runner that died holding one
+   * leaves a row nothing else will ever come back for: not the inbox (which only hands out a
+   * PENDING steer), not the lease expiry above, and not the completion of the turn it was aimed
+   * at (which only re-files a steer that was still PENDING). Without this the message is simply
+   * gone — no event, no queue entry, no failure — which is the single outcome mid-turn sending
+   * is not allowed to produce.
+   *
+   * Reported rather than settled here, and read rather than written, because activation is
+   * retried on transport errors: a response nobody received has to leave these rows exactly as
+   * they were, so the next attempt hands the same ones over again. The runner settles each one
+   * (`subtype: 'steer'`, FAILED) once it has said so on the event stream, which is what takes it
+   * out of this set.
+   *
+   * They are reported as FAILED and not re-filed: whether the message reached the engine before
+   * the process died is not knowable from here, and Codex does not de-duplicate
+   * (docs/codex-turn-steer-contract.md §4.3b).
+   */
+  private async abandonedSteers(sessionId: string, generation: string | null): Promise<AbandonedSteer[]> {
+    const stranded = await this.prisma.conversationTurn.findMany({
+      where: {
+        sessionId,
+        kind: 'steer',
+        status: 'IN_FLIGHT',
+        ...(generation ? { NOT: { leaseGeneration: generation } } : {}),
+      },
+      select: { id: true, content: true },
+      orderBy: { seq: 'asc' },
+    });
+    if (stranded.length === 0) return [];
+    // Whether the dead process got as far as putting a bubble in the transcript decides what the
+    // report has to do: amend the one that is there, or open one. Emitting a second `user` event
+    // for a turn that already has one shows the same message twice.
+    const announced = await this.prisma.runEvent.findMany({
+      where: { sessionId, turnId: { in: stranded.map((t) => t.id) }, type: RunEventType.USER },
+      select: { turnId: true },
+    });
+    const hasBubble = new Set(announced.map((e) => e.turnId));
+    return stranded.map((t) => ({
+      turnId: t.id,
+      content: t.content ?? '',
+      announced: hasBubble.has(t.id),
+    }));
   }
 
   /** Expire input leases abandoned when a warm runtime is evicted. */
@@ -1535,11 +1594,20 @@ export class RunnerApiController {
      *  message runs a turn later instead of vanishing. This is what makes the control plane
      *  safe to deploy ahead of the runners rather than only after them. */
     @Query('acceptsSteer') acceptsSteer?: string,
+    /** …and knowing the kind is not the same as being able to deliver it for THIS session's
+     *  engine. Every runner that speaks `steer` at all can write one into a claude turn;
+     *  codex needs `turn/steer`, which arrived later, so an older binary answers that same
+     *  kind by refusing it in front of the user. The declaration is re-read from the poller
+     *  on every poll rather than trusted from the heartbeat snapshot createTurn used: this
+     *  is the process that will actually execute the turn, and it may have been downgraded
+     *  since. */
+    @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
   ): Promise<RunInboxResponse> {
     const generation = parseLeaseGeneration(leaseGeneration);
+    const declared = parseRunnerCapabilities(capabilities) ?? [];
     const deadline = Date.now() + INBOX_LONG_POLL_MS;
     for (;;) {
-      const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1');
+      const turn = await this.dequeueTurn(sessionId, runner.id, generation, acceptsSteer === '1', declared);
       if (turn) return turn;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return { turnId: '', seq: 0, kind: 'message' };
@@ -1631,6 +1699,10 @@ export class RunnerApiController {
     leaseGeneration: string | null,
     /** Whether this poller can act on a steer at all — see the inbox route. */
     acceptsSteer = false,
+    /** What that poller declared it can do, which decides whether "a steer" means one for
+     *  THIS session's engine. Absent is a runner that declared nothing: claude steers as it
+     *  always has, and every gated runtime withholds. */
+    declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
     return this.prisma.$transaction(async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
@@ -1642,10 +1714,14 @@ export class RunnerApiController {
           inboxLeaseGeneration: string | null;
           inboxLeaseOwner: string | null;
           status: RunStatus;
+          ownerId: string;
+          provider: string;
+          providerBuiltin: boolean;
         }>
       >`
         SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration",
-               "inbox_lease_owner" AS "inboxLeaseOwner", status
+               "inbox_lease_owner" AS "inboxLeaseOwner", status,
+               "owner_id" AS "ownerId", provider, "provider_builtin" AS "providerBuiltin"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runnerId}::uuid
         FOR UPDATE
@@ -1682,6 +1758,17 @@ export class RunnerApiController {
           throw new ConflictException('inbox lease generation is missing or retired');
         }
       }
+      // "Can this poller act on a steer" is not a property of the poller alone: it is this
+      // runner's word about the runtime this session actually executes on. A binary that
+      // knows the kind but not this engine's mid-turn call refuses every steer it is handed,
+      // so withholding one here is what keeps a half-upgraded fleet on the behaviour it has
+      // today — the row stays PENDING and turn-complete re-files it as an ordinary message
+      // when the running turn ends. Resolved per poll, through the same runtime resolution
+      // dispatch and createTurn use, so a configured (BYOK) session is judged by the runtime
+      // it borrows rather than by its slug.
+      const deliverSteer =
+        acceptsSteer &&
+        supportsMidTurnSteer(await sessionExecRuntime(tx, owned[0]), declaredCapabilities);
       const rows = await tx.$queryRaw<Array<{ id: string; seq: number; kind: string; content: string | null }>>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
@@ -1717,7 +1804,7 @@ export class RunnerApiController {
               -- its turn ends is not stranded either — turn-complete files it as an ordinary
               -- message, which is what it becomes once there is nothing to steer.
               OR (turn."kind" = 'steer' AND turn."status" = 'PENDING'
-                AND ${acceptsSteer}::boolean
+                AND ${deliverSteer}::boolean
                 AND EXISTS (
                   SELECT 1 FROM "session" active
                   WHERE active.id = ${sessionId}::uuid
@@ -1837,6 +1924,11 @@ export class RunnerApiController {
         content,
         attachments,
         env: t.kind === 'reload' ? await this.reloadProviderEnv(tx, sessionId, t.content) : undefined,
+        // Said on the delivery itself, because it is only ever true of THIS control plane and
+        // is only needed while this one message is being answered for: a steer that provably
+        // never reached the engine can come back here as an ordinary message (see turnComplete)
+        // instead of being reported as a failure the person has to re-send by hand.
+        steerRequeue: t.kind === 'steer' ? true : undefined,
       };
     });
   }
@@ -2069,6 +2161,69 @@ export class RunnerApiController {
         where: { id: dto.turnId, sessionId, kind: 'steer' },
         select: { id: true },
       });
+      // `turnComplete` is retried when the response is lost. After the first successful
+      // steer_requeue the SAME row is already a `message` (and may even have been leased for its
+      // real execution) by the time that retry arrives, so looking only at its current kind and
+      // falling through to the ordinary-turn path would ACK the requeued message without running
+      // it. The subtype is a completion *operation*, not a claim that a non-steer row completed:
+      // once there is no steer left to requeue, the only idempotent answer is a no-op.
+      if (!steering && dto.subtype === TURN_COMPLETE_STEER_REQUEUE) {
+        return {
+          applied: false,
+          steer: true,
+          requeued: false,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
+      }
+      // A steer the engine PROVABLY never read is un-filed rather than acked: it becomes the
+      // ordinary message it would have been had it arrived a moment later, on the same row,
+      // with the same seq and the same clientTurnId — the kind was the only thing about it that
+      // was ever a matter of timing. This is the same transition turn-complete already applies
+      // to a steer still PENDING when its turn ends, reached from the other direction: there,
+      // because there is no longer a turn to join; here, because the runner came back and said
+      // it could not join the one there was.
+      //
+      // Only for provable non-delivery, which is the runner's judgement to make (see
+      // TURN_COMPLETE_STEER_REQUEUE): re-filing a message Codex may already have taken is how
+      // one prompt gets run twice, and Codex does not de-duplicate.
+      if (steering && dto.subtype === TURN_COMPLETE_STEER_REQUEUE) {
+        // Idempotent by the kind itself: the update changes one leased steer at most once. The
+        // guard above is the other half of that invariant — a retry which now observes the row as
+        // a message must stop here rather than settling that message as an ordinary completed turn.
+        // This is also safe against the turn ending underneath it: that path only touches steers
+        // that are still PENDING, and this one only a leased one.
+        const requeued = await tx.conversationTurn.updateMany({
+          where: { id: dto.turnId, sessionId, kind: 'steer', status: 'IN_FLIGHT' },
+          data: {
+            kind: 'message',
+            status: 'PENDING',
+            deliveredAt: null,
+            leaseDeadlineAt: null,
+            leaseGeneration: null,
+          },
+        });
+        if (requeued.count > 0) {
+          // The turn this message was aimed at may already have completed — the two race by
+          // construction, since "there was no turn to steer" is the commonest reason to get
+          // here. That completion counted the executable turns before this row became one, so
+          // it may have parked the session with a message now queued behind nothing. Waking it
+          // is the same transition an ordinary send makes.
+          await tx.session.updateMany({
+            where: { id: sessionId, status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+            data: { status: RunStatus.PENDING, lastTurnAt: new Date() },
+          });
+        }
+        return {
+          applied: requeued.count > 0,
+          steer: true,
+          requeued: requeued.count > 0,
+          status: current.status,
+          failSession: false,
+          retryAt: current.retryAt,
+        };
+      }
       if (steering) {
         const acked = await tx.conversationTurn.updateMany({
           where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
@@ -2077,6 +2232,7 @@ export class RunnerApiController {
         return {
           applied: acked.count > 0,
           steer: true,
+          requeued: false,
           status: current.status,
           failSession: false,
           retryAt: current.retryAt,
@@ -2128,7 +2284,7 @@ export class RunnerApiController {
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
-        return { applied: false, steer: false, status: current.status, failSession, retryAt: current.retryAt };
+        return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -2262,12 +2418,16 @@ export class RunnerApiController {
         await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED);
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
-      return { applied: true, steer: false, status: nextStatus, failSession, retryAt: current.retryAt };
+      return { applied: true, steer: false, requeued: false, status: nextStatus, failSession, retryAt: current.retryAt };
     });
     if (finalized.steer) {
       // Nothing about the session changed, so nothing about it is announced. The queue view
       // did change — a steer left it — and the clients read that from the durable list.
       if (finalized.applied) this.realtime.publishQueuedTurnsChanged(sessionId);
+      // A requeued steer is an executable turn again, and nothing else is going to come
+      // looking for it: the completion that would normally wake the inbox has either already
+      // happened or is about to find this row on its own.
+      if (finalized.requeued) this.realtime.notifyInbox(sessionId);
       return { ok: true, status: finalized.status };
     }
     if (finalized.failSession) {
