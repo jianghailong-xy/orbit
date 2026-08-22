@@ -112,10 +112,16 @@ test('the migration installs a guard on the dependency table too', () => {
   assert.match(MIGRATION, /BEFORE INSERT OR UPDATE OR DELETE ON "task_dependency"/);
 });
 
-test('every acquisition the migration adds is NOWAIT', () => {
-  // The whole argument for a BEFORE trigger taking a project is that it never waits: waiting is
-  // what makes a cycle, refusing immediately cannot. One `FOR NO KEY UPDATE` without NOWAIT in
-  // either guard body would put the inversion back and nothing else in the suite would notice.
+test('every acquisition the migration adds on a row it already holds is NOWAIT', () => {
+  // The argument for a BEFORE trigger taking a project is that it never waits WHILE HOLDING THE
+  // TASK: on UPDATE and DELETE the row being written is locked before any trigger of ours runs, so
+  // waiting there is the edge that closes the cycle. One `FOR NO KEY UPDATE` without NOWAIT on
+  // those paths would put the inversion back and nothing else in the suite would notice.
+  //
+  // INSERT is the exception, and it is 0132's exception: the row does not exist yet and the FK
+  // checks are on the AFTER side, so nothing below the project is held and a waiter that holds
+  // nothing cannot be in a cycle. It is excluded by name below rather than by the regex, so that
+  // adding a THIRD waiting acquisition has to be an edit to this test.
   const guards = MIGRATION.slice(
     MIGRATION.indexOf('CREATE OR REPLACE FUNCTION "task_acceptance_fact_lock_order"'),
     MIGRATION.indexOf('-- 3. The two column lists are one list'),
@@ -127,9 +133,17 @@ test('every acquisition the migration adds is NOWAIT', () => {
   const acquisitions = [...guards.matchAll(/FOR (?:NO KEY UPDATE|UPDATE|SHARE|KEY SHARE)[^;]*/g)]
     .map((m) => m[0]);
   assert.ok(acquisitions.length >= 3, 'expected the guards to take project and task rows');
-  for (const acquisition of acquisitions) {
-    assert.match(acquisition, /NOWAIT/, `a guard acquisition without NOWAIT: ${acquisition}`);
-  }
+  const waiting = acquisitions.filter((a) => !/NOWAIT/.test(a));
+  assert.equal(waiting.length, 1,
+    `exactly one waiting acquisition is allowed (the INSERT branch); found: ${waiting.join(' | ')}`);
+  // ...and it is under `TG_OP = 'INSERT'`, not somewhere else that happens to have been written
+  // without NOWAIT.
+  const at = guards.indexOf("IF TG_OP = 'INSERT' THEN");
+  assert.notEqual(at, -1, 'the guard no longer has an INSERT branch');
+  // Searched FORWARD from the branch, not from the start of the text: `ELSE` occurs earlier in the
+  // function body, so anchoring on its first occurrence produced an empty slice and a test that
+  // asserted nothing about anything.
+  assert.match(guards.slice(at, guards.indexOf('ELSE', at)), /FOR NO KEY UPDATE;/);
 });
 
 // ---------------------------------------------------------------------------------------------

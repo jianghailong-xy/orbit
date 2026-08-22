@@ -87,14 +87,34 @@ BEGIN
      WHERE candidate.id IS NOT NULL
      ORDER BY candidate.id
   LOOP
-    BEGIN
-      PERFORM 1 FROM "project" p WHERE p."id" = target FOR NO KEY UPDATE NOWAIT;
-    EXCEPTION WHEN lock_not_available THEN
-      RAISE EXCEPTION
-        'TASK_FACT_PROJECT_BUSY: project % is being written right now, so this task fact cannot be recorded in this transaction — nothing was written; retry',
-        target
-        USING ERRCODE = 'lock_not_available';
-    END;
+    IF TG_OP = 'INSERT' THEN
+      -- WAITING is safe here, and only here — 0132's split, for 0132's reason. On INSERT this
+      -- transaction holds no task row when a BEFORE ROW trigger runs: the row does not exist yet
+      -- and the foreign-key checks are on the AFTER side. So taking the project first makes this
+      -- path project → task like every other writer, and a waiter that holds nothing below the
+      -- project cannot be part of a cycle.
+      --
+      -- It is also what a filed task DESERVES. Refusing here costs a precise answer: a child whose
+      -- arrival would activate an aggregate parent has `TASK_AGGREGATE_PARENT_ACTIVATION` waiting
+      -- for it one trigger later, and a NOWAIT refusal in front of that replaces it with "the
+      -- project is busy, retry" — the caller has to come back to learn the real reason, and the
+      -- real reason will not change. A short wait behind a reconcile is the better trade.
+      PERFORM 1 FROM "project" p WHERE p."id" = target FOR NO KEY UPDATE;
+    ELSE
+      -- On UPDATE and DELETE, PostgreSQL locked the task row BEFORE this trigger ran, so this
+      -- transaction is already task → project and waiting here is exactly the edge that closes the
+      -- cycle against a Coordinator holding the project and reaching for the task. NOWAIT converts
+      -- it into a typed refusal with nothing written — retryable, and never a `40P01` victim
+      -- chosen at random.
+      BEGIN
+        PERFORM 1 FROM "project" p WHERE p."id" = target FOR NO KEY UPDATE NOWAIT;
+      EXCEPTION WHEN lock_not_available THEN
+        RAISE EXCEPTION
+          'TASK_FACT_PROJECT_BUSY: project % is being written right now, so this task fact cannot be recorded in this transaction — nothing was written; retry',
+          target
+          USING ERRCODE = 'lock_not_available';
+      END;
+    END IF;
   END LOOP;
 
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
