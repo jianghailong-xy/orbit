@@ -521,6 +521,9 @@ func cmdUnregister(bools map[string]bool) {
 
 func cmdRun() {
 	clearInheritedSessionContext()
+	// Before anything reads HOME, ORBIT_HOME or PATH — loadConfig below is already one
+	// such reader — settle what this process's environment actually is.
+	resolveRunnerEnv()
 	// Runner startup is a trusted path (unlike an agent-invoked read-only CLI
 	// command), so migrate the legacy 0755/0644 credential storage before use.
 	if err := hardenConfigStorage(); err != nil && !os.IsNotExist(err) {

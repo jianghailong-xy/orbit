@@ -333,6 +333,10 @@ func installedByOfficialInstaller(binPath, home string) bool {
 	return false
 }
 
+// defaultSystemPath is the last-resort PATH: what a POSIX system guarantees, used when
+// neither the target user's login shell nor the current process can name a better one.
+const defaultSystemPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 // userLoginPath returns the target user's login PATH. When we're root dropping to
 // another user, the process PATH is root's (or sudo-sanitized), so query that
 // user's own login shell; otherwise the current PATH already is theirs.
@@ -345,7 +349,7 @@ func userLoginPath(u *user.User, fallback string) string {
 		}
 	}
 	if fallback == "" {
-		return "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+		return defaultSystemPath
 	}
 	return fallback
 }
