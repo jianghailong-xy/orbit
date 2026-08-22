@@ -6,6 +6,7 @@
 #   scripts/deadlock-barrier.sh spec           # the harness's own pg spec
 #   scripts/deadlock-barrier.sh retry          # the shared transaction-retry pg spec
 #   scripts/deadlock-barrier.sh boundary       # the API's 503 answer to a real conflict
+#   scripts/deadlock-barrier.sh task-retry     # a real deadlock victim re-running a Task create
 #   scripts/deadlock-barrier.sh session-scope  # the 0130 Session event-source scope regression
 #   scripts/deadlock-barrier.sh lock-order     # the canonical lock order, from both arrival orders
 #   scripts/deadlock-barrier.sh all            # every gate above, on one server
@@ -42,8 +43,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|three-party|spec|retry|boundary|session-scope|lock-order|all) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|session-scope|lock-order|all] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|retry|boundary|task-retry|session-scope|lock-order|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -89,7 +90,7 @@ URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
 case "$TARGET" in
   # session-scope runs LAST because it rebuilds the pre-0130 trigger mid-test: an interrupted
   # run must never be able to leave a baseline executing against a schema it did not intend.
-  all) TARGETS=(spec retry boundary baseline three-party lock-order session-scope) ;;
+  all) TARGETS=(spec retry boundary baseline three-party lock-order task-retry session-scope) ;;
   *)   TARGETS=("$TARGET") ;;
 esac
 
@@ -100,6 +101,10 @@ run_target() {
     spec)        CMD=("$NODE" --test --test-concurrency=1 build/deadlock/pg-barrier.pg.spec.js) ;;
     retry)       CMD=("$NODE" --test --test-concurrency=1 build/common/transaction-retry.pg.spec.js) ;;
     boundary)    CMD=("$NODE" --test --test-concurrency=1 build/common/transient-db-conflict.pg.spec.js) ;;
+    # Tasks create/createMany as the victim of a real cycle. It runs AFTER lock-order, whose
+    # subject is the create NOT deadlocking: proving the retry first would leave it unclear
+    # whether the ordered path still needs one.
+    task-retry)  CMD=("$NODE" --test --test-concurrency=1 build/tasks/task-create-retry.pg.spec.js) ;;
     # The regression the narrowing owns. It rebuilds the pre-0130 trigger to prove its own
     # barrier discriminates, then re-applies 0130 — so it must not run beside the baselines.
     session-scope) CMD=("$NODE" --test --test-concurrency=1 build/projects/project-session-event-scope.pg.spec.js) ;;
