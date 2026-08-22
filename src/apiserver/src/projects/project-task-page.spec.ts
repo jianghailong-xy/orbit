@@ -40,11 +40,24 @@ function serviceWith(opts: {
   tasks?: unknown[];
   parent?: unknown;
   project?: unknown;
+  graph?: unknown[];
   onFindMany?: (args: any) => void;
 } = {}) {
-  const calls: { findMany: any[]; parentWhere: any[] } = { findMany: [], parentWhere: [] };
+  const calls: { findMany: any[]; parentWhere: any[]; graph: any[] } = {
+    findMany: [],
+    parentWhere: [],
+    graph: [],
+  };
   const service = new ProjectsService({
     project: { findFirst: async () => ('project' in opts ? opts.project : { id: PROJECT_ID }) },
+    // The dependency pass. What its SQL actually computes is a property of PostgreSQL and is
+    // proved against a real one in `project-task-dependency-fields.pg.spec.ts`; what is checked
+    // here is the part that is this file's subject — that it happens once per page and that its
+    // answer reaches the rows.
+    $queryRaw: async (sql: unknown) => {
+      calls.graph.push(sql);
+      return opts.graph ?? [];
+    },
     task: {
       findFirst: async (args: any) => {
         calls.parentWhere.push(args.where);
@@ -282,6 +295,7 @@ test('paging a level whose rows share a createdAt loses nothing and repeats noth
 
   const service = new ProjectsService({
     project: { findFirst: async () => ({ id: PROJECT_ID }) },
+    $queryRaw: async () => [],
     task: {
       findMany: async (args: any) => {
         const bound = args.where.AND?.[1]?.OR;
@@ -415,6 +429,93 @@ test('childCount is a counted aggregate, scoped like the page it would open', as
   });
   assert.equal(calls.findMany[0].select.children, undefined);
   assert.equal(calls.findMany[0].include, undefined);
+});
+
+// ── The dependency fields ─────────────────────────────────────────────────────────────────────
+
+test('every row carries all four dependency fields, and the graph is read once per page', async () => {
+  const waiting = '00000000-0000-7000-8000-0000000000a7';
+  const alone = '00000000-0000-7000-8000-0000000000a8';
+  const { service, calls } = serviceWith({
+    tasks: [row(waiting), row(alone)],
+    // Only one of the two rows comes back from the graph pass — the other stands for a row the
+    // query had nothing to say about, which must still read as "nothing is holding this back"
+    // rather than as a row missing half its keys.
+    graph: [
+      {
+        id: waiting,
+        unmetCount: 2,
+        blocksCount: 5,
+        topoLevel: 3,
+        prerequisiteCount: 4,
+        terminalCount: 0,
+        doneCount: 2,
+      },
+    ],
+  });
+
+  const { items } = await service.taskPage(OWNER_ID, PROJECT_ID);
+
+  const shown = (task: unknown) => {
+    const { unmetCount, blocksCount, topoLevel, dependencyState } = task as any;
+    return { unmetCount, blocksCount, topoLevel, dependencyState };
+  };
+  // Two prerequisites still open and none of them terminal: waiting, not broken.
+  assert.deepEqual(shown(items[0]), {
+    unmetCount: 2,
+    blocksCount: 5,
+    topoLevel: 3,
+    dependencyState: 'BLOCKED',
+  });
+  for (const field of ['unmetCount', 'blocksCount', 'topoLevel', 'dependencyState']) {
+    assert.equal(field in (items[1] as any), true, `${field} must be on every row`);
+  }
+  assert.deepEqual(shown(items[1]), {
+    unmetCount: 0,
+    blocksCount: 0,
+    topoLevel: 0,
+    dependencyState: 'READY',
+  });
+  // One pass for the page, not one per row — the whole reason the level is computed in SQL.
+  assert.equal(calls.graph.length, 1);
+});
+
+test('a page with no rows reads no graph at all', async () => {
+  const { service, calls } = serviceWith({ tasks: [] });
+
+  const { items } = await service.taskPage(OWNER_ID, PROJECT_ID);
+
+  assert.deepEqual(items, []);
+  assert.deepEqual(calls.graph, []);
+});
+
+test('the tallies decide the state by the rule the task list already uses', async () => {
+  const id = '00000000-0000-7000-8000-0000000000a9';
+  const tallies = (over: Record<string, number>) => ({
+    id,
+    unmetCount: 0,
+    blocksCount: 0,
+    topoLevel: 0,
+    prerequisiteCount: 0,
+    terminalCount: 0,
+    doneCount: 0,
+    ...over,
+  });
+  const cases: Array<[Record<string, number>, string]> = [
+    // No prerequisites is not a fourth word here: nothing is holding the row back, so READY.
+    [{}, 'READY'],
+    [{ prerequisiteCount: 2, doneCount: 2 }, 'READY'],
+    [{ prerequisiteCount: 2, doneCount: 1 }, 'BLOCKED'],
+    // A cancelled prerequisite is not "unmet" — it will never be met — so it escalates even
+    // though every other prerequisite is done.
+    [{ prerequisiteCount: 2, doneCount: 1, terminalCount: 1 }, 'BLOCKED_FAILED'],
+  ];
+
+  for (const [over, expected] of cases) {
+    const { service } = serviceWith({ tasks: [row(id)], graph: [tallies(over)] });
+    const { items } = await service.taskPage(OWNER_ID, PROJECT_ID);
+    assert.equal((items[0] as any).dependencyState, expected, JSON.stringify(over));
+  }
 });
 
 // ── The route ─────────────────────────────────────────────────────────────────────────────────

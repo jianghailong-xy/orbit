@@ -22,6 +22,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
 import { SessionsService } from '../sessions/sessions.service';
 import { withSessionState } from '../sessions/session-state';
+import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
 import {
   DEFAULT_TASK_PAGE_SIZE,
   MAX_TASK_PAGE_SIZE,
@@ -114,6 +115,57 @@ export const PROJECT_TASK_TREE_SELECT = {
   verifiesTaskId: true,
   assignee: { select: { id: true, name: true } },
 } satisfies Prisma.TaskSelect;
+
+/**
+ * What a page row says about its place in the project's dependency graph.
+ *
+ * Derived on every read from the current graph, never stored — the same rule the rest of the
+ * system derives `dependencyState` by (`task-dependencies.ts`), so a row here and the same task on
+ * the task list cannot disagree about whether it is waiting.
+ *
+ * None of these four names is id-shaped, which is deliberate: `PUBLIC_ID_FIELDS` classifies by
+ * field NAME, so a tally called `blockedById` would be run through the Base62 encoder as though it
+ * were an address. Counts are counts.
+ */
+interface ProjectTaskDependencyFields {
+  /** Prerequisites that are neither DONE nor CANCELLED — what this task is still waiting on. */
+  unmetCount: number;
+  /** Tasks that name this one as a prerequisite: what finishing it would release. */
+  blocksCount: number;
+  /** Longest prerequisite path to this task inside this project. A source sits at 0. */
+  topoLevel: number;
+  /**
+   * `READY` | `BLOCKED` | `BLOCKED_FAILED`, from the one vocabulary the task list already uses.
+   * `NONE` is not a fourth word here: a row with no prerequisites at all is a row nothing is
+   * holding back, which is what READY says, and a client rendering a lock icon would have had to
+   * treat the two identically anyway.
+   */
+  dependencyState: Exclude<DependencyState, 'NONE'>;
+}
+
+/** The raw tallies the graph query returns, before the state rule is applied to them. */
+interface ProjectTaskDependencyRow extends Omit<ProjectTaskDependencyFields, 'dependencyState'> {
+  id: string;
+  prerequisiteCount: number;
+  terminalCount: number;
+  doneCount: number;
+}
+
+/** A task with no edges at all — also the shape a row falls back to, so no key ever goes missing. */
+const UNCONNECTED_TASK: ProjectTaskDependencyFields = {
+  unmetCount: 0,
+  blocksCount: 0,
+  topoLevel: 0,
+  dependencyState: 'READY',
+};
+
+/** The shared rule, with this payload's collapse of `NONE` onto `READY` applied once. */
+function projectTaskDependencyState(
+  counts: Parameters<typeof dependencyStateFromCounts>[0],
+): ProjectTaskDependencyFields['dependencyState'] {
+  const state = dependencyStateFromCounts(counts);
+  return state === 'NONE' ? 'READY' : state;
+}
 
 /**
  * What every project response says about its coordination, and the two rows it is read from.
@@ -1456,11 +1508,129 @@ export class ProjectsService {
 
     const hasMore = rows.length > limit;
     const page = hasMore ? rows.slice(0, limit) : rows;
-    const items = page.map(({ _count, ...task }) => ({ ...task, childCount: _count.children }));
+    // One pass over the project's graph for the whole page, never one per row: the level a task
+    // sits at is a fact about the graph rather than about the row, so it cannot be answered by
+    // selecting more columns of `task`.
+    const dependencies = await this.taskDependencyFields(
+      ownerId,
+      projectId,
+      page.map((task) => task.id),
+    );
+    const items = page.map(({ _count, ...task }) => ({
+      ...task,
+      childCount: _count.children,
+      // Never spread-with-fallback into nothing: a row that somehow missed the graph pass still
+      // carries all four keys, because an absent key reads to a client as "this endpoint does not
+      // report dependencies" rather than as "this task has none".
+      ...(dependencies.get(task.id) ?? UNCONNECTED_TASK),
+    }));
     return {
       items,
       nextCursor: hasMore && page.length ? encodeTaskPageCursor(page[page.length - 1]) : null,
     };
+  }
+
+  /**
+   * Where each of these tasks sits in its project's dependency graph, in one recursive query.
+   *
+   * Four derived facts, and they are not all scoped the same way, because they answer different
+   * questions:
+   *   - `unmetCount`, `blocksCount` and `dependencyState` count EVERY edge this owner has into or
+   *     out of the task. A prerequisite filed under another project still stops the dispatcher, so
+   *     a project-scoped tally here would show `READY` on a row nothing will start.
+   *   - `topoLevel` is the longest prerequisite path INSIDE this project, which is what a reader
+   *     of this project's plan is asking for. A task whose only prerequisite is elsewhere is a
+   *     source of this graph, at level 0, and its `dependencyState` still says it is waiting.
+   *
+   * The level is a longest path, not a shortest one: a task belongs below everything it waits on,
+   * so a node reachable at depths 1 and 3 sits at 3. `UNION` (not `UNION ALL`) is what keeps that
+   * affordable — the recursion dedupes `(task, level)` pairs against everything already produced,
+   * so a diamond is walked once per level rather than once per path, and a 118-node project costs
+   * one query instead of 118.
+   */
+  private async taskDependencyFields(
+    ownerId: string,
+    projectId: string,
+    taskIds: string[],
+  ): Promise<Map<string, ProjectTaskDependencyFields>> {
+    if (taskIds.length === 0) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<ProjectTaskDependencyRow>>(Prisma.sql`
+      WITH RECURSIVE
+      "scoped" AS (
+        SELECT t."id"
+          FROM "task" t
+         WHERE t."owner_id" = ${ownerId}::uuid AND t."project_id" = ${projectId}::uuid
+      ),
+      "inbound" AS (
+        SELECT d."task_id" AS "id", p."status"::text AS "status"
+          FROM "task_dependency" d
+          JOIN "scoped" s ON s."id" = d."task_id"
+          JOIN "task" p ON p."id" = d."depends_on_task_id" AND p."owner_id" = ${ownerId}::uuid
+      ),
+      "tally" AS (
+        SELECT "id",
+               COUNT(*)::int AS "prerequisiteCount",
+               COUNT(*) FILTER (WHERE "status" NOT IN ('DONE', 'CANCELLED'))::int AS "unmetCount",
+               COUNT(*) FILTER (WHERE "status" IN ('CANCELLED', 'FAILED'))::int AS "terminalCount",
+               COUNT(*) FILTER (WHERE "status" = 'DONE')::int AS "doneCount"
+          FROM "inbound"
+         GROUP BY "id"
+      ),
+      "outbound" AS (
+        SELECT d."depends_on_task_id" AS "id", COUNT(*)::int AS "blocksCount"
+          FROM "task_dependency" d
+          JOIN "scoped" s ON s."id" = d."depends_on_task_id"
+          JOIN "task" c ON c."id" = d."task_id" AND c."owner_id" = ${ownerId}::uuid
+         GROUP BY d."depends_on_task_id"
+      ),
+      "edge" AS (
+        SELECT d."task_id", d."depends_on_task_id"
+          FROM "task_dependency" d
+          JOIN "scoped" a ON a."id" = d."task_id"
+          JOIN "scoped" b ON b."id" = d."depends_on_task_id"
+      ),
+      "walk" AS (
+        SELECT s."id", 0 AS "lvl"
+          FROM "scoped" s
+         WHERE NOT EXISTS (SELECT 1 FROM "edge" e WHERE e."task_id" = s."id")
+         UNION
+        SELECT e."task_id", w."lvl" + 1
+          FROM "walk" w
+          JOIN "edge" e ON e."depends_on_task_id" = w."id"
+         -- A DAG's longest path is shorter than its node count, so this bound is unreachable by a
+         -- well-formed graph and is the fence that stops a cycle that slipped past the write-side
+         -- check from spinning here forever.
+         WHERE w."lvl" < (SELECT COUNT(*) FROM "scoped")
+      ),
+      "topo" AS (SELECT "id", MAX("lvl")::int AS "topoLevel" FROM "walk" GROUP BY "id")
+      SELECT s."id",
+             COALESCE(t."unmetCount", 0) AS "unmetCount",
+             COALESCE(o."blocksCount", 0) AS "blocksCount",
+             COALESCE(p."topoLevel", 0) AS "topoLevel",
+             COALESCE(t."prerequisiteCount", 0) AS "prerequisiteCount",
+             COALESCE(t."terminalCount", 0) AS "terminalCount",
+             COALESCE(t."doneCount", 0) AS "doneCount"
+        FROM "scoped" s
+        LEFT JOIN "tally" t ON t."id" = s."id"
+        LEFT JOIN "outbound" o ON o."id" = s."id"
+        LEFT JOIN "topo" p ON p."id" = s."id"
+       WHERE s."id" IN (${Prisma.join(taskIds)})
+    `);
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          unmetCount: row.unmetCount,
+          blocksCount: row.blocksCount,
+          topoLevel: row.topoLevel,
+          dependencyState: projectTaskDependencyState({
+            prerequisites: row.prerequisiteCount,
+            terminal: row.terminalCount,
+            done: row.doneCount,
+          }),
+        },
+      ]),
+    );
   }
 
   /**

@@ -4,6 +4,7 @@ import { TaskStatus } from '@orbit/shared';
 import {
   canRun,
   computeDependencyState,
+  dependencyStateFromCounts,
   wouldCreateCycle,
   wouldReplacementCreateCycle,
   type DependencyEdge,
@@ -44,6 +45,34 @@ test('a FAILED prerequisite escalates to BLOCKED_FAILED (needs a human, like CAN
   const state = computeDependencyState([TaskStatus.DONE, TaskStatus.FAILED]);
   assert.equal(state, 'BLOCKED_FAILED');
   assert.equal(canRun(state), false);
+});
+
+/**
+ * The tally form is the one the project task page uses, because counting in SQL is what keeps a
+ * 118-node project to one query. Two spellings of a rule are two rules unless something holds them
+ * together, so this walks every multiset of prerequisite statuses up to four long and requires the
+ * two to agree on all of them.
+ */
+test('dependencyStateFromCounts agrees with computeDependencyState on every multiset', () => {
+  const statuses = [TaskStatus.OPEN, TaskStatus.IN_PROGRESS, TaskStatus.DONE, TaskStatus.CANCELLED, TaskStatus.FAILED];
+  const multisets: TaskStatus[][] = [[]];
+  for (let size = 0; size < 4; size += 1) {
+    for (const prefix of multisets.filter((m) => m.length === size)) {
+      for (const status of statuses) multisets.push([...prefix, status]);
+    }
+  }
+
+  for (const prerequisites of multisets) {
+    assert.equal(
+      dependencyStateFromCounts({
+        prerequisites: prerequisites.length,
+        terminal: prerequisites.filter((s) => s === TaskStatus.CANCELLED || s === TaskStatus.FAILED).length,
+        done: prerequisites.filter((s) => s === TaskStatus.DONE).length,
+      }),
+      computeDependencyState(prerequisites),
+      prerequisites.join(',') || '(no prerequisites)',
+    );
+  }
 });
 
 test('self-dependency is a cycle', () => {

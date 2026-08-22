@@ -25,6 +25,27 @@ export function computeDependencyState(prerequisiteStatuses: TaskStatus[]): Depe
   return 'BLOCKED';
 }
 
+/**
+ * The same rule as `computeDependencyState`, decided from tallies instead of from one entry per
+ * prerequisite — for the callers that count in SQL because hydrating a row per edge is exactly the
+ * fan-out they exist to avoid.
+ *
+ * It lives here, beside the rule it restates, so the two cannot drift apart unnoticed;
+ * `task-dependencies.spec.ts` proves they agree on every combination of tallies.
+ */
+export function dependencyStateFromCounts(counts: {
+  /** How many prerequisites the task has at all. Zero is what makes the state `NONE`. */
+  prerequisites: number;
+  /** Of those, how many are CANCELLED or FAILED — terminal, so waiting will not clear them. */
+  terminal: number;
+  /** Of those, how many are DONE. */
+  done: number;
+}): DependencyState {
+  if (counts.prerequisites === 0) return 'NONE';
+  if (counts.terminal > 0) return 'BLOCKED_FAILED';
+  return counts.done === counts.prerequisites ? 'READY' : 'BLOCKED';
+}
+
 /** A task may be executed only when it has no unmet prerequisites. */
 export function canRun(state: DependencyState): boolean {
   return state === 'NONE' || state === 'READY';
