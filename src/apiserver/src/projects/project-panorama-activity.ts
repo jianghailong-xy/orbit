@@ -34,7 +34,7 @@ import { decodeTaskPageCursor, encodeTaskPageCursor } from '../tasks/tasks.servi
 /**
  * The closed set of things that can appear in this stream.
  *
- * The eight action types keep their own names — they are already the vocabulary the contract
+ * The nine action types keep their own names — they are already the vocabulary the contract
  * writes and reads them under, and renaming them here would buy nothing but a second glossary.
  * `DECIDE`, `WAKE` and `SIGNAL` are the three the other two tables map into.
  */
@@ -47,6 +47,10 @@ export const PROJECT_ACTIVITY_KINDS = [
   'APPLY_VERIFICATION_VERDICT',
   'REQUEST_APPROVAL',
   'RUN_PROJECT_ACCEPTANCE',
+  // Migration 0133's ninth type. §13.2 V8's one machine-closable gap: a task that only a passing
+  // check can complete, with no check pointed at it, is filed BY the loop — so it is an act of the
+  // control loop and belongs in the stream that reports them, not a silent side effect.
+  'FILE_VERIFICATION_TASK',
   'DECIDE',
   'WAKE',
   'SIGNAL',
@@ -103,7 +107,7 @@ const TIMER_EVENT_KIND = 'timer.due';
 /**
  * Every `project_action_type`, in the vocabulary and in English.
  *
- * A `Record` rather than a lookup with a fallback, so adding a ninth action type is a compile
+ * A `Record` rather than a lookup with a fallback, so adding a tenth action type is a compile
  * error here — the alternative is a new kind of action appearing in the stream under a name no
  * client was told about, which is the failure this endpoint's whole point is to avoid.
  */
@@ -116,6 +120,7 @@ const ACTION_ACTIVITY: Record<ProjectActionType, { kind: ProjectActivityKind; ti
   APPLY_VERIFICATION_VERDICT: { kind: 'APPLY_VERIFICATION_VERDICT', title: 'Apply verification verdict' },
   REQUEST_APPROVAL: { kind: 'REQUEST_APPROVAL', title: 'Request approval' },
   RUN_PROJECT_ACCEPTANCE: { kind: 'RUN_PROJECT_ACCEPTANCE', title: 'Run project acceptance' },
+  FILE_VERIFICATION_TASK: { kind: 'FILE_VERIFICATION_TASK', title: 'File verification task' },
 };
 
 /** One merged row, before it is put into words. Nine columns, the same nine from all three
