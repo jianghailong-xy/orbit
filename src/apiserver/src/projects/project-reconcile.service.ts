@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
+import { withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ProjectDecisionBlockerAudit,
@@ -1016,17 +1017,27 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** PostgreSQL may abort an RR contender whose first snapshot predates a conflicting action. */
+  /**
+   * PostgreSQL may abort an RR contender whose first snapshot predates a conflicting action.
+   *
+   * Which failures count as that, and what the whole-transaction retry looks like, are the shared
+   * `withTransactionRetry` rules (common/transaction-retry) rather than this service's: an
+   * aborted transaction means the same thing here as it does anywhere else in the API server,
+   * and a second local answer to that question could only ever disagree with the first.
+   */
   private async repeatableRead<T>(effect: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        return await this.prisma.$transaction(effect, {
-          isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
-        });
-      } catch (cause) {
-        if (attempt >= 3 || !isSerializationFailure(cause)) throw cause;
-      }
-    }
+    return withTransactionRetry(this.prisma, effect, {
+      label: 'project.applyDecisionAction',
+      transaction: { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+      onOutcome: (event) => {
+        if (event.outcome === 'RETRYING' || event.outcome === 'EXHAUSTED') {
+          this.log.warn(
+            `Project action transaction ${event.outcome.toLowerCase()} on attempt ` +
+              `${event.attempt}/${event.maxAttempts} (${event.reason}): ${errorText(event.error)}`,
+          );
+        }
+      },
+    });
   }
 
   private async acquireLeaseInTransaction(
@@ -1773,14 +1784,4 @@ function internalDedupeKey(dedupeKey: string): string {
 function errorText(cause: unknown): string {
   const text = cause instanceof Error ? cause.message : String(cause);
   return text.slice(0, 2_000);
-}
-
-function isSerializationFailure(cause: unknown): boolean {
-  if (!cause || typeof cause !== 'object') return false;
-  const error = cause as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
-  return error.code === 'P2034'
-    || error.code === '40001'
-    || error.meta?.code === '40001'
-    || (typeof error.message === 'string'
-      && /could not serialize access|write conflict|deadlock/i.test(error.message));
 }

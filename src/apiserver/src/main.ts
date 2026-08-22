@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
+import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 
 declare global {
@@ -47,7 +48,15 @@ async function bootstrap() {
   // A response body leaves by one of two doors, and both spell ids the same way. The interceptor
   // above maps what a handler returns; this maps what it throws, which used to leave raw UUIDs in
   // refusal bodies on endpoints whose success bodies were base62.
-  app.useGlobalFilters(new PublicIdExceptionFilter(app.get(HttpAdapterHost).httpAdapter));
+  //
+  // In front of it, and chained INTO it rather than registered beside it: Nest runs exactly one
+  // filter per exception, so two catch-alls would not compose — the second would simply replace
+  // the first. The conflict boundary answers a database that rolled a request back and hands
+  // everything else straight through, so the id rule still applies to every refusal.
+  const httpAdapter = app.get(HttpAdapterHost).httpAdapter;
+  app.useGlobalFilters(
+    new TransientDbConflictFilter(new PublicIdExceptionFilter(httpAdapter), httpAdapter),
+  );
 
   const origins = (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173')
     .split(',')
