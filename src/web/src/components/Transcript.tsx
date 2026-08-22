@@ -673,6 +673,7 @@ function isGroupableTool(node: Node): node is ToolNode {
     node.name !== 'AskUserQuestion' &&
     node.name !== 'ExitPlanMode' &&
     node.name !== 'mcp__orbit__session_create' &&
+    node.name !== 'mcp__orbit__task_create_batch' &&
     node.name !== 'Task' &&
     node.name !== 'Workspace'
   );
@@ -1758,6 +1759,24 @@ function Thinking({ text, seq }: { text: string; seq?: number }) {
   );
 }
 
+// Past this a batch stops being a card and becomes a page: one may carry fifty
+// (TASK_BATCH_CREATE_MAX), and fifty rows unfolded into the middle of a turn is a wall, not a
+// record.
+const BATCH_AUTO_OPEN_MAX = 12;
+
+/**
+ * A batch small enough to unfold on sight.
+ *
+ * Read from the *preview* input, so a clipped one is declined rather than under-counted — a batch
+ * big enough to clip is past the ceiling anyway, and refetching it would be the price of a card
+ * nobody asked to open.
+ */
+function isAutoOpenBatch(node: ToolNode): boolean {
+  if (node.name !== 'mcp__orbit__task_create_batch' || node.truncated) return false;
+  const tasks = node.input?.tasks;
+  return Array.isArray(tasks) && tasks.length > 0 && tasks.length <= BATCH_AUTO_OPEN_MAX;
+}
+
 // ── tool calls ──────────────────────────────────────────────────────────────
 // Each tool renders as a single folded row (icon · name · summary · status);
 // clicking expands to show the call body, any sub-workspace transcript, and the
@@ -1771,6 +1790,10 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
   // default; a result carrying an image (a screenshot the workspace produced for the
   // user) opens so the picture shows without a click. A static export opens every card
   // (nothing can be un-folded after the fact).
+  // A created batch joins them: it is a write to state outside this session, the titles it names
+  // appear nowhere else in the transcript, and under auto-approval the panel that would have shown
+  // them was never on screen. The folded row carries the shape and the count — which is what the
+  // batch *is*, not what it did.
   // A failure used to open too. It is the loudest thing a call can do and the least
   // proportionate to unfold: the input is what has the lines (a heredoc clamps at
   // sixteen), the reason is four — and the agent, not the reader, is the first responder
@@ -1783,6 +1806,7 @@ function ToolView({ node, live }: { node: ToolNode; live?: boolean }) {
     node.name === 'ExitPlanMode' ||
     node.name === 'AskUserQuestion' ||
     isShell ||
+    isAutoOpenBatch(node) ||
     hasResultImage(node.result?.content);
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
   const open = manualOpen ?? defaultOpen;

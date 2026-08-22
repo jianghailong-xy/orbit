@@ -744,6 +744,29 @@ describe('Orbit write tool cards', () => {
     expect(html).toContain('Create tasks');
     expect(html).toContain('2 in parallel after 1');
     expect(html).not.toContain('mcp__orbit__task_create_batch');
+    // Unfolded on sight: the shape is on the row, but the titles are the write, and a reader
+    // scrolling a settled turn has no other place to find them.
+    expect(html).toContain('准备分片清单');
+    expect(html).toContain('batch-graph');
+  });
+
+  // Fifty is a legal batch (TASK_BATCH_CREATE_MAX) and fifty unfolded rows is a wall dropped into
+  // the middle of a turn. Past the ceiling the card goes back to being a card.
+  it('leaves an oversized batch folded', () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <Transcript
+          events={[
+            toolEvent('mcp__orbit__task_create_batch', {
+              tasks: Array.from({ length: 13 }, (_, n) => ({ title: `分片 ${n}` })),
+            }),
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(html).toContain('13 independent tasks');
+    expect(html).not.toContain('分片 0');
   });
 
   it('names a restructure by its reason rather than its JSON', () => {
@@ -1208,6 +1231,19 @@ describe('tool run folding', () => {
     ]);
 
     expect(html).toContain('chat-tool-task');
+    expect(html).not.toContain('chat-tool-group');
+  });
+
+  // Same reason as the child-session card: a batch renders its own picture and its own list of
+  // titles, and a line item inside "Tools × 3" is none of that.
+  it('keeps a created batch out of the fold', () => {
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      callWith('mcp__orbit__task_create_batch', { tasks: [{ title: '分片 A' }] }, 'ok'),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+    ]);
+
+    expect(html).toContain('Create tasks');
     expect(html).not.toContain('chat-tool-group');
   });
 

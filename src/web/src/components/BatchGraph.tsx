@@ -41,7 +41,12 @@ export function BatchGraph({ tasks }: { tasks: BatchTaskInput[] }): JSX.Element 
   const h = PAD * 2 + g.depth * NODE_H + (g.depth - 1) * ROW_GAP;
 
   return (
-    <div className="batch-graph">
+    // The drawing has a natural size. A transcript card runs several times wider than the ~520px
+    // approval panel these numbers were measured for, and `width: 100%` letterboxes it there — the
+    // picture ends up centred in a band of empty card, out of line with the list of titles beneath
+    // it. Cap the box at the drawing's own width: 1:1 and left-aligned wherever there is room,
+    // scaled down only where there is not.
+    <div className="batch-graph" style={{ maxWidth: w }}>
       <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} role="img"
            aria-label={`Batch shape: ${describeShape(g)}`}>
         {g.edges.map((e, i) => {
