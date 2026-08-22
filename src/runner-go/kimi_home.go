@@ -10,6 +10,7 @@ package main
 // directory itself. Same idea as the per-session CODEX_HOME in codex_state.go.
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -130,4 +131,20 @@ func removeKimiHomeOverlay(dir string) error {
 		}
 	}
 	return os.Remove(dir)
+}
+
+// writeKimiHomeMCPConfig writes the overlay's mcp.json. Kimi reads this as its
+// user-global MCP configuration, which here means this session's only: the home it
+// sits in belongs to one session. It is the sole route left for a stdio server, since
+// the engine rejects those as ACP session parameters (see kimiMCPServers).
+//
+// mcp.json is deliberately not among kimiHomeOverlayEntries. The file is Orbit's, not
+// borrowed, so the user's own servers stay in the TUI they configured them for and the
+// agent's MCP configuration is the whole of what the session sees.
+func writeKimiHomeMCPConfig(dir string, servers map[string]interface{}) error {
+	body, err := json.MarshalIndent(map[string]interface{}{"mcpServers": servers}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "mcp.json"), append(body, '\n'), 0o600)
 }

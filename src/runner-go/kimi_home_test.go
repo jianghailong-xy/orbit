@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -236,5 +238,97 @@ func TestKimiACPSubprocessRunsAgainstTheOverlayHome(t *testing.T) {
 			t.Fatalf("kimi acp never reported its home: %v", err)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// The whole point of the overlay: a stdio server the engine refuses as an ACP
+// parameter is declared in a file instead, in the record shape Kimi reads there.
+func TestWriteKimiHomeMCPConfigWritesTheRecordShape(t *testing.T) {
+	home, _ := fakeKimiHome(t)
+	overlay, err := prepareKimiHomeOverlay(t.TempDir(), home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent := kimiMixedMCPAgent()
+	if err := writeKimiHomeMCPConfig(overlay, kimiMCPConfigRecord(agent, "/opt/orbit")); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(overlay, "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]interface{}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("mcp.json is not JSON: %v\n%s", err, body)
+	}
+	want := map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"stdio": map[string]interface{}{
+				"command": "node",
+				"args":    []interface{}{"server.js", "--stdio"},
+				"env":     map[string]interface{}{"TOKEN": "x"},
+			},
+			"orbit": map[string]interface{}{
+				"command": "/opt/orbit",
+				"args":    []interface{}{"mcp"},
+				"env":     map[string]interface{}{},
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mcp.json =\n%s\nwant %#v", body, want)
+	}
+
+	// Borrowed from the real home would mean writing through the link into it.
+	info, err := os.Lstat(filepath.Join(overlay, "mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("mcp.json is a symlink; Orbit would be writing into the real home")
+	}
+	if _, err := os.Lstat(filepath.Join(home, "mcp.json")); !os.IsNotExist(err) {
+		t.Fatalf("real home gained an mcp.json: %v", err)
+	}
+	if err := removeKimiHomeOverlay(overlay); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(overlay); !os.IsNotExist(err) {
+		t.Fatalf("overlay survived cleanup: %v", err)
+	}
+}
+
+// The runner auto-commits the worktree, so a config file written there would land in
+// the user's branch — and would trip guardKimiProjectMCP on the next start.
+func TestKimiMCPConfigNeverLandsInTheWorktree(t *testing.T) {
+	home, _ := fakeKimiHome(t)
+	execDir := t.TempDir()
+	scratch := t.TempDir()
+
+	overlay, err := prepareKimiHomeOverlay(scratch, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeKimiHomeMCPConfig(overlay, kimiMCPConfigRecord(kimiMixedMCPAgent(), "/opt/orbit")); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := os.ReadDir(execDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("execDir gained %v", entries)
+	}
+	for _, name := range []string{".mcp.json", ".kimi-code"} {
+		if _, err := os.Lstat(filepath.Join(execDir, name)); !os.IsNotExist(err) {
+			t.Fatalf("execDir gained %s: %v", name, err)
+		}
+	}
+	// Same paths the guard refuses, so a session that just wrote its config can still
+	// start the next time.
+	if err := guardKimiProjectMCP(execDir); err != nil {
+		t.Fatalf("guardKimiProjectMCP(execDir) = %v after writing the config", err)
 	}
 }

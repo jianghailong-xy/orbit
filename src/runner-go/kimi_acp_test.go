@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -644,8 +646,8 @@ func TestKimiUsesEnvModelLayersAgentEnvironmentOverProcess(t *testing.T) {
 	}
 }
 
-func TestKimiMCPServersConvertsACPShapes(t *testing.T) {
-	agent := AgentExecConfig{McpConfig: map[string]interface{}{
+func kimiMixedMCPAgent() AgentExecConfig {
+	return AgentExecConfig{McpConfig: map[string]interface{}{
 		"stdio": map[string]interface{}{
 			"command": "node",
 			"args":    []interface{}{"server.js", "--stdio"},
@@ -657,21 +659,112 @@ func TestKimiMCPServersConvertsACPShapes(t *testing.T) {
 			"headers": map[string]interface{}{"Authorization": "Bearer x"},
 		},
 	}}
-	got := kimiMCPServers(agent, "/opt/orbit")
-	if len(got) != 3 {
+}
+
+func TestKimiMCPServersConvertsACPShapes(t *testing.T) {
+	got := kimiMCPServers(kimiMixedMCPAgent())
+	if len(got) != 1 {
 		t.Fatalf("servers = %#v", got)
 	}
-	if got[0]["name"] != "remote" || got[0]["type"] != "sse" {
+	if got[0]["name"] != "remote" || got[0]["type"] != "sse" || got[0]["url"] != "https://example.test/sse" {
 		t.Fatalf("remote server = %#v", got[0])
 	}
-	if got[1]["name"] != "stdio" || got[1]["command"] != "node" {
-		t.Fatalf("stdio server = %#v", got[1])
+	if !reflect.DeepEqual(got[0]["headers"], []map[string]string{{"name": "Authorization", "value": "Bearer x"}}) {
+		t.Fatalf("remote headers = %#v", got[0]["headers"])
 	}
-	if !reflect.DeepEqual(got[1]["args"], []string{"server.js", "--stdio"}) {
-		t.Fatalf("stdio args = %#v", got[1]["args"])
+	// Kimi 0.38 parses a stdio server out of the ACP array and then rejects it for
+	// having no `type`, failing session/new outright. Nothing without one may travel
+	// this way, whatever else changes.
+	for _, server := range got {
+		if server["type"] == nil {
+			t.Fatalf("ACP server %#v declares no type; Kimi answers those with -32603", server)
+		}
 	}
-	if got[2]["name"] != "orbit" || got[2]["command"] != "/opt/orbit" {
-		t.Fatalf("orbit server = %#v", got[2])
+}
+
+func TestKimiMCPConfigRecordCarriesStdioServers(t *testing.T) {
+	got := kimiMCPConfigRecord(kimiMixedMCPAgent(), "/opt/orbit")
+	if len(got) != 2 {
+		t.Fatalf("record = %#v", got)
+	}
+	if _, ok := got["remote"]; ok {
+		t.Fatalf("sse server took the config file route as well: %#v", got)
+	}
+	stdio := mapValue(got["stdio"])
+	if stdio["command"] != "node" {
+		t.Fatalf("stdio server = %#v", stdio)
+	}
+	if !reflect.DeepEqual(stdio["args"], []string{"server.js", "--stdio"}) {
+		t.Fatalf("stdio args = %#v", stdio["args"])
+	}
+	// The config file spells env as an object; the ACP array spelled it [{name,value}].
+	if !reflect.DeepEqual(stdio["env"], map[string]string{"TOKEN": "x"}) {
+		t.Fatalf("stdio env = %#v", stdio["env"])
+	}
+	if _, ok := stdio["name"]; ok {
+		t.Fatalf("stdio server repeats its key as a field: %#v", stdio)
+	}
+
+	orbit := mapValue(got["orbit"])
+	if orbit["command"] != "/opt/orbit" {
+		t.Fatalf("orbit server = %#v", orbit)
+	}
+	if !reflect.DeepEqual(orbit["args"], []string{"mcp"}) {
+		t.Fatalf("orbit args = %#v", orbit["args"])
+	}
+	// Empty on purpose: `orbit mcp` inherits ORBIT_SESSION_ID and friends from kimi's
+	// environment, so this session's identity is never written into a file.
+	if !reflect.DeepEqual(orbit["env"], map[string]string{}) {
+		t.Fatalf("orbit env = %#v, want empty", orbit["env"])
+	}
+
+	// The expression the session start actually uses: the command has to be this
+	// runner's own binary, since that is what serves `orbit mcp`.
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	live := mapValue(kimiMCPConfigRecord(AgentExecConfig{}, orbitCLIExecutable())["orbit"])
+	if live["command"] != filepath.Clean(exe) {
+		t.Fatalf("orbit command = %#v, want the runner executable %q", live["command"], exe)
+	}
+}
+
+// An entry naming both a command and a url must be started once, not once per route.
+func TestKimiMCPRoutesEachServerOnce(t *testing.T) {
+	agent := AgentExecConfig{McpConfig: map[string]interface{}{
+		"both": map[string]interface{}{
+			"command": "node",
+			"url":     "https://example.test/mcp",
+		},
+	}}
+	if got := kimiMCPServers(agent); len(got) != 0 {
+		t.Fatalf("ACP servers = %#v, want the command-bearing entry left to the config file", got)
+	}
+	record := kimiMCPConfigRecord(agent, "")
+	if len(record) != 1 || mapValue(record["both"])["command"] != "node" {
+		t.Fatalf("record = %#v", record)
+	}
+}
+
+// Env and headers reach Orbit in three shapes; the config file needs every one of them
+// as an object.
+func TestKimiStringMapAcceptsEverySourceShape(t *testing.T) {
+	want := map[string]string{"A": "1", "B": "2"}
+	for name, value := range map[string]interface{}{
+		"map[string]string":      map[string]string{"A": "1", "B": "2"},
+		"map[string]interface{}": map[string]interface{}{"A": "1", "B": "2"},
+		"name/value array": []interface{}{
+			map[string]interface{}{"name": "A", "value": "1"},
+			map[string]interface{}{"name": "B", "value": "2"},
+		},
+	} {
+		if got := kimiStringMap(value); !reflect.DeepEqual(got, want) {
+			t.Fatalf("kimiStringMap(%s) = %#v, want %#v", name, got, want)
+		}
+	}
+	if got := kimiStringMap(nil); !reflect.DeepEqual(got, map[string]string{}) {
+		t.Fatalf("kimiStringMap(nil) = %#v, want empty", got)
 	}
 }
 

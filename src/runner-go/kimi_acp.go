@@ -657,7 +657,7 @@ func kimiAuthMessage(err error) string {
 func (a *kimiACPClient) startOrResumeSession(ctx context.Context, job *ClaimedSession, execDir string) (string, error) {
 	params := map[string]interface{}{
 		"cwd":        execDir,
-		"mcpServers": kimiMCPServers(job.Agent, orbitCLIExecutable()),
+		"mcpServers": kimiMCPServers(job.Agent),
 	}
 	if job.RuntimeSessionID == "" {
 		result, err := a.request(ctx, "session/new", params)
@@ -820,25 +820,33 @@ func kimiUsesEnvModel(env map[string]string) bool {
 		envValueWithAgentOverride(env, "KIMI_MODEL_API_KEY") != ""
 }
 
-func kimiMCPServers(agent AgentExecConfig, orbitExe string) []map[string]interface{} {
+// An MCP server reaches Kimi by one of two routes, and which route is not Orbit's to
+// pick. The engine's own acpMcpServersToConfigRecord throws "does not declare a
+// runtime identity" for any ACP entry without a `type`, and the stdio variant of its
+// schema has no such field to set — so as of 0.38.0 a stdio server declared here fails
+// session/new outright, which is the whole reason for the Kimi home overlay. It
+// converts only `type` http and sse, dropping anything else with a warning, and its
+// initialize result advertises exactly mcpCapabilities {http, sse}.
+//
+// So stdio servers move to the overlay's mcp.json (kimiMCPConfigRecord) and http/sse
+// stay on ACP. Two routes rather than one, deliberately: ACP is the only route the
+// engine still advertises for the transports it does accept, it is the shape already
+// in use here, and moving those to the file too would be an unverified change to the
+// one part of this that still works. The routes compose rather than compete — the ACP
+// list becomes a per-session overlay merged over the file-declared servers by name
+// (MergedMcpConnectionView), so file entries survive, and no name is ever put on both
+// routes anyway.
+func kimiMCPServers(agent AgentExecConfig) []map[string]interface{} {
 	names := make([]string, 0, len(agent.McpConfig))
 	for name := range agent.McpConfig {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	servers := make([]map[string]interface{}, 0, len(names)+1)
+	servers := make([]map[string]interface{}, 0, len(names))
 	for _, name := range names {
 		if converted := kimiMCPServer(name, agent.McpConfig[name]); converted != nil {
 			servers = append(servers, converted)
 		}
-	}
-	if orbitExe != "" {
-		servers = append(servers, map[string]interface{}{
-			"name":    "orbit",
-			"command": orbitExe,
-			"args":    []string{"mcp"},
-			"env":     []map[string]string{},
-		})
 	}
 	return servers
 }
@@ -848,13 +856,10 @@ func kimiMCPServer(name string, value interface{}) map[string]interface{} {
 	if m == nil || strings.TrimSpace(name) == "" {
 		return nil
 	}
-	if command := firstString(m, "command"); command != "" {
-		return map[string]interface{}{
-			"name":    name,
-			"command": command,
-			"args":    stringSlice(m["args"]),
-			"env":     kimiNameValuePairs(m["env"]),
-		}
+	// Command first, matching kimiMCPConfigEntry, so an entry naming both a command
+	// and a url lands on exactly one route rather than being started twice.
+	if firstString(m, "command") != "" {
+		return nil
 	}
 	url := firstString(m, "url")
 	if url == "" {
@@ -869,6 +874,46 @@ func kimiMCPServer(name string, value interface{}) map[string]interface{} {
 		"type":    typ,
 		"url":     url,
 		"headers": kimiNameValuePairs(m["headers"]),
+	}
+}
+
+// kimiMCPConfigRecord is the mcpServers body of the overlay home's mcp.json: every
+// stdio server, keyed by name rather than listed. Orbit's own MCP server is always
+// among them.
+func kimiMCPConfigRecord(agent AgentExecConfig, orbitExe string) map[string]interface{} {
+	servers := map[string]interface{}{}
+	for name, value := range agent.McpConfig {
+		if entry := kimiMCPConfigEntry(name, value); entry != nil {
+			servers[name] = entry
+		}
+	}
+	if orbitExe != "" {
+		servers["orbit"] = map[string]interface{}{
+			"command": orbitExe,
+			"args":    []string{"mcp"},
+			// Empty on purpose. `orbit mcp` reads the session it belongs to from
+			// ORBIT_SESSION_ID and friends, which it inherits through kimi from the
+			// env startKimiACP sets. Writing the ids here would pin this session's
+			// identity into a file instead.
+			"env": map[string]string{},
+		}
+	}
+	return servers
+}
+
+func kimiMCPConfigEntry(name string, value interface{}) map[string]interface{} {
+	m := mapValue(value)
+	if m == nil || strings.TrimSpace(name) == "" {
+		return nil
+	}
+	command := firstString(m, "command")
+	if command == "" {
+		return nil
+	}
+	return map[string]interface{}{
+		"command": command,
+		"args":    stringSlice(m["args"]),
+		"env":     kimiStringMap(m["env"]),
 	}
 }
 
@@ -887,6 +932,17 @@ func stringSlice(value interface{}) []string {
 	default:
 		return []string{}
 	}
+}
+
+// kimiStringMap is kimiNameValuePairs' counterpart for the config file, which spells
+// env and headers as an object where ACP wants a [{name,value}] array. Both start from
+// the same source shapes, so normalize once and fold.
+func kimiStringMap(value interface{}) map[string]string {
+	out := map[string]string{}
+	for _, pair := range kimiNameValuePairs(value) {
+		out[pair["name"]] = pair["value"]
+	}
+	return out
 }
 
 func kimiNameValuePairs(value interface{}) []map[string]string {
@@ -1172,6 +1228,10 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	// Registered before the spawn so a failed start is cleaned up too. Defers run
 	// LIFO, so the overlay outlives the process it belongs to.
 	defer func() { _ = removeKimiHomeOverlay(kimiHome) }()
+	if err := writeKimiHomeMCPConfig(kimiHome, kimiMCPConfigRecord(job.Agent, orbitCLIExecutable())); err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to write the Kimi MCP configuration: " + err.Error()})
+		return stFailed, true, false
+	}
 
 	app, err := startKimiACP(ctx, t, job, execDir, kimiHome, emit)
 	if err != nil {
