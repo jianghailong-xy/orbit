@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectDecisionService } from './project-decision.service';
@@ -24,6 +26,8 @@ import { ProjectsService } from './projects.service';
   controllers: [ProjectsController],
   providers: [
     ProjectsService,
+    ConvergenceLedgerService,
+    SessionAttemptService,
     ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,
@@ -39,6 +43,10 @@ import { ProjectsService } from './projects.service';
   ],
   exports: [
     ProjectsService,
+    ConvergenceLedgerService,
+    // Exported so the RUNNER door guards attempts through the same instance the user door reads
+    // them from. `[K3]` §3's refusals only mean anything at the door an agent actually knocks on.
+    SessionAttemptService,
     ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,

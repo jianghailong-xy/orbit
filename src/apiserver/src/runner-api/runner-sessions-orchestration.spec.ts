@@ -4,6 +4,10 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { SessionsService } from '../sessions/sessions.service';
 import { RunnerSessionsController } from './runner-sessions.controller';
 
+// `[K3]` guards attempts at this door; nothing here is an attempt, so both calls are no-ops. A
+// stub rather than `{}` so a guard that starts being called shows up as a test change, not a crash.
+const ATTEMPTS = { assertMayEndSession: async () => undefined, chargeSteer: async () => undefined };
+
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 const CALLER_SESSION_ID = 'caller-session';
 const ORCHESTRATION_TOKEN = 'signed-session-credential';
@@ -111,7 +115,8 @@ function makeController(orchestrationEnabled: boolean) {
     },
   };
   return {
-    controller: new RunnerSessionsController(sessions as never, authorizer as never, {} as never),
+    controller: new RunnerSessionsController(
+      sessions as never, authorizer as never, {} as never, ATTEMPTS as never),
     serviceCalls,
     authorizationCalls,
   };
@@ -218,7 +223,8 @@ test('headless callers reach the read and send routes scoped to the runner that 
       throw new Error('a headless call must not go through the orchestration authorizer');
     },
   };
-  const controller = new RunnerSessionsController(sessions as never, authorizer as never, {} as never);
+  const controller = new RunnerSessionsController(
+      sessions as never, authorizer as never, {} as never, ATTEMPTS as never);
 
   assert.deepEqual(await controller.listSessions(RUNNER, undefined, undefined, undefined, 'RUNNING', undefined), {
     route: 'listForOrchestration',

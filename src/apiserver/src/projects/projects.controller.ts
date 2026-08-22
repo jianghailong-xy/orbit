@@ -23,6 +23,8 @@ import {
   TriggerProjectCoordinatorDto,
   UpdateProjectDto,
 } from './dto';
+import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 
@@ -34,6 +36,8 @@ export class ProjectsController {
   constructor(
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
+    private readonly convergence: ConvergenceLedgerService,
+    private readonly attempts: SessionAttemptService,
   ) {}
 
   @Post()
@@ -70,6 +74,55 @@ export class ProjectsController {
     @Query('status') status?: string,
   ) {
     return this.projects.taskPage(user.userId, id, { parentId, cursor, limit, status });
+  }
+
+  /**
+   * Why this TASK is or is not still being attempted (`[K2]`, convergence contract §1/§4/§8).
+   *
+   * `/coordinator/status` answers the same question for the project; this is the per-task half, and
+   * the one that can distinguish the two things a stopped task looks identical from the outside:
+   * a task that is converging slowly, and a task whose breaker tripped and is waiting for a person.
+   *
+   * It serves the RESOLVED thresholds rather than the project's override columns — a caller asking
+   * why a task stopped needs the limit that applied, not a null that means "the default did". Every
+   * scope revision is returned, superseded ones included: the old rows are the audit that says what
+   * the task was asking for while the attempts charged to that revision were being spent.
+   *
+   * Ids leave as Base62, including the ones buried inside the two machine keys, which the
+   * interceptor cannot see into.
+   */
+  @Get(':id/tasks/:taskId/convergence')
+  async convergenceLedger(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.convergence.describe(user.userId, taskId);
+  }
+
+  /**
+   * How much of this TASK's current attempt is left, per dimension (`[K3]`, attempt budget §1).
+   *
+   * `.../convergence` answers "how many more tries does this task get"; this answers the other
+   * half — "how much is left of the try that is running". Both are needed and neither implies the
+   * other: a task with plenty of attempts left can be one turn from the end of the one in flight.
+   *
+   * Every dimension reports its own reading rather than a single boolean, because BD3's four states
+   * are not interchangeable: `UNMEASURED` (the runner has not reported a context window yet) is not
+   * `WITHIN` and is not `UNBOUNDED`, and collapsing them is how a budget silently stops applying.
+   * The live attempt is re-measured against the request's clock so the wall clock is current; a
+   * closed one reports the spend it was last measured at rather than one that kept running after
+   * the work stopped.
+   */
+  @Get(':id/tasks/:taskId/attempts')
+  async taskAttempts(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.attempts.describe(user.userId, taskId, new Date());
   }
 
   /**
