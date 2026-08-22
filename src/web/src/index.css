@@ -7136,6 +7136,71 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--brand-border);
   pointer-events: none;
 }
+
+/* --- Project task section: List | Graph ------------------------------------------------- */
+.ptv-toggle-option {
+  padding: 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ptv-toggle-option:hover {
+  border-color: var(--brand-border);
+  color: var(--text-1);
+}
+.ptv-toggle-option.is-selected {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+.ptv-toggle-option:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+/* A parent task folded into the frame its subtasks sit in — see ProjectDependencyGraph.tsx for
+   why parent/child is a box here and never an edge. */
+.pdg-group {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-raised) 55%, transparent);
+}
+.pdg-group.state-failed {
+  border-color: var(--error-border);
+}
+.pdg-group-header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 0;
+  color: var(--text-1);
+}
+.pdg-group-title {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdg-group-header:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.pdg-group .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bg-raised);
+  background: var(--text-4);
+  pointer-events: none;
+}
 .tdg-error {
   display: flex;
   height: 100%;
@@ -8963,4 +9028,21 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--fill-muted);
   color: var(--text-3);
   font-size: 12px;
+}
+
+/* The panorama's middle row: the blocking ranking beside the acceptance card, at the 1.32 : 1 the
+   design calls for — the ranking carries a horizontal bar per row and goes unreadable first when
+   the column narrows, and acceptance is a column of short lines that does not. `start` rather than
+   the default stretch so neither card is padded out to the other's height; they are two cards, not
+   two halves of one. Below 860px there is no longer room for two of either, so they stack. */
+.project-panorama-pair {
+  display: grid;
+  grid-template-columns: 1.32fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .project-panorama-pair {
+    grid-template-columns: 1fr;
+  }
 }

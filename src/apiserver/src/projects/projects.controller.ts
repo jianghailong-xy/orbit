@@ -104,6 +104,19 @@ export class ProjectsController {
   }
 
   /**
+   * This project's dependency graph, whole: every task in it plus every in-project dependency
+   * edge, in the same `nodes` / `edges` vocabulary `GET /tasks/:id/dependency-graph` answers in.
+   *
+   * Unpaged and unparameterised on purpose. It is not a page of a tree — a graph served in pieces
+   * is not a graph — and it is bounded instead by a server-side node cap that reports itself as
+   * `truncated` when it bites.
+   */
+  @Get(':id/dependency-graph')
+  dependencyGraph(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.dependencyGraph(user.userId, id);
+  }
+
+  /**
    * What every verification in this project concluded, and what is still blocked by one (§13.2).
    *
    * The audit face for verdicts: each check's current conclusion and its `verdictRevision`, every
@@ -113,6 +126,25 @@ export class ProjectsController {
   @Get(':id/verifications')
   verifications(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.verifications(user.userId, id);
+  }
+
+  /**
+   * What the control loop has been doing, newest first — `?limit=` (default 20) and `?cursor=`.
+   *
+   * The outbox, the decision audit and the action ledger as ONE stream: `kind` is the closed
+   * vocabulary all three map into rather than any of their raw enums, `outcome` is the four values
+   * a row's colour is chosen from, and `subjectTaskId` is the task to open when the row is about
+   * one. The cursor is `(timestamp, id)`, because a pass writes its decision and its actions in
+   * one transaction and a page boundary lands inside such a group routinely. Ids are Base62.
+   */
+  @Get(':id/panorama/activity')
+  activity(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.projects.activity(user.userId, id, { limit, cursor });
   }
 
   /**

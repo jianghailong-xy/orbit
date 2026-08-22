@@ -9,6 +9,7 @@ import type { CoordinatorStatus } from './coordinatorStatus';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
+import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -345,4 +346,51 @@ export const projectCoordinatorStatusQuery = (projectId: string) =>
     queryFn: () =>
       api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
     refetchInterval: 15_000,
+  });
+
+/** One entry of the blocking-root leaderboard: an unfinished task and how much unfinished work
+ *  sits behind it. `downstreamBlocked` is the TRANSITIVE closure — every task that waits on this
+ *  one however indirectly — not the count of its direct edges, which carries no decision value. */
+export interface ProjectBlockingItem {
+  taskId: string;
+  title: string;
+  status: string;
+  downstreamBlocked: number;
+}
+
+/**
+ * `GET /projects/:id/panorama/blocking` — the ranking that answers "unblock which task to release
+ * the most work".
+ *
+ * `remainingCount` is every unfinished task in the project, not the size of `items`: the card uses
+ * it as the bar TRACK so a bar length means "this holds up 88% of what is left" rather than "this
+ * is the biggest of the five shown". `truncated` is always present and normally null; the server
+ * sets it instead of silently returning a short ranking when a project is too large to close over.
+ */
+export interface ProjectBlockingLeaderboard {
+  remainingCount: number;
+  items: ProjectBlockingItem[];
+  truncated: { reason: string; maxTasks: number } | null;
+}
+
+/** Keyed UNDER `['project', projectId]`, like the coordinator status above, so the invalidation a
+ *  project write already fires refreshes the ranking too. `limit` is in the key because it is in
+ *  the URL: two cards asking for different depths are two different answers. */
+export const projectPanoramaBlockingQuery = (projectId: string, limit = 5) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'panorama', 'blocking', limit] as const,
+    queryFn: () =>
+      api<ProjectBlockingLeaderboard>(
+        `/projects/${encodeURIComponent(projectId)}/panorama/blocking?limit=${limit}`,
+      ),
+  });
+
+/** Keyed under `['project', projectId]` like the rest, so a project write invalidates it too. */
+export const projectDependencyGraphQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'dependency-graph'] as const,
+    queryFn: () =>
+      api<ProjectDependencyGraphResponse>(
+        `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
+      ),
   });
