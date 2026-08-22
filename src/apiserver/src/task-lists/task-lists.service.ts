@@ -685,14 +685,23 @@ export class TaskListsService {
     // in one line with every other multi-row Task write rather than trusting two planners to
     // agree; making the pair atomic while we are here also removes the state where the tasks were
     // disarmed and the list survived.
-    await this.prisma.$transaction(async (tx) => {
-      await lockOwnerTaskGraph(tx, ownerId);
-      await tx.task.updateMany({
-        where: { ownerId, listId: id },
-        data: { autoRunWhenReady: false, dispatchHold: false },
-      });
-      await tx.taskList.delete({ where: { id } });
-    });
+    await this.prisma.$transaction(
+      async (tx) => {
+        await lockOwnerTaskGraph(tx, ownerId);
+        await tx.task.updateMany({
+          where: { ownerId, listId: id },
+          data: { autoRunWhenReady: false, dispatchHold: false },
+        });
+        await tx.taskList.delete({ where: { id } });
+      },
+      // The same deadline TasksService.deleteAndStopRuns carries, and for the same reason: these
+      // two statements used to run under no client deadline at all, and inside an interactive
+      // transaction Prisma's default aborts at 5s. A list on the scale this deployment actually
+      // has — 27,548 tasks on one of them — cascades through far more than that, so the default
+      // would turn deletes that used to work into P2028. The locks are held for as long as the
+      // delete takes either way.
+      { timeout: 60_000, maxWait: 10_000 },
+    );
     // In-flight runs, torn down only after the tasks can no longer be re-dispatched — the other
     // order re-runs whatever the sweep catches in between. Best-effort, as in
     // TasksService.batchStop: a runner that will not answer must not fail the delete.
