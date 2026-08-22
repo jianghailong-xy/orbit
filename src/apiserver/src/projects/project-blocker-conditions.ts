@@ -76,11 +76,18 @@ function retirementIndex(input: ProjectDecisionInput): Map<string, TaskRetiremen
   return index;
 }
 
-function outsideBlockerScope(
-  task: { id: string; status: string; verifiesTaskId?: string | null },
+/**
+ * §13.6 SU6 on its own: this attempt was replaced or abandoned, or it CHECKS work that was.
+ *
+ * Split out of `outsideBlockerScope` because the two halves are not the same rule and not every
+ * detector wants both. "Settled" says the task reached an end; SU6 says nobody is doing this work
+ * here anymore. A detector that reads a task row wants both. A detector that reads EVIDENCE a task
+ * left behind wants only this one — see `namedTaskObsolete`.
+ */
+function taskObsolete(
+  task: { id: string; verifiesTaskId?: string | null },
   input: ProjectDecisionInput,
 ): boolean {
-  if (SETTLED_TASK_STATUSES.has(task.status)) return true;
   const index = retirementIndex(input);
   return taskIsObsolete({
     retirement: index.get(task.id) ?? null,
@@ -89,6 +96,68 @@ function outsideBlockerScope(
     // required action nobody can discharge — and §13.4's DONE gate refuses a project holding one.
     subjectRetirement: task.verifiesTaskId ? (index.get(task.verifiesTaskId) ?? null) : null,
   });
+}
+
+function outsideBlockerScope(
+  task: { id: string; status: string; verifiesTaskId?: string | null },
+  input: ProjectDecisionInput,
+): boolean {
+  if (SETTLED_TASK_STATUSES.has(task.status)) return true;
+  return taskObsolete(task, input);
+}
+
+/** The snapshot's tasks by id, indexed once for the reason the retirements are: the two detectors
+ *  below iterate evidence rows that NAME a task, and a `world.tasks.find` per row is quadratic on a
+ *  project with a long branch and session history. */
+const TASK_INDEX = new WeakMap<
+  object, Map<string, ProjectDecisionInput['world']['tasks'][number]>
+>();
+
+function taskIndex(
+  input: ProjectDecisionInput,
+): Map<string, ProjectDecisionInput['world']['tasks'][number]> {
+  const cached = TASK_INDEX.get(input.world);
+  if (cached) return cached;
+  const index = new Map(input.world.tasks.map((task) => [task.id, task]));
+  TASK_INDEX.set(input.world, index);
+  return index;
+}
+
+/**
+ * §13.6 SU6 for a row that NAMES a task instead of being one — a branch, a session.
+ *
+ * `mergeConditions` and `awaitingUserInputConditions` iterate EVIDENCE, so neither ever had a task
+ * filter at all: a branch left conflicted by an attempt that was later re-done from scratch, and a
+ * question asked by a run whose task has since been replaced, both kept being raised every pass.
+ * Neither is a request anybody can discharge — the branch will never be merged from and the answer
+ * would reach nobody — and §13.4's DONE gate refuses a project holding an open blocker, so one
+ * retired attempt held its whole project's acceptance open on work that had already moved.
+ *
+ * SU6 ONLY, and deliberately not `outsideBlockerScope`:
+ *
+ *   A DONE task with a conflicted branch is the ORDINARY case here, not a stale one — this product
+ *   finishes a task and merges its branch afterwards, so `merge_status = 'conflict'` mostly lands
+ *   on tasks that are already DONE. §11.2's row is the only place the control plane says a branch
+ *   did not land; silencing it on settled tasks would retire the `MERGE_CONFLICT` kind in practice
+ *   and leave a genuinely unmerged branch with nothing asking anybody to deal with it.
+ *
+ *   A session parked on a question whose task is DONE is a real problem too, and making the row
+ *   invisible is not a fix for it: silence is not an answer somebody gave. It is filed on its own
+ *   rather than folded in here, because the two need opposite treatment and one predicate cannot
+ *   give it to them.
+ *
+ * A task this snapshot cannot see reads as IN scope — the same rule `taskIsObsolete` states for a
+ * subject it did not read: a projection may not infer a fact from a row it has not got, and the
+ * fail-closed direction is to keep asking.
+ */
+function namedTaskObsolete(
+  taskId: string | null | undefined,
+  input: ProjectDecisionInput,
+): boolean {
+  if (taskId == null) return false;
+  const task = taskIndex(input).get(taskId);
+  if (!task) return false;
+  return taskObsolete(task, input);
 }
 
 /** Facts this pass has already planned elsewhere. They are passed in rather than recomputed: two
@@ -225,6 +294,9 @@ function mergeConditions(input: ProjectDecisionInput): ObservedBlockerCondition[
   for (const branch of input.world.evidence.branches) {
     if (branch.mergeStatus !== 'conflict' && branch.mergeStatus !== 'error') continue;
     if (!branch.taskId) continue;
+    // §13.6 SU6. The branch row is not touched — it stays exactly the record of what that attempt
+    // did; this only stops asking somebody to merge work that was replaced.
+    if (namedTaskObsolete(branch.taskId, input)) continue;
     const paths = changedPaths(branch.changedFiles);
     conditions.push({
       kind: branch.mergeStatus === 'conflict' ? 'MERGE_CONFLICT' : 'UNKNOWN_FAILURE',
@@ -371,7 +443,11 @@ function awaitingUserInputConditions(input: ProjectDecisionInput): ObservedBlock
   return input.world.sessions
     .filter((session) => session.taskId != null
       && !session.deletedAt
-      && session.runStatus === 'AWAITING_INPUT')
+      && session.runStatus === 'AWAITING_INPUT'
+      // §13.6 SU6. A question asked on behalf of an attempt that was replaced is addressed to
+      // nobody: answering it cannot make that attempt go forward. The Session is left exactly as
+      // it is — the row is dropped, never the history.
+      && !namedTaskObsolete(session.taskId, input))
     .map((session) => ({
       kind: 'AWAITING_USER_INPUT' as const,
       subjectType: 'SESSION' as const,
