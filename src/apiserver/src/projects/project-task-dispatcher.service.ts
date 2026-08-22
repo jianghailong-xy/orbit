@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
@@ -35,11 +34,17 @@ import {
   scheduleProjectRunner,
 } from './project-runner-scheduler';
 import { ProjectBlockerKind } from './project-blocker';
+import {
+  dispatchDesiredSessionId,
+  dispatchRuntimeSessionId,
+} from './project-dispatch-identity';
 import { DispatchBlockingRow, openBlockersStoppingDispatch } from './project-blocker-guard';
 
 const BUILTIN_PROVIDERS = Object.values(AgentProvider);
 const PROVIDER_RETRY_MS = 5 * 60_000;
 const RUNNER_RETRY_MS = 60_000;
+/** A race resolves itself: by the next pass the id is either claimed by a live run or free. */
+const RACED_RETRY_MS = 5_000;
 
 export interface ProjectTaskDispatchCommand {
   decisionId: string;
@@ -400,8 +405,8 @@ export class ProjectTaskDispatcherService {
       verifiesTaskId: row.verifiesTaskId,
       list: { instructions: row.listInstructions },
     });
-    const sessionId = randomUUID();
-    const runtimeSessionId = randomUUID();
+    const sessionId = dispatchDesiredSessionId(command.idempotencyKey);
+    const runtimeSessionId = dispatchRuntimeSessionId(command.idempotencyKey);
     const title = `执行任务：${row.title}`.slice(0, 80);
     const inserted = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       INSERT INTO "session" (
@@ -421,21 +426,27 @@ export class ProjectTaskDispatcherService {
         'PROJECT_COORDINATOR', 'PROJECT_COORDINATOR', ${JSON.stringify(resolution)}::jsonb,
         ${now}, ${effectiveCapabilities}::text[], ${lease.fencingToken}, true, ${now}
       )
-      ON CONFLICT ("task_id") WHERE "task_id" IS NOT NULL AND "deleted_at" IS NULL
-        AND "status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
-      DO NOTHING
+      ON CONFLICT DO NOTHING
       RETURNING "id"
     `);
-    // The predicate above must be spelled EXACTLY as `session_task_execution_claim_idx` is (0130),
-    // or PostgreSQL infers no index and the INSERT raises instead of landing here. It is the same
-    // four statuses §4.2 guard 5 calls live: a run paused at `AWAITING_INPUT` holds its task, and
-    // the two-status version of this predicate is what let a second Session be opened on a
-    // conversation somebody was in the middle of.
+    // Untargeted `DO NOTHING`, and §8.5 C1 is the reason rather than convenience: a unique
+    // violation ABORTS the transaction, so C2's "continue committing the rest of the outcome" —
+    // `consumed_at`, the blocker changes, `nextWakeAt` — becomes physically impossible and
+    // `PC-CX-04`'s livelock is back. C1 therefore requires EVERY conflict this insert can reach to
+    // arrive as a return value, and PostgreSQL allows exactly one inference clause.
+    //
+    // Naming `task_id` covered one index of three. The PRIMARY KEY is the one this change puts in
+    // reach: the id above is now a function of the request rather than a fresh random value, so
+    // "something already carries this id" is a state that can exist, and it used to arrive as a raw
+    // P2002 with no refusal code, no `dispatchFailure`, and no way to tell "somebody else is
+    // running" from "this id is taken". `session_project_action_id_key` is the third. None of them
+    // is an error here; each is a fact to go and read, which is what the classifier below does.
+    //
+    // §7.7 D5-b's verbatim predicate is still required of anything that INFERS the claim index —
+    // the classifier spells it exactly, for that reason. It is not required of a clause that infers
+    // nothing.
     if (!inserted[0]) {
-      return this.refusal('TASK_ALREADY_RUNNING', 'TASK_ALREADY_RUNNING', {
-        authorization: audit,
-        resolution,
-      }, now);
+      return this.claimConflictedDispatch(tx, { sessionId, command, audit, resolution, now });
     }
     // §9.5 Q3 row 3, the write half (`PC-CX-64`). A retry that leaves the task at `FAILED` is a
     // retry nobody can see: the row keeps the status of the run that died while a live Session sits
@@ -469,6 +480,66 @@ export class ProjectTaskDispatcherService {
     `);
   }
 
+  /**
+   * The Session INSERT conflicted. WHICH index it was decides the answer, and each is read as a
+   * FACT rather than guessed from the shape of the error.
+   *
+   * 1. A Session holds the task's live claim. That is `TASK_ALREADY_RUNNING`, a §11.2 non-blocking
+   *    refusal, and it is read off `session_task_execution_claim_idx`'s own predicate rather than
+   *    off "the newest Session on this task" or "the one that is live right now" — both of those
+   *    are properties that move WHILE the lookup is being made, and a run paused under some other
+   *    id is exactly the row that must not be mistaken for this request's. The conflicting id goes
+   *    in the detail, so the refusal names the row instead of describing a category.
+   * 2. Nothing holds it. Then the collision was the PRIMARY KEY — something already carries the id
+   *    this request derives — or a constraint this unit does not own. There is nothing truthful to
+   *    return: the request did not run, and the row in the way is not its own (it cannot be; see
+   *    `dispatchDesiredSessionId`). So it is refused as a retryable race, never as a success and
+   *    never as somebody else's `TASK_ALREADY_RUNNING`.
+   *
+   * What this deliberately does NOT do is adopt the row at the desired id as this action's result.
+   * 0122's `project_action_dispatch_result_check` requires an APPLIED action's `result_session_id`
+   * to name a Session that names it back, and a Session that named THIS action would mean this
+   * action had already applied — which the ledger, one statement earlier, said it had not. There is
+   * no state in which adoption is both reachable and legal, so there is no branch for it.
+   */
+  private async claimConflictedDispatch(
+    tx: Prisma.TransactionClient,
+    context: {
+      sessionId: string;
+      command: ProjectTaskDispatchCommand;
+      audit: ProjectAuthorizationAudit;
+      resolution: unknown;
+      now: Date;
+    },
+  ) {
+    const { sessionId, command, audit, resolution, now } = context;
+    // Spelled EXACTLY as `session_task_execution_claim_idx` is (0130) — the same four statuses
+    // §4.2 guard 5 calls live. A run paused at `AWAITING_INPUT` holds its task, and the two-status
+    // version of this predicate is what let a second Session be opened on a conversation somebody
+    // was in the middle of.
+    const [holder] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT s."id" FROM "session" s
+       WHERE s."task_id" = ${command.taskId}::uuid
+         AND s."deleted_at" IS NULL
+         AND s."status" IN ('PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED')
+       LIMIT 1
+    `);
+    if (holder) {
+      return this.refusal('TASK_ALREADY_RUNNING', 'TASK_ALREADY_RUNNING', {
+        authorization: audit,
+        resolution,
+        conflictingSessionId: holder.id,
+      }, now);
+    }
+    return this.refusal(
+      wireRefusalCode('DISPATCH_SESSION_RACED'),
+      'DISPATCH_SESSION_RACED',
+      { authorization: audit, resolution, desiredSessionId: sessionId },
+      now,
+      new Date(now.getTime() + RACED_RETRY_MS).toISOString(),
+    );
+  }
+
   private refusal(
     refusalCode: string,
     reasonCode: string,
@@ -476,7 +547,8 @@ export class ProjectTaskDispatcherService {
     now: Date,
     retryAt?: string | null,
   ) {
-    const retryable = reasonCode === 'PROVIDER_UNAVAILABLE'
+    const retryable = reasonCode === 'DISPATCH_SESSION_RACED'
+      || reasonCode === 'PROVIDER_UNAVAILABLE'
       || reasonCode === 'RUNNER_UNAVAILABLE'
       || reasonCode === 'RUNTIME_REQUIREMENT_UNMET'
       || reasonCode === 'PROJECT_CONCURRENCY_LIMIT'
@@ -566,6 +638,22 @@ export function wireRefusalCode(reasonCode: string): string {
   // as non-blocking. The refinement is not lost: `reasonCode` carries it verbatim, next to the
   // authorization audit that says which prerequisite and why.
   if (reasonCode === 'VERIFICATION_NOT_PASSED') return 'TASK_DEPENDENCIES_INCOMPLETE';
+  // §13.1 AG6-e again, and this is the case the rule was written for. The Session INSERT collided
+  // with a row this snapshot cannot see — a concurrent commit under the same derived id, or a
+  // constraint this unit does not own. Adding `DISPATCH_SESSION_RACED` to §11.2's non-blocking set
+  // would fix THIS build's reader and do nothing at all for the replica running next to it during
+  // a rolling deploy: BL2 fails an unrecognised code CLOSED to `UNKNOWN_FAILURE`, whose subject is
+  // the PROJECT, and BL1 reads a PROJECT-subject row as "stop everything" — permanently, because
+  // §11.4 clears such a row only by letting an attempt through and watching it not be refused, and
+  // this one always will be.
+  //
+  // `STALE_SNAPSHOT` is not a euphemism for it. Reaching this gate means a row committed under this
+  // request's own derived id that the plan could not see, which is precisely "the snapshot this
+  // action was planned from is out of date"; old readers already classify it non-blocking and
+  // already read it as "re-plan", which is the correct next step. The precise cause is not lost —
+  // `reasonCode` carries `DISPATCH_SESSION_RACED` verbatim, `detail.desiredSessionId` names the id
+  // that collided, and `dispatchFailure.retryAt` says when to come back.
+  if (reasonCode === 'DISPATCH_SESSION_RACED') return 'STALE_SNAPSHOT';
   return reasonCode;
 }
 
