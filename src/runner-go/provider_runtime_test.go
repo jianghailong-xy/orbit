@@ -10,6 +10,7 @@ func TestProviderRuntimesDeclareOneTransportPerEngine(t *testing.T) {
 		providerCodex:    transportJSONRPC,
 		providerKimi:     transportJSONRPC,
 		providerOpenCode: transportOneShot,
+		providerDSH:      transportStreamJSON,
 	}
 	if len(providerRuntimes) != len(want) {
 		t.Fatalf("providerRuntimes has %d entries, want %d — a new engine needs a transport here", len(providerRuntimes), len(want))

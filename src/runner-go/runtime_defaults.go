@@ -32,6 +32,7 @@ func probeRuntimeDefaultModels() []runtimeDefaultProbeResult {
 		probe(providerClaude, claudeCLIAvailable(), fetchClaudeDefaultModel),
 		probe(providerCodex, codexCLIAvailable(), fetchCodexDefaultModel),
 		probe(providerKimi, kimiCLIAvailable(), fetchKimiDefaultModel),
+		probe(providerDSH, dshCLIAvailable(), fetchDSHDefaultModel),
 	}
 }
 

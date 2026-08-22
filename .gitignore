@@ -50,3 +50,6 @@ DerivedData/
 /orbit-uploads/
 
 .rebase-pc/
+
+# repo-local offline toolchains (Go for runner builds in sandboxed/offline environments)
+/.tools/

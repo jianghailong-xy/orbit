@@ -712,6 +712,9 @@ func cmdResume(args []string) {
 			os.Exit(1)
 		}
 		cmd = exec.Command(providerOpenCode, "--session", meta.RuntimeSessionID)
+	case providerDSH:
+		fmt.Fprintln(os.Stderr, "DSH sessions are headless-only (the bridge spawns a fresh `dsh --profile headless` per turn) — interactive `orbit resume` is not supported for provider \"dsh\".")
+		os.Exit(1)
 	default:
 		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
 	}

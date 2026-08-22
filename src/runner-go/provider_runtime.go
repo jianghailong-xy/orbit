@@ -91,6 +91,19 @@ var providerRuntimes = map[string]providerRuntime{
 				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
 		},
 	},
+	// DSH (DeepSeek Harness) rides the stream-json transport through the
+	// dsh-orbit-bridge.mjs engine process (dsh_runtime.go): one bridge per session,
+	// user frames in, assistant/result frames out — the same shapes claude uses.
+	// Steers are refused at the control plane (providerTransport.ts) and in the
+	// driver, because the bridge queues frames rather than folding them mid-turn.
+	providerDSH: {
+		transport: transportStreamJSON,
+		run: func(p sessionProcessArgs) (string, bool, bool) {
+			return runDSHSessionProcess(p.ctx, p.shutdownCtx, p.t, p.job, p.leaseGeneration,
+				p.execDir, p.scratchDir, p.emit, p.emitFor, p.setTurn, p.firstSpawn, p.bg,
+				p.completeTurn, p.waitTurnPermit, p.onLeaseLost)
+		},
+	},
 }
 
 // providerRuntimeFor answers how the named provider is driven. The name must already be

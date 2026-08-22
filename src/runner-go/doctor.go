@@ -117,6 +117,21 @@ var engineSpecs = []engineSpec{
 		loginArgs:     []string{"auth", "login"},
 		loginHeadless: "opencode auth login",
 	},
+	{
+		// DSH (DeepSeek Harness): no interactive sign-in — credentials live in the
+		// runner's $DSH_HOME/.credentials.yaml or DEEPSEEK_API_KEY env, so loginArgs
+		// stays empty (probeAuth falls through to authUnknown and never blocks a
+		// session). The runner also needs node + the dsh-orbit-bridge.mjs next to
+		// its executable; DSH_ORBIT_BRIDGE overrides the bridge location.
+		name:          "DeepSeek Harness",
+		bin:           providerDSH,
+		installCmd:    "npm install -g @deepseek-ai/dsh",
+		updateCmd:     "npm update -g @deepseek-ai/dsh",
+		installAlt:    "clone DeepSeek Harness and run from source (pnpm dsh --profile headless)",
+		latestURL:     "https://registry.npmjs.org/@deepseek-ai/dsh/latest",
+		latestField:   "version",
+		loginHeadless: "set DEEPSEEK_API_KEY in the runner environment (or $DSH_HOME/.credentials.yaml)",
+	},
 }
 
 // authState is a tri-state sign-in probe result.

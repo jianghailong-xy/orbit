@@ -88,6 +88,7 @@ const (
 	providerCodex    = "codex"
 	providerKimi     = "kimi"
 	providerOpenCode = "opencode"
+	providerDSH      = "dsh"
 )
 
 // runInteractiveSession drives a long-lived `claude` process for an interactive
@@ -113,7 +114,7 @@ func runtimeProvider(job *ClaimedSession) string {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
 	switch p {
-	case providerCodex, providerKimi, providerOpenCode:
+	case providerCodex, providerKimi, providerOpenCode, providerDSH:
 		return p
 	}
 	return providerClaude
