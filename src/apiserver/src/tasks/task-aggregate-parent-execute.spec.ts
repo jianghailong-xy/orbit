@@ -270,3 +270,27 @@ test('deleting a parent that loses the lock race is a 409, not a 500', async () 
     },
   );
 });
+
+test('the SQLSTATE extractor knows all three shapes this stack produces', async () => {
+  const { postgresSqlState, isLockNotAvailable } = await import('./task-supersession.js');
+  // The third one is the one that was missing, and it is the one production actually raises:
+  // Prisma 7 with `@prisma/adapter-pg` sets `code = 'P2010'` and leaves `meta.code` UNSET, putting
+  // the driver's SQLSTATE under `meta.driverAdapterError.cause`. A real-PostgreSQL test caught it —
+  // every `FOR UPDATE NOWAIT` this process loses was escaping as an unhandled P2010.
+  const shapes: Array<[string, unknown]> = [
+    ['bare pg', { code: '55P03' }],
+    ['prisma, pre-adapter', { code: 'P2010', meta: { code: '55P03' } }],
+    ['prisma 7 adapter', {
+      code: 'P2010',
+      meta: { driverAdapterError: { cause: { originalCode: '55P03', code: '55P03' } } },
+    }],
+  ];
+  for (const [name, error] of shapes) {
+    assert.equal(postgresSqlState(error), '55P03', name);
+    assert.equal(isLockNotAvailable(error), true, name);
+  }
+  // `P2010` is Prisma's own wrapper code and must never be mistaken for a SQLSTATE.
+  assert.equal(postgresSqlState({ code: 'P2010' }), null);
+  assert.equal(postgresSqlState(new Error('nothing structured')), null);
+  assert.equal(isLockNotAvailable({ code: '40001' }), false, 'a different state is a different answer');
+});

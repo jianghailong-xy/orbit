@@ -942,6 +942,79 @@ test('AG6: an owner move is judged on BOTH sides, each by its own owner', { skip
     });
 });
 
+test('AG6: a cross-owner DELETE still takes the parent lock before deciding', { skip }, async (t) => {
+  // The delete side of the unlocked-exclude hole. Standing down on an unlocked owner read means
+  // taking NO lock, and then this interleaving loses a retry:
+  //
+  //   T1 deletes a cross-owner child (uncommitted, no lock taken);
+  //   T2 re-owns the parent to that child's owner and commits;
+  //   T3's settle holds the parent, still sees the child, and disarms the leaf's retry;
+  //   T1 commits — the child is gone and the parent was never bumped.
+  //
+  // So the lock is always taken and the owner is read underneath it.
+  await t.test('the lock is held even when the child does not count', { skip }, async () => {
+    const pool = new Pool();
+    try {
+      const db = await pool.open();
+      await fixture(db);
+      const parent = id();
+      const foreign = id();
+      await task(db, parent, 'ALL_CHILDREN_DONE', null);
+      await task(db, foreign, 'MANUAL', parent, { owner: OTHER_OWNER });
+      const before = await db.query<{ updatedAt: Date }>(
+        'SELECT "updated_at" AS "updatedAt" FROM "task" WHERE id = $1', [parent],
+      );
+
+      const deleter = await pool.open();
+      await deleter.query('BEGIN');
+      assert.equal(await settled(
+        deleter.query('DELETE FROM "task" WHERE id = $1', [foreign]),
+      ), 'OK');
+
+      // Somebody else cannot have the parent while that delete is in flight — which is exactly
+      // what stops T2's re-own and T3's settle from running between T1's decision and its commit.
+      const rival = await pool.open();
+      assert.match(await settled(rival.query(
+        'SELECT 1 FROM "task" WHERE id = $1 FOR UPDATE NOWAIT', [parent],
+      )), /55P03/, 'the delete holds the parent, cross-owner or not');
+
+      await deleter.query('COMMIT');
+      const after = await db.query<{ updatedAt: Date }>(
+        'SELECT "updated_at" AS "updatedAt" FROM "task" WHERE id = $1', [parent],
+      );
+      assert.equal(after.rows[0].updatedAt.getTime(), before.rows[0].updatedAt.getTime(),
+        '...and having held it, decides under it NOT to bump another tenant\'s row');
+    } finally {
+      await pool.close();
+    }
+  });
+
+  await t.test('an owner that came to match before the lock IS bumped', { skip }, async () => {
+    const pool = new Pool();
+    try {
+      const db = await pool.open();
+      await fixture(db);
+      const parent = id();
+      const child = id();
+      await task(db, parent, 'ALL_CHILDREN_DONE', null, { owner: OTHER_OWNER });
+      await task(db, child, 'MANUAL', parent);
+      // The parent joins the child's owner set — the child now counts, so its removal is a release.
+      await db.query('UPDATE "task" SET owner_id = $2 WHERE id = $1', [parent, OWNER]);
+      const before = await db.query<{ updatedAt: Date }>(
+        'SELECT "updated_at" AS "updatedAt" FROM "task" WHERE id = $1', [parent],
+      );
+      assert.equal(await settled(db.query('DELETE FROM "task" WHERE id = $1', [child])), 'OK');
+      const after = await db.query<{ updatedAt: Date }>(
+        'SELECT "updated_at" AS "updatedAt" FROM "task" WHERE id = $1', [parent],
+      );
+      assert.ok(after.rows[0].updatedAt.getTime() > before.rows[0].updatedAt.getTime(),
+        'the fresh owner read decides it counts, so the release is published');
+    } finally {
+      await pool.close();
+    }
+  });
+});
+
 test('AG6 barrier: opposing re-parents between the same two parents', { skip }, async () => {
   const pool = new Pool();
   try {
@@ -1230,3 +1303,206 @@ test('AG6: reviving a terminal work Session whose task became an aggregate paren
     await pool.close();
   }
 });
+
+// ---------------------------------------------------------------------------------------------
+// The PRODUCTION settle helpers, against a real PrismaClient and a real server.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * `AutoRetryService`'s two §13.1 AG6 settles walk project -> task -> session with `FOR UPDATE
+ * NOWAIT` at every step, re-read everything their compare-and-set depends on, and translate the
+ * lock failure through Prisma's `P2010` wrapper. Every one of those is a property of the real
+ * client against a real server:
+ *
+ *  - the unit specs drive a fake, so they prove the BRANCHES and nothing about the SQL;
+ *  - a hand-written `SELECT ... FOR UPDATE` in this file would prove the protocol works and say
+ *    nothing about whether the service implements it.
+ *
+ * So these call the production methods. They are private, and the cast below is deliberately the
+ * narrowest thing that reaches them: `sweep` would need a runner, a workspace, capability
+ * derivation and a resumable session before it got anywhere near the settle.
+ */
+type SettleHelpers = {
+  disarmIfStillAggregateParent(
+    sessionId: string, parkedAs: string, taskId: string, attempts: number, observedRetryAt: Date,
+  ): Promise<'SETTLED' | 'RELEASED' | 'BUSY'>;
+  refundIfStillAggregateParent(
+    sessionId: string, taskId: string, attempts: number, parkedAs: string,
+  ): Promise<'SETTLED' | 'RELEASED' | 'BUSY'>;
+};
+
+const ARMED_AT = new Date('2026-08-03T16:20:00.000Z');
+
+/**
+ * Run one helper call with a deadline of its own.
+ *
+ * The `pg` connections in this file carry `statement_timeout`; the Prisma client does not, and the
+ * whole point of these cases is that another transaction is holding a row. If a regression ever
+ * drops a `NOWAIT`, the helper would block for as long as the holder lives — and the holder is
+ * released in this test's `finally`, which never runs. That is a suite that hangs instead of one
+ * that fails, so the deadline is here rather than trusted to the server.
+ */
+/**
+ * Hold a lock for the duration of `body`, and release it whichever way `body` ends.
+ *
+ * `Pool.close` only runs when the ENCLOSING test does, so a subtest that fails between `BEGIN` and
+ * `COMMIT` would leave its row locked for every sibling subtest after it — turning one real failure
+ * into a cascade of `BUSY` results that look like different bugs. The connection is its own, so
+ * ending it here releases the lock even when the ROLLBACK itself cannot be sent.
+ */
+async function holding<T>(
+  open: () => Promise<Client>,
+  lock: (client: Client) => Promise<unknown>,
+  body: (release: () => Promise<void>) => Promise<T>,
+): Promise<T> {
+  const holder = await open();
+  let released = false;
+  const release = async () => {
+    if (released) return;
+    released = true;
+    await holder.query('COMMIT').catch(() => undefined);
+  };
+  try {
+    await holder.query('BEGIN');
+    await lock(holder);
+    return await body(release);
+  } finally {
+    if (!released) await holder.query('ROLLBACK').catch(() => undefined);
+    await holder.end().catch(() => undefined);
+  }
+}
+
+function withDeadline<T>(what: string, run: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout;
+  return Promise.race([
+    run.finally(() => clearTimeout(timer)),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`${what} did not return in 5s — a NOWAIT is missing`)), 5_000,
+      );
+    }),
+  ]);
+}
+
+test('AG6: the production settle helpers, on a real client and a real server', { skip },
+  async (t) => {
+    const { AutoRetryService } = await import('../sessions/auto-retry.service.js');
+    const { prismaClientFor } = await import('../prisma/prisma-client.js');
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const client = prismaClientFor(URL);
+    const helpers = new AutoRetryService(
+      client as never, {} as never, {} as never,
+    ) as unknown as SettleHelpers;
+    const pool = new Pool();
+
+    /**
+     * parent + child + a FAILED work Session armed at a known instant.
+     *
+     * The arm is read BACK through the Prisma client and handed to the helper from there, because
+     * that is what production does: the due projection reads `retryAt` with this client and passes
+     * that value on. `retry_at` is `timestamp without time zone`, so a Date written by `pg` and one
+     * read by the adapter are not automatically the same instant — comparing the helper's read
+     * against the raw fixture Date would be testing the two drivers against each other.
+     */
+    async function fixtureRow(db: Client): Promise<{
+      parent: string; session: string; armedAt: Date;
+    }> {
+      const parent = id();
+      const session = randomUUID();
+      await task(db, parent, 'ALL_CHILDREN_DONE', null);
+      await task(db, id(), 'MANUAL', parent);
+      await db.query(
+        `INSERT INTO "session" (id, owner_id, creator_id, title, prompt, task_id, workspace_id,
+                                status, starts_task_work, retry_at, retry_attempts, updated_at)
+         VALUES ($1, $2, $2, 's', 'p', $3, $4, 'FAILED', true, $5, 0, now())`,
+        [session, OWNER, parent, WORKSPACE, ARMED_AT],
+      );
+      const [row] = await client.$queryRaw<Array<{ retryAt: Date }>>(
+        Prisma.sql`SELECT "retry_at" AS "retryAt" FROM "session" WHERE "id" = ${session}::uuid`,
+      );
+      return { parent, session, armedAt: row.retryAt };
+    }
+
+    const retryAtOf = async (db: Client, session: string) => (await db.query<{
+      retryAt: Date | null; retryAttempts: number;
+    }>('SELECT "retry_at" AS "retryAt", "retry_attempts" AS "retryAttempts" FROM "session" WHERE id = $1',
+      [session])).rows[0];
+
+    try {
+      const db = await pool.open();
+      await fixture(db);
+
+      await t.test('disarm SETTLES and clears the arm', async () => {
+        const { parent, session, armedAt } = await fixtureRow(db);
+        assert.equal(await withDeadline('disarm', helpers.disarmIfStillAggregateParent(
+          session, 'FAILED', parent, 0, armedAt,
+        )), 'SETTLED');
+        assert.equal((await retryAtOf(db, session)).retryAt, null);
+      });
+
+      await t.test('refund SETTLES and hands the attempt back', async () => {
+        const { parent, session } = await fixtureRow(db);
+        // The shape a claim leaves behind: no arm, one attempt spent.
+        await db.query(
+          'UPDATE "session" SET retry_at = NULL, retry_attempts = 1 WHERE id = $1', [session],
+        );
+        assert.equal(await withDeadline('refund', helpers.refundIfStillAggregateParent(
+          session, parent, 0, 'FAILED',
+        )), 'SETTLED');
+        assert.equal((await retryAtOf(db, session)).retryAttempts, 0);
+      });
+
+      /** The four ways a settle can be blocked, each asserted the same way. */
+      const blockedBy: Array<[
+        string,
+        (row: { parent: string; session: string }) => (client: Client) => Promise<unknown>,
+        'SETTLED' | 'RELEASED',
+      ]> = [
+        // The parent, held directly. This is also where Prisma 7's `P2010` wrapper — SQLSTATE under
+        // `meta.driverAdapterError.cause` — is exercised end to end.
+        ['a held PARENT', ({ parent }) => (c) =>
+          c.query('SELECT 1 FROM "task" WHERE id = $1 FOR UPDATE', [parent]), 'SETTLED'],
+        ['a held SESSION', ({ session }) => (c) =>
+          c.query('SELECT 1 FROM "session" WHERE id = $1 FOR UPDATE', [session]), 'SETTLED'],
+        // A release in flight: it holds the parent, and once it lands the shape is gone.
+        ['an uncommitted policy release', ({ parent }) => (c) =>
+          c.query(`UPDATE "task" SET completion_policy = 'MANUAL' WHERE id = $1`, [parent]),
+          'RELEASED'],
+        // The same, spelled as the release that fires no column trigger — the candidate-first
+        // DELETE path, against the production settle.
+        ['an uncommitted child DELETE', ({ parent }) => (c) =>
+          c.query('DELETE FROM "task" WHERE parent_task_id = $1', [parent]), 'RELEASED'],
+      ];
+
+      for (const [name, lockFor, afterRelease] of blockedBy) {
+        await t.test(`${name} makes it BUSY, and the retry survives`, async () => {
+          const { parent, session, armedAt } = await fixtureRow(db);
+          const settle = () => withDeadline('disarm', helpers.disarmIfStillAggregateParent(
+            session, 'FAILED', parent, 0, armedAt,
+          ));
+          await holding(() => pool.open(), lockFor({ parent, session }), async (release) => {
+            assert.equal(await settle(), 'BUSY', `${name}: nothing is judged`);
+            const held = await retryAtOf(db, session);
+            assert.notEqual(held.retryAt, null, `${name}: still armed`);
+            assert.equal(held.retryAttempts, 0, `${name}: and nothing spent`);
+
+            await release();
+            assert.equal(await settle(), afterRelease, `${name}: and then it decides`);
+          });
+          const survived = await retryAtOf(db, session);
+          if (afterRelease === 'RELEASED') {
+            assert.notEqual(survived.retryAt, null, `${name}: the legal retry is left alone`);
+            assert.equal(survived.retryAttempts, 0, `${name}: with nothing spent`);
+          } else {
+            assert.equal(survived.retryAt, null, `${name}: the settle wrote`);
+          }
+        });
+      }
+
+    } finally {
+      // Holders first: `Pool.close` rolls back and ends every connection this test opened, which is
+      // what releases anything the helper might still be queued behind. Only then the client.
+      await pool.close();
+      await client.$disconnect().catch(() => undefined);
+    }
+  });

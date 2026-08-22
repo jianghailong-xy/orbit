@@ -8,7 +8,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { isLockNotAvailable, taskRetirement } from '../tasks/task-supersession';
+import { postgresSqlState, taskRetirement } from '../tasks/task-supersession';
 import { TaskCompletionPolicyValue, isAggregateParent } from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
@@ -742,10 +742,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // Read through the repo's extractor rather than off `error.code`: Prisma wraps a failed raw
       // query as `P2010` and carries the driver's SQLSTATE in `meta`, so a bare `code` comparison
       // recognises the shape a test sees through `pg` and NOT the one production raises.
-      if (isLockNotAvailable(error)) return 'BUSY';
-      const code = (error as { code?: unknown; meta?: { code?: unknown } });
-      if (code.code === '40001' || code.meta?.code === '40001'
-          || code.code === '40P01' || code.meta?.code === '40P01') return 'BUSY';
+      // One extractor for all three shapes this stack can put a SQLSTATE in — in particular
+      // Prisma 7's adapter, which buries it under `meta.driverAdapterError.cause`.
+      const sqlState = postgresSqlState(error);
+      if (sqlState === '55P03' || sqlState === '40001' || sqlState === '40P01') return 'BUSY';
       throw error;
     }
   }

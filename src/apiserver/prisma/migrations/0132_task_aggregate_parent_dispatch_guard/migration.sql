@@ -717,17 +717,25 @@ BEGIN
   IF OLD."parent_task_id" IS NULL OR OLD."parent_task_id" = OLD."id" THEN
     RETURN OLD;
   END IF;
+  -- The parent is ALWAYS a candidate, and whether this row counts towards it is decided under the
+  -- lock — never before it. Standing down here on an unlocked owner read looks like a free
+  -- optimisation and is the same hole §4 describes, reached from the delete side:
+  --
+  --   T1 deletes a cross-owner child. Unlocked, it reads "not my owner", returns, takes NO lock.
+  --   T2 re-owns the parent to that child's owner and commits.
+  --   T3's settle now holds the parent, sees the child (T1 has not committed), and disarms a retry.
+  --   T1 commits. The child is gone, the parent never got locked or bumped, and the leaf's retry
+  --     was thrown away on evidence that no longer exists.
+  --
+  -- Taking the lock is what serializes this delete against both of the others, so it is taken
+  -- first and the owner is re-read underneath it. The unlocked read below is only a GUESS about
+  -- which project to take, and it is re-confirmed after the lock like every other one in this file.
+  --
   -- project -> task, the same order as everywhere else. NOWAIT: a DELETE already holds this row,
   -- so waiting here is the task -> project edge that closes a cycle against a reconcile.
-  -- ONLY a counted child. The predicate counts children that share the parent's owner, so deleting
-  -- a cross-owner row — which raw SQL can produce and the API cannot — changes nothing about the
-  -- parent's shape. Touching it anyway would write another tenant's `updated_at`, wake THEIR
-  -- project through 0117, and let their reconcile hand this delete an unrelated 409. Read the
-  -- owner from the same row the scope came from, and stand down before taking any lock at all.
-  SELECT t."project_id", t."owner_id" INTO scope, parent_owner
-    FROM "task" t WHERE t."id" = OLD."parent_task_id";
-  IF NOT FOUND OR parent_owner IS DISTINCT FROM OLD."owner_id" THEN
-    RETURN OLD;
+  SELECT t."project_id" INTO scope FROM "task" t WHERE t."id" = OLD."parent_task_id";
+  IF NOT FOUND THEN
+    RETURN OLD;                       -- no parent row at all; there is nothing to serialize against
   END IF;
   IF scope IS NOT NULL THEN
     BEGIN
@@ -761,9 +769,10 @@ BEGIN
       'TASK_AGGREGATE_SCOPE_MOVED: a task involved in this write changed project while it was being checked — nothing was written; retry'
       USING ERRCODE = 'lock_not_available';
   END IF;
-  -- The owner was read unlocked too, and it decides whether this child counts AT ALL. Re-confirm it
-  -- under the lock: if it drifted, this row is not a counted child of that parent any more and must
-  -- not bump it — a cross-owner touch would wake another tenant's project over nothing.
+  -- NOW the owner decides, on a value read under the lock. A child that still does not share its
+  -- parent's owner counts for nothing, so the parent is released untouched — a cross-owner bump
+  -- would wake another tenant's project over a change that means nothing to it. The lock was still
+  -- worth taking: it is what stopped the owner moving while this was being decided.
   IF parent_owner IS DISTINCT FROM OLD."owner_id" THEN
     RETURN OLD;
   END IF;
