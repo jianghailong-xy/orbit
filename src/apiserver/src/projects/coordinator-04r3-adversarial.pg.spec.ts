@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,6 +45,30 @@ datasource db {
   provider = "postgresql"
 }
 `;
+
+/**
+ * Prisma 7 takes `migrations.path` from the project's own `prisma.config.ts`, which `--schema`
+ * does not override: pointed at a temporary schema the executor still read the repository's whole
+ * migration history and died in 0068 on a private schema that cannot see `public.pg_trgm`. The
+ * fixture therefore ships a config of its own, bound to the directory it just wrote.
+ */
+const PRISMA_CONFIG = (root: string) => `export default {
+  schema: ${JSON.stringify(path.join(root, 'schema.prisma'))},
+  migrations: { path: ${JSON.stringify(path.join(root, 'migrations'))} },
+  datasource: { url: process.env.DATABASE_URL },
+};
+`;
+
+/** Every migration name this fixture ever writes. Nothing else may reach the executor. */
+const FIXTURE_MIGRATIONS = [
+  '0000_coordinator_0110',
+  '0111_project_coordinator_identity',
+  '0112_project_coordinator_companions',
+  '0113_project_coordinator_final_row',
+  '0113_project_coordinator_identity_source_guard',
+  '0114_project_coordinator_identity_source',
+  '0115_project_coordinator_identity_window_repair',
+];
 
 const BASELINE_0110 = `
 CREATE TABLE "workspace" (
@@ -99,15 +123,20 @@ async function writeMigration(root: string, name: string, sql: string): Promise<
   await writeFile(path.join(directory, 'migration.sql'), sql);
 }
 
-async function makeExecutorFixture(schema: string): Promise<{
+type ExecutorFixture = {
   root: string;
   schemaPath: string;
+  configPath: string;
   databaseUrl: string;
-}> {
+};
+
+async function makeExecutorFixture(schema: string): Promise<ExecutorFixture> {
   assert.ok(URL);
   const root = await mkdtemp(path.join(os.tmpdir(), 'pcc03d-prisma-'));
   const schemaPath = path.join(root, 'schema.prisma');
+  const configPath = path.join(root, 'prisma.config.ts');
   await writeFile(schemaPath, PRISMA_SCHEMA);
+  await writeFile(configPath, PRISMA_CONFIG(root));
   await writeMigration(root, '0000_coordinator_0110', BASELINE_0110);
   await writeMigration(root, '0111_project_coordinator_identity', IDENTITY);
   await writeMigration(root, '0112_project_coordinator_companions', COMPANIONS);
@@ -115,18 +144,43 @@ async function makeExecutorFixture(schema: string): Promise<{
   const parsed = new globalThis.URL(URL);
   parsed.searchParams.set('schema', schema);
   parsed.searchParams.set('application_name', `prisma_${schema}`);
-  return { root, schemaPath, databaseUrl: parsed.toString() };
+  return { root, schemaPath, configPath, databaseUrl: parsed.toString() };
 }
 
-function startPrismaDeploy(schemaPath: string, databaseUrl: string) {
+/**
+ * The CLI reports which config it loaded and how many migrations it found; both must be the
+ * fixture's. It labels the directory `prisma/migrations` whatever the configured path is, so the
+ * count is what distinguishes these few files from the repository's whole history.
+ */
+function assertFixtureMigrationsOnly(output: string, fixture: ExecutorFixture, found: number): void {
+  assert.ok(
+    output.includes(`${path.basename(fixture.root)}${path.sep}prisma.config.ts`),
+    `the executor did not load the fixture's own Prisma config:\n${output}`,
+  );
+  assert.match(
+    output, new RegExp(`^${found} migrations found`, 'm'),
+    `the executor found migrations other than the fixture's ${found}:\n${output}`,
+  );
+  const foreign = [...output.matchAll(/Applying migration `([^`]+)`/g)]
+    .map((match) => match[1])
+    .filter((name) => !FIXTURE_MIGRATIONS.includes(name));
+  assert.deepEqual(foreign, [], `the executor applied migrations the fixture never wrote:\n${output}`);
+}
+
+function startPrismaDeploy(fixture: ExecutorFixture) {
   let output = '';
   let finished = false;
+  const found = readdirSync(path.join(fixture.root, 'migrations')).length;
   const child = spawn(
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['--no-install', 'prisma', 'migrate', 'deploy', '--schema', schemaPath],
+    [
+      '--no-install', 'prisma', 'migrate', 'deploy',
+      '--config', fixture.configPath,
+      '--schema', fixture.schemaPath,
+    ],
     {
       cwd: path.resolve(__dirname, '../..'),
-      env: { ...process.env, DATABASE_URL: databaseUrl, NO_COLOR: '1' },
+      env: { ...process.env, DATABASE_URL: fixture.databaseUrl, NO_COLOR: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     },
@@ -137,8 +191,16 @@ function startPrismaDeploy(schemaPath: string, databaseUrl: string) {
     child.once('error', reject);
     child.once('close', (code, signal) => {
       finished = true;
-      if (code === 0) resolve(output);
-      else reject(new Error(`prisma migrate deploy exited ${code ?? signal}:\n${output}`));
+      if (code !== 0) {
+        reject(new Error(`prisma migrate deploy exited ${code ?? signal}:\n${output}`));
+        return;
+      }
+      try {
+        assertFixtureMigrationsOnly(output, fixture, found);
+        resolve(output);
+      } catch (error) {
+        reject(error);
+      }
     });
   });
   return {
@@ -155,8 +217,8 @@ function startPrismaDeploy(schemaPath: string, databaseUrl: string) {
   };
 }
 
-async function prismaDeploy(schemaPath: string, databaseUrl: string): Promise<string> {
-  return startPrismaDeploy(schemaPath, databaseUrl).done;
+async function prismaDeploy(fixture: ExecutorFixture): Promise<string> {
+  return startPrismaDeploy(fixture).done;
 }
 
 async function waitForExecutorPause(client: Client, schema: string, deploy: ReturnType<typeof startPrismaDeploy>) {
@@ -697,7 +759,7 @@ test('the migration guard remains durable and fail-closed after the 0114 executo
       await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
       await admin.query(`CREATE SCHEMA ${executorSchema}`);
       fixture = await makeExecutorFixture(executorSchema);
-      await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      await prismaDeploy(fixture);
       writer = await open(executorSchema);
       await seedExecutor(writer);
 
@@ -722,7 +784,7 @@ test('the migration guard remains durable and fail-closed after the 0114 executo
         IDENTITY_WINDOW_REPAIR,
       );
 
-      deploy = startPrismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      deploy = startPrismaDeploy(fixture);
       await waitForExecutorPause(admin, executorSchema, deploy);
       const id = P(0x58);
       await assert.rejects(
@@ -792,7 +854,7 @@ test('the real Prisma executor keeps an old writer typed fail-closed in the 0114
       await admin.query(`DROP SCHEMA IF EXISTS ${executorSchema} CASCADE`);
       await admin.query(`CREATE SCHEMA ${executorSchema}`);
       fixture = await makeExecutorFixture(executorSchema);
-      await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      await prismaDeploy(fixture);
 
       writer = await open(executorSchema);
       await seedExecutor(writer);
@@ -818,7 +880,7 @@ test('the real Prisma executor keeps an old writer typed fail-closed in the 0114
         IDENTITY_WINDOW_REPAIR,
       );
 
-      deploy = startPrismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      deploy = startPrismaDeploy(fixture);
       await waitForExecutorPause(admin, executorSchema, deploy);
       const id = P(0x52);
       await assert.rejects(
@@ -840,6 +902,10 @@ test('the real Prisma executor keeps an old writer typed fail-closed in the 0114
       assert.match(output, /Applying migration `0113_project_coordinator_identity_source_guard`/);
       assert.match(output, /Applying migration `0114_project_coordinator_identity_source`/);
       assert.match(output, /Applying migration `0115_project_coordinator_identity_window_repair`/);
+      const recorded = (await writer.query(`SELECT migration_name FROM "_prisma_migrations"`))
+        .rows.map((row: any) => row.migration_name).sort();
+      assert.deepEqual(recorded, [...FIXTURE_MIGRATIONS].sort(),
+        'the ledger holds this fixture\'s migrations and none of the repository\'s');
 
       await writer.query(oldInsert(id, A, S[0]));
       await writer.query(`UPDATE "project" SET "coordinator_workspace_id" = '${B}' WHERE "id" = '${id}'`);
@@ -877,7 +943,7 @@ test('Prisma applies the compatibility migrations after recorded 0114 without ch
         '0114_project_coordinator_identity_source',
         IDENTITY_SOURCE,
       );
-      await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      await prismaDeploy(fixture);
 
       writer = await open(executorSchema);
       await seedExecutor(writer);
@@ -909,7 +975,7 @@ test('Prisma applies the compatibility migrations after recorded 0114 without ch
         '0115_project_coordinator_identity_window_repair',
         IDENTITY_WINDOW_REPAIR,
       );
-      const output = await prismaDeploy(fixture.schemaPath, fixture.databaseUrl);
+      const output = await prismaDeploy(fixture);
       assert.match(output, /Applying migration `0113_project_coordinator_identity_source_guard`/);
       assert.match(output, /Applying migration `0115_project_coordinator_identity_window_repair`/);
       const checksumAfter = (
