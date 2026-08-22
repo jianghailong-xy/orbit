@@ -675,3 +675,72 @@ describe('the decision ledger', () => {
     expect(paint(<CoordinatorDecisions status={busy()} />)).toContain('never been reconciled');
   });
 });
+
+describe('§13.8: what happened to this project’s @-mentions', () => {
+  it('says nothing arrived stuck when the server tracked and found none', () => {
+    const html = paint(
+      <ProjectCoordinatorPanel
+        loading={false} error={null} onRetry={() => {}} readOnly={false}
+        trigger={noopTrigger} policy={noopPolicy(policyDraftOf(busy()))}
+        status={busy({
+          acceptance: {
+            ...busy().acceptance,
+            evidence: {
+              ...busy().acceptance.evidence,
+              undeliveredMentions: [],
+              undeliveredMentionsEmptyReason: 'NO_UNDELIVERED_MENTION',
+            },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('reached the agent it named');
+  });
+
+  it('does NOT claim that when the server never tracked it', () => {
+    // Mixed version: a new client against an old server. `undefined` is "no opinion", and
+    // collapsing it into an empty list would report every mention delivered on the strength of a
+    // field that was never sent.
+    const status = busy();
+    delete (status.acceptance.evidence as any).undeliveredMentions;
+    delete (status.acceptance.evidence as any).undeliveredMentionsEmptyReason;
+    const html = paint(
+      <ProjectCoordinatorPanel
+        loading={false} error={null} onRetry={() => {}} readOnly={false}
+        trigger={noopTrigger} policy={noopPolicy(policyDraftOf(busy()))}
+        status={status}
+      />,
+    );
+    expect(html).toContain('does not track');
+    expect(html).not.toContain('reached the agent it named');
+  });
+
+  it('names the task, the agent and what would clear a stuck one', () => {
+    const html = paint(
+      <ProjectCoordinatorPanel
+        loading={false} error={null} onRetry={() => {}} readOnly={false}
+        trigger={noopTrigger} policy={noopPolicy(policyDraftOf(busy()))}
+        status={busy({
+          acceptance: {
+            ...busy().acceptance,
+            evidence: {
+              ...busy().acceptance.evidence,
+              undeliveredMentions: [{
+                id: 'd1', taskId: TASK, workspaceId: WORKSPACE, status: 'BLOCKED' as const,
+                attempts: 0, errorCode: 'NO_RUNNER',
+                requiredAction: 'bind this agent to a runner',
+                lastError: null,
+                nextAttemptAt: '2026-08-20T10:05:00.000Z',
+                createdAt: '2026-08-20T10:00:00.000Z',
+              }],
+              undeliveredMentionsEmptyReason: null,
+            },
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('NO_RUNNER');
+    expect(html).toContain('bind this agent to a runner');
+    expect(html).toContain('not delivered yet');
+  });
+});

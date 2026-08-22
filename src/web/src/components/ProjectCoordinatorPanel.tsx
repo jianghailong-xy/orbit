@@ -552,14 +552,25 @@ export function CoordinatorAcceptance({ status }: { status: CoordinatorStatus })
             point of the ledger is that it is somewhere a person looks. Here rather than only on
             the task, because "an agent was asked for something and never heard" is a fact about
             the project's progress. */}
-        {(a.evidence.undeliveredMentions ?? []).length > 0 ? (
+        {/* THREE states, not two. `undefined` means this server predates the ledger and has no
+            opinion; collapsing it into an empty array would report "every mention arrived" on the
+            strength of a field the server never sent — a new client telling a comfortable lie about
+            an old one. Empty-with-a-reason is the healthy case, and it is a different sentence. */}
+        {a.evidence.undeliveredMentions === undefined ? (
+          <Absent reason="MENTION_AUDIT_UNAVAILABLE" />
+        ) : a.evidence.undeliveredMentions.length > 0 ? (
           <div>
-            {(a.evidence.undeliveredMentions ?? []).map((mention) => (
+            {a.evidence.undeliveredMentions.map((mention) => (
               <div key={mention.id} style={{ fontSize: 12, padding: '2px 0' }}>
                 <Tag color={mention.status === 'DEAD' ? 'red' : 'gold'}>
                   {mention.status === 'DEAD' ? 'not delivered' : 'not delivered yet'}
                 </Tag>
-                <Link to={`/tasks/${mention.taskId}`}>{mention.taskId}</Link>{' '}
+                <Link to={`/tasks/${mention.taskId}`}>{mention.taskId}</Link>{' → '}
+                {/* WHO was asked, not just where: "a mention on task X is stuck" leaves the reader
+                    to work out which agent is waiting on them. Rendered rather than linked because
+                    this app has no agent detail route — a link would 404, which is worse than an
+                    id somebody can search for. */}
+                <Typography.Text code>{mention.workspaceId}</Typography.Text>{' '}
                 <Typography.Text code>{mention.errorCode ?? 'UNKNOWN'}</Typography.Text>
                 {mention.requiredAction ? (
                   <Typography.Text type="secondary"> — {mention.requiredAction}</Typography.Text>

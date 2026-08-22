@@ -6164,17 +6164,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : clientTurnId;
       const already = await this.prisma.conversationTurn.findFirst({
         where: { sessionId: remembered.id, clientTurnId: receiptKey },
-        select: { id: true, status: true },
+        select: { id: true, status: true, deliveredAt: true },
       });
       if (already) {
         // EXISTING is not DELIVERED. A turn still `PENDING` is durably queued and nothing more —
         // its session can fail before the engine ever reads it, and a work session that dies on
-        // seq 1 leaves this one sitting in the table unread for ever. Only a turn the engine has
-        // taken (IN_FLIGHT) or answered is a message that arrived.
+        // seq 1 leaves this one sitting in the table unread for ever.
         //
-        // And a session that has ENDED with the turn still pending is the case that must never
-        // read as success: the ledger says so, and the sweep rotates to a new conversation.
-        const consumed = already.status !== 'PENDING';
+        // `deliveredAt` is the ONLY receipt. The inbox stamps it when the runner takes the turn, so
+        // it is the moment the message stopped being ours and became the engine's — and it is the
+        // one field nothing else writes.
+        //
+        // `status` is deliberately NOT a fallback, tempting as it looks. Finalize, the reaper's
+        // drain and the failure paths settle a session's outstanding turns in bulk: those rows come
+        // out ANSWERED with `delivered_at` still NULL, having been read by nobody. Accepting a
+        // status would call every one of those delivered, which is the exact failure this ledger
+        // was built to remove, reintroduced by a defensive `||`.
+        //
+        // A session that has ended with its turn unstamped is therefore stranded, whatever status
+        // the teardown left on it: the ledger says so and the sweep re-homes the message.
+        const consumed = already.deliveredAt != null;
         if (consumed) return { sessionId: remembered.id, turnId: already.id, consumed: true };
         const alive = !remembered.deletedAt
           && (SessionsService.LIVE.includes(remembered.status)

@@ -1825,6 +1825,95 @@ test('unit E: every @-mention gets exactly one delivery, and says what happened 
         assert.equal(after.error, 'seq 1 died');
       });
 
+      await t.test('DELIVERED follows the turn receipt, not the row existing', async () => {
+        // `conversation_turn.delivered_at` is stamped when the runner takes the turn. That instant
+        // — not the insert — is when the message stopped being ours, and it is what the ledger
+        // waits for. A row with no receipt is QUEUED however long it sits there.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-receipt');
+        const subject = await task(services.db, target, 'the work');
+        const run = await session(services.db, target, {
+          taskId: subject, status: RunStatus.AWAITING_INPUT, finishedAt: null,
+        });
+        await comment(target, subject, [target.agentId]);
+        await services.tasks.deliverMentions();
+        assert.equal((await deliveries(subject))[0].status, 'QUEUED', 'no receipt yet');
+
+        // The runner takes it.
+        await services.db.$executeRawUnsafe(
+          `UPDATE "conversation_turn" SET "delivered_at" = now(), "status" = 'IN_FLIGHT'
+            WHERE "session_id" = $1::uuid AND "client_turn_id" LIKE 'task-comment-mention:%'`,
+          run,
+        );
+        await services.db.$executeRawUnsafe(
+          `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+            WHERE "task_id" = $1::uuid`, subject,
+        );
+        await services.tasks.deliverMentions();
+
+        const [row] = await deliveries(subject);
+        assert.equal(row.status, 'DELIVERED', 'the receipt is what settles it');
+        assert.ok(row.turnId, 'and the ledger names the turn that carried it');
+        assert.equal(row.attempts, 0, 'waiting for a receipt spent no budget');
+      });
+
+      await t.test('finalizing a run with a mention still unread re-homes it', async () => {
+        // The reaper/finalize path. A session force-finalized with a queued mention behind it is
+        // the same loss as a failed one: the ledger must not be left claiming delivery, and the
+        // ended run must keep every field it ended with.
+        await emptyWorld(client);
+        const target = await world(services.db, 'su8-finalize');
+        const subject = await task(services.db, target, 'the work');
+        const run = await session(services.db, target, {
+          taskId: subject, status: RunStatus.RUNNING, finishedAt: null,
+        });
+        await comment(target, subject, [target.agentId]);
+        await services.tasks.deliverMentions();
+        assert.equal((await deliveries(subject))[0].status, 'QUEUED');
+
+        // The shape a teardown actually leaves, and the reason `status` is not a receipt: finalize,
+        // the reaper's drain and the failure paths settle a session's outstanding turns in BULK, so
+        // the mention comes out ANSWERED with `delivered_at` still NULL — answered by nobody,
+        // because nobody ever took it.
+        await services.db.$executeRawUnsafe(
+          `UPDATE "conversation_turn"
+              SET "status" = 'ANSWERED', "answered_at" = now(), "delivered_at" = NULL
+            WHERE "session_id" = $1::uuid AND "client_turn_id" LIKE 'task-comment-mention:%'`,
+          run,
+        );
+        await services.db.session.update({
+          where: { id: run },
+          data: {
+            status: RunStatus.CANCELLED, finishedAt: new Date(),
+            endReason: 'runner offline',
+          },
+        });
+        const frozen = await services.db.session.findUniqueOrThrow({ where: { id: run } });
+        const [settled] = await services.db.$queryRawUnsafe<Array<{ status: string }>>(
+          `SELECT "status" FROM "conversation_turn"
+            WHERE "session_id" = $1::uuid AND "client_turn_id" LIKE 'task-comment-mention:%'`,
+          run,
+        );
+        assert.equal(settled.status, 'ANSWERED', 'the fixture is the teardown shape, not a guess');
+
+        for (let round = 0; round < 2; round += 1) {
+          await services.db.$executeRawUnsafe(
+            `UPDATE "task_comment_mention_delivery" SET "next_attempt_at" = now()
+              WHERE "task_id" = $1::uuid`, subject,
+          );
+          await services.tasks.deliverMentions();
+        }
+
+        const [row] = await deliveries(subject);
+        assert.notEqual(row.status, 'DELIVERED',
+          'an ANSWERED turn with no receipt was read by nobody');
+        assert.notEqual(row.targetSessionId, run, 'and it moved off the finalized run');
+        const after = await services.db.session.findUniqueOrThrow({ where: { id: run } });
+        assert.equal(after.status, RunStatus.CANCELLED);
+        assert.equal(after.endReason, frozen.endReason);
+        assert.deepEqual(after.finishedAt, frozen.finishedAt);
+      });
+
       await t.test('a 0.1.130 comment gets no ledger row and is left to the old path', async () => {
         // The rolling-deploy rule: an old binary omits `mention_delivery_version`, it defaults to
         // 0, and this sweep must not deliver a comment that binary already delivered inline.
