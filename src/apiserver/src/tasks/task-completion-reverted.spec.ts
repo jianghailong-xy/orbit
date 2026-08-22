@@ -40,7 +40,7 @@ function makeService(verifications = 0) {
     dependsOn: [],
     dependedOnBy: [],
   };
-  const prisma = {
+  const prisma: any = {
     task: {
       findFirst: async () => ({ ...task }),
       update: async ({ where, data }: { where: unknown; data: Record<string, unknown> }) => {
@@ -58,6 +58,13 @@ function makeService(verifications = 0) {
         return create;
       },
     },
+    // §8.6 LO1: a PURE `{status}` PATCH is an acceptance fact, so it now runs inside a
+    // transaction that takes the project, the task closure and nothing else. Before this change it
+    // was a single unlocked `task.update`, which is exactly the fast path that let a status write
+    // reach `project_acceptance_reopen` from an AFTER trigger with the task already held. The
+    // doubles below answer "no project, nothing else in the closure", which is this fixture's world.
+    $queryRaw: async () => [],
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
   } as never;
   const service = new TasksService(prisma, {} as never, {
     publishForUser() {},

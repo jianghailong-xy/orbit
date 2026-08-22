@@ -45,6 +45,12 @@ const PROVIDER_RETRY_MS = 5 * 60_000;
 const RUNNER_RETRY_MS = 60_000;
 /** A race resolves itself: by the next pass the id is either claimed by a live run or free. */
 const RACED_RETRY_MS = 5_000;
+/**
+ * §8.6 LO4's own wait, and short on purpose: contention is measured in the length of one
+ * transaction, not one turn. `PROJECT_WAKE_FLOOR_MS` is 5s, so anything below that is floored away
+ * anyway — this asks for the next wake the floor allows rather than pretending to a finer number.
+ */
+const CONTENDED_RETRY_MS = 5_000;
 
 export interface ProjectTaskDispatchCommand {
   decisionId: string;
@@ -173,6 +179,22 @@ export class ProjectTaskDispatcherService {
     // that revision from its last, so a dispatch that reached rank 70 before rank 10 would meet it
     // head-on. Measured, not assumed — `dependency-revision.pg.spec.ts` takes this line out and
     // gets a 40P01.
+    // ...and rank 40 immediately after it, for the same kind of reason one rank down.
+    //
+    // The lease this pass holds is on `project_runtime`; the PROJECT row itself was never taken.
+    // The read below takes the TASK row `FOR SHARE` (rank 50), and the dispatch then writes that
+    // task's status — which reaches `project_acceptance_reopen` from an AFTER trigger and takes the
+    // project with the task already held. That is rank 50 before rank 40, on the one path that is
+    // running whenever the Coordinator is, and it is the far side of three of the five barriers in
+    // `tools/lock-order/barriers.mjs`.
+    //
+    // WAITING, not NOWAIT, and safe because nothing below rank 40 is held yet: a transaction
+    // blocked here holds no task row and cannot be part of a cycle. From here on the acceptance-
+    // fact guard's NOWAIT acquisitions are re-acquisitions of a lock this transaction already
+    // holds, so this path never earns its own refusal.
+    await tx.$queryRaw(Prisma.sql`
+      SELECT 1 FROM "project" WHERE "id" = ${lease.projectId}::uuid FOR NO KEY UPDATE
+    `);
     const rows = await tx.$queryRaw<DispatchRow[]>(Prisma.sql`
       SELECT p."owner_id" AS "ownerId", t."title", t."description", t."provider", t."model",
              t."is_foreman" AS "isForeman", t."verifies_task_id" AS "verifiesTaskId",
@@ -554,8 +576,15 @@ export class ProjectTaskDispatcherService {
       || reasonCode === 'PROJECT_CONCURRENCY_LIMIT'
       || reasonCode === 'AGENT_CONCURRENCY_LIMIT'
       || reasonCode === 'SESSION_BUDGET_EXHAUSTED'
-      || reasonCode === 'RETRY_BACKOFF_ACTIVE';
-    const fallbackRetryAt = reasonCode === 'PROVIDER_UNAVAILABLE'
+      || reasonCode === 'RETRY_BACKOFF_ACTIVE'
+      // §8.6 LO4. Every attempt behind this code was rolled back WHOLE by PostgreSQL, so there is
+      // nothing half-written to reconcile and coming back is the entire remedy — which is what
+      // `retryable` means here. Without it a contended write would land in the decision audit as a
+      // terminal refusal and the task would sit until something unrelated woke the project.
+      || reasonCode === 'PROJECT_FACT_WRITE_CONTENDED';
+    const fallbackRetryAt = reasonCode === 'PROJECT_FACT_WRITE_CONTENDED'
+      ? new Date(now.getTime() + CONTENDED_RETRY_MS).toISOString()
+      : reasonCode === 'PROVIDER_UNAVAILABLE'
       ? new Date(now.getTime() + PROVIDER_RETRY_MS).toISOString()
       : refusalCode === 'NO_MATCHING_RUNNER'
         ? new Date(now.getTime() + RUNNER_RETRY_MS).toISOString()
@@ -654,6 +683,12 @@ export function wireRefusalCode(reasonCode: string): string {
   // `reasonCode` carries `DISPATCH_SESSION_RACED` verbatim, `detail.desiredSessionId` names the id
   // that collided, and `dispatchFailure.retryAt` says when to come back.
   if (reasonCode === 'DISPATCH_SESSION_RACED') return 'STALE_SNAPSHOT';
+  // Same treatment and the same reason: the wire vocabulary has no code for "these rows were being
+  // written by somebody else", and inventing one would make every existing consumer read an
+  // unknown refusal as blocking. `STALE_SNAPSHOT` is already the wire word for "come back with a
+  // fresh read", which is exactly the remedy. `reasonCode` carries the precise one verbatim beside
+  // it, and `dispatchFailure.retryAt` says when.
+  if (reasonCode === 'PROJECT_FACT_WRITE_CONTENDED') return 'STALE_SNAPSHOT';
   return reasonCode;
 }
 

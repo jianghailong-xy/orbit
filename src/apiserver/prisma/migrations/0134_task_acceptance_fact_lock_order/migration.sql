@@ -41,7 +41,12 @@
 -- markers 0130 and 0132 raise. A binary that predates the two new markers surfaces them as a 500 on
 -- a genuinely contended write instead of a `40P01` on one — strictly the better of the two, and the
 -- window is one deploy long.
-BEGIN;
+--
+-- No explicit BEGIN/COMMIT. The schema engine already wraps a migration file in one transaction,
+-- and an explicit COMMIT at the end is a statement that RUNS AFTER the drift assertion below —
+-- so when the assertion fires, the failure the operator is shown is that COMMIT's "current
+-- transaction is aborted", and `ACCEPTANCE_FACT_COLUMN_DRIFT` never reaches them. A guard whose
+-- message is swallowed is a guard that stops the deploy without saying why.
 
 -- ---------------------------------------------------------------------------------------------
 -- 1. The task side: the project before the task, for every column that reaches the projection.
@@ -234,5 +239,3 @@ BEGIN
       fact_columns, guard_columns;
   END IF;
 END $$;
-
-COMMIT;
