@@ -245,8 +245,31 @@ export interface CoordinatorStatus {
       };
       merges: MergeEvidence[];
       mergesEmptyReason: AbsentReason | null;
+      /**
+       * §13.8: @-mentions in this project that nobody has received.
+       *
+       * Only BLOCKED and DEAD — a mention in flight is not a project condition, and listing it here
+       * would bury the ones that are. Absent on a status read from a server that predates the
+       * ledger, which is why it is optional rather than an empty array.
+       */
+      undeliveredMentions?: UndeliveredMention[];
+      undeliveredMentionsEmptyReason?: AbsentReason | null;
     };
   };
+}
+
+/** One @-mention that has not reached the agent it named, with what would clear it. */
+export interface UndeliveredMention {
+  id: string;
+  taskId: string;
+  workspaceId: string;
+  status: 'BLOCKED' | 'DEAD';
+  attempts: number;
+  errorCode: string | null;
+  requiredAction: string | null;
+  lastError: string | null;
+  nextAttemptAt: string;
+  createdAt: string;
 }
 
 /** One stated criterion and what the attempt concluded about it (§13.4 clause 3). */

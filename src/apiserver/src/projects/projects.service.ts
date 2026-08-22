@@ -915,7 +915,7 @@ export class ProjectsService {
 
     const since24h = new Date(readAt.getTime() - 24 * 60 * 60 * 1_000);
     const [byStatus, [consumption], decisionRows, pendingActionRows, eventRows, mergeRows,
-      [verdicts], [unresolvedFailures], [acceptanceRow]] = await Promise.all([
+      [verdicts], [unresolvedFailures], [acceptanceRow], mentionDeliveries] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId, ownerId },
@@ -1026,6 +1026,32 @@ export class ProjectsService {
            AND a."type"::text = 'RUN_PROJECT_ACCEPTANCE'
          ORDER BY a."created_at" DESC, a."id" DESC
          LIMIT 1
+      `),
+      // §13.8: @-mentions in this project that have NOT been delivered.
+      //
+      // Only the ones that need somebody — BLOCKED and DEAD. A delivered or in-flight mention is
+      // not a project condition, and listing it here would bury the ones that are. Each carries
+      // what a reader has to act on: which agent, on which task, why, and what would clear it.
+      //
+      // This is the half the ledger exists for. A mention that cannot be delivered used to be a
+      // `logger.warn` on one apiserver; without a projection somebody actually reads, moving it
+      // into a table changes where it is invisible rather than whether it is.
+      this.prisma.$queryRaw<Array<{
+        id: string; taskId: string; workspaceId: string; status: string; attempts: number;
+        errorCode: string | null; requiredAction: string | null; lastError: string | null;
+        nextAttemptAt: Date; createdAt: Date;
+      }>>(Prisma.sql`
+        SELECT d."id", d."task_id" AS "taskId", d."workspace_id" AS "workspaceId",
+               d."status"::text AS "status", d."attempts",
+               d."error_code" AS "errorCode", d."required_action" AS "requiredAction",
+               d."last_error" AS "lastError", d."next_attempt_at" AS "nextAttemptAt",
+               d."created_at" AS "createdAt"
+          FROM "task_comment_mention_delivery" d
+          JOIN "task" t ON t."id" = d."task_id"
+         WHERE t."project_id" = ${projectId}::uuid AND d."owner_id" = ${ownerId}::uuid
+           AND d."status"::text IN ('BLOCKED', 'DEAD')
+         ORDER BY d."created_at" DESC, d."id" DESC
+         LIMIT 50
       `),
     ]);
 
@@ -1230,6 +1256,23 @@ export class ProjectsService {
             inconclusive: verdicts.inconclusive,
             unresolvedFailures: unresolvedFailures.count,
           },
+          // §13.8. Named `undelivered` rather than `mentions` because that is the claim being
+          // made: these are messages somebody sent that nobody has received.
+          undeliveredMentions: mentionDeliveries.map((row) => ({
+            id: row.id,
+            taskId: row.taskId,
+            workspaceId: row.workspaceId,
+            status: row.status,
+            attempts: row.attempts,
+            errorCode: row.errorCode,
+            requiredAction: row.requiredAction,
+            lastError: row.lastError,
+            nextAttemptAt: row.nextAttemptAt.toISOString(),
+            createdAt: row.createdAt.toISOString(),
+          })),
+          undeliveredMentionsEmptyReason: mentionDeliveries.length > 0
+            ? null
+            : ('NO_UNDELIVERED_MENTION' as const),
           merges: mergeRows,
           mergesEmptyReason: reasonIfEmpty(mergeRows, 'NO_MERGE_EVIDENCE'),
         },

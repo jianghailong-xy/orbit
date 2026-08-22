@@ -547,6 +547,30 @@ export function CoordinatorAcceptance({ status }: { status: CoordinatorStatus })
           </span>
         )}
       </Fact>
+      <Fact label="Undelivered @-mentions">
+        {/* §13.8. A mention nobody could deliver used to be one apiserver's log line; the whole
+            point of the ledger is that it is somewhere a person looks. Here rather than only on
+            the task, because "an agent was asked for something and never heard" is a fact about
+            the project's progress. */}
+        {(a.evidence.undeliveredMentions ?? []).length > 0 ? (
+          <div>
+            {(a.evidence.undeliveredMentions ?? []).map((mention) => (
+              <div key={mention.id} style={{ fontSize: 12, padding: '2px 0' }}>
+                <Tag color={mention.status === 'DEAD' ? 'red' : 'gold'}>
+                  {mention.status === 'DEAD' ? 'not delivered' : 'not delivered yet'}
+                </Tag>
+                <Link to={`/tasks/${mention.taskId}`}>{mention.taskId}</Link>{' '}
+                <Typography.Text code>{mention.errorCode ?? 'UNKNOWN'}</Typography.Text>
+                {mention.requiredAction ? (
+                  <Typography.Text type="secondary"> — {mention.requiredAction}</Typography.Text>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Absent reason={a.evidence.undeliveredMentionsEmptyReason ?? 'NO_UNDELIVERED_MENTION'} />
+        )}
+      </Fact>
       <Fact label="Branch merge evidence">
         {a.evidence.merges.length > 0 ? (
           <div>

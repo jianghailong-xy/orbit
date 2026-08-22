@@ -1,4 +1,5 @@
 import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Avatar, Button, Input, Segmented, Select, Spin, Switch, Tooltip } from 'antd';
 import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -249,8 +250,24 @@ export function TaskDetailPanel({
     queryFn: () => api<any>(`/tasks/${taskId}`),
     // While the task has a busy (queued/running) session, poll so the 开始执行 button
     // leaves its running state once the run ends; stay idle otherwise.
-    refetchInterval: (query) =>
-      (query.state.data?.sessions ?? []).some((s: any) => isSessionBusy(s)) ? 4000 : false,
+    // Poll while anything on this task is still moving. Two things can be:
+    //
+    //   a busy session — so the 开始执行 button leaves its running state when the run ends;
+    //   a mention delivery that has not settled (§13.8). Its state changes on a background sweep
+    //     with no request behind it, so without this the panel shows PENDING or BLOCKED for ever
+    //     and a status nobody watches change is barely better than the log line it replaced.
+    refetchInterval: (query) => {
+      const data = query.state.data as any;
+      const busy = (data?.sessions ?? []).some((session: any) => isSessionBusy(session));
+      // Only the states that are actively MOVING. BLOCKED can last hours — a runner is down, a
+      // provider is signed out — and polling it every four seconds is a hot loop whose only output
+      // is load. Those refresh on the task.changed the sweep publishes when the state does change,
+      // and otherwise on the panel's next ordinary fetch.
+      const moving = (data?.comments ?? []).some((comment: any) =>
+        (comment.deliveries ?? []).some((delivery: any) =>
+          ['PENDING', 'DELIVERING', 'SESSION_CREATED', 'QUEUED'].includes(delivery.status)));
+      return busy || moving ? 4000 : false;
+    },
   });
   const task = q.data ?? summary;
 
@@ -1106,6 +1123,11 @@ export function TaskDetailPanel({
                         {c.body}
                       </Markdown>
                     </div>
+                    <MentionDeliveryNotes
+                      deliveries={c.deliveries}
+                      mentions={c.mentions}
+                      agents={workspaceList}
+                    />
                   </div>
                 </div>
               ))
