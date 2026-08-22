@@ -15,7 +15,7 @@
  *     blocking wait into a mutual one. Each side now commits as soon as its own statements are
  *     through.
  *
- *   PG_URL=postgresql://... SEED_SQL=/path/seed.sql node h3-repro2.mjs
+ *   PG_URL=postgresql://... SEED_SQL=/path/seed.sql node tools/lock-order/acceptance-facts.mjs
  */
 import { Client } from 'pg';
 import { readFileSync } from 'node:fs';

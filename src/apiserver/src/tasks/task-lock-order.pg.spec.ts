@@ -1,9 +1,9 @@
 /**
  * §8.6 LO1 through the doors a caller actually has, against a real PostgreSQL.
  *
- * `task-lock-order.spec.ts` proves the rule is stated correctly. `h3-repro.mjs` proves the ORDER
- * is the right one, by driving raw statements and showing the same five barriers deadlock without
- * migration 0134 and do not with it. Neither of them proves the thing that actually broke, which
+ * `task-lock-order.spec.ts` proves the rule is stated correctly. `tools/lock-order/barriers.mjs`
+ * proves the ORDER is the right one, by driving raw statements and showing the same five barriers
+ * deadlock without migration 0134 and do not with it. Neither of them proves the thing that actually broke, which
  * is that `TasksService` TAKES the order — the production incident was not a wrong rule, it was
  * four write paths that each took part of it and one that took none.
  *

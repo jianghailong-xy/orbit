@@ -15,7 +15,7 @@
  *     so an ordinary blocking wait reads as a `57014`. Each side now commits as soon as its own
  *     statements are through, which is what a request does.
  *
- *   PG_URL=... PG_URL_BASELINE=... SEED_SQL=/path/seed.sql node h3-repro.mjs [--only <name>]
+ *   PG_URL=... PG_URL_BASELINE=... SEED_SQL=/path/seed.sql node tools/lock-order/barriers.mjs [--only <name>]
  *
  * Exit status is the verdict: 0 when every barrier deadlocked on the baseline and came out clean
  * under LO1, 1 otherwise, with the offending line marked FAIL.
