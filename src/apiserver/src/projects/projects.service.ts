@@ -673,6 +673,12 @@ export class ProjectsService {
    * One project, with how its work is distributed — but not the work itself, for the reason
    * `list` gives above. One grouped query, so the cost is bounded by the number of task statuses
    * rather than by the number of tasks.
+   *
+   * `acceptance` is the other half of "is this project done". `tasksByStatus` measures the PROCESS
+   * and can read 100% while nothing the project was for has been checked; the acceptance tally is
+   * the OUTCOME — how many of the stated criteria the latest attempt concluded PASS about, from
+   * §13.4's per-criterion rows. It sits beside `acceptanceCriteria`, the free text, and replaces
+   * nothing about it: the prose is still what a person edits, and this is what a run concluded.
    */
   async get(ownerId: string, id: string) {
     const project = await this.prisma.project.findFirst({
@@ -685,9 +691,11 @@ export class ProjectsService {
       where: { projectId: id },
       _count: { _all: true },
     });
+    const acceptance = await this.acceptance.criteriaSummary(id, project.acceptanceCriteria);
     return {
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
+      acceptance,
     };
   }
 

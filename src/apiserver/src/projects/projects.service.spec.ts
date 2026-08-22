@@ -124,6 +124,9 @@ test('the detail read reports progress without loading the project’s tasks', a
       },
       findMany: async () => assert.fail('the detail read must not load the project’s tasks'),
     },
+    // The acceptance standing the read serves beside the task tally. A project nobody has run
+    // acceptance against has no run to read, which is the shape this stub gives it.
+    projectAcceptanceRun: { findFirst: async () => null },
   });
 
   const project = await service.get(OWNER_ID, PROJECT_ID);
@@ -131,6 +134,10 @@ test('the detail read reports progress without loading the project’s tasks', a
   assert.deepEqual(project.tasksByStatus, { DONE: 2, OPEN: 1 });
   assert.equal(project._count.tasks, 3);
   assert.deepEqual(groupByArgs.where, { projectId: PROJECT_ID });
+  // The process measure and the outcome measure are both served: a task tally can read 100% while
+  // nothing stated has been checked. `project-acceptance-summary.pg.spec.ts` is where the tally
+  // itself is decided, against real runs.
+  assert.deepEqual(project.acceptance, { total: 0, passed: 0, lastRunAt: null, criteria: [] });
 });
 
 test('someone else’s project is a 404, not an empty project', async () => {
