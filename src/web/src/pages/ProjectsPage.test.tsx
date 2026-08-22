@@ -93,6 +93,21 @@ const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'ta
 // the same reason tasksKey is: a key the page changed unilaterally should break these tests.
 const coordinatorKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'coordinator-status'];
 
+// Every entry the panorama cards register, in the order they mount. Four, not five: the acceptance
+// card reads the project document under `['project', id]` — the entry the page already holds — and
+// the chain strip deliberately shares the header's `panorama` key and the ranking's `blocking`
+// one, so neither adds a request. `dispatch-health` is here because a disabled `useQuery` still
+// takes a cache entry; it is registered, not fetched, until the ready-but-idle banner needs it.
+const panoramaKeys = (projectUuid: string) => {
+  const id = encodeId(projectUuid);
+  return [
+    ['project', id, 'panorama'],
+    ['project', id, 'panorama', 'dispatch-health'],
+    ['project', id, 'panorama', 'blocking', 5],
+    ['project', id, 'panorama', 'activity'],
+  ];
+};
+
 const task = (over: Record<string, unknown> = {}) => ({
   id: 't1',
   title: 'Design the landing page',
@@ -494,12 +509,13 @@ describe('ProjectDetailPage — top-level tasks', () => {
     expect(out).toContain('0 subtasks');
 
     // The children themselves stay unfetched. Rendering a row with `3 subtasks` on it must not
-    // open a page for those three — expansion is the next unit, so these three (the document, its
-    // root task level, and the Coordinator surface's one read) are the only queries this page is
-    // allowed to have.
+    // open a page for those three — expansion is the next unit, so the document, its root task
+    // level, the panorama's own entries and the Coordinator surface's one read are the only
+    // queries this page is allowed to have.
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
+      ...panoramaKeys(P1),
       coordinatorKey(P1),
     ]);
   });
@@ -685,10 +701,11 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
 
     // ...and closed means NOT FETCHED, not merely not shown: the level component is the only
     // thing that registers a child query, and a closed row does not render one at all. Two rows
-    // claiming four children between them still leave exactly the three queries this page had.
+    // claiming four children between them still leave exactly the queries this page already had.
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
+      ...panoramaKeys(P1),
       coordinatorKey(P1),
     ]);
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();
@@ -1009,7 +1026,7 @@ describe('ProjectDetailPage — coordinator', () => {
     expect(missingId).not.toContain('Coordinator');
   });
 
-  it('sits between the project’s own fields and its tasks, reading the bound pointer for its label', () => {
+  it('sits after the project’s own fields and its tasks, reading the bound pointer for its label', () => {
     const qc = newClient();
     qc.setQueryData(['project', encodeId(P1)], detail({ coordinatorSessionId: encodeId(S1) }));
     qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
@@ -1018,8 +1035,10 @@ describe('ProjectDetailPage — coordinator', () => {
     // The section is there, named, and knows this project already has one...
     expect(out).toContain('>Coordinator<');
     expect(out).toContain('Open coordinator');
-    // ...ahead of the tasks, and with everything else on the page still around it.
-    expect(out.indexOf('>Coordinator<')).toBeLessThan(out.indexOf('>Tasks<'));
+    // ...below the tasks, and with everything else on the page still around it. Behind the
+    // panorama rather than ahead of it: what a coordinator is DOING is read off the activity feed
+    // above, and this is where it is talked to and configured.
+    expect(out.indexOf('>Coordinator<')).toBeGreaterThan(out.indexOf('>Tasks<'));
     expect(out).toContain('Website Revamp');
     expect(out).toContain('5 tasks');
     expect(out).toContain('Land behind a flag, then flip it');
@@ -1039,7 +1058,7 @@ describe('ProjectDetailPage — coordinator', () => {
     // cannot fail the mutation, so this reads the two places that decide it.
     const control = source.indexOf('<ProjectCoordinatorControl');
     expect(control).toBeGreaterThan(-1);
-    expect(control).toBeLessThan(source.indexOf('<ProjectTasks projectId={id}'));
+    expect(control).toBeGreaterThan(source.indexOf('<ProjectTasks projectId={id}'));
     // Nothing on the page is rendered conditionally on the coordinator's failure...
     expect(source).not.toMatch(/coordinator\.(isError|error)\s*\?/);
     // ...and the failed section still stands up whole on its own: heading, action and message.
@@ -1398,6 +1417,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
       ['project', encodeId(P1)],
       tasksKey(P1),
+      ...panoramaKeys(P1),
       coordinatorKey(P1),
     ]);
   });

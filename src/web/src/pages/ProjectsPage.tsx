@@ -3,10 +3,15 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
+import { ProjectActivityFeed } from '../components/ProjectActivityFeed';
+import { ProjectBlockingLeaderboard } from '../components/ProjectBlockingLeaderboard';
+import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import {
   ProjectCoordinatorPanel,
   type TriggerResult,
 } from '../components/ProjectCoordinatorPanel';
+import { ProjectPanoramaHeader } from '../components/ProjectPanoramaHeader';
 import {
   isForbidden,
   isStaleConfigRevision,
@@ -200,7 +205,9 @@ export function ProjectDetailPage() {
   });
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
+    // and the ranking bars in the left one stop being readable at half of 900.
+    <div style={{ maxWidth: 1040, margin: '0 auto' }}>
       <Link to="/projects">← All projects</Link>
 
       {!id ? (
@@ -251,6 +258,42 @@ export function ProjectDetailPage() {
             )}
           </div>
 
+          {/* The panorama. Every card below is a SIBLING of the others — none of them wraps
+              another — on the same terms the coordinator section has always been a sibling of the
+              fields around it: each one runs its own query and draws its own loading and error
+              state, so a panorama endpoint that 500s costs the reader that one card and leaves
+              the rest of the page standing.
+
+              Ordered by how often each is asked for rather than by how complete it is: where the
+              work stands, then what to unblock and whether it is passing, then what the
+              coordinator has been doing, then the tasks themselves. All of it inside this branch
+              for the reason the tasks section already was — a project that 404s must not put a
+              row of doomed requests on the wire. */}
+          <ProjectPanoramaHeader projectId={id} />
+
+          {/* 1.32 : 1, and one column below 860px. The ranking carries a bar per row and needs
+              the width; acceptance is a column of short lines and does not. */}
+          <div className="project-panorama-pair">
+            <ProjectBlockingLeaderboard projectId={id} />
+            <ProjectAcceptanceCard projectId={id} />
+          </div>
+
+          <ProjectActivityFeed projectId={id} />
+
+          {/* Inside this branch on purpose: the tasks page is only asked for once the project it
+              belongs to came back, so a project that 404s never puts a second doomed request on
+              the wire. `id` is the normalized route id — the same spelling the project query
+              above is keyed and fetched with. */}
+          <ProjectTasks projectId={id} taskCount={p._count.tasks} />
+
+          {/* Draws nothing at all unless this project is a chain: it reads the same shape the
+              header above does and returns null for a mesh, so the strip is not something this
+              page decides to show — it is something a chain-shaped project has. */}
+          <ProjectChainProgress projectId={id} />
+
+          {/* Below the panorama, not above it. These three are what the project was SET UP to be
+              — read once, when it is being understood or changed — where everything above is
+              where it stands right now, which is what a reader comes back for. */}
           <Field label="Goal" text={p.goal} empty="No goal set" />
           <Field
             label="Acceptance criteria"
@@ -271,11 +314,6 @@ export function ProjectDetailPage() {
               doing and what it is allowed to do. Inside the loaded branch for the same reason the
               task page is — a project that 404s puts no second doomed request on the wire. */}
           <ProjectCoordinatorSection projectId={id} />
-          {/* Inside this branch on purpose: the tasks page is only asked for once the project it
-              belongs to came back, so a project that 404s never puts a second doomed request on
-              the wire. `id` is the normalized route id — the same spelling the project query
-              above is keyed and fetched with. */}
-          <ProjectTasks projectId={id} taskCount={p._count.tasks} />
         </>
       ) : null}
     </div>
