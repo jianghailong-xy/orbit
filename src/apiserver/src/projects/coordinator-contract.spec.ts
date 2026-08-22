@@ -533,8 +533,12 @@ test('the turn reasons are a total order, and at most one turn comes out of one 
   const rows = turnReasonTable();
   const order = column(rows, '序').map(bare);
   const codes = column(rows, 'reasonCode').map(bare);
-  assert.deepEqual(order, ['1', '2', '3', '4', '5'], '§7.2 no longer orders the turn reasons');
-  assert.deepEqual(codes, ['MANUAL', 'VERDICT', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'], 'the frozen total order changed');
+  assert.deepEqual(order, ['1', '2', '3', '4', '5', '6'], '§7.2 no longer orders the turn reasons');
+  assert.deepEqual(
+    codes,
+    ['MANUAL', 'VERDICT', 'TASK_FAILURE', 'BLOCKER_DECISION', 'ACCEPTANCE', 'REPLAN'],
+    'the frozen total order changed',
+  );
   assert.equal(new Set(codes).size, codes.length, 'two rows share a reasonCode');
   assert.match(section(PCC, '7.2'), /\*\*TU4（唯一裁决：首个为真者胜/, '§7.2 states the order but not the rule that reads it');
   assert.match(section(PCC, '4.3'), /\*\*I15/, 'the "at most one semantic turn" invariant is not stated');
@@ -543,7 +547,10 @@ test('the turn reasons are a total order, and at most one turn comes out of one 
   // or a cleared-and-recurring episode collides with the turn key of the episode before it.
   const tf4 = tables(section(PCC, '7.2')).find((t) => t[0][0].replace(/[`*]/g, '').trim() === 'reasonCode' && t[0].length === 3);
   assert.ok(tf4, 'TF4 no longer lists which reasons carry a generation');
-  assert.deepEqual(column(tf4, 'reasonCode').map(bare).sort(), ['ACCEPTANCE', 'BLOCKER_DECISION', 'VERDICT']);
+  assert.deepEqual(
+    column(tf4, 'reasonCode').map(bare).sort(),
+    ['ACCEPTANCE', 'BLOCKER_DECISION', 'TASK_FAILURE', 'VERDICT'],
+  );
   const facts = column(rows, 'turnFacts（进入 reasonDigest 的输入投影，§7.3）');
   for (const [i, generation] of column(tf4, '代次项').map(bare).entries()) {
     const code = bare(column(tf4, 'reasonCode')[i]);

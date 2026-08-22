@@ -8,6 +8,7 @@ import { ProjectDispatchPassService } from './project-dispatch-pass.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
+import { ProjectCoordinatorTurnService } from './project-coordinator-turn.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
@@ -28,6 +29,7 @@ import { ProjectsService } from './projects.service';
     ProjectAuthorizationService,
     ProjectReconcileService,
     ProjectCoordinatorSessionService,
+    ProjectCoordinatorTurnService,
     ProjectTaskDispatcherService,
     ProjectDispatchPassService,
     ProjectVerificationVerdictService,
@@ -41,6 +43,7 @@ import { ProjectsService } from './projects.service';
     ProjectAuthorizationService,
     ProjectReconcileService,
     ProjectCoordinatorSessionService,
+    ProjectCoordinatorTurnService,
     ProjectTaskDispatcherService,
     ProjectDispatchPassService,
     ProjectVerificationVerdictService,

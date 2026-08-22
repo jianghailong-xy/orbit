@@ -24,6 +24,7 @@ import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
+import { ProjectCoordinatorTurnService } from './project-coordinator-turn.service';
 import {
   ProjectDecisionService,
   createDecisionId,
@@ -59,6 +60,8 @@ export interface E2eServices {
   decisions: ProjectDecisionService;
   reconciler: ProjectReconcileService;
   coordinatorSessions: ProjectCoordinatorSessionService;
+  /** §7.6's executor — the pass that decides a turn is the pass that delivers it. */
+  coordinatorTurns: ProjectCoordinatorTurnService;
   dispatcher: ProjectTaskDispatcherService;
   /** §7.8's pass — the production caller of `dispatcher`, driven by `reconciler.afterCommit`. */
   dispatchPass: ProjectDispatchPassService;
@@ -139,6 +142,9 @@ export function servicesOn(
   const dispatcher = new ProjectTaskDispatcherService(
     prisma, reconciler, authorization, queue, realtime,
   );
+  const coordinatorTurns = new ProjectCoordinatorTurnService(
+    prisma, reconciler, authorization, queue, realtime,
+  );
   const dispatchPass = new ProjectDispatchPassService(prisma, reconciler, decisions, dispatcher);
   const verdicts = new ProjectVerificationVerdictService(prisma, reconciler);
   const reaper = new ProjectAvailabilityReaperService(prisma);
@@ -154,6 +160,7 @@ export function servicesOn(
     ? () => undefined
     : events.registerHandler(reconciler);
   const unregisterRotation = reconciler.registerRotationExecutor(coordinatorSessions);
+  const unregisterTurn = reconciler.registerTurnExecutor(coordinatorTurns);
   // §7.8's production wiring. `registerDispatchPass: false` is for the scenarios that predate the
   // pass and count decisions by hand — with it installed, a drain that reconciles a project with a
   // ready task also dispatches it, which is the point of the unit and a surprise to a rig that was
@@ -163,10 +170,11 @@ export function servicesOn(
     : reconciler.registerDispatchPass(dispatchPass);
 
   return {
-    db, events, decisions, reconciler, coordinatorSessions, dispatcher, dispatchPass, verdicts,
-    reaper, acceptance, projects, sessions, announced,
+    db, events, decisions, reconciler, coordinatorSessions, coordinatorTurns, dispatcher,
+    dispatchPass, verdicts, reaper, acceptance, projects, sessions, announced,
     dispose: async () => {
       unregisterDispatchPass();
+      unregisterTurn();
       unregisterRotation();
       unregisterHandler();
       events.onModuleDestroy();
