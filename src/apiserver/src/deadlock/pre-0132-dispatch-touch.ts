@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { Client } from 'pg';
 
 /**
- * `task_dependency_dispatch_touch`, as 0122 installed it and 0131 removed it.
+ * `task_dependency_dispatch_touch`, as 0122 installed it and 0132 removed it.
  *
  * The 2026-08-21 05:47:43 three-party cycle ran THROUGH this trigger: the edge insert fired it,
  * its `UPDATE "task"` re-ran `task_creator_session_id_fkey`, and the foreign key asked for
@@ -36,8 +36,8 @@ export function historicalTouchSql(): string {
 }
 
 /**
- * Put the pre-0131 touch back, for a fixture that is evidence about it — or, in
- * `ROLLBACK_0131`'s case, because a rollback has to restore the boundary it removes.
+ * Put the pre-0132 touch back, for a fixture that is evidence about it — or, in
+ * `ROLLBACK_0132`'s case, because a rollback has to restore the boundary it removes.
  */
 export async function installHistoricalDispatchTouch(client: Client): Promise<void> {
   await client.query(historicalTouchSql());
@@ -45,7 +45,7 @@ export async function installHistoricalDispatchTouch(client: Client): Promise<vo
 
 /**
  * Take it away again. Called from a `finally`, and idempotent: a run killed between the install
- * and the drop would otherwise leave the disposable server carrying a trigger 0131 removed, and
+ * and the drop would otherwise leave the disposable server carrying a trigger 0132 removed, and
  * every later gate would be measuring the wrong schema. `dependency-revision.pg.spec.ts` asserts
  * the trigger is absent before its first round for the same reason.
  */

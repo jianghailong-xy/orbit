@@ -392,7 +392,7 @@ test('a held task is filtered out of the candidate scan, without reading its lis
   assert.doesNotMatch(executable, /task_list/);
 });
 
-test('the sweep selects candidates on all five READY conditions, anchored on a DONE prerequisite', async () => {
+test('the sweep selects candidates on all five READY conditions, anchored on HAVING prerequisites', async () => {
   let sql = '';
   const prisma = {
     $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
@@ -405,11 +405,19 @@ test('the sweep selects candidates on all five READY conditions, anchored on a D
   assert.match(sql, /t\.status = 'OPEN'::task_status/);
   assert.match(sql, /t\.auto_run_when_ready = true/);
   assert.match(sql, /EXISTS \(SELECT 1 FROM workspace a[\s\S]*a\.runner_id IS NOT NULL\)/);
-  assert.match(sql, /NOT EXISTS \([\s\S]*p\.status <> 'DONE'::task_status[\s\S]*\)/);
+  // §13.6 SU9: an edge is satisfied by the END of its supersession chain, so the sweep asks for
+  // "no prerequisite whose chain contains no DONE" rather than "no prerequisite that is not DONE".
+  // The two agree on every task nothing replaced, and only the first can ever release a task whose
+  // prerequisite was re-done under a new id.
+  assert.match(sql, /NOT EXISTS \([\s\S]*WITH RECURSIVE chain[\s\S]*chain\.status = 'DONE'/);
   // Load-bearing despite being logically implied by the two clauses around it: it is the only
   // selective entry point the planner has. Drop it and this once-a-minute sweep goes back to
   // hash-joining every dependency edge in the deployment (32ms -> 264ms on a 55k-edge database).
-  assert.match(sql, /EXISTS \([\s\S]*p\.status = 'DONE'::task_status[\s\S]*\)/);
+  // §13.6 SU9: the anchor is "this task HAS prerequisites", not "one of them is DONE". The second
+  // was the same claim only while a DONE row was the only way to satisfy an edge; a chain tail
+  // satisfies one now, and a task whose single prerequisite was replaced would pass the
+  // satisfaction clause and fail the anchor — never selected, with nothing saying why.
+  assert.match(sql, /EXISTS \(SELECT 1 FROM task_dependency d WHERE d\.task_id = t\.id\)/);
   // The occupied-session set is the wider TASK_OCCUPYING (incl. idle-but-live AWAITING_INPUT /
   // INTERRUPTED), not the two states the Ready tab's own predicate uses.
   assert.equal((sql.match(/::run_status/g) ?? []).length, TASK_OCCUPYING.length);

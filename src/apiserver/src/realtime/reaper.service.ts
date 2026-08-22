@@ -107,6 +107,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         lastTurnAt: true,
         cancelRequestedAt: true,
         endReason: true,
+        // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
+        // follows the task's lifecycle; see `shouldEndTerminalTask`.
+        startsTaskWork: true,
         task: { select: { status: true } },
         assignedRunner: { select: { lastHeartbeatAt: true, status: true } },
       },
@@ -154,8 +157,16 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
             : s.task?.status === TaskStatus.CANCELLED
               ? SessionEndReason.TASK_CANCELLED
               : null;
+        // §13.6 SU6: only a run that is DOING the task's work follows the task's lifecycle.
+        //
+        // A salvage session — `startsTaskWork = false`, which is what an explicit session_create
+        // against a task writes — is somebody reading a run that already happened. Migration 0130
+        // permits exactly that against a retired (and therefore CANCELLED or FAILED) task, and
+        // ending it here on the next sweep would make the permission worthless: the conversation
+        // gets one tick, is closed as TASK_CANCELLED, and the categorical revive rule then refuses
+        // to bring it back. A window that closes itself is not a window.
         const shouldEndTerminalTask =
-          s.status === RunStatus.AWAITING_INPUT && taskEndReason !== null;
+          s.status === RunStatus.AWAITING_INPUT && taskEndReason !== null && s.startsTaskWork;
         if (offline && !shouldEndTerminalTask) {
           // RUNNING is an active turn and cannot survive losing its runner. An idle
           // AWAITING_INPUT/INTERRUPTED session consumes no slot and remains resumable;

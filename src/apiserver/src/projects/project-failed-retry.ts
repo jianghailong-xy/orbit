@@ -38,6 +38,7 @@
  */
 
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
+import type { TaskRetirement } from '../tasks/task-supersession';
 
 /**
  * What a `FAILED` task is to the control loop. Closed set, and every arm names a different owner:
@@ -46,6 +47,15 @@ import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 export type FailedTaskDisposition =
   /** Not a failure the loop has to answer for: the task is `OPEN`, running, or settled. */
   | 'NOT_FAILED'
+  /**
+   * §13.6 SU6: this attempt was replaced or abandoned. It is a historical failure, not a current
+   * one — nothing here is the loop's to move, retry, blocker or turn, and the successor (where
+   * there is one) carries the work. Asked BEFORE `OCCUPIED` on purpose: a retirement is a stated
+   * fact about the attempt, while a live session is a passing property of it, and letting the
+   * session decide would flip a retired task's disposition back and forth as runs start and end —
+   * which moves TF6's episode identity and mints a second permanent turn key for one dead task.
+   */
+  | 'RETIRED'
   /** `FAILED` on the row, but a Session is still on it — §7.4 precondition 4 owns this task. */
   | 'OCCUPIED'
   /** §9.5 Q3 row 3: below the cap, attributable, backoff expired. The loop dispatches it. */
@@ -74,6 +84,21 @@ export interface FailedTaskFacts {
   retryBackoffExpired: boolean;
   /** §9.5's cap. Defaulted rather than required so a caller cannot quietly install a second one. */
   maxAutoRunFailures?: number;
+  /**
+   * §13.6 SU6's answer for this task, or null when nothing has retired it. Optional so a snapshot
+   * captured before this field existed replays to what it originally produced: absent reads as
+   * "not retired", which is what every one of those rows was.
+   */
+  retirement?: TaskRetirement | null;
+  /**
+   * §13.6 SU6's derived half: the retirement of the task this one VERIFIES, when it verifies one.
+   *
+   * Here rather than only at the pass, because this function is the single judgement four gates
+   * read: a FAILED check whose subject was replaced would otherwise be classified by its BUDGET —
+   * `ATTEMPTS_EXHAUSTED`, a `TEST_FAILED` blocker and a turn — for failures that are no longer
+   * about anything. Obsolete is not a kind of failure; it is the absence of a question.
+   */
+  subjectRetirement?: TaskRetirement | null;
 }
 
 /**
@@ -114,6 +139,9 @@ export function failedTaskBlockerKind(
 
 export function failedTaskDisposition(task: FailedTaskFacts): FailedTaskDisposition {
   if (task.status !== 'FAILED') return 'NOT_FAILED';
+  // §13.6 SU6, first — both halves. See the `RETIRED` arm for why it outranks even `OCCUPIED`, and
+  // `subjectRetirement` for why a check of replaced work is retired even when it is healthy.
+  if (task.retirement != null || task.subjectRetirement != null) return 'RETIRED';
   // §7.4 precondition 4 and §4.2 guard 5 in one line: somebody is on it, and the failure being
   // asked about is not settled yet.
   if (task.hasLiveSession) return 'OCCUPIED';
@@ -141,7 +169,8 @@ export function failedTaskDisposition(task: FailedTaskFacts): FailedTaskDisposit
  * True for `RETRY_DUE` and `RETRY_BACKOFF` — the loop dispatches, or has scheduled the instant it
  * will. Both are v1.1's original "不得开 turn" case, restored to the status a real failure produces.
  * False for the two terminal arms, which is `PC-CX-63`'s "不开 turn 不是克制，是静默" —— and false
- * for `OCCUPIED`, where the answer is neither a turn nor a dispatch but waiting for the run.
+ * for `OCCUPIED`, where the answer is neither a turn nor a dispatch but waiting for the run, and
+ * for `RETIRED`, where there is no answer to give because this attempt is not the live one.
  */
 export function loopCanRetryFailedTask(disposition: FailedTaskDisposition): boolean {
   return disposition === 'RETRY_DUE' || disposition === 'RETRY_BACKOFF';
@@ -150,6 +179,10 @@ export function loopCanRetryFailedTask(disposition: FailedTaskDisposition): bool
 /**
  * The two arms nothing mechanical can advance: a person has to look. §11.2 gives each of them a
  * row, and §7.2 TU2 gives the pair a turn.
+ *
+ * `RETIRED` is deliberately not one of them, and that is the whole point of the arm: a replaced
+ * attempt asks nothing of anybody. Calling somebody to a failure that has already been re-done is
+ * the foreman shape TU2 exists to prevent, arriving through the one door TU2 opened.
  */
 export function failedTaskNeedsAttention(disposition: FailedTaskDisposition): boolean {
   return disposition === 'UNATTRIBUTABLE' || disposition === 'ATTEMPTS_EXHAUSTED';

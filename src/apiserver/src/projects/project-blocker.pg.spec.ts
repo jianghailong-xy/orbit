@@ -194,6 +194,9 @@ async function reset(client: Client): Promise<void> {
       "verifies_task_id" UUID,
       "completion_policy" TEXT NOT NULL DEFAULT 'MANUAL', "verdict" TEXT,
       "verdict_revision" BIGINT NOT NULL DEFAULT 0,
+      -- §13.6's columns, which the authorization adapter reads since 0130: a stand-in schema that
+      -- omits a column the code under test selects fails on the column, not on the property.
+      "superseded_by_task_id" UUID, "superseded_at" TIMESTAMP(3), "terminal_reason" TEXT,
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE "task_dependency" (

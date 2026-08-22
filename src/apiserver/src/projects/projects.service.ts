@@ -32,6 +32,8 @@ import { CreateProjectDto, UpdateProjectDto } from './dto';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 import { publicIdempotencyKey } from './project-decision.service';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
+import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import {
   COORDINATOR_DISABLED_CODE,
   COORDINATOR_STATUS_DECISION_LIMIT,
@@ -666,6 +668,13 @@ export class ProjectsService {
         raisedByAction: { select: { id: true, status: true, refusalCode: true, idempotencyKey: true } },
       },
     });
+    // §13.6 SU6: `failures` above is the AUDIT and stays complete — every finding this project ever
+    // recorded, retired or not, is still listed with its verdict, its defect and the action that
+    // raised it. `blockedTasks` is the CURRENT projection, and it answers the same question §7.4's
+    // gate answers ("what is stopped right now"), so it has to answer it the same way. A finding
+    // whose verifier or whose subject was replaced can never be resolved — the later PASS that
+    // resolves it would have to come from a task nothing will dispatch again — so listing it as a
+    // current block tells a reader to act on something no action can clear.
     const blockedTasks = await this.prisma.$queryRaw<Array<{
       taskId: string;
       reason: string;
@@ -680,16 +689,23 @@ export class ProjectsService {
         FROM "task_verification_failure" f
         JOIN "task" blocked ON blocked."id" = f."subject_task_id"
         JOIN "task" defect ON defect."id" = f."defect_task_id"
+        JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+        JOIN "task" subject ON subject."id" = f."subject_task_id"
        WHERE f."project_id" = ${projectId}::uuid AND f."resolved_at" IS NULL
          AND defect."status"::text NOT IN ('DONE', 'CANCELLED')
+         AND ${Prisma.raw(taskNotRetiredSql('defect'))}
+         AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
       UNION ALL
       SELECT d."task_id" AS "taskId", 'UPSTREAM' AS "reason", f."id" AS "failureId",
              f."verifier_task_id" AS "verifierTaskId", f."subject_task_id" AS "subjectTaskId",
              f."defect_task_id" AS "defectTaskId"
         FROM "task_verification_failure" f
         JOIN "task_dependency" d ON d."depends_on_task_id" = f."subject_task_id"
+        JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+        JOIN "task" subject ON subject."id" = f."subject_task_id"
        WHERE f."project_id" = ${projectId}::uuid AND f."resolved_at" IS NULL
          AND f."blocks_downstream" = true
+         AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
        ORDER BY "taskId", "reason", "failureId"
     `);
     return {
@@ -899,7 +915,7 @@ export class ProjectsService {
 
     const since24h = new Date(readAt.getTime() - 24 * 60 * 60 * 1_000);
     const [byStatus, [consumption], decisionRows, pendingActionRows, eventRows, mergeRows,
-      [verdicts], [unresolvedFailures], [acceptanceRow]] = await Promise.all([
+      [verdicts], [unresolvedFailures], [acceptanceRow], mentionDeliveries] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
         where: { projectId, ownerId },
@@ -913,7 +929,9 @@ export class ProjectsService {
           (SELECT count(*)::int FROM "session" s JOIN "task" t ON t."id" = s."task_id"
             WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${ownerId}::uuid
               AND s."owner_id" = ${ownerId}::uuid AND s."deleted_at" IS NULL
-              AND s."status"::text IN ('PENDING', 'RUNNING')) AS "tasksInFlight",
+              AND s."starts_task_work"
+              AND s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)}))
+            AS "tasksInFlight",
           (SELECT count(*)::int FROM "project_action" a
             WHERE a."project_id" = ${projectId}::uuid
               AND a."type"::text IN ('DISPATCH_TASK', 'ROTATE_COORDINATOR_SESSION')
@@ -986,9 +1004,15 @@ export class ProjectsService {
          WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${ownerId}::uuid
            AND t."verifies_task_id" IS NOT NULL
       `),
+      // The same count §13.4's DONE gate makes, spelled the same way — a status page that counted
+      // "unresolved failures" its own way would eventually differ from the gate by one and send
+      // somebody looking for a bug in the gate. §13.6 SU6's history rows are excluded from both.
       this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
         SELECT count(*)::int AS "count" FROM "task_verification_failure" f
+          JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+          JOIN "task" subject  ON subject."id"  = f."subject_task_id"
          WHERE f."project_id" = ${projectId}::uuid AND f."resolved_at" IS NULL
+           AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
       `),
       this.prisma.$queryRaw<Array<CoordinatorStatusActionRow>>(Prisma.sql`
         SELECT a."id", a."decision_id" AS "decisionId", a."type"::text AS "type",
@@ -1002,6 +1026,32 @@ export class ProjectsService {
            AND a."type"::text = 'RUN_PROJECT_ACCEPTANCE'
          ORDER BY a."created_at" DESC, a."id" DESC
          LIMIT 1
+      `),
+      // §13.8: @-mentions in this project that have NOT been delivered.
+      //
+      // Only the ones that need somebody — BLOCKED and DEAD. A delivered or in-flight mention is
+      // not a project condition, and listing it here would bury the ones that are. Each carries
+      // what a reader has to act on: which agent, on which task, why, and what would clear it.
+      //
+      // This is the half the ledger exists for. A mention that cannot be delivered used to be a
+      // `logger.warn` on one apiserver; without a projection somebody actually reads, moving it
+      // into a table changes where it is invisible rather than whether it is.
+      this.prisma.$queryRaw<Array<{
+        id: string; taskId: string; workspaceId: string; status: string; attempts: number;
+        errorCode: string | null; requiredAction: string | null; lastError: string | null;
+        nextAttemptAt: Date; createdAt: Date;
+      }>>(Prisma.sql`
+        SELECT d."id", d."task_id" AS "taskId", d."workspace_id" AS "workspaceId",
+               d."status"::text AS "status", d."attempts",
+               d."error_code" AS "errorCode", d."required_action" AS "requiredAction",
+               d."last_error" AS "lastError", d."next_attempt_at" AS "nextAttemptAt",
+               d."created_at" AS "createdAt"
+          FROM "task_comment_mention_delivery" d
+          JOIN "task" t ON t."id" = d."task_id"
+         WHERE t."project_id" = ${projectId}::uuid AND d."owner_id" = ${ownerId}::uuid
+           AND d."status"::text IN ('BLOCKED', 'DEAD')
+         ORDER BY d."created_at" DESC, d."id" DESC
+         LIMIT 50
       `),
     ]);
 
@@ -1206,6 +1256,23 @@ export class ProjectsService {
             inconclusive: verdicts.inconclusive,
             unresolvedFailures: unresolvedFailures.count,
           },
+          // §13.8. Named `undelivered` rather than `mentions` because that is the claim being
+          // made: these are messages somebody sent that nobody has received.
+          undeliveredMentions: mentionDeliveries.map((row) => ({
+            id: row.id,
+            taskId: row.taskId,
+            workspaceId: row.workspaceId,
+            status: row.status,
+            attempts: row.attempts,
+            errorCode: row.errorCode,
+            requiredAction: row.requiredAction,
+            lastError: row.lastError,
+            nextAttemptAt: row.nextAttemptAt.toISOString(),
+            createdAt: row.createdAt.toISOString(),
+          })),
+          undeliveredMentionsEmptyReason: mentionDeliveries.length > 0
+            ? null
+            : ('NO_UNDELIVERED_MENTION' as const),
           merges: mergeRows,
           mergesEmptyReason: reasonIfEmpty(mergeRows, 'NO_MERGE_EVIDENCE'),
         },

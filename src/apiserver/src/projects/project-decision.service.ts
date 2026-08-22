@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AgentProvider, USAGE_LIMIT_ERROR_MARKERS, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { taskIsObsolete, taskRetirement } from '../tasks/task-supersession';
 import {
   ProjectAuthorizationAudit,
   replayProjectAuthorizationAudit,
@@ -146,6 +147,22 @@ export interface ProjectDecisionInput {
        * not fire for one. The next conclusion on that verifier advances the counter and carries it.
        */
       verdictRevision?: string;
+      /**
+       * §13.6 SU1's three columns, absent on decisions captured before migration 0129. Readers
+       * must treat an absent field as "nothing retired this attempt", which is exactly what those
+       * rows held — the columns did not exist, so no task could name a successor. An old snapshot
+       * therefore replays to what it originally produced rather than to today's rules applied to
+       * yesterday's world (the same compatibility shape `completionPolicy` and `verdictRevision`
+       * already carry).
+       *
+       * They are in the snapshot rather than re-read at each gate because supersession is a fact
+       * the decision is MADE OF: it enters `decisionInputHash`, so a link established after this
+       * snapshot was taken makes the replay fail its hash check instead of quietly reaching a
+       * different conclusion from the same recorded input.
+       */
+      supersededByTaskId?: string | null;
+      supersededAt?: string | null;
+      terminalReason?: string | null;
       dependsOnTaskIds: string[];
       liveSessionIds: string[];
       failureCount: number;
@@ -451,6 +468,9 @@ interface TaskRow {
   completionPolicy: string;
   verdict: string | null;
   verdictRevision: bigint;
+  supersededByTaskId: string | null;
+  supersededAt: Date | null;
+  terminalReason: string | null;
   updatedAt: Date;
 }
 
@@ -668,6 +688,9 @@ export class ProjectDecisionService {
                t."verifies_task_id" AS "verifiesTaskId",
                t."completion_policy"::text AS "completionPolicy", t."verdict"::text AS "verdict",
                t."verdict_revision" AS "verdictRevision",
+               t."superseded_by_task_id" AS "supersededByTaskId",
+               t."superseded_at" AS "supersededAt",
+               t."terminal_reason" AS "terminalReason",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -877,6 +900,9 @@ export class ProjectDecisionService {
         completionPolicy: row.completionPolicy,
         verdict: row.verdict,
         verdictRevision: String(row.verdictRevision),
+        supersededByTaskId: toPublicIdOrNull(row.supersededByTaskId),
+        supersededAt: iso(row.supersededAt),
+        terminalReason: row.terminalReason,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,
@@ -1560,6 +1586,12 @@ function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
     completionPolicy: (task.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
     verifiesTaskId: task.verifiesTaskId,
     verdict: (task.verdict ?? null) as TaskVerdictValue | null,
+    // §13.6 SU6. Absent on a pre-0129 snapshot, which reads as "not retired" — see `world.tasks`.
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    retirement: taskRetirement({
+      supersededByTaskId: task.supersededByTaskId ?? null,
+      terminalReason: task.terminalReason ?? null,
+    }),
   }));
 }
 
@@ -1590,6 +1622,11 @@ export function verificationVerdictFacts(input: ProjectDecisionInput): {
         verifiesTaskId: task.verifiesTaskId,
         verdict: (task.verdict ?? null) as TaskVerdictValue | null,
         verdictRevision: task.verdictRevision ?? '0',
+        // §13.6 SU6, carried through the snapshot rather than re-read: the planner's answer and the
+        // decision's recorded input have to be about one world. Absent on a pre-0129 snapshot,
+        // which reads as "nothing retired this check".
+        supersededByTaskId: task.supersededByTaskId ?? null,
+        terminalReason: task.terminalReason ?? null,
         hasLiveSession: task.liveSessionIds.length > 0,
         session: evidence?.sessionId
           ? {
@@ -1605,6 +1642,8 @@ export function verificationVerdictFacts(input: ProjectDecisionInput): {
   const subjects = input.world.tasks.map((task) => ({
     id: task.id,
     status: task.status as AggregationTaskStatus,
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
   }));
   return { verifications, subjects };
 }
@@ -1629,7 +1668,24 @@ function runStateOf(
   const blocked = blockerRunState(openBlockers);
   if (blocked) return blocked;
   if (hasLiveTaskSession(input)) return 'EXECUTING';
-  if (input.world.tasks.some((task) => task.verifiesTaskId && task.status !== 'DONE')) {
+  // §4.2 guard 6, with §13.6 SU6's exception. "A verification exists that is not DONE" is the
+  // right question about a LIVE check; asked of a retired one it never stops being true, because
+  // nothing will dispatch that verifier again. A project whose check was re-run from scratch would
+  // sit in AWAITING_VERIFICATION for the rest of its life, waiting on the attempt it replaced.
+  // Absent fields (a pre-0129 snapshot) read as not retired, so an old decision replays unchanged.
+  const retirementById = new Map(input.world.tasks.map((task) => [task.id, taskRetirement({
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  })]));
+  if (input.world.tasks.some((task) => task.verifiesTaskId
+    && task.status !== 'DONE'
+    && !taskIsObsolete({
+      retirement: retirementById.get(task.id) ?? null,
+      // ...and its SUBJECT's, which is the half that made this guard unfalsifiable: a healthy
+      // OPEN check pointed at replaced work can never become DONE, so "a verification exists that
+      // is not DONE" stayed true for the life of the project.
+      subjectRetirement: retirementById.get(task.verifiesTaskId) ?? null,
+    }))) {
     return 'AWAITING_VERIFICATION';
   }
   return 'PLANNING';

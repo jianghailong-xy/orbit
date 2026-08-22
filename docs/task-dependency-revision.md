@@ -1,17 +1,17 @@
 # dependency revision：把 dispatch 版本边界从 `task.updated_at` 挪走
 
 `docs/postgres-lock-order.md` §4 把 `task_dependency_dispatch_touch` 记成"**保留**，已标注替换路径"。
-本文件是那条替换路径的交付：migration **0131**。
+本文件是那条替换路径的交付：migration **0132**。
 
 | | |
 |---|---|
-| migration | `src/apiserver/prisma/migrations/0131_task_dependency_revision/migration.sql` |
+| migration | `src/apiserver/prisma/migrations/0132_task_dependency_revision/migration.sql` |
 | 锁序里的位置（秩 70） | `src/apiserver/src/common/lock-order.ts` |
 | dispatch 侧：秩 70 取锁 | `src/apiserver/src/projects/project-authorization.service.ts` |
 | dispatch 侧：秩 10 预锁（I4） | `src/apiserver/src/projects/project-task-dispatcher.service.ts` |
 | 真实 PG 回归（两种提交顺序、批量、回滚） | `src/apiserver/src/deadlock/dependency-revision.pg.spec.ts` |
-| 回归夹具 + **可执行的回滚 SQL**（`ROLLBACK_0131`） | `src/apiserver/src/deadlock/dependency-revision-fixture.ts` |
-| 基线要用的历史 touch 触发器 | `src/apiserver/src/deadlock/pre-0131-dispatch-touch.ts` |
+| 回归夹具 + **可执行的回滚 SQL**（`ROLLBACK_0132`） | `src/apiserver/src/deadlock/dependency-revision-fixture.ts` |
+| 基线要用的历史 touch 触发器 | `src/apiserver/src/deadlock/pre-0132-dispatch-touch.ts` |
 
 ```
 scripts/deadlock-barrier.sh dependency-revision   # 只跑本文件的回归
@@ -156,7 +156,7 @@ Coordinator 派发生效：用户手动"开始执行"一个前置未完成的任
 不 dispatch。所以顺序必须是**先 migration 后代码**，与本仓库既有的部署顺序（apiserver 启动时跑
 migration）一致。
 
-**回滚**：`ROLLBACK_0131`（`dependency-revision-fixture.ts`，回归里真的执行过一遍）。它**先装回 touch
+**回滚**：`ROLLBACK_0132`（`dependency-revision-fixture.ts`，回归里真的执行过一遍）。它**先装回 touch
 再删 revision**——回程上边界必须每一刻都存在，否则回滚窗口里的 dispatch 会一条边界都没有。
 没有需要撤销的数据：`task_dependency_revision` 全表丢弃，`task.updated_at` 只多了一些历史抖动。
 
@@ -186,10 +186,10 @@ SELECT count(*) FROM "project_action"
 * **I4**：把 dispatch 第一条语句的 owner 预锁去掉，同一对事务拿到 `40P01`；
 * 旧副本（不取 revision）在 COMMIT 被 `DISPATCH_DEPENDENCY_CHANGED` 挡下，Session 与 action 全回滚；
   两条对照：前置全 DONE 的 Coordinator 派发能提交，用户手动 Session 不受影响；
-* 回滚跑通（touch 回来了、边写又开始写 Task 行），随后把 0131 重新应用到一个**已经有 Task 和边**的库上，
+* 回滚跑通（touch 回来了、边写又开始写 Task 行），随后把 0132 重新应用到一个**已经有 Task 和边**的库上，
   回填不漏一行——这同时就是数据迁移用例。
 
 两条生产基线仍是修复前证据，因此
 `three-party-40p01.baseline.ts` 与 `pg-barrier.pg.spec.ts` 那一个 harness 自检会先把历史 touch 装回去
-（`pre-0131-dispatch-touch.ts`，定义直接从 0122 里读，不是重打一遍），跑完在 `finally` 里删掉。
+（`pre-0132-dispatch-touch.ts`，定义直接从 0122 里读，不是重打一遍），跑完在 `finally` 里删掉。
 被重放的语句一个字没改。

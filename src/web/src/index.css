@@ -7348,6 +7348,31 @@ html[data-theme='dark'] .session-tag-chip {
   line-height: 1.6;
   word-break: break-word;
 }
+/* §13.8: what happened to this comment's @-mentions. Quiet by default — a mention on its way is
+   not news — and only the two states that need somebody take a colour. */
+.tdp-mention-deliveries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.tdp-mention-delivery {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.tdp-mention-delivery-blocked {
+  color: var(--warning, #d48806);
+}
+.tdp-mention-delivery-dead {
+  color: var(--danger, #cf1322);
+}
+.tdp-mention-delivery-untracked {
+  font-style: italic;
+}
+.tdp-mention-delivery a {
+  color: inherit;
+  text-decoration: underline dotted;
+}
 /* Comment markdown inherits the 13px bubble size rather than .md's 14px. */
 .tdp-comment-text.md {
   font-size: 13px;

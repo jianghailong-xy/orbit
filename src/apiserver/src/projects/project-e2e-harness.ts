@@ -15,6 +15,7 @@ import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { TasksService } from '../tasks/tasks.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
   assertCoordinatorPgUrlIsIsolated,
@@ -69,6 +70,8 @@ export interface E2eServices {
   reaper: ProjectAvailabilityReaperService;
   acceptance: ProjectAcceptanceService;
   projects: ProjectsService;
+  /** §13.6 SU7's `create({ supersedesTaskId })` and the supersession half of `update`. */
+  tasks: TasksService;
   sessions: SessionsService;
   /** Post-commit announcements the loop made, so "it told the runner" is observable. */
   announced: { queued: number; sessions: string[] };
@@ -151,6 +154,11 @@ export function servicesOn(
   const sessions = new SessionsService(prisma, queue, realtime);
   const acceptance = new ProjectAcceptanceService(prisma);
   const projects = new ProjectsService(prisma, sessions, acceptance);
+  // §13.6 SU7's atomic replace lives here, and it is the public write path a person or an agent
+  // actually uses — so a scenario about it has to drive the real service rather than a raw UPDATE.
+  // Constructed without `onModuleInit`, exactly like the services above: its reconcile timer would
+  // otherwise dispatch tasks underneath a suite that counts passes.
+  const tasks = new TasksService(prisma, sessions, realtime);
 
   // The production wiring, minus the timers: `onModuleInit` would also start §10.2's clock, and a
   // suite that asserts on exact pass counts cannot share the world with a background ticker.
@@ -171,7 +179,7 @@ export function servicesOn(
 
   return {
     db, events, decisions, reconciler, coordinatorSessions, coordinatorTurns, dispatcher,
-    dispatchPass, verdicts, reaper, acceptance, projects, sessions, announced,
+    dispatchPass, verdicts, reaper, acceptance, projects, tasks, sessions, announced,
     dispose: async () => {
       unregisterDispatchPass();
       unregisterTurn();
@@ -328,6 +336,8 @@ export async function task(
 }
 
 export interface SessionOptions {
+  /** §13.6 SU6: does this Session exist to DO the task's work, or to look at it? Default false. */
+  startsTaskWork?: boolean;
   taskId?: string | null;
   status?: RunStatus;
   error?: string | null;
@@ -364,6 +374,12 @@ export async function session(
       provider: 'claude',
       status: options.status ?? RunStatus.SUCCEEDED,
       dispatchOrigin: SessionDispatchOrigin.USER,
+      // §13.6 SU6, defaulting TRUE — the value every task-linked session this release creates, and
+      // the one the database defaults to. A fixture standing in for a task run has to carry it, or
+      // it holds no execution claim, occupies no slot and does not stop its task being retired,
+      // and the scenarios built on it would be measuring the fixture. A salvage session passes
+      // `false` explicitly, which is what makes that exemption a stated property of the test.
+      startsTaskWork: options.startsTaskWork ?? true,
       error: options.error ?? null,
       finishedAt: options.finishedAt === undefined ? new Date() : options.finishedAt,
       ...(options.createdAt ? { createdAt: options.createdAt } : {}),

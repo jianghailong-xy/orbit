@@ -31,12 +31,59 @@ import {
 } from './project-blocker';
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 import { failedTaskBlockerKind } from './project-failed-retry';
+import { TaskRetirement, taskIsObsolete, taskRetirement } from '../tasks/task-supersession';
 import type { PlannedVerificationVerdict } from './task-verification-verdict';
 
 /** §9.4: the rolling window `sessionBudgetPerDay` is measured over. */
 export const PROJECT_SESSION_BUDGET_WINDOW_MS = 24 * 60 * 60_000;
 
 const SETTLED_TASK_STATUSES: ReadonlySet<string> = new Set(['DONE', 'CANCELLED']);
+
+/**
+ * Settled, or retired by §13.6 SU6 — the two ways a task stops being something §11 has to raise a
+ * row about.
+ *
+ * A blocker is a request addressed to somebody: "look at why this keeps failing", "read the detail
+ * and clear it". A replaced attempt asks that of nobody, and a row that keeps asking is worse than
+ * noise — §13.4's DONE gate refuses a project holding open blockers, so one retired FAILED task
+ * held its whole project's acceptance open on a failure that had already been re-done and passed.
+ */
+/**
+ * §13.6 SU6 for one snapshot, indexed once.
+ *
+ * A `WeakMap` keyed on the snapshot rather than a parameter threaded through eleven detectors: they
+ * are called from one place with one input, and the alternative — looking the row up with
+ * `world.tasks.find` inside each detector's loop — is quadratic. Three detectors iterate every task
+ * and would each pay a linear scan per task, which on a project with tens of thousands of them is
+ * the reconcile pass itself becoming the thing that stops.
+ */
+const RETIREMENT_INDEX = new WeakMap<object, Map<string, TaskRetirement | null>>();
+
+function retirementIndex(input: ProjectDecisionInput): Map<string, TaskRetirement | null> {
+  const cached = RETIREMENT_INDEX.get(input.world);
+  if (cached) return cached;
+  const index = new Map(input.world.tasks.map((task) => [task.id, taskRetirement({
+    supersededByTaskId: task.supersededByTaskId ?? null,
+    terminalReason: task.terminalReason ?? null,
+  })]));
+  RETIREMENT_INDEX.set(input.world, index);
+  return index;
+}
+
+function outsideBlockerScope(
+  task: { id: string; status: string; verifiesTaskId?: string | null },
+  input: ProjectDecisionInput,
+): boolean {
+  if (SETTLED_TASK_STATUSES.has(task.status)) return true;
+  const index = retirementIndex(input);
+  return taskIsObsolete({
+    retirement: index.get(task.id) ?? null,
+    // The derived half, and it belongs to EVERY detector rather than to the failure ones: a healthy
+    // OPEN check whose subject was replaced can never run, so a manual-policy hold on it is a
+    // required action nobody can discharge — and §13.4's DONE gate refuses a project holding one.
+    subjectRetirement: task.verifiesTaskId ? (index.get(task.verifiesTaskId) ?? null) : null,
+  });
+}
 
 /** Facts this pass has already planned elsewhere. They are passed in rather than recomputed: two
  *  copies of "what is a cycle" or "what did this verdict conclude" would eventually disagree, and
@@ -122,7 +169,7 @@ function refusedDispatchConditions(input: ProjectDecisionInput): ObservedBlocker
   }
   const conditions: ObservedBlockerCondition[] = [];
   for (const task of input.world.tasks) {
-    if (SETTLED_TASK_STATUSES.has(task.status)) continue;
+    if (outsideBlockerScope(task, input)) continue;
     const action = latest.get(task.id);
     if (!action || action.status !== 'REFUSED') continue;
     const kind = blockerKindForRefusal(action.refusalCode);
@@ -200,7 +247,7 @@ function mergeConditions(input: ProjectDecisionInput): ObservedBlockerCondition[
 function spentFailureBudgetConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
   const conditions: ObservedBlockerCondition[] = [];
   for (const task of input.world.tasks) {
-    if (SETTLED_TASK_STATUSES.has(task.status)) continue;
+    if (outsideBlockerScope(task, input)) continue;
     const kind = failedTaskBlockerKind(task);
     if (!kind) continue;
     conditions.push({
@@ -484,7 +531,12 @@ function eligibleTaskIds(input: ProjectDecisionInput): string[] {
       && task.liveSessionIds.length === 0
       && task.dependsOnTaskIds.every((id) => done.has(id))
       && (input.evaluation.dueTasks[task.id]?.retryBackoffExpired ?? true)
-      && (input.evaluation.dueTasks[task.id]?.runAtDue ?? true))
+      && (input.evaluation.dueTasks[task.id]?.runAtDue ?? true)
+      // §13.6 SU6, and it is the same predicate every other detector in this file uses. A manual
+      // hold is a required action addressed to a person; an obsolete task asks nothing of anyone,
+      // and a hold on one can never be discharged — while §13.4's DONE gate refuses a project that
+      // holds an open blocker.
+      && !outsideBlockerScope(task, input))
     .map((task) => task.id)
     .sort(compare);
 }

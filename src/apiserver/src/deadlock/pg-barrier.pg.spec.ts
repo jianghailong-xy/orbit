@@ -15,7 +15,7 @@ import { runScenario, type ScenarioSpec } from './pg-barrier';
 import {
   dropHistoricalDispatchTouch,
   installHistoricalDispatchTouch,
-} from './pre-0131-dispatch-touch';
+} from './pre-0132-dispatch-touch';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -259,7 +259,7 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
   });
 
   // The harness property this case reads out — a statement naming no Session queueing on one —
-  // was observed through `task_dependency_dispatch_touch`, and 0131 removed that trigger. The
+  // was observed through `task_dependency_dispatch_touch`, and 0132 removed that trigger. The
   // trigger is rebuilt for the case and dropped again, exactly as the three-party baseline does:
   // what is being asserted is the HARNESS's ability to see a lock nobody wrote, and the touch is
   // the sharpest instrument for it that this repo ever shipped.
@@ -289,7 +289,7 @@ test('the three-party plan blocks where the fixture says it does', { skip: !URL,
       );
     } finally {
       // Dropped here rather than at the end of the file's `after`: every later case in this run
-      // must measure the schema 0131 leaves behind, not the one this case rebuilt.
+      // must measure the schema 0132 leaves behind, not the one this case rebuilt.
       await dropHistoricalDispatchTouch(admin);
     }
   });

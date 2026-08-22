@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Client } from 'pg';
 
-import { historicalTouchSql } from './pre-0131-dispatch-touch';
+import { historicalTouchSql } from './pre-0132-dispatch-touch';
 
 /**
  * A Project Coordinator dispatch, and the dependency mutations that race it, as the statements
@@ -17,7 +17,7 @@ import { historicalTouchSql } from './pre-0131-dispatch-touch';
  *
  * The Session insert goes through every guard 0122 installed — the authority gate, the frozen
  * snapshot check, and both deferred attribution triggers — because a fixture that bypassed them
- * would prove nothing about the one 0131 adds beside them.
+ * would prove nothing about the one 0132 adds beside them.
  */
 
 export interface RevisionIds {
@@ -208,7 +208,7 @@ export const COUNT_INCOMPLETE_PREREQUISITES = `
      AND prerequisite."owner_id" = $2::uuid
      AND prerequisite."status"::text <> 'DONE'`;
 
-/** `TasksService.addDependency`: rank 10, then the edge. Nothing else since 0131. */
+/** `TasksService.addDependency`: rank 10, then the edge. Nothing else since 0132. */
 export const LOCK_OWNER_GRAPH = 'SELECT "id" FROM "user" WHERE "id" = $1::uuid FOR UPDATE';
 export const INSERT_EDGE = `
   INSERT INTO "task_dependency" ("id", "task_id", "depends_on_task_id")
@@ -255,7 +255,7 @@ export function dispatchSteps(
 }
 
 /**
- * The documented down-migration for 0131, executable so that "the rollback works" is a test
+ * The documented down-migration for 0132, executable so that "the rollback works" is a test
  * result rather than a paragraph. `docs/task-dependency-revision.md` points here rather than
  * repeating it, because a rollback nobody has run is a guess.
  *
@@ -264,7 +264,7 @@ export function dispatchSteps(
  * itself is read out of 0122 rather than retyped here, so a rollback can never restore a trigger
  * production did not have.
  */
-export const ROLLBACK_0131 = `
+export const ROLLBACK_0132 = `
   ${historicalTouchSql()}
 
   DROP TRIGGER "session_dispatch_dependency_check" ON "session";

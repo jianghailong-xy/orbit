@@ -6,6 +6,7 @@ import { Client } from 'pg';
 
 import {
   ARRIVALS,
+  admissionFenceSteps,
   capacityFenceScenario,
   heldRelations,
   orderedBatchCreateScenario,
@@ -155,11 +156,11 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       assertAllCommitted(outcome);
       // One wait, and it is the one the fix never claimed to remove: two writers of one Session
       // row. The baseline's other two edges are not merely re-ordered, they do not exist —
-      // since 0131 the dependency mutation touches no Session at all.
+      // since 0132 the dependency mutation touches no Session at all.
       assert.equal(outcome.waitEdges.length, 1, `${outcome.name}: one wait, and not a ring`);
       assert.deepEqual(edges(outcome), ['runner-inbox -> telemetry']);
 
-      // The claim 0131 makes, read out of `pg_locks` rather than argued: at the moment the runner
+      // The claim 0132 makes, read out of `pg_locks` rather than argued: at the moment the runner
       // pair contended, the dependency transaction was open, had written its Task and its edge,
       // and held no `session` lock of any kind. Under 0122 this list contained `session`, taken
       // by the dispatch touch's UPDATE through `task_creator_session_id_fkey`.
@@ -187,24 +188,59 @@ test('the canonical lock order holds from both directions', { skip: !URL, timeou
       assert.equal(rows[0].revision, '1', 'and the revision the edge advanced');
     });
 
-    await t.test(`the Project capacity fence still serializes admission (${arrival})`, async () => {
+    await t.test(`the Project admission fence still serializes admission (${arrival})`, async () => {
       const ids = newFixtureIds(`lockorder-capacity-${arrival}`);
       await seedLockFixture(admin, ids);
-      const outcome = await runScenario(url, capacityFenceScenario(ids, arrival), 30_000);
-      assertAllCommitted(outcome);
-      assert.equal(outcome.waitEdges.length, 1);
-      assert.deepEqual(
-        edges(outcome),
-        arrival === 'task-first' ? ['admission -> capacity'] : ['capacity -> admission'],
-      );
-      // The waiting side is waiting on the PROJECT row, which is the fence doing its job — a
-      // Session leaving the live-claim set cannot commit beside a dispatch decision that counted
-      // it, in either arrival order.
-      const waiter = outcome.waitEdges[0];
-      assert.ok(
-        waiter.locks.some((l) => !l.granted && (l.locktype === 'tuple' || l.locktype === 'transactionid')),
-        'the wait is a row-level one, as a fence on one Project row must be',
-      );
+      if (arrival === 'task-first') {
+        // The Session write got there first, so the adapter's own project lock waits for it. An
+        // ordinary blocking FOR NO KEY UPDATE, unchanged by 0130.
+        const outcome = await runScenario(url, capacityFenceScenario(ids), 30_000);
+        assertAllCommitted(outcome);
+        assert.equal(outcome.waitEdges.length, 1);
+        assert.deepEqual(edges(outcome), ['admission -> capacity']);
+        // The waiting side is waiting on the PROJECT row, which is the fence doing its job — a
+        // Session leaving the live-claim set cannot commit beside a dispatch decision that
+        // counted it.
+        const waiter = outcome.waitEdges[0];
+        assert.ok(
+          waiter.locks.some((l) => !l.granted
+            && (l.locktype === 'tuple' || l.locktype === 'transactionid')),
+          'the wait is a row-level one, as a fence on one Project row must be',
+        );
+        return;
+      }
+
+      // The other arrival is no longer a wait. 0130 replaced `session_project_capacity_serialize`
+      // with `session_admission_lock_order`, whose project lock is NOWAIT: a Session write that
+      // arrives while a dispatch decision holds the Project is REFUSED — typed, with nothing
+      // written — rather than queued behind it. Same guarantee, answered instead of waited out,
+      // so it is proven as a refusal rather than as a barrier.
+      const steps = admissionFenceSteps(ids);
+      const admission = new Client({ connectionString: url });
+      const capacity = new Client({ connectionString: url });
+      await Promise.all([admission.connect(), capacity.connect()]);
+      try {
+        await admission.query('BEGIN');
+        await admission.query(steps.lockProject.sql, steps.lockProject.values as never);
+        await capacity.query('BEGIN');
+        await capacity.query(steps.lockSession.sql, steps.lockSession.values as never);
+        const refusal = await capacity
+          .query(steps.statusWrite.sql, steps.statusWrite.values as never)
+          .then(() => null, (e: { code?: string; message?: string }) => e);
+        assert.ok(refusal, 'the Session write was admitted beside a dispatch decision');
+        assert.equal(refusal.code, '55P03');
+        assert.match(String(refusal.message), /SESSION_PROJECT_BUSY/);
+        await capacity.query('ROLLBACK');
+        await admission.query('COMMIT');
+        const { rows } = await admin.query<{ status: string }>(
+          `SELECT "status"::text AS status FROM "session" WHERE "id" = $1::uuid`,
+          [ids.telemetrySessionId],
+        );
+        assert.equal(rows[0].status, 'RUNNING', 'the refused write left something behind');
+      } finally {
+        await Promise.all([admission, capacity].map((c) =>
+          c.query('ROLLBACK').catch(() => undefined).then(() => c.end().catch(() => undefined))));
+      }
     });
   }
 

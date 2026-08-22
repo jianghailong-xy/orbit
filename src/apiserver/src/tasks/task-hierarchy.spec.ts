@@ -20,12 +20,27 @@ const CHILD_ID = '00000000-0000-7000-8000-0000000000b3';
  */
 function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
   const client: Record<string, unknown> = { ...models };
-  client.$queryRaw = async (strings: TemplateStringsArray, ...bound: unknown[]) => {
-    const sql = Prisma.sql(strings, ...(bound as never[])).text.replace(/\s+/g, ' ').trim();
+  // §13.6 SU3's other direction: a project move now reads whether this task is anybody's SUCCESSOR
+  // before it commits. None of these cases has one, so the double answers "nobody" — spelled here
+  // rather than in each fixture so a case that adds one has to say so.
+  const task = client.task as Record<string, unknown> | undefined;
+  if (task && !task.findMany) task.findMany = async () => [];
+  client.$queryRaw = async (strings: TemplateStringsArray | Prisma.Sql, ...bound: unknown[]) => {
+    // Two calling conventions reach this double, and both are production shapes: a tagged template
+    // (`tx.$queryRaw\`...\``) and a prepared `Prisma.sql` object. Handing the second to
+    // `Prisma.sql()` as if it were a template array throws inside the client runtime, which reads
+    // as a failure of the code under test rather than of the stub.
+    const query = 'raw' in strings
+      ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
+      : (strings as Prisma.Sql);
+    const sql = query.text.replace(/\s+/g, ' ').trim();
     // Labelled by the table it locks: the owner lock is `... FROM "user" ... FOR UPDATE`.
     calls.push(
       /FOR UPDATE/i.test(sql) ? `lock:${/FROM\s+"(\w+)"/i.exec(sql)?.[1] ?? '?'}` : `raw:${sql}`,
     );
+    // The live-session probe a project move now makes (§12.3 D3 / §13.6 SU8) must answer "no live
+    // run" here: none of these cases has one, and a blanket row would refuse every move.
+    if (/FROM "session"/i.test(sql)) return [];
     return [{ id: OWNER_ID }];
   };
   client.$transaction = async (fn: (tx: unknown) => Promise<unknown>) => {

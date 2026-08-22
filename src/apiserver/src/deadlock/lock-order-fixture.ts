@@ -241,10 +241,10 @@ function twoPartyPlan(
  * and the second write re-checked `session_owner_id_fkey` onto the owner row the dependency
  * transaction held FOR UPDATE.
  *
- * Post-0131, all three edges are gone, and two of them for a stronger reason than "taken in a
+ * Post-0132, all three edges are gone, and two of them for a stronger reason than "taken in a
  * better order": the dependency mutation no longer touches a Session AT ALL. 0122's
  * `task_dependency_dispatch_touch` was what made an edge write re-write its dependent Task and so
- * re-check `task_creator_session_id_fkey`; 0131 advances `task_dependency_revision` instead, and
+ * re-check `task_creator_session_id_fkey`; 0132 advances `task_dependency_revision` instead, and
  * that row's only parent is the Task. The telemetry transaction writes its Session row once, so
  * it never asks for the owner either.
  *
@@ -252,7 +252,7 @@ function twoPartyPlan(
  * the two runner parties contend for nothing, and the only wait left in the plan is the one the
  * fix never claimed to remove — two writers of one Session row. `lock-order.pg.spec.ts` reads the
  * dependency backend's held relations out of that observation and asserts `session` is not among
- * them, which is the claim 0131 actually makes.
+ * them, which is the claim 0132 actually makes.
  */
 export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): ScenarioSpec {
   const parties = [
@@ -273,7 +273,7 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
     // The step the baseline died on, and the reason the pre-lock that used to precede it is gone.
     // In the baseline this INSERT fired the dispatch touch, the touch re-wrote a Task row D3 had
     // already written, and that second write re-checked `task_creator_session_id_fkey` onto a
-    // Session somebody else held. After 0131 it writes the edge and advances
+    // Session somebody else held. After 0132 it writes the edge and advances
     // `task_dependency_revision` — a row whose only foreign key is the Task this transaction is
     // already holding — so no Session is asked for and none is pre-locked.
     { op: 'run', party: 'dependency', label: 'D4 insert-task-dependency',
@@ -342,18 +342,23 @@ export function orderedDependencyScenario(ids: FixtureIds, arrival: Arrival): Sc
 }
 
 /**
- * `session_project_capacity_serialize`, kept and proven from both sides.
+ * The admission fence, from the one arrival that is still a wait.
  *
  * The fence exists because Project/Agent admission counts Session rows: a Session entering or
  * leaving the live-claim set has to line up with the Project row lock the authorization adapter
  * takes, or a dispatch decision is made against a count that is already wrong. It is rank 40 of
- * the canonical order, taken by a transaction that already holds its Session at rank 30 — so it
- * is IN order, and the reason it is kept rather than narrowed further.
+ * the canonical order, taken by a transaction that already holds its Session at rank 30.
+ *
+ * ONE arrival, not both, since 0130 replaced `session_project_capacity_serialize` with
+ * `session_admission_lock_order`: the fence's project lock is `FOR NO KEY UPDATE NOWAIT` now, so
+ * a Session write that arrives SECOND is refused with `SESSION_PROJECT_BUSY` (55P03) instead of
+ * queuing. There is no wait to schedule in that direction, so it is not a barrier scenario —
+ * `lock-order.pg.spec.ts` proves it directly, as a refusal with nothing written.
  *
  * `capacity` is the Session status write; `admission` is the adapter's
  * `SELECT … FROM "project" … FOR NO KEY UPDATE`.
  */
-export function capacityFenceScenario(ids: FixtureIds, arrival: Arrival): ScenarioSpec {
+export function capacityFenceScenario(ids: FixtureIds): ScenarioSpec {
   const parties = [
     { name: 'capacity', deadlockTimeout: '2s' },
     { name: 'admission', deadlockTimeout: '2s' },
@@ -384,38 +389,42 @@ export function capacityFenceScenario(ids: FixtureIds, arrival: Arrival): Scenar
   const run = (party: string, step: Step): PlanStep =>
     ({ op: 'run', party, label: step.label, sql: step.sql, values: step.values });
 
-  if (arrival === 'task-first') {
-    // The Session write gets there first: the adapter's project lock waits for the fence.
-    return {
-      name: 'capacity-fence/session-first',
-      parties,
-      plan: [
-        run('capacity', lockSession),
-        run('capacity', statusWrite),
-        { op: 'block', party: 'admission', ...admissionLock, blockedBy: ['capacity'] },
-        { op: 'finish', party: 'capacity', action: 'COMMIT' },
-        { op: 'settle', party: 'admission' },
-        run('admission', admissionRead),
-        { op: 'finish', party: 'admission', action: 'COMMIT' },
-      ],
-    };
-  }
-  // The adapter gets there first: the Session write waits inside its BEFORE trigger, which is
-  // the whole point — the count the adapter is reading cannot move under it.
+  // The Session write gets there first: the adapter's project lock waits for the fence. This
+  // direction is unchanged by 0130 — the adapter's own lock is an ordinary blocking one.
   return {
-    name: 'capacity-fence/admission-first',
+    name: 'capacity-fence/session-first',
     parties,
     plan: [
-      run('admission', admissionLock),
-      run('admission', admissionRead),
       run('capacity', lockSession),
-      { op: 'block', party: 'capacity', ...statusWrite, blockedBy: ['admission'] },
-      { op: 'finish', party: 'admission', action: 'COMMIT' },
-      { op: 'settle', party: 'capacity' },
+      run('capacity', statusWrite),
+      { op: 'block', party: 'admission', ...admissionLock, blockedBy: ['capacity'] },
       { op: 'finish', party: 'capacity', action: 'COMMIT' },
+      { op: 'settle', party: 'admission' },
+      run('admission', admissionRead),
+      { op: 'finish', party: 'admission', action: 'COMMIT' },
     ],
   };
 }
+
+/** The statements the refusal case drives directly, kept beside the scenario they came out of. */
+export function admissionFenceSteps(ids: FixtureIds) {
+  return {
+    lockProject: {
+      sql: 'SELECT "id" FROM "project" WHERE "id" = $1::uuid AND "owner_id" = $2::uuid FOR NO KEY UPDATE',
+      values: [ids.projectId, ids.ownerId] as unknown[],
+    },
+    lockSession: {
+      sql: 'SELECT "id" FROM "session" WHERE "id" = $1::uuid FOR UPDATE',
+      values: [ids.telemetrySessionId] as unknown[],
+    },
+    statusWrite: {
+      sql: `UPDATE "session" SET "status" = 'SUCCEEDED'::run_status, "finished_at" = $2, "updated_at" = $2
+             WHERE "id" = $1::uuid`,
+      values: [ids.telemetrySessionId, ids.telemetryTurnAt] as unknown[],
+    },
+  };
+}
+
 
 /**
  * Two reverse edges written at once — A→B and B→A — which is what the owner graph mutex exists

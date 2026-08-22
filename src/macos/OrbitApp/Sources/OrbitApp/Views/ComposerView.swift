@@ -268,8 +268,15 @@ struct ComposerView: View {
                 } else {
                     // With something typed while a turn generates, Send steers — the message joins
                     // the turn that is running. "Stop this and do THIS instead" is the other intent
-                    // people have at that moment and cannot be expressed by typing, so it gets its
-                    // own control, beside Send rather than instead of it (web parity).
+                    // people have at that moment and cannot be expressed by typing, so on the desktop
+                    // it gets its own control, beside Send rather than instead of it (web parity).
+                    //
+                    // Not on iOS: a phone composer has room for exactly one primary action, and two
+                    // same-weight circles with no hover tooltip to tell them apart read as a duplicate
+                    // Send. There, Send is the only button while a turn runs — and its meaning is
+                    // steer/queue into THAT turn, not stop it; Stop stays the empty-draft morph
+                    // (`showsInterrupt`).
+                    #if !os(iOS)
                     if ComposerLogic.offersInterruptAndSend(
                         session: app.session(id: console.sessionID)?.effectiveRunStatus,
                         stream: console.state.status,
@@ -287,6 +294,7 @@ struct ComposerView: View {
                         .help("Stop the current turn and send this instead")
                         .accessibilityLabel("Stop and send")
                     }
+                    #endif
                     Button {
                         // Capture the authoritative status at tap time so a mid-turn send is labeled
                         // "Queued" (the Stop button reads the same source) — see ComposerLogic.willQueue.

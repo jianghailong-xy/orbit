@@ -13,7 +13,7 @@ const runnerApi = read('src/runner-api/runner-api.controller.ts');
 const workspacesService = read('src/workspaces/workspaces.service.ts');
 const dispatchBoundary = read('prisma/migrations/0122_project_dispatch_boundary/migration.sql');
 const acceptanceRun = read('prisma/migrations/0127_project_acceptance_run/migration.sql');
-const dependencyRevision = read('prisma/migrations/0131_task_dependency_revision/migration.sql');
+const dependencyRevision = read('prisma/migrations/0132_task_dependency_revision/migration.sql');
 
 /**
  * Every statement in this repo that writes a `task` or `task_dependency` row, and what each one
@@ -34,6 +34,18 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   holds: string[];
   note: string;
 }> = [
+  {
+    file: 'tasks.service.ts',
+    method: 'linkSupersededBy',
+    statements: ['UPDATE "task"'],
+    holds: ['await this.lockTaskForSupersessionWrite(tx, predecessorId);'],
+    note:
+      'The predecessor\'s retirement, reached from `create` and from `update`. Its own rank-50 lock ' +
+      'is NOWAIT rather than blocking, which is the one place in this inventory where a lock is ' +
+      'declined rather than waited for: the caller already holds the project (rank 40), so waiting ' +
+      'here for a dispatch that holds the task and wants the project would be the cycle. Ranks 10 ' +
+      'and 40 are taken by both callers before this runs.',
+  },
   {
     file: 'tasks.service.ts',
     method: 'create',
@@ -73,7 +85,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'if (restructures) await this.lockDependencyGraph(tx, ownerId);',
       'await lockTaskLists(tx, [dto.listId]);',
       'if (rewritesTaskRow) await this.preLockCreatorSessions(tx, [], [id]);',
-      'if (before.projectId && touchesAcceptanceFacts) {',
+      'const acceptanceProjects = touchesAcceptanceFacts || supersession || movesProject',
     ],
     note:
       'The only Task write that can need all four ranks, and each is conditional on the write ' +
@@ -104,7 +116,7 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
     statements: ['taskDependency.deleteMany', 'taskDependency.createMany'],
     holds: ['await this.lockDependencyGraph(tx, ownerId);'],
     note:
-      'Rank 10 and nothing else since 0131. A restructure writes only edges, and an edge write no ' +
+      'Rank 10 and nothing else since 0132. A restructure writes only edges, and an edge write no ' +
       'longer re-writes its dependent Task, so there is no second write of a task row to ' +
       're-check task_creator_session_id_fkey against and no creator Session to pre-lock. The ' +
       'dispatch boundary it used to buy is task_dependency_revision, advanced at rank 70.',
@@ -195,13 +207,20 @@ const TASK_WRITE =
 const METHOD = /^ {2}(?:private |protected |public |static )*(?:async )?([A-Za-z0-9_]+)\s*\(/;
 const NOT_A_METHOD = new Set(['if', 'for', 'while', 'switch', 'catch', 'return', 'constructor']);
 
-/** Every Task write statement in one file, paired with the class method it sits in. */
+/**
+ * Every Task write statement in one file, paired with the class method it sits in.
+ *
+ * Comment lines are skipped before the match. The comments in these files NAME the statements they
+ * are about — "`tx.task.update` below takes the same row" — and counting those as writes would ask
+ * the inventory to carry a lock plan for a sentence.
+ */
 function scanTaskWrites(source: string): Array<{ method: string; statement: string }> {
   const found: Array<{ method: string; statement: string }> = [];
   let method = '(top-level)';
   for (const line of source.split('\n')) {
     const declared = METHOD.exec(line);
     if (declared && !NOT_A_METHOD.has(declared[1])) method = declared[1];
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue;
     const write = TASK_WRITE.exec(line);
     if (write) {
       found.push({
@@ -321,7 +340,7 @@ test('the compatibility arguments still describe the code they are about', () =>
 
 test('the triggers the order is derived from are still declared the way it assumes', () => {
   // Rank 70 is a relation of its own because an edge write advances it and the dispatch decision
-  // reads the edge set under it — and because 0131 REMOVED the touch that used to serve as the
+  // reads the edge set under it — and because 0132 REMOVED the touch that used to serve as the
   // boundary, which is what took rank 30 off the pure edge paths.
   assert.equal(/CREATE TRIGGER "task_dependency_dispatch_touch"/.test(dependencyRevision), false);
   assert.match(dependencyRevision, /DROP TRIGGER "task_dependency_dispatch_touch" ON "task_dependency"/);

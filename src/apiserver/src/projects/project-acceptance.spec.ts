@@ -22,7 +22,7 @@ const PROJECT = '00000000-0000-7000-8000-000000002501';
 function facts(overrides: Partial<AcceptanceFacts> = {}): AcceptanceFacts {
   return {
     criteriaRevision: sha256('every suite green\nmerged to main'),
-    taskSet: [['t1', 'DONE', 'MANUAL'], ['t2', 'DONE', 'MANUAL']],
+    taskSet: [['t1', 'DONE', 'MANUAL', '', ''], ['t2', 'DONE', 'MANUAL', '', '']],
     verdicts: [['v1', 't1', 'PASS']],
     mergeEvidence: [['r1', 'main', 'a'.repeat(64), '3']],
     ...overrides,
@@ -51,9 +51,9 @@ test('the digest is stable under reordering and unstable under every projection'
     ['criteria edited', facts({ criteriaRevision: sha256('every suite green') })],
     // A task reopened: the id set is identical and the digest must still move (AE1's note on
     // carrying `status`, not only ids).
-    ['task reopened', facts({ taskSet: [['t1', 'OPEN', 'MANUAL'], ['t2', 'DONE', 'MANUAL']] })],
-    ['task added', facts({ taskSet: [...base.taskSet, ['t3', 'OPEN', 'MANUAL']] })],
-    ['completion policy changed', facts({ taskSet: [['t1', 'DONE', 'VERIFICATION_PASSED'], ['t2', 'DONE', 'MANUAL']] })],
+    ['task reopened', facts({ taskSet: [['t1', 'OPEN', 'MANUAL', '', ''], ['t2', 'DONE', 'MANUAL', '', '']] })],
+    ['task added', facts({ taskSet: [...base.taskSet, ['t3', 'OPEN', 'MANUAL', '', '']] })],
+    ['completion policy changed', facts({ taskSet: [['t1', 'DONE', 'VERIFICATION_PASSED', '', ''], ['t2', 'DONE', 'MANUAL', '', '']] })],
     ['verdict changed', facts({ verdicts: [['v1', 't1', 'FAIL']] })],
     ['verifier repointed', facts({ verdicts: [['v1', 't2', 'PASS']] })],
     ['branch content changed', facts({ mergeEvidence: [['r1', 'main', 'b'.repeat(64), '4']] })],
@@ -70,8 +70,10 @@ test('the digest names the project and its own version', () => {
   const other = '00000000-0000-7000-8000-0000000025ff';
   assert.notEqual(acceptanceDigest(PROJECT, facts()), acceptanceDigest(other, facts()));
   // The version is INSIDE the hash, so a future change to the input shape cannot let an old record
-  // match a new reading of the same world.
-  assert.equal(ACCEPTANCE_DIGEST_VERSION, 1);
+  // match a new reading of the same world. It moved to 2 when §13.6 SU6's two columns joined
+  // `taskSet` — a run frozen before that change re-digests differently and its DONE is refused
+  // ACCEPTANCE_EVIDENCE_STALE, which is the recoverable outcome and the honest one.
+  assert.equal(ACCEPTANCE_DIGEST_VERSION, 2);
 });
 
 test('the result digest is about the conclusions, not the world', () => {

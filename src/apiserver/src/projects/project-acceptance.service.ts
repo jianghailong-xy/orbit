@@ -9,6 +9,7 @@ import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ACCEPTANCE_BLOCKED,
+  ACCEPTANCE_DIGEST_VERSION,
   ACCEPTANCE_EVIDENCE_STALE,
   ACCEPTANCE_MISSING,
   AcceptanceFacts,
@@ -19,6 +20,7 @@ import {
   parseCriteria,
   sha256,
 } from './project-acceptance';
+import { verificationFailureIsHistorySql } from '../tasks/task-supersession';
 
 /** What a caller may say when opening a run. Both attributions are historical ids: they record who
  *  ran an acceptance, and nothing later may rewrite that by deleting a session. */
@@ -123,6 +125,10 @@ export class ProjectAcceptanceService {
       where: { projectId },
       select: {
         id: true, status: true, completionPolicy: true, verifiesTaskId: true, verdict: true,
+        // §13.6 SU6. Part of AE1's facts because they change which tasks are unfinished, and both
+        // of them because they move independently; see `ACCEPTANCE_DIGEST_VERSION`.
+        terminalReason: true,
+        supersededByTaskId: true,
       },
     });
     // DISTINCT ON: only the newest generation of each (requirement, branch) pair is what the
@@ -141,7 +147,9 @@ export class ProjectAcceptanceService {
 
     return {
       criteriaRevision: sha256(project.acceptanceCriteria ?? ''),
-      taskSet: tasks.map((t) => [t.id, t.status, t.completionPolicy] as [string, string, string]),
+      taskSet: tasks.map((t) => [
+        t.id, t.status, t.completionPolicy, t.terminalReason ?? '', t.supersededByTaskId ?? '',
+      ] as [string, string, string, string, string]),
       verdicts: tasks
         .filter((t) => t.verifiesTaskId !== null)
         .map((t) => [t.id, t.verifiesTaskId!, t.verdict ?? 'PENDING'] as [string, string, string]),
@@ -285,6 +293,10 @@ export class ProjectAcceptanceService {
           criteriaSnapshot: locked.acceptanceCriteria ?? '',
           criteriaRevision: facts.criteriaRevision,
           inputDigest,
+          // Which reading of the world this evidence is about. Written explicitly, not defaulted:
+          // the column's DEFAULT of 1 exists so an OLDER binary's run is fail-closed at 0130's DONE
+          // gate, and only a writer that knows about §13.6 SU6's facts may claim the current one.
+          digestVersion: ACCEPTANCE_DIGEST_VERSION,
           decidedBy: input.decidedBy,
           coordinatorAgentId: input.coordinatorAgentId ?? null,
           coordinatorSessionId: input.coordinatorSessionId ?? null,
@@ -537,9 +549,20 @@ export class ProjectAcceptanceService {
     const openBlockers = await tx.projectBlocker.count({
       where: { projectId, resolvedAt: null },
     });
-    const unresolvedFailures = await tx.taskVerificationFailure.count({
-      where: { projectId, resolvedAt: null },
-    });
+    // §13.6 SU6: a failure whose verifier or whose subject was REPLACED is a record, not a request
+    // — nothing will ever run either of them again, so the later PASS that is the only thing which
+    // resolves this row can never arrive. Counting it would make a project that re-ran a failed
+    // check from scratch permanently unacceptable, which is precisely the history this project has.
+    // Raw rather than Prisma because the predicate is shared verbatim with §7.4's own reader.
+    const [{ count: unresolvedFailures }] = await tx.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+      SELECT count(*)::int AS "count"
+        FROM "task_verification_failure" f
+        JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+        JOIN "task" subject  ON subject."id"  = f."subject_task_id"
+       WHERE f."project_id" = ${projectId}::uuid
+         AND f."resolved_at" IS NULL
+         AND NOT ${Prisma.raw(verificationFailureIsHistorySql())}
+    `);
     if (openBlockers > 0 || unresolvedFailures > 0) {
       throw new AcceptanceRefusal(
         ACCEPTANCE_BLOCKED,

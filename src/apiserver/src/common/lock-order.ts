@@ -24,7 +24,7 @@ import type { Prisma } from '@prisma/client';
  *  locks up front, sorted, at the strongest mode the transaction will need, is what stops a Task
  *  transaction from interleaving Session locks with Task locks — the shape of the 2026-08-21
  *  05:53:11 two-party cycle. An EDGE write used to need this too, because
- *  `task_dependency_dispatch_touch` made it re-write its dependent Task; since 0131 it advances
+ *  `task_dependency_dispatch_touch` made it re-write its dependent Task; since 0132 it advances
  *  `task_dependency_revision` (rank 70) instead and takes no Session lock at all, so the pure
  *  edge paths take rank 10 and nothing else.
  *
@@ -96,7 +96,7 @@ export const LOCK_ORDER = [
   {
     rank: 70,
     relation: 'task_dependency_revision',
-    modes: 'FOR NO KEY UPDATE (0131 advances it after an edge write) · FOR SHARE (the dispatch decision reads the edge set under it)',
+    modes: 'FOR NO KEY UPDATE (0132 advances it after an edge write) · FOR SHARE (the dispatch decision reads the edge set under it)',
     why:
       'The dispatch version boundary for one Task\'s prerequisite set, and the last lock anybody ' +
       'takes. BELOW the edges (60) because a writer changes edges and then advances the revision, ' +

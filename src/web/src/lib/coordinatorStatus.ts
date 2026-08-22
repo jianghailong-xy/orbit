@@ -245,8 +245,31 @@ export interface CoordinatorStatus {
       };
       merges: MergeEvidence[];
       mergesEmptyReason: AbsentReason | null;
+      /**
+       * §13.8: @-mentions in this project that nobody has received.
+       *
+       * Only BLOCKED and DEAD — a mention in flight is not a project condition, and listing it here
+       * would bury the ones that are. Absent on a status read from a server that predates the
+       * ledger, which is why it is optional rather than an empty array.
+       */
+      undeliveredMentions?: UndeliveredMention[];
+      undeliveredMentionsEmptyReason?: AbsentReason | null;
     };
   };
+}
+
+/** One @-mention that has not reached the agent it named, with what would clear it. */
+export interface UndeliveredMention {
+  id: string;
+  taskId: string;
+  workspaceId: string;
+  status: 'BLOCKED' | 'DEAD';
+  attempts: number;
+  errorCode: string | null;
+  requiredAction: string | null;
+  lastError: string | null;
+  nextAttemptAt: string;
+  createdAt: string;
 }
 
 /** One stated criterion and what the attempt concluded about it (§13.4 clause 3). */
@@ -303,6 +326,13 @@ export const DONE_REFUSAL_TEXT: Readonly<Record<string, string>> = {
  * limit" is not "a limit of zero", and "never attempted" is neither a pass nor a failure.
  */
 export const ABSENT_REASON_TEXT: Readonly<Record<string, string>> = {
+  // §13.8. Not "this build cannot explain it" — the ledger was read and it is empty, which is the
+  // healthy case and deserves to say so.
+  NO_UNDELIVERED_MENTION: 'Every @-mention in this project reached the agent it named.',
+  // Distinct from the line above on purpose: "nothing is stuck" and "nobody was tracking" are
+  // different answers, and only one of them is reassuring.
+  MENTION_AUDIT_UNAVAILABLE:
+    'This server does not track @-mention delivery, so whether every mention arrived was never recorded.',
   NO_COORDINATOR_AGENT: 'No agent holds this project’s coordinator seat, so nothing is deciding for it.',
   COORDINATOR_NEVER_OPENED: 'The coordination conversation has never been opened.',
   COORDINATOR_SESSION_TRASHED:

@@ -74,6 +74,23 @@ export class CreateTaskDto {
   // verification, and must be in the same project — aggregation reads one project's tasks, so a
   // check filed across that line would be one nothing can ever count.
   @IsOptional() @IsPublicId() verifiesTaskId?: string;
+  // §13.6 SU7: the attempt this new task REPLACES. The successor and the link are written in one
+  // transaction — the point of the field is that there is no window in which the replacement
+  // exists and the thing it replaced does not know.
+  //
+  // Without it, recording a supersession takes two calls, and this deployment has already paid for
+  // the gap between them: a fresh review was created saying "replacement for the earlier attempt"
+  // in its description, the second call was never made, and the abandoned attempt was re-dispatched
+  // by the control loop weeks later because nothing structured said it had been replaced.
+  //
+  // The predecessor must be CANCELLED or FAILED, owned by the caller, in the same project as this
+  // new task, and not already replaced (SU2–SU5, plus a compare-and-set so two concurrent
+  // replacements produce one winner and one 409 rather than a pointer that depends on timing).
+  //
+  // There is deliberately no `supersedesRef` for a task created by this same batch: SU4 refuses a
+  // predecessor that has not stopped, batch-created tasks are OPEN, and a parameter that is
+  // refused every time it is used is worse than one that does not exist.
+  @IsOptional() @IsPublicId() supersedesTaskId?: string;
   @IsOptional() @IsDateString() dueDate?: string;
   // The earliest time this task may start automatically (ISO 8601, stored and returned UTC).
   // Omitted means unscheduled, which is what every task has always been. Distinct from dueDate on

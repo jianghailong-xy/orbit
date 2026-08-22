@@ -14,7 +14,7 @@ import {
   INSERT_EDGE,
   LOCK_DEPENDENCY_REVISION,
   LOCK_OWNER_GRAPH,
-  ROLLBACK_0131,
+  ROLLBACK_0132,
   claimDispatchAction,
   dispatchSteps,
   insertTask,
@@ -31,8 +31,8 @@ const MIGRATIONS = path.resolve(__dirname, '../../prisma/migrations');
 /** `__dirname` is `build/deadlock`, so sources are two levels up — the same shape lock-order.spec uses. */
 const read = (rel: string): string =>
   readFileSync(path.resolve(__dirname, '../..', rel), 'utf8');
-const MIGRATION_0131 = readFileSync(
-  path.join(MIGRATIONS, '0131_task_dependency_revision/migration.sql'), 'utf8',
+const MIGRATION_0132 = readFileSync(
+  path.join(MIGRATIONS, '0132_task_dependency_revision/migration.sql'), 'utf8',
 );
 
 /** A hard budget for every wait in this file. A barrier that times out is red, never a pass. */
@@ -80,11 +80,11 @@ async function incompletePrerequisites(client: Client, ids: RevisionIds): Promis
 }
 
 /**
- * Migration 0131: the dependency dispatch boundary, moved off `task.updated_at`.
+ * Migration 0132: the dependency dispatch boundary, moved off `task.updated_at`.
  *
  * 0122 gave a dispatch decision something to lock by touching the dependent Task. That worked and
  * cost three things it did not need to: a `task` row write, the `task_creator_session_id_fkey`
- * re-check that write arms, and a re-fire of every FOR EACH ROW trigger on `task`. 0131 replaces
+ * re-check that write arms, and a re-fire of every FOR EACH ROW trigger on `task`. 0132 replaces
  * it with `task_dependency_revision` — one row per Task, advanced by the edge write itself.
  *
  * What is proven here, in the order the claims depend on each other:
@@ -95,7 +95,7 @@ async function incompletePrerequisites(client: Client, ids: RevisionIds): Promis
  *  4. BOTH commit orders of dispatch-vs-dependency-change end correctly, with the wait observed;
  *  5. the commit-boundary check refuses a dispatch whose prerequisites moved — which is what makes
  *     an OLD apiserver replica, that does not know to take the revision, safe during a rollout;
- *  6. the rollback runs, and re-applying 0131 to a database that already has tasks and edges
+ *  6. the rollback runs, and re-applying 0132 to a database that already has tasks and edges
  *     backfills every one of them.
  *
  * Destructive: it seeds, contends and (in the last case) rebuilds schema, so it runs only against
@@ -406,7 +406,7 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     const mutation = new Client({ connectionString: url });
     await Promise.all([dispatch.connect(), mutation.connect()]);
     try {
-      // A pre-0131 apiserver, in full: neither the revision lock nor the rank-10 owner pre-lock,
+      // A pre-0132 apiserver, in full: neither the revision lock nor the rank-10 owner pre-lock,
       // because both arrived with this migration. That is what makes the race below possible at
       // all — a new binary would have serialized with the edge writer on the owner row.
       await dispatch.query('BEGIN');
@@ -482,7 +482,7 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
   });
 
   // Last, because it rebuilds schema: the rollback, and the data migration on the way back in.
-  await t.test('the rollback runs, and re-applying 0131 backfills what is already there', async () => {
+  await t.test('the rollback runs, and re-applying 0132 backfills what is already there', async () => {
     const ids = newRevisionIds('rev-rollback');
     await seedRevisionFixture(admin, ids);
     await admin.query(INSERT_EDGE, [ids.dependentTaskId, ids.doneTaskId]);
@@ -490,8 +490,8 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     assert.equal(bumped, 1);
 
     try {
-      await admin.query(ROLLBACK_0131);
-      // Pre-0131 again, all the way down to the touch being the boundary once more.
+      await admin.query(ROLLBACK_0132);
+      // Pre-0132 again, all the way down to the touch being the boundary once more.
       const { rows: back } = await admin.query<{ table: string | null; touch: string }>(
         `SELECT to_regclass('public.task_dependency_revision')::text AS table,
                 count(t.tgname)::text AS touch
@@ -500,14 +500,14 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
       );
       assert.equal(back[0].table, null, 'the rollback left the table behind');
       assert.equal(back[0].touch, '1', 'the rollback did not restore the touch');
-      // And it works: an edge write moves the Task's clock again, which is the behaviour 0131
+      // And it works: an edge write moves the Task's clock again, which is the behaviour 0132
       // removed and therefore the behaviour a rollback has to bring back.
       const before = await xminOf(admin, ids.dependentTaskId);
       await admin.query(INSERT_EDGE, [ids.dependentTaskId, ids.openTaskId]);
       assert.notEqual(await xminOf(admin, ids.dependentTaskId), before,
         'the restored touch did not write the dependent Task');
     } finally {
-      await admin.query(MIGRATION_0131);
+      await admin.query(MIGRATION_0132);
     }
 
     // The data migration, run against a database that already has Tasks and edges — which is the
@@ -518,7 +518,7 @@ test('the dependency dispatch boundary is a revision, not a Task touch',
     );
     assert.equal(orphans[0].n, '0', 'the backfill missed a Task that existed before the table');
     assert.equal(await revisionOf(admin, ids.dependentTaskId), 0,
-      'a re-applied 0131 should start every Task from the same value');
+      'a re-applied 0132 should start every Task from the same value');
     // And the boundary is live again on rows that predate it.
     await admin.query(DELETE_EDGE, [ids.dependentTaskId, ids.doneTaskId]);
     assert.equal(await revisionOf(admin, ids.dependentTaskId), 1);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SessionsController } from './sessions.controller';
+import { SessionNotSendable, SessionsService } from './sessions.service';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import type { SessionTurnDto, SessionInterruptDto } from './dto';
 
@@ -208,4 +209,23 @@ test('an interrupt answers with the follow-up it queued, or with nothing but ok'
   // Accepting either is not a claim the engine stopped — the runner reports that as an
   // `interrupt` transcript event — so neither answer pretends to say so.
   assert.deepEqual(stopped, { ok: true });
+});
+
+/**
+ * A class declared between `@Injectable()` and the service it was written for silently steals the
+ * decorator: the service keeps compiling, keeps passing tests that construct it by hand, and fails
+ * at boot when Nest is asked to resolve constructor arguments it can no longer see. Cheap to pin,
+ * and the failure it prevents costs a deploy.
+ */
+test('SessionsService still carries the DI metadata Nest resolves it from', () => {
+  const watermark = Reflect.getMetadata('__injectable__', SessionsService);
+  assert.equal(watermark, true, '@Injectable() must sit immediately above the service');
+  assert.equal(
+    Reflect.getMetadata('design:paramtypes', SessionsService)?.length, 3,
+    'and its three constructor dependencies must still be visible to the injector',
+  );
+  assert.equal(
+    Reflect.getMetadata('__injectable__', SessionNotSendable), undefined,
+    'and no error class beside it may have taken the decorator',
+  );
 });
