@@ -107,6 +107,7 @@ import {
   computeDependencyState,
   dependenciesSatisfiedSql,
   dependencyEpochGate,
+  dependencyEpochStalled,
   statusPrerequisites,
   verificationGateMessage,
   type DependencyPrerequisiteFact,
@@ -1380,6 +1381,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return new Map([...byTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
       status: entry.status,
       verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
+      verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
     }))]));
   }
 
@@ -4083,6 +4085,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       verificationGate: dependencyEpochGate(
         d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
       ),
+      verificationGateStalled: dependencyEpochStalled(
+        d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
+      ),
     })));
     const supersession = await this.supersession(ownerId, task);
     return {
@@ -4258,6 +4263,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.verdict != null && !verifiesTaskId) {
       throw new BadRequestException(
         'Only a verification task can carry a verdict — this task does not verify anything',
+      );
+    }
+    // `[K5]` criterion 6, and §13.2 V1 said as a refusal for the first time.
+    //
+    // "A check's carrier is its own TERMINAL state plus a structured result" has always been the
+    // rule and has never been enforced on the way IN: `status: DONE` with no verdict is accepted,
+    // and everything downstream then behaves correctly and uselessly — the subject can never reach
+    // the PASS its policy waits for, every dependent stays blocked, `planVerificationVerdicts`
+    // skips it as `NO_VERDICT`, and the whole of the loop's response is one WARN a minute. `[H0V2]`
+    // found that shape by exhaustion and could not find anybody it was reported to.
+    //
+    // Judged on the row AFTER the write, so both legal spellings survive: conclude and finish in
+    // one call, or write the verdict first and the status after. What stops being expressible is
+    // finishing a check without saying what it found. Migration 0141 carries the same rule for
+    // writers that never reach this method.
+    const concludedStatus = dto.status === undefined ? before.status : dto.status;
+    const concludedVerdict = dto.verdict === undefined ? before.verdict : (dto.verdict ?? null);
+    if (
+      verifiesTaskId && concludedStatus === TaskStatus.DONE && concludedVerdict == null
+      && before.status !== TaskStatus.DONE
+    ) {
+      throw new BadRequestException(
+        'A verification task cannot be DONE without a verdict — it would never conclude, and '
+          + 'everything waiting on its subject would stay blocked with nothing to act on. Record '
+          + 'PASS, FAIL or INCONCLUSIVE in this same call, or cancel the check instead',
       );
     }
     // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,

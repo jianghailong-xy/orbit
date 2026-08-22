@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { SessionsModule } from '../sessions/sessions.module';
 import { ProjectsController } from './projects.controller';
+import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectDecisionService } from './project-decision.service';
@@ -14,6 +16,7 @@ import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
 import { ProjectVerificationFilingService } from './project-verification-filing.service';
+import { VerificationFindingService } from './verification-finding.service';
 import { ProjectsService } from './projects.service';
 
 // PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
@@ -25,6 +28,8 @@ import { ProjectsService } from './projects.service';
   controllers: [ProjectsController],
   providers: [
     ProjectsService,
+    ConvergenceLedgerService,
+    SessionAttemptService,
     ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,
@@ -36,11 +41,16 @@ import { ProjectsService } from './projects.service';
     ProjectDispatchPassService,
     ProjectVerificationVerdictService,
     ProjectVerificationFilingService,
+    VerificationFindingService,
     ProjectAvailabilityReaperService,
     ProjectFailureRecoveryService,
   ],
   exports: [
     ProjectsService,
+    ConvergenceLedgerService,
+    // Exported so the RUNNER door guards attempts through the same instance the user door reads
+    // them from. `[K3]` §3's refusals only mean anything at the door an agent actually knocks on.
+    SessionAttemptService,
     ProjectAcceptanceService,
     ProjectEventsService,
     ProjectDecisionService,
@@ -52,6 +62,7 @@ import { ProjectsService } from './projects.service';
     ProjectDispatchPassService,
     ProjectVerificationVerdictService,
     ProjectVerificationFilingService,
+    VerificationFindingService,
     ProjectFailureRecoveryService,
   ],
 })

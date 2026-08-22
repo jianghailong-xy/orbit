@@ -1331,7 +1331,9 @@ function opensTurnNow(b: LiveBlocker, triggers: string[]): boolean {
 test('PC-CX-12 escalation changes the owner and nothing else', () => {
   const table = kindTable();
   const triggers = turnTriggerKinds();
-  assert.equal(table.length, 22, '§11.2 freezes twenty-two kinds');
+  // Twenty-two through `[H0]`, plus `[K5]`'s three: the shape `[H0V2]` found unattended, and §3's
+  // two classes whose one legal result is a §11 row rather than a Task.
+  assert.equal(table.length, 25, '§11.2 freezes twenty-five kinds');
 
   for (const row of table) {
     // BL4, stated on the constant column: opensTurn is a function of kind, and it agrees with the

@@ -56,11 +56,18 @@ const BLOCKER = migration('0125_project_blocker');
  * table until a later migration added kinds. Re-applying only the first one would freeze this
  * fixture on a closed set the product has moved past, and the failure reads as "the new kind is
  * invalid" rather than "the fixture is old". Only the two `ALTER TABLE` statements are taken — the
- * same file's `ALTER TYPE` touches an enum this subset does not build.
+ * same file's other statements touch tables this subset does not build.
+ *
+ * Points at whichever migration LAST rewrote the constraint — 0135 through `[H0]`, 0141 from
+ * `[K5]` — because the fixture's job is to be the product's current closed set, not a snapshot
+ * of the set on the day this file was written.
  */
-const KIND_CHECK = migration('0135_project_task_completion_gap')
+const KIND_CHECK = migration('0141_task_verification_finding')
   .split(';')
-  .filter((statement) => /project_blocker_kind_chk/.test(statement))
+  // Comments stripped BEFORE the match, not after. A migration's prose legitimately names the
+  // constraint it is about, and matching on the raw chunk drags the file header in as if it were
+  // SQL — which fails as a syntax error somewhere in the middle of an English sentence.
+  .filter((statement) => /project_blocker_kind_chk/.test(statement.replace(/^\s*--.*$/gm, '')))
   .map((statement) => `${statement};`)
   .join('\n');
 

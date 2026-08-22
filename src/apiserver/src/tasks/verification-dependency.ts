@@ -88,6 +88,7 @@
 import { RunStatus } from '@orbit/shared';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import { taskNotRetiredSql } from './task-supersession';
+import { verificationLiveness } from './verification-liveness';
 
 /**
  * The one `end_reason` that means "the worker finished the task", as opposed to a person filing or
@@ -187,6 +188,25 @@ export function verificationRunSettled(check: VerificationEpochCheckFact): boole
 }
 
 /**
+ * The check the epoch is decided ON: the newest one that still counts toward it, or null.
+ *
+ * Byte order over the id. Orbit's task ids decode to UUIDv7, so the last one is the most recently
+ * filed — the same total order §7.8's pass and §10.4 W5-2a already rank by, and the same one
+ * `ORDER BY id DESC LIMIT 1` gives the SQL spelling over `uuid`.
+ *
+ * Exported because `[K5]`'s liveness rule has to answer about the SAME row the gate answered about;
+ * picking the newest check a second time, by a second spelling, is how two faces come to describe
+ * two different worlds.
+ */
+export function newestLiveCheck(
+  checks: readonly VerificationEpochCheckFact[],
+): VerificationEpochCheckFact | null {
+  const live = checks.filter(verificationCountsTowardEpoch)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return live.at(-1) ?? null;
+}
+
+/**
  * Is `subject`'s PASS epoch open — and if not, which clause said no?
  *
  * `checks` is every task whose `verifiesTaskId` names this subject, live or not; the filtering is
@@ -200,12 +220,7 @@ export function verificationEpochGate(
   subject: VerificationEpochSubjectFact,
   checks: readonly VerificationEpochCheckFact[],
 ): VerificationEpochGate | null {
-  // Byte order over the id. Orbit's task ids decode to UUIDv7, so the last one is the most
-  // recently filed — the same total order §7.8's pass and §10.4 W5-2a already rank by, and the
-  // same one `ORDER BY id DESC LIMIT 1` gives the SQL spelling over `uuid`.
-  const live = checks.filter(verificationCountsTowardEpoch)
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const newest = live.at(-1);
+  const newest = newestLiveCheck(checks);
   if (!newest) return 'NO_LIVE_VERIFICATION';
   if (newest.status !== 'DONE') return 'VERIFICATION_IN_FLIGHT';
   if (!newest.verdict) return 'VERDICT_ABSENT';
@@ -347,6 +362,18 @@ export interface VerificationEpochEntry {
   subjectTaskId: string;
   /** `null` when the epoch is open. */
   gate: VerificationEpochGate | null;
+  /**
+   * `[K5]`: true when nothing in motion will open this epoch — see `verificationLiveness`.
+   *
+   * Carried on the entry rather than re-derived by each reader because the answer depends on the
+   * check's RUNS, which the readers do not have. False for an open epoch and for every ordinary
+   * wait, so a caller that ignores it behaves exactly as it did before this field existed.
+   *
+   * OPTIONAL, and absent reads as false: an entry built by an older reader — or by a test that only
+   * cares about the gate — asserts nothing about liveness, and inventing `true` for it would
+   * escalate an ordinary wait into "somebody has to act" on no evidence.
+   */
+  stalled?: boolean;
 }
 
 /**
@@ -402,8 +429,12 @@ export function verificationEpochGates(
     const gate = subject
       ? verificationEpochGate({ id: subject.id, status: subject.status }, checks)
       : 'SUBJECT_NOT_DONE';
-    if (subject) epochs.set(subjectTaskId, { subjectTaskId, gate });
-    for (const check of checks) epochs.set(check.id, { subjectTaskId, gate });
+    // `[K5]`: asked about the row the gate was decided on, and asked once for the whole epoch —
+    // the subject entry and every check entry carry the same gate, so they carry the same answer
+    // about whether anything will move it.
+    const stalled = verificationLiveness(gate, newestLiveCheck(checks)).state === 'STALLED';
+    if (subject) epochs.set(subjectTaskId, { subjectTaskId, gate, stalled });
+    for (const check of checks) epochs.set(check.id, { subjectTaskId, gate, stalled });
   }
   return epochs;
 }

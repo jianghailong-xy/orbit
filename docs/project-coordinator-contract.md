@@ -1001,14 +1001,12 @@ CREATE UNIQUE INDEX session_task_execution_claim_idx
 
 | 入口 | 插入方式 | 冲突时 | 对外结果 |
 |---|---|---|---|
-| 控制环 `DISPATCH_TASK` | `INSERT … ON CONFLICT DO NOTHING RETURNING id`（§8.5；自 v1.20 起不带推断子句，见 D5-b1） | 返回 0 行 | `project_action.status = SUPERSEDED`、`refusal_code = TASK_ALREADY_RUNNING`，或 D5-b2 的 `STALE_SNAPSHOT`；**本次事务照常提交**（事件被消费、blocker/decision/nextWake 落库）；`nextWakeAt = evaluation.epoch + 60s` |
+| 控制环 `DISPATCH_TASK` | `INSERT … ON CONFLICT DO NOTHING RETURNING id`（§8.5） | 返回 0 行 | `project_action.status = SUPERSEDED`、`refusal_code = TASK_ALREADY_RUNNING`；**本次事务照常提交**（事件被消费、blocker/decision/nextWake 落库）；`nextWakeAt = evaluation.epoch + 60s` |
 | 人工"开始执行" | 同上 | 返回 0 行 | 返回**既有的那条 Session**（与既有"重复点击 no-op"一致），**不是** 409、更不是 500 |
 | legacy sweep | 同上 | 返回 0 行 | 跳过该 Task，本轮不记失败（sweep 的下一轮会重新求值） |
 
 **D5-a**：三个入口**都**必须用 `ON CONFLICT DO NOTHING RETURNING`，不允许任何一个靠捕获唯一约束异常来实现 —— 异常会中止整个事务，把 `PC-CX-01` 修成 `PC-CX-04`（见 §8.5）。
 **D5-b**：`ON CONFLICT` 对 partial unique index 的推断必须**逐字重复索引谓词**（`ON CONFLICT (task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND status IN ('PENDING','RUNNING') DO NOTHING`），否则 Postgres 推断不到索引而报错。Prisma 表达不了这个形状，因此这三处是 `$executeRaw`。**既有教训**：裸 SQL 躲得过编译期检查，构建通过 ≠ 改对了，所以这三处必须有跑在真实数据库上的测试，不能只有类型检查。
-**D5-b1（推断一条索引，还是一条都不推断，v1.20 新增，单元 H2）**：D5-b 说的是**推断**这条 partial unique index 时的写法，它一个字没变。变的是控制环那一处**不再推断任何索引**：自本单元起派发的 Session id 由请求身份派生（§8.2 的动作键，见 `dispatchDesiredSessionId`），于是这条 INSERT 能撞上的唯一索引有**三条** —— 主键（这个 id 上已经有一行）、`session_task_execution_claim_idx`、`session_project_action_id_key`。**Postgres 只允许一条推断子句**，所以点名 `task_id` 等于把另外两条留在"抛裸唯一约束错误"上，而那正是 D5-a 与 §8.5 C1 禁止的形状：异常中止整个事务，C2 的"其余 outcome 照常提交"在物理上不成立。因此控制环写**不带推断的 `ON CONFLICT DO NOTHING`**，再由一次**读**判定撞的是哪一条：live claim 被别的 Session 占着 ⇒ `TASK_ALREADY_RUNNING`（`detail.conflictingSessionId` 指名那一行，不是"最新的那条"）；否则 ⇒ D5-b2。那次读**仍然逐字重复索引谓词**，D5-b 对它逐字有效。本条只改控制环这一个入口，人工入口与 legacy sweep 不在本单元范围内。
-**D5-b2（撞上无法归因的唯一索引时的对外码，v1.20 新增，单元 H2）**：这一支的 `reasonCode` 是 `DISPATCH_SESSION_RACED`（可重试，`retryAt = now + 5s`，`detail.desiredSessionId` 记下撞上的那个 id），但**持久列 `refusal_code` 写 `STALE_SNAPSHOT`** —— 与 §13.1 AG6-e 同一条理由，不是另立一条：BL2 对旧副本不认识的码 fail-closed 成 `UNKNOWN_FAILURE`（PROJECT 主体、§11 BL1 读作"全停"、§11.4 永远解不开），所以滚动升级期间新副本**不得**往这一列写只有自己认识的词。语义也确实成立：本请求派生的 id 上已经有一行，而这次计划所依据的世界里没有它 —— "快照已过期、请重新计划"正是下一步。
 **D5-c**：迁移建索引前必须先**收敛存量重复**：对每个 Task 保留 `created_at` 最新的一条占位中 Session，其余置 `CANCELLED` 且 `end_reason = 'duplicate_live_session_reconciled'`，并把受影响的 id 数量打进迁移输出（§12.1 步骤 3b）。**不先收敛就建索引 = 迁移在生产上直接失败。**
 
 #### D6 · Dispatch Authority Guard（触发器）
@@ -3301,6 +3299,9 @@ SELECT p.id
 | `AGGREGATE_PARENT_UNSATISFIABLE` | §13.1 AG7：聚合父节点当前子集合永远满足不了 AG1（`outstanding = 0` 且 `done = 0`） | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
 | `SUCCESSOR_OUTSIDE_SUBTREE` | §13.1 AG7：唯一还未收敛的子任务全是“被取代但 successor 不在本子树”的退休行 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
 | `VERIFICATION_REQUIRED` | §13.1 AG7：`VERIFICATION_PASSED` 且子任务已收敛，但没有任何存活验证指向它，且 §13.2 也定不出可自动补的验证 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
+| `VERIFICATION_CANNOT_CONCLUDE` | `[K5]`/`[H0V2]`：`VERIFICATION_PASSED` 且子任务已收敛，指向它的检查**已 DONE 却没有 verdict** —— 该行永不再动，subject 永远拿不到 PASS。与 `VERIFICATION_REQUIRED` 分开：那一条可由 §13.2 自动补一个检查，这一条必须先查清上一次为什么没结论，自动补只会每趟多一个检查 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
+| `ENVIRONMENT_BROKEN` | `[K5]` §3：finding 归类 `ENVIRONMENT` —— 机器/配置/工具链坏了，改代码不解决。CL1 不计入 attempt 预算，正是因为再试一次不会改变答案 | `SYSTEM` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
+| `HUMAN_DECISION_REQUIRED` | `[K5]` §3：finding 归类 `HUMAN_REQUIRED` —— 需要人的判断或权限 | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 | `UNKNOWN_FAILURE` | **兜底**：任何未归类的失败，含"该 Task 存在没有错误文本的失败运行"（§9.5 Q3-e，v1.18 起由快照直接检出，不再需要先发生一次派发拒绝） | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 
 **BL4（v1.2 修订，可机械核对）**：`opensTurn` 是 **`kind` 的函数**，与那一行 blocker **当前**的 `owner` 无关。本表的 `默认 owner` 列同样是 kind 的常量，两列逐行满足

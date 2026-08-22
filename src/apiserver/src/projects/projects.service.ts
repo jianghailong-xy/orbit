@@ -473,6 +473,21 @@ export class ProjectsService {
   }
 
   /**
+   * The tenancy check a task-scoped project route needs: this owner's task, filed under this
+   * owner's project. One query rather than two, so a task that exists but belongs to another
+   * project cannot be read through this project's URL — and `not found` is the same answer for
+   * "no such task" and "not yours", which is what stops the route from confirming ids.
+   */
+  async assertTaskInProject(ownerId: string, projectId: string, taskId: string): Promise<void> {
+    await this.assertOwned(ownerId, projectId);
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId, projectId },
+      select: { id: true },
+    });
+    if (!task) throw new NotFoundException('task not found');
+  }
+
+  /**
    * Blank prose is stored as null so "not set" has exactly one representation — the same rule
    * `TaskListsService.update` applies to a list's instructions, and for the same reason: an empty
    * string and a null must not be able to mean different things to whatever reads them later.

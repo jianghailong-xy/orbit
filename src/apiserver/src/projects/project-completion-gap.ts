@@ -118,6 +118,11 @@ const BLOCKER_KIND_FOR_GAP: Readonly<Record<TaskCompletionGapReason, ProjectBloc
   NO_CHILD_CAN_COMPLETE: 'AGGREGATE_PARENT_UNSATISFIABLE',
   SUCCESSOR_OUTSIDE_SUBTREE: 'SUCCESSOR_OUTSIDE_SUBTREE',
   NO_VERIFICATION_FILED: 'VERIFICATION_REQUIRED',
+  // `[K5]`: its own kind rather than `VERIFICATION_REQUIRED`, because the two ask for different
+  // things. "File a check" is a request the loop can satisfy; "your check finished without
+  // concluding" is a question about a run that already happened, and answering it by filing another
+  // check is how one silent shape becomes a check per pass.
+  VERIFICATION_CANNOT_CONCLUDE: 'VERIFICATION_CANNOT_CONCLUDE',
 };
 
 /**

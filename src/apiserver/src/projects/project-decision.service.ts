@@ -67,6 +67,26 @@ export type ProjectDecisionRunState =
   | 'ACCEPTANCE'
   | 'SETTLED';
 
+/** `[K5]`: one durable finding whose result is a §11 row, as the condition detector reads it. */
+export interface ProjectFindingFact {
+  /** Base62, like every id in this snapshot. */
+  findingId: string;
+  taskId: string;
+  /** FD1's key, project term stripped — the condition dedupes on it, so it is spelled publicly. */
+  dedupKey: string;
+  scopeRevision: number;
+  classification: string;
+  severity: string;
+  violatedInvariant: string;
+  minimalRepro: string;
+  /** The kind this finding's outcome says to raise. Recorded when the finding committed, so the
+   *  condition cannot pick a different one later from the same facts. */
+  blockerKind: string;
+  requiredAction: string;
+  owner: string;
+  createdAt: string;
+}
+
 export interface ProjectDecisionInput {
   v: typeof PROJECT_DECISION_INPUT_VERSION;
   readAt: string;
@@ -297,8 +317,22 @@ export interface ProjectDecisionInput {
      * only what a NEW capture contains, so it needs no gate of its own — an old snapshot is
      * replayed from its own stored bytes.
      */
-    protocol?: { completionGaps: true; verificationEpoch?: true };
+    protocol?: { completionGaps: true; verificationEpoch?: true; findings?: true };
     blockers?: ProjectBlockerFact[];
+    /**
+     * `[K5]` §6: the findings whose one legal result is a §11 row, and whose subject has not
+     * settled since.
+     *
+     * Only the two classes CL1 exempts from the attempt budget appear here — `ENVIRONMENT` and
+     * `HUMAN_REQUIRED` — because those are the two whose result IS a blocker. The four that produce
+     * a Task produced it in the finding's own transaction and have nothing left for a condition to
+     * recompute.
+     *
+     * Absent on decisions captured before this projection existed, which readers must treat as
+     * "this snapshot predates finding-driven blockers" and NOT as "there were none" — the reading
+     * `blockers` and `deadLetters` already ask for, and for the same reason.
+     */
+    findings?: ProjectFindingFact[];
     /**
      * §5.4 F22's UNACKNOWLEDGED dead letters — events this project lost for good, minus the ones
      * somebody has already dealt with.
@@ -624,6 +658,22 @@ interface BlockerRow {
   escalatedAt: Date | null;
 }
 
+/** `[K5]`: one `task_verification_finding` row as the snapshot reads it. */
+interface FindingRow {
+  id: string;
+  taskId: string;
+  dedupKey: string;
+  scopeRevision: number;
+  classification: string;
+  severity: string;
+  violatedInvariant: string;
+  minimalRepro: string;
+  blockerKind: string;
+  requiredAction: string;
+  owner: string;
+  createdAt: Date;
+}
+
 interface DeadLetterRow {
   id: string;
   kind: string;
@@ -885,6 +935,35 @@ export class ProjectDecisionService {
          WHERE b."project_id" = ${projectId}::uuid AND p."owner_id" = ${project.ownerId}::uuid
            AND b."resolved_at" IS NULL
          ORDER BY b."dedupe_key", b."id"
+      `);
+    // `[K5]`: findings whose result is a blocker, on tasks in this project that have not settled.
+    // Restricted to the CURRENT scope revision on FD4's reasoning read one step on — a finding about
+    // a revision the task has moved past is a conclusion about a question nobody is asking, and a
+    // blocker recomputed from one would be unclosable by anything except editing history.
+    // Is 0141 applied here? Probed rather than assumed, and the answer is carried into the snapshot
+    // as `protocol.findings` — the same mixed-version shape `completionGaps` and `verificationEpoch`
+    // already have. A binary that reaches a database one migration behind must produce the answer
+    // its own world supports ("this snapshot predates finding-driven blockers"), not a 42P01 that
+    // stops the whole reconcile; and a decision captured then must replay to what it decided.
+    const [findingTable] = await tx.$queryRaw<Array<{ present: boolean }>>(Prisma.sql`
+      SELECT to_regclass('task_verification_finding') IS NOT NULL AS "present"
+    `);
+    const findingsAvailable = findingTable?.present === true;
+    const findingRows = !findingsAvailable ? [] : await tx.$queryRaw<FindingRow[]>(Prisma.sql`
+        SELECT f."id", f."task_id" AS "taskId", f."dedup_key" AS "dedupKey",
+               f."scope_revision" AS "scopeRevision",
+               f."effective_classification" AS "classification", f."severity",
+               f."violated_invariant" AS "violatedInvariant",
+               f."minimal_repro" AS "minimalRepro",
+               f."effect_blocker_kind" AS "blockerKind",
+               f."required_action" AS "requiredAction", f."owner", f."created_at" AS "createdAt"
+          FROM "task_verification_finding" f
+          JOIN "task" t ON t."id" = f."task_id"
+         WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${project.ownerId}::uuid
+           AND f."effect_blocker_kind" IS NOT NULL
+           AND f."scope_revision" = t."scope_revision"
+           AND t."status"::text NOT IN ('DONE', 'CANCELLED')
+         ORDER BY f."dedup_key", f."id"
       `);
     const signalRows = await tx.$queryRaw<SignalRow[]>(Prisma.sql`
         SELECT e."id", e."kind", e."dedupe_key" AS "dedupeKey"
@@ -1157,7 +1236,23 @@ export class ProjectDecisionService {
       })),
       // §13.1 AG7's capability marker, stamped by the binary that captured this world. Constant by
       // construction — it says what THIS build computes, not what the project contains.
-      protocol: { completionGaps: true, verificationEpoch: true },
+      protocol: findingsAvailable
+        ? { completionGaps: true, verificationEpoch: true, findings: true }
+        : { completionGaps: true, verificationEpoch: true },
+      findings: !findingsAvailable ? undefined : findingRows.map((row) => ({
+        findingId: toPublicId(row.id),
+        taskId: toPublicId(row.taskId),
+        dedupKey: publicDedupeKey(row.dedupKey),
+        scopeRevision: row.scopeRevision,
+        classification: row.classification,
+        severity: row.severity,
+        violatedInvariant: row.violatedInvariant,
+        minimalRepro: row.minimalRepro,
+        blockerKind: row.blockerKind,
+        requiredAction: row.requiredAction,
+        owner: row.owner,
+        createdAt: isoRequired(row.createdAt),
+      })),
       blockers: blockerRows.map((row) => ({
         id: toPublicId(row.id),
         kind: row.kind as ProjectBlockerFact['kind'],
