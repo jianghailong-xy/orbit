@@ -19,7 +19,13 @@ const OTHER_TASK_ID = '550e8400-e29b-41d4-a716-446655440001';
 const SCHEDULED = new Date('2026-09-01T09:00:00.000Z');
 
 function serviceWith(prisma: unknown, sessions: unknown = {}, realtime: unknown = {}): TasksService {
-  return new TasksService(prisma as never, sessions as never, realtime as never);
+  // See task-labels.spec: a create runs inside a transaction, so a double without `$transaction`
+  // cannot serve one. A caller that supplies its own still wins.
+  const client: Record<string, unknown> = {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(client),
+    ...(prisma as Record<string, unknown>),
+  };
+  return new TasksService(client as never, sessions as never, realtime as never);
 }
 
 /** Renders the tagged template PostgreSQL would get, like task-labels.spec's recorder. */

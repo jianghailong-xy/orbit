@@ -273,14 +273,19 @@ test('an item cannot be filed under a parent in another project', async () => {
   assert.deepEqual(created, []);
 });
 
-test('a batch whose parents are all internal refs takes no owner lock', async () => {
+test('a batch whose parents are all internal refs still takes the owner lock', async () => {
   const { service, locks } = makeService();
   await service.createMany(OWNER, {
     tasks: [item({ ref: 'epic' }), item({ parentRef: 'epic' })],
   });
 
-  // The lock exists so a parent read here cannot be moved into another project before the child
-  // referencing it is written. A parent this transaction is itself creating is invisible to every
-  // other request until it commits, so there is no such race to serialize against.
-  assert.deepEqual(locks, []);
+  // The lock used to be conditional, because the race it was reasoned about — a parent read here
+  // being moved into another project before the child referencing it is written — cannot happen
+  // when the parent is a row this transaction is itself creating.
+  //
+  // It is unconditional now for a different reason: a batch writes several `task` rows in item
+  // order, which is not an order any other writer shares, and rank 10 of the canonical lock order
+  // (common/lock-order.ts, I1) is what keeps two multi-row Task writes from taking the same rows
+  // in opposite orders. The hierarchy CHECK is still skipped — that is what refs make unnecessary.
+  assert.deepEqual(locks, ['lock']);
 });

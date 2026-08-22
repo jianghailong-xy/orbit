@@ -26,20 +26,30 @@ function fixture(opts: { inFlightTurn: string | null; existingByKey?: (key: stri
     },
     count: async () => 0,
   };
+  // The ordered pre-locks the canonical order takes before a task write (common/lock-order.ts):
+  // the owner graph mutex, the lists, and the creator Session. All raw, all returning nothing
+  // this fixture reads — recorded only so a caller could assert one was taken.
+  const locks: string[] = [];
+  const $queryRaw = async (strings: TemplateStringsArray) => {
+    locks.push(strings.join('?').replace(/\s+/g, ' ').trim());
+    return [];
+  };
   const prisma = {
     task,
+    $queryRaw,
     taskDependency: { createMany: async () => ({ count: 0 }) },
     session: { findFirst: async () => ({ id: SESSION }) },
     conversationTurn: {
       findFirst: async () => (opts.inFlightTurn ? { id: opts.inFlightTurn } : null),
       count: async () => 0,
     },
-    $transaction: async (fn: (tx: any) => Promise<unknown>) => fn({ task, taskDependency: prisma.taskDependency }),
+    $transaction: async (fn: (tx: any) => Promise<unknown>) =>
+      fn({ task, $queryRaw, taskDependency: prisma.taskDependency }),
   };
   const service = new TasksService(prisma as never, {} as never, {
     publishTaskChanged: () => {},
   } as never);
-  return { service, creates, findUniqueKeys };
+  return { service, creates, findUniqueKeys, locks };
 }
 
 test('a task created twice inside one turn collapses onto the first', async () => {

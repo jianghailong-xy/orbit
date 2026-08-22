@@ -48,7 +48,13 @@ function harness(options: HarnessOptions = {}) {
     session: {
       findUniqueOrThrow: async ({ select }: { select?: Record<string, boolean> }) => {
         if (select?.runtimeSessionId) {
-          return { status: RunStatus.RUNNING, runtimeSessionId: 'runtime-1' };
+          return {
+            status: RunStatus.RUNNING,
+            runtimeSessionId: 'runtime-1',
+            cancelRequestedAt: null,
+            runningBgShells: [],
+            runningSubagents: [],
+          };
         }
         if (select?.taskId) {
           return { status: RunStatus.RUNNING, taskId: null };
