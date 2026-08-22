@@ -141,12 +141,29 @@ interface DependencyAggregateNodeData extends Record<string, unknown> {
 
 type DependencyAggregateFlowNode = Node<DependencyAggregateNodeData, 'taskDependencyAggregate'>;
 
-const EDGE_COLORS: Record<TaskDependencyVisualState, string> = {
-  complete: 'var(--success-solid)',
+// `complete` is --success, not --success-solid, on purpose. These edges are bare lines with no
+// label or icon, so hue is the only channel unless we add one: against --error-solid the solid
+// green collapses under deuteranopia to OKLab dE(x100) 3.6 light / 4.0 dark (31.7 to normal
+// vision, which is why review never catches it), where --success reads 8.7 / 7.2. Do not "unify
+// on solid" here — --success-solid and --warning-solid sit 2.4 apart under protanopia, which is
+// safe only where an icon or text co-encodes the state, and edges have neither. Dark deuteranopia
+// still lands under the ~8 discrimination floor, so colour alone is never enough: EDGE_DASH gives
+// `failed` a second, colour-independent channel. All of it is measured in statusPalette.test.ts.
+export const EDGE_COLORS: Record<TaskDependencyVisualState, string> = {
+  complete: 'var(--success)',
   active: 'var(--brand)',
   queued: 'var(--brand-border)',
   failed: 'var(--error-solid)',
   pending: 'var(--text-4)',
+};
+
+/**
+ * Shape encoding per state, applied on top of EDGE_COLORS. Long enough to stay legible when the
+ * graph is zoomed out, and deliberately not the aggregate edge's '5 4' so a failed dependency
+ * never reads as a collapsed branch.
+ */
+const EDGE_DASH: Partial<Record<TaskDependencyVisualState, string>> = {
+  failed: '7 4',
 };
 
 function DependencyNode({ data }: NodeProps<DependencyFlowNode>) {
@@ -402,6 +419,7 @@ export function buildDependencyFlowElements(
     const state = getTaskDependencyEdgeState(graph, edge);
     const highlightedEdge = !!highlighted?.edgeKeys.has(key);
     const stroke = EDGE_COLORS[state];
+    const dash = EDGE_DASH[state];
     return {
       id: key,
       source: edge.sourceTaskId,
@@ -416,6 +434,7 @@ export function buildDependencyFlowElements(
         stroke,
         strokeWidth: highlightedEdge ? 2.5 : directPrerequisiteIds.has(edge.sourceTaskId) && edge.targetTaskId === graph.focusTaskId ? 2 : 1.5,
         opacity: state === 'complete' ? 0.55 : 0.9,
+        ...(dash ? { strokeDasharray: dash } : {}),
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
