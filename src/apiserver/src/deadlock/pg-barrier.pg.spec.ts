@@ -3,7 +3,14 @@ import test from 'node:test';
 
 import { Client } from 'pg';
 
-import { newFixtureIds, seedLockFixture, twoPartyDeadlockScenario } from './orbit-lock-fixture';
+import {
+  newFixtureIds,
+  seedLockFixture,
+  seedThreePartyFixture,
+  threePartyDeadlockScenario,
+  twoPartyDeadlockScenario,
+  type FixtureIds,
+} from './orbit-lock-fixture';
 import { runScenario, type ScenarioSpec } from './pg-barrier';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -174,5 +181,198 @@ test('the barrier harness schedules on observed state', { skip: !URL, timeout: 1
                                  WHERE attrelid = t.oid AND attname = 'creator_session_id')]`,
     );
     assert.deepEqual(rows.map((r) => r.conname), ['task_creator_session_id_fkey']);
+  });
+});
+
+/**
+ * Where the three-party plan's locks come from, proved one edge at a time.
+ *
+ * Two of its three wait edges are taken by a foreign key rather than by any statement the plan
+ * writes, and both only exist because the row being written was ALREADY written by the same
+ * transaction (ri_triggers.c fires an unchanged-key check when the old row's xmin is the current
+ * xact). That is the whole mechanism, and it is invisible in the SQL — so each edge is asserted
+ * here against its own control: the same plan minus the earlier write must NOT block.
+ *
+ * Everything here stays true after the production lock order is repaired. The claim that today's
+ * code loses the resulting cycle is three-party-40P01.baseline.ts's, deliberately not a test.
+ */
+test('the three-party plan blocks where the fixture says it does', { skip: !URL, timeout: 180_000 }, async (t) => {
+  const url = URL!;
+  const admin = new Client({ connectionString: url });
+  await admin.connect();
+  t.after(() => admin.end());
+
+  /** The dependency transaction's two statements, with the arming UPDATE optional. */
+  const dispatchTouchSpec = (ids: FixtureIds, armed: boolean): ScenarioSpec => ({
+    name: `harness/dispatch-touch-${armed ? 'armed' : 'control'}`,
+    parties: [
+      { name: 'holder', deadlockTimeout: '30min' },
+      { name: 'dependency', deadlockTimeout: '30min' },
+    ],
+    plan: [
+      { op: 'run', party: 'holder', label: 'hold-contended-session',
+        sql: 'SELECT "id" FROM "session" WHERE "id" = $1::uuid FOR UPDATE',
+        values: [ids.contendedSessionId] },
+      ...(armed
+        ? [{ op: 'run' as const, party: 'dependency', label: 'update-task',
+             sql: `UPDATE "task" SET "status" = $2::task_status, "updated_at" = $3 WHERE "id" = $1::uuid`,
+             values: [ids.dependentTaskId, 'IN_PROGRESS', ids.telemetryTurnAt] }]
+        : []),
+      { op: 'block', party: 'dependency', label: 'insert-task-dependency',
+        sql: `INSERT INTO "task_dependency" ("id", "task_id", "depends_on_task_id")
+              VALUES ($1::uuid, $2::uuid, $3::uuid)`,
+        values: [ids.dependencyId, ids.dependentTaskId, ids.prerequisiteTaskId],
+        blockedBy: ['holder'] },
+      { op: 'finish', party: 'holder', action: 'ROLLBACK' },
+      { op: 'settle', party: 'dependency' },
+      { op: 'finish', party: 'dependency', action: 'ROLLBACK' },
+    ],
+  });
+
+  /** The telemetry transaction's two Session writes, with the first one optional. */
+  const sessionWriteSpec = (ids: FixtureIds, armed: boolean): ScenarioSpec => ({
+    name: `harness/session-fk-recheck-${armed ? 'armed' : 'control'}`,
+    parties: [
+      { name: 'owner-lock', deadlockTimeout: '30min' },
+      { name: 'telemetry', deadlockTimeout: '30min' },
+    ],
+    plan: [
+      { op: 'run', party: 'owner-lock', label: 'lock-dependency-graph',
+        sql: 'SELECT "id" FROM "user" WHERE "id" = $1::uuid FOR UPDATE', values: [ids.ownerId] },
+      ...(armed
+        ? [{ op: 'run' as const, party: 'telemetry', label: 'telemetry-session-update',
+             sql: `UPDATE "session" SET "last_turn_at" = $2, "updated_at" = $2 WHERE "id" = $1::uuid`,
+             values: [ids.telemetrySessionId, ids.telemetryTurnAt] }]
+        : []),
+      { op: 'block', party: 'telemetry', label: 'session-preview-update',
+        sql: `UPDATE "session" SET "last_assistant_text" = $2, "updated_at" = $3 WHERE "id" = $1::uuid`,
+        values: [ids.telemetrySessionId, 'preview', ids.telemetryTurnAt],
+        blockedBy: ['owner-lock'] },
+      { op: 'finish', party: 'owner-lock', action: 'ROLLBACK' },
+      { op: 'settle', party: 'telemetry' },
+      { op: 'finish', party: 'telemetry', action: 'ROLLBACK' },
+    ],
+  });
+
+  await t.test('the dispatch touch takes a Session row lock only once the task row is ours', async () => {
+    const armed = newFixtureIds('touch-armed');
+    await seedThreePartyFixture(admin, armed);
+    const outcome = await runScenario(url, dispatchTouchSpec(armed, true), 30_000);
+    const edge = outcome.waitEdges[0];
+    assert.ok(edge, 'the edge insert never blocked');
+    assert.deepEqual(edge.blockingPids, [outcome.pids.holder]);
+    // The waiter is queued on a `session` row, from a statement that names no session at all.
+    assert.deepEqual(
+      edge.locks.filter((l) => l.pid === outcome.pids.dependency && l.locktype === 'tuple')
+        .map((l) => l.relation),
+      ['session'],
+    );
+
+    // The control: drop the arming UPDATE and the same insert takes no Session lock whatsoever.
+    const control = newFixtureIds('touch-control');
+    await seedThreePartyFixture(admin, control);
+    await assert.rejects(
+      () => runScenario(url, dispatchTouchSpec(control, false), 5_000),
+      /finished without ever blocking/,
+      'without the earlier task UPDATE the foreign key must not be re-checked',
+    );
+  });
+
+  await t.test('a Session write re-checks its owner foreign key only when it is the second one', async () => {
+    const armed = newFixtureIds('session-armed');
+    await seedThreePartyFixture(admin, armed);
+    const outcome = await runScenario(url, sessionWriteSpec(armed, true), 30_000);
+    const edge = outcome.waitEdges[0];
+    assert.ok(edge, 'the second Session write never blocked');
+    assert.deepEqual(edge.blockingPids, [outcome.pids['owner-lock']]);
+    assert.deepEqual(
+      edge.locks.filter((l) => l.pid === outcome.pids.telemetry && l.locktype === 'tuple')
+        .map((l) => l.relation),
+      ['"user"'],
+    );
+
+    const control = newFixtureIds('session-control');
+    await seedThreePartyFixture(admin, control);
+    await assert.rejects(
+      () => runScenario(url, sessionWriteSpec(control, false), 5_000),
+      /finished without ever blocking/,
+      'a first Session write must not re-check the owner foreign key',
+    );
+  });
+
+  await t.test('every project_event in a round is attributable to a named event source', async () => {
+    const ids = newFixtureIds('event-source');
+    await seedThreePartyFixture(admin, ids);
+    const kinds = async (sourceId: string): Promise<string[]> => {
+      const { rows } = await admin.query<{ kind: string }>(
+        `SELECT "kind" FROM "project_event" WHERE "source_id" = $1::uuid ORDER BY "kind"`,
+        [sourceId],
+      );
+      return rows.map((r) => r.kind);
+    };
+    // project_session_event_source on a telemetry-only write: the trigger runs and decides there
+    // is no signal, which is why the baseline can count the round's outbox rows exactly.
+    await admin.query(
+      `UPDATE "session" SET "last_turn_at" = $2, "updated_at" = $2 WHERE "id" = $1::uuid`,
+      [ids.telemetrySessionId, ids.telemetryTurnAt],
+    );
+    assert.deepEqual(await kinds(ids.telemetrySessionId), ['session.started']);
+    // The same trigger on a status change does enqueue one.
+    await admin.query(
+      `UPDATE "session" SET "status" = 'AWAITING_INPUT'::run_status, "updated_at" = $2 WHERE "id" = $1::uuid`,
+      [ids.telemetrySessionId, ids.telemetryTurnAt],
+    );
+    assert.deepEqual(await kinds(ids.telemetrySessionId), ['session.awaiting_input', 'session.started']);
+
+    // project_task_event_source and project_task_dependency_event_source, the two the victim's
+    // rollback has to erase. `task.created` is the seed's and must survive.
+    assert.deepEqual(await kinds(ids.dependentTaskId), ['task.created']);
+    await admin.query(
+      `UPDATE "task" SET "status" = 'IN_PROGRESS'::task_status, "updated_at" = $2 WHERE "id" = $1::uuid`,
+      [ids.dependentTaskId, ids.telemetryTurnAt],
+    );
+    await admin.query(
+      `INSERT INTO "task_dependency" ("id", "task_id", "depends_on_task_id")
+       VALUES ($1::uuid, $2::uuid, $3::uuid)`,
+      [ids.dependencyId, ids.dependentTaskId, ids.prerequisiteTaskId],
+    );
+    assert.deepEqual(
+      await kinds(ids.dependentTaskId),
+      ['task.created', 'task.dependency_changed', 'task.status_changed'],
+    );
+  });
+
+  await t.test('the three-party plan still contends the rows the production report named', async () => {
+    const ids = newFixtureIds('three-party-shape');
+    const spec = threePartyDeadlockScenario(ids);
+    assert.deepEqual(spec.parties.map((p) => p.name), ['dependency', 'runner-inbox', 'telemetry']);
+    // Exactly one party may detect the cycle, or the victim would be a race rather than a setting.
+    assert.deepEqual(
+      spec.parties.filter((p) => p.deadlockTimeout !== '30min').map((p) => p.name),
+      ['dependency'],
+    );
+    // Three declared blocks, forming the ring the baseline asserts.
+    const blocks = spec.plan.filter((s) => s.op === 'block');
+    assert.deepEqual(
+      blocks.map((s) => `${s.party}->${s.op === 'block' ? s.blockedBy.join() : ''}`),
+      ['telemetry->dependency', 'runner-inbox->telemetry', 'dependency->runner-inbox'],
+    );
+    // The closing edge must name the Session the inbox party holds FOR UPDATE, through the task
+    // whose creator_session_id it is — the part a careless edit would silently drop.
+    const inboxLock = spec.plan.find((s) => s.op === 'run' && s.label.startsWith('I1'));
+    const closing = blocks.find((s) => s.party === 'dependency');
+    assert.ok(inboxLock && inboxLock.op === 'run' && closing && closing.op === 'block');
+    assert.match(inboxLock.sql, /FOR UPDATE/);
+    assert.ok(inboxLock.values?.includes(ids.contendedSessionId));
+    assert.ok(closing.values?.includes(ids.dependentTaskId));
+
+    // And the seeded row really carries the foreign key the closing edge travels down: without
+    // creator_session_id pointing at the contended Session there is no third edge at all.
+    await seedThreePartyFixture(admin, ids);
+    const { rows } = await admin.query<{ creator_session_id: string | null }>(
+      `SELECT "creator_session_id" FROM "task" WHERE "id" = $1::uuid`,
+      [ids.dependentTaskId],
+    );
+    assert.deepEqual(rows.map((r) => r.creator_session_id), [ids.contendedSessionId]);
   });
 });

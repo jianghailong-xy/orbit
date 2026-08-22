@@ -18,9 +18,10 @@ import {
  * guard is `coordinator-pg-test-safety`, which the rest of the repo's destructive PG specs
  * already use, so an accidental Orbit business URL fails before the first write.
  *
- * The only barrier primitive is `pg_blocking_pids`: a party that is supposed to be waiting is
- * polled until PostgreSQL itself reports it blocked by the expected backends. A poll that does
- * not converge inside its deadline throws — a barrier never times out into a pass.
+ * The only barrier primitive is one `pg_stat_activity` snapshot: a party that is supposed to be
+ * waiting is polled until PostgreSQL itself reports it parked in a `Lock` wait AND blocked by
+ * exactly the expected backends. A poll that does not converge inside its deadline throws — a
+ * barrier never times out into a pass.
  */
 
 /** How often the blocked-state barrier re-reads `pg_blocking_pids`. */
@@ -265,7 +266,8 @@ async function backendPid(client: Client): Promise<number> {
 }
 
 /**
- * Poll until PostgreSQL reports `pid` blocked by exactly `expected`. Returns the observation.
+ * Poll until PostgreSQL reports `pid` parked in a lock wait and blocked by exactly `expected`.
+ * Returns the observation.
  *
  * This is the only synchronisation primitive in the harness. It is a condition barrier, not a
  * sleep: it advances the moment the server reports the state the plan requires, and a deadline
@@ -289,7 +291,14 @@ async function awaitBlocked(
     last = state.blockingPids;
     const want = [...expected].sort();
     const got = [...state.blockingPids].sort();
-    if (got.length === want.length && got.every((v, i) => v === want[i])) return state;
+    // Both halves of the one snapshot have to agree. A backend joins the lock manager's wait
+    // queue BEFORE it publishes its wait event, so `pg_blocking_pids` can already name the
+    // blocker while `wait_event_type` is still NULL. Advancing there records a wait edge with a
+    // null wait event — evidence that was only read too early, which shows up much later as a
+    // rare failed assertion about the edge rather than about the lock order.
+    if (state.waitEventType === 'Lock' && got.length === want.length && got.every((v, i) => v === want[i])) {
+      return state;
+    }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 }

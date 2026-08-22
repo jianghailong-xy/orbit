@@ -2,12 +2,14 @@
 # A disposable PostgreSQL 16 with Orbit's migrations on it, for the lock-order barrier fixture.
 #
 #   scripts/deadlock-barrier.sh              # the two-party 40P01 baseline (default)
+#   scripts/deadlock-barrier.sh three-party  # the three-party 40P01 baseline
 #   scripts/deadlock-barrier.sh spec         # the harness's own pg spec
+#   scripts/deadlock-barrier.sh all          # spec, then both baselines, on one server
 #   scripts/deadlock-barrier.sh baseline --keep
 #
 # Why its own server rather than `db:up` or the deployment's postgres: the fixture deliberately
-# parks two backends in a lock cycle and lets PostgreSQL abort one of them. That is safe on a
-# server nobody else is using and nowhere else, so the database and role are named `pcc40p01_*`
+# parks two or three backends in a lock cycle and lets PostgreSQL abort one of them. That is safe
+# on a server nobody else is using and nowhere else, so the database and role are named `pcc40p01_*`
 # and the specs re-check the server's system_identifier before their first write
 # (src/apiserver/src/projects/coordinator-pg-test-safety.ts). Handing this script an Orbit
 # business URL fails in the guard, before any statement runs.
@@ -36,8 +38,8 @@ TARGET="baseline"; KEEP=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
-    baseline|spec) TARGET="$arg" ;;
-    *) echo "usage: $(basename "$0") [baseline|spec] [--keep]" >&2; exit 2 ;;
+    baseline|three-party|spec|all) TARGET="$arg" ;;
+    *) echo "usage: $(basename "$0") [baseline|three-party|spec|all] [--keep]" >&2; exit 2 ;;
   esac
 done
 
@@ -78,23 +80,38 @@ echo "==> building the test tree"
 ( cd "$API" && "$TSC" -p tsconfig.test.json ) || exit 1
 
 URL="postgresql://$ADMIN:$PASSWORD@127.0.0.1:$PORT/$DB"
+# The whole point of `all`: one provisioned server, every gate, and a non-zero exit if any of
+# them fails. Rounds are serialized, so a later target never observes an earlier one's backends.
 case "$TARGET" in
-  baseline) CMD=("$NODE" build/deadlock/two-party-40p01.baseline.js) ;;
-  spec)     CMD=("$NODE" --test --test-concurrency=1 build/deadlock/pg-barrier.pg.spec.js) ;;
+  all) TARGETS=(spec baseline three-party) ;;
+  *)   TARGETS=("$TARGET") ;;
 esac
 
-echo "==> $TARGET"
-( cd "$API" && COORDINATOR_PG_URL="$URL" \
-    COORDINATOR_PG_EXPECTED_DATABASE="$DB" \
-    COORDINATOR_PG_EXPECTED_USER="$ADMIN" \
-    COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID" \
-    timeout -k 20 "$RUN_TIMEOUT" "${CMD[@]}" )
-rc=$?
-if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then
-  echo "!! $TARGET TIMED OUT after ${RUN_TIMEOUT}s (rc=$rc) — a hang, not a pass"
-elif [ "$rc" != "0" ]; then
-  echo "!! $TARGET FAILED rc=$rc"
-else
-  echo "==> $TARGET OK"
-fi
+run_target() {
+  case "$1" in
+    baseline)    CMD=("$NODE" build/deadlock/two-party-40p01.baseline.js) ;;
+    three-party) CMD=("$NODE" build/deadlock/three-party-40p01.baseline.js) ;;
+    spec)        CMD=("$NODE" --test --test-concurrency=1 build/deadlock/pg-barrier.pg.spec.js) ;;
+  esac
+  echo "==> $1"
+  ( cd "$API" && COORDINATOR_PG_URL="$URL" \
+      COORDINATOR_PG_EXPECTED_DATABASE="$DB" \
+      COORDINATOR_PG_EXPECTED_USER="$ADMIN" \
+      COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER="$SYSTEM_ID" \
+      timeout -k 20 "$RUN_TIMEOUT" "${CMD[@]}" )
+  local rc=$?
+  if [ "$rc" = "124" ] || [ "$rc" = "137" ]; then
+    echo "!! $1 TIMED OUT after ${RUN_TIMEOUT}s (rc=$rc) — a hang, not a pass"
+  elif [ "$rc" != "0" ]; then
+    echo "!! $1 FAILED rc=$rc"
+  else
+    echo "==> $1 OK"
+  fi
+  return "$rc"
+}
+
+rc=0
+for t in "${TARGETS[@]}"; do
+  run_target "$t" || { rc=$?; break; }
+done
 exit "$rc"

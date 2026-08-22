@@ -43,8 +43,8 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Codex `turn/steer` contract](codex-turn-steer-contract.md) — the frozen wire format, failure taxonomy,
   capability gating, and mixed-version rollout rules for steering a running Codex turn, with the
   [engine evidence](evidence/codex-turn-steer-0.149.0/transcript.md) behind them.
-- [PostgreSQL lock-order barrier fixture](postgres-deadlock-barrier.md) — the isolated two-connection
-  harness that reproduces the 2026-08-21 `40P01` deadlock deterministically, its lock graph and
+- [PostgreSQL lock-order barrier fixture](postgres-deadlock-barrier.md) — the isolated multi-connection
+  harness that reproduces the two 2026-08-21 `40P01` deadlocks deterministically, their lock graphs and
   `pg_locks`/`pg_blocking_pids` evidence, and how the fix regression reuses the same schedule.
 
 Design notes capture the reasoning and implementation state at the time they were written. When a design note

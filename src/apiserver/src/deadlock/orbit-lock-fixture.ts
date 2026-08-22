@@ -7,7 +7,8 @@ import type { ScenarioSpec } from './pg-barrier';
 
 /**
  * The Orbit half of the barrier fixture: the rows the production lock edges are taken on, and
- * the plan that reproduces the 2026-08-21 05:53:11 two-party deadlock on them.
+ * the plans that reproduce the 2026-08-21 two-party (05:53:11) and three-party (05:47:43)
+ * deadlocks on them.
  *
  * Every statement below is the SQL a production path already issues, cited at its source. The
  * fixture composes them; it does not invent lock modes.
@@ -30,6 +31,9 @@ import type { ScenarioSpec } from './pg-barrier';
  * The cycle: A holds the telemetry Session row A2 wrote and wants FOR KEY SHARE on the Session
  * B holds FOR UPDATE; B holds that Session and wants the telemetry row A holds. FOR KEY SHARE
  * conflicts with FOR UPDATE and with nothing weaker, which is why the FK check is what waits.
+ *
+ * The three-party plan and its own step list are at `threePartyDeadlockScenario`, below; both
+ * plans share these rows and this seed.
  */
 
 /** Row identities for one round. Every round gets fresh ids so rounds cannot interfere. */
@@ -47,6 +51,12 @@ export interface FixtureIds {
   prerequisiteTaskId: string;
   /** Written by the victim before it blocks — the row a failed rollback would leave behind. */
   batchTaskId: string;
+  /**
+   * Three-party only: a COMMITTED task whose `creator_session_id` is the contended Session. The
+   * dependency transaction updates it and then inserts an edge onto it, and the edge's
+   * `task_dependency_dispatch_touch` re-updates it — which is what makes the foreign key fire.
+   */
+  dependentTaskId: string;
   /** The insert that blocks on task_creator_session_id_fkey. */
   victimTaskId: string;
   dependencyId: string;
@@ -54,6 +64,9 @@ export interface FixtureIds {
   /** last_turn_at the survivor writes; distinguishable from the victim's. */
   survivorTurnAt: Date;
   victimTurnAt: Date;
+  /** Three-party only. Each survivor writes its own value, so "who won" has one answer. */
+  telemetryTurnAt: Date;
+  inboxTurnAt: Date;
 }
 
 export function newFixtureIds(label: string): FixtureIds {
@@ -67,11 +80,14 @@ export function newFixtureIds(label: string): FixtureIds {
     telemetrySessionId: randomUUID(),
     prerequisiteTaskId: randomUUID(),
     batchTaskId: randomUUID(),
+    dependentTaskId: randomUUID(),
     victimTaskId: randomUUID(),
     dependencyId: randomUUID(),
     runEventId: randomUUID(),
     victimTurnAt: new Date('2026-08-21T05:53:11.000Z'),
     survivorTurnAt: new Date('2026-08-21T05:53:12.000Z'),
+    telemetryTurnAt: new Date('2026-08-21T05:47:43.000Z'),
+    inboxTurnAt: new Date('2026-08-21T05:47:44.000Z'),
   };
 }
 
@@ -270,5 +286,249 @@ export async function inspectSurvivor(client: Client, ids: FixtureIds): Promise<
   return {
     runEvents: Number(events[0].n),
     telemetryLastTurnAt: session[0]?.last_turn_at?.toISOString() ?? null,
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────
+ * The 2026-08-21 05:47:43 three-party cycle.
+ * ──────────────────────────────────────────────────────────────────────────────────────────── */
+
+/** The preview denormalisation of the runner events transaction, as Prisma emits
+ *  `session.update({ where: { id }, data: { lastAssistantText, lastToolUse } })`. */
+const SESSION_PREVIEW_UPDATE = `
+  UPDATE "session" SET "last_assistant_text" = $2, "last_tool_use" = $3, "updated_at" = $4
+   WHERE "id" = $1::uuid`;
+
+/** `tx.task.update({ where: { id }, data: { status } })` — the scalar half of a PATCH that also
+ *  replaces the task's dependency edges. */
+const UPDATE_TASK_STATUS = `
+  UPDATE "task" SET "status" = $2::task_status, "updated_at" = $3
+   WHERE "id" = $1::uuid`;
+
+/**
+ * The extra committed row the three-party plan needs: a task in the project whose
+ * `creator_session_id` is the contended Session. Added on top of `seedLockFixture` rather than
+ * inside it, so the two-party fixture's seeded state stays exactly what it was.
+ */
+export async function seedThreePartyFixture(client: Client, ids: FixtureIds): Promise<void> {
+  await seedLockFixture(client, ids);
+  await client.query(INSERT_TASK, [
+    ids.dependentTaskId,
+    `${ids.label}-dependent`,
+    ids.ownerId,
+    ids.ownerId,
+    ids.contendedSessionId,
+    ids.projectId,
+  ]);
+}
+
+/**
+ * The 2026-08-21 05:47:43 three-party cycle: dependency → runner-inbox → telemetry → dependency.
+ *
+ * Every statement is production SQL, cited at its source:
+ *
+ *   dependency (the production victim) — TasksService.update with dependsOnTaskIds
+ *     D1  SELECT "user" … FOR UPDATE       TasksService.lockDependencyGraph
+ *     D2  UPDATE "task" SET status         tx.task.update, the scalar half of the same PATCH
+ *     D3  INSERT "task_dependency"         tx.taskDependency.createMany
+ *
+ *   runner-inbox (survivor) — the runner's Session-fenced write path
+ *     I1  SELECT "session" … FOR UPDATE    RunnerApiController.lockSessionLeaseOwner
+ *     I2  INSERT "run_event"               the events transaction's durable event write
+ *     I3  UPDATE "session" SET last_turn_at   the telemetry-only Session write, on the OTHER
+ *                                             Session — the one `telemetry` is holding
+ *
+ *   telemetry (survivor) — the runner events transaction on the telemetry Session
+ *     P1  UPDATE "session" SET last_turn_at   the telemetry-only write
+ *     P2  UPDATE "session" SET last_assistant_text …   the preview denormalisation, the very
+ *                                             next Session write of that same transaction
+ *
+ * The three wait edges, and where each lock comes from:
+ *
+ *   D3 → I1   `task_dependency_dispatch_touch` (an ordinary AFTER INSERT trigger) re-updates the
+ *             dependent Task. D2 already updated that row in this transaction, so its xmin is the
+ *             current xact and PostgreSQL re-runs every one of the task's foreign-key checks even
+ *             though no key column changed (ri_triggers.c: "if the original row was inserted by
+ *             our own transaction, we must fire the trigger whether or not the keys are equal").
+ *             `task_creator_session_id_fkey` therefore takes FOR KEY SHARE on the contended
+ *             Session, which I1 holds FOR UPDATE — the one row-lock pair FOR KEY SHARE conflicts
+ *             with. Without D2 the touch does not take that lock at all.
+ *
+ *   I3 → P1   two writers of the same telemetry Session row: an ordinary FOR NO KEY UPDATE
+ *             conflict, no triggers involved.
+ *
+ *   P2 → D1   the SECOND Session write of one transaction, for the same reason D3 blocks: P1 left
+ *             the row's xmin current, so P2 re-checks every Session foreign key, and
+ *             `session_owner_id_fkey` takes FOR KEY SHARE on the owner `user` row — which D1
+ *             holds FOR UPDATE. `project_session_event_source` runs on both writes and enqueues
+ *             nothing (neither changes status or merge_status), so it is not what waits and the
+ *             round's whole outbox is the dependency transaction's.
+ *
+ * The victim is pinned the same way as in the two-party plan: only `dependency` has a
+ * `deadlock_timeout` short enough to fire inside a round, so it is the backend that runs the
+ * check, finds the cycle and is aborted. Production's victim was the dependency write.
+ */
+export function threePartyDeadlockScenario(ids: FixtureIds): ScenarioSpec {
+  const telemetryArgs = (turnAt: Date) => [ids.telemetrySessionId, turnAt, OPEN_SESSION_STATUSES];
+  return {
+    name: 'three-party/dependency-vs-runner-inbox-vs-telemetry',
+    parties: [
+      { name: 'dependency', deadlockTimeout: '2s' },
+      { name: 'runner-inbox', deadlockTimeout: '30min' },
+      { name: 'telemetry', deadlockTimeout: '30min' },
+    ],
+    plan: [
+      { op: 'run', party: 'dependency', label: 'D1 lock-dependency-graph',
+        sql: 'SELECT "id" FROM "user" WHERE "id" = $1::uuid FOR UPDATE', values: [ids.ownerId] },
+
+      { op: 'run', party: 'runner-inbox', label: 'I1 lock-session-lease-owner',
+        sql: `SELECT id, ("inbox_lease_owner" IS NOT DISTINCT FROM $2::uuid) AS "leaseOwnerMatches"
+                FROM "session"
+               WHERE id = $1::uuid AND "assigned_runner_id" = $3::uuid
+               FOR UPDATE`,
+        values: [ids.contendedSessionId, null, ids.runnerId] },
+      { op: 'run', party: 'runner-inbox', label: 'I2 insert-run-event',
+        sql: `INSERT INTO "run_event" ("id", "session_id", "seq", "type", "payload", "created_at")
+              VALUES ($1::uuid, $2::uuid, 1, 'assistant', '{"text":"fixture"}'::jsonb, CURRENT_TIMESTAMP)
+              ON CONFLICT DO NOTHING`,
+        values: [ids.runEventId, ids.contendedSessionId] },
+
+      { op: 'run', party: 'telemetry', label: 'P1 telemetry-session-update',
+        sql: TELEMETRY_SESSION_UPDATE, values: telemetryArgs(ids.telemetryTurnAt) },
+
+      // The write that arms the foreign key: after it, the dependent Task's xmin is this
+      // transaction, so the edge insert's touch cannot skip the FK re-check.
+      { op: 'run', party: 'dependency', label: 'D2 update-task',
+        sql: UPDATE_TASK_STATUS,
+        values: [ids.dependentTaskId, 'IN_PROGRESS', ids.telemetryTurnAt] },
+
+      // Edge 1: the events transaction's own next Session write re-checks session_owner_id_fkey
+      // and waits for the FOR UPDATE the dependency transaction holds on the owner.
+      { op: 'block', party: 'telemetry', label: 'P2 session-preview-update',
+        sql: SESSION_PREVIEW_UPDATE,
+        values: [ids.telemetrySessionId, `${ids.label}-telemetry-preview`, null, ids.telemetryTurnAt],
+        blockedBy: ['dependency'] },
+      // Edge 2: the inbox transaction, already holding the contended Session FOR UPDATE, waits
+      // for the telemetry Session row the telemetry transaction wrote.
+      { op: 'block', party: 'runner-inbox', label: 'I3 telemetry-session-update',
+        sql: TELEMETRY_SESSION_UPDATE, values: telemetryArgs(ids.inboxTurnAt),
+        blockedBy: ['telemetry'] },
+      // Edge 3 closes the ring: the edge insert's dispatch touch re-checks
+      // task_creator_session_id_fkey, which wants FOR KEY SHARE on the Session I1 holds.
+      { op: 'block', party: 'dependency', label: 'D3 insert-task-dependency',
+        sql: `INSERT INTO "task_dependency" ("id", "task_id", "depends_on_task_id")
+              VALUES ($1::uuid, $2::uuid, $3::uuid)`,
+        values: [ids.dependencyId, ids.dependentTaskId, ids.prerequisiteTaskId],
+        blockedBy: ['runner-inbox'] },
+
+      // The victim first: its locks are held until ROLLBACK, and only then can `telemetry`
+      // finish, and only after `telemetry` commits can `runner-inbox` finish.
+      { op: 'settle', party: 'dependency' },
+      { op: 'finish', party: 'dependency', action: 'ROLLBACK' },
+      { op: 'settle', party: 'telemetry' },
+      { op: 'finish', party: 'telemetry', action: 'COMMIT' },
+      { op: 'settle', party: 'runner-inbox' },
+      { op: 'finish', party: 'runner-inbox', action: 'COMMIT' },
+    ],
+  };
+}
+
+export interface ThreePartyRollback {
+  /** The edge the victim tried to insert. */
+  dependencies: number;
+  /** project_event rows the victim's own writes would have enqueued. */
+  projectEvents: number;
+  /** project_action rows naming the dependent task as their subject. */
+  dispatchActions: number;
+  /** The dependent Task, which existed before the round and must be untouched by it. */
+  dependentTaskStatus: string | null;
+  dependentTaskTouched: boolean;
+  dependentTaskDispatchAttempt: string | null;
+  /** The unrelated prerequisite must not carry a dispatch touch either. */
+  prerequisiteTouched: boolean;
+}
+
+/**
+ * Nothing the victim wrote may survive: not the edge, not the status it wrote on the dependent
+ * task, not the `updated_at` bump `task_dependency_dispatch_touch` put there, and not the
+ * outbox rows the task/dependency event-source triggers enqueued.
+ *
+ * The dependent task is a COMMITTED row here, so "gone" is the wrong test — the row must still
+ * be exactly what it was. `task.created` (enqueued when the seed committed it) is exactly the
+ * project_event that must survive, which is why the count is by kind rather than by source.
+ */
+export async function inspectThreePartyRollback(client: Client, ids: FixtureIds): Promise<ThreePartyRollback> {
+  const one = async (sql: string, values: unknown[]): Promise<number> => {
+    const { rows } = await client.query<{ n: string }>(sql, values as never);
+    return Number(rows[0].n);
+  };
+  const { rows: task } = await client.query<{
+    status: string; touched: boolean; dispatch_attempt: string;
+  }>(
+    `SELECT "status"::text AS status, ("updated_at" <> "created_at") AS touched,
+            "dispatch_attempt"::text AS dispatch_attempt
+       FROM "task" WHERE "id" = $1::uuid`,
+    [ids.dependentTaskId],
+  );
+  const { rows: prereq } = await client.query<{ touched: boolean }>(
+    `SELECT ("updated_at" <> "created_at") AS touched FROM "task" WHERE "id" = $1::uuid`,
+    [ids.prerequisiteTaskId],
+  );
+  return {
+    dependencies: await one(
+      `SELECT count(*) AS n FROM "task_dependency"
+        WHERE "id" = $1::uuid OR "task_id" = $2::uuid`,
+      [ids.dependencyId, ids.dependentTaskId],
+    ),
+    projectEvents: await one(
+      `SELECT count(*) AS n FROM "project_event"
+        WHERE "source_id" = $1::uuid
+          AND "kind" IN ('task.status_changed', 'task.dependency_changed', 'task.updated')`,
+      [ids.dependentTaskId],
+    ),
+    dispatchActions: await one(
+      `SELECT count(*) AS n FROM "project_action" WHERE "subject_id" = $1::uuid`,
+      [ids.dependentTaskId],
+    ),
+    dependentTaskStatus: task[0]?.status ?? null,
+    dependentTaskTouched: task[0]?.touched ?? true,
+    dependentTaskDispatchAttempt: task[0]?.dispatch_attempt ?? null,
+    prerequisiteTouched: prereq[0]?.touched ?? true,
+  };
+}
+
+export interface ThreePartySurvivors {
+  runEvents: number;
+  /** Written by `runner-inbox` last, so this is the one value that says who finished. */
+  telemetryLastTurnAt: string | null;
+  /** Written by `telemetry`, and never overwritten — both survivors are legible at once. */
+  telemetryPreview: string | null;
+  /** The event-source trigger's verdict on a telemetry-only Session write: no signal. */
+  sessionProjectEvents: number;
+}
+
+/** What the two surviving transactions committed. */
+export async function inspectThreePartySurvivors(
+  client: Client,
+  ids: FixtureIds,
+): Promise<ThreePartySurvivors> {
+  const { rows: events } = await client.query<{ n: string }>(
+    `SELECT count(*) AS n FROM "run_event" WHERE "id" = $1::uuid`,
+    [ids.runEventId],
+  );
+  const { rows: session } = await client.query<{ last_turn_at: Date | null; last_assistant_text: string | null }>(
+    `SELECT "last_turn_at", "last_assistant_text" FROM "session" WHERE "id" = $1::uuid`,
+    [ids.telemetrySessionId],
+  );
+  const { rows: signals } = await client.query<{ n: string }>(
+    `SELECT count(*) AS n FROM "project_event"
+      WHERE "source_type" = 'SESSION' AND "source_id" = $1::uuid AND "kind" <> 'session.started'`,
+    [ids.telemetrySessionId],
+  );
+  return {
+    runEvents: Number(events[0].n),
+    telemetryLastTurnAt: session[0]?.last_turn_at?.toISOString() ?? null,
+    telemetryPreview: session[0]?.last_assistant_text ?? null,
+    sessionProjectEvents: Number(signals[0].n),
   };
 }
