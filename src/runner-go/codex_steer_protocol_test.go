@@ -37,15 +37,72 @@ type codexAppServerProbe struct {
 	next int
 }
 
+// isolatedCodexProbeEnv gives a probe process a Codex home of its own.
+//
+// Isolating `sqlite_home` is not enough, and getting that wrong is what this file learned the hard
+// way: the startup backfill that rebuilds the state DB out of rollout files is keyed on CODEX_HOME
+// and takes a lease over it. Point two app-servers at one CODEX_HOME and the second waits on the
+// first, so on any host where Orbit is itself running Codex a probe that inherited the machine's
+// home queued behind live sessions and never answered `initialize` inside the deadline below. A
+// fresh home has no rollout files to walk, which is why it comes up in under a second instead.
+//
+// The override rides on the child's environment rather than t.Setenv, so probes stay parallel-safe
+// and leave the test process's own environment alone.
+func isolatedCodexProbeEnv(t *testing.T) (env []string, home string) {
+	t.Helper()
+	home = filepath.Join(t.TempDir(), "codex-home")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatalf("probe codex home: %v", err)
+	}
+	return envWithValue(os.Environ(), "CODEX_HOME", home), home
+}
+
+// The reverse regression for that leak: resolved by the same rules the runner itself uses, a
+// probe's environment has to name a home of its own and never the machine's.
+func TestCodexProbeEnvIsolatesTheCodexHome(t *testing.T) {
+	env, home := isolatedCodexProbeEnv(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	resolved, err := effectiveCodexHome(env, cwd)
+	if err != nil {
+		t.Fatalf("effectiveCodexHome: %v", err)
+	}
+	if resolved != home {
+		t.Fatalf("a probe resolves CODEX_HOME to %q, want its own %q", resolved, home)
+	}
+	ambient, err := effectiveCodexHome(os.Environ(), cwd)
+	if err != nil {
+		t.Fatalf("effectiveCodexHome(ambient): %v", err)
+	}
+	if resolved == ambient {
+		t.Fatalf("a probe would share the machine's Codex home %q, so its startup backfill would "+
+			"queue behind whatever else is already running there", ambient)
+	}
+	if _, other := isolatedCodexProbeEnv(t); other == home {
+		t.Fatalf("two probes share the Codex home %q, so they would serialize on each other", home)
+	}
+	entries, err := os.ReadDir(home)
+	if err != nil {
+		t.Fatalf("read %s: %v", home, err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("a probe's Codex home %q starts out non-empty (%v), so it has state to backfill",
+			home, entries)
+	}
+}
+
 func startCodexAppServerProbe(t *testing.T) *codexAppServerProbe {
 	t.Helper()
 	exe, err := exec.LookPath("codex")
 	if err != nil {
 		t.Skip("no codex on PATH; this protocol check needs a real app-server")
 	}
-	// Its own SQLite home, so a probe never touches the developer's real thread history.
+	env, home := isolatedCodexProbeEnv(t)
 	cmd := exec.Command(exe, "app-server", "--stdio", "-c",
-		fmt.Sprintf("sqlite_home=%q", filepath.Join(t.TempDir(), "state")))
+		fmt.Sprintf("sqlite_home=%q", filepath.Join(home, "state")))
+	cmd.Env = env
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
@@ -229,8 +286,11 @@ func TestCodexTurnSteerParamsSchemaMatchesTheContract(t *testing.T) {
 	if err != nil {
 		t.Skip("no codex on PATH; this schema check needs a real engine")
 	}
+	env, _ := isolatedCodexProbeEnv(t)
 	dir := t.TempDir()
-	out, err := exec.Command(exe, "app-server", "generate-json-schema", "--out", dir).CombinedOutput()
+	gen := exec.Command(exe, "app-server", "generate-json-schema", "--out", dir)
+	gen.Env = env
+	out, err := gen.CombinedOutput()
 	if err != nil {
 		t.Skipf("cannot generate the app-server schema: %v: %s", err, out)
 	}
