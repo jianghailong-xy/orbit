@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   AttemptBudget,
   ConvergenceClassification,
@@ -55,6 +56,8 @@ import {
  */
 @Injectable()
 export class SessionAttemptService {
+  private readonly logger = new Logger(SessionAttemptService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: ConvergenceLedgerService,
@@ -86,7 +89,7 @@ export class SessionAttemptService {
       decidedBy?: 'ORCHESTRATOR' | 'COORDINATOR_AGENT' | 'USER';
     },
   ): Promise<{ attempt: AttemptRow; seed: AttemptSeed; reused: boolean }> {
-    return this.prisma.$transaction(async (tx) => {
+    return withTransactionRetry(this.prisma, async (tx) => {
       const existing = await this.byAttemptKey(tx, ownerId, request.attemptKey);
       // GN1. Returned rather than refused: a replay is the same dispatch arriving twice, and the
       // caller is owed the row it already committed, not an error it has no way to act on.
@@ -148,7 +151,7 @@ export class SessionAttemptService {
         ),
         reused: false,
       };
-    });
+    }, loggedRetry(this.logger, 'sessionAttempt.open'));
   }
 
   /**
@@ -165,7 +168,7 @@ export class SessionAttemptService {
     sessionId: string,
     now: Date,
   ): Promise<{ attempt: AttemptRow; spend: AttemptSpend; report: AttemptBudgetReport } | null> {
-    return this.prisma.$transaction(async (tx) => {
+    return withTransactionRetry(this.prisma, async (tx) => {
       const attempt = await this.bySessionId(tx, ownerId, sessionId, true);
       if (!attempt) return null;
       // A closed attempt is measured as it was, not as the clock has moved since. Re-measuring it
@@ -190,7 +193,7 @@ export class SessionAttemptService {
 
       const refreshed = await this.byId(tx, ownerId, attempt.id);
       return { attempt: refreshed ?? attempt, spend, report };
-    });
+    }, loggedRetry(this.logger, 'sessionAttempt.evaluate'));
   }
 
   /**
@@ -208,7 +211,7 @@ export class SessionAttemptService {
     close: AttemptClose,
     closedAt: Date,
   ): Promise<AttemptRow> {
-    return this.prisma.$transaction(async (tx) => {
+    return withTransactionRetry(this.prisma, async (tx) => {
       const attempt = await this.bySessionId(tx, ownerId, sessionId, true);
       if (!attempt) throw new NotFoundException('attempt not found');
       const planned = planAttemptClose(
@@ -242,7 +245,7 @@ export class SessionAttemptService {
       const refreshed = await this.byId(tx, ownerId, attempt.id);
       if (!refreshed) throw new Error('failed to close the attempt');
       return refreshed;
-    });
+    }, loggedRetry(this.logger, 'sessionAttempt.close'));
   }
 
   /**

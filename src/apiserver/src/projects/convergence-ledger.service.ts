@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   AttemptBudget,
   ConvergenceAutomationPolicy,
@@ -50,6 +51,8 @@ import {
  */
 @Injectable()
 export class ConvergenceLedgerService {
+  private readonly logger = new Logger(ConvergenceLedgerService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   /**
@@ -212,7 +215,7 @@ export class ConvergenceLedgerService {
     taskId: string,
     proposal: ScopeRevisionProposal,
   ): Promise<{ revision: number; scopeHash: string }> {
-    return this.prisma.$transaction(async (tx) => {
+    return withTransactionRetry(this.prisma, async (tx) => {
       const state = await this.lockAndRead(tx, taskId, ownerId);
       const planned = planScopeRevision(state, proposal, state.policy);
       if (typeof planned === 'string') throw new ConflictException(planned);
@@ -245,7 +248,7 @@ export class ConvergenceLedgerService {
       `);
 
       return { revision: planned.revision, scopeHash: planned.scopeHash };
-    });
+    }, loggedRetry(this.logger, 'convergenceLedger.reviseScope'));
   }
 
   /**

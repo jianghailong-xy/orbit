@@ -26,10 +26,11 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { ConvergenceDecidedBy } from './convergence-ledger';
 import { EMPTY_PROGRESS_VECTOR } from './convergence-progress';
@@ -87,6 +88,8 @@ interface SubjectRow {
 
 @Injectable()
 export class VerificationFindingService {
+  private readonly logger = new Logger(VerificationFindingService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledger: ConvergenceLedgerService,
@@ -111,7 +114,7 @@ export class VerificationFindingService {
    */
   async submit(input: SubmitFindingInput): Promise<SubmitFindingResult> {
     const now = input.now ?? new Date();
-    return this.prisma.$transaction(async (tx) => {
+    return withTransactionRetry(this.prisma, async (tx) => {
       const state = await this.ledger.lockAndRead(tx, input.subjectTaskId, input.ownerId);
       const subject = await this.subject(tx, input.subjectTaskId, input.ownerId);
       // Judging a task is what puts it under management, and a finding is a judgment: without the
@@ -276,7 +279,7 @@ export class VerificationFindingService {
         effectBlockerKind,
         decisionId: uuidToBase62(judged.id),
       };
-    });
+    }, loggedRetry(this.logger, 'verificationFinding.submit'));
   }
 
   /** Every finding on one task, newest first — the read face of `finding → Task/decision`. */
