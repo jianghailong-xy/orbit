@@ -24,6 +24,13 @@
 # lose an applied dispatch" reports `# SKIP` — a silent hole in exactly the property that most needs
 # a real server.
 #
+# `ORBIT_DB_CONFLICT_ORIGIN=fault_injection` is supplied for the reason `scripts/deadlock-barrier.sh`
+# supplies it: every spec here makes conflicts on purpose. The label is a property of the PROCESS —
+# src/apiserver/src/common/db-conflict-metrics.ts reads it from the environment exactly so that no
+# production code path can reach it — so a harness that does not export it leaves its own deliberate
+# 40001s counted as `origin="service"`, the value that means a real incident. transaction-retry.pg is
+# the spec that asserts the label, and without this it reports 4/6 for a property of this script.
+#
 # A spec FAILS if node exits non-zero for any reason — a failing assertion, a crash, a timeout, or a
 # process that will not exit because something left a handle open. The timeout is a backstop and
 # never a pass; the script exits non-zero if anything was red.
@@ -107,6 +114,7 @@ for f in $(ls build/**/*.pg.spec.js | sort); do
         COORDINATOR_PG_CONTAINER="$CONTAINER" \
         ORBIT_TEST_PG_URL="$URL" \
         COORDINATOR_PG_RESTART_COMMAND="docker restart $CONTAINER" \
+        ORBIT_DB_CONFLICT_ORIGIN=fault_injection \
         timeout -k 20 "$SPEC_TIMEOUT" "$NODE" --test --test-concurrency=1 "$f" 2>&1)
   rc=$?
   t=$(echo "$out" | sed -n 's/^# tests \([0-9]*\)/\1/p' | tail -1); t=${t:-0}

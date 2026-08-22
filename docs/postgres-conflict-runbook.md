@@ -78,10 +78,16 @@ different problems.
 sum by (operation) (rate(orbit_db_transaction_units_total{origin="fault_injection"}[5m]))
 ```
 
-`scripts/deadlock-barrier.sh` and the fault-injection suites create real deadlocks — that is what
-they are for — and they export `ORBIT_DB_CONFLICT_ORIGIN=fault_injection`, so their conflicts label
-themselves. No production code path can set it. **Action: none.** If this is non-zero on a scraped
-production process, something is running a test suite against it, which is its own problem.
+`scripts/deadlock-barrier.sh`, `scripts/project-pg-matrix.sh` and the fault-injection suites create
+real deadlocks — that is what they are for — and they export `ORBIT_DB_CONFLICT_ORIGIN=fault_injection`
+in the environment of every test process they start, so their conflicts label themselves. No
+production code path can set it. **Action: none.** If this is non-zero on a scraped production
+process, something is running a test suite against it, which is its own problem.
+
+A harness that starts a test process without it is the mirror image of that problem, and it is
+visible in the harness rather than in a graph: `transaction-retry.pg.spec.ts` asserts both the label
+on its own two injected conflicts and that the variable is set at all, so it reports 4/6 rather than
+6/6. Anything new that makes conflicts on purpose exports the variable to its children.
 
 ### 2. Contention a retry absorbed
 
