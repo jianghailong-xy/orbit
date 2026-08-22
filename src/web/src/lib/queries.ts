@@ -9,6 +9,7 @@ import type { CoordinatorStatus } from './coordinatorStatus';
 import type { SessionTagRef } from './sessionGrouping';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import type { ProviderModelRow } from './providerAdmin';
+import type { ProjectDependencyGraphResponse } from './projectDependencyGraph';
 import {
   activeTasksPath,
   labelSummaryPath,
@@ -345,4 +346,14 @@ export const projectCoordinatorStatusQuery = (projectId: string) =>
     queryFn: () =>
       api<CoordinatorStatus>(`/projects/${encodeURIComponent(projectId)}/coordinator/status`),
     refetchInterval: 15_000,
+  });
+
+/** Keyed under `['project', projectId]` like the rest, so a project write invalidates it too. */
+export const projectDependencyGraphQuery = (projectId: string) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'dependency-graph'] as const,
+    queryFn: () =>
+      api<ProjectDependencyGraphResponse>(
+        `/projects/${encodeURIComponent(projectId)}/dependency-graph`,
+      ),
   });

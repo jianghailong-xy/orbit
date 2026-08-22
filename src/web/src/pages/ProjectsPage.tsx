@@ -28,6 +28,7 @@ import {
   runAtProblem,
   scheduledStart,
 } from '../lib/taskSchedule';
+import { ProjectTasksViewToggle } from '../components/ProjectTasksViewToggle';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -273,7 +274,7 @@ export function ProjectDetailPage() {
               belongs to came back, so a project that 404s never puts a second doomed request on
               the wire. `id` is the normalized route id — the same spelling the project query
               above is keyed and fetched with. */}
-          <ProjectTasks projectId={id} />
+          <ProjectTasks projectId={id} taskCount={p._count.tasks} />
         </>
       ) : null}
     </div>
@@ -558,7 +559,7 @@ const TASK_STATUS_COLOR: Record<ProjectTask['status'], string> = {
  * opened — so a project with a deep tree still costs exactly one request until the reader asks for
  * more.
  */
-function ProjectTasks({ projectId }: { projectId: string }) {
+function ProjectTasks({ projectId, taskCount }: { projectId: string; taskCount: number }) {
   // The dialog is opened from here rather than owning its own trigger, so the section that lists
   // the level a new task lands in is also the thing that offers to add one to it.
   const [creating, setCreating] = useState(false);
@@ -580,40 +581,45 @@ function ProjectTasks({ projectId }: { projectId: string }) {
         </Button>
       </div>
 
-      {tasks.isLoading ? (
-        <div style={{ padding: 24, textAlign: 'center' }}>
-          <Spin />
-        </div>
-      ) : tasks.isError ? (
-        <Alert
-          type="error"
-          showIcon
-          message="Tasks could not be loaded"
-          description={tasks.error instanceof Error ? tasks.error.message : undefined}
-          action={
-            <Button size="small" danger onClick={() => tasks.refetch()}>
-              Retry
-            </Button>
-          }
-        />
-      ) : tasks.data && tasks.data.items.length > 0 ? (
-        <>
-          <List
-            dataSource={tasks.data.items}
-            rowKey="id"
-            renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
+      {/* The list is this toggle's default and its `children`; Graph is the option beside it.
+          The heading and New task sit outside it on purpose — neither of them is a view of the
+          tasks, and both stay reachable whichever view is showing. */}
+      <ProjectTasksViewToggle projectId={projectId} taskCount={taskCount}>
+        {tasks.isLoading ? (
+          <div style={{ padding: 24, textAlign: 'center' }}>
+            <Spin />
+          </div>
+        ) : tasks.isError ? (
+          <Alert
+            type="error"
+            showIcon
+            message="Tasks could not be loaded"
+            description={tasks.error instanceof Error ? tasks.error.message : undefined}
+            action={
+              <Button size="small" danger onClick={() => tasks.refetch()}>
+                Retry
+              </Button>
+            }
           />
-          {/* Said outright rather than shown as a button: this unit reads one page and sends no
-              cursor, so a silent stop here would read as "that is all of them". */}
-          {tasks.data.nextCursor ? (
-            <Typography.Text type="secondary">
-              More top-level tasks exist beyond this first page.
-            </Typography.Text>
-          ) : null}
-        </>
-      ) : (
-        <Empty description="No top-level tasks yet" />
-      )}
+        ) : tasks.data && tasks.data.items.length > 0 ? (
+          <>
+            <List
+              dataSource={tasks.data.items}
+              rowKey="id"
+              renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
+            />
+            {/* Said outright rather than shown as a button: this unit reads one page and sends no
+                cursor, so a silent stop here would read as "that is all of them". */}
+            {tasks.data.nextCursor ? (
+              <Typography.Text type="secondary">
+                More top-level tasks exist beyond this first page.
+              </Typography.Text>
+            ) : null}
+          </>
+        ) : (
+          <Empty description="No top-level tasks yet" />
+        )}
+      </ProjectTasksViewToggle>
 
       <NewProjectTaskModal
         projectId={projectId}
