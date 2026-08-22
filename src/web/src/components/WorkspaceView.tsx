@@ -26,6 +26,7 @@ import {
   PlusOutlined,
   PushpinFilled,
   PushpinOutlined,
+  RightOutlined,
   SearchOutlined,
   ShareAltOutlined,
   ThunderboltOutlined,
@@ -61,6 +62,7 @@ import {
   type Me,
   meQuery,
   providersQuery,
+  projectSessionCountsQuery,
   SESSION_PAGE_SIZE,
   sessionQuery,
   type SessionListView,
@@ -74,6 +76,12 @@ import {
   sessionTimeSections,
   sessionsWithTag,
 } from '../lib/sessionGrouping';
+import {
+  type ProjectSection,
+  projectBadgeParts,
+  projectCountsById,
+  sessionProjectSections,
+} from '../lib/projectGrouping';
 import {
   type ConfiguredProvider,
   clampPermissionModeForModel,
@@ -475,6 +483,60 @@ function PlanUsageIndicator({ usage }: { usage: PlanUsageSnapshot }) {
   );
 }
 
+/**
+ * Header of one project group in the Open list: the project's name over its rollup, and a chevron
+ * that rolls the whole group up to just this line.
+ *
+ * The rollup is what makes rolling up safe. A recency heading says nothing about the rows it
+ * hides, so collapsing one would hide a waiting approval outright; "2 needs you · 1 running ·
+ * 5/9 done" is counted over the project's whole session set server-side, so the header keeps
+ * speaking for rows this page never loaded and for rows the user has rolled away. Pinned and
+ * Unfiled are not projects and have no rollup, so they state their row count instead — every
+ * group header carries a number either way.
+ */
+function SessionGroupHead({
+  group,
+  onToggle,
+}: {
+  group: ProjectSection<any>;
+  onToggle: (key: string) => void;
+}) {
+  const toggle = (): void => onToggle(group.key);
+  return (
+    <div
+      className={`session-group-head${group.collapsed ? ' collapsed' : ''}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={!group.collapsed}
+      onClick={toggle}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        toggle();
+      }}
+    >
+      <div className="session-group-title-row">
+        <RightOutlined className="session-group-caret" />
+        <span className="session-group-title">{group.title}</span>
+        {group.projectId === null && <span className="session-group-count">{group.count}</span>}
+      </div>
+      {/* Kept in the layout from the first paint, empty until the rollup query answers: it lands a
+          beat after the list does, and a second line appearing under every project at once reads
+          as the column shifting under the cursor. */}
+      {group.projectId !== null && (
+        <div className="session-group-stats">
+          {group.counts &&
+            projectBadgeParts(group.counts).map((part) => (
+              <span key={part.kind} className={`session-group-stat ${part.kind}`}>
+                {part.text}
+              </span>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // The slices of the session list, in menu order. Open is the overwhelmingly common
 // one, so the other two live in the header's scope menu rather than a permanent tab row.
 type SessionView = SessionListView;
@@ -488,6 +550,12 @@ const SESSION_VIEWS: { value: SessionView; label: string }[] = [
 // page is asked for — roughly a couple of rows, so the list is already widened by the time
 // the user reaches the bottom.
 const SESSION_LOAD_MORE_PX = 240;
+
+// Which project groups the user has rolled up in the Open list, persisted across reloads as an
+// array of group keys (a project id, or the Pinned/Unfiled sentinels). Account-wide rather than
+// per-workspace: one project's sessions are spread over several workspaces, so a group rolled up
+// in one and open in the next would read as the state not sticking.
+const SESSION_GROUP_COLLAPSED_KEY = 'orbit.sessionProjectCollapsed';
 
 // Drag-resizable width of the left session column, persisted across reloads.
 const SESSION_COL_KEY = 'orbit.sessionColWidth';
@@ -1289,6 +1357,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // The owner's tag library, for the filter menu and the "Group by Tag" headings.
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
+  // Open groups by project, which is the list's default sectioning; "Group by Tag" replaces it,
+  // and Completed/Trash keep recency (a filed session's project is history, not structure).
+  const groupByProject = effectiveView === 'open' && !groupByTag;
+  // The rollup behind each group header. Counted server-side over the project's whole session
+  // set — the header has to speak for the rows this page never loaded, and for the ones inside a
+  // group the user rolled up. No poll: the control-plane stream invalidates `['session-counts']`,
+  // which this key sits under.
+  const projectCountsQ = useQuery({ ...projectSessionCountsQuery(), enabled: groupByProject });
+  const projectCounts = useMemo(() => projectCountsById(projectCountsQ.data), [projectCountsQ.data]);
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(() => {
+    try {
+      const saved: unknown = JSON.parse(localStorage.getItem(SESSION_GROUP_COLLAPSED_KEY) ?? '[]');
+      return new Set(Array.isArray(saved) ? saved.filter((k) => typeof k === 'string') : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    localStorage.setItem(SESSION_GROUP_COLLAPSED_KEY, JSON.stringify([...collapsedGroups]));
+  }, [collapsedGroups]);
+
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
     // The Completed view is ordered by the server on completed_at (newest first) and
@@ -1575,26 +1671,69 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [loadMoreSessions],
   );
 
-  // The list's sections. Recency by default (Pinned / Today / Yesterday / …), or one section per
-  // tag when the user switches grouping — both from the pure groupers shared in shape with
-  // OrbitKit's, over the already console-sorted list. Pinning only applies in Open, and
-  // a "Pinned" section would fight an active tag filter, so it's suppressed there (as on iOS).
+  // The list's sections. Open groups by project (each group headed by its rollup, and rolled up
+  // to just that header when the user collapses it); "Group by Tag" gives one section per tag;
+  // Completed and Trash keep recency (Pinned / Today / Yesterday / …). All three come from pure
+  // groupers over the already console-sorted list — the recency and tag ones shared in shape with
+  // OrbitKit's. Pinning only applies in Open, and a "Pinned" group would fight an active tag
+  // filter, so it's suppressed there (as on iOS).
   // Note the Completed view is server-ordered by completed_at while bucketing reads last activity,
   // so its rows are grouped by when they last ran, not by when they moved — same as iOS.
-  const sections = useMemo(
-    () =>
-      groupByTag
-        ? sessionTagSections(visibleSessions).map((s) => ({
-            key: s.tag?.id ?? '__untagged__',
-            tag: s.tag,
-            title: s.tag?.name ?? 'Untagged',
-            sessions: s.sessions,
-          }))
-        : sessionTimeSections(visibleSessions, {
-            pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({ key: s.title, tag: null as SessionTagRef | null, ...s })),
-    [visibleSessions, groupByTag, view, tagFilter],
-  );
+  //
+  // One flat list of row-runs whatever the mode, so the render below stays a single loop: a run
+  // carries the group header to paint above it (`group`, on the first run of each group only) and
+  // its own heading (`title`, null where the rows need none). A collapsed group is a run with no
+  // rows — which is also what keeps `orderedSessions` to what is actually on screen.
+  const sections = useMemo(() => {
+    if (groupByTag) {
+      return sessionTagSections(visibleSessions).map((s) => ({
+        key: s.tag?.id ?? '__untagged__',
+        group: null as ProjectSection<any> | null,
+        nested: false,
+        tag: s.tag,
+        title: s.tag?.name ?? 'Untagged',
+        sessions: s.sessions,
+      }));
+    }
+    if (groupByProject) {
+      return sessionProjectSections(visibleSessions, {
+        counts: projectCounts,
+        collapsed: collapsedGroups,
+        pinnedFirst: !tagFilter,
+      }).flatMap((g) =>
+        g.sections.length === 0
+          ? [
+              {
+                key: g.key,
+                group: g,
+                nested: true,
+                tag: null as SessionTagRef | null,
+                title: null,
+                sessions: [],
+              },
+            ]
+          : g.sections.map((sub, i) => ({
+              key: `${g.key}:${sub.title ?? ''}`,
+              group: i === 0 ? g : null,
+              // Every run here sits under a group header, including Unfiled's later recency
+              // runs — whose own header scrolled past several runs ago.
+              nested: true,
+              tag: null as SessionTagRef | null,
+              title: sub.title,
+              sessions: sub.sessions,
+            })),
+      );
+    }
+    // Only Completed and Trash reach here — Open takes one of the two branches above — and
+    // pinning applies to neither, so a (possibly stale) pinnedAt just buckets by time.
+    return sessionTimeSections(visibleSessions, { pinnedFirst: false }).map((s) => ({
+      key: s.title,
+      group: null as ProjectSection<any> | null,
+      nested: false,
+      tag: null as SessionTagRef | null,
+      ...s,
+    }));
+  }, [visibleSessions, groupByTag, groupByProject, projectCounts, collapsedGroups, tagFilter]);
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
@@ -4327,12 +4466,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           )}
           {sections.map((sec) => (
             <Fragment key={sec.key}>
-              <div className="session-section-head">
-                {sec.tag && (
-                  <span className="session-section-dot" style={{ background: sec.tag.color }} />
-                )}
-                {sec.title}
-              </div>
+              {/* Project group header: the name, its rollup, and the chevron that rolls the group
+                  up to just this line. The rollup is why collapsing is safe — a group can hide
+                  twenty rows and still say two of them are waiting on you. */}
+              {sec.group && <SessionGroupHead group={sec.group} onToggle={toggleGroup} />}
+              {sec.title !== null && (
+                <div className={`session-section-head${sec.nested ? ' nested' : ''}`}>
+                  {sec.tag && (
+                    <span className="session-section-dot" style={{ background: sec.tag.color }} />
+                  )}
+                  {sec.title}
+                </div>
+              )}
               {sec.sessions.map((s) => {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);

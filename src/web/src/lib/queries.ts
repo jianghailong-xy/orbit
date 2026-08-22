@@ -214,6 +214,31 @@ export const workspaceSessionCountsQuery = () =>
     queryFn: () => api<WorkspaceSessionCounts[]>('/sessions/counts'),
   });
 
+/** One project's session tallies, as returned by `GET /sessions/project-counts`. */
+export interface ProjectSessionCounts {
+  projectId: string;
+  /** Conversations blocked on an approval — the same definition the per-workspace badge uses. */
+  needsYou: number;
+  /** Conversations with the engine producing and nothing waiting on the user. Disjoint from
+   *  `needsYou`, so a group header can state both without counting a session twice. */
+  running: number;
+  /** Completed, or finished successfully and not yet filed. */
+  done: number;
+  /** Every session the project has, trashed ones excluded. `done`/`total` is the header's ratio. */
+  total: number;
+}
+
+/**
+ * Per-project session tallies for the list's group headers. Shares the `['session-counts']` prefix
+ * with the per-workspace query — the two answer the same question about different groupings, and
+ * the control-plane stream invalidates them together.
+ */
+export const projectSessionCountsQuery = () =>
+  queryOptions({
+    queryKey: ['session-counts', 'project'] as const,
+    queryFn: () => api<ProjectSessionCounts[]>('/sessions/project-counts'),
+  });
+
 /**
  * Cross-scope session search, backing the ⌘K palette. Keyed on the query itself so each distinct
  * search is its own cache entry — retyping a query the user just backspaced out of answers from
