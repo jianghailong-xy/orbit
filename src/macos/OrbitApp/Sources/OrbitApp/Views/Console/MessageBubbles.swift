@@ -137,14 +137,25 @@ struct UserBubbleView: View {
     /// Touch has no hover, so a hover-gated copy button can never be reached on iOS: the only user
     /// turns copyable from a phone were the ones whose row is pinned up anyway (a steer, a send in
     /// flight), which is why "Sent into this turn" carried a copy button and the message above it
-    /// didn't. On iOS it is simply always shown. The timestamp next to it stays hover-only — not
-    /// showing the time at rest is what was asked for, and it costs a platform with no hover
-    /// nothing it had before.
+    /// didn't. On iOS it is simply always shown.
     private var copyShown: Bool {
         #if os(iOS)
         true
         #else
         unconfirmed || hovering
+        #endif
+    }
+
+    /// The same hover problem, on the other half of the row. That slot holds a delivery state when
+    /// there is one to report ("Queued", "Sending…", a steer's line) and the send time otherwise —
+    /// so on iOS, where the copy button is always up, a hover-gated time left the space beside it
+    /// permanently blank. Showing it at rest fills only that otherwise-empty slot. macOS still has
+    /// a cursor, and keeps revealing copy and time together.
+    private var timeShown: Bool {
+        #if os(iOS)
+        true
+        #else
+        hovering
         #endif
     }
 
@@ -205,11 +216,11 @@ struct UserBubbleView: View {
                         .padding(.leading, 2).contentShape(Rectangle())
                     }
                 } else if let ts = bubble.ts, let rel = RelativeTime.format(ts) {
-                    // Hover-only, and only ever reached on a settled turn — every other branch above
-                    // is a state that stays on screen. Gated here rather than on the row so the copy
-                    // button beside it can be shown on its own (see `copyShown`).
+                    // Only ever reached on a settled turn — every other branch above is a state that
+                    // stays on screen. Gated here rather than on the row so the copy button beside it
+                    // can be shown on its own (see `copyShown` / `timeShown`).
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
-                        .opacity(hovering ? 1 : 0)
+                        .opacity(timeShown ? 1 : 0)
                 }
             }
             .frame(height: metaHeight)
