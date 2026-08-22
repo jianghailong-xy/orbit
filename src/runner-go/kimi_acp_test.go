@@ -889,6 +889,105 @@ func TestHandleKimiPlanUpdateRendersChecklist(t *testing.T) {
 	}
 }
 
+// Kimi announces occupancy and its window once per turn (`usage_update`). Orbit had no case for
+// it, so both halves of the context gauge were dropped and every Kimi session read 0%.
+func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
+	var events int
+	emit := func(string, map[string]interface{}) { events++ }
+	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
+	var mu sync.Mutex
+
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", map[string]interface{}{
+		"sessionUpdate": "usage_update",
+		"used":          21166,
+		"size":          1048576,
+	}), emit, &mu, &active)
+
+	if active.contextTokens != 21166 || active.contextWindow != 1048576 {
+		t.Fatalf("reading = %d/%d, want 21166/1048576", active.contextTokens, active.contextWindow)
+	}
+	// A usage report is a gauge reading, not transcript content.
+	if events != 0 {
+		t.Fatalf("usage_update emitted %d transcript events", events)
+	}
+
+	// Each report replaces the last: the newest is the current context.
+	handleKimiNotification("session-1", kimiNotification(t, "session-1", map[string]interface{}{
+		"sessionUpdate": "usage_update",
+		"used":          40000,
+		"size":          1048576,
+	}), emit, &mu, &active)
+	if active.contextTokens != 40000 {
+		t.Fatalf("second reading = %d, want 40000", active.contextTokens)
+	}
+}
+
+// The denominator Kimi reports beats the catalog's: it follows the model the session is actually
+// on, while the catalog is keyed on the id the agent was configured with.
+func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
+	t.Cleanup(func() { publishModelCatalog(nil) })
+	publishModelCatalog(&ModelCatalog{
+		Kimi: []ModelInfo{{Value: "kimi-k2.7", ContextWindow: 262_144}},
+	})
+	job := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-k2.7"}}
+
+	got := kimiTurnEndPayload(&kimiActiveTurn{contextTokens: 21166, contextWindow: 1_048_576}, "completed", job)
+	if got["contextTokens"] != 21166 {
+		t.Fatalf("contextTokens = %v, want 21166", got["contextTokens"])
+	}
+	if got["contextWindow"] != 1_048_576 {
+		t.Fatalf("contextWindow = %v, want Kimi's own 1048576 rather than the catalog's", got["contextWindow"])
+	}
+	if got["subtype"] != "completed" || got["numTurns"] != 1 {
+		t.Fatalf("turn_end lost its shape: %#v", got)
+	}
+
+	// Kimi said nothing about the window (an older build, or a turn with no usage report): the
+	// catalog answers, exactly as it does for the other engines.
+	got = kimiTurnEndPayload(&kimiActiveTurn{contextTokens: 21166}, "completed", job)
+	if got["contextWindow"] != 262_144 {
+		t.Fatalf("contextWindow = %v, want the catalog's 262144", got["contextWindow"])
+	}
+
+	// Neither has an answer: the key is absent, which is what leaves the clients on their own
+	// fallback instead of dividing by zero.
+	byok := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-unlisted"}}
+	got = kimiTurnEndPayload(&kimiActiveTurn{contextTokens: 21166}, "completed", byok)
+	if _, ok := got["contextWindow"]; ok {
+		t.Fatalf("unknown window reported anyway: %#v", got)
+	}
+}
+
+// config_option_update and session_info_update describe the session, not its content. They were
+// being reported as "no transcript rendering", which is noise that hides a real gap.
+func TestHandleKimiSessionScopedUpdatesAreNotReportedAsGaps(t *testing.T) {
+	emit := func(typ string, payload map[string]interface{}) {
+		t.Fatalf("session-scoped update emitted %s %#v", typ, payload)
+	}
+	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
+	var mu sync.Mutex
+
+	reported := func(kind string) bool {
+		_, ok := unhandledStreamKinds.Load("kimi/" + kind)
+		return ok
+	}
+	for _, kind := range []string{"config_option_update", "session_info_update"} {
+		handleKimiNotification("session-1", kimiNotification(t, "session-1",
+			map[string]interface{}{"sessionUpdate": kind}), emit, &mu, &active)
+		if reported(kind) {
+			t.Fatalf("%s still reported as an unrendered stream kind", kind)
+		}
+	}
+
+	// The report itself still works — otherwise the assertions above pass for the wrong reason.
+	handleKimiNotification("session-1", kimiNotification(t, "session-1",
+		map[string]interface{}{"sessionUpdate": "kimi_invented_this_kind"}), emit, &mu, &active)
+	t.Cleanup(func() { unhandledStreamKinds.Delete("kimi/kimi_invented_this_kind") })
+	if !reported("kimi_invented_this_kind") {
+		t.Fatal("an unknown kind went unreported")
+	}
+}
+
 func TestKimiPermissionOptionMapsApprovalAndQuestion(t *testing.T) {
 	options := []interface{}{
 		map[string]interface{}{"optionId": "approve_once", "name": "Approve once", "kind": "allow_once"},

@@ -1102,6 +1102,10 @@ type kimiActiveTurn struct {
 	seenTools   map[string]bool
 	doneTools   map[string]bool
 	plans       int // plan updates seen this turn; makes each one a distinct tool id
+	// Context-window occupancy as Kimi last reported it this turn, and the window it is a
+	// fraction of (usage_update). Read out on turn_end, and mid-turn by the pinger.
+	contextTokens int
+	contextWindow int
 }
 
 func kimiContentText(value interface{}) string {
@@ -1152,6 +1156,30 @@ func learnKimiCommands(update map[string]interface{}) {
 		}
 	}
 	slashReg.learnFor(providerKimi, commands, nil)
+}
+
+// withKimiContextWindow attaches the gauge's denominator, preferring the one Kimi reports beside
+// each reading (usage_update's `size`) over the catalog's entry for the configured model id: it
+// moves with the model the session is actually on — 262144 on K2.7, 1048576 on K3 — and is right
+// without waiting for a catalog refresh. 0 means Kimi said nothing, and the catalog answers.
+func withKimiContextWindow(payload map[string]interface{}, job *ClaimedSession, window int) map[string]interface{} {
+	if window > 0 {
+		payload["contextWindow"] = window
+		return payload
+	}
+	return withContextWindow(payload, job)
+}
+
+// kimiTurnEndPayload closes the turn with the gauge's last reading: the occupancy Kimi reported
+// during it, over the window Kimi named beside it. Kimi bills no cost and runs one ACP prompt per
+// Orbit turn, so the other two are constants.
+func kimiTurnEndPayload(turn *kimiActiveTurn, subtype string, job *ClaimedSession) map[string]interface{} {
+	return withKimiContextWindow(map[string]interface{}{
+		"subtype":       subtype,
+		"numTurns":      1,
+		"costUsd":       0,
+		"contextTokens": turn.contextTokens,
+	}, job, turn.contextWindow)
 }
 
 func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, activeMu *sync.Mutex, active **kimiActiveTurn) {
@@ -1230,10 +1258,21 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 			"content":   planChecklist(rows),
 			"isError":   false,
 		})
+	// Kimi reports occupancy and the window it is a fraction of on every turn. Dropped here,
+	// both halves of the gauge were missing and every Kimi session read 0%.
+	case "usage_update":
+		if used := toInt(update["used"]); used > 0 {
+			a.contextTokens = used
+		}
+		if size := toInt(update["size"]); size > 0 {
+			a.contextWindow = size
+		}
 	default:
 		// user_message_chunk is Orbit's own prompt echoed back, and mode changes have no
-		// transcript representation by design; neither is a gap worth reporting.
-		logUnhandledStreamKind("kimi", kind, "user_message_chunk", "current_mode_update")
+		// transcript representation by design; config_option_update and session_info_update
+		// describe the session rather than its content. None is a gap worth reporting.
+		logUnhandledStreamKind("kimi", kind, "user_message_chunk", "current_mode_update",
+			"config_option_update", "session_info_update")
 	}
 }
 
@@ -1288,6 +1327,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	app.wg.Add(1)
 	go func() {
 		defer app.wg.Done()
+		// Kimi reports usage mid-turn; a tool-heavy turn is many minutes from its turn_end, so
+		// move the gauge as the reading moves instead of leaving it empty until then.
+		var ctxPing contextPinger
 		process := func(item kimiInboundItem) {
 			if item.barrier != nil {
 				close(item.barrier)
@@ -1295,6 +1337,15 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 			}
 			if item.message != nil {
 				handleKimiNotification(expectedSessionID.Load().(string), *item.message, emit, &activeMu, &active)
+				activeMu.Lock()
+				tokens, window := 0, 0
+				if active != nil {
+					tokens, window = active.contextTokens, active.contextWindow
+				}
+				activeMu.Unlock()
+				ctxPing.ping(func(eventType string, payload map[string]interface{}) {
+					emit(eventType, withKimiContextWindow(payload, job, window))
+				}, tokens, job)
 			}
 		}
 		for {
@@ -1414,11 +1465,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		if text := strings.TrimSpace(turn.text.String()); text != "" {
 			emit(evAssistant, map[string]interface{}{"text": text})
 		}
-		emit(evTurnEnd, map[string]interface{}{
-			"subtype":  subtype,
-			"numTurns": 1,
-			"costUsd":  0,
-		})
+		emit(evTurnEnd, kimiTurnEndPayload(turn, subtype, job))
 		liveFiles, livePatches := liveDiff(job.WT)
 		if completeErr := completeTurn(TurnCompleteRequest{
 			TurnID:           done.turnID,
