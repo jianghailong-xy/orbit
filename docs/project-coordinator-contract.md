@@ -3594,6 +3594,78 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
 沿用既有 `TaskDependency`。控制环对"就绪"的判定就是 §7.4 的八条前置，**不新增一套依赖语义**。
 
+#### DEP（v1.19 新增，单元 H0G）：依赖一条**验证**时，"DONE" 不等于"通过"
+
+一个验证 Task 在它的**运行结束**时变成 `DONE` —— 无论它得出什么结论。
+本项目自己的历史就是证据：`H0V` 跑完、判 **FAIL**、`status = DONE`，
+于是每一条把它写成前置的 Task 都变成 `READY`，因为 `status = 'DONE'` 为真。
+**一次失败的验证把它本该拦住的工作放行了。** `task.verdict` 早就存着结论，只是没有任何下游读它。
+
+**DEP0（一个判据，五个读者）**：一个**没有任何验证指向它**的前置，仍以**有效 DONE** 为准（§13.6 SU9 的链尾），
+这是绝大多数任务的情形，本条对它们一字不改。
+一旦某个前置**有适用的验证 epoch**，"DONE" 就不再是它完成的全部。
+planner（§7.8）、`dependencyState`、§9.2 的提交点、Run Now / 批量 Run 与三条旧 sweep **共用同一条规则**，
+分别以纯函数（`verificationEpochGate`）和 SQL 片段（`verificationEpochOpenSql`）两种拼写落地；
+一条边在其中一处 ready、另一处 blocked，正是两条派发路径开始各说各话的方式。
+
+**DEP1（PASS epoch 属于 subject，边也按 subject 判）**：
+
+> subject 的 PASS epoch **开着**，当且仅当它**最新的存活验证**带着一个已生效的 PASS，且 subject **现在仍是 DONE**。
+
+`dependsOn: A` 的意思是"等 A 做完"；A 一旦被检查，"做完"就是"做完**且**验过"。
+所以受这条 epoch 约束的是 **A 自己那条边** —— 这正是本项目事故的真实形状：**H1 与 L1 依赖的是 H0，不是 H0V**。
+API/CLI 因此明确引导调用方把边指向 subject（见 `AddDependencyDto`、`task_dependency_add`、`orbit task dependency-add`）。
+指向**验证任务**的边被**代理解析到同一个 epoch**（既有计划继续可用），而**不**读成"这一次 run 结束了" ——
+后者比作者的本意更窄，也更脆：重跑会新建一条验证，而边还指着旧的那条。
+
+唯一的豁免是自指环：一条验证**可以**依赖它所检查的 subject（或该 subject 的兄弟验证）而不必等自己的结论 ——
+否则 epoch 因为"这条检查还没结论"而关着，而它又要等 epoch 才能跑，双向死锁。
+判据是"等待方检查的 subject == 该前置所属 epoch 的 subject"，两种拼写各自实现同一条（SQL 侧用
+`IS NOT DISTINCT FROM`，`=` 会让整个片段变成 NULL —— 在不带 WHERE 的聚合里那是 fail-open）。
+
+锚在 subject 而不是锚在边指的那一行，是为了两个方向都不成为死角：
+
+- **更新的验证会关掉 epoch** —— 新建的、在跑的、或判了 FAIL 的都算。
+  于是"旧 PASS + 新验证"这种形状里，旧的 PASS 从新验证出现那一刻起不再放行任何东西。只读边自己指的那条验证是看不见这件事的。
+- **更旧的 FAIL 不会把 epoch 永久锁死** —— 修完重跑、新的一条判 PASS，下游就该走。
+  这与 §13.2 里 PASS **解除该 subject 上全部未决 condition**（而不只是它自己提的那些）是同一句话。
+- **全部验证被取消 ≠ 通过**：`NO_LIVE_VERIFICATION`，subject 那条边照样挡住。
+
+**DEP2（存活）**：被取代（§13.6 SU1）或 `CANCELLED` 的验证不计入 epoch —— 与 §13.2 V8-d 同一条判据。
+若 **subject 本身**被取代，则它与它的验证一并是历史（与 `verificationFailureIsHistorySql` 对 condition 行的处理相同），
+此时依赖回落到纯 status 判据，不另加否决 —— 否则就是一个没人能解的楔子。
+被取代/取消的验证**仍然**拿到 epoch 记号：它永远不是最终裁决的那一条（SU4 不允许 DONE 行指认后继，
+而 `dependencySatisfied` 只在一行已经 DONE 时才去看 gate），但它让读者看到的是原因而不是一个裸 `CANCELLED`。
+
+**DEP3（自然收口的运行）**：`SUCCEEDED` + `end_reason = 'task_done'` + §4.2 的 `COMPLETED` 生命周期，且**没有存活的运行**。
+**不是** turn 计数（§13.2 V5 的教训：turn 在结束时才落库，于是"0 turn"恰恰出现在真的跑过的那些运行上），
+也**不是**裸 `SUCCEEDED` —— 被人 `complete` / `cancel` 收掉的会话带着别的 `end_reason`，
+而本项目的硬约束正写在这个值上。
+
+**DEP4（`APPLY_VERIFICATION_VERDICT` 已生效）**：按 §8.2 的**永久键** `pc:v1:<project>:verdict:<verifier>:<revision>`
+查账本 `APPLIED`。§13.2 的退回、缺陷子任务与 condition 才是让一个 verdict **有意义**的东西，
+在账本说 APPLIED 之前它们一件都没发生；提前放行就是与 reconcile 抢同一个瞬间 ——
+一边起新工作，一边把 subject 从它脚下退回去。按**当前 revision** 的键查，而不是"这条验证的某个 verdict action"：
+被改写过的结论有它自己的键。验证若不在任何 Project 里则没有账本，DEP4 读作"不适用"而非"未生效"。
+
+**DEP5（重放与乱序）**：以上每一项都读**当前权威行**，不读事件。
+因此 `task.updated` / `session.ended` 乱序投递、重复投递、服务重启都改变不了答案 —— 这条判据没有可以跑到前面去的记忆。
+重复的 `verdictRevision` 由下一层排除：账本键是 `(verifier, revision)`，同一个结论第二次投递是撞键而不是再执行一次。
+
+**DEP6（审计语义）**：`verificationEpochGate` 返回的是**哪一条**说了不行，不是一个布尔：
+`NO_LIVE_VERIFICATION` / `VERIFICATION_IN_FLIGHT` / `VERDICT_ABSENT` / `VERIFICATION_FAILED` /
+`VERIFICATION_INCONCLUSIVE` / `VERDICT_UNREVISIONED` / `RUN_NOT_SETTLED` / `VERDICT_NOT_APPLIED` / `SUBJECT_NOT_DONE`。
+§7.8 的 skip 用 `DEPENDENCY_VERIFICATION_NOT_PASSED`，§9.2 的 reasonCode 用 `VERIFICATION_NOT_PASSED`（DEFER，不是 DENY）。
+`FAIL` / `INCONCLUSIVE` / `NO_LIVE_VERIFICATION` 归入 `BLOCKED_FAILED`（要人动手），其余是 `BLOCKED`（等）。
+**"前置还没完成"用在一条判了 FAIL 的验证上，正是让这次事故跑起来的那句话**：它描述的是等待，而发生的事情是拒绝。
+
+**DEP7（混合版本）**：快照标记 `world.protocol.verificationEpoch`。缺失 ⇒ 该决策由一个按 `status = 'DONE'` 判断的二进制做出，
+重放必须复现**那个**答案（它的快照里根本没有 `task.verdictApplied` 与 `session.endReason`/`archivedAt` 两项事实）。
+`project_action.refusal_code` 这一列上，`VERIFICATION_NOT_PASSED` 经 `wireRefusalCode` 写成
+`TASK_DEPENDENCIES_INCOMPLETE` —— 与 §13.1 AG6 用 `STALE_SNAPSHOT` 同一条理由：BL2 对旧 reader 不认识的码 fail-closed 成
+PROJECT 主体的 `UNKNOWN_FAILURE`，会停死整个项目。精确语义不丢，在 `reasonCode` 与授权审计里。
+本条**不需要迁移**：读的四项事实全部是既有列。
+
 ### 13.4 项目级验收与 DONE（AC12）
 
 1. 全部 Task 收敛且验证全 PASS ⇒ `run_state = ACCEPTANCE`，产生 `RUN_PROJECT_ACCEPTANCE`。

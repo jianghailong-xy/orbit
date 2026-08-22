@@ -12,7 +12,7 @@ import { openCoordinatorTurnIdempotencyKey } from './project-turn-reason';
 import { selectDispatchableTasks } from './project-dispatch-pass';
 import { projectPolicyCell } from './project-authorization.service';
 import { PROJECT_BLOCKER_POLICY } from './project-blocker';
-import { computeDependencyState } from '../tasks/task-dependencies';
+import { computeDependencyState, statusPrerequisites } from '../tasks/task-dependencies';
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 
 /**
@@ -234,7 +234,7 @@ test('the fixture is the production shape: Task FAILED, Session FAILED, downstre
   assert.equal(failed.liveSessionIds.length, 0, 'nothing is still running it');
   assert.equal(input.world.sessions[0].runStatus, 'FAILED', 'the run that failed is on the snapshot');
   assert.equal(
-    computeDependencyState([failed.status as TaskStatus]),
+    computeDependencyState(statusPrerequisites([failed.status as TaskStatus])),
     'BLOCKED_FAILED',
     'the downstream task is terminally blocked, which is what makes this need a decision',
   );

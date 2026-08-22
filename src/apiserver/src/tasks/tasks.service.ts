@@ -67,7 +67,6 @@ import {
   supersessionRefusal,
   taskOutcome,
   isLockNotAvailable,
-  dependenciesSatisfiedSql,
   taskFenceConflictMessage,
   taskNotObsoleteSql,
   taskRetirement,
@@ -89,10 +88,16 @@ import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
   canRun,
   computeDependencyState,
+  dependenciesSatisfiedSql,
+  dependencyEpochGate,
+  statusPrerequisites,
+  verificationGateMessage,
+  type DependencyPrerequisiteFact,
   wouldCreateCycle,
   wouldReplacementCreateCycle,
   type DependencyState,
 } from './task-dependencies';
+import { loadVerificationEpochGates } from './verification-epoch-read';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
@@ -1281,26 +1286,62 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
    */
   private async dependencyStatesFor(taskIds: string[]): Promise<Map<string, DependencyState>> {
+    return new Map([...await this.dependencyFactsFor(taskIds)]
+      .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
+  }
+
+  /**
+   * Each task's prerequisites as §13.3 DEP reads them: the status, plus why a CHECK among them has
+   * no current pass behind it.
+   *
+   * Split out of `dependencyStatesFor` so Run Now and the batch path can say WHICH clause refused
+   * them. "Prerequisites are not all complete yet" on a check that concluded FAIL is the sentence
+   * that let the incident run: it describes a wait, and what happened was a refusal.
+   */
+  private async dependencyFactsFor(
+    taskIds: string[],
+  ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
+    const byTask = new Map<string, Array<{ id: string; status: TaskStatus }>>();
     if (taskIds.length === 0) return new Map();
-    const byTask = new Map<string, TaskStatus[]>();
     const uniqueIds = [...new Set(taskIds)];
     for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
       const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
       const edges = await this.prisma.taskDependency.findMany({
         where: { taskId: { in: ids } },
-        select: { taskId: true, dependsOnTask: { select: { status: true } } },
+        select: {
+          taskId: true,
+          dependsOnTaskId: true,
+          dependsOnTask: { select: { status: true } },
+        },
       });
       for (const e of edges) {
-        const status = e.dependsOnTask.status as unknown as TaskStatus;
+        const entry = {
+          id: e.dependsOnTaskId,
+          status: e.dependsOnTask.status as unknown as TaskStatus,
+        };
         const arr = byTask.get(e.taskId);
-        if (arr) arr.push(status);
-        else byTask.set(e.taskId, [status]);
+        if (arr) arr.push(entry);
+        else byTask.set(e.taskId, [entry]);
       }
     }
-    const out = new Map<string, DependencyState>();
-    for (const [taskId, statuses] of byTask) out.set(taskId, computeDependencyState(statuses));
-    return out;
+    const epochs = await loadVerificationEpochGates(
+      this.prisma,
+      [...byTask.values()].flat().map((entry) => entry.id),
+    );
+    // §13.3 DEP's self-exemption: a check that depends on the subject it checks must not be made to
+    // wait for its own conclusion. Read only when some prerequisite actually HAS an epoch, which on
+    // an ordinary backlog is never — this is on the path of every task page and every Run.
+    const dependents = epochs.size === 0 ? new Map<string, string | null>()
+      : new Map((await this.prisma.task.findMany({
+        where: { id: { in: [...byTask.keys()] }, verifiesTaskId: { not: null } },
+        select: { id: true, verifiesTaskId: true },
+      })).map((row) => [row.id, row.verifiesTaskId]));
+    return new Map([...byTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
+      status: entry.status,
+      verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
+    }))]));
   }
+
 
   /**
    * Derive graph-node state without hydrating every prerequisite row. A dense task can have
@@ -1342,10 +1383,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ]);
     const completedByTask = new Map(completed.map((row) => [row.taskId, row._count._all]));
     const failedByTask = new Map(failed.map((row) => [row.taskId, row._count._all]));
+    // §13.3 DEP, as a fourth count rather than through `computeDependencyState`: this method
+    // exists to keep memory O(nodes) on a dense DAG, so it must not hydrate every prerequisite the
+    // pure predicate would want. A check that is DONE without a current pass stops counting as
+    // completed here too — the graph may under-state WHY (`BLOCKED` rather than `BLOCKED_FAILED`,
+    // which needs the verdict), but it can no longer offer a READY the API would refuse.
+    const notPassedByTask = await this.verificationBlockedCounts(ownerId, taskIds);
     const states = new Map<string, DependencyState>();
     for (const row of totals) {
       const failedCount = failedByTask.get(row.taskId) ?? 0;
-      const completedCount = completedByTask.get(row.taskId) ?? 0;
+      const notPassed = notPassedByTask.get(row.taskId) ?? 0;
+      const completedCount = (completedByTask.get(row.taskId) ?? 0) - notPassed;
       states.set(
         row.taskId,
         failedCount > 0
@@ -1356,6 +1404,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     return states;
+  }
+
+  /**
+   * Per task, how many of its DONE prerequisites are CHECKS whose subject has no open PASS epoch.
+   *
+   * Raw because the predicate is a correlated EXISTS over three tables and Prisma's `where` cannot
+   * express it — and raw against the SHARED fragment, so this count and the sweeps' own gate cannot
+   * come to different conclusions about the same edge.
+   */
+  private async verificationBlockedCounts(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, number>> {
+    if (taskIds.length === 0) return new Map();
+    // Only the DONE prerequisites that are CHECKS are hydrated — the rest cannot have an epoch and
+    // are already counted by the grouped queries above. That keeps the O(nodes) budget this method
+    // exists for while still asking the shared predicate rather than a fourth spelling of it.
+    const edges = await this.prisma.taskDependency.findMany({
+      where: {
+        taskId: { in: taskIds },
+        task: { ownerId },
+        dependsOnTask: {
+          ownerId,
+          status: TaskStatus.DONE,
+          OR: [{ verifiesTaskId: { not: null } }, { verifiedBy: { some: {} } }],
+        },
+      },
+      select: { taskId: true, dependsOnTaskId: true, task: { select: { verifiesTaskId: true } } },
+    });
+    if (edges.length === 0) return new Map();
+    const epochs = await loadVerificationEpochGates(
+      this.prisma,
+      edges.map((edge) => edge.dependsOnTaskId),
+    );
+    const counts = new Map<string, number>();
+    for (const edge of edges) {
+      const gate = dependencyEpochGate(
+        edge.dependsOnTaskId, epochs, edge.task?.verifiesTaskId ?? null,
+      );
+      if (gate == null) continue;
+      counts.set(edge.taskId, (counts.get(edge.taskId) ?? 0) + 1);
+    }
+    return counts;
   }
 
   /**
@@ -3864,9 +3955,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!task) throw new NotFoundException('task not found');
-    const dependencyState = computeDependencyState(
-      task.dependsOn.map((d) => d.dependsOnTask.status as unknown as TaskStatus),
+    // §13.3 DEP: the same judgement the Run button and the Coordinator's pass make. A task page
+    // that says READY while `execute` refuses is the disagreement `RUNNABLE_TASK_SQL` already
+    // warns about, one clause further along. Built from the edges this query already hydrated, so
+    // a task with no prerequisites costs no extra read at all.
+    const prerequisiteEpochs = await loadVerificationEpochGates(
+      this.prisma,
+      task.dependsOn.map((d) => d.dependsOnTaskId),
     );
+    const dependencyState = computeDependencyState(task.dependsOn.map((d) => ({
+      status: d.dependsOnTask.status as unknown as TaskStatus,
+      verificationGate: dependencyEpochGate(
+        d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
+      ),
+    })));
     const supersession = await this.supersession(ownerId, task);
     return {
       ...task,
@@ -6808,12 +6910,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
       return { ok: false as const, skipped: 'rescheduled' as const };
     }
-    const depState = (await this.dependencyStatesFor([id])).get(id) ?? 'NONE';
+    const depFacts = (await this.dependencyFactsFor([id])).get(id) ?? [];
+    const depState = computeDependencyState(depFacts);
     if (!canRun(depState)) {
+      // §13.3 DEP: name the CHECK when a check is what refused. "Prerequisites are not all complete
+      // yet" reads as a wait, and a verdict of FAIL is not one — it is a refusal with something to
+      // go and do, and a person told to wait will simply click again.
+      const gate = depFacts.find((fact) => fact.verificationGate != null)?.verificationGate;
       throw new BadRequestException(
-        depState === 'BLOCKED_FAILED'
-          ? 'A prerequisite was cancelled — resolve it before running'
-          : 'Prerequisites are not all complete yet, cannot run',
+        gate
+          ? `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`
+          : depState === 'BLOCKED_FAILED'
+            ? 'A prerequisite was cancelled — resolve it before running'
+            : 'Prerequisites are not all complete yet, cannot run',
       );
     }
     // The sweep already filters held tasks out in SQL; this is the manual button's half of the
@@ -7053,7 +7162,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
+    const batchFacts = await this.dependencyFactsFor(tasks.map((t) => t.id));
+    const states = new Map([...batchFacts]
+      .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
     // task that's already running (runWorkspaceOnTask also guards this, but surfacing it here
     // lets us report it as skipped rather than silently dispatched).
@@ -7118,12 +7229,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
       else if (!t.assignee.runnerId)
         skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
-      else if (!canRun(state))
+      else if (!canRun(state)) {
+        // §13.3 DEP, and the same sentence `execute` gives: a batch that reports "prerequisites not
+        // complete" for a check that concluded FAIL hides the one row somebody has to act on.
+        const gate = (batchFacts.get(t.id) ?? [])
+          .find((fact) => fact.verificationGate != null)?.verificationGate;
         skipped.push({
           id: t.id,
           title: t.title,
-          reason: state === 'BLOCKED_FAILED' ? 'Prerequisite cancelled' : 'Prerequisites not complete',
+          reason: gate
+            ? `Prerequisite not verified: ${verificationGateMessage(gate)}`
+            : state === 'BLOCKED_FAILED'
+              ? 'Prerequisite cancelled'
+              : 'Prerequisites not complete',
         });
+      }
       else if (occupied.has(t.id))
         skipped.push({ id: t.id, title: t.title, reason: 'Already running or queued' });
       else runnable.push(t);

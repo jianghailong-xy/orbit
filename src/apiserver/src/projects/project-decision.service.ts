@@ -150,6 +150,13 @@ export interface ProjectDecisionInput {
        */
       verdictRevision?: string;
       /**
+       * §13.3 DEP4: `APPLY_VERIFICATION_VERDICT` for `(this task, this verdictRevision)` is APPLIED
+       * in the ledger. Absent on decisions captured before DEP, which readers must treat as
+       * "unknown" and NOT as `false` — see `world.protocol.verificationEpoch`, which decides
+       * whether the DEP rule is evaluated at all.
+       */
+      verdictApplied?: boolean;
+      /**
        * §13.6 SU1's three columns, absent on decisions captured before migration 0129. Readers
        * must treat an absent field as "nothing retired this attempt", which is exactly what those
        * rows held — the columns did not exist, so no task could name a successor. An old snapshot
@@ -187,6 +194,13 @@ export interface ProjectDecisionInput {
       startedAt: string | null;
       finishedAt: string | null;
       completedAt: string | null;
+      /**
+       * §13.3 DEP1, absent on decisions captured before it. A reader must treat an absent field as
+       * "this snapshot predates DEP" and fall back to the status rule, which is what the binary
+       * that captured it did — `world.protocol.verificationEpoch` is the marker that says which.
+       */
+      archivedAt?: string | null;
+      endReason?: string | null;
       deletedAt: string | null;
     }>;
     coordinatorSession: {
@@ -271,12 +285,19 @@ export interface ProjectDecisionInput {
      * this one is spelled as a capability rather than as data because the answer for an old
      * snapshot is "do not evaluate", not "evaluate over nothing".
      *
+     * v1.19 adds `verificationEpoch` to the same object, and it gates §13.3 DEP for the same
+     * reason: a decision taken before DEP was decided by a binary that read `status = 'DONE'` off a
+     * verification prerequisite, and a replay has to reproduce THAT answer rather than today's.
+     * The two facts DEP needs (`task.verdictApplied`, `session.endReason`/`archivedAt`) are absent
+     * from those snapshots, so evaluating the rule over them would not even be today's answer — it
+     * would be a third one, computed from holes.
+     *
      * It also marks the wider `providers` projection V8 needs (a slug a team member configured as
      * a fallback, which no task or session in this project has used yet). That widening changes
      * only what a NEW capture contains, so it needs no gate of its own — an old snapshot is
      * replayed from its own stored bytes.
      */
-    protocol?: { completionGaps: true };
+    protocol?: { completionGaps: true; verificationEpoch?: true };
     blockers?: ProjectBlockerFact[];
     /**
      * §5.4 F22's UNACKNOWLEDGED dead letters — events this project lost for good, minus the ones
@@ -492,6 +513,8 @@ interface TaskRow {
   supersededByTaskId: string | null;
   supersededAt: Date | null;
   terminalReason: string | null;
+  /** §13.3 DEP4, per row: is THIS task's CURRENT verdict revision applied in the ledger? */
+  verdictApplied: boolean;
   updatedAt: Date;
 }
 
@@ -514,6 +537,8 @@ interface SessionRow {
   startedAt: Date | null;
   finishedAt: Date | null;
   completedAt: Date | null;
+  archivedAt: Date | null;
+  endReason: string | null;
   deletedAt: Date | null;
   result: string | null;
   error: string | null;
@@ -712,6 +737,18 @@ export class ProjectDecisionService {
                t."superseded_by_task_id" AS "supersededByTaskId",
                t."superseded_at" AS "supersededAt",
                t."terminal_reason" AS "terminalReason",
+               -- §13.3 DEP4. Correlated rather than joined so a task with no conclusion costs
+               -- nothing, and keyed on the ledger's own unique identity (§8.2) rather than on
+               -- "some verdict action for this task": a superseded revision is not this one.
+               EXISTS (
+                 SELECT 1 FROM "project_action" va
+                  WHERE va."project_id" = t."project_id"
+                    AND va."type"::text = 'APPLY_VERIFICATION_VERDICT'
+                    AND va."status"::text = 'APPLIED'
+                    AND va."subject_id" = t."id"
+                    AND va."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
+                        || t."id"::text || ':' || t."verdict_revision"::text
+               ) AS "verdictApplied",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -736,7 +773,8 @@ export class ProjectDecisionService {
                s."provider", s."model", s."permission_mode" AS "permissionMode", s."effort",
                s."created_at" AS "createdAt",
                s."started_at" AS "startedAt", s."finished_at" AS "finishedAt",
-               s."completed_at" AS "completedAt", s."deleted_at" AS "deletedAt",
+               s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt",
+               s."end_reason" AS "endReason", s."deleted_at" AS "deletedAt",
                s."result", s."error", s."branch", s."base_sha" AS "baseSha",
                s."changed_files" AS "changedFiles", s."merge_status" AS "mergeStatus",
                s."merged_source_sha" AS "mergedSourceSha", s."merge_target" AS "mergeTarget",
@@ -931,6 +969,7 @@ export class ProjectDecisionService {
         supersededByTaskId: toPublicIdOrNull(row.supersededByTaskId),
         supersededAt: iso(row.supersededAt),
         terminalReason: row.terminalReason,
+        verdictApplied: row.verdictApplied,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,
@@ -955,6 +994,11 @@ export class ProjectDecisionService {
       startedAt: iso(row.startedAt),
       finishedAt: iso(row.finishedAt),
       completedAt: iso(row.completedAt),
+      // §13.3 DEP1's two halves. `archivedAt` completes §4.2's COMPLETED lifecycle (the derivation
+      // is `completedAt ?? archivedAt`) and `endReason` is what tells a run the worker finished
+      // apart from one a person filed or stopped — a distinction the whole DEP rule rests on.
+      archivedAt: iso(row.archivedAt),
+      endReason: row.endReason,
       deletedAt: iso(row.deletedAt),
     }));
 
@@ -1113,7 +1157,7 @@ export class ProjectDecisionService {
       })),
       // §13.1 AG7's capability marker, stamped by the binary that captured this world. Constant by
       // construction — it says what THIS build computes, not what the project contains.
-      protocol: { completionGaps: true },
+      protocol: { completionGaps: true, verificationEpoch: true },
       blockers: blockerRows.map((row) => ({
         id: toPublicId(row.id),
         kind: row.kind as ProjectBlockerFact['kind'],

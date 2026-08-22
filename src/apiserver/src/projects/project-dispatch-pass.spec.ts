@@ -144,6 +144,8 @@ interface WorldOverrides {
   coordinatorEnabled?: boolean;
   runState?: ProjectDecisionInput['world']['runtime']['runState'];
   due?: Record<string, { runAtDue: boolean; retryBackoffExpired: boolean }>;
+  /** §13.3 DEP / §13.1 AG7's capability marker. Absent is the pre-DEP snapshot, deliberately. */
+  protocol?: { completionGaps: true; verificationEpoch?: true };
 }
 
 function input(overrides: WorldOverrides = {}): ProjectDecisionInput {
@@ -172,6 +174,7 @@ function input(overrides: WorldOverrides = {}): ProjectDecisionInput {
     sessions: overrides.sessions ?? [],
     coordinatorSession: null, workspaces: [], runners: [], providers: [],
     actions: overrides.actions ?? [],
+    ...(overrides.protocol ? { protocol: overrides.protocol } : {}),
     ...(overrides.blockers ? { blockers: overrides.blockers } : {}),
     evidence: { branches: [], tests: [] },
   };
@@ -611,4 +614,261 @@ test('§13.1 AG6: a MANUAL project never asks a person to Run an aggregate paren
   assert.equal(held.length, 1, 'the project does hold real work');
   assert.deepEqual((held[0].facts as { taskIds: string[] }).taskIds, [taskId(2)],
     'and it is the leaf, never the roll-up node above it');
+});
+
+// ---------------------------------------------------------------------------
+// §13.3 DEP — a dependency on a CHECK is satisfied by a PASS, not by a run ending
+//
+// The shape is this project's own incident: H0V checked H0, ran, concluded FAIL and went DONE.
+// H1 and L1 named it as a prerequisite and became READY, because `status = 'DONE'` was true.
+// ---------------------------------------------------------------------------
+
+const DEP_PROTOCOL = { completionGaps: true, verificationEpoch: true } as const;
+
+/** A run that ended the way a worker finishing its task ends one (DEP3). */
+function settledRun(id: string, taskRef: string): SessionFact {
+  return {
+    ...session(id, taskRef, 'SUCCEEDED'),
+    finishedAt: READ_AT,
+    completedAt: READ_AT,
+    archivedAt: READ_AT,
+    endReason: 'task_done',
+  };
+}
+
+/**
+ * H0 (subject, DONE) ← H0V (check) ← H1 and L1 (downstream, depending on the CHECK).
+ *
+ * `verdict` and `verdictApplied` are what each case varies; everything else is the world in which
+ * the old rule said READY.
+ */
+function verdictWorld(over: {
+  verdict?: string | null;
+  verdictApplied?: boolean;
+  subjectStatus?: string;
+  extraChecks?: TaskFact[];
+  extraSessions?: SessionFact[];
+  protocol?: { completionGaps: true; verificationEpoch?: true };
+} = {}) {
+  const subject = taskId(1);
+  const checkTask = taskId(2);
+  return input({
+    protocol: over.protocol ?? DEP_PROTOCOL,
+    tasks: [
+      task(subject, { status: over.subjectStatus ?? 'DONE' }),
+      task(checkTask, {
+        status: 'DONE',
+        verifiesTaskId: subject,
+        verdict: over.verdict === undefined ? 'FAIL' : over.verdict,
+        verdictRevision: '1',
+        verdictApplied: over.verdictApplied ?? true,
+      }),
+      ...(over.extraChecks ?? []),
+      task(taskId(3), { dependsOnTaskIds: [checkTask] }),
+      task(taskId(4), { dependsOnTaskIds: [checkTask] }),
+    ],
+    sessions: [settledRun('s2', checkTask), ...(over.extraSessions ?? [])],
+  });
+}
+
+test('DEP: a check that concluded FAIL does not release the tasks depending on it', () => {
+  const world = verdictWorld();
+  assert.deepEqual(chosen(world), [], 'nothing downstream of a failed check is a next step');
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+  assert.equal(skipReason(world, taskId(4)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: INCONCLUSIVE holds them too, and so does a check that recorded nothing', () => {
+  for (const verdict of ['INCONCLUSIVE', null]) {
+    assert.deepEqual(chosen(verdictWorld({ verdict })), [], `verdict=${verdict}`);
+  }
+});
+
+test('DEP: an applied PASS releases them — exactly once, and both at once', () => {
+  assert.deepEqual(chosen(verdictWorld({ verdict: 'PASS' })), [taskId(3), taskId(4)]);
+});
+
+test('DEP: a PASS whose consequences are not applied yet is not a release', () => {
+  const world = verdictWorld({ verdict: 'PASS', verdictApplied: false });
+  assert.deepEqual(chosen(world), []);
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: a PASS whose run has not settled naturally is not a release', () => {
+  // The same world, minus the natural finish: the check is DONE and the verdict is applied, but
+  // its only run is still live.
+  const subject = taskId(1);
+  const checkTask = taskId(2);
+  const world = input({
+    protocol: DEP_PROTOCOL,
+    tasks: [
+      task(subject, { status: 'DONE' }),
+      task(checkTask, {
+        status: 'DONE', verifiesTaskId: subject, verdict: 'PASS',
+        verdictRevision: '1', verdictApplied: true, liveSessionIds: ['s2'],
+      }),
+      task(taskId(3), { dependsOnTaskIds: [checkTask] }),
+    ],
+    sessions: [session('s2', checkTask, 'RUNNING')],
+  });
+  assert.deepEqual(chosen(world), []);
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: a session somebody completed by hand is not the worker finishing the task', () => {
+  const subject = taskId(1);
+  const checkTask = taskId(2);
+  const world = input({
+    protocol: DEP_PROTOCOL,
+    tasks: [
+      task(subject, { status: 'DONE' }),
+      task(checkTask, {
+        status: 'DONE', verifiesTaskId: subject, verdict: 'PASS',
+        verdictRevision: '1', verdictApplied: true,
+      }),
+      task(taskId(3), { dependsOnTaskIds: [checkTask] }),
+    ],
+    sessions: [{ ...settledRun('s2', checkTask), endReason: 'completed' }],
+  });
+  assert.deepEqual(chosen(world), []);
+});
+
+test('DEP: reopening the subject after a PASS puts every downstream task back', () => {
+  const world = verdictWorld({ verdict: 'PASS', subjectStatus: 'OPEN' });
+  assert.deepEqual(chosen(world).filter((id) => id !== taskId(1)), []);
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: an older PASS stops releasing the moment a newer check is filed', () => {
+  const world = verdictWorld({
+    verdict: 'PASS',
+    // A re-check, newer by id, that has not concluded. The epoch belongs to the subject.
+    extraChecks: [task(taskId(5), {
+      status: 'OPEN', verifiesTaskId: taskId(1), verdict: null, verdictRevision: '0',
+    })],
+  });
+  assert.deepEqual(chosen(world), [taskId(5)], 'only the new check itself may run');
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: a newer PASS releases work an older FAIL held — fix, re-check, proceed', () => {
+  const world = verdictWorld({
+    verdict: 'FAIL',
+    extraChecks: [task(taskId(5), {
+      status: 'DONE', verifiesTaskId: taskId(1), verdict: 'PASS',
+      verdictRevision: '1', verdictApplied: true,
+    })],
+    extraSessions: [settledRun('s5', taskId(5))],
+  });
+  assert.deepEqual(chosen(world), [taskId(3), taskId(4)]);
+});
+
+test('DEP: an ordinary DONE prerequisite is untouched, and reports the plain wait when it is not', () => {
+  const world = input({
+    protocol: DEP_PROTOCOL,
+    tasks: [
+      task(taskId(1), { status: 'DONE' }),
+      task(taskId(2), { status: 'OPEN' }),
+      task(taskId(3), { dependsOnTaskIds: [taskId(1)] }),
+      task(taskId(4), { dependsOnTaskIds: [taskId(2)] }),
+    ],
+  });
+  assert.deepEqual(chosen(world), [taskId(2), taskId(3)]);
+  assert.equal(skipReason(world, taskId(4)), 'TASK_DEPENDENCIES_INCOMPLETE');
+});
+
+test('DEP7: a snapshot captured before DEP replays to the answer its own binary gave', () => {
+  // Same world, no `verificationEpoch` marker: `status = 'DONE'` was the whole rule, and a replay
+  // has to reproduce THAT — the two facts DEP reads are not even in those snapshots.
+  const world = verdictWorld({ protocol: { completionGaps: true } });
+  assert.deepEqual(chosen(world), [taskId(3), taskId(4)]);
+});
+
+// ---------------------------------------------------------------------------
+// §13.3 DEP, the edge callers are told to write: `dependsOn: <the SUBJECT>`
+//
+// This is the shape the incident actually had — H1 and L1 named H0, not H0V — and the one the
+// API's own guidance promises the server holds until the check passes.
+// ---------------------------------------------------------------------------
+
+/** H0 (subject) ← H0V (check), with the downstream tasks depending on the SUBJECT. */
+function subjectEdgeWorld(over: {
+  verdict?: string | null;
+  checkStatus?: string;
+  subjectStatus?: string;
+  checked?: boolean;
+  protocol?: { completionGaps: true; verificationEpoch?: true };
+} = {}) {
+  const subject = taskId(1);
+  const checkTask = taskId(2);
+  return input({
+    protocol: over.protocol ?? DEP_PROTOCOL,
+    tasks: [
+      task(subject, { status: over.subjectStatus ?? 'DONE' }),
+      ...(over.checked === false ? [] : [task(checkTask, {
+        status: over.checkStatus ?? 'DONE',
+        verifiesTaskId: subject,
+        verdict: over.verdict === undefined ? 'FAIL' : over.verdict,
+        verdictRevision: over.verdict === null ? '0' : '1',
+        verdictApplied: true,
+      })]),
+      task(taskId(3), { dependsOnTaskIds: [subject] }),
+      task(taskId(4), { dependsOnTaskIds: [subject] }),
+    ],
+    sessions: over.checked === false ? [] : [settledRun('s2', checkTask)],
+  });
+}
+
+test('DEP: a DONE subject whose check FAILED does not release the tasks depending on IT', () => {
+  const world = subjectEdgeWorld();
+  assert.deepEqual(chosen(world), []);
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+  assert.equal(skipReason(world, taskId(4)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: a DONE subject whose check PASSED releases them, once', () => {
+  assert.deepEqual(
+    chosen(subjectEdgeWorld({ verdict: 'PASS' })),
+    [taskId(3), taskId(4)],
+  );
+});
+
+test('DEP: a check still running holds the subject edge', () => {
+  const world = subjectEdgeWorld({ checkStatus: 'IN_PROGRESS', verdict: null });
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: cancelling every check of a DONE subject is not a pass', () => {
+  const world = subjectEdgeWorld({ checkStatus: 'CANCELLED', verdict: null });
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP: a subject nothing checks is an ordinary prerequisite, untouched', () => {
+  assert.deepEqual(
+    chosen(subjectEdgeWorld({ checked: false })),
+    [taskId(3), taskId(4)],
+  );
+});
+
+test('DEP: a check depending on the subject it checks is not made to wait for itself', () => {
+  // Without the exemption this deadlocks: the epoch is shut BECAUSE this check has not concluded.
+  const subject = taskId(1);
+  const world = input({
+    protocol: DEP_PROTOCOL,
+    tasks: [
+      task(subject, { status: 'DONE' }),
+      task(taskId(2), {
+        status: 'OPEN', verifiesTaskId: subject, verdict: null, verdictRevision: '0',
+        dependsOnTaskIds: [subject],
+      }),
+      task(taskId(3), { dependsOnTaskIds: [subject] }),
+    ],
+  });
+  assert.deepEqual(chosen(world), [taskId(2)], 'the check runs; the ordinary dependent waits');
+  assert.equal(skipReason(world, taskId(3)), 'DEPENDENCY_VERIFICATION_NOT_PASSED');
+});
+
+test('DEP7: a pre-DEP snapshot releases the subject edge exactly as its own binary did', () => {
+  const world = subjectEdgeWorld({ protocol: { completionGaps: true } });
+  assert.deepEqual(chosen(world), [taskId(3), taskId(4)]);
 });

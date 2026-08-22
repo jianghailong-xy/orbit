@@ -11,7 +11,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
-import { canRun, computeDependencyState } from '../tasks/task-dependencies';
+import {
+  canRun,
+  computeDependencyState,
+  dependencyEpochGate,
+  type DependencyPrerequisiteFact,
+} from '../tasks/task-dependencies';
+import { loadVerificationEpochGates } from '../tasks/verification-epoch-read';
 import { TASK_LIST_SELECT } from '../tasks/tasks.service';
 import { CreateTaskListDto, UpdateTaskListDto } from './dto';
 
@@ -152,7 +158,11 @@ export class TaskListsService {
           }),
           this.prisma.taskDependency.findMany({
             where: { task: { ownerId, listId: id } },
-            select: { taskId: true, dependsOnTask: { select: { status: true } } },
+            select: {
+              taskId: true,
+              dependsOnTaskId: true,
+              dependsOnTask: { select: { status: true } },
+            },
           }),
         ])
       : [[], []];
@@ -162,16 +172,25 @@ export class TaskListsService {
     const queued = new Set(
       busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId),
     );
-    const prerequisiteStatuses = new Map<string, SharedTaskStatus[]>();
+    // §13.3 DEP. The Ready tab must never offer a run the API would reject, so it asks the same
+    // question the Run button does — including "is this prerequisite a CHECK, and did it pass".
+    const epochs = await loadVerificationEpochGates(
+      this.prisma,
+      dependencies.map((dependency) => dependency.dependsOnTaskId),
+    );
+    const prerequisites = new Map<string, DependencyPrerequisiteFact[]>();
     for (const dependency of dependencies) {
-      const statuses = prerequisiteStatuses.get(dependency.taskId) ?? [];
-      statuses.push(dependency.dependsOnTask.status as unknown as SharedTaskStatus);
-      prerequisiteStatuses.set(dependency.taskId, statuses);
+      const facts = prerequisites.get(dependency.taskId) ?? [];
+      facts.push({
+        status: dependency.dependsOnTask.status as unknown as SharedTaskStatus,
+        verificationGate: dependencyEpochGate(dependency.dependsOnTaskId, epochs),
+      });
+      prerequisites.set(dependency.taskId, facts);
     }
     return {
       ...list,
       tasks: tasks.map((t) => {
-        const dependencyState = computeDependencyState(prerequisiteStatuses.get(t.id) ?? []);
+        const dependencyState = computeDependencyState(prerequisites.get(t.id) ?? []);
         return {
           ...t,
           running: running.has(t.id),

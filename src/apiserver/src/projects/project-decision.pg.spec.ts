@@ -172,6 +172,9 @@ async function reset(client: Client): Promise<void> {
       "verifies_task_id" UUID,
       "completion_policy" TEXT NOT NULL DEFAULT 'MANUAL', "verdict" TEXT,
       "verdict_revision" BIGINT NOT NULL DEFAULT 0,
+      -- 13.6 SU1's three columns, which the capture has selected since they landed. A hand-built
+      -- subset only ever agrees with itself, and the whole spec was failing on its first query.
+      "superseded_by_task_id" UUID, "superseded_at" TIMESTAMP(3), "terminal_reason" TEXT,
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE "task_dependency" (
@@ -185,6 +188,9 @@ async function reset(client: Client): Promise<void> {
       "effort" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "started_at" TIMESTAMP(3), "finished_at" TIMESTAMP(3),
       "completed_at" TIMESTAMP(3), "deleted_at" TIMESTAMP(3), "result" TEXT, "error" TEXT,
+      -- 13.3 DEP3's two: the lifecycle half the capture projects beside completed_at, and the
+      -- end reason that tells a worker finishing the task from a person filing the session.
+      "archived_at" TIMESTAMP(3), "end_reason" TEXT,
       "branch" TEXT, "base_sha" TEXT, "changed_files" JSONB, "merge_status" TEXT,
       "merged_source_sha" TEXT, "merge_target" TEXT, "branch_merged" BOOLEAN,
       "worktree_branch" TEXT, "worktree_dirty" BOOLEAN, "commit_status" TEXT

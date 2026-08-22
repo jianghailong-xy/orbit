@@ -284,6 +284,24 @@ async function conclude(
   await tasks.update({ where: { id: verifierId }, data: { status: TaskStatus.DONE, verdict } });
 }
 
+/**
+ * The run a check leaves behind when its worker finishes the task (§13.3 DEP3).
+ *
+ * `dispatch_origin = 'USER'`: migration 0122's boundary refuses a Session written straight onto a
+ * COORDINATOR-authority task, and `dispatch_authority` is a derived column. What DEP3 reads off the
+ * row — status, end reason, lifecycle — is identical either way.
+ */
+async function settledRun(db: PrismaClient, target: Fixture, verifier: string): Promise<void> {
+  await db.$executeRawUnsafe(
+    `INSERT INTO "session" ("id","owner_id","workspace_id","task_id","title","prompt","creator_id",
+       "provider","status","end_reason","completed_at","starts_task_work","dispatch_origin",
+       "updated_at")
+     VALUES ($1,$2,$3,$4,'check run','run the check',$2,'claude','SUCCEEDED','task_done',now(),
+       true,'USER'::"session_dispatch_origin",now())`,
+    randomUUID(), target.ownerId, target.workspaceId, target.ids[verifier],
+  );
+}
+
 async function defects(db: PrismaClient, target: Fixture): Promise<Array<{
   id: string; parentTaskId: string | null; status: string; idempotencyKey: string | null;
 }>> {
@@ -680,9 +698,14 @@ test('verification verdicts have native consequences on PostgreSQL',
             v: { verifies: 's' },
             d: { dependsOn: ['s'] },
           });
+          // §13.3 DEP: `d` depends on `s`, and `s` has a check that has not concluded — so it is
+          // not yet done in the sense the edge means. Before DEP this read ALLOW off the subject's
+          // status alone, which is the hole H0G closed.
           const before = await authorize(db, authorization, target, 'd');
-          assert.equal(before?.result.decision, 'ALLOW');
+          assert.equal(before?.result.decision, 'DEFER');
+          assert.equal(before?.result.reasonCode, 'VERIFICATION_NOT_PASSED');
 
+          await settledRun(db, target, 'v');
           await round(target, 'v', TaskVerdict.FAIL);
           // The dependent's own row says nothing about being blocked — that is the point (V3).
           const dependent = await db.task.findUniqueOrThrow({ where: { id: target.ids.d } });
