@@ -150,6 +150,16 @@ tmpfs 数据目录，一次性容器，跑完 `docker rm -f -v`）。
 worktree 内独立 `npm install` —— `/root/orbit/node_modules` 仍是 Prisma 5.22 / TS 5.9 的陈旧树，软链过去会得到
 一批假错（26 已记过同一条）。
 
+### 2.0 分支与提交
+
+分支 `orbit/b-open-coordinator-turn-b86879`，从**包含单元 26 的最新主线** `b1391eee` 开出
+（26 的分支 `orbit/a-coordinator-f675a4` 收工时仍未并入 `main`，而本单元必须站在它上面，所以是 fast-forward 到
+它再往前做，不是另开一条从 `main` 出发的分支）。
+
+- `9e4d3e30` feat(projects): deliver the coordinator turn the loop already decided
+- `7486c783` style(projects): name the delivery record instead of inlining it in the SQL
+- 本文所在的提交是当前分支 tip。
+
 ### 2.1 命令
 
 ```bash
@@ -163,9 +173,16 @@ docker run -d --name pccb-turn-pg --tmpfs /var/lib/postgresql/data:rw,size=1500m
 DATABASE_URL=postgresql://pccb_user:pccb_pw@127.0.0.1:55437/pccb_turn npx prisma migrate deploy
 COORDINATOR_PG_URL=postgresql://pccb_user:pccb_pw@127.0.0.1:55437/pccb_turn \
 COORDINATOR_PG_EXPECTED_DATABASE=pccb_turn COORDINATOR_PG_EXPECTED_USER=pccb_user \
-COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER=7676636031404142626 \
+COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER=$(docker exec pccb-turn-pg \
+    psql -U pccb_user -d pccb_turn -tAc 'SELECT system_identifier FROM pg_control_system()') \
   node --test build/projects/project-coordinator-turn.pg.spec.js
+
+docker rm -f -v pccb-turn-pg     # 一次性，跑完就删；tmpfs 不留卷
 ```
+
+`COORDINATOR_PG_EXPECTED_SYSTEM_IDENTIFIER` **每个容器都不一样**，所以上面从容器里读而不是抄一个常数 ——
+`coordinator-pg-test-safety` 要的就是"你确实知道自己连的是哪台一次性服务器"。本轮实际用过两台
+（`7676636031404142626` 与最后一次复核的 `7676647512191844386`）。
 
 ### 2.2 结果
 
