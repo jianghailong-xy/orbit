@@ -249,18 +249,41 @@ export function verificationFailureIsHistorySql(
 }
 
 /**
- * PostgreSQL's `lock_not_available` (55P03), as raised by a `FOR UPDATE NOWAIT` that lost.
+ * The PostgreSQL SQLSTATE behind an error, wherever this stack happens to have put it.
  *
- * Matched on the SQLSTATE rather than on the message: Prisma wraps a failed raw query as `P2010`
- * and carries the driver's code in `meta`, and the driver itself surfaces it as `error.code`. Both
- * shapes reach a caller depending on whether the statement ran through the client or through `pg`
- * directly in a test, and a predicate that recognised one of them would be a guard that works in
- * production and not in the spec that proves it — or the other way round.
+ * There are three shapes, and a predicate that knows fewer than all of them is a guard that works
+ * in one place and silently does not in another:
+ *
+ *  - `pg` directly (every spec in this repo that opens its own connection): `error.code`;
+ *  - Prisma before the driver adapter: `P2010` with the driver's code in `meta.code`;
+ *  - **Prisma 7 with `@prisma/adapter-pg`** (what this deployment runs): `P2010` with the code at
+ *    `meta.driverAdapterError.cause.originalCode`. `meta.code` is NOT set.
+ *
+ * The third one was missing until a real-PostgreSQL test caught it: `isLockNotAvailable` returned
+ * false for every `FOR UPDATE NOWAIT` this process actually loses, so the typed refusal every
+ * caller relies on was escaping as an unhandled `P2010`.
  */
+export function postgresSqlState(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const candidate = error as {
+    code?: unknown;
+    meta?: {
+      code?: unknown;
+      driverAdapterError?: { cause?: { originalCode?: unknown; code?: unknown } };
+    };
+  };
+  const adapter = candidate.meta?.driverAdapterError?.cause;
+  for (const value of [adapter?.originalCode, adapter?.code, candidate.meta?.code, candidate.code]) {
+    // `P2010` is Prisma's own wrapper code, never a SQLSTATE; skipping it keeps the fallback to
+    // `error.code` honest for the bare-`pg` shape.
+    if (typeof value === 'string' && value !== 'P2010') return value;
+  }
+  return null;
+}
+
+/** PostgreSQL's `lock_not_available` (55P03), as raised by a `FOR UPDATE NOWAIT` that lost. */
 export function isLockNotAvailable(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const candidate = error as { code?: unknown; meta?: { code?: unknown } };
-  return candidate.code === '55P03' || candidate.meta?.code === '55P03';
+  return postgresSqlState(error) === '55P03';
 }
 
 /**
