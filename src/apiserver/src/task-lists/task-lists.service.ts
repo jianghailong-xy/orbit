@@ -7,6 +7,8 @@ import {
   TaskStatus as SharedTaskStatus,
   uuidToBase62,
 } from '@orbit/shared';
+import { lockOwnerTaskGraph } from '../common/lock-order';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
@@ -294,7 +296,17 @@ export class TaskListsService {
     data: Record<string, unknown>,
     recordAs: { note?: string | null; author?: RevisionAuthor; authorSessionId?: string | null } | null,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. Everything it decides — the revision number, the seeded before-state, the
+    // dispatchHold sweep — is derived inside the closure from rows read under the two locks below,
+    // so a re-run re-derives all of it against the snapshot that actually won rather than
+    // replaying a version of the list that no longer exists.
+    return withTransactionRetry(this.prisma, async (tx) => {
+      // Rank 10 before rank 20 (common/lock-order.ts, I1): a pause writes every Task in the list,
+      // so it is a multi-row Task write and takes the same owner mutex every other one takes.
+      // Without it, this transaction holds the list row and waits for Task rows while a PATCH
+      // that re-files a Task holds that Task and waits for the list — the two sides of one
+      // foreign key, taken in opposite orders.
+      await lockOwnerTaskGraph(tx, ownerId);
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "task_list"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -361,7 +373,7 @@ export class TaskListsService {
         });
       }
       return list;
-    });
+    }, loggedRetry(this.logger, 'taskLists.writePolicy'));
   }
 
   /**
@@ -672,11 +684,38 @@ export class TaskListsService {
     // ever be resumed, which is a wedge rather than a stop. Disarming and releasing together say
     // the one thing that is actually true: nothing will start this on its own any more, and a
     // person still can.
-    await this.prisma.task.updateMany({
-      where: { ownerId, listId: id },
-      data: { autoRunWhenReady: false, dispatchHold: false },
-    });
-    await this.prisma.taskList.delete({ where: { id } });
+    // One transaction, under the owner graph mutex (common/lock-order.ts, I1). Two multi-row
+    // `task` writes happen here — this one, and the `Task.listId` SET NULL the delete cascades —
+    // and neither takes its rows in an order any other writer shares. Rank 10 is what puts them
+    // in one line with every other multi-row Task write rather than trusting two planners to
+    // agree; making the pair atomic while we are here also removes the state where the tasks were
+    // disarmed and the list survived.
+    await withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        await lockOwnerTaskGraph(tx, ownerId);
+        await tx.task.updateMany({
+          where: { ownerId, listId: id },
+          data: { autoRunWhenReady: false, dispatchHold: false },
+        });
+        await tx.taskList.delete({ where: { id } });
+      },
+      loggedRetry(this.logger, 'taskLists.remove', {
+        // The same deadline TasksService.deleteAndStopRuns carries, and for the same reason: these
+        // two statements used to run under no client deadline at all, and inside an interactive
+        // transaction Prisma's default aborts at 5s. A list on the scale this deployment actually
+        // has — 27,548 tasks on one of them — cascades through far more than that, so the default
+        // would turn deletes that used to work into P2028. The locks are held for as long as the
+        // delete takes either way. Handed to every attempt, not only the first.
+        transaction: { timeout: 60_000, maxWait: 10_000 },
+        // A deadlock victim aborts at the statement that lost, not at its deadline, so a retry
+        // costs what that attempt had already spent rather than another 60s. Three chances is
+        // still the wrong shape for a cascade this size: two absorbs the collision this can
+        // actually have — a Task write that arrived at the same list — without turning one slow
+        // delete into four.
+        maxAttempts: 2,
+      }),
+    );
     // In-flight runs, torn down only after the tasks can no longer be re-dispatched — the other
     // order re-runs whatever the sweep catches in between. Best-effort, as in
     // TasksService.batchStop: a runner that will not answer must not fail the delete.

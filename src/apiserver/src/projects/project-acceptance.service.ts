@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, ProjectAcceptanceVerdict, ProjectStatus } from '@prisma/client';
@@ -21,6 +22,7 @@ import {
   sha256,
 } from './project-acceptance';
 import { verificationFailureIsHistorySql } from '../tasks/task-supersession';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** What a caller may say when opening a run. Both attributions are historical ids: they record who
  *  ran an acceptance, and nothing later may rewrite that by deleting a session. */
@@ -127,6 +129,8 @@ type AuditKind =
  */
 @Injectable()
 export class ProjectAcceptanceService {
+  private readonly logger = new Logger(ProjectAcceptanceService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   // ------------------------------------------------------------------------------------------
@@ -272,7 +276,9 @@ export class ProjectAcceptanceService {
     if (input.decidedBy !== 'COORDINATOR_AGENT' && input.decidedBy !== 'USER') {
       throw new BadRequestException('decidedBy must be COORDINATOR_AGENT or USER');
     }
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. The run is opened against the project row this closure locks and re-reads, so
+    // a re-run opens against the state the winner left. A victim opened no run.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const locked = await ProjectAcceptanceService.lockProject(
         tx, projectId, ownerId, 'FOR NO KEY UPDATE',
       );
@@ -344,7 +350,7 @@ export class ProjectAcceptanceService {
         { attempt: String(attempt), inputDigest, criteria: criteria.length }, run.id,
       );
       return this.readRun(tx, run.id);
-    });
+    }, loggedRetry(this.logger, 'projectAcceptance.openRun'));
   }
 
   /**
@@ -368,7 +374,9 @@ export class ProjectAcceptanceService {
     if (!Array.isArray(outcomes) || outcomes.length === 0) {
       throw new BadRequestException('a verdict must state a conclusion for every criterion');
     }
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole: the verdict is computed inside the closure from facts read under the project
+    // lock, so a re-run recomputes rather than replaying a verdict from a discarded snapshot.
+    return withTransactionRetry(this.prisma, async (tx) => {
       await ProjectAcceptanceService.lockProject(tx, projectId, ownerId, 'FOR NO KEY UPDATE');
       const run = await tx.projectAcceptanceRun.findFirst({
         where: { id: runId, projectId },
@@ -473,7 +481,7 @@ export class ProjectAcceptanceService {
         run.id,
       );
       return this.readRun(tx, run.id);
-    });
+    }, loggedRetry(this.logger, 'projectAcceptance.finalizeRun'));
   }
 
   // ------------------------------------------------------------------------------------------
@@ -503,7 +511,9 @@ export class ProjectAcceptanceService {
           '`git branch --contains` boolean is a guaranteed false negative after a squash',
       );
     }
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. The evidence row is keyed by the merge it records, so a re-run writes the same
+    // row rather than a second one.
+    return withTransactionRetry(this.prisma, async (tx) => {
       await ProjectAcceptanceService.lockProject(tx, projectId, ownerId, 'FOR NO KEY UPDATE');
       const [latest] = await tx.$queryRaw<Array<{
         id: string; contentHash: string; refGeneration: bigint;
@@ -547,7 +557,7 @@ export class ProjectAcceptanceService {
         },
       );
       return { ...ProjectAcceptanceService.mergeRow(row), changed: true };
-    });
+    }, loggedRetry(this.logger, 'projectAcceptance.recordMergeEvidence'));
   }
 
   // ------------------------------------------------------------------------------------------
@@ -837,7 +847,9 @@ export class ProjectAcceptanceService {
     code: AcceptanceRefusalCode | null;
     reason: string | null;
   }> {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole: the gate reads the project and its tasks under the project lock and decides
+    // from that read alone.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const digest = await this.digest(tx, projectId);
       try {
         const allowed = await this.assertDoneAllowed(tx, projectId);
@@ -849,7 +861,7 @@ export class ProjectAcceptanceService {
         }
         throw e;
       }
-    });
+    }, loggedRetry(this.logger, 'projectAcceptance.evaluateGate'));
   }
 
   /**

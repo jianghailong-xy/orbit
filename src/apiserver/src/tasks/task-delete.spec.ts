@@ -250,16 +250,31 @@ test('the runs are read under a lock on the task, before it is deleted', async (
 
   // Order is the whole fix: after the delete the SET NULL foreign key has already erased the
   // link, and there is nothing left to scan for.
+  //
+  // Four locks now, in the ranks of the canonical order (common/lock-order.ts): the owner graph
+  // mutex (10), because a delete cascades edges away and writes many `task` rows; the runs
+  // attached to those tasks (30), because the DELETE's SET NULL cascade writes them and this is
+  // the one transaction that would otherwise take a `session` lock from inside a `task` lock;
+  // their projects (40), the lock `project_acceptance_reopen` takes from an AFTER trigger on each
+  // DELETE; then the tasks themselves (50).
   assert.deepEqual(
     calls.filter((c) => ['lock', 'scan', 'delete', 'cancel'].includes(c)),
-    ['lock', 'scan', 'delete', 'cancel'],
+    ['lock', 'lock', 'lock', 'lock', 'scan', 'delete', 'cancel'],
   );
+  const sql = calls.filter((c) => c.startsWith('SELECT'));
+  assert.match(sql[0], /FROM "user"/);
+  assert.match(sql[0], /FOR UPDATE/);
+  assert.match(sql[1], /FROM "session"/);
+  assert.match(sql[1], /ORDER BY "id"/);
+  assert.match(sql[1], /FOR UPDATE/);
+  assert.match(sql[2], /FROM "project"/);
+  assert.match(sql[2], /ORDER BY "id"/);
+  assert.match(sql[2], /FOR NO KEY UPDATE/);
   // FOR UPDATE on the task row conflicts with the FOR KEY SHARE a session insert takes on it,
   // so a dispatch landing mid-delete either commits before the scan or fails its foreign key.
   // Without it, a run could slip in between the scan and the delete and be stranded.
-  const sql = calls[calls.indexOf('lock') + 1];
-  assert.match(sql, /FROM "task"/);
-  assert.match(sql, /FOR UPDATE/);
+  assert.match(sql[3], /FROM "task"/);
+  assert.match(sql[3], /FOR UPDATE/);
 });
 
 test('a run that cannot be ended does not fail the delete', async () => {

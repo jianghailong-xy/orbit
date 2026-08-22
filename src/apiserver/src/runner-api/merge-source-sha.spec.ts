@@ -350,12 +350,16 @@ test('turn completion uses the same source-tip reconciliation as live reports', 
   assert.equal(unchanged.writes.length, 1);
   assert.equal(unchanged.writes[0].data.branchMerged, true);
 
+  // Clearing the stale merge state and parking the turn are ONE write of the Session row: a
+  // second write of a row this transaction already wrote re-runs every Session foreign key and
+  // takes FOR KEY SHARE on `user`, `workspace`, `runner` and `task` while holding the Session
+  // FOR UPDATE — the reverse of the order a Task write takes them in (common/lock-order.ts, I3).
   const changed = turnHarness(NEW_SOURCE_SHA);
   await changed.api.turnComplete({ id: RUNNER_ID }, SESSION_ID, changed.request);
-  assert.equal(changed.writes.length, 2);
+  assert.equal(changed.writes.length, 1);
   assert.equal(changed.writes[0].data.mergeStatus, null);
   assert.equal(changed.writes[0].data.mergedSourceSha, null);
-  assert.equal(changed.writes[1].data.branchMerged, false);
+  assert.equal(changed.writes[0].data.branchMerged, false);
 
   const missing = turnHarness();
   await missing.api.turnComplete({ id: RUNNER_ID }, SESSION_ID, missing.request);

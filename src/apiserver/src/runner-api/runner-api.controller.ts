@@ -7,6 +7,7 @@ import {
   Get,
   Headers,
   HttpCode,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -91,6 +92,7 @@ import {
 } from '../common/runtime-provider';
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -269,9 +271,20 @@ function producedNothingBeforeFailing(
   return status === RunStatus.FAILED && numTurns === 0 && !dto.changedFiles?.length;
 }
 
+/**
+ * Whether a running-set survived a batch unchanged — the test that keeps an ordinary tool_result
+ * out of the Session write. Order matters: these arrays are append-on-launch, so a set that has
+ * the same members in a different order is a set the batch reordered and has to be stored.
+ */
+function sameIds(next: readonly string[], stored: readonly string[]): boolean {
+  return next.length === stored.length && next.every((v, i) => v === stored[i]);
+}
+
 @MachineProtocol()
 @Controller('runner')
 export class RunnerApiController {
+  private readonly logger = new Logger(RunnerApiController.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
@@ -1229,7 +1242,11 @@ export class RunnerApiController {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
     const expectedLeaseOwner = parseLeaseGeneration(dto?.expectedLeaseOwner ?? undefined);
-    const status = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. Every fence this evaluates — the lease owner, the generation, the session's
+    // status — is re-read under the row lock inside the closure, so a re-run judges the state the
+    // winning transaction left rather than replaying a takeover decided against a discarded
+    // snapshot. `dto` and the parsed generations are computed above and identical on every attempt.
+    const status = await withTransactionRetry(this.prisma, async (tx) => {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
@@ -1335,7 +1352,7 @@ export class RunnerApiController {
           AND status = 'IN_FLIGHT'
       `;
       return owned[0].status;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.takeoverLeases'));
     this.realtime.notifyInbox(sessionId);
     return { ok: true, status: status as SharedRunStatus };
   }
@@ -1376,7 +1393,9 @@ export class RunnerApiController {
       return { ok: true, abandonedSteers: await this.abandonedSteers(sessionId, generation) };
     }
 
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole, for the same reason as the takeover above: the ownership fence is re-read
+    // under the row lock on each attempt, and nothing outside the closure moves between them.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const owned = await tx.$queryRaw<
         Array<{
           id: string;
@@ -1458,7 +1477,7 @@ export class RunnerApiController {
           AND status = 'IN_FLIGHT'
           AND "lease_generation" IS DISTINCT FROM ${generation}::uuid
       `;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.activateLeases'));
     // A steer is deliberately NOT included above: expiring its lease would re-deliver it, and
     // the one thing mid-turn delivery must never do is write a message the engine may already
     // have acted on a second time. It is handed to the incoming process to report instead.
@@ -1523,7 +1542,10 @@ export class RunnerApiController {
   ): Promise<{ ok: true }> {
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. A release is idempotent by construction — it clears an ownership this
+    // transaction re-reads under the row lock — so a re-run against a fresh snapshot either
+    // clears it or finds it already clear, which is the same answer.
+    await withTransactionRetry(this.prisma, async (tx) => {
       // Use the same Session row lock as dequeueTurn. Whichever request arrives
       // last observes the other's generation, so a delayed release from a dead
       // process can never expire its replacement's lease.
@@ -1565,7 +1587,7 @@ export class RunnerApiController {
           AND status = 'IN_FLIGHT'
           AND "lease_generation" IS NOT DISTINCT FROM ${generation}::uuid
       `;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.releaseLeases'));
     this.realtime.notifyInbox(sessionId);
     return { ok: true };
   }
@@ -1706,7 +1728,12 @@ export class RunnerApiController {
      *  always has, and every gated runtime withholds. */
     declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. This is the inbox claim: it selects a queued turn under the Session row lock
+    // and marks it in flight. A deadlock victim's claim never happened — the row is still queued —
+    // so a re-run claims from the state that actually exists rather than reporting a turn it does
+    // not own. The response is built from the winning attempt's read, and nothing is sent to the
+    // runner until this returns.
+    return withTransactionRetry(this.prisma, async (tx) => {
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
       // cannot both lease different messages from the same snapshot.
@@ -1932,7 +1959,7 @@ export class RunnerApiController {
         // instead of being reported as a failure the person has to re-send by hand.
         steerRequeue: t.kind === 'steer' ? true : undefined,
       };
-    });
+    }, loggedRetry(this.logger, 'runnerApi.dequeueTurn'));
   }
 
   /**
@@ -2133,7 +2160,11 @@ export class RunnerApiController {
   ) {
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     const usage = dto.usage;
-    const finalized = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. Every decision — the duplicate-ack check, the park, the merge-state clear, the
+    // billing accrual — is taken from the Session row read under its own lock inside the closure,
+    // so a re-run cannot accrue against a turn the winner already closed. `dto` and its usage are
+    // outside, so a retry books the same numbers and not a second set.
+    const finalized = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
       // lost-wakeup state AWAITING_INPUT + PENDING conversation turn. The same lock also
@@ -2253,6 +2284,7 @@ export class RunnerApiController {
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
+      let clearsMergedState = false;
       if (dto.branchMerged === false && current.mergeStatus === 'merged') {
         if (current.mergedSourceSha && (!dto.branchSha || current.mergedSourceSha === dto.branchSha)) {
           // A rebase merge can produce a different patch-id from its source commit when it
@@ -2262,30 +2294,35 @@ export class RunnerApiController {
           // so it must not erase an exact marker captured by the successful merge.
           branchMerged = true;
         } else {
-          const mergedSourceSha = current.mergedSourceSha ?? null;
-          await tx.session.updateMany({
-            where: {
-              id: sessionId,
-              assignedRunnerId: runner.id,
-              mergeStatus: 'merged',
-              mergedSourceSha,
-            },
-            data: {
-              mergeStatus: null,
-              mergeOperationId: null,
-              mergeOperationOwner: null,
-              mergeError: null,
-              mergedSourceSha: null,
-            },
-          });
+          // Recorded, not written yet. This transaction gets one write of the Session row
+          // (common/lock-order.ts, I3): a second one re-runs every Session foreign key and takes
+          // FOR KEY SHARE on `user`, `workspace`, `runner` and `task` while holding the Session
+          // FOR UPDATE — the reverse of the order a Task write takes them in. The CAS this used
+          // to carry (`mergeStatus = 'merged'` at this exact `mergedSourceSha`, for this runner)
+          // is the state just read under that lock and cannot move underneath it, so evaluating
+          // it here is the same test.
+          clearsMergedState = true;
         }
       }
-      // Idempotent ack: only the first turn-complete for this turn applies.
+      const CLEARED_MERGE_STATE = {
+        mergeStatus: null,
+        mergeOperationId: null,
+        mergeOperationOwner: null,
+        mergeError: null,
+        mergedSourceSha: null,
+      } as const;
+      // Idempotent ack: only the first turn-complete for this turn applies. A duplicate
+      // completion still clears the stale merge state — that was true before this was folded
+      // into one write, and it is the reason the clear cannot simply ride along with the park
+      // below. Nothing has written the Session row on this path, so this IS the one write.
       const ack = await tx.conversationTurn.updateMany({
         where: { id: dto.turnId, sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },
       });
       if (ack.count === 0) {
+        if (clearsMergedState) {
+          await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
+        }
         return { applied: false, steer: false, requeued: false, status: current.status, failSession, retryAt: current.retryAt };
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
@@ -2364,9 +2401,17 @@ export class RunnerApiController {
           sumOutputTokens: { increment: usage?.output_tokens ?? 0 },
           sumCacheRead: { increment: usage?.cache_read_input_tokens ?? 0 },
           sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
+          // Folded into the park so the row is written once (I3). The park is conditional, so
+          // the branch below covers the case where it matched nothing.
+          ...(clearsMergedState ? CLEARED_MERGE_STATE : {}),
         },
       });
       if (parked.count === 0) {
+        // Nothing was written above — an UPDATE that matches no row leaves the tuple, and its
+        // xmin, exactly as it was — so this is still this transaction's first Session write.
+        if (clearsMergedState) {
+          await tx.session.update({ where: { id: sessionId }, data: { ...CLEARED_MERGE_STATE } });
+        }
         const latest = await tx.session.findUnique({
           where: { id: sessionId },
           select: { status: true },
@@ -2421,7 +2466,7 @@ export class RunnerApiController {
         await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
       }
       return { applied: true, steer: false, requeued: false, status: nextStatus, failSession, retryAt: current.retryAt };
-    });
+    }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
     if (finalized.steer) {
       // Nothing about the session changed, so nothing about it is announced. The queue view
       // did change — a steer left it — and the clients read that from the durable list.
@@ -2491,14 +2536,29 @@ export class RunnerApiController {
         e.type !== RunEventType.THINKING_DELTA &&
         e.type !== RunEventType.BACKGROUND_OUTPUT,
     );
-    const session = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
+    // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
+    // skipDuplicates, the tool_call outcome by tool_use id, the running sets by set semantics),
+    // `durable` and `events` are derived from the request body above, and the ONE Session write is
+    // accumulated from a row re-read under its lock on every attempt. The live broadcast below is
+    // outside the loop, so a retried batch is published once, after the attempt that committed.
+    const session = await withTransactionRetry(this.prisma, async (tx) => {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
       // outside the transaction and later deadlocking when they touch Session.
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       const session = await tx.session.findUniqueOrThrow({
         where: { id: sessionId },
-        select: { status: true, runtimeSessionId: true },
+        select: {
+          status: true,
+          runtimeSessionId: true,
+          // Read under the row lock so the three conditional writes this transaction used to
+          // issue as separate guarded statements can be decided here instead. Nothing can move
+          // them between this read and the single write below: the row is held FOR UPDATE.
+          cancelRequestedAt: true,
+          runningBgShells: true,
+          runningSubagents: true,
+        },
       });
       // The owner fence alone is insufficient when the same runner process
       // survives a control-plane terminal transition. Reject before every event-
@@ -2507,6 +2567,17 @@ export class RunnerApiController {
       if (!OPEN.includes(session.status)) {
         throw new ConflictException('session is no longer open');
       }
+      // ONE write of this Session row, accumulated here and issued once at the end
+      // (common/lock-order.ts, I3). It used to be up to eight — a telemetry write, a runtime-id
+      // fill, the preview denormalisation and one per background/sub-agent id — and every write
+      // after the first re-ran EVERY Session foreign key, because PostgreSQL only skips the
+      // re-check when the row it is replacing was not written by the current transaction. Those
+      // re-checks took FOR KEY SHARE on `user`, `workspace`, `runner` and `task` while this
+      // transaction held the Session FOR UPDATE, which is the exact reverse of the order a Task
+      // write takes them in, and it is the third edge of the 2026-08-21 05:47:43 cycle. Written
+      // once, this transaction's lock set is the Session row and its own child rows, and nothing
+      // else. `lock-order.pg.spec.ts` reads those four locks out of pg_locks to keep it that way.
+      const sessionData: Prisma.SessionUpdateInput = {};
       if (durable.length > 0) {
         await tx.runEvent.createMany({
           data: durable.map((e) => ({
@@ -2524,15 +2595,10 @@ export class RunnerApiController {
         // and counting that handshake would move every waiting session to "now" and scramble the
         // recency sort. OPEN deliberately includes PENDING because a buffered tail from the prior
         // turn may arrive after a concurrent send moved AWAITING_INPUT -> PENDING.
-        if (hasSessionActivity(durable)) {
-          await tx.session.updateMany({
-            where: {
-              id: sessionId,
-              cancelRequestedAt: null,
-              status: { in: OPEN },
-            },
-            data: { lastTurnAt: new Date() },
-          });
+        // `status IN (OPEN)` was the other half of this write's old WHERE clause; it is the
+        // condition already asserted above off the same locked read.
+        if (hasSessionActivity(durable) && session.cancelRequestedAt == null) {
+          sessionData.lastTurnAt = new Date();
         }
       }
 
@@ -2545,12 +2611,7 @@ export class RunnerApiController {
       // stable per session), so this is a one-shot, retry-idempotent write.
       if (!session.runtimeSessionId) {
         const runtimeId = runtimeInitSessionId(durable);
-        if (runtimeId) {
-          await tx.session.updateMany({
-            where: { id: sessionId, runtimeSessionId: null },
-            data: { runtimeSessionId: runtimeId },
-          });
-        }
+        if (runtimeId) sessionData.runtimeSessionId = runtimeId;
       }
 
       // Denormalize the latest assistant reply onto the session for the list's preview
@@ -2637,22 +2698,17 @@ export class RunnerApiController {
       // it: a turn the runtime started for itself never reaches /turn-complete, so the session
       // stays AWAITING_INPUT for its whole duration.
       const engineTurnActive = engineTurnActiveAfter(durable);
-      if (lastAssistant || frontier || context || engineTurnActive !== undefined) {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: {
-            ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
-            ...(frontier ? { lastToolUse: frontier.tool } : {}),
-            ...(context ? { contextTokens: context.tokens } : {}),
-            ...(context?.window ? { contextWindow: context.window } : {}),
-            ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
-            // undefined = nothing in this batch either asked or answered; keep the stored
-            // message rather than writing null over it.
-            ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),
-            ...retry,
-          },
-        });
-      }
+      Object.assign(sessionData, {
+        ...(lastAssistant ? { lastAssistantText: lastAssistant.text } : {}),
+        ...(frontier ? { lastToolUse: frontier.tool } : {}),
+        ...(context ? { contextTokens: context.tokens } : {}),
+        ...(context?.window ? { contextWindow: context.window } : {}),
+        ...(engineTurnActive !== undefined ? { engineTurnActive } : {}),
+        // undefined = nothing in this batch either asked or answered; keep the stored
+        // message rather than writing null over it.
+        ...(pendingUserText !== undefined ? { lastUserText: pendingUserText } : {}),
+        ...retry,
+      });
 
       const toolUses = events.filter((e) => e.type === RunEventType.TOOL_USE);
       if (toolUses.length > 0) {
@@ -2774,36 +2830,37 @@ export class RunnerApiController {
           e.type === RunEventType.SYSTEM &&
           String((e.payload as { subtype?: unknown }).subtype ?? '') === 'resumed',
       );
-      if (bgReset) {
-        await tx.session.update({
-          where: { id: sessionId },
-          data: { runningBgShells: [], runningSubagents: [] },
-        });
-      }
-      for (const id of bgStarted) {
-        await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_append(array_remove("running_bg_shells", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
-      }
-      for (const id of subStarted) {
-        await tx.$executeRaw`UPDATE "session" SET "running_subagents" = array_append(array_remove("running_subagents", ${id}), ${id}) WHERE "id" = ${sessionId}::uuid`;
-      }
+      // The two running sets, folded in the order the separate statements used to apply them:
+      // reset, then the launches, then the terminal notifications, then the synchronous
+      // sub-workspace completions. Computed from the values read under the row lock rather than
+      // from the row itself, because this transaction gets exactly one write of it (I3) — and set
+      // semantics make that identical to the sequence of `array_append`/`array_remove` it
+      // replaces, including under an event-batch retry, which replays the same ids onto the same
+      // starting state.
+      let shells = bgReset ? [] : [...session.runningBgShells];
+      let subagents = bgReset ? [] : [...session.runningSubagents];
+      for (const id of bgStarted) shells = [...shells.filter((v) => v !== id), id];
+      for (const id of subStarted) subagents = [...subagents.filter((v) => v !== id), id];
       // A terminal background_task id belongs to either a background shell or a sub-workspace;
-      // array_remove is a no-op on the set that doesn't hold it, so clear from both.
+      // removing from the set that doesn't hold it is a no-op, so clear from both.
       for (const id of bgEnded) {
-        await tx.$executeRaw`UPDATE "session" SET "running_bg_shells" = array_remove("running_bg_shells", ${id}), "running_subagents" = array_remove("running_subagents", ${id}) WHERE "id" = ${sessionId}::uuid`;
+        shells = shells.filter((v) => v !== id);
+        subagents = subagents.filter((v) => v !== id);
       }
-      // Clear synchronously-completed sub-workspaces in one guarded write. The `&&` overlap check means
-      // ordinary (non-sub-workspace) tool_results — the vast majority — match no rows and never rewrite
-      // the hot session row.
       if (subEnded.length > 0) {
-        await tx.$executeRaw`
-        UPDATE "session"
-        SET "running_subagents" = ARRAY(
-          SELECT unnest("running_subagents") EXCEPT SELECT unnest(${subEnded}::text[])
-        )
-        WHERE "id" = ${sessionId}::uuid AND "running_subagents" && ${subEnded}::text[]`;
+        const done = new Set(subEnded);
+        subagents = subagents.filter((v) => !done.has(v));
+      }
+      // Only when they actually moved, so an ordinary tool_result — the vast majority — does not
+      // put the hot Session row into this write at all.
+      if (!sameIds(shells, session.runningBgShells)) sessionData.runningBgShells = shells;
+      if (!sameIds(subagents, session.runningSubagents)) sessionData.runningSubagents = subagents;
+
+      if (Object.keys(sessionData).length > 0) {
+        await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
       return session;
-    });
+    }, loggedRetry(this.logger, 'runnerApi.events'));
 
     // Broadcast to live subscribers while the session is open;
     // once finalized, don't let late/replayed events spam the live stream — they
@@ -2839,7 +2896,10 @@ export class RunnerApiController {
     // checkout lifetime. The process fence is evaluated from that same locked snapshot,
     // so a predecessor cannot finalize after takeover. Billing is accrued per-turn by
     // /turn-complete.
-    const outcome = await this.prisma.$transaction(async (tx) => {
+    // Retried whole: one locked re-read decides the final status and the checkout lifetime, and a
+    // re-run re-reads it. A session another writer finalized first is seen as finalized, which is
+    // the answer this already gives.
+    const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       if (!TERMINAL.includes(dto.status as RunStatus)) {
         throw new BadRequestException('finalization status must be terminal');
@@ -2955,7 +3015,7 @@ export class RunnerApiController {
         }
       }
       return { finalized: true, effectiveStatus, keepCheckout, retryAt };
-    });
+    }, loggedRetry(this.logger, 'runnerApi.finalize'));
     if (!outcome.finalized) return { ok: true, keepCheckout: outcome.keepCheckout };
 
     this.realtime.publish(sessionId, {
@@ -3044,7 +3104,10 @@ export class RunnerApiController {
       throw new BadRequestException('released requires the claimed operation');
     }
     const merged = dto.status === 'merged';
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
+    // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
+    // two outcomes a first attempt has.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
@@ -3163,7 +3226,7 @@ export class RunnerApiController {
           operationId: dto.operationId ?? null,
         });
       }
-    });
+    }, loggedRetry(this.logger, 'runnerApi.mergeResult'));
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is
@@ -3203,7 +3266,8 @@ export class RunnerApiController {
       throw new BadRequestException('released requires the claimed operation');
     }
     const clean = dto.status === 'committed' || dto.status === 'nochange';
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole, on the same claim fence as the merge result above.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<
         Array<{
           status: RunStatus;
@@ -3263,7 +3327,7 @@ export class RunnerApiController {
           ...(clean ? { worktreeDirty: false } : {}),
         },
       });
-    });
+    }, loggedRetry(this.logger, 'runnerApi.commitResult'));
     // Mirror mergeResult: release a message queued behind this commit now that the
     // checkout is free, rather than waiting for the queue's periodic poll.
     if (!released) this.queue.notifySessionQueued();

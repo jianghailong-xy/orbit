@@ -9,7 +9,14 @@ const LIST_ID = '00000000-0000-7000-8000-0000000000aa';
 const TASK_ID = '00000000-0000-7000-8000-0000000000b1';
 
 function serviceWith(prisma: unknown): TasksService {
-  return new TasksService(prisma as never, {} as never, {} as never);
+  // Every Task write runs inside a transaction — a deadlock victim can only re-run a whole one —
+  // so a double that stubs no `$transaction` cannot serve a create. The stubs are handed back as
+  // the transactional client; a caller that supplies its own wins.
+  const client: Record<string, unknown> = {
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(client),
+    ...(prisma as Record<string, unknown>),
+  };
+  return new TasksService(client as never, {} as never, {} as never);
 }
 
 /** Same recorder as task-list-pagination.spec: renders the tagged template PostgreSQL would get. */

@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, RunStatus, SessionDispatchOrigin, SessionRunSource } from '@prisma/client';
@@ -87,6 +88,7 @@ import {
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
 import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -289,6 +291,8 @@ export class SessionNotSendable extends ConflictException {}
 
 @Injectable()
 export class SessionsService {
+  private readonly logger = new Logger(SessionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly queue: QueueService,
@@ -2900,12 +2904,15 @@ export class SessionsService {
     sessionId: string,
     data: { kind: string; content?: string; clientTurnId: string },
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. The seq is allocated from a row read under the Session's own lock inside the
+    // closure, so a re-run allocates from the sequence the winner left rather than reusing a number
+    // a discarded snapshot suggested.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const rows = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session" WHERE id = ${sessionId}::uuid FOR UPDATE`;
       if (rows.length === 0) throw new NotFoundException('session not found');
       return this.insertTurnLocked(tx, sessionId, data);
-    });
+    }, loggedRetry(this.logger, 'sessions.insertTurn'));
   }
 
   /**
@@ -2981,7 +2988,11 @@ export class SessionsService {
   ) {
     assertPromptSize(dto.content, 'message');
     await this.getSendable(ownerId, id); // fast ownership/lifecycle validation
-    const queued = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. This is where a user turn serializes against the runner's claim and against
+    // turnComplete, and every one of those decisions is taken from the Session row read under the
+    // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
+    // notice to the runner is outside the loop, after commit.
+    const queued = await withTransactionRetry(this.prisma, async (tx) => {
       // Linearize against claim and turnComplete. If completion wins, it first releases
       // RUNNING->AWAITING_INPUT and this enqueue changes it to PENDING. If enqueue wins,
       // completion sees this turn and retains RUNNING. Neither ordering can lose a wakeup.
@@ -3137,7 +3148,7 @@ export class SessionsService {
         wakeQueue: nextStatus === RunStatus.PENDING,
         wakeInbox: nextStatus === RunStatus.RUNNING,
       };
-    });
+    }, loggedRetry(this.logger, 'sessions.createTurn'));
     if (queued.wakeQueue) this.queue.notifySessionQueued();
     if (queued.wakeInbox) this.realtime.notifyInbox(id);
     // No transcript event exists until the runner leases this turn. Tell every focused client to
@@ -3182,7 +3193,8 @@ export class SessionsService {
       }
     }
     await this.getLive(ownerId, id);
-    const queued = await this.prisma.$transaction(async (tx) => {
+    // Retried whole: the interrupt is decided from the Session row re-read under its lock.
+    const queued = await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -3280,7 +3292,7 @@ export class SessionsService {
         },
       });
       return { turn, wakeQueue: nextStatus === RunStatus.PENDING };
-    });
+    }, loggedRetry(this.logger, 'sessions.interrupt'));
     // The inbox is woken unconditionally: the interrupt turn is what it is waiting for, and
     // it is deliverable the moment this commits, whatever the follow-up's status implies.
     if (queued.wakeQueue) this.queue.notifySessionQueued();
@@ -3350,7 +3362,10 @@ export class SessionsService {
    *  running, and will appear in the transcript, so cancelling is rejected. */
   async cancelQueuedTurn(ownerId: string, id: string, turnId: string) {
     await this.getSendable(ownerId, id);
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. A cancel is a compare-and-set against a turn still queued; an attempt the
+    // server discarded cancelled nothing, so a re-run either still finds it queued or reports the
+    // same 'already gone' the first attempt would have.
+    await withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -3409,7 +3424,7 @@ export class SessionsService {
           data: { status: RunStatus.AWAITING_INPUT, lastTurnAt: new Date() },
         });
       }
-    });
+    }, loggedRetry(this.logger, 'sessions.cancelQueuedTurn'));
     this.realtime.notifyInbox(id);
     this.realtime.publishQueuedTurnsChanged(id);
     return { ok: true };
@@ -3443,7 +3458,10 @@ export class SessionsService {
    */
   async mergeToMain(ownerId: string, id: string, targetBranch?: string) {
     const target = targetBranch?.trim() || null;
-    const workspaceId = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. The worktree-operation claim is taken under the Session row lock inside the
+    // closure, so a re-run competes for it from the state that exists. The runner is only told
+    // about the operation after this returns.
+    const workspaceId = await withTransactionRetry(this.prisma, async (tx) => {
       // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
       // all linearize on this row. An old click therefore cannot create a fresh
       // operation after the session has already entered a new turn epoch.
@@ -3487,7 +3505,7 @@ export class SessionsService {
         },
       });
       return session.workspaceId;
-    });
+    }, loggedRetry(this.logger, 'sessions.mergeToMain'));
     // Remember an explicitly chosen target on the workspace so every session of it defaults there.
     if (target && workspaceId) {
       await this.prisma.workspace.update({
@@ -3594,7 +3612,8 @@ export class SessionsService {
    * and merge verdict are cleared so the runner's next report re-derives them for the new branch.
    */
   async adoptWorktreeBranch(ownerId: string, id: string) {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole: one locked re-read decides whether the branch may be re-pointed.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -3644,7 +3663,7 @@ export class SessionsService {
         },
       });
       return { ok: true, branch: target };
-    });
+    }, loggedRetry(this.logger, 'sessions.adoptWorktreeBranch'));
   }
 
   /**
@@ -3706,7 +3725,9 @@ export class SessionsService {
     filingState: SessionFilingState;
     endReason: SessionEndReason | null;
   }> {
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. Every terminal transition is decided from the Session row under its lock, so a
+    // re-run sees whichever end actually committed rather than re-applying one that did not.
+    return withTransactionRetry(this.prisma, async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "session"
         WHERE id = ${sessionId}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -3799,7 +3820,7 @@ export class SessionsService {
         filingState,
         endReason: reason,
       };
-    });
+    }, loggedRetry(this.logger, 'sessions.transitionEnd'));
   }
 
   /** Emit runner/control-plane effects for a newly persisted end intent. */
@@ -4080,7 +4101,10 @@ export class SessionsService {
 
     // Re-check capability and revive under the same Session row lock used by complete/delete.
     // This closes the race where Trash could win after the fast read but before the turn insert.
-    const revived = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. A resume reads the session, its project capacity and its worktree state under
+    // locks taken inside the closure and writes from that read; nothing outside it moves between
+    // attempts, and the runner is notified after this returns.
+    const revived = await withTransactionRetry(this.prisma, async (tx) => {
       // PROJECT FIRST — the one order this system takes these three rows in.
       //
       // A revive ends by writing a live status onto this row, which reaches
@@ -4339,7 +4363,7 @@ export class SessionsService {
         wasCompleted: (current.completedAt ?? current.archivedAt) != null,
         wasRevived: true,
       };
-    });
+    }, loggedRetry(this.logger, 'sessions.resume'));
     // Un-filing is a list-membership change with no STATUS event of its own — mirror restore()
     // and signal the control plane, so every other client moves the row out of Completed and
     // into Open without polling.
@@ -4487,7 +4511,9 @@ export class SessionsService {
     ) {
       throw new BadRequestException('nothing to update');
     }
-    const needsReload = await this.prisma.$transaction(async (tx) => {
+    // Retried whole: a locked re-read decides what the new config may be, and the reload nudge
+    // below happens once, after commit.
+    const needsReload = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize config patches with each other and with claim/end transitions. The effective
       // model/mode pair must be derived from the latest row: two concurrent partial PATCHes must
       // not restore each other's stale model or leave Auto paired with an unsupported model.
@@ -4574,7 +4600,7 @@ export class SessionsService {
         clientTurnId: randomUUID(),
       });
       return true;
-    });
+    }, loggedRetry(this.logger, 'sessions.updateConfig'));
     if (needsReload) this.realtime.notifyInbox(id);
     return { ok: true };
   }
@@ -4619,7 +4645,8 @@ export class SessionsService {
 
   /** Bring a Completed or soft-deleted session back to Open. */
   async restore(ownerId: string, id: string) {
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole. Restoring something already restored is the same answer on any attempt.
+    await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize with purge: if restore wins, purge re-reads an Open row and refuses;
       // if purge wins, this lock query sees no row and restore returns 404.
       const locked = await tx.$queryRaw<Array<{ id: string }>>`
@@ -4631,7 +4658,7 @@ export class SessionsService {
         where: { id },
         data: { completedAt: null, archivedAt: null, deletedAt: null },
       });
-    });
+    }, loggedRetry(this.logger, 'sessions.restore'));
     // Back in Open — same signal as a brand-new session (the control plane's
     // session.created carries a full summary either way).
     this.realtime.publishSessionCreated(id);
@@ -4661,7 +4688,8 @@ export class SessionsService {
    * created are detached (Task.creatorSessionId → null), not deleted.
    */
   async purge(ownerId: string, id: string) {
-    await this.prisma.$transaction(async (tx) => {
+    // Retried whole, for the same reason as restore: it is decided from a locked re-read.
+    await withTransactionRetry(this.prisma, async (tx) => {
       // The Trash guard and irreversible delete must share the same row lock as restore.
       // A pre-lock deletedAt read could otherwise delete a session restored in between.
       const locked = await tx.$queryRaw<Array<{ id: string; deletedAt: Date | null }>>`
@@ -4674,7 +4702,7 @@ export class SessionsService {
         throw new BadRequestException('session must be in Trash before it can be permanently deleted');
       }
       await tx.session.delete({ where: { id: session.id } });
-    });
+    }, loggedRetry(this.logger, 'sessions.purge'));
     return { ok: true };
   }
 }

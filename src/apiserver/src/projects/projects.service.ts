@@ -55,6 +55,7 @@ import {
   reasonIfAbsent,
   reasonIfEmpty,
 } from './project-coordinator-status';
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /**
  * "This project's coordinator belongs in a workspace that will not have it."
@@ -2268,7 +2269,10 @@ export class ProjectsService {
     // forbids starting weak and upgrading, so the strength is chosen here, before the first read.
     const settling = dto.status === ProjectStatus.DONE;
     try {
-      const project = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. The project row is locked and re-read inside the closure, and every field the
+    // update derives — the acceptance recompute, the coordinator rebind — comes from that read, so
+    // a re-run writes against the row the winner left rather than the one an aborted attempt saw.
+      const project = await withTransactionRetry(this.prisma, async (tx) => {
         // The project row first, and this is the lock a coordinator has to take before committing
         // anything the fields above authorize. Taking it here is what makes "the user revoked it"
         // and "the coordinator acted on what it read" two orderings rather than an interleaving:
@@ -2338,7 +2342,7 @@ export class ProjectsService {
           await ProjectsService.writeCoordinatorAgent(tx, ownerId, id, agentId);
         }
         return tx.project.update({ where: { id }, data, include: COORDINATION_INCLUDE });
-      });
+      }, loggedRetry(this.logger, 'projects.update'));
       return withCoordination(project);
     } catch (e) {
       // A refused DONE is a thing somebody has to be able to look up afterwards — "I pressed it and
@@ -2404,7 +2408,9 @@ export class ProjectsService {
     options: { expectedConfigRevision?: string; triggerId?: string } = {},
   ) {
     const triggerId = options.triggerId ?? randomUUID();
-    return this.prisma.$transaction(async (tx) => {
+    // Retried whole. The manual trigger is deduplicated by a request id minted above, outside the
+    // closure, so a second attempt records the same trigger rather than a second one.
+    return withTransactionRetry(this.prisma, async (tx) => {
       // The same row lock `update` takes, for the same reason: the policy this trigger is checked
       // against has to be the policy that is still in force when the signal commits.
       const [locked] = await tx.$queryRaw<Array<{
@@ -2488,7 +2494,7 @@ export class ProjectsService {
         consumedAt: event?.consumedAt ?? null,
         nextAttemptAt: event?.nextAttemptAt ?? null,
       };
-    });
+    }, loggedRetry(this.logger, 'projects.triggerCoordinator'));
   }
 
   /**
@@ -2691,7 +2697,9 @@ export class ProjectsService {
    */
   async remove(ownerId: string, id: string) {
     try {
-      await this.prisma.$transaction(async (tx) => {
+    // Retried whole: a delete re-reads what it is deleting under the row lock, and deleting
+    // something already gone is the same answer on any attempt.
+      await withTransactionRetry(this.prisma, async (tx) => {
         const locked = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT id FROM "project"
           WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
@@ -2700,7 +2708,7 @@ export class ProjectsService {
         const tasks = await tx.task.count({ where: { projectId: id } });
         if (tasks > 0) throw new ConflictException(this.notEmptyMessage(tasks));
         await tx.project.delete({ where: { id } });
-      });
+      }, loggedRetry(this.logger, 'projects.remove'));
     } catch (e) {
       // The database's own refusal, phrased as the endpoint's. Reached only by a writer that beat
       // the lock — but a 500 there would say "we broke" about a rule working exactly as intended.

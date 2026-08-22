@@ -129,8 +129,9 @@ test('creating a subtask reads its parent under the owner lock, in one transacti
 });
 
 // The other half of the same rule: an ordinary create must not queue behind another request's DAG
-// rewrite for the same owner.
-test('creating an ordinary task takes no transaction and no lock', async () => {
+// rewrite for the same owner. It is still a transaction — every create is, so that a deadlock
+// victim has a whole unit of work to re-run — but an empty one: no owner lock, no list, no Session.
+test('creating an ordinary task takes its own transaction and no lock', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
     {
@@ -147,7 +148,7 @@ test('creating an ordinary task takes no transaction and no lock', async () => {
 
   await service.create(OWNER_ID, { title: 'just a task' } as never);
 
-  assert.deepEqual(calls, ['createTask']);
+  assert.deepEqual(calls, ['BEGIN', 'createTask', 'COMMIT']);
 });
 
 test('a project belonging to somebody else cannot be filed into', async () => {
@@ -282,7 +283,10 @@ test('the cycle walk runs inside the locked transaction, not before it', async (
   await service.update(OWNER_ID, TASK_ID, { parentTaskId: PARENT_ID } as never);
 
   // `get()`'s read comes first (outside), then everything that decides and writes is inside one
-  // transaction, behind the lock.
+  // transaction, behind the lock. No rank-30 pre-lock here: a re-point writes the task row once,
+  // and PostgreSQL only re-runs `task_creator_session_id_fkey` on a SECOND write of a row this
+  // transaction already wrote (common/lock-order.ts, I2) — which a dependency replacement or a
+  // supersession does and this does not.
   assert.deepEqual(calls, [
     'reReadTask',
     'BEGIN',
@@ -420,7 +424,7 @@ test('acceptance criteria are replaced when sent and cleared by null', async () 
 
 // The guarantee this whole phase rests on: an update that says nothing about a project or a parent
 // behaves exactly as it did before the columns existed — same writes, no extra query, and no lock.
-test('an update that mentions neither column asks no hierarchy questions and takes no lock', async () => {
+test('an update that mentions neither column asks no hierarchy questions', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
     {
@@ -444,9 +448,44 @@ test('an update that mentions neither column asks no hierarchy questions and tak
     status: TaskStatus.OPEN,
   } as never);
 
-  assert.deepEqual(calls, ['updateTask']);
+  // No hierarchy question, and no owner mutex — this write restructures nothing. The one lock is
+  // rank 40: a status write on a project-filed task makes `project_acceptance_task_fact_update`
+  // take FOR NO KEY UPDATE on that project, so it is taken here rather than left to an AFTER
+  // trigger holding the task row already (common/lock-order.ts).
+  assert.deepEqual(calls, [
+    'BEGIN',
+    'raw:SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE',
+    'updateTask',
+    'COMMIT',
+  ]);
+  // Not the owner mutex: a status write restructures nothing, so it must not queue behind
+  // another request's DAG rewrite. And not the creator-Session pre-lock: that is for a write
+  // that touches the task row TWICE, which this one does not.
   assert.equal(updated.project, undefined);
   assert.equal(updated.parent, undefined);
+});
+
+// The other half of that rule: no project, no acceptance fact, nothing to order against — so the
+// cheapest write stays the cheapest write.
+test('a status write on a task with no project stays a single statement', async () => {
+  const calls: string[] = [];
+  const { service } = serviceOn(
+    {
+      task: {
+        findFirst: async () => taskRow({ projectId: null }),
+        update: async (args: any) => {
+          calls.push('updateTask');
+          return { id: TASK_ID, ...args.data };
+        },
+      },
+      taskDependency: { findMany: async () => [] },
+    },
+    calls,
+  );
+
+  await service.update(OWNER_ID, TASK_ID, { status: TaskStatus.OPEN } as never);
+
+  assert.deepEqual(calls, ['updateTask']);
 });
 
 // batch-create shares taskCreateData with create, so it would otherwise be a way to write the
@@ -507,7 +546,7 @@ test('a batch with parents but no dependencies still takes the lock', async () =
   assert.deepEqual(calls, ['BEGIN', 'lock:user', 'createTask', 'COMMIT']);
 });
 
-test('a batch with neither parents nor dependencies locks nothing, as before', async () => {
+test('a batch with neither parents nor dependencies still takes the owner lock', async () => {
   const calls: string[] = [];
   const { service } = serviceOn(
     {
@@ -524,5 +563,8 @@ test('a batch with neither parents nor dependencies locks nothing, as before', a
 
   await service.createMany(OWNER_ID, { tasks: [{ title: 'a' }, { title: 'b' }] } as never);
 
-  assert.deepEqual(calls, ['BEGIN', 'createTask', 'createTask', 'COMMIT']);
+  // Not for the hierarchy — there is none — but because a batch writes several `task` rows in
+  // item order, and rank 10 of the canonical order is what stops two multi-row Task writes from
+  // taking the same rows in opposite orders (common/lock-order.ts, I1).
+  assert.deepEqual(calls, ['BEGIN', 'lock:user', 'createTask', 'createTask', 'COMMIT']);
 });
