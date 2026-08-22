@@ -11,6 +11,13 @@ const tasksService = readFileSync(
   path.resolve(__dirname, '../../src/tasks/tasks.service.ts'),
   'utf8',
 );
+const sessionScope = readFileSync(
+  path.resolve(
+    __dirname,
+    '../../prisma/migrations/0130_session_event_source_update_scope/migration.sql',
+  ),
+  'utf8',
+);
 
 test('the Project event producer migration owns the complete unit-06 source contract', () => {
   for (const trigger of [
@@ -55,4 +62,29 @@ test('manual task starts record one Project request and automatic starts do not'
   assert.match(tasksService, /if \(!auto && task\.projectId\) \{\s+await this\.recordManualProjectTriggers/);
   assert.match(tasksService, /runnable\.map\(\(task\) => task\.projectId\)/);
   assert.match(tasksService, /SELECT "project_event_manual_trigger"\(/);
+});
+
+test('the Session event source is declared over the three columns that can carry an event', () => {
+  // `UPDATE OF` keeps the trigger from being queued at all, so a telemetry-only write never
+  // reaches `task` or `project`; `WHEN` covers the writer that names one of the three columns
+  // while re-asserting the value it already had. The behaviour behind both, and the barrier that
+  // proves the lock domain actually shrank, is project-session-event-scope.pg.spec.ts.
+  assert.match(sessionScope, /AFTER INSERT OR DELETE ON "session"/);
+  assert.match(
+    sessionScope,
+    /AFTER UPDATE OF "status", "deleted_at", "merge_status" ON "session"/,
+  );
+  assert.match(
+    sessionScope,
+    /WHEN \(OLD\."status" IS DISTINCT FROM NEW\."status"\s+OR OLD\."deleted_at" IS DISTINCT FROM NEW\."deleted_at"\s+OR OLD\."merge_status" IS DISTINCT FROM NEW\."merge_status"\)/,
+  );
+  // The same predicate inside the function, ahead of both lookups: a redefined trigger must not
+  // be able to put `task` and `project` back into a telemetry write's lock set.
+  const body = sessionScope.slice(sessionScope.indexOf('CREATE OR REPLACE FUNCTION'));
+  const earlyReturn = body.indexOf("IF TG_OP = 'UPDATE'");
+  assert.ok(earlyReturn > 0 && earlyReturn < body.indexOf('FROM "task" t'));
+  assert.match(
+    body,
+    /NEW\."status" IS NOT DISTINCT FROM OLD\."status"\s+AND NEW\."deleted_at" IS NOT DISTINCT FROM OLD\."deleted_at"\s+AND NEW\."merge_status" IS NOT DISTINCT FROM OLD\."merge_status" THEN\s+RETURN NULL;/,
+  );
 });
