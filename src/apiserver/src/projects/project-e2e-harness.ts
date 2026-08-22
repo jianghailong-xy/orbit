@@ -294,6 +294,15 @@ export interface TaskOptions {
   status?: TaskStatus;
   parentTaskId?: string | null;
   verifiesTaskId?: string | null;
+  /**
+   * What a verification concluded — and, since `[K5]`'s 0141, half of what makes it FINISHED.
+   *
+   * A check may not REACH `DONE` without one, at the database. A fixture that wanted a finished
+   * check therefore has to say what it found in the SAME insert, which is why this is an option
+   * here rather than a second `update` in each caller: the second update is exactly the shape the
+   * trigger refuses.
+   */
+  verdict?: 'PASS' | 'FAIL' | 'INCONCLUSIVE' | null;
   completionPolicy?: 'MANUAL' | 'ALL_CHILDREN_DONE' | 'VERIFICATION_PASSED';
   dependsOn?: string[];
   requiredCapabilities?: string[];
@@ -323,6 +332,7 @@ export async function task(
       provider: options.provider ?? 'claude',
       parentTaskId: options.parentTaskId ?? null,
       verifiesTaskId: options.verifiesTaskId ?? null,
+      ...(options.verdict === undefined ? {} : { verdict: options.verdict }),
       requiredCapabilities: options.requiredCapabilities ?? [],
       ...(options.autoRunWhenReady === undefined ? {} : { autoRunWhenReady: options.autoRunWhenReady }),
       ...(options.dispatchHold === undefined ? {} : { dispatchHold: options.dispatchHold }),

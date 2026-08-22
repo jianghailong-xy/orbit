@@ -197,7 +197,10 @@ test('unit 25A: project acceptance and the DONE hard gate', { skip, timeout: 900
     const target = await world(services.db, 'blocked', { acceptanceCriteria: CRITERIA });
     const subject = await task(services.db, target, 'the work', { status: TaskStatus.DONE });
     const verifier = await task(services.db, target, 'the check', {
-      status: TaskStatus.DONE, verifiesTaskId: subject,
+      // `[K5]`'s 0141: a check cannot REACH DONE without saying what it found, so the conclusion is
+      // seeded with the row. FAIL, because the failure row below is this check's — a fixture that
+      // said PASS here would describe a check disagreeing with its own recorded verdict.
+      status: TaskStatus.DONE, verifiesTaskId: subject, verdict: 'FAIL',
     });
     await passing(services, target.ownerId, target.projectId);
 
@@ -532,7 +535,9 @@ test('unit 25A: project acceptance and the DONE hard gate', { skip, timeout: 900
     const target = await world(services.db, 'read-face', { acceptanceCriteria: CRITERIA });
     const subject = await task(services.db, target, 'the work', { status: TaskStatus.DONE });
     await task(services.db, target, 'the check', {
-      status: TaskStatus.DONE, verifiesTaskId: subject,
+      // As above, and PASS here: this scenario ends with the DONE gate allowed, which is what a
+      // finished check that concluded nothing could never have supported.
+      status: TaskStatus.DONE, verifiesTaskId: subject, verdict: 'PASS',
     });
     await services.acceptance.recordMergeEvidence(target.ownerId, target.projectId, {
       requirementId: 'feat/project', targetBranch: 'main', contentHash: HASH_A,
