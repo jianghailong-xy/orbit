@@ -279,12 +279,25 @@ export const DEFAULT_CONVERGENCE_THRESHOLDS: Readonly<ConvergenceThresholds> = {
   maxScopeExpansionRequests: 0,
 };
 
-/** §8's per-attempt resource budget. Reaching one ENDS the attempt; it does not fail it (TH2). */
+/**
+ * §8's per-attempt resource budget. Reaching one ENDS the attempt; it does not fail it (TH2).
+ *
+ * The last two dimensions were added by `[K3]` (doc v1.1). Both were already in §8's prose — TH2
+ * asks the attempt to write a checkpoint on its way out, TH3 says steering is not a new attempt —
+ * and neither was in the table, which by RL1 means neither was a bound at all.
+ *
+ * `maxContextPercent` is a PERCENTAGE of the session's reported context window rather than a token
+ * count, because a token count is a property of the model and not of the task: one absolute number
+ * is too strict for every small window and vacuous for every large one. The 20% the default leaves
+ * is not slack — it is the context TH2's wind-down has to be written in.
+ */
 export interface AttemptBudget {
   maxTurns: number | null;
   maxWallClockMs: number | null;
   maxToolCalls: number | null;
   maxCostMicros: number | null;
+  maxContextPercent: number | null;
+  maxCoordinatorSteers: number | null;
 }
 
 export const DEFAULT_ATTEMPT_BUDGET: Readonly<AttemptBudget> = {
@@ -292,6 +305,8 @@ export const DEFAULT_ATTEMPT_BUDGET: Readonly<AttemptBudget> = {
   maxWallClockMs: 3_600_000,
   maxToolCalls: 1_200,
   maxCostMicros: 20_000_000,
+  maxContextPercent: 80,
+  maxCoordinatorSteers: 3,
 };
 
 /** §8's reasons, in TH1's fixed evaluation order. Exported as an array because the ORDER is the

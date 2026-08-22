@@ -12,6 +12,10 @@ import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import { ServiceTokenAuthorizer } from './service-token.authorizer';
 
+// `[K3]` guards attempts at this door; nothing here is an attempt, so both calls are no-ops. A
+// stub rather than `{}` so a guard that starts being called shows up as a test change, not a crash.
+const ATTEMPTS = { assertMayEndSession: async () => undefined, chargeSteer: async () => undefined };
+
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 const TARGET_SESSION_ID = 'target-session';
 
@@ -201,7 +205,8 @@ function makeController() {
     },
   };
   return {
-    controller: new RunnerSessionsController(sessions as never, authorizer as never, {} as never),
+    controller: new RunnerSessionsController(
+      sessions as never, authorizer as never, {} as never, ATTEMPTS as never),
     calls,
   };
 }

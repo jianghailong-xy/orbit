@@ -1051,6 +1051,9 @@ model Session {
   resultOfProjectAction ProjectAction? @relation("ProjectActionResultSession")
   // Append-only record of every merge attempted for this session's branch, however it was made.
   mergeReceipts         SessionMergeReceipt[]
+  /// `[K3]`: the attempt this session IS, if it is one (migration 0133). At most one — a session is
+  /// one attempt or none, never a second try at the same thing.
+  attempt               TaskAttempt?
 
   @@index([assignedRunnerId, status])
   // "what did this workspace last run on", the derived seed a new session inherits when the
@@ -2488,6 +2491,8 @@ model Task {
   /// `[K2]`: every version of what this task asked for, and every judgment made about it.
   scopeRevisions          TaskScopeRevision[]
   convergenceDecisions    TaskConvergenceDecision[]
+  /// `[K3]`: every attempt spent on this task — one row per Session that ran it (migration 0133).
+  attempts                TaskAttempt[]
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -2583,6 +2588,7 @@ model TaskScopeRevision {
   createdAt             DateTime @default(now()) @map("created_at")
 
   decisions TaskConvergenceDecision[]
+  attempts  TaskAttempt[]
 
   @@unique([taskId, revision])
   /// The composite key `TaskConvergenceDecision` points at. Naming the HASH as well as the revision
@@ -2661,6 +2667,93 @@ model TaskConvergenceDecision {
   @@index([ownerId, createdAt(sort: Desc)])
   @@index([taskId, scopeRevision, failureFingerprint])
   @@map("task_convergence_decision")
+}
+
+/// `[K3]`: one attempt — one Session, under one Task, under one scope revision (migration 0133).
+///
+/// The identity is the point, and it comes before any limit. `[K1]` made the breaker decidable and
+/// `[K2]` made its counters durable, and neither would have stopped the incident: those hundreds of
+/// rounds never crossed an attempt line because they were never hundreds of attempts. They were ONE
+/// session steered hundreds of times — which adds no attempt, mints no new fingerprint, and leaves
+/// every liveness check green because the loop really is busy.
+///
+/// Still no new business entity (RL4): this is a subordinate table between Task and Session, and
+/// the business layer continues to be Project and Task.
+model TaskAttempt {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  /// AT1. NOT NULL because an attempt with nothing running is not a weaker attempt, it is not one.
+  /// Cascade on delete: purging a session destroys the run this row is a fact ABOUT, while the
+  /// spend it was charged survives in `[K2]`'s ledger, which keeps its own copy of the generation.
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  scopeRevision     Int               @map("scope_revision")
+  scopeHash         String            @map("scope_hash") @db.Char(64)
+  /// §5 FP3 as a foreign key: an attempt names the revision it was spent on, hash included, so it
+  /// cannot be re-pointed at a different question after the fact.
+  revision          TaskScopeRevision @relation(fields: [taskId, scopeRevision, scopeHash], references: [taskId, revision, scopeHash], onDelete: Cascade, map: "task_attempt_scope_revision_fkey")
+  attemptGeneration BigInt            @map("attempt_generation")
+
+  /// GN1: the durable identity of THIS dispatch, supplied by the caller — never a fresh UUID. A
+  /// replay after a crash re-derives it and reads its own row back instead of opening a second
+  /// generation. The same rule, for the same reason, as `[K2]`'s observation key.
+  attemptKey String @map("attempt_key")
+  /// AT3: what this attempt will do DIFFERENTLY. The digest is a gate, not decoration — migration
+  /// 0133 refuses a second attempt carrying the previous one's, unless that one ended `TRANSIENT`.
+  hypothesis       String
+  hypothesisDigest String @map("hypothesis_digest") @db.Char(64)
+
+  /// BD5: the six limits in force when this attempt opened, frozen. Judged against this copy and
+  /// not the project's current policy, so a policy edit mid-flight can neither end a running
+  /// attempt nor revive one already asked to stop — both are one result overwriting another.
+  budget Json
+  /// The last measured spend, for the read face; the budget decision is taken against a fresh
+  /// measurement. Null until something has been measured.
+  spend  Json?
+  /// The one dimension the control plane itself writes rather than reads (AU3). Monotonic.
+  coordinatorSteers Int @default(0) @map("coordinator_steers")
+
+  /// §2's lifecycle: OPEN → WINDING_DOWN → CLOSED. `WINDING_DOWN` exists so that "was asked to
+  /// stop" is a committed fact rather than an intention held in whoever asked.
+  status             String  @default("OPEN")
+  /// NC2's four real endings. `CANCELLED` is not among them and a CHECK refuses it, so "cancel the
+  /// run and call that its result" is a statement this table cannot store.
+  outcome            String?
+  classification     String?
+  exhaustedDimension String? @map("exhausted_dimension")
+
+  /// NC5: the pointer half of §7's checkpoint. The `ACCEPTED`/`WIP_RED` table and the merge gate
+  /// that reads it are `[K6]`; an `ACCEPTED` sha here is also written back to `task.knownGoodSha`.
+  checkpointSha            String? @map("checkpoint_sha")
+  checkpointKind           String? @map("checkpoint_kind")
+  checkpointEvidenceDigest String? @map("checkpoint_evidence_digest")
+  /// NC3's "if there is none, say there is none". A crash HAS none; inventing a checkpoint would
+  /// make the next generation resume from a point that does not exist.
+  noCheckpointReason       String? @map("no_checkpoint_reason")
+
+  /// SD1: evidence crosses a generation, context does not.
+  inheritedKnownGoodSha String?   @map("inherited_known_good_sha")
+  windDownRequestedAt   DateTime? @map("wind_down_requested_at")
+  closedAt              DateTime? @map("closed_at")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@unique([attemptKey], map: "task_attempt_attempt_key_key")
+  /// AC4 in one line: the same (task, revision, generation) is never started twice. Two
+  /// coordinators, a redelivered event and a takeover all compute the same triple; one lands.
+  @@unique([taskId, scopeRevision, attemptGeneration], map: "task_attempt_generation_key")
+  /// AT1, and AC3's mechanical half: a "fresh generation" that actually resumes the previous
+  /// session — inheriting its unbounded context with it — is a row this refuses.
+  @@unique([sessionId], map: "task_attempt_session_key")
+  /// One live attempt per task is enforced by a PARTIAL unique index this schema cannot spell
+  /// (`task_attempt_one_open_key`, `WHERE status <> 'CLOSED'`), the same trade `Session.retryAt`
+  /// and migration 0108's pair already carry.
+  @@index([taskId, scopeRevision, attemptGeneration(sort: Desc)], map: "task_attempt_task_generation_idx")
+  @@index([ownerId, createdAt(sort: Desc)], map: "task_attempt_owner_created_idx")
+  @@map("task_attempt")
 }
 
 model TaskVerificationFailure {

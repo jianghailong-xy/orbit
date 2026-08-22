@@ -24,6 +24,7 @@ import {
   UpdateProjectDto,
 } from './dto';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 
@@ -36,6 +37,7 @@ export class ProjectsController {
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
     private readonly convergence: ConvergenceLedgerService,
+    private readonly attempts: SessionAttemptService,
   ) {}
 
   @Post()
@@ -97,6 +99,30 @@ export class ProjectsController {
   ) {
     await this.projects.assertTaskInProject(user.userId, id, taskId);
     return this.convergence.describe(user.userId, taskId);
+  }
+
+  /**
+   * How much of this TASK's current attempt is left, per dimension (`[K3]`, attempt budget §1).
+   *
+   * `.../convergence` answers "how many more tries does this task get"; this answers the other
+   * half — "how much is left of the try that is running". Both are needed and neither implies the
+   * other: a task with plenty of attempts left can be one turn from the end of the one in flight.
+   *
+   * Every dimension reports its own reading rather than a single boolean, because BD3's four states
+   * are not interchangeable: `UNMEASURED` (the runner has not reported a context window yet) is not
+   * `WITHIN` and is not `UNBOUNDED`, and collapsing them is how a budget silently stops applying.
+   * The live attempt is re-measured against the request's clock so the wall clock is current; a
+   * closed one reports the spend it was last measured at rather than one that kept running after
+   * the work stopped.
+   */
+  @Get(':id/tasks/:taskId/attempts')
+  async taskAttempts(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.attempts.describe(user.userId, taskId, new Date());
   }
 
   /**

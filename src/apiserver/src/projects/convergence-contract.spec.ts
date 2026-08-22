@@ -66,7 +66,9 @@ test('§0–§9 all exist, and the code names the version the document does', ()
   for (const n of ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
     assert.ok(headings.has(n), `§${n} is missing from the convergence contract`);
   }
-  assert.match(DOC.split('\n')[0], /有界收敛契约 v1\.0$/);
+  // v1.1: `[K3]` added the two attempt-budget dimensions §8's prose already relied on. Every other
+  // table in this document is byte-identical to the frozen v1.0, and the assertions below say so.
+  assert.match(DOC.split('\n')[0], /有界收敛契约 v1\.1$/);
 });
 
 test('§2: the state table and the code list exactly the same states', () => {

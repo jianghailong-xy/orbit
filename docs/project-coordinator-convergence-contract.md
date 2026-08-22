@@ -1,4 +1,4 @@
-# Project Coordinator 有界收敛契约 v1.0
+# Project Coordinator 有界收敛契约 v1.1
 
 冻结单元 `[K1]`。本文件是 `[K1]..[K9]` 的规范来源，由
 `src/apiserver/src/projects/convergence-contract.spec.ts` 逐表核对代码，任何一处不一致都会变红。
@@ -283,6 +283,17 @@ Project 计的，本契约把同一件事按 **Task 的一次 scope revision** �
 | `maxWallClockMs` | 3600000 |
 | `maxToolCalls` | 1200 |
 | `maxCostMicros` | 20000000 |
+| `maxContextPercent` | 80 |
+| `maxCoordinatorSteers` | 3 |
+
+后两个维度由 `[K3]` 补入（v1.1），它们本来就写在 TH2 与 TH3 的散文里，只是没有进这张表——而一个不在
+表里的上限，按 RL1 的说法根本不是上限。`maxContextPercent` 是**百分比而不是 token 数**：token 数是模型的
+属性、不是任务的属性，写死一个绝对值对小窗口模型过严、对大窗口模型等于没写。默认 80 留出的 20% 不是余量，
+是 TH2 要求的那次收口本身要花的**上下文预算**——一个把上下文用尽的 attempt 已经写不出可信的 checkpoint 了。
+`contextWindow` 未被 Runner 上报时这一维读作 `UNMEASURED`：既不算越线，也不算无限，其余五维照常有界。
+
+`[K3]` 的实现细则（attempt 与 Session 的对应、六维余量、自然收口、fresh generation 的门禁）在
+`docs/project-coordinator-attempt-budget.md`，本表是它的规范来源。
 
 - **TH1**：熔断原因的判定顺序是固定的，与计数器的读取顺序无关：
   `SCOPE_EXPANSION_REQUIRED` → `SAME_FAILURE_REPEATED` → `VERIFICATION_ROUNDS_EXHAUSTED` →

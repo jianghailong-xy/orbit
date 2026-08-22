@@ -15,6 +15,8 @@ import { Runner, RunStatus } from '@prisma/client';
 import { RunnerSessionScope, SessionsService } from '../sessions/sessions.service';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
+import { SessionAttemptService } from '../projects/session-attempt.service';
+import { SessionLifecycleActor } from '../projects/attempt-budget';
 import { CurrentRunner } from './current-runner.decorator';
 import { CurrentServiceGrant, RunnerSessionAuthGuard } from './runner-session-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -61,7 +63,22 @@ export class RunnerSessionsController {
     private readonly sessions: SessionsService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
     private readonly mergeReceipts: MergeReceiptService,
+    private readonly attempts: SessionAttemptService,
   ) {}
+
+  /**
+   * `[K3]` §3: who is knocking.
+   *
+   * This is the door an agent uses, so it is the only place the difference between "a person
+   * stopped this run" and "another agent stopped somebody else's run" is still visible — by the
+   * time the request reaches SessionsService both look identical, which is how a coordinator's
+   * `session complete` used to land on a live worker as an ordinary cancellation.
+   */
+  private static actor(callingSessionId: string | undefined): SessionLifecycleActor {
+    return callingSessionId && !isHeadlessCaller(callingSessionId)
+      ? { kind: 'AGENT_SESSION', sessionId: callingSessionId }
+      : { kind: 'USER' };
+  }
 
   /**
    * Resolve one headless request's reach, then assert it covers what the route needs.
@@ -214,6 +231,12 @@ export class RunnerSessionsController {
       this.assertNoServiceToken(grant);
       await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     }
+    // AU3/TH3: steering somebody else's live attempt is bounded. "Keep going" is the only verb
+    // that produces activity without producing an attempt, a fingerprint or a unit of progress —
+    // which is exactly why every liveness check stayed green through the incident. Spending the
+    // budget leaves one legal next step: a fresh generation with a new hypothesis.
+    await this.attempts.chargeSteer(
+      runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
     // Same idempotency key every other entry point sends. A caller that retries a request it
     // never saw the answer to (the MCP tool, the CLI, a script) can repeat the key and get the
     // turn it already filed back, instead of a second copy of the message. Minting one here
@@ -243,6 +266,13 @@ export class RunnerSessionsController {
     // browser sends (SessionInterruptDto): the follow-up is filed after the interrupt drops
     // what was queued, so it cannot be its own casualty. Bodyless stays a plain interrupt.
     const followUp = dto?.message?.trim();
+    // Only the version that injects a turn is charged. A bodyless interrupt stops what is running
+    // and writes no outcome, so it cannot overwrite one; an interrupt CARRYING a message is a steer
+    // with more force behind it, and an unbounded loop of those is the same unbounded verb.
+    if (followUp) {
+      await this.attempts.chargeSteer(
+        runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
+    }
     return this.sessions.interrupt(
       runner.ownerId,
       id,
@@ -310,6 +340,11 @@ export class RunnerSessionsController {
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    // TH2/AU2: a live attempt's ending is the worker's to write. Another agent ending it here
+    // would settle the session with no outcome and no checkpoint, and "what actually failed" would
+    // stop having an answer for every generation after this one.
+    await this.attempts.assertMayEndSession(
+      runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
     return this.sessions.end(runner.ownerId, id);
   }
 
@@ -326,6 +361,11 @@ export class RunnerSessionsController {
   ) {
     this.assertNoServiceToken(grant);
     await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    // The single most expensive action in the incident: a coordinator that disliked a run and
+    // completed it. That is not a close — it is a result with no ending written over one that had
+    // one, and the session lands as CANCELLED with nothing left to learn from.
+    await this.attempts.assertMayEndSession(
+      runner.ownerId, id, RunnerSessionsController.actor(callingSessionId));
     return this.sessions.complete(runner.ownerId, id);
   }
 
