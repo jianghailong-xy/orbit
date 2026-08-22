@@ -239,6 +239,89 @@ test('40P01, 40001 and P2034 are decided in one place', () => {
 });
 
 /**
+ * The lines of one transaction closure: from its `=> {` to the `}` that matches it.
+ *
+ * Braces, not parentheses. A parenthesis count runs on past the closure into the `.catch(…)` that
+ * often follows — and that catch runs AFTER the rollback, which is where two of these services
+ * deliberately read with the unmanaged client. Scanning it would report the one shape that is
+ * definitely correct.
+ */
+function closureBody(lines: readonly string[], start: number): { from: number; to: number } | null {
+  let opened = -1;
+  for (let cursor = start; cursor < Math.min(start + 6, lines.length); cursor += 1) {
+    if (/=>\s*\{/.test(lines[cursor].replace(/\/\/.*$/, ''))) {
+      opened = cursor;
+      break;
+    }
+  }
+  if (opened < 0) return null;
+  let depth = 0;
+  let seen = false;
+  for (let cursor = opened; cursor < lines.length; cursor += 1) {
+    const code = lines[cursor].replace(/\/\/.*$/, '');
+    for (const character of code) {
+      if (character === '{') {
+        depth += 1;
+        seen = true;
+      } else if (character === '}') {
+        depth -= 1;
+        // Char-precise, because the closure's own `}` and the `{` of a `.catch(async (e) => {`
+        // chained onto it routinely share a line. Stopping at end-of-line would swallow the catch,
+        // which runs AFTER the rollback and is exactly where the unmanaged client belongs.
+        if (seen && depth <= 0) return { from: opened, to: cursor };
+      }
+    }
+  }
+  return null;
+}
+
+/** Every transaction closure in a source file that is not a comment. */
+function closures(source: string): Array<{ from: number; to: number }> {
+  const lines = source.split('\n');
+  const found: Array<{ from: number; to: number }> = [];
+  lines.forEach((line, index) => {
+    if (!/\$transaction\(|withTransactionRetry\(/.test(line)) return;
+    if (/^\s*(\/\/|\*)/.test(line)) return;
+    const body = closureBody(lines, index);
+    if (body) found.push(body);
+  });
+  return found;
+}
+
+/**
+ * Nothing inside a transaction may reach the database through the UNMANAGED client.
+ *
+ * `this.prisma.x.update(...)` inside a `tx` closure is a write in its own transaction: it commits
+ * whether or not the surrounding one does, it is not rolled back with a victim, and a retry issues
+ * it once per attempt. It is also invisible — the code reads exactly like the transactional
+ * statement beside it. Nothing in the tree does this today; this is what keeps it that way.
+ */
+test('a transaction writes through its own client and no other', () => {
+  const offenders: string[] = [];
+  for (const file of sources(SRC)) {
+    const rel = path.relative(SRC, file).split(path.sep).join('/');
+    if (EXCLUDED_SOURCES.some((excluded) => rel === excluded.path || rel.startsWith(excluded.path))) continue;
+    const source = readFileSync(file, 'utf8');
+    const lines = source.split('\n');
+    for (const { from, to } of closures(source)) {
+      for (let cursor = from + 1; cursor < to; cursor += 1) {
+        const body = lines[cursor];
+        if (/^\s*(\/\/|\*)/.test(body)) continue;
+        if (/this\.prisma\./.test(body.replace(/\/\/.*$/, ''))) {
+          offenders.push(`${rel}:${cursor + 1}: ${body.trim()}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'a statement inside a transaction went through the unmanaged client — it commits on its own, ' +
+      'survives the rollback of the transaction around it, and runs once per retry attempt. Use tx.',
+  );
+});
+
+/**
  * No external action inside a retried closure.
  *
  * This is the one property a retry can break that nothing else in the system would notice: an
@@ -253,30 +336,15 @@ test('nothing outside the database happens inside a transaction', () => {
   for (const file of sources(SRC)) {
     const rel = path.relative(SRC, file).split(path.sep).join('/');
     if (EXCLUDED_SOURCES.some((excluded) => rel === excluded.path || rel.startsWith(excluded.path))) continue;
-    const lines = readFileSync(file, 'utf8').split('\n');
-    lines.forEach((line, index) => {
-      if (!/\$transaction\(|withTransactionRetry\(/.test(line)) return;
-      if (/^\s*(\/\/|\*)/.test(line)) return;
-      // Match parens from the call to find the closure's last line.
-      let depth = 0;
-      let started = false;
-      let end = index;
-      for (let cursor = index; cursor < lines.length; cursor += 1) {
-        for (const character of lines[cursor].replace(/\/\/.*$/, '')) {
-          if (character === '(') {
-            depth += 1;
-            started = true;
-          } else if (character === ')') depth -= 1;
-        }
-        end = cursor;
-        if (started && depth <= 0) break;
-      }
-      for (let cursor = index; cursor <= end; cursor += 1) {
+    const source = readFileSync(file, 'utf8');
+    const lines = source.split('\n');
+    for (const { from, to } of closures(source)) {
+      for (let cursor = from; cursor <= to; cursor += 1) {
         const body = lines[cursor];
         if (/^\s*(\/\/|\*)/.test(body)) continue;
         if (EXTERNAL.test(body)) offenders.push(`${rel}:${cursor + 1}: ${body.trim()}`);
       }
-    });
+    }
   }
   assert.deepEqual(
     offenders,

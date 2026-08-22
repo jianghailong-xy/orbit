@@ -22,6 +22,12 @@
  *  - **A participant** (`TRANSACTION_PARTICIPANTS`) writes only through a transaction client its
  *    caller hands it. It has no boundary of its own, so it has no retry decision of its own — it
  *    is re-run when its owner is, and its lock order is its owner's.
+ * The array form of `$transaction` has no production call site left. Three had one — the two
+ * reorders and the session re-tag — and all three became callbacks, because an array is a batch
+ * the caller cannot re-run: `withTransactionRetry` needs a closure to call again, and a list of
+ * already-started promises is not one. The array form is still a shape a conflict can ARRIVE in,
+ * which is why `transient-db-conflict.spec.ts` keeps testing the boundary against it.
+ *
  *  - **A statement** (`STATEMENT_UNITS`) runs outside any transaction. PostgreSQL wraps each one
  *    in an implicit transaction of exactly one statement, so there is no closure to re-run and no
  *    unit of work to re-derive. These are NOT retried, deliberately; the argument is per class in
@@ -36,7 +42,9 @@
  * `identity` is the first half of that claim and `replay` is the second. `effects` is the third
  * thing that decides it: an external action inside a retried closure would happen once per
  * attempt, which is why every one of them in this codebase sits after the commit, and why the
- * spec asserts that mechanically rather than trusting this sentence.
+ * spec asserts that mechanically rather than trusting this sentence. The API server sends no mail,
+ * so the external actions this has to account for are the realtime publishes, the APNs push and
+ * the nudges to a runner — the spec's pattern names all three plus a bare `fetch`.
  *
  * ISOLATION
  * ---------

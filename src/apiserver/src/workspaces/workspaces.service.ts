@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
-import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
@@ -185,11 +184,15 @@ export class WorkspacesService {
     // Sorting the STATEMENTS fixes it without changing a single stored position: each row still
     // gets the index the caller asked for, and every concurrent reorder now takes the rows in one
     // agreed order, which is the same trick `RunnersService.reorderRunners` has always used and
-    // the general rule `orderedIds` exists for (common/lock-order.ts). Two reorders that overlap
+    // the general rule `orderedIds` states (common/lock-order.ts). Two reorders that overlap
     // now queue behind each other and both commit, last writer winning per row — which is what a
     // sidebar order means anyway.
-    const position = new Map(ordered.map((id, index) => [id, index]));
-    const ranked = orderedIds(ordered);
+    // De-duplicated in the order the caller sent — a client that repeats an id must not hand two
+    // positions to one row — and then sorted by id, which is the same two steps
+    // `RunnersService.reorderRunners` takes.
+    const ranked = [...new Set(ordered)]
+      .map((id, position) => ({ id, position }))
+      .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
     if (ranked.length === 0) return this.list(ownerId);
     // Retried whole. The ordering above removes the reorder-versus-reorder cycle, but a
     // `workspace` row is also touched by other writers, so the residual conflict is answered
@@ -198,8 +201,8 @@ export class WorkspacesService {
     await withTransactionRetry(
       this.prisma,
       async (tx) => {
-        for (const id of ranked) {
-          await tx.workspace.update({ where: { id }, data: { position: position.get(id) } });
+        for (const { id, position } of ranked) {
+          await tx.workspace.update({ where: { id }, data: { position } });
         }
       },
       loggedRetry(this.logger, 'workspaces.reorder'),
