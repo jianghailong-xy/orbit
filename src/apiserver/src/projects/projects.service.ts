@@ -32,6 +32,7 @@ import {
 import { CreateProjectDto, UpdateProjectDto } from './dto';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
+import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { publicIdempotencyKey } from './project-decision.service';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -680,6 +681,19 @@ export class ProjectsService {
       ...withCoordination(project),
       tasksByStatus: Object.fromEntries(byStatus.map((row) => [row.status, row._count._all])),
     };
+  }
+
+  /**
+   * The two sets of numbers the project page leads with: where its work actually stands, and what
+   * shape its dependency graph is.
+   *
+   * Separate from `get` rather than folded into it, because they answer different questions at
+   * different costs: `get` is the project's own record and its per-status tally, this walks every
+   * dependency edge in the project. A page that only wants the title should not pay for the walk.
+   */
+  async panorama(ownerId: string, projectId: string): Promise<ProjectPanorama> {
+    await this.assertOwned(ownerId, projectId);
+    return readProjectPanorama(this.prisma, ownerId, projectId);
   }
 
   /**

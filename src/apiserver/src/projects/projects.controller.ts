@@ -53,6 +53,19 @@ export class ProjectsController {
   }
 
   /**
+   * Where this project's work stands, and what shape its dependency graph is (one read).
+   *
+   * `buckets` splits the OPEN tally `GET :id` reports into `ready` (nothing owed to it — it could
+   * start now) and `blocked` (waiting on a prerequisite), which is the distinction the page needs
+   * and the combined count cannot express. `shape` says whether the graph is worth drawing as a
+   * node-link diagram or reads as a chain. No ids, so nothing here needs Base62 rewriting.
+   */
+  @Get(':id/panorama')
+  panorama(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.panorama(user.userId, id);
+  }
+
+  /**
    * One level of this project's task tree: its top-level tasks, or — with `?parentId=` — the
    * direct children of one of them. Cursor-paged, newest first.
    *
