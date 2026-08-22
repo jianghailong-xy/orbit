@@ -40,6 +40,7 @@ import {
   ProjectBlockingLeaderboard,
   readProjectBlockingLeaderboard,
 } from './project-panorama-blocking';
+import { ProjectActivityQuery, readProjectActivity } from './project-panorama-activity';
 import { publicIdempotencyKey } from './project-decision.service';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -845,6 +846,22 @@ export class ProjectsService {
       // read; this is the other half of that.
       blockedTasks: blockedTasks.map((row) => ({ ...row, failureId: uuidToBase62(row.failureId) })),
     };
+  }
+
+  /**
+   * What the control loop has been doing, newest first (panorama).
+   *
+   * The one layer of a project of autonomous work that has no counterpart in a tracker whose
+   * tickets do not decide anything — and, until this endpoint, the one with six thousand rows
+   * behind it and nowhere to read them. `/coordinator/status` serves the last few decisions as
+   * part of a current-state answer; this is the history itself, merged out of the outbox, the
+   * decision audit and the action ledger into one vocabulary and paged.
+   *
+   * A read, and only a read.
+   */
+  async activity(ownerId: string, projectId: string, query: ProjectActivityQuery = {}) {
+    await this.assertOwned(ownerId, projectId);
+    return readProjectActivity(this.prisma, projectId, query);
   }
 
   /**
