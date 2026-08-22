@@ -3955,6 +3955,7 @@ v1.5 相对 v1.4 **一个业务字段、一张表、一列 `task`/`project`/`ses
 | 23 | 项目级验收与合并审计 | §13.4 · §14 | 验收产物 |
 | 25D | 派发 pass：控制环自己启动下一个任务 | §7.8 · §7.4 · §10.2 W1 | `src/apiserver/src/projects/project-dispatch-pass.spec.ts`（选择函数）+ `project-dispatch-pass.pg.spec.ts`（真实 Postgres：自派发、重放幂等、超并发、blocker、MANUAL、恢复） |
 | 26 | 失败唤醒：`TASK_FAILURE` 的原因、优先级与幂等（纯决策） | §7.2 TU2 · TU4 · TU6 · TU7 · TU8 · TF6 · §7.6 · §9.5 Q3-d · §11.2 BL9 · §33 | `src/apiserver/src/projects/project-turn-reason.spec.ts`（全序 64 组合 + TR1 摘要性质）+ `project-failure-turn.spec.ts`（生产同构夹具：Task=FAILED / Session=FAILED / 下游 BLOCKED_FAILED / Coordinator=AWAITING_INPUT）；执行记录见 [`project-failure-wakeup-26.md`](./project-failure-wakeup-26.md) |
+| 27 | `OPEN_COORDINATOR_TURN` 的原子投递与可靠唤醒（执行） | §7.3 动作表 · §7.6 TR1–TR3 · TR2-a/TR2-b/TR2-c · TU7 · §8.3 · §10.4 第 7 条 | `src/apiserver/src/projects/project-coordinator-turn.spec.ts`（键与消息的纯函数）+ `project-coordinator-turn.pg.spec.ts`（真实 PostgreSQL：原子提交、message ≠ steer、重放/接管/重启、提交前后各一次真实 `SIGKILL`、通知必抛下的可恢复性、TR2-c 的未消费信号）；执行记录见 [`project-coordinator-turn-27.md`](./project-coordinator-turn-27.md) |
 
 ---
 

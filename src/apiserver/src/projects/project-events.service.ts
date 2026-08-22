@@ -79,6 +79,29 @@ export interface ProjectEventHandleResult {
   disposition?: Extract<ProjectEventDisposition, 'RECONCILED' | 'DISCARDED_OUT_OF_LOOP'>;
   /** Lease contention is not a failure: keep the events pending until the holder can be replaced. */
   deferUntil?: Date;
+  /**
+   * §7.6 TR2-c: signals this pass RECONCILED but did not ANSWER.
+   *
+   * For a plain dirty-marker event, "looked at it once" is the whole of processing, and the batch
+   * consume below is right. For a REQUESTED action it is not: a `user.manual_trigger` that was rate
+   * limited, or that found no live coordination run, has not happened yet, and writing `consumed_at`
+   * for it would delete a person's explicit request with nothing anywhere to say it was refused
+   * (`PC-CX-31`). These rows stay unconsumed with a retry instant, and `attempts` is deliberately
+   * NOT advanced — this is not a failed delivery, and letting it count toward the dead-letter
+   * threshold would turn a normal rate-limit into a lost request after ten windows.
+   */
+  hold?: { eventIds: readonly string[]; nextAttemptAt: Date };
+  /**
+   * §7.6 TR2-c ①: signals this pass ANSWERED, consumed with it whether or not this delivery is the
+   * one that brought them.
+   *
+   * TF5 is what makes this necessary rather than tidy: one `MANUAL` turn answers EVERY request
+   * outstanding at the time, and a request held behind an earlier window is outstanding while
+   * sitting on a future `next_attempt_at` — so the delivery that finally answers it is carrying
+   * some unrelated event. Consuming only the batch would leave the answered request pending, and
+   * the next pass would pick `MANUAL` again on a key the ledger has already spent.
+   */
+  answered?: readonly string[];
 }
 
 export type ProjectEventDeliveryResult =
@@ -308,17 +331,41 @@ export class ProjectEventsService implements OnModuleInit, OnModuleDestroy {
 
         const ids = events.map((event) => event.id);
         const disposition = handled?.disposition ?? 'RECONCILED';
-        await tx.$executeRaw(Prisma.sql`
-          UPDATE "project_event"
-             SET "consumed_at" = ${now}, "next_attempt_at" = NULL,
-                 "disposition" = ${disposition}
-           WHERE "id" IN (${uuidList(ids)}) AND "consumed_at" IS NULL
-        `);
+        const holdIds = new Set(handled?.hold?.eventIds ?? []);
+        const consumedIds = [...new Set([
+          ...ids.filter((id) => !holdIds.has(id)),
+          ...(handled?.answered ?? []),
+        ])];
+        if (consumedIds.length > 0) {
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "project_event"
+               SET "consumed_at" = ${now}, "next_attempt_at" = NULL,
+                   "disposition" = ${disposition}
+             WHERE "id" IN (${uuidList(consumedIds)}) AND "consumed_at" IS NULL
+          `);
+        }
+        // TR2-b ②③, in one statement: still unconsumed, `attempts` untouched, and pointed at the
+        // instant the handler says it may be answered.
+        if (holdIds.size > 0 && handled?.hold) {
+          // Never in the past, for the reason `deferUntil` above is not either: this pump drains
+          // in a loop, and a retry instant that has already arrived is a spin rather than a
+          // schedule. A held signal is re-decided by the wake the same pass wrote.
+          const retryAt = handled.hold.nextAttemptAt > now
+            ? handled.hold.nextAttemptAt
+            : new Date(now.getTime() + 1_000);
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "project_event"
+               SET "next_attempt_at" = ${retryAt}
+             WHERE "id" IN (${uuidList([...holdIds])}) AND "consumed_at" IS NULL
+          `);
+        }
         await tx.$executeRawUnsafe('RELEASE SAVEPOINT project_event_delivery');
         return {
           status: disposition === 'RECONCILED' ? 'CONSUMED' : 'DISCARDED',
           projectId,
-          eventIds: ids,
+          // What this delivery actually settled. A held signal is still pending, and reporting it
+          // as consumed here is exactly the lie TR2-c exists to stop.
+          eventIds: consumedIds,
         } as const;
       } catch (cause) {
         await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT project_event_delivery');

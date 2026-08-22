@@ -119,6 +119,18 @@ export function openCoordinatorTurnIdempotencyKey(
 }
 
 /**
+ * The `<generation>` inside a turn key, read back out of it.
+ *
+ * Read from the key rather than carried beside it so the epoch an action is CLAIMED under and the
+ * epoch its permanent name was BUILT from cannot drift apart — §8.2 GE4 already allows this one key
+ * to be recomputed by a returning world, and it is the generation that makes that safe.
+ */
+export function coordinatorTurnGeneration(idempotencyKey: string): string | null {
+  const parts = idempotencyKey.split(':');
+  return parts.length === 6 && parts[3] === 'turn' ? parts[4] : null;
+}
+
+/**
  * §7.2 TU4 / TU5: at most one reason comes out of one snapshot, and which one does not depend on
  * how anything was iterated.
  */
@@ -303,4 +315,18 @@ function canonical(value: unknown): string {
     return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
   }
   return JSON.stringify(value ?? null);
+}
+
+/**
+ * The `conversation_turn.client_turn_id` one opened turn is filed under: §8.2's key, verbatim.
+ *
+ * One string in two tables rather than a derivation, because the two idempotency layers this turn
+ * has are meant to be recognisably the same fact. `project_action.idempotency_key` stops a second
+ * ledger claim; `conversation_turn (session_id, client_turn_id)` stops a second message — and a
+ * reader (or a repair query) can join them without knowing a rule. The session scope is what makes
+ * it safe to reuse the string as-is: the key already carries `generation`, and a generation belongs
+ * to exactly one coordination run (§7.5), so one key can never name two sessions' turns.
+ */
+export function openCoordinatorTurnClientTurnId(idempotencyKey: string): string {
+  return idempotencyKey;
 }
