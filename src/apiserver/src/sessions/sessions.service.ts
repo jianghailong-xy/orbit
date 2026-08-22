@@ -31,6 +31,7 @@ import {
   SessionEndReason,
   SessionFilingState,
   SessionLifecycleState,
+  type SessionProjectRole,
   type SessionResumeBlockedReason,
   SessionRunState,
   SessionState,
@@ -80,7 +81,11 @@ import {
   UNSETTLED_SESSION_STATUSES,
   statusAfterTurnEnqueued,
 } from '../common/session-scheduling';
-import { GENERATING_SESSION_FILTER, isSessionGenerating } from '../common/session-generating';
+import {
+  GENERATING_SESSION_FILTER,
+  generatingSessionSql,
+  isSessionGenerating,
+} from '../common/session-generating';
 import {
   normalizeBuiltinPermissionMode,
   normalizeEffortForProvider,
@@ -1596,6 +1601,58 @@ export class SessionsService {
     return [...counts.values()];
   }
 
+  /**
+   * The same tallies again, per PROJECT — what a project's group header in the session list rolls
+   * up: how many of its conversations are waiting on the user, how many are working, and how far
+   * through the work it is ("x/y done").
+   *
+   * Not a variation of `workspaceSessionCounts`, and not merged into it: a project is not a
+   * workspace. One project's sessions can be spread over several workspaces (its coordinator's and
+   * every worker's), so neither grouping can be derived from the other, and the query cannot go
+   * through the query builder at all — it groups by a column `session` deliberately does not have.
+   * A session belongs to a project the same two ways a list row says it does: through its task, or
+   * by being the project's coordinator.
+   *
+   * The four buckets are disjoint by construction, because a header that reads
+   * "1 needs you · 1 running · 2/4 done" must add up: `running` is the generating rows that are
+   * NOT already counted as needing you (they are generating too — a permission prompt does not
+   * stop the turn), and both exclude anything already filed as done. Trashed sessions are in no
+   * bucket, `total` included: they are in no list either.
+   */
+  async projectSessionCounts(ownerId: string) {
+    type Row = {
+      projectId: string;
+      needsYou: number;
+      running: number;
+      done: number;
+      total: number;
+    };
+    // Same definitions as the list payload and as `workspaceSessionCounts`: still open, still
+    // generating, still holding a PENDING approval.
+    const open = Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL`;
+    const generating = generatingSessionSql('s');
+    const blocked = Prisma.sql`EXISTS (
+      SELECT 1 FROM approval ap WHERE ap.session_id = s.id AND ap.status = 'PENDING'
+    )`;
+    return this.prisma.$queryRaw<Row[]>(Prisma.sql`
+      SELECT
+        COALESCE(cp.id, t.project_id) AS "projectId",
+        count(*) FILTER (WHERE ${open} AND ${generating} AND ${blocked})::int     AS "needsYou",
+        count(*) FILTER (WHERE ${open} AND ${generating} AND NOT ${blocked})::int AS "running",
+        -- Done is what the clients file as done: moved to Completed (or the archived alias), or
+        -- finished successfully and not yet filed anywhere. A run that failed is not done.
+        count(*) FILTER (WHERE NOT (${open}) OR s.status = 'SUCCEEDED')::int      AS "done",
+        count(*)::int AS "total"
+      FROM session s
+      LEFT JOIN task t   ON t.id = s.task_id
+      LEFT JOIN project cp ON cp.coordinator_session_id = s.id
+      WHERE s.owner_id = ${ownerId}::uuid
+        AND s.deleted_at IS NULL
+        AND COALESCE(cp.id, t.project_id) IS NOT NULL
+      GROUP BY 1
+    `);
+  }
+
   async list(
     ownerId: string,
     filters: {
@@ -1704,6 +1761,9 @@ export class SessionsService {
       runnerLastHeartbeatAt: Date | null;
       taskId: string | null;
       taskTitle: string | null;
+      projectId: string | null;
+      projectTitle: string | null;
+      role: SessionProjectRole;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -1762,6 +1822,21 @@ export class SessionsService {
         r.last_heartbeat_at AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle",
+        -- The project this conversation belongs to, and what it is doing there. Both are joined
+        -- rather than denormalized onto the session row: a redundant column is a second truth to
+        -- keep in step, and this pays a PK lookup plus a unique-index lookup per row.
+        COALESCE(cp.id, t.project_id)  AS "projectId",
+        COALESCE(cp.title, p.title)    AS "projectTitle",
+        -- Role, in the one order the identities can be read in: coordinating a project is what
+        -- this session IS, however it was started; a verification is what its task is; and
+        -- PROJECT_COORDINATOR dispatch is what tells a worker the coordinator started from a
+        -- session the user started themselves. Everything else is the user's own conversation.
+        CASE
+          WHEN cp.id IS NOT NULL THEN 'coordinator'
+          WHEN t.verifies_task_id IS NOT NULL THEN 'verification'
+          WHEN s.dispatch_origin = 'PROJECT_COORDINATOR' THEN 'execution'
+          ELSE 'user'
+        END AS "role",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -1769,6 +1844,11 @@ export class SessionsService {
       LEFT JOIN workspace a  ON a.id = s.workspace_id
       LEFT JOIN runner r ON r.id = s.assigned_runner_id
       LEFT JOIN task t   ON t.id = s.task_id
+      -- The task's project, and the project this session coordinates. Both are at most one row —
+      -- t.project_id is a primary-key lookup and coordinator_session_id is UNIQUE — so
+      -- neither can multiply the list.
+      LEFT JOIN project p  ON p.id = t.project_id
+      LEFT JOIN project cp ON cp.coordinator_session_id = s.id
       -- Which gate is holding a queued session, and against what numbers. "Waiting for a free
       -- slot" was true of every PENDING row and explained none of them: the runner could be
       -- idle while the session's own run was full, and nothing said so. Every count and
@@ -1865,6 +1945,9 @@ export class SessionsService {
           : null,
         taskId: r.taskId,
         taskTitle: r.taskTitle,
+        projectId: r.projectId,
+        projectTitle: r.projectTitle,
+        role: r.role,
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -1876,14 +1959,28 @@ export class SessionsService {
     // hold a live approval; skip the query otherwise. That includes a self-driven turn, which
     // stays at AWAITING_INPUT while it runs — its prompt is no less blocking for it.
     const generating = sessions.filter(isSessionGenerating).map((s) => s.id);
-    if (generating.length === 0) return sessions.map((s) => ({ ...s, pendingApprovals: 0 }));
+    if (generating.length === 0)
+      return sessions.map((s) => ({ ...s, pendingApprovals: 0, oldestPendingApprovalAt: null }));
+    // `_min` rides along with the count because how LONG a session has been blocked is what the
+    // attention inbox orders by, and a count cannot say it: two rows both reading "1 waiting"
+    // are a five-second-old prompt and a two-hour-old one, and the list has to put the second
+    // first. Same group, same scan — the oldest of a session's live approvals is when it started
+    // waiting on a human.
     const counts = await this.prisma.approval.groupBy({
       by: ['sessionId'],
       where: { sessionId: { in: generating }, status: 'PENDING' },
       _count: { _all: true },
+      _min: { createdAt: true },
     });
-    const byId = new Map(counts.map((c) => [c.sessionId, c._count._all]));
-    return sessions.map((s) => ({ ...s, pendingApprovals: byId.get(s.id) ?? 0 }));
+    const byId = new Map(counts.map((c) => [c.sessionId, c]));
+    return sessions.map((s) => {
+      const pending = byId.get(s.id);
+      return {
+        ...s,
+        pendingApprovals: pending?._count._all ?? 0,
+        oldestPendingApprovalAt: pending?._min.createdAt ?? null,
+      };
+    });
   }
 
   async get(ownerId: string, id: string) {

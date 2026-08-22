@@ -24,6 +24,17 @@ import {
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 
+/**
+ * What a session IS to the project it belongs to, as served on every session-list row.
+ *
+ * Derived server-side (`SessionsService.list`) rather than by each client, because it is read off
+ * three different columns — the project's `coordinatorSessionId`, the task's `verifiesTaskId`, and
+ * the session's own dispatch origin — and four clients re-deriving that is four chances to
+ * disagree about who is coordinating. `user` is the answer for every conversation the user started
+ * themselves, project or no project.
+ */
+export type SessionProjectRole = 'coordinator' | 'verification' | 'execution' | 'user';
+
 /** Why an ended session cannot currently be resumed on its original runner. */
 export type SessionResumeBlockedReason =
   'TRASHED' | 'ENDING' | 'NOT_TERMINAL' | 'NOT_STARTED' | 'MISSING_CONTEXT' | 'NO_RUNNER' | 'RUNNER_OFFLINE';
