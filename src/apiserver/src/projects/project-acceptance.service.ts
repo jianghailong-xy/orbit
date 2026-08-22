@@ -42,6 +42,32 @@ export interface AcceptanceCriterionOutcomeInput {
   evidenceSessionId?: string | null;
 }
 
+/** What a criterion the latest run has not concluded about reports instead of a verdict. A value
+ *  rather than `null`, so "not judged yet" is something a client can render rather than something
+ *  it has to infer from an absence. Outside `ProjectAcceptanceVerdict` on purpose: it is not a
+ *  conclusion, and it is never written to a column. */
+export const ACCEPTANCE_UNDECIDED = 'UNDECIDED' as const;
+
+/** One stated criterion and what the latest attempt currently says about it. */
+export interface AcceptanceCriterionStanding {
+  key: string;
+  text: string;
+  ordinal: number;
+  verdict: ProjectAcceptanceVerdict | typeof ACCEPTANCE_UNDECIDED;
+  summary: string | null;
+  decidedAt: Date | null;
+  evidenceTaskId: string | null;
+}
+
+/** The acceptance tally a project detail read embeds: the outcome measure next to the task tally's
+ *  process measure. */
+export interface ProjectAcceptanceCriteriaSummary {
+  total: number;
+  passed: number;
+  lastRunAt: Date | null;
+  criteria: AcceptanceCriterionStanding[];
+}
+
 export interface RecordMergeEvidenceInput {
   requirementId: string;
   targetBranch: string;
@@ -824,6 +850,77 @@ export class ProjectAcceptanceService {
         throw e;
       }
     });
+  }
+
+  /**
+   * The RESULT indicator for a project detail page: how many stated criteria the latest acceptance
+   * attempt has concluded PASS about, and what each one currently says.
+   *
+   * The detail read already answers "how much of the work is done" with a task tally, which is a
+   * PROCESS measure — it can reach 100% while the thing the project was for is unmet. This is the
+   * other half, and it comes from `project_acceptance_criterion` rather than from anybody's
+   * summary prose.
+   *
+   * Only the LATEST attempt is read, by `attempt` descending. A criterion key appears once per run
+   * it was judged in, so a read that gathered rows by key across runs would mix last week's PASS
+   * into this week's checklist and report a project as further along than any single attempt ever
+   * concluded. `attempt` rather than `supersededAt is null`, because the newest run is superseded
+   * too once a fact moves underneath a DONE (§13.4 AE8) — and after that, the newest LIVE run is an
+   * older one whose verdicts are exactly the stale ones this must not report.
+   *
+   * A project that has never been run against is not an error and not an empty list: its criteria
+   * are stated, they are simply unjudged, so they are listed from the stated text with
+   * `ACCEPTANCE_UNDECIDED` — the same placeholder a criterion the current run has not reached
+   * carries. Undecided is spelled as a value rather than as `null` so that a client renders "not
+   * judged yet" instead of having to distinguish absent-because-unjudged from absent-because-the
+   * -field-was-not-served.
+   *
+   * `criteria` is the free-text field's parse, not a replacement for it: the prose is served
+   * unchanged alongside this, and remains the thing a person edits.
+   */
+  async criteriaSummary(
+    projectId: string,
+    acceptanceCriteria: string | null,
+  ): Promise<ProjectAcceptanceCriteriaSummary> {
+    const latest = await this.prisma.projectAcceptanceRun.findFirst({
+      where: { projectId },
+      orderBy: { attempt: 'desc' },
+      include: { criteria: { orderBy: { ordinal: 'asc' } } },
+    });
+    if (latest === null) {
+      const stated = parseCriteria(acceptanceCriteria);
+      return {
+        total: stated.length,
+        passed: 0,
+        lastRunAt: null,
+        criteria: stated.map((c) => ({
+          key: c.key,
+          text: c.text,
+          ordinal: c.ordinal,
+          verdict: ACCEPTANCE_UNDECIDED,
+          summary: null,
+          decidedAt: null,
+          evidenceTaskId: null,
+        })),
+      };
+    }
+    const criteria = latest.criteria.map((c) => ({
+      key: c.criterionKey,
+      text: c.criterionText,
+      ordinal: c.ordinal,
+      verdict: c.verdict ?? ACCEPTANCE_UNDECIDED,
+      summary: c.summary,
+      decidedAt: c.decidedAt,
+      evidenceTaskId: c.evidenceTaskId,
+    }));
+    return {
+      total: criteria.length,
+      passed: criteria.filter((c) => c.verdict === ProjectAcceptanceVerdict.PASS).length,
+      // When it concluded, or — for an attempt still open — when it started. Either way the answer
+      // to "when was acceptance last looked at", which is what a page shows next to the tally.
+      lastRunAt: latest.completedAt ?? latest.startedAt,
+      criteria,
+    };
   }
 
   /** The compact form the coordinator status endpoint embeds — the latest live run and whether the
