@@ -3,6 +3,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { HttpException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
+import {
+  type ConflictFacts,
+  markConflictCounted,
+  recordTransactionUnit,
+} from './db-conflict-metrics';
+
 /**
  * Retrying a PostgreSQL transaction that the server itself rolled back.
  *
@@ -18,7 +24,10 @@ import { Prisma } from '@prisma/client';
  * `classifyTransactionError`, so the two can never disagree about what a transient failure is.
  *
  * Nothing here knows about Projects, Tasks or any other domain: the input is an unknown error
- * and something with a `$transaction` method.
+ * and something with a `$transaction` method. The one thing it reaches out to is the conflict
+ * counters (`db-conflict-metrics.ts`), which every settled unit records itself into — the loop is
+ * the only place that knows how many attempts a unit spent and how long the caller waited for
+ * them, so a caller who forgot to wire telemetry up cannot make a retry invisible.
  */
 
 /** Why PostgreSQL threw the transaction away. Each one is safe to re-run. */
@@ -38,6 +47,36 @@ export interface TransactionErrorClassification {
   evidence?: string;
   /** Where the evidence was found: 0 is the thrown error, 1 its cause, and so on. */
   depth?: number;
+}
+
+/**
+ * WHAT kind of failure this was, for a reader who needs more than "may I run it again".
+ *
+ * `retryable` answers one question and answers it well, but it collapses four different things
+ * into one `false`: a duplicate key, a database that has run out of connections, a validation
+ * refusal a service already turned into a 409, and something nobody has classified. An operator
+ * watching a graph has to tell those apart — the second is an incident, the first and third are
+ * Tuesday — so the same traversal that decides `retryable` also names the family it found.
+ *
+ * It changes no decision. `withTransactionRetry` still retries exactly `TRANSIENT`, and the error
+ * boundary still answers a typed 503 for exactly `TRANSIENT`; this is the label on the counter,
+ * not a second policy.
+ */
+export type TransactionErrorFamily =
+  /** The server threw the transaction away. Safe to run again — see {@link TransientTransactionReason}. */
+  | 'TRANSIENT'
+  /** A decision about one statement that the data will reach again: a duplicate key, a missing parent. */
+  | 'PERMANENT'
+  /** The database or its resources failed: no connections left, out of memory, shutting down, disk. */
+  | 'RESOURCE'
+  /** Some layer already turned this into an answer for a client. */
+  | 'ANSWERED'
+  /** Nothing in the chain said what it was. */
+  | 'UNCLASSIFIED';
+
+/** {@link TransactionErrorClassification}, plus the family the same traversal found. */
+export interface TransactionFaultClassification extends TransactionErrorClassification {
+  family: TransactionErrorFamily;
 }
 
 /**
@@ -61,6 +100,23 @@ const TRANSIENT_CODES = new Map<string, TransientTransactionReason>([
  * already has.
  */
 const PERMANENT_CODES = new Set(['23503', '23505', 'P2002', 'P2003', 'P2025']);
+
+/**
+ * The SQLSTATE classes that mean the database itself is in trouble: `08` (the connection),
+ * `53` (out of connections, memory or disk), `57` (cancelled, shutting down, dropped) and
+ * `58` (the file system under it).
+ *
+ * Matched by class rather than by a list of codes, because the list is PostgreSQL's to extend and
+ * the class is the part that carries the meaning. None of them is retried — re-running a unit of
+ * work against a server that has no connections left only spends the caller's latency on the same
+ * answer — but they are the one `retryable: false` that means somebody should be woken up, so the
+ * counter has to be able to say so.
+ *
+ * `55P03` (`lock_not_available`) is deliberately NOT here. It is what a `FOR UPDATE NOWAIT` raises
+ * when it declines to wait, which two paths in this codebase do on purpose and handle themselves;
+ * it is a control-flow signal, not a fault.
+ */
+const RESOURCE_CLASS = /^(?:08|53|57|58)[0-9A-Z]{3}$/;
 
 /**
  * Where a code hides. `code` is Prisma's and `pg`'s field; `originalCode` is the driver adapter's,
@@ -102,6 +158,7 @@ type Rank = (typeof Rank)[keyof typeof Rank];
 
 interface Signal {
   rank: Rank;
+  family: TransactionErrorFamily;
   reason?: TransientTransactionReason;
   evidence: string;
   depth: number;
@@ -131,19 +188,36 @@ function signalOf(node: unknown, depth: number): Signal | null {
   const codes = [...stringsAt(node, CODE_FIELDS), ...stringsAt(meta, CODE_FIELDS)];
   for (const code of codes) {
     const reason = TRANSIENT_CODES.get(code);
-    if (reason) return { rank: Rank.TransientCode, reason, evidence: code, depth };
+    if (reason) return { rank: Rank.TransientCode, family: 'TRANSIENT', reason, evidence: code, depth };
   }
   for (const code of codes) {
-    if (PERMANENT_CODES.has(code)) return { rank: Rank.PermanentCode, evidence: code, depth };
+    if (PERMANENT_CODES.has(code)) {
+      return { rank: Rank.PermanentCode, family: 'PERMANENT', evidence: code, depth };
+    }
+  }
+  // After the permanent codes and at the same rank: both are answers this loop will not re-run,
+  // and a chain that carries a named permanent code as well as a resource class is reporting the
+  // statement that failed, which is the more specific of the two.
+  for (const code of codes) {
+    if (RESOURCE_CLASS.test(code)) {
+      return { rank: Rank.PermanentCode, family: 'RESOURCE', evidence: code, depth };
+    }
   }
   for (const text of [...stringsAt(node, TEXT_FIELDS), ...stringsAt(meta, TEXT_FIELDS)]) {
     const sqlstate = TRANSIENT_SQLSTATE_TEXT.exec(text)?.[1]?.toUpperCase();
     if (sqlstate) {
-      return { rank: Rank.TransientText, reason: TRANSIENT_CODES.get(sqlstate), evidence: 'message', depth };
+      return {
+        rank: Rank.TransientText,
+        family: 'TRANSIENT',
+        reason: TRANSIENT_CODES.get(sqlstate),
+        evidence: 'message',
+        depth,
+      };
     }
     if (TRANSIENT_TEXT.test(text)) {
       return {
         rank: Rank.TransientText,
+        family: 'TRANSIENT',
         reason: /deadlock/i.test(text) ? 'DEADLOCK' : 'SERIALIZATION',
         evidence: 'message',
         depth,
@@ -164,7 +238,7 @@ function signalOf(node: unknown, depth: number): Signal | null {
  * cap, so a chain that points back at itself — which `new Error(..., { cause })` makes trivially
  * easy to build — terminates instead of hanging the caller.
  */
-export function classifyTransactionError(cause: unknown): TransactionErrorClassification {
+export function classifyTransactionFault(cause: unknown): TransactionFaultClassification {
   const seen = new Set<unknown>();
   let queue: Array<{ node: unknown; depth: number }> = [{ node: cause, depth: 0 }];
   let visited = 0;
@@ -179,7 +253,7 @@ export function classifyTransactionError(cause: unknown): TransactionErrorClassi
       visited += 1;
 
       if (node instanceof HttpException) {
-        return { retryable: false, evidence: `http:${node.getStatus()}`, depth };
+        return { retryable: false, family: 'ANSWERED', evidence: `http:${node.getStatus()}`, depth };
       }
       const signal = signalOf(node, depth);
       if (signal && (!best || signal.rank > best.rank)) best = signal;
@@ -194,14 +268,37 @@ export function classifyTransactionError(cause: unknown): TransactionErrorClassi
   }
 
   if (!best || best.rank === Rank.PermanentCode) {
-    return { retryable: false, evidence: best?.evidence, depth: best?.depth };
+    return {
+      retryable: false,
+      family: best?.family ?? 'UNCLASSIFIED',
+      evidence: best?.evidence,
+      depth: best?.depth,
+    };
   }
-  return { retryable: true, reason: best.reason, evidence: best.evidence, depth: best.depth };
+  return {
+    retryable: true,
+    family: 'TRANSIENT',
+    reason: best.reason,
+    evidence: best.evidence,
+    depth: best.depth,
+  };
+}
+
+/**
+ * The retry verdict alone, which is what every caller that has to DECIDE something reads.
+ *
+ * One traversal, two readings: this drops the family from {@link classifyTransactionFault} rather
+ * than deciding anything a second time, so "may I run it again" and "what kind of failure was it"
+ * cannot come to inconsistent answers about the same error.
+ */
+export function classifyTransactionError(cause: unknown): TransactionErrorClassification {
+  const { family: _family, ...verdict } = classifyTransactionFault(cause);
+  return verdict;
 }
 
 /** Shorthand for callers — an error boundary, a log line — that only need the verdict. */
 export function isTransientTransactionError(cause: unknown): boolean {
-  return classifyTransactionError(cause).retryable;
+  return classifyTransactionFault(cause).retryable;
 }
 
 /** The `$transaction` options a caller chose. Every attempt is given the same ones. */
@@ -371,15 +468,44 @@ export async function withTransactionRetry<T, TTx = Prisma.TransactionClient>(
   const sleep = options.sleep ?? delay;
   const { label } = options;
   let retryOf: TransactionAttemptEvent['retryOf'];
+  // Counted from before the first attempt, so what the metric reports is what the caller waited:
+  // every attempt, plus every backoff between them.
+  const startedAt = performance.now();
+  // The conflict this unit last paid for, so a unit that eventually commits can still say what it
+  // was retried FOR. A committed unit's own error is `undefined`; the interesting fact about it is
+  // the one it survived.
+  let lastConflict: ConflictFacts | undefined;
+  // Through `notify` for its reason: counting is telemetry, and telemetry that throws must not
+  // fail a transaction the database already committed.
+  const settle = (
+    outcome: 'committed' | 'conflict' | 'failed',
+    handling: 'none' | 'absorbed' | 'exhausted',
+    attempts: number,
+    error?: ConflictFacts,
+  ) =>
+    notify(recordTransactionUnit, {
+      operation: label,
+      outcome,
+      handling,
+      attempts,
+      durationMs: performance.now() - startedAt,
+      error,
+    });
 
   for (let attempt = 1; ; attempt += 1) {
     notify(options.onAttempt, { label, attempt, maxAttempts, retryOf });
     try {
       const result = await runner.$transaction(work, options.transaction);
       notify(options.onOutcome, { label, attempt, maxAttempts, outcome: 'COMMITTED' });
+      settle('committed', attempt === 1 ? 'none' : 'absorbed', attempt, lastConflict);
       return result;
     } catch (cause) {
-      const verdict = classifyTransactionError(cause);
+      const verdict = classifyTransactionFault(cause);
+      const facts: ConflictFacts = {
+        family: verdict.family,
+        reason: verdict.reason,
+        evidence: verdict.evidence,
+      };
       const base = {
         label,
         attempt,
@@ -390,15 +516,21 @@ export async function withTransactionRetry<T, TTx = Prisma.TransactionClient>(
       };
       if (!verdict.retryable) {
         notify(options.onOutcome, { ...base, outcome: 'FAILED' });
+        settle('failed', 'none', attempt, facts);
         throw cause;
       }
       if (attempt >= maxAttempts) {
         notify(options.onOutcome, { ...base, outcome: 'EXHAUSTED' });
+        settle('conflict', 'exhausted', attempt, facts);
+        // The same object reaches the global boundary next. Marked so that boundary counts it as
+        // the exhaustion it is, rather than as a path that never had a retry.
+        markConflictCounted(cause);
         throw cause;
       }
       const delayMs = transactionRetryDelayMs(attempt, options);
       notify(options.onOutcome, { ...base, outcome: 'RETRYING', delayMs });
       retryOf = { reason: verdict.reason, evidence: verdict.evidence, delayMs };
+      lastConflict = facts;
       await sleep(delayMs);
     }
   }

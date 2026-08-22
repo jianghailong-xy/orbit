@@ -4,7 +4,8 @@ import {
   TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS,
   transientDbConflictBody,
 } from '@orbit/shared';
-import { classifyTransactionError } from './transaction-retry';
+import { conflictWasCounted, recordConflictResponse } from './db-conflict-metrics';
+import { classifyTransactionFault } from './transaction-retry';
 
 /**
  * The last thing between a database conflict and the client: what a `40P01`, a `40001` or a
@@ -50,12 +51,23 @@ export class TransientDbConflictFilter implements ExceptionFilter {
     // even if the classifier changes: a layer that already decided what to tell the client wins.
     if (exception instanceof HttpException) return this.next.catch(exception, host);
 
-    const verdict = classifyTransactionError(exception);
+    const verdict = classifyTransactionFault(exception);
     if (!verdict.retryable) return this.next.catch(exception, host);
 
     const http = host.switchToHttp();
     const request = http.getRequest<{ method?: string; route?: { path?: string } }>();
     const response = http.getResponse();
+
+    // Counted here and not in the retry loop, because this is where the fact being counted happens:
+    // a CALLER was turned away. `handling` says which kind of turning away it was — a loop that
+    // spent its attempts (already counted as a unit, hence `conflictWasCounted`) or a write with no
+    // retry loop at all, which is the one that says a path is missing something.
+    recordConflictResponse({
+      method: request?.method,
+      route: request?.route?.path,
+      handling: conflictWasCounted(exception) ? 'exhausted' : 'boundary_only',
+      error: { family: verdict.family, reason: verdict.reason, evidence: verdict.evidence },
+    });
 
     // Everything on this line is a constant or a code from a closed set (`40001`, `40P01`,
     // `P2034`, or the literal `message` when only the driver's wording survived the wrapping).
