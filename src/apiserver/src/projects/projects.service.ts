@@ -33,6 +33,12 @@ import { CreateProjectDto, UpdateProjectDto } from './dto';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
+import {
+  DEFAULT_BLOCKING_LIMIT,
+  MAX_BLOCKING_LIMIT,
+  ProjectBlockingLeaderboard,
+  readProjectBlockingLeaderboard,
+} from './project-panorama-blocking';
 import { publicIdempotencyKey } from './project-decision.service';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
@@ -694,6 +700,27 @@ export class ProjectsService {
   async panorama(ownerId: string, projectId: string): Promise<ProjectPanorama> {
     await this.assertOwned(ownerId, projectId);
     return readProjectPanorama(this.prisma, ownerId, projectId);
+  }
+
+  /**
+   * Which unfinished tasks are holding up the most of this project, most first.
+   *
+   * The question the buckets raise and cannot answer: `blocked: 30` says the project is stuck and
+   * says nothing about where to push. Ranked by how much each task releases through the WHOLE
+   * dependency chain rather than one hop out — see `readProjectBlockingLeaderboard` for why the
+   * direct edge count is not a usable ranking.
+   */
+  async panoramaBlocking(
+    ownerId: string,
+    projectId: string,
+    query: { limit?: string } = {},
+  ): Promise<ProjectBlockingLeaderboard> {
+    await this.assertOwned(ownerId, projectId);
+    const limit = query.limit === undefined ? DEFAULT_BLOCKING_LIMIT : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_BLOCKING_LIMIT) {
+      throw new BadRequestException(`limit must be an integer from 1 to ${MAX_BLOCKING_LIMIT}`);
+    }
+    return readProjectBlockingLeaderboard(this.prisma, ownerId, projectId, limit);
   }
 
   /**

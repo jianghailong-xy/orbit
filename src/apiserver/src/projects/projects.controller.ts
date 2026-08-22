@@ -66,6 +66,24 @@ export class ProjectsController {
   }
 
   /**
+   * Unblocking which task would release the most of this project — most first, `?limit=` rows.
+   *
+   * Ranked by transitive downstream count, so the head of a chain outranks the links behind it
+   * rather than tying with them. `remainingCount` comes back beside the ranking as the project's
+   * whole unfinished total: it is the denominator a bar length needs to mean anything, and the
+   * one number a client cannot derive from the rows it was sent. `taskId` is an address like any
+   * other and is rendered Base62 by the response interceptor.
+   */
+  @Get(':id/panorama/blocking')
+  panoramaBlocking(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.projects.panoramaBlocking(user.userId, id, { limit });
+  }
+
+  /**
    * One level of this project's task tree: its top-level tasks, or — with `?parentId=` — the
    * direct children of one of them. Cursor-paged, newest first.
    *
