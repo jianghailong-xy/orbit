@@ -452,9 +452,15 @@ test('an update that mentions neither column asks no hierarchy questions', async
   // rank 40: a status write on a project-filed task makes `project_acceptance_task_fact_update`
   // take FOR NO KEY UPDATE on that project, so it is taken here rather than left to an AFTER
   // trigger holding the task row already (common/lock-order.ts).
+  //
+  // ...and one read after it, which is not a lock and not a hierarchy question: the project that
+  // was just locked was chosen from a read taken BEFORE it was held, so it was a guess. If this
+  // task has been re-filed since, the guess holds the old project while the AFTER trigger reaches
+  // for the new one — the same inversion, one step late, and committing rather than deadlocking.
   assert.deepEqual(calls, [
     'BEGIN',
     'raw:SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE',
+    'raw:SELECT DISTINCT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ANY($1::uuid[]) AND t."owner_id" = $2::uuid',
     'updateTask',
     'COMMIT',
   ]);

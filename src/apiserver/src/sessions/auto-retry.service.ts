@@ -13,6 +13,11 @@ import { TaskCompletionPolicyValue, isAggregateParent } from '../projects/task-a
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
+import {
+  classifyTransactionError,
+  loggedRetry,
+  withTransactionRetry,
+} from '../common/transaction-retry';
 
 const SWEEP_INTERVAL_MS = 30_000;
 // How long a session armed by the reaper waits for its runner to come back. Covers the
@@ -671,7 +676,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     write: (tx: Prisma.TransactionClient) => Promise<number>,
   ): Promise<AggregateSettleOutcome> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      // Through the shared retry, which is what puts this unit in the conflict counters under a
+      // name — a unit that opted out would absorb conflicts invisibly, which is the whole point of
+      // `db-conflict-metrics`.
+      //
+      // The two kinds of failure below are answered differently, and only one of them is a retry.
+      // A `55P03` is a NOWAIT that declined to wait: somebody is writing these rows right now, and
+      // the answer is to leave the retry armed for the next tick rather than to spend attempts
+      // re-earning it — `classifyTransactionError` agrees, and does not call it transient. A
+      // `40P01`/`40001` is the server throwing the transaction away, and re-running is correct:
+      // every fact this closure decides on is re-read inside it.
+      return await withTransactionRetry(this.prisma, async (tx) => {
         const [scope] = await tx.$queryRaw<Array<{ projectId: string | null }>>(Prisma.sql`
           SELECT t."project_id" AS "projectId" FROM "task" t WHERE t."id" = ${taskId}::uuid
         `);
@@ -734,7 +749,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           return 'RELEASED';
         }
         return (await write(tx)) > 0 ? 'SETTLED' : 'RELEASED';
-      });
+      }, loggedRetry(this.log, 'sessions.autoRetry.aggregateParentSettle'));
     } catch (error) {
       // `lock_not_available` (55P03) and a serialization failure both mean the same thing here:
       // somebody else is writing one of these rows right now. Leave the retry armed and look again.
@@ -744,8 +759,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // recognises the shape a test sees through `pg` and NOT the one production raises.
       // One extractor for all three shapes this stack can put a SQLSTATE in — in particular
       // Prisma 7's adapter, which buries it under `meta.driverAdapterError.cause`.
-      const sqlState = postgresSqlState(error);
-      if (sqlState === '55P03' || sqlState === '40001' || sqlState === '40P01') return 'BUSY';
+      // A NOWAIT that declined to wait is a decision, not a fault, so it is read straight off the
+      // SQLSTATE — `classifyTransactionError` deliberately excludes it from the transient set.
+      if (postgresSqlState(error) === '55P03') return 'BUSY';
+      // The two the SERVER threw the transaction away for are read through the one module that
+      // decides what transient means. A private copy here is how a conflict ends up retried by one
+      // layer and answered 500 by another; `db-write-inventory.spec` fails the build for it.
+      if (classifyTransactionError(error).retryable) return 'BUSY';
       throw error;
     }
   }

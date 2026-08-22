@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
+import { Prisma } from '@prisma/client';
 import { test } from 'node:test';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
@@ -191,11 +192,36 @@ function deleteRecorder(runs: string[], deleted = 1) {
         return { count: deleted };
       },
     },
-    $queryRaw: async (strings: TemplateStringsArray) => {
+    // Two calling conventions reach here and both are production shapes: a tagged template
+    // (`tx.$queryRaw\`...\``) and a prepared `Prisma.sql`. The cascade walk uses the second, and
+    // reading it as a template array throws inside the client — which reads as a failure of the
+    // code under test rather than of the stub.
+    $queryRaw: async (strings: TemplateStringsArray | Prisma.Sql, ...bound: unknown[]) => {
+      const query = 'raw' in strings
+        ? Prisma.sql(strings as TemplateStringsArray, ...(bound as never[]))
+        : (strings as Prisma.Sql);
+      const sql = query.text.replace(/\s+/g, ' ').trim();
+      // Labelled by what it DOES, and the lock clause decides first: the rank-30 session pre-lock
+      // walks the same cascade to find its rows, so testing for the walk first would relabel an
+      // acquisition as a read and hide it from the order assertion.
+      if (/FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE/.test(sql)) {
+        calls.push('lock');
+        calls.push(sql);
+        return [];
+      }
+      if (/WITH RECURSIVE cascaded/.test(sql)) {
+        calls.push('cascade');
+        // Echo the seeds back rather than a fixed row: the bound values live on `.values`, and a
+        // double that answered with one id would make a batch delete look like it only ever
+        // reached its first task.
+        const seeds = (query.values as unknown[]).find(Array.isArray) as string[] | undefined;
+        return (seeds ?? []).map((id) => ({ id }));
+      }
       calls.push('lock');
-      calls.push(strings.join('?').replace(/\s+/g, ' ').trim());
+      calls.push(sql);
       return [];
     },
+
     session: {
       findMany: async ({ where }: any) => {
         calls.push('scan');

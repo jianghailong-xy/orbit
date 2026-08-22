@@ -2079,7 +2079,10 @@ export class SessionsService {
     // roll-up node by the time it commits, promising a retry the sweep will only ever refuse.
     // Taking the task `FOR UPDATE` is what makes the two orders decide the same thing, and it is
     // the mode the shape guard conflicts with.
-    const armed = await this.prisma.$transaction(async (tx) => {
+    // Retried whole. It takes rank 40 then rank 50 then writes the Session row, and everything it
+    // decides — the target's task, that task's project, the role the refusal was judged against —
+    // is re-read inside the closure, so a re-run judges the state the winning transaction left.
+    const armed = await withTransactionRetry(this.prisma, async (tx) => {
       const [target] = await tx.$queryRaw<Array<{
         taskId: string | null; startsTaskWork: boolean; projectId: string | null;
       }>>(Prisma.sql`
@@ -2135,7 +2138,7 @@ export class SessionsService {
         },
         data: { retryAt: at },
       });
-    });
+    }, loggedRetry(this.logger, 'sessions.armAutoRetry'));
     if (!armed.count) throw new BadRequestException('session is not waiting on a retry');
     return { retryAt: at };
   }
@@ -4047,6 +4050,16 @@ export class SessionsService {
     locked = false,
     startsTaskWork = true,
   ): Promise<string | null> {
+    // §13.1 AG6 rides on the same read. A resume that hands a task its own work is a dispatch by
+    // another name: the row was a legal leaf when it ran and the task has since become an aggregate
+    // parent, so reviving it would put a Worker back on a row whose completion now belongs to the
+    // recomputation. `hasDirectChildren` is owner-scoped like every other reader of this predicate,
+    // because that is the scope aggregation itself walks.
+    //
+    // Said HERE rather than inside the statement, and that is not only taste: `db-write-inventory`
+    // finds a statement's lock clause by reading a window of lines after the `$queryRaw`, so five
+    // lines of prose in the middle pushed `FOR SHARE OF t` out of view and this method stopped
+    // counting as a lock site the inventory could see.
     const [facts] = await db.$queryRaw<Array<TaskWorkFacts & {
       completionPolicy: string; hasDirectChildren: boolean;
     }>>(Prisma.sql`
@@ -4054,11 +4067,6 @@ export class SessionsService {
              t."superseded_by_task_id" AS "supersededByTaskId",
              subject."terminal_reason" AS "subjectTerminalReason",
              subject."superseded_by_task_id" AS "subjectSupersededByTaskId",
-             -- §13.1 AG6, on the same read. A resume that hands a task its own work is a dispatch
-             -- by another name: the row was a legal leaf when it ran and the task has since become
-             -- an aggregate parent, so reviving it would put a Worker back on a row whose
-             -- completion now belongs to the recomputation. Owner-scoped like every other reader
-             -- of this predicate, because that is the scope aggregation itself walks.
              t."completion_policy"::text AS "completionPolicy",
              EXISTS (SELECT 1 FROM "task" c
                       WHERE c."parent_task_id" = t."id" AND c."owner_id" = t."owner_id")
