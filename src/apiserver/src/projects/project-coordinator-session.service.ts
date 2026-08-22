@@ -60,6 +60,9 @@ interface RotationRow {
   coordinatorGeneration: bigint;
   currentStatus: string | null;
   currentDeletedAt: Date | null;
+  /** What the run being replaced opens on. NULL only when the pointer names nothing. */
+  currentProvider: string | null;
+  currentProviderBuiltin: boolean | null;
   landingId: string | null;
   landingEnabled: boolean | null;
   landingDeletedAt: Date | null;
@@ -193,6 +196,8 @@ implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
              r."coordinator_generation" AS "coordinatorGeneration",
              current."status"::text AS "currentStatus",
              current."deleted_at" AS "currentDeletedAt",
+             current."provider" AS "currentProvider",
+             current."provider_builtin" AS "currentProviderBuiltin",
              landing."id" AS "landingId", landing."enabled" AS "landingEnabled",
              landing."deleted_at" AS "landingDeletedAt",
              landing."enable_worktree" AS "enableWorktree",
@@ -284,14 +289,45 @@ implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
       return refusal(audit.result.reasonCode, audit.result.reasonCode, { authorization: audit });
     }
 
-    const seed = await tx.$queryRaw<Array<{ provider: string; providerBuiltin: boolean }>>(Prisma.sql`
+    // §7.5 轮换只换 Session, and that includes what it runs ON: the replacement continues on the
+    // provider of the run it replaces, read from the pointer this transaction just re-read rather
+    // than from the plan (§6.3 — a pass re-reads the world, never the signal that woke it). The
+    // `ProjectCoordinator` FK is `onDelete: SetNull`, so a non-null pointer under this row's lock
+    // has a session behind it: there is no "source I could not resolve" case to guess at.
+    //
+    // It used to read the newest top-level session in the LANDING — which is `workspaces/
+    // workspace-provider.ts`'s Agent default, the answer to "where does a conversation somebody is
+    // about to start begin". The two coincide exactly while nothing else runs in that Agent, and
+    // diverge the moment anything does: one Agent is the landing for several projects, so another
+    // project's coordinator rotating seconds earlier, a `session_create` probe, or a person opening
+    // a session by hand each became the provider THIS project's next coordination run was moved to
+    // — with `?? CLAUDE`/`?? true` underneath, turning "nothing matched" into the built-in
+    // subscription. A run silently moved between two accounts with two different quotas is the
+    // §11.2 fallback nobody configured, and it is not observable afterwards: `session.provider` is
+    // mutable (a revive may switch it), so the row read later does not say what the rotation saw.
+    //
+    // Only a FIRST binding has no run to continue. That one case IS the Agent default, and it is
+    // named in the resolution rather than assumed, so the two can never be confused again.
+    const inherited = row.coordinatorSessionId && row.currentProvider !== null
+      ? { provider: row.currentProvider, providerBuiltin: row.currentProviderBuiltin === true }
+      : null;
+    const derived = inherited ? [] : await tx.$queryRaw<
+      Array<{ provider: string; providerBuiltin: boolean }>
+    >(Prisma.sql`
       SELECT "provider", "provider_builtin" AS "providerBuiltin" FROM "session"
        WHERE "workspace_id" = ${landingId}::uuid AND "task_id" IS NULL
          AND "parent_session_id" IS NULL
        ORDER BY "created_at" DESC LIMIT 1
     `);
-    const provider = seed[0]?.provider ?? AgentProvider.CLAUDE;
-    const providerBuiltin = seed[0]?.providerBuiltin ?? true;
+    const seed = inherited ?? derived[0] ?? null;
+    // Three sources, told apart on the record. The last is Orbit's documented starting point for an
+    // Agent that has never run anything (`workspaces/workspace-provider.ts`'s
+    // `DEFAULT_AGENT_PROVIDER`) — a first choice, not a fallback from one somebody already made.
+    const providerSource = inherited
+      ? 'coordinator-rotation-source'
+      : derived[0] ? 'coordination-workspace-default' : 'orbit-default';
+    const provider = seed?.provider ?? AgentProvider.CLAUDE;
+    const providerBuiltin = seed?.providerBuiltin ?? true;
     const configured = providerBuiltin ? [] : await tx.$queryRaw<Array<{ runtime: string }>>(Prisma.sql`
       SELECT "runtime" FROM "model_provider"
        WHERE "slug" = ${provider} AND "enabled" = true
@@ -321,7 +357,7 @@ implements ProjectRotationExecutor, OnModuleInit, OnModuleDestroy {
     const resolution = {
       v: 1,
       who: { agentId: uuidToBase62(row.seatAgentId), source: 'project-coordinator' },
-      with: { provider, model: null, effort: null, source: 'coordinator-seed' },
+      with: { provider, providerBuiltin, model: null, effort: null, source: providerSource },
       where: {
         workspaceId: planned.landingWorkspaceId,
         runnerId: uuidToBase62(row.runnerId),
