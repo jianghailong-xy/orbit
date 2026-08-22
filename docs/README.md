@@ -13,6 +13,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Build or change Orbit | [Development guide](development.md) and [contribution guide](../CONTRIBUTING.md) |
 | Automate tasks and sessions | [Runner CLI and automation](runner-cli.md) |
 | Restore or validate a backup | [Postgres backup and restore](postgres-backup-restore.md) |
+| Diagnose database conflicts, or deploy and roll back the code that handles them | [PostgreSQL conflict runbook](postgres-conflict-runbook.md) |
 | Understand project direction | [Project maturity and brand roadmap](project-maturity.md) |
 
 ## Product and operations
@@ -24,6 +25,10 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   boundaries.
 - [Postgres backup and restore](postgres-backup-restore.md) — base backups, WAL archiving, point-in-time
   recovery, and restore verification.
+- [PostgreSQL conflict runbook](postgres-conflict-runbook.md) — the transaction-conflict counters and where to
+  read them, how to tell an injected fault from absorbed contention, a lock-order defect, a database resource
+  fault and an unretried path, alert thresholds, PostgreSQL log correlation, and the deploy, mixed-schema,
+  rollback and data-check procedures for the migrations behind them.
 - [macOS app](../src/macos/OrbitApp/README.md) and [iOS app](../src/ios/README.md) — native build and release
   details.
 
