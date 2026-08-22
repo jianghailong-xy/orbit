@@ -87,6 +87,21 @@ function graphFixture(
         };
         const matches = (edge: StoredEdge, where: any): boolean => {
           if (where.OR && !(where.OR as any[]).some((clause) => matches(edge, clause))) return false;
+          // §13.3 DEP reads the edges whose PREREQUISITE has a verification epoch, so the
+          // prerequisite-row half of the filter has to be honoured here — no task in this fixture
+          // is a check or is checked, which is the answer that keeps the epoch read from firing.
+          if (where.dependsOnTask) {
+            const prerequisite = taskRows.get(edge.dependsOnTaskId) as any;
+            if (!prerequisite) return false;
+            const clause = where.dependsOnTask;
+            if (clause.status && prerequisite.status !== clause.status) return false;
+            const hasEpoch = (test: any): boolean =>
+              (test.verifiesTaskId?.not === null && prerequisite.verifiesTaskId != null)
+              || (test.verifiedBy?.some !== undefined
+                && edges.some((other) => other.dependsOnTaskId === edge.dependsOnTaskId
+                  && (taskRows.get(other.taskId) as any)?.verifiesTaskId === edge.dependsOnTaskId));
+            if (clause.OR && !(clause.OR as any[]).some(hasEpoch)) return false;
+          }
           return (
             matchesScalar(edge.taskId, where.taskId) &&
             matchesScalar(edge.dependsOnTaskId, where.dependsOnTaskId)

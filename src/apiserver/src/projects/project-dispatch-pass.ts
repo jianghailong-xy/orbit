@@ -41,17 +41,30 @@
  *    cannot be the throttle.
  */
 
-import { ProjectDecisionInput } from './project-decision.service';
+import { ProjectDecisionInput, aggregationFacts } from './project-decision.service';
 import {
   PROJECT_BLOCKER_RESOLUTION_CHAIN_KINDS,
   ProjectBlockerFact,
 } from './project-blocker';
 import { failedTaskDisposition, loopCanRetryFailedTask } from './project-failed-retry';
 import {
+  AggregationTaskStatus,
+  TaskChildCounts,
+  TaskCompletionPolicyValue,
+  isAggregateParent,
+  planTaskAggregation,
+  verificationSubjectReady,
+} from './task-aggregation';
+import {
   TaskRetirement,
-  dependencySatisfied,
   taskRetirement,
 } from '../tasks/task-supersession';
+import { dependencyEpochGate, dependencySatisfied } from '../tasks/task-dependencies';
+import {
+  VerificationEpochEntry,
+  VerificationRunFact,
+  verificationEpochGates,
+} from '../tasks/verification-dependency';
 import { isLiveSessionStatus } from './project-coordinator-session';
 
 /** How many dispatches one pass may propose, however much capacity the project reports. */
@@ -93,6 +106,17 @@ export type ProjectDispatchSkipReason =
    * task that had been re-done read as an ordinary retryable failure and was dispatched again.
    */
   | 'TASK_SUPERSEDED'
+  /**
+   * §13.1 AG6: this task has direct children and a policy that completes it FROM them, so the only
+   * thing that may finish it is the recomputation — a Session on it has no completion condition.
+   *
+   * Judged immediately after the two supersession answers and BEFORE the failure ladder, because
+   * every clause below it would answer first for an aggregate parent that had already been
+   * dispatched once and failed: it would read as an ordinary retryable failure, be retried, fail
+   * the same way, and eventually earn a `TEST_FAILED` blocker about a task that was never work.
+   * Its role is not a precondition that can lift, so it is asked before any that can.
+   */
+  | 'TASK_AGGREGATE_PARENT'
   /** §9.5 Q3's terminal cells: the failure is real and nothing mechanical advances it (`PC-CX-64`). */
   | 'TASK_FAILED_TERMINAL'
   | 'NOT_COORDINATOR_AUTHORITY'
@@ -101,6 +125,14 @@ export type ProjectDispatchSkipReason =
   | 'RETRY_BACKOFF_ACTIVE'
   | 'TASK_ALREADY_RUNNING'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
+  /**
+   * §13.3 DEP: a prerequisite of this task is a CHECK, and the subject it checks has no open PASS
+   * epoch. Its own reason and not `TASK_DEPENDENCIES_INCOMPLETE`, because the two are opposite
+   * sentences: one says "wait, work is still running", and this one can say "the check concluded
+   * FAIL" — which is not a wait, it is a refusal somebody has to act on. The precise clause is in
+   * the audit; this is the answer the skip list shows.
+   */
+  | 'DEPENDENCY_VERIFICATION_NOT_PASSED'
   | 'VERIFICATION_SUBJECT_NOT_DONE'
   /**
    * §13.6 SU6, the derived half: this task CHECKS an attempt that was replaced or abandoned. The
@@ -195,6 +227,12 @@ export function selectDispatchableTasks(
   // project-blocked early return below explains every considered task, and "considered" is one of
   // the questions §13.6 SU6 answers — so these have to exist by then, not eleven lines later.
   const statusOf = new Map(input.world.tasks.map((task) => [task.id, task.status]));
+  const taskById = new Map(input.world.tasks.map((task) => [task.id, task]));
+  // AG8's counts, from §13.1's own recomputation rather than from a second walk of the same rows.
+  const childCounts = new Map(
+    planTaskAggregation(aggregationFacts(input)).childCounts
+      .map((entry) => [entry.taskId, entry.counts] as const),
+  );
   // Absent fields read as "not retired" (pre-0129), which is what every one of those rows was.
   const retirementOf = new Map(input.world.tasks.map((task) => [task.id, taskRetirement({
     supersededByTaskId: task.supersededByTaskId ?? null,
@@ -208,6 +246,31 @@ export function selectDispatchableTasks(
   ));
   const obsoleteSubjects = new Set(
     [...retirementOf].filter(([, retired]) => retired != null).map(([id]) => id),
+  );
+  // §13.3 DEP, from this same snapshot and nothing else. Versioned like AG8 below: a decision taken
+  // before DEP carries neither `verdictApplied` nor a session's `endReason`, so it is replayed by
+  // the rule its own binary used — `status = 'DONE'` — rather than by this one over missing facts.
+  const epochOf = input.world.protocol?.verificationEpoch
+    ? verificationEpochGates(
+        input.world.tasks.map((task) => ({
+          id: task.id,
+          status: task.status,
+          verifiesTaskId: task.verifiesTaskId,
+          verdict: task.verdict ?? null,
+          verdictRevision: task.verdictRevision ?? '0',
+          verdictApplied: task.verdictApplied ?? false,
+          retired: retirementOf.get(task.id) != null,
+        })),
+        verificationRunsByTask(input),
+      )
+    : new Map<string, VerificationEpochEntry>();
+  // §13.1 AG6's first clause, over the same set `planTaskAggregation` counts children in: a
+  // `parentTaskId` naming a task outside this Project's snapshot matches nothing here, which is
+  // exactly how aggregation reads it — the half of a tree this snapshot cannot see is not guessed
+  // at. Built with the indexes above rather than per task, so the predicate stays O(1) per row and
+  // both gates read one definition of "has a direct child".
+  const parentsWithChildren = new Set(
+    input.world.tasks.map((task) => task.parentTaskId).filter((id): id is string => id != null),
   );
 
   // §4.2's `run_state` is deliberately absent from this predicate; see `dispatchStoppedByRunState`.
@@ -251,7 +314,8 @@ export function selectDispatchableTasks(
   for (const task of [...input.world.tasks].sort((a, b) => compare(a.id, b.id))) {
     const due = input.evaluation.dueTasks[task.id];
     const reason = firstFailure(
-      task, due, statusOf, successorOf, retirementOf, blockers,
+      input, task, due, statusOf, taskById, childCounts, successorOf, retirementOf,
+      parentsWithChildren, blockers, epochOf,
       latestDispatch.get(task.id), epochMs,
     );
     if (reason) {
@@ -287,12 +351,17 @@ export function selectDispatchableTasks(
 }
 
 function firstFailure(
+  input: ProjectDecisionInput,
   task: ProjectDecisionInput['world']['tasks'][number],
   due: { runAtDue: boolean; retryBackoffExpired: boolean } | undefined,
   statusOf: Map<string, string>,
+  taskById: ReadonlyMap<string, ProjectDecisionInput['world']['tasks'][number]>,
+  childCounts: ReadonlyMap<string, TaskChildCounts>,
   successorOf: Map<string, string | null>,
   retirementOf: Map<string, TaskRetirement | null>,
+  parentsWithChildren: ReadonlySet<string>,
   blockers: readonly ProjectBlockerFact[],
+  epochOf: ReadonlyMap<string, VerificationEpochEntry>,
   latestDispatch: ProjectDecisionInput['world']['actions'][number] | undefined,
   epochMs: number,
 ): ProjectDispatchSkipReason | null {
@@ -313,6 +382,16 @@ function firstFailure(
   // An obsolete task is not a task whose preconditions failed; it is not a step at all.
   if (task.verifiesTaskId && retirementOf.get(task.verifiesTaskId) != null) {
     return 'VERIFICATION_SUBJECT_SUPERSEDED';
+  }
+  // §13.1 AG6, third — after the two answers about whether this row is still the work at all, and
+  // before every clause that could lift. See `TASK_AGGREGATE_PARENT` for why the order is the rule
+  // rather than a preference. `completionPolicy` absent (pre-0123) reads as MANUAL, which is what
+  // those rows held: an old snapshot reaches the answer it originally did.
+  if (isAggregateParent({
+    completionPolicy: (task.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
+    hasDirectChildren: parentsWithChildren.has(task.id),
+  })) {
+    return 'TASK_AGGREGATE_PARENT';
   }
   // §7.4 precondition 1, v1.18 (`PC-CX-64`). `OPEN` is one of the two statuses a dispatchable task
   // can be in, not the only one: a real failed run leaves `FAILED`, and §9.5 Q3's retry ladder is
@@ -348,14 +427,45 @@ function firstFailure(
   // §7.4 precondition 3, first half — through §13.6 SU9's chain. An edge points at an ATTEMPT, and
   // when that attempt was replaced the work moved to its successor while the edge did not. Read as
   // `status = 'DONE'` it is a prerequisite nothing can ever complete.
-  if (task.dependsOnTaskIds.some((id) => !dependencySatisfied(id, statusOf, successorOf))) {
-    return 'TASK_DEPENDENCIES_INCOMPLETE';
+  // ...and through §13.3 DEP, which qualifies what `DONE` means on a prerequisite that is a CHECK.
+  // Reported apart from the plain wait so the skip list can say "the check failed" rather than
+  // "not finished yet", which is the sentence that let a FAIL release its downstream.
+  if (task.dependsOnTaskIds.some((id) =>
+    !dependencySatisfied(id, statusOf, successorOf, epochOf, task.verifiesTaskId))) {
+    return task.dependsOnTaskIds.some((id) => statusOf.get(id) === 'DONE'
+      && dependencyEpochGate(id, epochOf, task.verifiesTaskId) != null)
+      ? 'DEPENDENCY_VERIFICATION_NOT_PASSED'
+      : 'TASK_DEPENDENCIES_INCOMPLETE';
   }
   // §7.4 precondition 3, second half: a check may not run before the thing it checks is finished.
   // The REPLACED case was split out and answered at the top of this function; what is left here is
   // the genuine wait.
-  if (task.verifiesTaskId && statusOf.get(task.verifiesTaskId) !== 'DONE') {
-    return 'VERIFICATION_SUBJECT_NOT_DONE';
+  if (task.verifiesTaskId) {
+    // AG8, not `status === 'DONE'`. The blunt form is a deadlock on exactly one shape — a
+    // `VERIFICATION_PASSED` roll-up is completed BY this check, so demanding it be DONE first makes
+    // the check undispatchable and the subject uncompletable, each waiting on the other. The
+    // predicate is shared with §13.1's own counts so "the children are in" means one thing here and
+    // in the recomputation that will complete the subject the moment this check passes.
+    //
+    // Nothing else moves: the subject still gets no Session of its own (AG6 is above, unchanged),
+    // and every other subject still has to be DONE.
+    const subject = taskById.get(task.verifiesTaskId);
+    if (!subject) return 'VERIFICATION_SUBJECT_NOT_DONE';
+    // …and versioned, like every other rule this file added to a snapshot format that outlives it.
+    // A decision captured before AG7 was decided by a binary that asked `status === 'DONE'`, and a
+    // replay has to reproduce THAT answer: without this clause an old snapshot would replay to a
+    // dispatchable check, which is the audit reporting a dispatch the loop never made.
+    if (!input.world.protocol?.completionGaps) {
+      if (subject.status !== 'DONE') return 'VERIFICATION_SUBJECT_NOT_DONE';
+    } else if (!verificationSubjectReady({
+      status: subject.status as AggregationTaskStatus,
+      completionPolicy: (subject.completionPolicy ?? 'MANUAL') as TaskCompletionPolicyValue,
+      hasDirectChildren: parentsWithChildren.has(subject.id),
+      childrenDone: childCounts.get(subject.id)?.done ?? 0,
+      childrenOutstanding: childCounts.get(subject.id)?.outstanding ?? 0,
+    })) {
+      return 'VERIFICATION_SUBJECT_NOT_DONE';
+    }
   }
   // Not a gate this pass enforces — §9.2 does, and it DENYs — but an unassigned task has no agent
   // whose concurrency cap could be counted below, so it cannot be ranked. It reaches the dispatcher
@@ -438,4 +548,31 @@ function byTaskId(a: { taskId: string }, b: { taskId: string }): number {
 /** By bytes, never by a database collation — §10.4 W5-2a's rule, for the same reason. */
 function compare(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Every task's runs, as §13.3 DEP1 reads them, from the snapshot's own session list.
+ *
+ * Deleted sessions are kept rather than filtered: `verificationRunSettled` reads `deletedAt` itself
+ * to decide that a trashed run is not evidence of a natural finish, and dropping them here would
+ * make a check whose only run was deleted look like a check that never ran — a different answer for
+ * the same world.
+ */
+function verificationRunsByTask(
+  input: ProjectDecisionInput,
+): ReadonlyMap<string, VerificationRunFact[]> {
+  const runs = new Map<string, VerificationRunFact[]>();
+  for (const session of input.world.sessions) {
+    if (session.taskId == null) continue;
+    const fact: VerificationRunFact = {
+      runStatus: session.runStatus,
+      endReason: session.endReason ?? null,
+      deletedAt: session.deletedAt,
+      completionAt: session.completedAt ?? session.archivedAt ?? null,
+    };
+    const list = runs.get(session.taskId);
+    if (list) list.push(fact);
+    else runs.set(session.taskId, [fact]);
+  }
+  return runs;
 }

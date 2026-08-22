@@ -29,6 +29,10 @@ function promptFor(task: {
         list: task.list ? { paused: false, maxConcurrent: null, ...task.list } : null,
         isForeman: false,
         verifiesTaskId: null,
+        // §13.1 AG6's two facts. Every task in this fixture is an ordinary leaf; the
+        // aggregate-parent gate has its own coverage in `task-aggregate-parent-execute.spec.ts`.
+        completionPolicy: 'MANUAL',
+        children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         ...task,
       }),

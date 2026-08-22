@@ -264,7 +264,7 @@ export class ProjectTaskDispatcherService {
       const noRunner = audit.result.reasonCode === 'RUNNER_UNAVAILABLE'
         || audit.result.reasonCode === 'RUNTIME_REQUIREMENT_UNMET';
       return this.refusal(
-        noRunner ? 'NO_MATCHING_RUNNER' : audit.result.reasonCode,
+        noRunner ? 'NO_MATCHING_RUNNER' : wireRefusalCode(audit.result.reasonCode),
         audit.result.reasonCode,
         { authorization: audit, runnerResolution },
         now,
@@ -516,6 +516,46 @@ function runtimeAvailable(engines: unknown, runtime: AgentProvider, configured: 
   // Absent/unknown/not-installed remain compatible with existing on-demand installation. Only an
   // online runner's explicit signed-out report is a reliable fail-closed runtime fact.
   return !(health?.installed && health.auth === 'no');
+}
+
+/**
+ * §13.1 AG6's mixed-version wire rule: the code that goes in `project_action.refusal_code` must be
+ * one every reader in the fleet ALREADY classifies.
+ *
+ * `refusal_code` is not a log line — it is a durable column that other processes read and turn into
+ * §11 rows. BL2 fails an unrecognised code CLOSED, to `UNKNOWN_FAILURE`, whose subject is the
+ * PROJECT, and §11 BL1 reads a PROJECT-subject row as "stop everything". So during a rolling deploy
+ * a NEW replica writing a code the OLD replica's frozen non-blocking list does not contain would
+ * stop that project's dispatch entirely, permanently — and §11.4 could never clear it, because it
+ * clears rows only by letting an attempt through and watching it not be refused, and this one
+ * always will be. Adding the code to this build's list fixes THIS build's reader and does nothing
+ * at all for the one still running next to it.
+ *
+ * `STALE_SNAPSHOT` is the code that goes on the wire, and it is not a euphemism: reaching this gate
+ * at all means the plan was made against a world that no longer describes the task. §7.8's pass
+ * skips an aggregate parent, so a candidate that arrives here either gained its children after the
+ * snapshot was taken or was proposed by a replica that does not have the rule — both are exactly
+ * "the snapshot this action was planned from is out of date". Old readers already treat it as
+ * non-blocking, and it already means "re-plan", which is the correct next step.
+ *
+ * The precise reason is not lost, it is just not on the wire: `reasonCode` carries
+ * `TASK_AGGREGATE_PARENT` verbatim, the authorization audit in `detail` carries the facts the gate
+ * read, and both are what a person and this build's own tooling see. Only the one column old code
+ * branches on is held to the old vocabulary.
+ *
+ * This mapping is what a fleet capability gate would otherwise be needed for. When there is a
+ * provable one — every reader at or past this release — this function is the single place that has
+ * to change.
+ */
+export function wireRefusalCode(reasonCode: string): string {
+  if (reasonCode === 'TASK_AGGREGATE_PARENT') return 'STALE_SNAPSHOT';
+  // §13.3 DEP, and the same rule as the line above rather than a second one: `VERIFICATION_NOT_PASSED`
+  // is a refinement OF `TASK_DEPENDENCIES_INCOMPLETE` — an unmet prerequisite, said more precisely —
+  // so the old vocabulary already has the right word for it and an old reader classifies that word
+  // as non-blocking. The refinement is not lost: `reasonCode` carries it verbatim, next to the
+  // authorization audit that says which prerequisite and why.
+  if (reasonCode === 'VERIFICATION_NOT_PASSED') return 'TASK_DEPENDENCIES_INCOMPLETE';
+  return reasonCode;
 }
 
 function providerAvailability(rows: ProviderRow[]): ProviderAvailability[] {

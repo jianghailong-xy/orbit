@@ -250,7 +250,7 @@ test('a snapshot captured before migration 0126 decides nothing, and replays to 
   // is the one that raises the row.
   assert.deepEqual(
     detectProjectBlockerConditions(legacy, {
-      aggregationCycleTaskIds: [],
+      aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
       verificationVerdicts: [],
       coordinatorSession: planCoordinatorSessionRotation(legacy),
     }).filter((condition) => condition.kind === 'COORDINATOR_UNAVAILABLE'),
@@ -305,7 +305,7 @@ test('a rotation that cannot happen is a COORDINATOR_UNAVAILABLE the owner can a
     workspaces: [],
   });
   const conditions = detectProjectBlockerConditions(homeless, {
-    aggregationCycleTaskIds: [],
+    aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
     verificationVerdicts: [],
     coordinatorSession: planCoordinatorSessionRotation(homeless),
   }).filter((condition) => condition.kind === 'COORDINATOR_UNAVAILABLE');
@@ -324,7 +324,7 @@ test('a rotation that cannot happen is a COORDINATOR_UNAVAILABLE the owner can a
     workspaces: [],
   });
   const seat = detectProjectBlockerConditions(both, {
-    aggregationCycleTaskIds: [],
+    aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
     verificationVerdicts: [],
     coordinatorSession: planCoordinatorSessionRotation(both),
   }).filter((condition) => condition.kind === 'COORDINATOR_UNAVAILABLE');
@@ -345,7 +345,7 @@ test('F22: an unacknowledged dead letter is a condition the recomputation keeps 
     }],
   });
   const conditions = detectProjectBlockerConditions(lost, {
-    aggregationCycleTaskIds: [],
+    aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
     verificationVerdicts: [],
     coordinatorSession: planCoordinatorSessionRotation(lost),
   }).filter((condition) => condition.kind === 'UNKNOWN_FAILURE');
@@ -357,7 +357,7 @@ test('F22: an unacknowledged dead letter is a condition the recomputation keeps 
   // existence of the detector.
   assert.deepEqual(
     detectProjectBlockerConditions(input(), {
-      aggregationCycleTaskIds: [],
+      aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
       verificationVerdicts: [],
       coordinatorSession: planCoordinatorSessionRotation(input()),
     }).filter((condition) => condition.kind === 'UNKNOWN_FAILURE'),
@@ -417,7 +417,7 @@ test('a run opened on these very facts, now ended without changing them, opens n
   const outcome = planProjectDecision(world, { decisionId: DECISION });
   assert.deepEqual(outcome.actions, [], 'a project that made no progress starts no run');
   const conditions = detectProjectBlockerConditions(world, {
-    aggregationCycleTaskIds: [],
+    aggregationCycleTaskIds: [], aggregationCompletionGaps: [],
     verificationVerdicts: [],
     coordinatorSession: plan,
   }).filter((condition) => condition.kind === 'COORDINATOR_NO_PROGRESS');

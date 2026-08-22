@@ -15,6 +15,7 @@ import { ProjectCoordinatorTurnService } from './project-coordinator-turn.servic
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
+import { ProjectVerificationFilingService } from './project-verification-filing.service';
 import { ProjectsService } from './projects.service';
 
 // PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
@@ -38,6 +39,7 @@ import { ProjectsService } from './projects.service';
     ProjectTaskDispatcherService,
     ProjectDispatchPassService,
     ProjectVerificationVerdictService,
+    ProjectVerificationFilingService,
     ProjectAvailabilityReaperService,
     ProjectFailureRecoveryService,
   ],
@@ -57,6 +59,7 @@ import { ProjectsService } from './projects.service';
     ProjectTaskDispatcherService,
     ProjectDispatchPassService,
     ProjectVerificationVerdictService,
+    ProjectVerificationFilingService,
     ProjectFailureRecoveryService,
   ],
 })

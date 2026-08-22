@@ -147,14 +147,18 @@ test('a prerequisite finishing does not start a task scheduled for later', async
           status: 'OPEN',
           autoRunWhenReady: true,
           runAt: future,
-          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
+          completionPolicy: 'MANUAL',
+        children: [],
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
         {
           id: OTHER_TASK_ID,
           status: 'OPEN',
           autoRunWhenReady: true,
           runAt: null,
-          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
+          completionPolicy: 'MANUAL',
+        children: [],
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
       ],
     },
@@ -185,12 +189,17 @@ test('a dependent whose schedule has already passed is started by its prerequisi
           status: 'OPEN',
           autoRunWhenReady: true,
           runAt: new Date(Date.now() - 60_000),
-          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
+          completionPolicy: 'MANUAL',
+        children: [],
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
       ],
     },
   });
-  (service as any).dependencyStatesFor = async () => new Map([[TASK_ID, 'READY']]);
+  // §13.3 DEP: `execute` reads prerequisite FACTS now, not just a reduced state, so that it can
+  // say which clause refused it. One satisfied prerequisite reduces to the READY this stubbed.
+  (service as any).dependencyFactsFor = async () =>
+    new Map([[TASK_ID, [{ status: TaskStatus.DONE }]]]);
   (service as any).execute = async (_o: string, id: string) => void executed.push(id);
 
   await (service as any).triggerDependents(OWNER_ID, 'done-task');
@@ -335,6 +344,8 @@ function executeFixture(runAt: Date | null, options: { cleared?: number } = {}) 
         status: TaskStatus.OPEN,
         dispatchHold: false,
         runAt,
+        completionPolicy: 'MANUAL',
+        children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
       updateMany: async (args: any) => (writes.push(args), { count: options.cleared ?? 1 }),
@@ -421,7 +432,9 @@ test('a dispatch that never happened leaves the schedule alone', async () => {
           status: TaskStatus.OPEN,
           dispatchHold: true,
           runAt: SCHEDULED,
-          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
+          completionPolicy: 'MANUAL',
+        children: [],
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         }),
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
       },
@@ -452,6 +465,8 @@ test('a bulk run keeps the appointment the same way a single run does', async ()
             model: null,
             status: TaskStatus.OPEN,
             runAt: SCHEDULED,
+            completionPolicy: 'MANUAL',
+            children: [],
             assignee: { id: 'workspace-1', runnerId: 'runner-1' },
           },
           {
@@ -462,6 +477,8 @@ test('a bulk run keeps the appointment the same way a single run does', async ()
             model: null,
             status: TaskStatus.OPEN,
             runAt: null,
+            completionPolicy: 'MANUAL',
+            children: [],
             assignee: { id: 'workspace-1', runnerId: 'runner-1' },
           },
         ],
@@ -726,6 +743,8 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
         status: TaskStatus.OPEN,
         dispatchHold: false,
         runAt: readRunAt,
+        completionPolicy: 'MANUAL',
+        children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
       findMany: async () => [
@@ -734,7 +753,9 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
           status: 'OPEN',
           autoRunWhenReady: true,
           runAt: scanRunAt,
-          assignee: { id: 'workspace-1', runnerId: 'runner-1' },
+          completionPolicy: 'MANUAL',
+        children: [],
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
         },
       ],
       updateMany: async (args: any) => (writes.push(args), { count: 1 }),
@@ -750,7 +771,10 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
   };
   const service = serviceWith(prisma, sessions, { publishForUser: () => undefined });
   (service as any).materialisationBudget = async () => ({ runner: new Map(), list: new Map() });
-  (service as any).dependencyStatesFor = async () => new Map([[TASK_ID, 'READY']]);
+  // §13.3 DEP: `execute` reads prerequisite FACTS now, not just a reduced state, so that it can
+  // say which clause refused it. One satisfied prerequisite reduces to the READY this stubbed.
+  (service as any).dependencyFactsFor = async () =>
+    new Map([[TASK_ID, [{ status: TaskStatus.DONE }]]]);
   return { service, createdSessions, writes };
 }
 

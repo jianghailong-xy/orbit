@@ -27,6 +27,7 @@
 
 import { AggregationTaskStatus, TaskVerdictValue } from './task-aggregation';
 import { taskRetirement } from '../tasks/task-supersession';
+import { verificationVerdictActionKeyOf } from '../tasks/verification-dependency';
 
 /** One verification task as this reads it, plus what its subject and its last run look like. */
 export interface VerificationVerdictFact {
@@ -155,7 +156,10 @@ export function verificationVerdictActionKey(
   verifierTaskId: string,
   verdictRevision: string | bigint | number,
 ): string {
-  return `pc:v1:${projectId}:verdict:${verifierTaskId}:${verdictRevision}`;
+  // Delegated rather than spelled twice: §13.3 DEP4 reads this key back out of the ledger to ask
+  // whether a conclusion has actually been applied, and it has to ask for the byte-identical
+  // string this writer minted. One template, two callers.
+  return verificationVerdictActionKeyOf(projectId, verifierTaskId, verdictRevision);
 }
 
 /** The deterministic key that makes "one defect per conclusion" a database fact, not a habit. */

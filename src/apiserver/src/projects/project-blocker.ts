@@ -45,6 +45,9 @@ export const PROJECT_BLOCKER_KINDS = [
   'DEPENDENCY_CYCLE',
   'COORDINATOR_UNAVAILABLE',
   'COORDINATOR_NO_PROGRESS',
+  'AGGREGATE_PARENT_UNSATISFIABLE',
+  'SUCCESSOR_OUTSIDE_SUBTREE',
+  'VERIFICATION_REQUIRED',
   'UNKNOWN_FAILURE',
 ] as const;
 
@@ -270,6 +273,56 @@ export const PROJECT_BLOCKER_POLICY: Readonly<Record<ProjectBlockerKind, Project
     escalateMs: 60 * 60_000,
     requiredAction: 'The coordinator ran on these facts and did not change them; take it from here.',
   },
+  AGGREGATE_PARENT_UNSATISFIABLE: {
+    // §13.1 AG7. `TASK_AGGREGATE_PARENT` is a non-blocking refusal because the children ARE the
+    // next step — that is true right up until there is no child that can be one, and then the same
+    // silence becomes §10.3's idling with a status on it. This row is the other half of AG6: the
+    // dispatch gates keep refusing (correctly, and for ever), and this says who can end that.
+    //
+    // `USER`, so `opensTurn` is ✘ by BL4: what the roll-up needs is a DECISION about its subtree —
+    // restore a child, file a new one, take the policy back to MANUAL, or cancel the roll-up — and
+    // none of the four is a fact the coordinator can derive from the world. Waking it on every
+    // pass to re-read a shape it cannot change is exactly §7.6 TR3's no-progress loop.
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    // The work has stopped and only a person restarts it, which is this table's own definition of
+    // CRITICAL — and it is stopped SILENTLY, which is what makes the row worth its severity.
+    severity: 'CRITICAL',
+    pollMs: null,
+    escalateMs: 60 * 60_000,
+    requiredAction: 'Nothing left under this task can complete it; add or restore a subtask, or set its completion policy to MANUAL.',
+  },
+  SUCCESSOR_OUTSIDE_SUBTREE: {
+    // §13.1 AG7's third shape: every subtask this roll-up is still counting is a RETIRED one whose
+    // work is not represented under it — a replacement that went somewhere else, or an attempt that
+    // was abandoned with nothing taking it over. Refusing to settle those is right (settling would
+    // complete the parent over work that left, or over work nobody did), and the cost is that the
+    // count cannot go down by itself: §13.6 SU6 never dispatches any of those rows again.
+    //
+    // `USER` for the same reason as the row above: both exits are a judgement about where the
+    // replacement work belongs, which is not derivable from the graph that has the problem in it.
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'CRITICAL',
+    pollMs: null,
+    escalateMs: 60 * 60_000,
+    requiredAction: 'A retired subtask still counts against this task; re-parent its successor under it, clear the subtask\'s retirement, or remove the subtask.',
+  },
+  VERIFICATION_REQUIRED: {
+    // §13.1 AG7's other shape: `VERIFICATION_PASSED` with its children in and no live check named
+    // on it. The loop files the check itself when the team makes one determinable (§13.2's
+    // `FILE_VERIFICATION_TASK`), so this row is what is LEFT — no independent agent, or an attempt
+    // that has already been spent — and every one of those is a person's call.
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'WARNING',
+    pollMs: null,
+    escalateMs: 60 * 60_000,
+    requiredAction: 'This task completes only on a passing verification and has none; file a verification task for it, or change its completion policy.',
+  },
   UNKNOWN_FAILURE: {
     // BL2: the way an unclassified failure exists is that this row gets opened, not that the pass
     // shrugs. Automatic dispatch for the project stops until somebody looks.
@@ -368,6 +421,12 @@ export const PROJECT_BLOCKER_NON_BLOCKING_REFUSALS: ReadonlySet<string> = new Se
   'TASK_DISPATCH_HELD',
   'TASK_NOT_DUE',
   'TASK_DEPENDENCIES_INCOMPLETE',
+  // §13.3 DEP: a prerequisite's check has not passed. Non-blocking for the same reason
+  // `TASK_DEPENDENCIES_INCOMPLETE` is — the row that somebody must act on is the FAILED CHECK's
+  // own §13.2 condition, which is already open against the SUBJECT and names the defect subtask.
+  // A second row against the downstream task would ask a different person for the same thing, and
+  // §13.4's DONE gate would hold the project open on both.
+  'VERIFICATION_NOT_PASSED',
   'TASK_ALREADY_RUNNING',
   'RETRY_BACKOFF_ACTIVE',
   'PROJECT_CONCURRENCY_LIMIT',
@@ -386,6 +445,20 @@ export const PROJECT_BLOCKER_NON_BLOCKING_REFUSALS: ReadonlySet<string> = new Se
   // successor holds the work — so a row here would be a request addressed to no one, and §13.4's
   // DONE gate would hold the whole project open on it.
   'TASK_SUPERSEDED',
+  // §13.1 AG6: the task is completed by aggregating its children, so it is not work that failed to
+  // start — it is not work. A blocker here is wrong in all three of BL1's axes at once: it names
+  // no owner (nobody is being asked for anything), no required action (the children are already
+  // moving on their own account), and §13.4's DONE gate would hold the whole project open on a
+  // parent whose entire completion condition is those children finishing.
+  //
+  // Leaving it out is not a cosmetic miss, and this is the line that says why: BL2 fails an
+  // unlisted code CLOSED to `UNKNOWN_FAILURE`, whose subject is the PROJECT, and §11 BL1 reads a
+  // PROJECT-subject row as "stop everything". One aggregate parent that the commit gate correctly
+  // refused would therefore stop every OTHER task in the project, permanently — the planner would
+  // skip from then on and nothing clears the row automatically (§11.4 needs an attempt that is not
+  // refused, and this one always will be). The refusal and this entry are one change, and the
+  // deployment order in §13.1 AG6 puts this list ahead of anything that can emit the code.
+  'TASK_AGGREGATE_PARENT',
 ]);
 
 /**
@@ -715,8 +788,39 @@ export function planProjectBlockers(input: ProjectBlockerPlanInput): ProjectBloc
     });
   }
 
+  const known = new Set<string>(PROJECT_BLOCKER_KINDS);
   for (const blocker of [...input.open].sort((a, b) => compare(a.dedupeKey, b.dedupeKey))) {
     if (observed.has(blocker.dedupeKey)) continue;
+    // BL3 auto-clear is "the recomputation no longer holds this condition", and a kind this binary
+    // has never heard of is one it did not RECOMPUTE — silence about it is ignorance, not absence.
+    //
+    // This is the mixed-version half of adding a kind, and it is the half that only the OLDER
+    // replica can perform. A newer one raises `AGGREGATE_PARENT_UNSATISFIABLE`; an older one, with
+    // no detector for it, sees an open row its condition list does not mention and resolves it as
+    // AUTO — deleting a row a person was being asked to act on, and then watching the new replica
+    // open it again one generation later. Neither end can coordinate the other, so the rule has to
+    // be one every version can apply to every version's kinds: leave alone what you cannot judge.
+    //
+    // It also keeps `openAfter` honest for the guards downstream (§4.2 2/3, §11 BL1): a row this
+    // build cannot evaluate still STOPS what it says it stops.
+    if (!known.has(blocker.kind)) {
+      openAfter.push({
+        id: blocker.id,
+        kind: blocker.kind,
+        owner: blocker.owner,
+        recovery: blocker.recovery,
+        dedupeKey: blocker.dedupeKey,
+        subjectType: blocker.subjectType,
+        subjectId: blocker.subjectId,
+        firstSeenAt: blocker.firstSeenAt,
+        nextCheckAt: blocker.nextCheckAt,
+        escalatedAt: blocker.escalatedAt,
+        requiredAction: blocker.requiredAction,
+        conditionVersion: blocker.conditionVersion,
+        lifecycleGeneration: blocker.lifecycleGeneration,
+      });
+      continue;
+    }
     clears.push({
       blockerId: blocker.id,
       dedupeKey: blocker.dedupeKey,
@@ -730,6 +834,10 @@ export function planProjectBlockers(input: ProjectBlockerPlanInput): ProjectBloc
   // redelivery is a notification that fires because a queue retried.
   for (const projection of openAfter) {
     if (projection.escalatedAt) continue;
+    // A kind this build does not know has no threshold here either, and inventing one would let an
+    // older replica escalate a row it cannot even evaluate — ES1's "the row's own policy decides"
+    // read the only way a mixed fleet can read it.
+    if (!known.has(projection.kind)) continue;
     // A row this pass is OPENING cannot also be escalated by it: its `first_seen_at` is this very
     // epoch and every threshold is positive, so the arithmetic below already excludes it. Skipping
     // it explicitly is what keeps that an invariant rather than a coincidence — an escalation with

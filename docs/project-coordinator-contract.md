@@ -784,6 +784,7 @@ v1.5 把这一格改成**全部未消费 `user.manual_trigger` 信号的 `dedupe
 | `CLEAR_BLOCKER` | 解除阻塞 | `pc:v1:<projectId>:unblock:<blockerId>` | 条件已消失（§11.4） |
 | `AGGREGATE_PARENT` | 按 `completionPolicy` 重算父任务状态 | 无（**current-state CAS**，不入账本，§13.1 AG5，v1.3） | §13.1 |
 | `APPLY_VERIFICATION_VERDICT` | 退回被验证任务 / 建缺陷子任务 / 阻断下游 | `pc:v1:<projectId>:verdict:<verifierTaskId>:<verdictRevision>` | §13.2；代次见 V7（v1.3，PC-CX-17） |
+| `FILE_VERIFICATION_TASK` | 为一条只能由验证完成、却没有验证的 Task 建一条验证任务 | `pc:v1:<projectId>:file-verification:<subjectTaskId>:<generation>` | §13.1 AG7 / §13.2 V8（v1.19）；候选唯一且独立才提议 |
 | `REQUEST_APPROVAL` | 把一个动作挂起等人批 | `pc:v1:<projectId>:approval:<targetIdempotencyKey>` | 策略判定为"需审批"（§9.2） |
 | `RUN_PROJECT_ACCEPTANCE` | 发起项目级验收 | `pc:v1:<projectId>:acceptance:<acceptanceAttempt>` | §13.4；代次见 AE11（v1.3，PC-CX-17） |
 | `SCHEDULE_WAKE` | 安排下次检查 | 无（写在 `project_runtime`，不入账本） | 恒执行 |
@@ -2782,6 +2783,7 @@ v1.3 保留这条规则要买的东西（**没有环、没有无界等待**）�
 | `RAISE_BLOCKER` | `project_blocker.lifecycle_generation` | `project_blocker` 行 | blocker 行插入成功的同一语句（BE1） |
 | `APPLY_VERIFICATION_VERDICT` | `task.verdict_revision`（验证任务自己那一行） | `task` 行 | 写入 verdict 的那一次事务（V7） |
 | `RUN_PROJECT_ACCEPTANCE` | `project_runtime.acceptance_attempt` | `project_runtime` 行 | 动作行插入成功的同一事务（AE11） |
+| `FILE_VERIFICATION_TASK` | 同一 subject 的 `FILE_VERIFICATION_TASK` 账本行数 + 1 | `project_action.subject_id`（历史行永不删除，故这个计数只增不减） | 每一次尝试插入动作行即前进（V8-e） |
 | `OPEN_COORDINATOR_TURN` | `coordinator_generation` + `reasonDigest` | `project_runtime` 行 + 快照 | 轮换（§7.5）；摘要由事实决定（TR1） |
 | `ROTATE_COORDINATOR_SESSION` | `coordinator_generation + 1` | `project_runtime` 行 | 轮换事务 |
 | `CLEAR_BLOCKER` | 目标 blocker 的行 id | `project_blocker` 行 | 该行一生只被解除一次 |
@@ -3294,6 +3296,9 @@ SELECT p.id
 | `DEPENDENCY_CYCLE` | 依赖图不可达/成环 | `COORDINATOR` | `EVENT` | ✔ | +5min | 已落地 |
 | `COORDINATOR_UNAVAILABLE` | 协调 Workspace 软删/离线，或轮换失败 | `USER` | `HUMAN` | ✘ | 升级到期（+15min） | 已落地 |
 | `COORDINATOR_NO_PROGRESS` | §7.6 TR3：同一 `reasonDigest` 的上一次 turn 结束后事实未变 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
+| `AGGREGATE_PARENT_UNSATISFIABLE` | §13.1 AG7：聚合父节点当前子集合永远满足不了 AG1（`outstanding = 0` 且 `done = 0`） | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
+| `SUCCESSOR_OUTSIDE_SUBTREE` | §13.1 AG7：唯一还未收敛的子任务全是“被取代但 successor 不在本子树”的退休行 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
+| `VERIFICATION_REQUIRED` | §13.1 AG7：`VERIFICATION_PASSED` 且子任务已收敛，但没有任何存活验证指向它，且 §13.2 也定不出可自动补的验证 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
 | `UNKNOWN_FAILURE` | **兜底**：任何未归类的失败，含"该 Task 存在没有错误文本的失败运行"（§9.5 Q3-e，v1.18 起由快照直接检出，不再需要先发生一次派发拒绝） | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 
 **BL4（v1.2 修订，可机械核对）**：`opensTurn` 是 **`kind` 的函数**，与那一行 blocker **当前**的 `owner` 无关。本表的 `默认 owner` 列同样是 kind 的常量，两列逐行满足
@@ -3517,6 +3522,35 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
   v1.2 给它的键是 `aggregate:<taskId>:<childrenDigest>`，而 AG3 明确允许子任务 `DONE → OPEN → DONE`：第三次的 childrenDigest **回到**第一次的值，撞上历史 `APPLIED` 行，§8.5 C2 跳过副作用，父任务永久停在 `OPEN`。审查记为 `PC-CX-17`。**一个纯重算不需要幂等键**：幂等来自"重算"这个性质本身（AG1），给它加一个由可回环事实构成的永久键，反而把幂等变成了单次（§8.2 GE2）。审计仍在：每次实际改变父状态都落一条 `project_decision`，只是不占动作账本。
 
+- **AG6（聚合父节点不可派发，v1.18 新增，单元 H0）**：一个 Task 同时满足下面两条时，是**纯聚合父节点**，`DISPATCH_TASK` 对它永远不合法，任何入口都不得为它创建 `starts_task_work` 的 Session：
+
+  1. 至少有一个直接子任务（与它同 owner；这正是聚合重算所计的那一组，见 AG4 的反面）；
+  2. `completionPolicy ≠ MANUAL`。
+
+  **理由是角色，不是时机。** 这种行的状态由 AG1 的重算从子任务与验证结果算出，它自己没有任何可达的完成条件 —— 派发出去的 Session 拿到的是"把子任务正在做的事总结一遍"，会和子任务抢同一条分支，而且永远报不了 done，因为唯一能把这行改成 DONE 的是那个盯着子任务的重算。线上后果是 G/H/K 三个纯汇总节点各拿到一条真实工作 Session，控制环无法收口。
+
+  - **AG6-a（三道门，判据同一条）**：§7.8 的 pass 给出 `TASK_AGGREGATE_PARENT` skip；§9.2 的提交点适配器在 project 行锁之后**重新读取**权威的 `completion_policy` 与直接子节点，再拒一次（DENY，不是 DEFER —— 角色不会随时间解除）；`TasksService.execute` / `batchExecute` 覆盖 Run Now、`task_start`、依赖解锁、定时与旧计划、foreman 与验证入口。三处的判定位置相同：在 §13.6 SU6 的两条"这行还是不是这件工作"之后，在失败重试阶梯之前 —— 否则一个 FAILED 的聚合父节点会被读成可重试的失败。
+  - **AG6-b（线性化，不只是复核）**：父行的行锁不是子集合上的谓词锁。迁移 0132 因此把判定放进 `session_admission_lock_order`，对进入 live work 的行取 `FOR UPDATE`（子行插入的外键只取 `FOR KEY SHARE`，二者只在这一档冲突），并由 `task_aggregate_parent_shape_guard` 从 task 侧拒绝**反方向** —— 父任务持有 live work Session 时，任何把它变成聚合形状的写入（新增/改绑子任务、`MANUAL → 聚合`、owner 变化、self-parent）都被拒；解除方向（删子任务、移出、改回 MANUAL）全部放行。两侧取同一把 `FOR UPDATE`，因此两种先后都可线性化。
+  - **AG6-c（兼容边界，逐条冻结）**：**无子任务**的 non-MANUAL Task 仍可派发（AG4：策略对它无效，它就是一个普通叶子）；**MANUAL 父任务**仍按 §13.1 之前的契约由显式状态写完成；**有效 Foreman 一律是 MANUAL** —— `isForeman` 与聚合策略并存会让一行有两个完成所有者（Worker 写 DONE，重算也写），`task_foreman_manual_policy` 因此在数据库层禁止这一对，MANUAL 的 Foreman 不受任何影响。**不得**用 `autoRunWhenReady`、清空 assignee 或 `dispatchHold` 代替本条：那会把角色不变量降级成一个别人可以改写的设置，而 §2 B3 与 §12.3 D4 已经点名禁止其中两个。
+  - **AG6-d（FAILED 聚合父节点的恢复）**：AG6 的 skip 排在重试阶梯之前，而 `TASK_AGGREGATE_PARENT` 是 §11.2 的**非阻塞**拒绝，因此这种行既不会被重试也不会开 blocker。若聚合同时拒绝改写它，它就成了没有出口的死结。所以聚合**收回**这一行的状态所有权：`FAILED` 与 `OPEN`/`IN_PROGRESS` 同列（`CANCELLED` 不在其中 —— 那是人对这个父节点本身的判断），子任务已收敛则 DONE，未收敛则回 OPEN。失败的那条 Session 一个字不改，它仍是 §6.1 计 `failureCount` 的依据。
+  - **AG6-e（混合版本的 wire 词汇）**：`project_action.refusal_code` 是别的进程要读的持久列，而 §11.2 BL2 对不认识的码**失败关闭**成 `UNKNOWN_FAILURE`（PROJECT 主体，§11 BL1 读作"全停"，且 §11.4 永远解不开它）。滚动升级时新副本写一个旧副本没见过的码，会把整个项目停死。因此持久列写 `STALE_SNAPSHOT`（旧副本已知的非阻塞码，语义也确实成立：pass 会跳过聚合父节点，能走到提交点说明计划所依据的世界已经变了），精确原因放在 `reasonCode` 与授权审计里。发布顺序：**先部署带三道服务门的副本，再跑 0132**；反过来会让旧副本撞上数据库拒绝，那条派发事务整体回滚（`ProjectDispatchPassService.runFor` 在 post-commit 位置吞掉并记录，事件不重投也不进死信，reconcile 已持久化的 `nextWakeAt` 仍然有效），安全但会白跑一轮。
+
+- **AG7（聚合父节点的完成缺口必须被看见，v1.19 新增，单元 H0 返修）**：AG6 的双条件说的是**谁**可以完成这一行（只有重算），它是准确的；它**没有**说重算在当前子集合上一定答得出来。两者之间恰好留了一个死角，AG6-d 修的 `FAILED → OPEN` 回收还会把行送进去：
+
+  | 形状 | 为什么重算永远答不出 | 为什么四面封死 |
+  |---|---|---|
+  | 子任务全部 settle 且**无一 DONE**（例：全被取消） | AG1 前向要求 `done > 0`，这些行不会再产生任何事件 | AG6 拒派发；`TASK_AGGREGATE_PARENT` 非阻塞所以不开 blocker；`TasksService` 拒绝对非 MANUAL 有子任务的父手写 DONE |
+  | `VERIFICATION_PASSED`、子任务已收敛、**无任何存活验证指向它** | "零条验证全部通过"是 AG4 拒绝的那种空真 | 同上；且验证任务只在 subject DONE 之后才可派发，而这个 subject 正是靠它才能 DONE |
+  | 还未收敛的子任务**全部**是被取代、而 successor 不在本子树的退休行 | §13.6 SU6 的 fail-closed：这种子任务不算 settled（否则父会在已经搬走的工作上报 DONE），但退休行永不再派发，计数因此再也降不下来 | 同上 |
+
+  规范：`planTaskAggregation` 在算出同一份计数的同一趟里**报出**这些行（`completionGaps`，按 task id 排序，与 `aggregations` 同源因此不可能互相矛盾），reconcile 把它们变成 §11 的 **TASK 主体** blocker —— `AGGREGATE_PARENT_UNSATISFIABLE`、`SUCCESSOR_OUTSIDE_SUBTREE` 与 `VERIFICATION_REQUIRED`。五条边界逐条冻结：
+
+  - **AG7-a（不改 AG6 的判据）**：`isAggregateParent` 一个字不动。它在迁移 0132 的触发器里有一份 SQL 复述，把 `done > 0` 或验证计数塞进去会让库侧与服务侧再次分叉；而且放宽它就等于派发这个 roll-up，那正是 AG6 存在的原因。缺口是**报出来**的，不是绕开的。
+  - **AG7-b（不擅自替人下结论）**：子任务全取消**不**推出父任务 DONE，也不推出 CANCELLED —— `CANCELLED` 是人对这个父节点本身的判断（AG6-d 已经把这句冻结了），聚合只替子任务说话。required action 因此写的是"补一条子任务，或把 completionPolicy 改回 MANUAL"，两个出口都是一次写入，写完 blocker 按 §11.4 BL3 自动解除。
+  - **AG7-c（主体必须是 TASK）**：PROJECT 主体会被 §11 BL1 读作"全停"，而这正是 AG6-e 用 `STALE_SNAPSHOT` 绕开的那件事。TASK 主体只挡这一行（它本来就永远不派发），项目其余任务照常推进；§13.4 的 DONE 门确实会因此把项目按住 —— 那是**正确**的，这个 roll-up 确实还没完成。
+  - **AG7-e（第三种形状不放宽 SU6）**：`chainStaysUnder` 的 fail-closed 一个字不动 —— 把 successor 在别的父下的退休子任务算成 settled，等于让父在已经搬出本子树的工作上报 DONE。缺口报出来的是**活性**问题，出口有两个，都是一次写入：把 successor 改挂回这个父之下，或者解掉那条 supersession 让原行自己继续。**只有**当所有未收敛子任务都是这种行时才报 —— 哪怕还剩一条活着的子任务，父就只是在正常等待。
+  - **AG7-d（幂等与不制造 turn）**：blocker 的去重键就是 §11.3 的 `<kind>:TASK:<taskId>`，同一份世界重放、乱序、重启都收敛到同一行；三个 kind 的 `opensTurn` 都是 ✘（BL4：`默认 owner = USER`），因此这条缺口**不会**每趟叫醒协调器去重读一个它改不了的形状。
+
 ### 13.2 验证失败的原生退回（AC6）
 
 既有 `task.verifiesTaskId` 表达"这个任务验证那个任务"。v1 让 verdict 产生**原生**后果，而不是靠提示词约定：
@@ -3541,9 +3575,96 @@ CREATE UNIQUE INDEX project_blocker_episode_idx
 
   两个推论与 DA2 逐字相同：同一份快照被重复 reconcile 算出**同一个** revision ⇒ 同一个键 ⇒ 副作用恰好一次（V2 保住）；一次**真正的新 verdict** 算出**新的** revision ⇒ 新键 ⇒ 退回/缺陷/阻断三件事再次发生（V4 兑现）。`verdict` 值本身仍然在键里没有位置 —— 它是一个能回到旧值的事实（§8.2 GE2）。
 
+- **V8（缺失的验证由 reconcile 自己补，v1.19 新增，单元 H0 返修）**：AG7 的第二种缺口 —— `VERIFICATION_PASSED` 的 roll-up 子任务已收敛却没有任何存活验证 —— 在团队能唯一确定一个**独立**验证者时不该落成一条等人的 blocker，60 秒一趟空转更不行。reconcile 因此在 §7.3 的动作表里多一条 `FILE_VERIFICATION_TASK`：
+
+  > 键：`pc:v1:<projectId>:file-verification:<subjectTaskId>:<generation>`
+
+  - **V8-a（候选必须唯一且独立）**：候选取自 §3 的项目团队，逐条排除 `enabled = false`、已软删、**subject 自己的执行 Agent**（冒用它就不是独立验证），以及没有可用 Workspace 或定不出 provider 的成员。**恰好剩一个**才叫"可确定"；剩零个或多个都不是本机制能替人做的选择，落 `VERIFICATION_REQUIRED`（§11.2）。协调器自己若在团队里且满足前面几条，是合法候选 —— 它写这一条计划的身份与它作为独立验证者的身份是两件事，真正的独立性由"不是 subject 的执行 Agent"这一条保证。
+  - **V8-b（恰好一次，两层）**：动作键是**永久**的（§8.2），所以一条 subject 只会被提议一次；新建 Task 行自己再带一次 `task.idempotency_key`（与 §13.2 的缺陷子任务同型，`ON CONFLICT DO NOTHING`），因此即使账本被绕过也不会出现两条验证。
+  - **V8-c（放在哪一层）**：新建的验证任务是 subject 的**兄弟**（`parentTaskId` = subject 的父），不是它的子任务 —— 挂成子任务会让它同时进入 AG1 的子集合与验证集合，于是"子任务是否收敛"与"验证是否通过"变成同一行的两种读法。
+  - **V8-d（用光了就交给人）**：动作键已在账本里而缺口仍在（上一次被 `STALE_SNAPSHOT` 拒了，或建出来的验证后来被删了），本机制不再重试 —— 那是 §8.2 的永久键的含义 —— 直接落 `VERIFICATION_REQUIRED`。判据取自快照里的 `world.actions`（它是全量的），因此这条判断和 blocker 的开/关是同一份世界的同一次读。
+  - **V8-e（代次，不能只用 subjectTaskId 当永久键）**：一次因 `STALE_SNAPSHOT` 被拒的动作**没有任何副作用**（§8.3 判定 stale 时直接落 REFUSED，effect 根本不跑），可它会把永久键烧掉；反过来，建出来的验证任务后来被删或被 retire 时缺口会**重新出现**，也需要能再建一条。因此键末尾带一个代次：
+
+    > `<generation>` = 账本里 `type = FILE_VERIFICATION_TASK` 且 `subject_id` = 这条 subject 的行数 + 1
+
+    它是持久的（账本行只增不减）、单调的、永不复用的，且**不是**时间、`updated_at` 或任何可回滚的摘要 —— 这正是 §8.2 GE1 对代次的要求。三条推论逐条成立：同一份快照重放算出同一个代次 ⇒ 同一个键 ⇒ 副作用恰好一次（并发两趟 reconcile 里第二趟撞唯一键，降级成读）；一次无副作用的拒绝在账本里留下一行 ⇒ 下一趟算出新代次 ⇒ 可以重试；clear 之后又 recur 同样进入新代次。为不让一个永远拒绝的世界无限重试，账本尾部**连续** 3 次 REFUSED 之后本机制停手，改落 `VERIFICATION_REQUIRED`（V8-d 的一般形式）。
+  - **V8-f（同事务）**：claim 动作、写账本行、建验证任务三件事在**同一个事务**里；`task.idempotency_key` 带同一个代次，是账本被绕过时的第二道唯一后挡，不是第一道。
+
 ### 13.3 依赖与就绪
 
 沿用既有 `TaskDependency`。控制环对"就绪"的判定就是 §7.4 的八条前置，**不新增一套依赖语义**。
+
+#### DEP（v1.19 新增，单元 H0G）：依赖一条**验证**时，"DONE" 不等于"通过"
+
+一个验证 Task 在它的**运行结束**时变成 `DONE` —— 无论它得出什么结论。
+本项目自己的历史就是证据：`H0V` 跑完、判 **FAIL**、`status = DONE`，
+于是每一条把它写成前置的 Task 都变成 `READY`，因为 `status = 'DONE'` 为真。
+**一次失败的验证把它本该拦住的工作放行了。** `task.verdict` 早就存着结论，只是没有任何下游读它。
+
+**DEP0（一个判据，五个读者）**：一个**没有任何验证指向它**的前置，仍以**有效 DONE** 为准（§13.6 SU9 的链尾），
+这是绝大多数任务的情形，本条对它们一字不改。
+一旦某个前置**有适用的验证 epoch**，"DONE" 就不再是它完成的全部。
+planner（§7.8）、`dependencyState`、§9.2 的提交点、Run Now / 批量 Run 与三条旧 sweep **共用同一条规则**，
+分别以纯函数（`verificationEpochGate`）和 SQL 片段（`verificationEpochOpenSql`）两种拼写落地；
+一条边在其中一处 ready、另一处 blocked，正是两条派发路径开始各说各话的方式。
+
+**DEP1（PASS epoch 属于 subject，边也按 subject 判）**：
+
+> subject 的 PASS epoch **开着**，当且仅当它**最新的存活验证**带着一个已生效的 PASS，且 subject **现在仍是 DONE**。
+
+`dependsOn: A` 的意思是"等 A 做完"；A 一旦被检查，"做完"就是"做完**且**验过"。
+所以受这条 epoch 约束的是 **A 自己那条边** —— 这正是本项目事故的真实形状：**H1 与 L1 依赖的是 H0，不是 H0V**。
+API/CLI 因此明确引导调用方把边指向 subject（见 `AddDependencyDto`、`task_dependency_add`、`orbit task dependency-add`）。
+指向**验证任务**的边被**代理解析到同一个 epoch**（既有计划继续可用），而**不**读成"这一次 run 结束了" ——
+后者比作者的本意更窄，也更脆：重跑会新建一条验证，而边还指着旧的那条。
+
+唯一的豁免是自指环：一条验证**可以**依赖它所检查的 subject（或该 subject 的兄弟验证）而不必等自己的结论 ——
+否则 epoch 因为"这条检查还没结论"而关着，而它又要等 epoch 才能跑，双向死锁。
+判据是"等待方检查的 subject == 该前置所属 epoch 的 subject"，两种拼写各自实现同一条（SQL 侧用
+`IS NOT DISTINCT FROM`，`=` 会让整个片段变成 NULL —— 在不带 WHERE 的聚合里那是 fail-open）。
+
+锚在 subject 而不是锚在边指的那一行，是为了两个方向都不成为死角：
+
+- **更新的验证会关掉 epoch** —— 新建的、在跑的、或判了 FAIL 的都算。
+  于是"旧 PASS + 新验证"这种形状里，旧的 PASS 从新验证出现那一刻起不再放行任何东西。只读边自己指的那条验证是看不见这件事的。
+- **更旧的 FAIL 不会把 epoch 永久锁死** —— 修完重跑、新的一条判 PASS，下游就该走。
+  这与 §13.2 里 PASS **解除该 subject 上全部未决 condition**（而不只是它自己提的那些）是同一句话。
+- **全部验证被取消 ≠ 通过**：`NO_LIVE_VERIFICATION`，subject 那条边照样挡住。
+
+**DEP2（存活）**：被取代（§13.6 SU1）或 `CANCELLED` 的验证不计入 epoch —— 与 §13.2 V8-d 同一条判据。
+若 **subject 本身**被取代，则它与它的验证一并是历史（与 `verificationFailureIsHistorySql` 对 condition 行的处理相同），
+此时依赖回落到纯 status 判据，不另加否决 —— 否则就是一个没人能解的楔子。
+被取代/取消的验证**仍然**拿到 epoch 记号：它永远不是最终裁决的那一条（SU4 不允许 DONE 行指认后继，
+而 `dependencySatisfied` 只在一行已经 DONE 时才去看 gate），但它让读者看到的是原因而不是一个裸 `CANCELLED`。
+
+**DEP3（自然收口的运行）**：`SUCCEEDED` + `end_reason = 'task_done'` + §4.2 的 `COMPLETED` 生命周期，且**没有存活的运行**。
+**不是** turn 计数（§13.2 V5 的教训：turn 在结束时才落库，于是"0 turn"恰恰出现在真的跑过的那些运行上），
+也**不是**裸 `SUCCEEDED` —— 被人 `complete` / `cancel` 收掉的会话带着别的 `end_reason`，
+而本项目的硬约束正写在这个值上。
+
+**DEP4（`APPLY_VERIFICATION_VERDICT` 已生效）**：按 §8.2 的**永久键** `pc:v1:<project>:verdict:<verifier>:<revision>`
+查账本 `APPLIED`。§13.2 的退回、缺陷子任务与 condition 才是让一个 verdict **有意义**的东西，
+在账本说 APPLIED 之前它们一件都没发生；提前放行就是与 reconcile 抢同一个瞬间 ——
+一边起新工作，一边把 subject 从它脚下退回去。按**当前 revision** 的键查，而不是"这条验证的某个 verdict action"：
+被改写过的结论有它自己的键。验证若不在任何 Project 里则没有账本，DEP4 读作"不适用"而非"未生效"。
+
+**DEP5（重放与乱序）**：以上每一项都读**当前权威行**，不读事件。
+因此 `task.updated` / `session.ended` 乱序投递、重复投递、服务重启都改变不了答案 —— 这条判据没有可以跑到前面去的记忆。
+重复的 `verdictRevision` 由下一层排除：账本键是 `(verifier, revision)`，同一个结论第二次投递是撞键而不是再执行一次。
+
+**DEP6（审计语义）**：`verificationEpochGate` 返回的是**哪一条**说了不行，不是一个布尔：
+`NO_LIVE_VERIFICATION` / `VERIFICATION_IN_FLIGHT` / `VERDICT_ABSENT` / `VERIFICATION_FAILED` /
+`VERIFICATION_INCONCLUSIVE` / `VERDICT_UNREVISIONED` / `RUN_NOT_SETTLED` / `VERDICT_NOT_APPLIED` / `SUBJECT_NOT_DONE`。
+§7.8 的 skip 用 `DEPENDENCY_VERIFICATION_NOT_PASSED`，§9.2 的 reasonCode 用 `VERIFICATION_NOT_PASSED`（DEFER，不是 DENY）。
+`FAIL` / `INCONCLUSIVE` / `NO_LIVE_VERIFICATION` 归入 `BLOCKED_FAILED`（要人动手），其余是 `BLOCKED`（等）。
+**"前置还没完成"用在一条判了 FAIL 的验证上，正是让这次事故跑起来的那句话**：它描述的是等待，而发生的事情是拒绝。
+
+**DEP7（混合版本）**：快照标记 `world.protocol.verificationEpoch`。缺失 ⇒ 该决策由一个按 `status = 'DONE'` 判断的二进制做出，
+重放必须复现**那个**答案（它的快照里根本没有 `task.verdictApplied` 与 `session.endReason`/`archivedAt` 两项事实）。
+`project_action.refusal_code` 这一列上，`VERIFICATION_NOT_PASSED` 经 `wireRefusalCode` 写成
+`TASK_DEPENDENCIES_INCOMPLETE` —— 与 §13.1 AG6 用 `STALE_SNAPSHOT` 同一条理由：BL2 对旧 reader 不认识的码 fail-closed 成
+PROJECT 主体的 `UNKNOWN_FAILURE`，会停死整个项目。精确语义不丢，在 `reasonCode` 与授权审计里。
+本条**不需要迁移**：读的四项事实全部是既有列。
 
 ### 13.4 项目级验收与 DONE（AC12）
 

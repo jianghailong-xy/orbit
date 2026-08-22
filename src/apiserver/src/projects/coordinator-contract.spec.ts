@@ -626,7 +626,7 @@ test('the decision input is complete: every column a rule reads is a field the i
   const camel = (snake: string): string => snake.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
   const missing = [...harvested].filter((column_) => {
     const name = camel(column_);
-    return !new RegExp(`\\b${name}\\b`).test(input) && !/^(taskId|verifierTaskId|blockerId|targetIdempotencyKey|kind|subjectId|generation|reasonDigest)$/.test(name);
+    return !new RegExp(`\\b${name}\\b`).test(input) && !/^(taskId|verifierTaskId|subjectTaskId|blockerId|targetIdempotencyKey|kind|subjectId|generation|reasonDigest)$/.test(name);
   });
   assert.deepEqual(missing, [], 'a rule reads a column the decision input does not carry (§6.1 S8)');
 

@@ -25,13 +25,24 @@ test('named task list rows expose the same dependency lock state as the main tas
         findMany: async (args: any) => {
           dependencyWhere = args.where;
           return [
-            { taskId: 'ready', dependsOnTask: { status: TaskStatus.DONE } },
-            { taskId: 'blocked', dependsOnTask: { status: TaskStatus.DONE } },
-            { taskId: 'blocked', dependsOnTask: { status: TaskStatus.IN_PROGRESS } },
-            { taskId: 'failed', dependsOnTask: { status: TaskStatus.CANCELLED } },
+            { taskId: 'ready', dependsOnTaskId: 'p1', dependsOnTask: { status: TaskStatus.DONE } },
+            { taskId: 'blocked', dependsOnTaskId: 'p1', dependsOnTask: { status: TaskStatus.DONE } },
+            {
+              taskId: 'blocked',
+              dependsOnTaskId: 'p2',
+              dependsOnTask: { status: TaskStatus.IN_PROGRESS },
+            },
+            {
+              taskId: 'failed',
+              dependsOnTaskId: 'p3',
+              dependsOnTask: { status: TaskStatus.CANCELLED },
+            },
           ];
         },
       },
+      // §13.3 DEP asks which prerequisites are CHECKS. None of these are, so the epoch read stops
+      // at its first query — this stub is what says so.
+      task: { findMany: async () => [] },
       user: {
         findMany: async () => [{ id: CREATOR_ID, name: 'Owner' }],
       },

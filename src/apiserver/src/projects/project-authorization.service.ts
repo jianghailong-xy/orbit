@@ -14,6 +14,8 @@ import {
   verificationFailureIsHistorySql,
 } from '../tasks/task-supersession';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from './project-coordinator-session';
+import { TaskCompletionPolicyValue, isAggregateParent } from './task-aggregation';
+import { verificationEpochOpenSql } from '../tasks/verification-dependency';
 
 export type ProjectAutomationPolicyValue = 'MANUAL' | 'GUARDED_AUTO' | 'AUTO';
 
@@ -28,6 +30,7 @@ export type ProjectAuthorizationAction =
   | 'OPEN_COORDINATOR_TURN'
   | 'ROTATE_COORDINATOR_SESSION'
   | 'APPLY_VERIFICATION_VERDICT'
+  | 'FILE_VERIFICATION_TASK'
   | 'RUN_PROJECT_ACCEPTANCE'
   | 'SET_PROJECT_DONE'
   | 'DELETE_TASK'
@@ -73,9 +76,16 @@ export type ProjectAuthorizationReasonCode =
   // §13.6 SU6: this attempt was replaced or abandoned. DENY and not DEFER — a deferral says "not
   // yet", and there is no later instant at which a superseded attempt becomes the live one again.
   | 'TASK_SUPERSEDED'
+  // §13.1 AG6: this task has direct children and a policy that completes it FROM them. DENY and
+  // not DEFER, for the same reason `TASK_SUPERSEDED` is: a deferral says "not yet", and there is
+  // no later instant at which a task whose completion is a recomputation becomes work somebody
+  // could do. What lifts it is somebody CHANGING the task — removing its children or setting the
+  // policy back to MANUAL — and that is a new shape, not a later moment of this one.
+  | 'TASK_AGGREGATE_PARENT'
   | 'TASK_DISPATCH_HELD'
   | 'TASK_NOT_DUE'
   | 'TASK_DEPENDENCIES_INCOMPLETE'
+  | 'VERIFICATION_NOT_PASSED'
   // §13.2 V3: an unresolved verification failure stops work here rather than by rewriting the
   // blocked tasks' status, so "why is this not running" stays a question the data answers.
   | 'VERIFICATION_DEFECT_OPEN'
@@ -177,6 +187,14 @@ export interface ProjectActionAuthorizationInput {
     runAtDue: boolean;
     dependenciesReady: boolean;
     /**
+     * §13.3 DEP: at least one unmet prerequisite is a CHECK that is DONE without an open PASS
+     * epoch. Separate from `dependenciesReady` because it changes the SENTENCE, not the verdict:
+     * "a prerequisite is still running" and "a prerequisite's check concluded FAIL" are opposite
+     * things to be told, and only one of them is a wait. Absent reads as false, which is what
+     * every caller that predates DEP meant.
+     */
+    dependenciesVerificationBlocked?: boolean;
+    /**
      * The unresolved verification failure that stops this task, or null. Absent on audits captured
      * before §13.2 landed, which read as "nothing was blocking" — which is what was true then.
      */
@@ -193,6 +211,23 @@ export interface ProjectActionAuthorizationInput {
      * a name rather than a Session for work that has already been re-done.
      */
     retirement?: TaskRetirement | null;
+    /**
+     * §13.1 AG6, as this gate READ IT AT THE COMMIT POINT, under the task row's `FOR SHARE`.
+     *
+     * The same race `retirement` above is here for, on a different pair of columns. §7.8's pass
+     * chose this task from a snapshot in which it had no children, or a MANUAL policy; between
+     * that snapshot and this transaction somebody filed a subtask under it or switched the policy
+     * to `ALL_CHILDREN_DONE`. The plan was correct when it was made and is wrong now, and the only
+     * place that can tell is a re-read inside the lock. Absent means the caller did not supply the
+     * facts — an audit captured before AG6, which read as "nothing about the shape stopped it",
+     * because that was true then.
+     */
+    aggregateParent?: {
+      /** `task.completion_policy` re-read at the commit point. */
+      completionPolicy: TaskCompletionPolicyValue;
+      /** Whether any task in this Project names it as `parentTaskId`, re-read at the commit point. */
+      hasDirectChildren: boolean;
+    } | null;
     /**
      * §13.6 SU6's derived half: the retirement of the task this one VERIFIES, when it verifies one.
      *
@@ -307,7 +342,11 @@ const ALWAYS_SAFE = new Set<ProjectAuthorizationAction>([
   'REQUEST_APPROVAL',
 ]);
 const COORDINATOR_ROUTINE = new Set<ProjectAuthorizationAction>([
+  // §13.2 V8's filing sits here beside the verdict it is the mirror of: both are the coordinator
+  // acting on a check, and both CREATE a task row (V8 the check itself, the verdict its defect).
+  // Classifying it anywhere else would be a second policy answer for the same kind of write.
   'OPEN_COORDINATOR_TURN', 'ROTATE_COORDINATOR_SESSION', 'APPLY_VERIFICATION_VERDICT',
+  'FILE_VERIFICATION_TASK',
 ]);
 const USER_CONTROL_ONLY = new Set<ProjectAuthorizationAction>([
   'SET_PROJECT_DONE', 'DELETE_TASK', 'DELETE_PROJECT', 'CHANGE_ACCEPTANCE_CRITERIA',
@@ -387,6 +426,16 @@ export function authorizeProjectAction(
   }
   if (input.requiredPermission === 'DELEGATE' && !input.principal.canDelegate) {
     return result('DENY', 'DELEGATE_PERMISSION_DENIED');
+  }
+  // §13.2 V8 is the one action that exercises BOTH, and `requiredPermission` names one. It creates
+  // a task AND hands it to a different agent, so a coordinator with only one of the two may not
+  // perform it — checking both here keeps that in the frozen matrix rather than in a hand-written
+  // clause at the two call sites, which is where the two would eventually differ.
+  if (input.action === 'FILE_VERIFICATION_TASK'
+      && !(input.principal.canCreateTasks && input.principal.canDelegate)) {
+    return result('DENY', input.principal.canCreateTasks
+      ? 'DELEGATE_PERMISSION_DENIED'
+      : 'CREATE_TASK_PERMISSION_DENIED');
   }
 
   let providerResolution: ProjectProviderResolution | undefined;
@@ -492,6 +541,17 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
   })) {
     return { decision: 'DENY', reasonCode: 'TASK_SUPERSEDED' };
   }
+  // §13.1 AG6, second and DENY, for the reason above and in the same position §7.8's pass puts it:
+  // before the status clause, because a FAILED aggregate parent is not a run to retry. This is the
+  // half of the gate that survives a plan made against an older shape — §7.8 chose from a snapshot,
+  // and children and policy are both columns somebody may write between that snapshot and here.
+  //
+  // Absent facts read as "not an aggregate parent", which is what an audit captured before AG6
+  // meant. A caller that supplies them cannot get that answer by omission: the adapter below fills
+  // the field for every DISPATCH_TASK it builds.
+  if (task.aggregateParent && isAggregateParent(task.aggregateParent)) {
+    return { decision: 'DENY', reasonCode: 'TASK_AGGREGATE_PARENT' };
+  }
   // §7.4 precondition 1, v1.18 (`PC-CX-64`): `FAILED` is a status this gate ADMITS ON, not one it
   // refuses out of hand. WHICH of §9.5 Q3's rows the task is on is then settled by clauses this
   // function already had, and that is deliberate — they are where `failedTaskBlockerKind` took its
@@ -521,7 +581,15 @@ function authorizeTaskState(input: ProjectActionAuthorizationInput): {
     };
   }
   if (!task.dependenciesReady) {
-    return { decision: 'DEFER', reasonCode: 'TASK_DEPENDENCIES_INCOMPLETE' };
+    // §13.3 DEP. Still DEFER, not DENY: a check that failed is re-run once the defect is fixed, and
+    // the epoch opens with nobody asked — the same shape as `verificationBlock` above, which is the
+    // other half of §7.4 precondition 3 and answers for the SUBJECT rather than for an edge.
+    return {
+      decision: 'DEFER',
+      reasonCode: task.dependenciesVerificationBlocked
+        ? 'VERIFICATION_NOT_PASSED'
+        : 'TASK_DEPENDENCIES_INCOMPLETE',
+    };
   }
   if (task.hasLiveSession) return { decision: 'DEFER', reasonCode: 'TASK_ALREADY_RUNNING' };
   if (!task.assigneeAgentId) return { decision: 'DENY', reasonCode: 'WHO_UNRESOLVED' };
@@ -750,12 +818,17 @@ export class ProjectAuthorizationService {
       assigneeAgentId: string | null;
       supersededByTaskId: string | null; terminalReason: string | null;
       verifiesTaskId: string | null;
+      completionPolicy: string;
     }>>(Prisma.sql`
       SELECT t."id", t."status"::text, t."dispatch_hold" AS "dispatchHold",
              t."run_at" AS "runAt", t."assignee_id" AS "assigneeAgentId",
              t."superseded_by_task_id" AS "supersededByTaskId",
              t."terminal_reason" AS "terminalReason",
-             t."verifies_task_id" AS "verifiesTaskId"
+             t."verifies_task_id" AS "verifiesTaskId",
+             -- §13.1 AG6's policy column, read from the row this statement already locks:
+             -- switching a policy is an UPDATE of exactly this row, so the lock that fences
+             -- supersession fences the policy flip too, with no second lock and no new lock order.
+             t."completion_policy"::text AS "completionPolicy"
         FROM "task" t
        WHERE t."id" = ${command.taskId}::uuid AND t."project_id" = ${command.projectId}::uuid
          AND t."owner_id" = ${command.ownerId}::uuid
@@ -779,6 +852,32 @@ export class ProjectAuthorizationService {
         FROM "task" t WHERE t."id" = ${task.verifiesTaskId}::uuid
        FOR SHARE
     `);
+
+    // §13.1 AG6's first clause, at the commit point. A THIRD statement, after the verifier and its
+    // subject, so the three keep one fixed order and cannot invert against 0130's session guard.
+    //
+    // OWNER-scoped, and deliberately not project-scoped: that is the scope
+    // `collectAggregationScope` walks, and the two rules are one predicate read in opposite
+    // directions — aggregation completes this task iff the loop must not dispatch it. The API
+    // refuses a cross-project parent (`assertParentEligible`), so the scopes differ only for rows
+    // raw SQL produced, and there the wider one is the fail-closed answer. `LIMIT 1`: existence.
+    //
+    // This read is NOT what makes the rule atomic, and it must not be mistaken for it. A row lock
+    // on a parent is not a predicate lock over its children — a child insert takes only the FK's
+    // `FOR KEY SHARE` on this row, which `FOR SHARE` does not conflict with. What this closes is
+    // the ordering §7.8's staleness leaves open: a child filed after the pass took its snapshot and
+    // committed before this transaction is seen HERE, and refused with a code a reader can act on.
+    // The genuinely concurrent case is closed one layer down, by migration 0132's pair of guards on
+    // a shared `FOR UPDATE` of this row — this gate exists so that the common case produces a
+    // refusal code rather than a raised exception.
+    const childRows = command.taskId == null ? [] : await tx.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`
+        SELECT c."id" FROM "task" c
+         WHERE c."parent_task_id" = ${command.taskId}::uuid
+           AND c."owner_id" = ${command.ownerId}::uuid
+         LIMIT 1
+      `,
+    );
 
     const targetAgents = !task?.assigneeAgentId ? []
       : await tx.$queryRaw<AuthorizationAgentRow[]>(Prisma.sql`
@@ -838,8 +937,9 @@ export class ProjectAuthorizationService {
               OR a."id" <> ${command.currentActionId ?? null}::uuid)
          AND a."created_at" >= ${new Date(now.getTime() - 24 * 60 * 60 * 1_000)}
     `);
-    const [dependencyState] = command.taskId == null ? [{ incomplete: 0 }]
-      : await tx.$queryRaw<Array<{ incomplete: number }>>(Prisma.sql`
+    const [dependencyState] = command.taskId == null
+      ? [{ incomplete: 0, verificationBlocked: false }]
+      : await tx.$queryRaw<Array<{ incomplete: number; verificationBlocked: boolean }>>(Prisma.sql`
           -- §13.6 SU9: an edge names an ATTEMPT, and a replaced attempt's work is held by its
           -- successor. Walked forward with a recursive CTE — the chain is short (0128 caps it at
           -- 256 and refuses cycles), and the walk is bounded here as well so data the trigger says
@@ -859,11 +959,39 @@ export class ProjectAuthorizationService {
               JOIN "task" successor ON successor."id" = current."superseded_by_task_id"
              WHERE chain.depth < 256
           )
-          SELECT count(*)::int AS "incomplete" FROM (
-            SELECT chain.root FROM chain
-             GROUP BY chain.root
-            HAVING bool_and(chain.status <> 'DONE')
-          ) unsatisfied
+          -- §13.3 DEP, on the same walk: once something CHECKS a prerequisite, that prerequisite
+          -- being DONE no longer means it is done — the check has to have passed. Asked of the
+          -- prerequisite's epoch SUBJECT, which is the row itself or, when the edge names a check,
+          -- what that check is about. verificationEpochOpenSql is TRUE for every task nothing
+          -- checks, so ordinary prerequisites reduce to exactly the old clause.
+          --
+          -- Projected per link and rolled up afterwards rather than written as
+          -- bool_and(... EXISTS ...): an aggregate whose argument carries a correlated subquery
+          -- is the shape that is easiest to get subtly wrong, and this one is read at a commit
+          -- point.
+          SELECT count(*)::int AS "incomplete",
+                 bool_or(rolled."verificationBlocked") AS "verificationBlocked"
+            FROM (
+              SELECT links.root,
+                     bool_and(NOT links."satisfied") AS "unsatisfied",
+                     bool_or(links."status" = 'DONE' AND NOT links."epochOpen")
+                       AS "verificationBlocked"
+                FROM (
+                  SELECT chain.root AS root, chain.status AS "status",
+                         ${Prisma.raw(verificationEpochOpenSql('chain_task', 'dependent_task'))}
+                           AS "epochOpen",
+                         (chain.status = 'DONE'
+                          AND ${Prisma.raw(verificationEpochOpenSql('chain_task', 'dependent_task'))}
+                         ) AS "satisfied"
+                    FROM chain
+                    JOIN "task" chain_task ON chain_task."id" = chain.id
+                    -- The WAITING task, joined so DEP's self-exemption can be asked: a check that
+                    -- depends on the subject it checks must not wait for its own conclusion.
+                    JOIN "task" dependent_task ON dependent_task."id" = ${command.taskId}::uuid
+                ) links
+               GROUP BY links.root
+            ) rolled
+           WHERE rolled."unsatisfied"
         `);
     // §7.4 precondition 3's second half. Two shapes, one read, most-specific first:
     //
@@ -990,6 +1118,7 @@ export class ProjectAuthorizationService {
               dispatchHold: task?.dispatchHold ?? true,
               runAtDue: task?.runAt == null || task.runAt <= now,
               dependenciesReady: (dependencyState?.incomplete ?? 0) === 0,
+              dependenciesVerificationBlocked: dependencyState?.verificationBlocked === true,
               verificationBlock: verificationBlockRow == null ? null : {
                 reason: verificationBlockRow.reason,
                 failureId: uuidToBase62(verificationBlockRow.failureId),
@@ -1003,6 +1132,10 @@ export class ProjectAuthorizationService {
               },
               hasLiveSession: (liveTask?.count ?? 0) > 0,
               retirement: task == null ? null : taskRetirement(task),
+              aggregateParent: task == null ? null : {
+                completionPolicy: task.completionPolicy as TaskCompletionPolicyValue,
+                hasDirectChildren: childRows.length > 0,
+              },
               verificationSubjectRetirement: subjectRows[0]
                 ? taskRetirement(subjectRows[0])
                 : null,

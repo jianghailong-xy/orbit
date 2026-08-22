@@ -222,7 +222,55 @@ function task(id: string, overrides: Partial<TaskFact> = {}): TaskFact {
   };
 }
 
-function input(tasks: TaskFact[]): ProjectDecisionInput {
+type SessionFact = ProjectDecisionInput['world']['sessions'][number];
+type BranchFact = ProjectDecisionInput['world']['evidence']['branches'][number];
+
+/** A session parked on the user, which is the only thing `awaitingUserInputConditions` reads. */
+function parkedSession(id: string, taskId: string | null): SessionFact {
+  return {
+    id,
+    taskId,
+    workspaceId: null,
+    assignedRunnerId: null,
+    runStatus: 'AWAITING_INPUT',
+    provider: 'claude',
+    model: null,
+    permissionMode: null,
+    effort: null,
+    createdAt: READ_AT,
+    startedAt: READ_AT,
+    finishedAt: null,
+    completedAt: null,
+    deletedAt: null,
+  };
+}
+
+/** A branch whose merge did not land, which is what `mergeConditions` reads. */
+function conflictedBranch(
+  sessionId: string,
+  taskId: string | null,
+  mergeStatus = 'conflict',
+): BranchFact {
+  return {
+    sessionId,
+    taskId,
+    branch: `orbit/${sessionId}`,
+    baseSha: 'b'.repeat(40),
+    worktreeBranch: null,
+    worktreeDirty: null,
+    commitStatus: null,
+    mergeStatus,
+    mergeTarget: 'main',
+    mergedSourceSha: null,
+    branchMerged: false,
+    changedFiles: [{ path: 'a.ts' }],
+  };
+}
+
+function input(
+  tasks: TaskFact[],
+  evidence: { sessions?: SessionFact[]; branches?: BranchFact[] } = {},
+): ProjectDecisionInput {
   const world: ProjectDecisionInput['world'] = {
     project: {
       id: p, ownerId: uuidToBase62(OWNER), title: 'ship', goal: null, acceptanceCriteria: null,
@@ -241,11 +289,11 @@ function input(tasks: TaskFact[]): ProjectDecisionInput {
       maxConcurrentTasks: null,
     }],
     tasks,
-    sessions: [],
+    sessions: evidence.sessions ?? [],
     coordinatorSession: null, workspaces: [], runners: [], providers: [],
     actions: [],
     blockers: [],
-    evidence: { branches: [], tests: [] },
+    evidence: { branches: evidence.branches ?? [], tests: [] },
   };
   const evaluation = {
     epoch: Date.parse(READ_AT) / 1_000,
@@ -348,7 +396,7 @@ test('no blocker is raised about a retired attempt, so acceptance is not held by
   for (const shape of RETIREMENTS) {
     const conditions = detectProjectBlockerConditions(
       input([task(OLD, { status: 'FAILED', failureCount: 5, failureAttributable: false, ...shape.facts })]),
-      { verificationVerdicts: [], aggregationCycleTaskIds: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
+      { verificationVerdicts: [], aggregationCycleTaskIds: [], aggregationCompletionGaps: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
     );
     assert.deepEqual(
       conditions.filter((condition) => condition.subjectId === OLD), [],
@@ -358,9 +406,125 @@ test('no blocker is raised about a retired attempt, so acceptance is not held by
   // Negative: the same history with nothing replacing it still raises its row.
   const raised = detectProjectBlockerConditions(
     input([task(OLD, { status: 'FAILED', failureCount: 5, failureAttributable: false })]),
-    { verificationVerdicts: [], aggregationCycleTaskIds: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
+    { verificationVerdicts: [], aggregationCycleTaskIds: [], aggregationCompletionGaps: [], coordinatorSession: UNSUPPORTED_COORDINATOR },
   );
   assert.deepEqual(raised.map((condition) => condition.kind), ['UNKNOWN_FAILURE']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// §11's two EVIDENCE detectors: `mergeConditions` and `awaitingUserInputConditions`
+//
+// The three above read the TASK list, so `outsideBlockerScope` reached them by iterating it. These
+// two read what a task LEFT BEHIND — a branch, a conversation — and so had no task filter at all:
+// a conflicted branch from an attempt that was re-done from scratch, and a question asked by a run
+// whose task has since been replaced, kept being raised every pass, and §13.4's DONE gate refuses a
+// project holding either.
+//
+// The filter is SU6 and deliberately not "settled": this product finishes a task and merges its
+// branch afterwards, so silencing DONE would retire `MERGE_CONFLICT` in practice, and a question
+// parked on a DONE task is not answered by making the row invisible. Both are pinned below.
+// ---------------------------------------------------------------------------------------------
+
+const NO_OTHER_SOURCES = {
+  verificationVerdicts: [],
+  aggregationCycleTaskIds: [],
+  aggregationCompletionGaps: [],
+  coordinatorSession: UNSUPPORTED_COORDINATOR,
+};
+
+/** A check pointed at OLD, healthy and OPEN itself — SU6's derived half. */
+const CHECK = taskId(3);
+const SESSION = uuidToBase62('00000000-0000-7000-8000-000000009501');
+/** A task id no snapshot below carries a row for. */
+const UNSEEN = taskId(9);
+
+/** The two evidence kinds, as keys, so an assertion names the subject and not just the kind. */
+function evidenceRows(conditions: ReturnType<typeof detectProjectBlockerConditions>): string[] {
+  return conditions
+    .filter((condition) => condition.kind === 'MERGE_CONFLICT'
+      || condition.kind === 'UNKNOWN_FAILURE'
+      || condition.kind === 'AWAITING_USER_INPUT')
+    .map((condition) => `${condition.kind}:${condition.subjectType}:${condition.subjectId}`)
+    .sort();
+}
+
+test('a branch and a question left by a retired attempt stop asking, in every retirement shape', () => {
+  for (const shape of RETIREMENTS) {
+    const world = input(
+      [task(OLD, { status: 'FAILED', ...shape.facts })],
+      { sessions: [parkedSession(SESSION, OLD)], branches: [conflictedBranch(SESSION, OLD)] },
+    );
+    // The whole snapshot, before and after: a detector may READ history and never rewrite it, and
+    // this unit's entire remedy is that the Session and the branch are left exactly as they are.
+    const before = JSON.stringify(world.world);
+    assert.deepEqual(evidenceRows(detectProjectBlockerConditions(world, NO_OTHER_SOURCES)), [],
+      shape.name);
+    assert.equal(JSON.stringify(world.world), before, `${shape.name}: the snapshot is not rewritten`);
+  }
+});
+
+test('a check whose SUBJECT was replaced stops asking too — the derived half of SU6', () => {
+  for (const shape of RETIREMENTS) {
+    // The check itself is healthy, OPEN and un-retired. It can never run (its subject will never be
+    // dispatched again), so a branch or a question of its own is addressed to nobody.
+    const world = input(
+      [task(OLD, { status: 'FAILED', ...shape.facts }), task(CHECK, { verifiesTaskId: OLD })],
+      { sessions: [parkedSession(SESSION, CHECK)], branches: [conflictedBranch(SESSION, CHECK)] },
+    );
+    assert.deepEqual(evidenceRows(detectProjectBlockerConditions(world, NO_OTHER_SOURCES)), [],
+      shape.name);
+  }
+});
+
+test('a live attempt is not filtered: its branch and its question both still ask', () => {
+  const world = input(
+    [task(OLD)],
+    { sessions: [parkedSession(SESSION, OLD)], branches: [conflictedBranch(SESSION, OLD)] },
+  );
+  assert.deepEqual(evidenceRows(detectProjectBlockerConditions(world, NO_OTHER_SOURCES)), [
+    `AWAITING_USER_INPUT:SESSION:${SESSION}`,
+    `MERGE_CONFLICT:TASK:${OLD}`,
+  ].sort());
+});
+
+test('a SETTLED task is not silenced — merging happens after DONE, and hiding a question is not answering it', () => {
+  for (const status of ['DONE', 'CANCELLED']) {
+    const world = input(
+      [task(OLD, { status })],
+      { sessions: [parkedSession(SESSION, OLD)], branches: [conflictedBranch(SESSION, OLD)] },
+    );
+    assert.deepEqual(evidenceRows(detectProjectBlockerConditions(world, NO_OTHER_SOURCES)), [
+      `AWAITING_USER_INPUT:SESSION:${SESSION}`,
+      `MERGE_CONFLICT:TASK:${OLD}`,
+    ].sort(), `${status} still reports what did not land`);
+  }
+});
+
+test('an evidence row naming a task this snapshot cannot see keeps asking (fail-closed)', () => {
+  const world = input(
+    [task(OLD, { status: 'FAILED', supersededByTaskId: SUCCESSOR, terminalReason: 'SUPERSEDED' })],
+    { sessions: [parkedSession(SESSION, UNSEEN)], branches: [conflictedBranch(SESSION, UNSEEN)] },
+  );
+  // A projection may not infer a fact from a row it did not read, so an unknown task reads as IN
+  // scope. The retired task in the same snapshot proves the filter is switched on regardless.
+  assert.deepEqual(evidenceRows(detectProjectBlockerConditions(world, NO_OTHER_SOURCES)), [
+    `AWAITING_USER_INPUT:SESSION:${SESSION}`,
+    `MERGE_CONFLICT:TASK:${UNSEEN}`,
+  ].sort());
+});
+
+test('a merge that failed for an unclassified reason follows the same rule, not a weaker one', () => {
+  const live = input([task(OLD)], { branches: [conflictedBranch(SESSION, OLD, 'error')] });
+  assert.deepEqual(evidenceRows(detectProjectBlockerConditions(live, NO_OTHER_SOURCES)),
+    [`UNKNOWN_FAILURE:TASK:${OLD}`]);
+  for (const shape of RETIREMENTS) {
+    const retired = input(
+      [task(OLD, { status: 'FAILED', ...shape.facts })],
+      { branches: [conflictedBranch(SESSION, OLD, 'error')] },
+    );
+    assert.deepEqual(evidenceRows(detectProjectBlockerConditions(retired, NO_OTHER_SOURCES)), [],
+      shape.name);
+  }
 });
 
 test('TASK_SUPERSEDED is a non-blocking refusal: a replaced attempt breeds no blocker', () => {

@@ -1,5 +1,10 @@
 import { TaskStatus } from '@orbit/shared';
-import { computeDependencyState, DependencyEdge, DependencyState } from './task-dependencies';
+import {
+  computeDependencyState,
+  DependencyEdge,
+  DependencyState,
+  statusPrerequisites,
+} from './task-dependencies';
 
 /**
  * A batch restructure of a list's dependency graph.
@@ -124,12 +129,15 @@ export function stateChanges(
 ): DagStateChange[] {
   const prereqBefore = prerequisitesByTask(before);
   const prereqAfter = prerequisitesByTask(after);
+  // Statuses only, deliberately: this answers "what do these EDGES change", not "is it runnable
+  // now". §13.3 DEP's gate belongs to the second question, and folding it in here would make a
+  // proposal that touches nothing at all report state changes because a check concluded elsewhere.
   const statesFor = (prereqs: Map<string, string[]>, taskId: string): DependencyState =>
-    computeDependencyState(
+    computeDependencyState(statusPrerequisites(
       (prereqs.get(taskId) ?? [])
         .map((id) => statusOf.get(id))
         .filter((s): s is TaskStatus => s !== undefined),
-    );
+    ));
   const out: DagStateChange[] = [];
   for (const taskId of new Set([...prereqBefore.keys(), ...prereqAfter.keys()])) {
     const from = statesFor(prereqBefore, taskId);

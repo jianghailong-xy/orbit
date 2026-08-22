@@ -249,18 +249,41 @@ export function verificationFailureIsHistorySql(
 }
 
 /**
- * PostgreSQL's `lock_not_available` (55P03), as raised by a `FOR UPDATE NOWAIT` that lost.
+ * The PostgreSQL SQLSTATE behind an error, wherever this stack happens to have put it.
  *
- * Matched on the SQLSTATE rather than on the message: Prisma wraps a failed raw query as `P2010`
- * and carries the driver's code in `meta`, and the driver itself surfaces it as `error.code`. Both
- * shapes reach a caller depending on whether the statement ran through the client or through `pg`
- * directly in a test, and a predicate that recognised one of them would be a guard that works in
- * production and not in the spec that proves it — or the other way round.
+ * There are three shapes, and a predicate that knows fewer than all of them is a guard that works
+ * in one place and silently does not in another:
+ *
+ *  - `pg` directly (every spec in this repo that opens its own connection): `error.code`;
+ *  - Prisma before the driver adapter: `P2010` with the driver's code in `meta.code`;
+ *  - **Prisma 7 with `@prisma/adapter-pg`** (what this deployment runs): `P2010` with the code at
+ *    `meta.driverAdapterError.cause.originalCode`. `meta.code` is NOT set.
+ *
+ * The third one was missing until a real-PostgreSQL test caught it: `isLockNotAvailable` returned
+ * false for every `FOR UPDATE NOWAIT` this process actually loses, so the typed refusal every
+ * caller relies on was escaping as an unhandled `P2010`.
  */
+export function postgresSqlState(error: unknown): string | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const candidate = error as {
+    code?: unknown;
+    meta?: {
+      code?: unknown;
+      driverAdapterError?: { cause?: { originalCode?: unknown; code?: unknown } };
+    };
+  };
+  const adapter = candidate.meta?.driverAdapterError?.cause;
+  for (const value of [adapter?.originalCode, adapter?.code, candidate.meta?.code, candidate.code]) {
+    // `P2010` is Prisma's own wrapper code, never a SQLSTATE; skipping it keeps the fallback to
+    // `error.code` honest for the bare-`pg` shape.
+    if (typeof value === 'string' && value !== 'P2010') return value;
+  }
+  return null;
+}
+
+/** PostgreSQL's `lock_not_available` (55P03), as raised by a `FOR UPDATE NOWAIT` that lost. */
 export function isLockNotAvailable(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const candidate = error as { code?: unknown; meta?: { code?: unknown } };
-  return candidate.code === '55P03' || candidate.meta?.code === '55P03';
+  return postgresSqlState(error) === '55P03';
 }
 
 /**
@@ -381,79 +404,46 @@ export function taskFenceConflictMessage(error: unknown): string | null {
   if (/SESSION_TASK_BUSY|TASK_VERIFICATION_SUBJECT_BUSY/.test(message)) {
     return 'this task is being written right now — nothing was changed; retry';
   }
+  // §13.1 AG6's write-time constraint, reached by any writer that did not ask first — an internal
+  // creator, a binary that predates the service guard, a raw UPDATE, or a race between two writes
+  // that were each legal alone. Prisma surfaces a CHECK violation as `P2010`/`23514` carrying the
+  // constraint name, so the name is what is matched; without this the caller gets a 500 whose body
+  // is a constraint identifier.
+  if (/task_foreman_manual_policy/.test(message)) {
+    return 'a coordinating (foreman) task is finished by its own run, so it cannot also be '
+      + 'completed by aggregating subtasks — clear the foreman role, or leave completionPolicy '
+      + 'as MANUAL';
+  }
+  // §13.1 AG6's lock-order refusals. Typed and retryable rather than a deadlock victim: every
+  // acquisition in `task_aggregate_parent_shape_guard` is NOWAIT precisely so a caller is told to
+  // retry instead of being killed at random by `40P01`.
+  if (/TASK_AGGREGATE_PROJECT_BUSY/.test(message)) {
+    return "this task's project is being reconciled right now — nothing was changed; retry";
+  }
+  if (/TASK_AGGREGATE_PARENT_BUSY/.test(message)) {
+    return "this task's parent is being written right now — nothing was changed; retry";
+  }
+  if (/TASK_AGGREGATE_SCOPE_MOVED/.test(message)) {
+    return 'a task involved in this write changed project while it was being prepared — nothing '
+      + 'was changed; retry';
+  }
+  // §13.1 AG6's two database refusals. Translated here for the reason every other entry in this
+  // function is: the guard is the last line, so the shape it catches is the one every service-side
+  // pre-check MISSED — a genuinely concurrent write, or a binary that predates the gates. Left
+  // untranslated it reaches the caller as a raw `check_violation`, which the API surfaces as a 500:
+  // the run did not start AND the reason is unreadable, which is the worst of the two.
+  if (/TASK_AGGREGATE_PARENT_ACTIVATION/.test(message)) {
+    return 'this task is running work right now, so its completion cannot be handed to subtasks '
+      + 'yet — let that run reach a terminal status of its own, or set the completion policy to '
+      + 'MANUAL';
+  }
+  if (/TASK_AGGREGATE_PARENT/.test(message)) {
+    return 'this task is completed by aggregating its subtasks, so it has no work of its own to '
+      + 'run — run its subtasks, or set its completion policy to MANUAL';
+  }
   if (/SESSION_TASK_MOVED/.test(message)) {
     return 'this task changed project while the request was being prepared — nothing was changed; '
       + 'retry';
   }
   return null;
-}
-
-/**
- * §13.6 SU9: is a PREREQUISITE satisfied, when the attempt it names was replaced?
- *
- * A dependency edge points at an attempt. When that attempt is superseded the work did not stop —
- * it moved to the successor — and the edge, which nobody re-pointed, still names the old row. Read
- * literally (`status = 'DONE'`) it is a prerequisite that can never complete: the old attempt will
- * never be dispatched again, so every task downstream of it is blocked for good, and the project
- * idles with no blocker and nothing to act on. That is the same silent shape this whole unit is
- * about, reached through the relation instead of through the status.
- *
- * So the edge is followed to the END of the supersession chain and answered from there: the work
- * this dependency is waiting on is whatever attempt currently holds it.
- *
- * Fail-closed in every case where the chain cannot be trusted:
- *
- *   - a cycle or an over-long chain (`successorChain` reports `truncated`) — the walk found data
- *     0128's trigger says is unwritable, and guessing about it is worse than waiting;
- *   - a successor this snapshot cannot see — a project-scoped read may not infer a row it did not
- *     read, the same rule an unknown prerequisite already follows;
- *   - `SUCCESSOR_DELETED` (retired with no pointer) and `ABANDONED` — nothing took the work over,
- *     so nothing will complete it. The edge stays unsatisfied and a person has to decide.
- */
-export function dependencySatisfied(
-  prerequisiteId: string,
-  statusOf: ReadonlyMap<string, string>,
-  edges: ReadonlyMap<string, string | null>,
-): boolean {
-  if (statusOf.get(prerequisiteId) === 'DONE') return true;
-  const { chain, truncated } = successorChain(prerequisiteId, edges);
-  if (truncated) return false;
-  const tail = chain.at(-1);
-  if (tail === undefined) return false;
-  return statusOf.get(tail) === 'DONE';
-}
-
-/**
- * §13.6 SU9 as a correlated SQL predicate: every prerequisite of `alias` is satisfied.
- *
- * The legacy sweeps ask this question in SQL, and the Coordinator's pass asks it in TypeScript
- * (`dependencySatisfied`). They have to give the same answer or a task is ready to one and blocked
- * to the other, which is how the two dispatch paths come to disagree about the same row.
- *
- * A prerequisite is satisfied when its chain CONTAINS a DONE. That is the same thing as "its tail
- * is DONE": SU4 only lets a CANCELLED or FAILED task name a successor, so no interior link of a
- * chain can be DONE — only the end of it can. Written this way because it needs no ORDER BY and
- * stops as soon as it finds one.
- *
- * The depth cap mirrors `TASK_SUPERSESSION_MAX_HOPS`: 0128's trigger refuses a cycle, and a walk
- * that reaches the cap has found data no writer here produced, so it stops rather than spinning.
- */
-export function dependenciesSatisfiedSql(alias = 't'): string {
-  return `NOT EXISTS (
-    SELECT 1 FROM task_dependency dep
-     WHERE dep.task_id = ${alias}.id
-       AND NOT EXISTS (
-         WITH RECURSIVE chain(id, status, depth) AS (
-           SELECT p.id, p.status::text, 0
-             FROM task p WHERE p.id = dep.depends_on_task_id
-           UNION ALL
-           SELECT successor.id, successor.status::text, chain.depth + 1
-             FROM chain
-             JOIN task current ON current.id = chain.id
-             JOIN task successor ON successor.id = current.superseded_by_task_id
-            WHERE chain.depth < ${TASK_SUPERSESSION_MAX_HOPS}
-         )
-         SELECT 1 FROM chain WHERE chain.status = 'DONE'
-       )
-  )`;
 }

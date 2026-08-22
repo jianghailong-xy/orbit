@@ -140,9 +140,51 @@ const CASES: Case[] = [
     expect: [],
   },
   {
-    name: 'a FAILED parent is not completed by finished children',
+    // AG6's recovery half. This case asserted `[]` until AG6 existed, on the reading that FAILED is
+    // a statement somebody made about the parent. It is not: an aggregate parent can only reach
+    // FAILED by having been dispatched, which AG6 says must never happen, so the status is the
+    // residue of a run that should not exist. Left untouched it is a wedge with no exit — the
+    // dispatch gates skip it before the retry ladder and `TASK_AGGREGATE_PARENT` is non-blocking,
+    // so nothing retries it and nothing opens a row about it. The aggregation role taking the
+    // status back is the only next step there is.
+    name: 'AG6: a FAILED parent is recomputed from its finished children',
     tasks: [
       task('p', 'FAILED', { policy: 'ALL_CHILDREN_DONE' }),
+      task('a', 'DONE', { parent: 'p' }),
+    ],
+    expect: ['p:FAILED->DONE'],
+  },
+  {
+    name: 'AG6: a FAILED parent with outstanding children goes back to OPEN, not DONE',
+    tasks: [
+      task('p', 'FAILED', { policy: 'ALL_CHILDREN_DONE' }),
+      task('a', 'DONE', { parent: 'p' }),
+      task('b', 'OPEN', { parent: 'p' }),
+    ],
+    expect: ['p:FAILED->OPEN'],
+  },
+  {
+    name: 'AG6: a FAILED VERIFICATION_PASSED parent completes once its check passes',
+    tasks: [
+      task('p', 'FAILED', { policy: 'VERIFICATION_PASSED' }),
+      task('a', 'DONE', { parent: 'p' }),
+      task('v', 'DONE', { verifies: 'p', verdict: 'PASS' }),
+    ],
+    expect: ['p:FAILED->DONE'],
+  },
+  {
+    name: 'AG6: a FAILED VERIFICATION_PASSED parent whose check has not passed stays outstanding',
+    tasks: [
+      task('p', 'FAILED', { policy: 'VERIFICATION_PASSED' }),
+      task('a', 'DONE', { parent: 'p' }),
+      task('v', 'OPEN', { verifies: 'p' }),
+    ],
+    expect: ['p:FAILED->OPEN'],
+  },
+  {
+    name: 'a MANUAL FAILED parent is left alone — AG6 recovers only what aggregation owns',
+    tasks: [
+      task('p', 'FAILED', { policy: 'MANUAL' }),
       task('a', 'DONE', { parent: 'p' }),
     ],
     expect: [],
@@ -184,12 +226,22 @@ const CASES: Case[] = [
     expect: ['p:DONE->OPEN'],
   },
   {
-    name: 'AG3: reopening never touches CANCELLED or FAILED parents',
+    // CANCELLED only. A cancellation is a statement somebody made about the parent itself, and
+    // aggregation only ever answers for the children — so it stays, in both directions. FAILED left
+    // this case when AG6 landed; see the AG6 rows above for why the two stopped being the same
+    // sentence.
+    name: 'AG3: reopening never touches a CANCELLED parent',
     tasks: [
       task('p', 'CANCELLED', { policy: 'ALL_CHILDREN_DONE' }),
-      task('q', 'FAILED', { policy: 'ALL_CHILDREN_DONE' }),
       task('a', 'OPEN', { parent: 'p' }),
-      task('b', 'OPEN', { parent: 'q' }),
+    ],
+    expect: [],
+  },
+  {
+    name: 'AG3: a CANCELLED parent is not completed by finished children either',
+    tasks: [
+      task('p', 'CANCELLED', { policy: 'ALL_CHILDREN_DONE' }),
+      task('a', 'DONE', { parent: 'p' }),
     ],
     expect: [],
   },

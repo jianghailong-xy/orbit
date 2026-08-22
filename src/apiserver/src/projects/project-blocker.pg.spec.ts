@@ -49,6 +49,20 @@ const RECONCILE = migration('0119_project_reconcile_runtime');
 const DECISION = migration('0120_project_decision_audit');
 const AUTHORIZATION = migration('0121_project_authorization_policy');
 const BLOCKER = migration('0125_project_blocker');
+/**
+ * The kind CHECK as it stands TODAY, not as 0125 first wrote it.
+ *
+ * This spec builds a schema subset and applies 0125 to it, which was the whole schema for this
+ * table until a later migration added kinds. Re-applying only the first one would freeze this
+ * fixture on a closed set the product has moved past, and the failure reads as "the new kind is
+ * invalid" rather than "the fixture is old". Only the two `ALTER TABLE` statements are taken — the
+ * same file's `ALTER TYPE` touches an enum this subset does not build.
+ */
+const KIND_CHECK = migration('0133_project_task_completion_gap')
+  .split(';')
+  .filter((statement) => /project_blocker_kind_chk/.test(statement))
+  .map((statement) => `${statement};`)
+  .join('\n');
 
 type ClientCtor = new (config: { connectionString?: string; connectionTimeoutMillis?: number }) => Client;
 type Tx = Prisma.TransactionClient;
@@ -194,6 +208,11 @@ async function reset(client: Client): Promise<void> {
       "verifies_task_id" UUID,
       "completion_policy" TEXT NOT NULL DEFAULT 'MANUAL', "verdict" TEXT,
       "verdict_revision" BIGINT NOT NULL DEFAULT 0,
+      -- Section 13.6 SU1's three columns (migration 0129). Missing here since they landed, and
+      -- every reconcile in this file reads them through ProjectDecisionService.capture -- so
+      -- eleven of the fifteen tests were failing on a missing column rather than on anything they
+      -- assert. Same drift, same fix, as the one 0132 repaired in project-authorization.pg.spec.
+      "superseded_by_task_id" UUID, "superseded_at" TIMESTAMP(3), "terminal_reason" TEXT,
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE "task_dependency" (
@@ -207,6 +226,10 @@ async function reset(client: Client): Promise<void> {
       "effort" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "started_at" TIMESTAMP(3), "finished_at" TIMESTAMP(3),
       "completed_at" TIMESTAMP(3), "deleted_at" TIMESTAMP(3), "result" TEXT, "error" TEXT,
+      -- 13.3 DEP3's two, which the capture projects beside completed_at: the other half of 4.2's
+      -- COMPLETED lifecycle, and the end reason that tells a worker finishing the task apart from
+      -- a person filing the session.
+      "archived_at" TIMESTAMP(3), "end_reason" TEXT,
       "branch" TEXT, "base_sha" TEXT, "changed_files" JSONB, "merge_status" TEXT,
       "merged_source_sha" TEXT, "merge_target" TEXT, "branch_merged" BOOLEAN,
       "worktree_branch" TEXT, "worktree_dirty" BOOLEAN, "commit_status" TEXT
@@ -223,6 +246,7 @@ async function reset(client: Client): Promise<void> {
   // reads (TR2-a's window bucket), so this fixture declares it and stops there.
   await client.query(`ALTER TABLE "project_action" ADD COLUMN "reason_code" TEXT`);
   await client.query(BLOCKER);
+  await client.query(KIND_CHECK);
 
   await client.query(`
     INSERT INTO "project" ("id", "owner_id", "title", "coordinator_workspace_id") VALUES

@@ -13,6 +13,8 @@ import {
   AggregationTaskFact,
   AggregationTaskStatus,
   PlannedTaskAggregation,
+  TaskAggregationPlan,
+  TaskCompletionGap,
   TaskCompletionPolicyValue,
   TaskVerdictValue,
   planTaskAggregation,
@@ -148,6 +150,13 @@ export interface ProjectDecisionInput {
        */
       verdictRevision?: string;
       /**
+       * §13.3 DEP4: `APPLY_VERIFICATION_VERDICT` for `(this task, this verdictRevision)` is APPLIED
+       * in the ledger. Absent on decisions captured before DEP, which readers must treat as
+       * "unknown" and NOT as `false` — see `world.protocol.verificationEpoch`, which decides
+       * whether the DEP rule is evaluated at all.
+       */
+      verdictApplied?: boolean;
+      /**
        * §13.6 SU1's three columns, absent on decisions captured before migration 0129. Readers
        * must treat an absent field as "nothing retired this attempt", which is exactly what those
        * rows held — the columns did not exist, so no task could name a successor. An old snapshot
@@ -185,6 +194,13 @@ export interface ProjectDecisionInput {
       startedAt: string | null;
       finishedAt: string | null;
       completedAt: string | null;
+      /**
+       * §13.3 DEP1, absent on decisions captured before it. A reader must treat an absent field as
+       * "this snapshot predates DEP" and fall back to the status rule, which is what the binary
+       * that captured it did — `world.protocol.verificationEpoch` is the marker that says which.
+       */
+      archivedAt?: string | null;
+      endReason?: string | null;
       deletedAt: string | null;
     }>;
     coordinatorSession: {
@@ -256,6 +272,32 @@ export interface ProjectDecisionInput {
      * snapshot predates blockers" and NOT as "there were none": an old decision has to replay to
      * the outcome it originally produced, not to today's rules applied to yesterday's world.
      */
+    /**
+     * §13.1 AG7's protocol marker: this snapshot was captured by a binary that computes completion
+     * gaps, and its outcome may therefore contain the two things older ones cannot — a gap blocker
+     * and a `FILE_VERIFICATION_TASK` proposal.
+     *
+     * Absent means "captured before AG7", NOT "this project has no gaps". A decision has to replay
+     * to what it originally produced rather than to today's rules applied to yesterday's world, and
+     * without this marker every decision taken before this build would replay with gap blockers
+     * that the binary which made it could not have raised — reported by `replay` as the control
+     * loop having acted on its own. `world.blockers` carries the same shape for the same reason;
+     * this one is spelled as a capability rather than as data because the answer for an old
+     * snapshot is "do not evaluate", not "evaluate over nothing".
+     *
+     * v1.19 adds `verificationEpoch` to the same object, and it gates §13.3 DEP for the same
+     * reason: a decision taken before DEP was decided by a binary that read `status = 'DONE'` off a
+     * verification prerequisite, and a replay has to reproduce THAT answer rather than today's.
+     * The two facts DEP needs (`task.verdictApplied`, `session.endReason`/`archivedAt`) are absent
+     * from those snapshots, so evaluating the rule over them would not even be today's answer — it
+     * would be a third one, computed from holes.
+     *
+     * It also marks the wider `providers` projection V8 needs (a slug a team member configured as
+     * a fallback, which no task or session in this project has used yet). That widening changes
+     * only what a NEW capture contains, so it needs no gate of its own — an old snapshot is
+     * replayed from its own stored bytes.
+     */
+    protocol?: { completionGaps: true; verificationEpoch?: true };
     blockers?: ProjectBlockerFact[];
     /**
      * §5.4 F22's UNACKNOWLEDGED dead letters — events this project lost for good, minus the ones
@@ -471,6 +513,8 @@ interface TaskRow {
   supersededByTaskId: string | null;
   supersededAt: Date | null;
   terminalReason: string | null;
+  /** §13.3 DEP4, per row: is THIS task's CURRENT verdict revision applied in the ledger? */
+  verdictApplied: boolean;
   updatedAt: Date;
 }
 
@@ -493,6 +537,8 @@ interface SessionRow {
   startedAt: Date | null;
   finishedAt: Date | null;
   completedAt: Date | null;
+  archivedAt: Date | null;
+  endReason: string | null;
   deletedAt: Date | null;
   result: string | null;
   error: string | null;
@@ -691,6 +737,18 @@ export class ProjectDecisionService {
                t."superseded_by_task_id" AS "supersededByTaskId",
                t."superseded_at" AS "supersededAt",
                t."terminal_reason" AS "terminalReason",
+               -- §13.3 DEP4. Correlated rather than joined so a task with no conclusion costs
+               -- nothing, and keyed on the ledger's own unique identity (§8.2) rather than on
+               -- "some verdict action for this task": a superseded revision is not this one.
+               EXISTS (
+                 SELECT 1 FROM "project_action" va
+                  WHERE va."project_id" = t."project_id"
+                    AND va."type"::text = 'APPLY_VERIFICATION_VERDICT'
+                    AND va."status"::text = 'APPLIED'
+                    AND va."subject_id" = t."id"
+                    AND va."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
+                        || t."id"::text || ':' || t."verdict_revision"::text
+               ) AS "verdictApplied",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -715,7 +773,8 @@ export class ProjectDecisionService {
                s."provider", s."model", s."permission_mode" AS "permissionMode", s."effort",
                s."created_at" AS "createdAt",
                s."started_at" AS "startedAt", s."finished_at" AS "finishedAt",
-               s."completed_at" AS "completedAt", s."deleted_at" AS "deletedAt",
+               s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt",
+               s."end_reason" AS "endReason", s."deleted_at" AS "deletedAt",
                s."result", s."error", s."branch", s."base_sha" AS "baseSha",
                s."changed_files" AS "changedFiles", s."merge_status" AS "mergeStatus",
                s."merged_source_sha" AS "mergedSourceSha", s."merge_target" AS "mergeTarget",
@@ -778,13 +837,20 @@ export class ProjectDecisionService {
            )
          ORDER BY r."id"
       `);
+    // §13.2 V8's third source, beside the two references: a slug some team member has explicitly
+    // configured as a fallback. Sorted and de-duplicated so the same team always produces the same
+    // snapshot. The OWNER clause below is untouched — this widens which slugs get answered, never
+    // whose providers are visible.
+    const fallbackProviderSlugs = [...new Set(teamRows.flatMap((row) =>
+      parseProviderFallbacks(row.providerFallbacks).map((fallback) => fallback.provider)))].sort();
     const providerRows = await tx.$queryRaw<ProviderRow[]>(Prisma.sql`
         SELECT mp."id" AS "providerId", mp."slug", mp."runtime", mp."enabled", mp."models",
                mp."default_model" AS "defaultModel", mp."owner_id" AS "ownerId"
           FROM "model_provider" mp
          WHERE (mp."owner_id" IS NULL OR mp."owner_id" = ${project.ownerId}::uuid)
            AND (
-             EXISTS (SELECT 1 FROM "task" t
+             mp."slug" = ANY(${fallbackProviderSlugs}::text[])
+             OR EXISTS (SELECT 1 FROM "task" t
                       WHERE t."project_id" = ${projectId}::uuid
                         AND t."owner_id" = ${project.ownerId}::uuid AND t."provider" = mp."slug")
              OR EXISTS (SELECT 1 FROM "session" s JOIN "task" t ON t."id" = s."task_id"
@@ -903,6 +969,7 @@ export class ProjectDecisionService {
         supersededByTaskId: toPublicIdOrNull(row.supersededByTaskId),
         supersededAt: iso(row.supersededAt),
         terminalReason: row.terminalReason,
+        verdictApplied: row.verdictApplied,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,
@@ -927,6 +994,11 @@ export class ProjectDecisionService {
       startedAt: iso(row.startedAt),
       finishedAt: iso(row.finishedAt),
       completedAt: iso(row.completedAt),
+      // §13.3 DEP1's two halves. `archivedAt` completes §4.2's COMPLETED lifecycle (the derivation
+      // is `completedAt ?? archivedAt`) and `endReason` is what tells a run the worker finished
+      // apart from one a person filed or stopped — a distinction the whole DEP rule rests on.
+      archivedAt: iso(row.archivedAt),
+      endReason: row.endReason,
       deletedAt: iso(row.deletedAt),
     }));
 
@@ -957,9 +1029,23 @@ export class ProjectDecisionService {
       }
     }
     const customProviderSlugs = new Set(providerRows.map((row) => row.slug));
+    // Every slug this decision could have to answer about, and the third source is the one AG7/V8
+    // needs: §13.2 V8 picks the engine for a filed check from the VERIFIER's own configured
+    // fallbacks, so the first check a project ever files usually names a provider no task or
+    // session in it has used yet. Projected only from what tasks and sessions REFERENCE, that
+    // provider is simply absent from the snapshot, and "absent" is read fail-closed as
+    // `NO_RUNNABLE_VERIFIER_COMBINATION` — a project whose team is configured correctly would be
+    // told, for ever, that it has no verifier.
+    //
+    // Widening the projection is not widening the SCOPE: a configured provider still has to be one
+    // `providerRows` returned (this owner's or shared), and a built-in still has to be a real
+    // runtime that an ONLINE runner reports models for. What changes is only which slugs get
+    // ANSWERED, and answering one nobody uses costs one row.
     const referencedProviderSlugs = new Set([
       ...taskRows.map((row) => row.provider),
       ...sessionRows.map((row) => row.provider),
+      ...teamRows.flatMap((row) =>
+        parseProviderFallbacks(row.providerFallbacks).map((fallback) => fallback.provider)),
     ].filter((slug): slug is string => Boolean(slug)));
     const builtinProviders: ProjectDecisionInput['world']['providers'] =
       [...referencedProviderSlugs]
@@ -1069,6 +1155,9 @@ export class ProjectDecisionService {
         detailHash: sha256(jsonValue(row.detail)),
         createdAt: isoRequired(row.createdAt),
       })),
+      // §13.1 AG7's capability marker, stamped by the binary that captured this world. Constant by
+      // construction — it says what THIS build computes, not what the project contains.
+      protocol: { completionGaps: true, verificationEpoch: true },
       blockers: blockerRows.map((row) => ({
         id: toPublicId(row.id),
         kind: row.kind as ProjectBlockerFact['kind'],
@@ -1329,7 +1418,7 @@ export function planProjectDecision(
   }
   const aggregation = planTaskAggregation(aggregationFacts(input));
   const coordinator = planCoordinatorSessionRotation(input);
-  const blockerPlan = planBlockers(input, aggregation.cycleTaskIds, coordinator);
+  const blockerPlan = planBlockers(input, aggregation, coordinator);
   const runStateAfter = runStateOf(input, blockerPlan?.openAfter ?? []);
   // §7.2 / §7.6, after the blockers and the rotation because it reads both. A snapshot that
   // predates either projection is NOT evaluated at all: those decisions were made by a binary that
@@ -1463,7 +1552,7 @@ function plannedActions(
  */
 function planBlockers(
   input: ProjectDecisionInput,
-  aggregationCycleTaskIds: readonly string[],
+  aggregation: TaskAggregationPlan,
   coordinatorSession: CoordinatorSessionPlan,
 ): ProjectBlockerPlan | null {
   const open = input.world.blockers;
@@ -1471,7 +1560,12 @@ function planBlockers(
   let observed: ObservedBlockerCondition[];
   try {
     observed = detectProjectBlockerConditions(input, {
-      aggregationCycleTaskIds,
+      aggregationCycleTaskIds: aggregation.cycleTaskIds,
+      // AG7's marker, checked here rather than inside the detector: an old snapshot must produce
+      // the outcome its own binary produced, and "no gaps observed" is what that binary observed.
+      aggregationCompletionGaps: input.world.protocol?.completionGaps
+        ? aggregation.completionGaps
+        : [],
       verificationVerdicts: verificationVerdictPlan(input),
       coordinatorSession,
     });
@@ -1499,6 +1593,16 @@ export function verificationVerdictPlan(
 ): PlannedVerificationVerdict[] {
   const facts = verificationVerdictFacts(input);
   return planVerificationVerdicts(facts.verifications, facts.subjects).verdicts;
+}
+
+/** §13.1 AG7's shapes for this snapshot, shared by §11's blocker face and §13.2 V8's filing action
+ *  the way `verificationVerdictPlan` is shared, so the two cannot disagree about which gaps the
+ *  loop closes itself and which ones it hands to a person. */
+export function completionGapPlan(input: ProjectDecisionInput): TaskCompletionGap[] {
+  // The marker, not a try/catch and not a feature flag: a decision captured before this build has
+  // to keep replaying to its own outcome. Both consumers go through here so neither can forget.
+  if (!input.world.protocol?.completionGaps) return [];
+  return planTaskAggregation(aggregationFacts(input)).completionGaps;
 }
 
 /**
@@ -1578,7 +1682,7 @@ function canonicalValue(value: unknown): unknown {
  * A pre-0123 snapshot has neither column. Defaulting them here rather than at the database keeps
  * one rule in one place: no policy means MANUAL means no aggregation.
  */
-function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
+export function aggregationFacts(input: ProjectDecisionInput): AggregationTaskFact[] {
   return input.world.tasks.map((task) => ({
     id: task.id,
     status: task.status as AggregationTaskStatus,

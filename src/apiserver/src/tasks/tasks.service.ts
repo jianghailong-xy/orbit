@@ -34,7 +34,11 @@ import {
   agentProviderSeed,
   lastProviderByWorkspace,
 } from '../workspaces/workspace-provider';
-import { planTaskAggregation } from '../projects/task-aggregation';
+import {
+  foremanPolicyConflict,
+  isAggregateParent,
+  planTaskAggregation,
+} from '../projects/task-aggregation';
 import {
   AGGREGATION_SCOPE_MAX_TASKS,
   applyTaskAggregations,
@@ -63,7 +67,6 @@ import {
   supersessionRefusal,
   taskOutcome,
   isLockNotAvailable,
-  dependenciesSatisfiedSql,
   taskFenceConflictMessage,
   taskNotObsoleteSql,
   taskRetirement,
@@ -85,10 +88,16 @@ import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
   canRun,
   computeDependencyState,
+  dependenciesSatisfiedSql,
+  dependencyEpochGate,
+  statusPrerequisites,
+  verificationGateMessage,
+  type DependencyPrerequisiteFact,
   wouldCreateCycle,
   wouldReplacementCreateCycle,
   type DependencyState,
 } from './task-dependencies';
+import { loadVerificationEpochGates } from './verification-epoch-read';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
@@ -1277,26 +1286,62 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
    */
   private async dependencyStatesFor(taskIds: string[]): Promise<Map<string, DependencyState>> {
+    return new Map([...await this.dependencyFactsFor(taskIds)]
+      .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
+  }
+
+  /**
+   * Each task's prerequisites as §13.3 DEP reads them: the status, plus why a CHECK among them has
+   * no current pass behind it.
+   *
+   * Split out of `dependencyStatesFor` so Run Now and the batch path can say WHICH clause refused
+   * them. "Prerequisites are not all complete yet" on a check that concluded FAIL is the sentence
+   * that let the incident run: it describes a wait, and what happened was a refusal.
+   */
+  private async dependencyFactsFor(
+    taskIds: string[],
+  ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
+    const byTask = new Map<string, Array<{ id: string; status: TaskStatus }>>();
     if (taskIds.length === 0) return new Map();
-    const byTask = new Map<string, TaskStatus[]>();
     const uniqueIds = [...new Set(taskIds)];
     for (let offset = 0; offset < uniqueIds.length; offset += TASK_ID_QUERY_CHUNK) {
       const ids = uniqueIds.slice(offset, offset + TASK_ID_QUERY_CHUNK);
       const edges = await this.prisma.taskDependency.findMany({
         where: { taskId: { in: ids } },
-        select: { taskId: true, dependsOnTask: { select: { status: true } } },
+        select: {
+          taskId: true,
+          dependsOnTaskId: true,
+          dependsOnTask: { select: { status: true } },
+        },
       });
       for (const e of edges) {
-        const status = e.dependsOnTask.status as unknown as TaskStatus;
+        const entry = {
+          id: e.dependsOnTaskId,
+          status: e.dependsOnTask.status as unknown as TaskStatus,
+        };
         const arr = byTask.get(e.taskId);
-        if (arr) arr.push(status);
-        else byTask.set(e.taskId, [status]);
+        if (arr) arr.push(entry);
+        else byTask.set(e.taskId, [entry]);
       }
     }
-    const out = new Map<string, DependencyState>();
-    for (const [taskId, statuses] of byTask) out.set(taskId, computeDependencyState(statuses));
-    return out;
+    const epochs = await loadVerificationEpochGates(
+      this.prisma,
+      [...byTask.values()].flat().map((entry) => entry.id),
+    );
+    // §13.3 DEP's self-exemption: a check that depends on the subject it checks must not be made to
+    // wait for its own conclusion. Read only when some prerequisite actually HAS an epoch, which on
+    // an ordinary backlog is never — this is on the path of every task page and every Run.
+    const dependents = epochs.size === 0 ? new Map<string, string | null>()
+      : new Map((await this.prisma.task.findMany({
+        where: { id: { in: [...byTask.keys()] }, verifiesTaskId: { not: null } },
+        select: { id: true, verifiesTaskId: true },
+      })).map((row) => [row.id, row.verifiesTaskId]));
+    return new Map([...byTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
+      status: entry.status,
+      verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
+    }))]));
   }
+
 
   /**
    * Derive graph-node state without hydrating every prerequisite row. A dense task can have
@@ -1338,10 +1383,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ]);
     const completedByTask = new Map(completed.map((row) => [row.taskId, row._count._all]));
     const failedByTask = new Map(failed.map((row) => [row.taskId, row._count._all]));
+    // §13.3 DEP, as a fourth count rather than through `computeDependencyState`: this method
+    // exists to keep memory O(nodes) on a dense DAG, so it must not hydrate every prerequisite the
+    // pure predicate would want. A check that is DONE without a current pass stops counting as
+    // completed here too — the graph may under-state WHY (`BLOCKED` rather than `BLOCKED_FAILED`,
+    // which needs the verdict), but it can no longer offer a READY the API would refuse.
+    const notPassedByTask = await this.verificationBlockedCounts(ownerId, taskIds);
     const states = new Map<string, DependencyState>();
     for (const row of totals) {
       const failedCount = failedByTask.get(row.taskId) ?? 0;
-      const completedCount = completedByTask.get(row.taskId) ?? 0;
+      const notPassed = notPassedByTask.get(row.taskId) ?? 0;
+      const completedCount = (completedByTask.get(row.taskId) ?? 0) - notPassed;
       states.set(
         row.taskId,
         failedCount > 0
@@ -1352,6 +1404,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     return states;
+  }
+
+  /**
+   * Per task, how many of its DONE prerequisites are CHECKS whose subject has no open PASS epoch.
+   *
+   * Raw because the predicate is a correlated EXISTS over three tables and Prisma's `where` cannot
+   * express it — and raw against the SHARED fragment, so this count and the sweeps' own gate cannot
+   * come to different conclusions about the same edge.
+   */
+  private async verificationBlockedCounts(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, number>> {
+    if (taskIds.length === 0) return new Map();
+    // Only the DONE prerequisites that are CHECKS are hydrated — the rest cannot have an epoch and
+    // are already counted by the grouped queries above. That keeps the O(nodes) budget this method
+    // exists for while still asking the shared predicate rather than a fourth spelling of it.
+    const edges = await this.prisma.taskDependency.findMany({
+      where: {
+        taskId: { in: taskIds },
+        task: { ownerId },
+        dependsOnTask: {
+          ownerId,
+          status: TaskStatus.DONE,
+          OR: [{ verifiesTaskId: { not: null } }, { verifiedBy: { some: {} } }],
+        },
+      },
+      select: { taskId: true, dependsOnTaskId: true, task: { select: { verifiesTaskId: true } } },
+    });
+    if (edges.length === 0) return new Map();
+    const epochs = await loadVerificationEpochGates(
+      this.prisma,
+      edges.map((edge) => edge.dependsOnTaskId),
+    );
+    const counts = new Map<string, number>();
+    for (const edge of edges) {
+      const gate = dependencyEpochGate(
+        edge.dependsOnTaskId, epochs, edge.task?.verifiesTaskId ?? null,
+      );
+      if (gate == null) continue;
+      counts.set(edge.taskId, (counts.get(edge.taskId) ?? 0) + 1);
+    }
+    return counts;
   }
 
   /**
@@ -1823,6 +1918,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             })
           : await this.prisma.task.create({ data });
     } catch (e) {
+      // §13.1 AG6's activation guard, FIRST, because it is the one refusal here that is not about
+      // this write racing itself. 0132 refuses a child whose arrival would hand a RUNNING parent's
+      // completion to its subtasks, and left untranslated that reaches the caller as a raw
+      // `check_violation` — an unreadable 500 for a request the product deliberately refused.
+      // Ahead of the idempotency branch on purpose: a refused write created no row, so there is no
+      // winner to read back, and `isDuplicateKey` would not match this error anyway.
+      const fenced = taskFenceConflictMessage(e);
+      if (fenced) throw new ConflictException(fenced);
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
       if (idempotencyKey && this.isDuplicateKey(e)) {
@@ -2364,6 +2467,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
       return rows;
     }).catch(async (e) => {
+      // §13.1 AG6's activation guard, FIRST and for the same reason `create` puts it first: 0132
+      // refuses a child whose arrival would hand a RUNNING parent's completion to its subtasks, and
+      // that refusal is about the request rather than about losing a race. Ahead of the idempotency
+      // replay because a refused batch wrote nothing — there is no winner to reconstruct, and the
+      // replay below would throw a misleading "cannot all be identified" over a plain 409.
+      const fenced = taskFenceConflictMessage(e);
+      if (fenced) throw new ConflictException(fenced);
       // The concurrent half of SU7-c. Two runs of one turn can both miss `existing` and race to the
       // same idempotency key; the loser's whole transaction rolls back, so any link it was about to
       // write does not exist. Re-checking the winner's rows turns that into either a clean
@@ -3845,9 +3955,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!task) throw new NotFoundException('task not found');
-    const dependencyState = computeDependencyState(
-      task.dependsOn.map((d) => d.dependsOnTask.status as unknown as TaskStatus),
+    // §13.3 DEP: the same judgement the Run button and the Coordinator's pass make. A task page
+    // that says READY while `execute` refuses is the disagreement `RUNNABLE_TASK_SQL` already
+    // warns about, one clause further along. Built from the edges this query already hydrated, so
+    // a task with no prerequisites costs no extra read at all.
+    const prerequisiteEpochs = await loadVerificationEpochGates(
+      this.prisma,
+      task.dependsOn.map((d) => d.dependsOnTaskId),
     );
+    const dependencyState = computeDependencyState(task.dependsOn.map((d) => ({
+      status: d.dependsOnTask.status as unknown as TaskStatus,
+      verificationGate: dependencyEpochGate(
+        d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
+      ),
+    })));
     const supersession = await this.supersession(ownerId, task);
     return {
       ...task,
@@ -4070,6 +4191,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         throw new BadRequestException(
           'A verification cannot be concluded from the session that ran the task it verifies — ' +
             'the check has to be an independent run',
+        );
+      }
+    }
+    // §13.1 AG6's other end, refused here so the API answers in a sentence rather than letting
+    // `task_foreman_manual_policy` answer with a constraint name. `is_foreman` says "this task's
+    // SESSION is the work"; a non-MANUAL policy says "the children decide when it is finished". A
+    // row asserting both has two completion owners — a worker writing DONE and `planTaskAggregation`
+    // writing DONE or dragging it back OPEN — and AG3's reopen makes whichever loses permanent.
+    //
+    // Read with its own query because `isForeman` is deliberately not in the list projection, and
+    // only when this write actually asks for the combination: an update that leaves the policy
+    // alone pays nothing.
+    if (dto.completionPolicy != null) {
+      const row = await this.prisma.task.findFirst({
+        where: { id, ownerId },
+        select: { isForeman: true },
+      });
+      // EFFECTIVE values, not "what this PATCH mentions": the conflict is a property of the row
+      // this write LEAVES BEHIND, so each field is the one being set if the request names it and
+      // the stored one otherwise. `isForeman` is not on the update DTO today, so its effective
+      // value is always the stored one — written this way so that adding it to the DTO cannot
+      // silently leave a half-checked guard behind. `task_foreman_manual_policy` is the backstop
+      // for every writer that does not come through here.
+      if (row && foremanPolicyConflict({
+        isForeman: row.isForeman,
+        completionPolicy: dto.completionPolicy,
+      })) {
+        throw new BadRequestException(
+          'This task is a coordinating (foreman) task, so its own run is what finishes it — it ' +
+            'cannot also be completed by aggregating subtasks. Clear the foreman role, or leave ' +
+            'completionPolicy as MANUAL',
         );
       }
     }
@@ -5604,7 +5756,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     ownerId: string,
     ids: string[],
   ): Promise<{ deleted: number; survivingLinks: string[] }> {
-    const { deleted, runs, links } = await this.prisma.$transaction(
+    // §13.1 AG6 reaches this path without naming it. Deleting a parent fires the FK's
+    // `ON DELETE SET NULL` on every child's `parent_task_id`, which is a column
+    // `task_aggregate_parent_shape_guard` is declared on — so a delete that overlaps a reconcile
+    // holding the project gets that guard's typed, retryable `TASK_AGGREGATE_PROJECT_BUSY` rather
+    // than waiting (waiting is what would close the task -> project cycle, so the NOWAIT stays).
+    //
+    // Translated out here, OUTSIDE the transaction, because that is where the marker surfaces: the
+    // refusal is correct and the caller should retry, and untranslated a perfectly ordinary delete
+    // reads as a 500 with a PostgreSQL error code in it.
+    const { deleted, runs, links } = await this.runTaskWorkTranslatingFences(() => this.prisma.$transaction(
       async (tx) => {
         // Ordered, so two deletes over overlapping selections cannot take the same rows in
         // opposite orders and deadlock.
@@ -5632,7 +5793,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // cascade through thousands of comments and edges would hit — turning deletes that used
       // to work into P2028. The locks are held for as long as the delete takes either way.
       { timeout: 60_000, maxWait: 10_000 },
-    );
+    ));
     for (const sessionId of runs) {
       // Each end is its own transaction, and one that fails must not take the delete with it:
       // the task is already gone either way, and an end nobody honors is force-finalized by
@@ -6680,6 +6841,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runAt: true,
         supersededByTaskId: true,
         terminalReason: true,
+        // §13.1 AG6's two columns, plus the existence of one direct child. `take: 1` because the
+        // question is existence, not a count — the parent of a hundred subtasks reads one row.
+        completionPolicy: true,
+        children: { where: { ownerId }, select: { id: true }, take: 1 },
         // §13.6 SU6's derived half: a check of replaced work is obsolete even when the check itself
         // is healthy. Read here so the refusal is a sentence, not a raw constraint violation from
         // 0130's guard several layers down.
@@ -6709,6 +6874,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (auto) return { ok: false as const, skipped: 'superseded' as const };
       throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
     }
+    // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
+    // authorization commit point: after the two answers about whether this row is still the work,
+    // before every clause that can lift.
+    //
+    // The door this method IS: Run Now, `task_start`, `orbit task start`, the dependency-unlock
+    // trigger, the auto-run sweep, the scheduled sweep, the foreman sweep and the verification
+    // filer all reach the Session through here. `batchExecute` does NOT — it classifies and calls
+    // `runWorkspaceOnTask` itself, so it carries the same predicate in its own skip loop. The one
+    // gate neither can bypass is migration 0132's trigger on the Session insert.
+    //
+    // An automatic caller SKIPS, like every other automatic stand-down here; a person gets a 409
+    // with the sentence, because a manual Run on an aggregate parent is a real request that cannot
+    // be honoured rather than a sweep that has nothing to do.
+    if (isAggregateParent({
+      completionPolicy: task.completionPolicy,
+      hasDirectChildren: task.children.length > 0,
+    })) {
+      if (auto) return { ok: false as const, skipped: 'aggregate-parent' as const };
+      throw new ConflictException(
+        `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
+        + `(${task.completionPolicy}), so it has no work of its own to run — `
+        + 'run its subtasks, or set its completion policy to MANUAL',
+      );
+    }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
       return { ok: false as const, skipped: 'coordinator-authority' as const };
     }
@@ -6721,12 +6910,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
       return { ok: false as const, skipped: 'rescheduled' as const };
     }
-    const depState = (await this.dependencyStatesFor([id])).get(id) ?? 'NONE';
+    const depFacts = (await this.dependencyFactsFor([id])).get(id) ?? [];
+    const depState = computeDependencyState(depFacts);
     if (!canRun(depState)) {
+      // §13.3 DEP: name the CHECK when a check is what refused. "Prerequisites are not all complete
+      // yet" reads as a wait, and a verdict of FAIL is not one — it is a refusal with something to
+      // go and do, and a person told to wait will simply click again.
+      const gate = depFacts.find((fact) => fact.verificationGate != null)?.verificationGate;
       throw new BadRequestException(
-        depState === 'BLOCKED_FAILED'
-          ? 'A prerequisite was cancelled — resolve it before running'
-          : 'Prerequisites are not all complete yet, cannot run',
+        gate
+          ? `A prerequisite cannot be treated as complete: ${verificationGateMessage(gate)}`
+          : depState === 'BLOCKED_FAILED'
+            ? 'A prerequisite was cancelled — resolve it before running'
+            : 'Prerequisites are not all complete yet, cannot run',
       );
     }
     // The sweep already filters held tasks out in SQL; this is the manual button's half of the
@@ -6956,13 +7152,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // before anything with an effect. See the skip below.
         supersededByTaskId: true,
         terminalReason: true,
+        // §13.1 AG6, the same two facts the single Run reads, so the two buttons cannot disagree
+        // about whether a row is work. Owner-scoped like every other reader of this predicate.
+        completionPolicy: true,
+        children: { where: { ownerId }, select: { id: true }, take: 1 },
         verifies: { select: { supersededByTaskId: true, terminalReason: true } },
         list: { select: { instructions: true } },
         assignee: { select: { id: true, runnerId: true } },
       },
     });
 
-    const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
+    const batchFacts = await this.dependencyFactsFor(tasks.map((t) => t.id));
+    const states = new Map([...batchFacts]
+      .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
     // task that's already running (runWorkspaceOnTask also guards this, but surfacing it here
     // lets us report it as skipped rather than silently dispatched).
@@ -7011,15 +7213,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 : 'Abandoned')
             : 'Obsolete: it checks work that was replaced',
         });
-      } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
-      else if (!t.assignee.runnerId)
-        skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
-      else if (!canRun(state))
+      } else if (isAggregateParent({
+        completionPolicy: t.completionPolicy,
+        hasDirectChildren: t.children.length > 0,
+      })) {
+        // §13.1 AG6, second and in the same position `execute` puts it: after the two answers about
+        // whether the row is still the work, before every clause that can lift. Classified rather
+        // than dropped, so somebody who selected fifty tasks is told which of them are roll-up
+        // nodes rather than watching them silently not start.
         skipped.push({
           id: t.id,
           title: t.title,
-          reason: state === 'BLOCKED_FAILED' ? 'Prerequisite cancelled' : 'Prerequisites not complete',
+          reason: `Completed by aggregating its subtasks (${t.completionPolicy}) — run those instead`,
         });
+      } else if (!t.assignee) skipped.push({ id: t.id, title: t.title, reason: 'No assignee' });
+      else if (!t.assignee.runnerId)
+        skipped.push({ id: t.id, title: t.title, reason: 'Assignee not bound to a runner' });
+      else if (!canRun(state)) {
+        // §13.3 DEP, and the same sentence `execute` gives: a batch that reports "prerequisites not
+        // complete" for a check that concluded FAIL hides the one row somebody has to act on.
+        const gate = (batchFacts.get(t.id) ?? [])
+          .find((fact) => fact.verificationGate != null)?.verificationGate;
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: gate
+            ? `Prerequisite not verified: ${verificationGateMessage(gate)}`
+            : state === 'BLOCKED_FAILED'
+              ? 'Prerequisite cancelled'
+              : 'Prerequisites not complete',
+        });
+      }
       else if (occupied.has(t.id))
         skipped.push({ id: t.id, title: t.title, reason: 'Already running or queued' });
       else runnable.push(t);

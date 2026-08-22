@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { wireRefusalCode } from './project-task-dispatcher.service';
 import { bare, column, section, tables } from './contract-doc';
 import {
   ObservedBlockerCondition,
@@ -25,10 +26,32 @@ import {
 
 const REPO = path.resolve(__dirname, '../../../..');
 const PCC = readFileSync(path.join(REPO, 'docs/project-coordinator-contract.md'), 'utf8');
+const MIGRATIONS = path.join(REPO, 'src/apiserver/prisma/migrations');
 const MIGRATION = readFileSync(
-  path.join(REPO, 'src/apiserver/prisma/migrations/0125_project_blocker/migration.sql'),
+  path.join(MIGRATIONS, '0125_project_blocker/migration.sql'),
   'utf8',
 );
+/**
+ * The kind CHECK as it stands after every migration, not as 0125 first wrote it.
+ *
+ * A closed set that can only ever be read from the migration that CREATED it is a set that can
+ * never grow: adding a kind means a later migration drops and re-adds the constraint (an applied
+ * migration may not be edited), and a test pinned to the first one would then be asserting a
+ * historical fact about a database nobody runs. Directory order is deployment order, so the last
+ * file that declares the constraint is the one in force.
+ */
+function kindCheckInForce(): string[] {
+  const declared = readdirSync(MIGRATIONS)
+    .filter((entry) => /^\d{4}_/.test(entry))
+    .sort()
+    .map((entry) => path.join(MIGRATIONS, entry, 'migration.sql'))
+    .filter((file) => existsSync(file))
+    .map((file) => readFileSync(file, 'utf8'))
+    .map((sql) => /project_blocker_kind_chk[\s\S]*?CHECK \("kind" IN \(([\s\S]*?)\)\)/.exec(sql))
+    .filter((match): match is RegExpExecArray => match !== null);
+  assert.ok(declared.length > 0, 'no migration declares the project_blocker kind CHECK');
+  return [...declared.at(-1)![1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+}
 // Read from the repo, not from `__dirname`: these specs run compiled, out of `build/`.
 const SRC = path.join(REPO, 'src/apiserver/src/projects');
 const AUTHORIZATION = readFileSync(path.join(SRC, 'project-authorization.service.ts'), 'utf8');
@@ -86,10 +109,9 @@ test('§11.2: the implemented kind set IS the document\'s, in the document\'s or
 });
 
 test('§11.2: the migration CHECK freezes exactly the same closed set', () => {
-  const check = /project_blocker_kind_chk[\s\S]*?CHECK \("kind" IN \(([\s\S]*?)\)\)/.exec(MIGRATION);
-  assert.ok(check, 'migration 0125 no longer declares the kind CHECK');
-  const declared = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
-  assert.deepEqual(declared.sort(), [...PROJECT_BLOCKER_KINDS].sort());
+  assert.deepEqual(kindCheckInForce().sort(), [...PROJECT_BLOCKER_KINDS].sort());
+  // …and 0125 is still where it started, so a rewrite of history would be visible here too.
+  assert.match(MIGRATION, /project_blocker_kind_chk/);
 });
 
 test('§11.2: every kind carries the document\'s owner and recovery', () => {
@@ -556,3 +578,18 @@ function fact(kind: ProjectBlockerKind, overrides: Partial<ProjectBlockerFact> =
 function iso(ms: number): string {
   return new Date(ms).toISOString();
 }
+
+test('§13.1 AG6: the refusal is non-blocking, and its wire code is one old readers know', () => {
+  // If this code ever became a blocker it would be a PROJECT-subject `UNKNOWN_FAILURE`, §11 BL1
+  // would read that as "stop everything", and §11.4 could never clear it — the attempt it needs to
+  // let through will always be refused for the same reason.
+  assert.equal(blockerKindForRefusal('TASK_AGGREGATE_PARENT'), null);
+  assert.ok(PROJECT_BLOCKER_NON_BLOCKING_REFUSALS.has('TASK_AGGREGATE_PARENT'));
+
+  // ...and the durable column carries a code a replica that predates this release also classifies
+  // as non-blocking, because adding it to THIS build's list does nothing for the one beside it.
+  assert.equal(wireRefusalCode('TASK_AGGREGATE_PARENT'), 'STALE_SNAPSHOT');
+  assert.equal(blockerKindForRefusal(wireRefusalCode('TASK_AGGREGATE_PARENT')), null);
+  // Every other code is passed through untouched.
+  assert.equal(wireRefusalCode('RUNNER_UNAVAILABLE'), 'RUNNER_UNAVAILABLE');
+});

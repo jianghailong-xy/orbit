@@ -194,7 +194,16 @@ test('§13.1 aggregation properties over generated forests', async (t) => {
           continue;
         }
         const was = initial.get(task.id)!;
-        if (was === 'CANCELLED' || was === 'FAILED') {
+        // CANCELLED only, since AG6. A cancellation is a statement somebody made ABOUT the parent,
+        // and aggregation only ever answers for the children — so it is preserved in both
+        // directions. FAILED is no longer in the same sentence: an aggregate parent can only reach
+        // FAILED by having been dispatched, which AG6 forbids, so that status is the residue of a
+        // run that should not exist rather than anybody's statement. Preserving it made a wedge
+        // with no exit — the dispatch gates skip such a task before the retry ladder and
+        // `TASK_AGGREGATE_PARENT` is a non-blocking refusal, so nothing retried it and nothing
+        // opened a row about it. It falls through to the ordinary rules below: childless means
+        // inert (so a FAILED leaf keeps its status), and with children it is recomputed.
+        if (was === 'CANCELLED') {
           assert.equal(task.status, was,
             `seed=${seed}: aggregation overwrote a ${was} parent ${task.id}`);
           continue;
