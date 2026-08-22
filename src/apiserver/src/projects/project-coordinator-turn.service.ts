@@ -351,18 +351,19 @@ implements ProjectTurnExecutor, OnModuleInit, OnModuleDestroy {
     // `result_session_id` is deliberately NOT used: it is unique, and this run is already the
     // result of the `ROTATE_COORDINATOR_SESSION` that opened it. The link lives in `detail`, which
     // is also where `flushPendingTurns` reads it back from.
+    const delivery = {
+      authorization: audit,
+      coordinatorSessionId: uuidToBase62(run.id),
+      conversationTurnId: turn.id,
+      conversationTurnSeq: turn.seq,
+      clientTurnId,
+      sessionStatusBefore: run.status,
+      sessionStatusAfter: statusAfter,
+    };
     await tx.$executeRaw(Prisma.sql`
       UPDATE "project_action"
          SET "reason_code" = ${planned.reasonCode},
-             "detail" = "detail" || ${JSON.stringify({
-    authorization: audit,
-    coordinatorSessionId: uuidToBase62(run.id),
-    conversationTurnId: turn.id,
-    conversationTurnSeq: turn.seq,
-    clientTurnId,
-    sessionStatusBefore: run.status,
-    sessionStatusAfter: statusAfter,
-  })}::jsonb,
+             "detail" = "detail" || ${JSON.stringify(delivery)}::jsonb,
              "updated_at" = ${now}
        WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
     `);
