@@ -17,6 +17,10 @@ import (
 const (
 	systemdService = "orbit-runner"
 	launchdLabel   = "com.orbit.runner"
+	// Where system-level unit files live. Named rather than spelled out at each use
+	// site because hostd's migration reads the same directory through an injectable
+	// field so tests can point it at a temporary one.
+	systemdUnitDir = "/etc/systemd/system"
 )
 
 // setupService installs + starts a background service that runs `orbit run` (with
@@ -253,14 +257,30 @@ func migrateLegacyUnit(sctl func(...string) error, root bool, sudo, legacySvc, n
 // Used to decide whether a legacy `orbit-runner` unit is safe to migrate/remove on behalf
 // of that user, without disturbing another user's runner.
 func unitRunsAsUser(svc, username string) bool {
+	return unitRunsAsUserIn(systemdUnitDir, execStdout, svc, username)
+}
+
+// unitRunsAsUserIn is unitRunsAsUser with its two touchpoints — where unit files live and
+// how a command is run — passed in, so hostd can apply the identical rule against an
+// injected systemctl and a temporary directory. One implementation, not two: both callers
+// decide the same thing about the same units, and a second copy would drift.
+func unitRunsAsUserIn(unitDir string, stdout func(string, ...string) (string, error), svc, username string) bool {
 	if username == "" {
 		return false
 	}
-	if _, err := os.Stat("/etc/systemd/system/" + svc + ".service"); err != nil {
+	if _, err := os.Stat(filepath.Join(unitDir, svc+".service")); err != nil {
 		return false
 	}
-	out, _ := exec.Command("systemctl", "show", svc+".service", "-p", "User", "--value").Output()
-	return strings.TrimSpace(string(out)) == username
+	out, _ := stdout("systemctl", "show", svc+".service", "-p", "User", "--value")
+	return strings.TrimSpace(out) == username
+}
+
+// execStdout runs a command and returns its standard output alone. Values read back out
+// of `systemctl show -p X --value` are compared verbatim, so stderr folded into the same
+// string would corrupt the comparison.
+func execStdout(name string, args ...string) (string, error) {
+	out, err := exec.Command(name, args...).Output()
+	return string(out), err
 }
 
 // registeringUser is the account the runner service should run as: the human who
