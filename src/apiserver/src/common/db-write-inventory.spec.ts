@@ -42,8 +42,15 @@ const NOT_A_METHOD = new Set([
 ]);
 /** A `$queryRaw` that takes a row or advisory lock — the reads that are really writes' neighbours. */
 const TAKES_LOCK = /FOR (?:NO KEY )?UPDATE|FOR (?:KEY )?SHARE|pg_advisory/;
-/** A `$queryRaw` whose statement changes rows or schema. */
-const WRITES_ROWS = /\b(INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|CREATE\s+|DROP\s+|ALTER\s+|TRUNCATE)/i;
+/**
+ * A `$queryRaw` whose statement changes rows or schema.
+ *
+ * Every alternative ends on a boundary the keyword really has in SQL — the whitespace or quote that
+ * has to follow it — because these run against prose and column aliases as well as statements. Without
+ * the `\b`, `TRUNCATE` matches the `truncated` a read-only leaderboard selects, and a SELECT is then
+ * asked to declare a retry decision for a write it does not make.
+ */
+const WRITES_ROWS = /\b(INSERT\s+INTO|UPDATE\s+"|DELETE\s+FROM|CREATE\s+|DROP\s+|ALTER\s+|TRUNCATE\b)/i;
 
 type Shape = 'TX_RETRIED' | 'TX_BARE' | 'INHERITED' | 'AUTOCOMMIT';
 
