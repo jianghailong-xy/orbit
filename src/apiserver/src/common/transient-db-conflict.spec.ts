@@ -157,6 +157,9 @@ function ran(route: string): void {
 
 const REFUSAL_ROW = '01a02427-6cb5-7ae0-ae3c-ffe57116c33e';
 
+/** What the retry loop concluded on the route that spends its attempts. */
+const exhaustedOutcomes: string[] = [];
+
 @Controller('conflict')
 class ConflictController {
   /** The interactive form: the closure had already written when the server rolled it back. */
@@ -192,6 +195,21 @@ class ConflictController {
       throw new Error('could not advance the project', { cause });
     }
     return {};
+  }
+
+  /**
+   * The other way a conflict arrives here: a retry loop that spent its attempts. The boundary
+   * adds none of its own — the closure ran exactly as many times as the caller allowed.
+   */
+  @Post('exhausted')
+  async exhausted(): Promise<unknown> {
+    ran('exhausted');
+    const db = new AbortingDatabase(() => abortedWrite('40001', 'could not serialize access due to concurrent update'));
+    return withTransactionRetry(db as never, async (tx) => (tx as unknown as AbortingDatabase).write(), {
+      maxAttempts: 2,
+      sleep: async () => undefined,
+      onOutcome: (event) => void exhaustedOutcomes.push(event.outcome),
+    });
   }
 
   /**
@@ -363,6 +381,15 @@ test('the answer to a database conflict, over real HTTP, on every shape a write 
     assertConflictAnswer(await post('conflict/nested'), 'nested');
   });
 
+  await t.test('a retry loop that spent its attempts is answered, not retried again', async () => {
+    const answer = await post('conflict/exhausted');
+    assertConflictAnswer(answer, 'exhausted');
+    assert.equal(handlerRuns.get('exhausted'), 1, 'the request itself ran once');
+    // Two attempts because the caller asked for two. A boundary that retried on its own would
+    // show a third here, and would be doing it without the closure's consent.
+    assert.deepEqual(exhaustedOutcomes, ['RETRYING', 'EXHAUSTED']);
+  });
+
   await t.test('a conflict the retry helper absorbed never reaches the boundary', async () => {
     const answer = await post('conflict/absorbed');
     assert.equal(answer.status, 201, 'the work succeeded on its second attempt; that is the answer');
@@ -372,7 +399,7 @@ test('the answer to a database conflict, over real HTTP, on every shape a write 
 
   await t.test('what the boundary logs names the reason and nothing about the row', () => {
     const lines = logged.filter((line) => line.includes(TRANSIENT_DB_CONFLICT_CODE));
-    assert.equal(lines.length, 4, 'one line per conflict answered, and none for the absorbed one');
+    assert.equal(lines.length, 5, 'one line per conflict answered, and none for the absorbed one');
     for (const line of lines) {
       for (const secret of SECRETS) assert.ok(!line.includes(secret), `the log repeats ${secret}: ${line}`);
       assert.ok(!/\bat .*\.(ts|js):\d+/.test(line), `the log carries a stack: ${line}`);
