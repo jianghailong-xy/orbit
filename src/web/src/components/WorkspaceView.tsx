@@ -78,8 +78,10 @@ import {
 } from '../lib/sessionGrouping';
 import {
   type ProjectSection,
+  projectActiveFace,
   projectBadgeParts,
   projectCountsById,
+  projectFoldLabel,
   sessionProjectSections,
 } from '../lib/projectGrouping';
 import {
@@ -536,6 +538,47 @@ function SessionGroupHead({
     </div>
   );
 }
+
+/**
+ * Foot of a capped project group: "View all 12 · 7 done", the one line the folded rows collapse
+ * into, and the way back out of it.
+ *
+ * A project accumulates finished workers forever, and a group that renders all of them buries the
+ * next project under work nobody has to look at again. So the group renders its active face — its
+ * coordinator, everything waiting on a person, then what is running — and says here how much it
+ * is not showing and how much of that is already done. Expanding is a look, not a setting: it
+ * lives in component state and is gone on reload, unlike the chevron's roll-up, which is the user
+ * telling the list how they want it kept.
+ */
+function SessionGroupFold({
+  label,
+  expanded,
+  onToggle,
+}: {
+  label: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className="session-group-fold"
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        onToggle();
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+/** The fold line one row-run ends with, or null where a run has nothing folded behind it. */
+type SessionFold = { key: string; label: string; expanded: boolean };
 
 // The slices of the session list, in menu order. Open is the overwhelmingly common
 // one, so the other two live in the header's scope menu rather than a permanent tab row.
@@ -1384,6 +1427,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   useEffect(() => {
     localStorage.setItem(SESSION_GROUP_COLLAPSED_KEY, JSON.stringify([...collapsedGroups]));
   }, [collapsedGroups]);
+  // Which project groups are showing everything they hold rather than just their active face.
+  // Deliberately not persisted, and deliberately not the same state as `collapsedGroups`: rolling
+  // a group up is how the user wants their list kept, while "view all" is one look at a group's
+  // history, and a look that came back tomorrow would just be the capping quietly not working.
+  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set<string>());
+  const toggleGroupExpanded = useCallback((key: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
+  }, []);
 
   const sessions = useMemo(() => {
     const rows = (sessionsQ.data ?? []).slice();
@@ -1693,6 +1748,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tag: s.tag,
         title: s.tag?.name ?? 'Untagged',
         sessions: s.sessions,
+        fold: null as SessionFold | null,
       }));
     }
     if (groupByProject) {
@@ -1700,29 +1756,60 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         counts: projectCounts,
         collapsed: collapsedGroups,
         pinnedFirst: !tagFilter,
-      }).flatMap((g) =>
-        g.sections.length === 0
-          ? [
-              {
-                key: g.key,
-                group: g,
-                nested: true,
-                tag: null as SessionTagRef | null,
-                title: null,
-                sessions: [],
-              },
-            ]
-          : g.sections.map((sub, i) => ({
-              key: `${g.key}:${sub.title ?? ''}`,
-              group: i === 0 ? g : null,
-              // Every run here sits under a group header, including Unfiled's later recency
-              // runs — whose own header scrolled past several runs ago.
+      }).flatMap((g) => {
+        if (g.sections.length === 0) {
+          return [
+            {
+              key: g.key,
+              group: g,
               nested: true,
               tag: null as SessionTagRef | null,
-              title: sub.title,
-              sessions: sub.sessions,
-            })),
-      );
+              title: null,
+              sessions: [],
+              fold: null as SessionFold | null,
+            },
+          ];
+        }
+        // A project group renders only its active face, with the rest — finished workers, mostly —
+        // behind one "View all N · M done" line. Pinned and Unfiled are not projects and are not
+        // capped: a pin means "keep this in front of me", and Unfiled's rows have no project to be
+        // finished for. Expanded shows the group as the console sorted it, which is the order the
+        // face already reads in.
+        if (g.projectId !== null) {
+          const rows = g.sections[0].sessions;
+          const face = projectActiveFace(rows);
+          const expanded = expandedGroups.has(g.key);
+          return [
+            {
+              key: `${g.key}:`,
+              group: g,
+              nested: true,
+              tag: null as SessionTagRef | null,
+              title: null,
+              sessions: expanded ? rows : face.visible,
+              fold:
+                face.hiddenCount === 0
+                  ? null
+                  : {
+                      key: g.key,
+                      label: expanded ? 'Show less' : projectFoldLabel(face),
+                      expanded,
+                    },
+            },
+          ];
+        }
+        return g.sections.map((sub, i) => ({
+          key: `${g.key}:${sub.title ?? ''}`,
+          group: i === 0 ? g : null,
+          // Every run here sits under a group header, including Unfiled's later recency
+          // runs — whose own header scrolled past several runs ago.
+          nested: true,
+          tag: null as SessionTagRef | null,
+          title: sub.title,
+          sessions: sub.sessions,
+          fold: null as SessionFold | null,
+        }));
+      });
     }
     // Only Completed and Trash reach here — Open takes one of the two branches above — and
     // pinning applies to neither, so a (possibly stale) pinnedAt just buckets by time.
@@ -1731,9 +1818,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       group: null as ProjectSection<any> | null,
       nested: false,
       tag: null as SessionTagRef | null,
+      fold: null as SessionFold | null,
       ...s,
     }));
-  }, [visibleSessions, groupByTag, groupByProject, projectCounts, collapsedGroups, tagFilter]);
+  }, [
+    visibleSessions,
+    groupByTag,
+    groupByProject,
+    projectCounts,
+    collapsedGroups,
+    expandedGroups,
+    tagFilter,
+  ]);
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
   // server sort — Completed arrives ordered by completion time but buckets by last activity,
@@ -4683,6 +4779,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   </div>
                 );
               })}
+              {/* What the group is not showing, and the way to see it. */}
+              {sec.fold && (
+                <SessionGroupFold
+                  label={sec.fold.label}
+                  expanded={sec.fold.expanded}
+                  onToggle={() => toggleGroupExpanded(sec.fold!.key)}
+                />
+              )}
             </Fragment>
           ))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the

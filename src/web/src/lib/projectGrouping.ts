@@ -10,6 +10,11 @@ import {
   type GroupableSession,
   type SessionTimeSection,
 } from './sessionGrouping';
+import {
+  sessionLifecycleStateOf,
+  sessionRunStateOf,
+  type SessionStateSource,
+} from './sessionState';
 
 /** What the grouper reads off a session row, on top of what the time grouper already reads. */
 export interface ProjectGroupableSession extends GroupableSession {
@@ -199,3 +204,103 @@ export function projectBadgeParts(counts: ProjectCounts): ProjectBadgePart[] {
   parts.push({ kind: 'done', text: `${counts.done}/${counts.total} done` });
   return parts;
 }
+
+/**
+ * How many rows one project group renders before the rest folds behind a single line. Five is
+ * what a group can spend and still leave the next project on screen — the column's job is to say
+ * which projects want a person, and a project that answers that with twenty finished workers has
+ * answered it nineteen times too often.
+ */
+export const PROJECT_ACTIVE_FACE_LIMIT = 5;
+
+/**
+ * What the active face reads off a row, on top of what the grouper already reads: the same three
+ * facts the server counts a project's rollup from, all served on every list row.
+ */
+export interface ProjectFaceSession extends ProjectGroupableSession, SessionStateSource {
+  /** What this session IS to its project, as `SessionsService.list` derives it. */
+  role?: string | null;
+  /** Live approvals; > 0 is what "waiting on you" means, here and in the rollup. */
+  pendingApprovals?: number | null;
+  /** A turn the runtime started for itself, which streams while parked at AWAITING_INPUT. */
+  engineTurnActive?: boolean | null;
+}
+
+export interface ProjectActiveFace<T> {
+  /** The rows to render, Main first, then everything waiting on you, then what is running. */
+  visible: T[];
+  /** Rows the face left out — 0 when the group is already entirely on screen. */
+  hiddenCount: number;
+  /** Finished rows across the whole group, the visible ones included: the fold line's "M done". */
+  doneCount: number;
+}
+
+// The buckets, spelled for the client exactly as `SessionsService.projectSessionCounts` spells
+// them in SQL, so a group's face and its header rollup cannot disagree about what a row is doing:
+// a session is open until it is filed (completed_at/archived_at), generating while the engine is
+// producing for it — including a self-driven turn parked at AWAITING_INPUT — and needs you when a
+// live approval is holding it. Done is the two ways a conversation is finished: filed, or
+// succeeded and not filed yet. A failed run is neither done nor active; it folds with the rest.
+const isOpen = (s: ProjectFaceSession): boolean => sessionLifecycleStateOf(s) === 'OPEN';
+const isGenerating = (s: ProjectFaceSession): boolean => {
+  const state = sessionRunStateOf(s);
+  return state === 'RUNNING' || (state === 'AWAITING_INPUT' && s.engineTurnActive === true);
+};
+const needsYou = (s: ProjectFaceSession): boolean =>
+  isOpen(s) && isGenerating(s) && (s.pendingApprovals ?? 0) > 0;
+const isDone = (s: ProjectFaceSession): boolean =>
+  !isOpen(s) || sessionRunStateOf(s) === 'SUCCEEDED';
+
+/**
+ * The part of a project group worth rendering by default, and what folding the rest away costs.
+ *
+ * A project group is not a list of its sessions — it is the answer to "does this project want
+ * something from me right now", and only three kinds of row carry that answer: the coordinator
+ * (the way into the project, whatever it is doing), every conversation blocked on an approval,
+ * and what is running. Finished workers are the group's history; they are what `doneCount` is for.
+ *
+ * The limit binds the running rows only. Main and everything waiting on you are in the face
+ * whatever it says — a folded approval is an approval nobody answers, which is the failure this
+ * whole list exists to end — so a project with six live prompts shows six rows and no running
+ * ones. Emitted in tier order (Main → waiting → running) rather than in the order handed in, so
+ * the face reads the same before and after the in-group sort lands; each tier keeps the console's
+ * order internally, and no row is moved between tiers.
+ */
+export function projectActiveFace<T extends ProjectFaceSession>(
+  rows: readonly T[],
+  opts: { limit?: number } = {},
+): ProjectActiveFace<T> {
+  const limit = opts.limit ?? PROJECT_ACTIVE_FACE_LIMIT;
+  const main: T[] = [];
+  const waiting: T[] = [];
+  const running: T[] = [];
+  let doneCount = 0;
+
+  for (const s of rows) {
+    if (isDone(s)) doneCount++;
+    // One bucket per row, in the order the identities outrank each other: coordinating the
+    // project is what the row IS, and a coordinator waiting on you is still the group's Main.
+    if (s.role === 'coordinator') main.push(s);
+    else if (needsYou(s)) waiting.push(s);
+    else if (isOpen(s) && isGenerating(s)) running.push(s);
+  }
+
+  const visible = [...main, ...waiting];
+  for (const s of running) {
+    if (visible.length >= limit) break;
+    visible.push(s);
+  }
+  return { visible, hiddenCount: rows.length - visible.length, doneCount };
+}
+
+/**
+ * The fold line under a capped group: "View all 12 · 7 done" — how many rows the group actually
+ * holds, and how much of that is finished work, which is what the user is being told they are not
+ * missing. The count is of loaded rows, not of the project (the header's rollup already speaks for
+ * the whole project). "0 done" is dropped: a group hiding nothing finished is hiding live rows,
+ * and saying "0 done" spends a word to describe an empty set.
+ */
+export const projectFoldLabel = (face: ProjectActiveFace<unknown>): string => {
+  const total = face.visible.length + face.hiddenCount;
+  return face.doneCount > 0 ? `View all ${total} · ${face.doneCount} done` : `View all ${total}`;
+};

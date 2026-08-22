@@ -2625,6 +2625,19 @@ body {
 .session-group-stat.running {
   color: var(--brand);
 }
+/* Foot of a capped project group: "View all 12 · 7 done". A line of text, not a row — what it
+   stands for is rows, and drawing it as one more of them would be one more thing to read past. */
+.session-group-fold {
+  padding: 8px 8px 10px 16px;
+  border-bottom: 1px solid var(--bg-hover);
+  font-size: 12px;
+  color: var(--text-4);
+  cursor: pointer;
+  user-select: none;
+}
+.session-group-fold:hover {
+  color: var(--text-2);
+}
 /* Foot of the list while the next page loads. */
 .session-list-more {
   display: flex;

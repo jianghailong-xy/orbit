@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   PINNED_GROUP_KEY,
+  PROJECT_ACTIVE_FACE_LIMIT,
   UNFILED_GROUP_KEY,
+  projectActiveFace,
   projectBadgeParts,
   projectCountsById,
+  projectFoldLabel,
   sessionProjectSections,
   type ProjectCounts,
 } from './projectGrouping';
@@ -213,6 +216,121 @@ describe('projectBadgeParts', () => {
     expect(projectBadgeParts(counts(1, 0, 0, 6))).toEqual([
       { kind: 'needsYou', text: '1 needs you' },
       { kind: 'done', text: '0/6 done' },
+    ]);
+  });
+});
+
+// One project group's rows, in the console order the list hands them over (most recent first):
+// its coordinator, two conversations holding a live approval, two working, and seven finished
+// workers — spelled both ways a session is finished, filed and succeeded-but-not-filed-yet.
+const main = { id: 'main', role: 'coordinator', status: 'RUNNING' };
+const waiting = (id: string) => ({ id, role: 'execution', status: 'RUNNING', pendingApprovals: 1 });
+const working = (id: string) => ({ id, role: 'execution', status: 'RUNNING', pendingApprovals: 0 });
+const succeeded = (id: string) => ({ id, role: 'execution', status: 'SUCCEEDED' });
+const filed = (id: string) => ({
+  id,
+  role: 'execution',
+  status: 'ENDED',
+  lifecycleState: 'COMPLETED',
+  completedAt: at(2026, 7, 7),
+});
+
+const GROUP = [
+  main,
+  waiting('ny-1'),
+  working('run-1'),
+  succeeded('done-1'),
+  filed('done-2'),
+  waiting('ny-2'),
+  succeeded('done-3'),
+  working('run-2'),
+  filed('done-4'),
+  succeeded('done-5'),
+  filed('done-6'),
+  succeeded('done-7'),
+];
+
+describe('projectActiveFace', () => {
+  it('shows Main, everything waiting and what is running, and folds the rest away', () => {
+    const face = projectActiveFace(GROUP);
+
+    // Exactly the cap, in tier order — Main, then the two waiting, then the two running — even
+    // though the input interleaves them with the finished rows.
+    expect(face.visible.map((s) => s.id)).toEqual(['main', 'ny-1', 'ny-2', 'run-1', 'run-2']);
+    expect(face.hiddenCount).toBe(7);
+    expect(face.doneCount).toBe(7);
+    expect(projectFoldLabel(face)).toBe('View all 12 · 7 done');
+    // What the fold line offers to show is the whole group: nothing is dropped, only folded.
+    expect(face.visible.length + face.hiddenCount).toBe(GROUP.length);
+  });
+
+  it('keeps every waiting row on the face, cap or no cap', () => {
+    // Six live prompts is six rows the user has to answer; the limit gives way to them, and the
+    // running rows are what pays for it.
+    const group = [
+      main,
+      ...['ny-1', 'ny-2', 'ny-3', 'ny-4', 'ny-5', 'ny-6'].map(waiting),
+      working('run-1'),
+      working('run-2'),
+      succeeded('done-1'),
+      succeeded('done-2'),
+      filed('done-3'),
+    ];
+    const face = projectActiveFace(group);
+
+    expect(face.visible.map((s) => s.id)).toEqual([
+      'main',
+      'ny-1',
+      'ny-2',
+      'ny-3',
+      'ny-4',
+      'ny-5',
+      'ny-6',
+    ]);
+    expect(face.hiddenCount).toBe(5);
+    expect(projectFoldLabel(face)).toBe('View all 12 · 3 done');
+  });
+
+  it('counts done the way the rollup counts it, and folds a failed run with the rest', () => {
+    // Filed and succeeded are the two ways a conversation is finished; a failure is neither
+    // finished nor active, so it folds — but it must not inflate "M done".
+    const group = [main, succeeded('done-1'), filed('done-2'), { id: 'boom', status: 'FAILED' }];
+    const face = projectActiveFace(group);
+
+    expect(face.visible.map((s) => s.id)).toEqual(['main']);
+    expect(face.doneCount).toBe(2);
+    expect(face.hiddenCount).toBe(3);
+    expect(projectFoldLabel(face)).toBe('View all 4 · 2 done');
+  });
+
+  it('reads a self-driven turn as running and a parked one as neither', () => {
+    // Same rule as the list line and the server rollup: AWAITING_INPUT only counts as working
+    // while the engine says a turn of its own is in flight.
+    const group = [
+      { id: 'self-driven', status: 'AWAITING_INPUT', engineTurnActive: true },
+      { id: 'parked', status: 'AWAITING_INPUT' },
+    ];
+    const face = projectActiveFace(group);
+
+    expect(face.visible.map((s) => s.id)).toEqual(['self-driven']);
+    expect(face.doneCount).toBe(0);
+    expect(projectFoldLabel(face)).toBe('View all 2');
+  });
+
+  it('folds nothing when the whole group is already on screen', () => {
+    const face = projectActiveFace([main, waiting('ny-1'), working('run-1')]);
+    expect(face.visible.map((s) => s.id)).toEqual(['main', 'ny-1', 'run-1']);
+    expect(face.hiddenCount).toBe(0);
+  });
+
+  it('takes the cap as an argument, defaulting to the shared limit', () => {
+    expect(projectActiveFace(GROUP, { limit: PROJECT_ACTIVE_FACE_LIMIT }).visible).toEqual(
+      projectActiveFace(GROUP).visible,
+    );
+    expect(projectActiveFace(GROUP, { limit: 3 }).visible.map((s) => s.id)).toEqual([
+      'main',
+      'ny-1',
+      'ny-2',
     ]);
   });
 });
