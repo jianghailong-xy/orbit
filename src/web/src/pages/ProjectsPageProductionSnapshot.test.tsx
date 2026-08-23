@@ -508,3 +508,89 @@ describe('projects index — Wrapping up with more than one row in it', () => {
     }
   });
 });
+
+/**
+ * ACCEPTANCE — the badges, over the same snapshot.
+ *
+ * The claim this unit was filed on is a claim about production: two projects hold a task whose
+ * status says RUNNING while nothing has been written to them for days, and the page had no signal
+ * for either. That is checkable here and nowhere else — a fixture named "Zombie Run" can only show
+ * that the rule works, not that anything in the deployment trips it.
+ *
+ * The snapshot is REPLAYED AS OF NOW rather than rendered against the wall clock: every instant is
+ * moved forward by one offset, so the GAPS between them — which is all a badge measures — are the
+ * production gaps, and the suite says the same thing in a year as it does today. Mocking the clock
+ * the page reads would work too; shifting the data leaves the page exactly as a browser runs it.
+ */
+describe('projects index — badges over the 2026-08-23 production snapshot', () => {
+  const SNAPSHOT_AT = Date.parse('2026-08-23T18:55:05.000Z');
+  const OFFSET = Date.now() - SNAPSHOT_AT;
+  const asOfNow = (rows: Snapshot[]): Snapshot[] =>
+    rows.map((p) => ({
+      ...p,
+      lastActivityAt: p.lastActivityAt
+        ? new Date(Date.parse(p.lastActivityAt) + OFFSET).toISOString()
+        : null,
+    }));
+
+  /** Every badged row, as `[title, badge]`, in the order the page draws them. */
+  function badges(html: string): Array<[string, string]> {
+    return [...html.matchAll(/<li [\s\S]*?<\/li>/g)].flatMap((li) => {
+      const title = /class="project-row-title">([^<]*)</.exec(li[0]);
+      const chip = /class="project-row-chip project-row-chip-\w+">([^<]*)</.exec(li[0]);
+      return title && chip ? [[decode(title[1]).trim(), decode(chip[1]).trim()] as [string, string]] : [];
+    });
+  }
+
+  const html = render(asOfNow(SNAPSHOT));
+
+  it('badges the two zombie runs production is actually carrying, and no other running project', () => {
+    // Both are in In progress — the section whose header reads "Work in flight" — and neither has
+    // been written to since the 20th/21st. Before this unit the page said "Work in flight" about
+    // them and nothing else at all.
+    const stale = badges(html).filter(([, chip]) => chip.startsWith('No progress'));
+
+    expect(stale).toEqual([
+      [NAME.fairSched, 'No progress 2d'],
+      [NAME.brand, 'No progress 3d'],
+    ]);
+    // Linux From Scratch is the control: it is in the same section, it also has a task running,
+    // and it wrote three minutes before the snapshot — so the badge is about the silence, not
+    // about the section.
+    expect(badges(html).map(([title]) => title)).not.toContain(NAME.lfs);
+  });
+
+  it('badges the finished project nobody closed with its own count', () => {
+    expect(badges(html)).toContainEqual([NAME.sessionList, '12/12 settled · still open']);
+  });
+
+  it('leaves most of the page unbadged, including six of the eight stalled rows', () => {
+    // Eight rows in Stalled, four badged. The other four were touched within the day — FineWeb
+    // three hours before the snapshot, with 6,118 ready tasks — and a badge on those would make
+    // amber the colour of the section rather than the mark on the rows that have gone cold.
+    const badged = badges(html);
+    const stalledBadges = badged.filter(([, chip]) => chip.startsWith('Stalled'));
+
+    expect(stalledBadges).toEqual([
+      [NAME.ios, 'Stalled 2d'],
+      [NAME.iosProject, 'Stalled 4d'],
+      // Both hold one ready task, so Stalled's tie-break on activity is what puts them this way
+      // round — and the badge is what makes that tie-break checkable from the row.
+      [NAME.multiAgent, 'Stalled 2d'],
+      [NAME.agentContract, 'Stalled 2d'],
+    ]);
+    expect(sectionOf(html, 'stalled').rows).toHaveLength(8);
+    expect(badged).toHaveLength(7);
+    expect(badged.map(([t]) => t)).not.toContain(NAME.fineweb);
+  });
+
+  it('tints the two biggest piles in Stalled, not the section', () => {
+    const tinted = [...html.matchAll(/<li [^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/li>/g)]
+      .filter((li) => li[1].split(' ').includes('project-row-spotlit'))
+      .map((li) => decode(/class="project-row-title">([^<]*)</.exec(li[2])?.[1] ?? '').trim());
+
+    // FineWeb's 6,118 ready tasks and 客户端性能's 9: the two largest piles of work that could
+    // start and isn't. The other six stalled rows carry no wash at all.
+    expect(tinted).toEqual([NAME.fineweb, NAME.ios]);
+  });
+});

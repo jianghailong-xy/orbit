@@ -183,3 +183,128 @@ export function projectAttentionSections<T extends AttentionProject & SectionPro
     ),
   }));
 }
+
+/* ── The badges ──────────────────────────────────────────────────────────────────────────────
+ *
+ * A section says what a project's numbers ARE. These say that it has been that way too long, and
+ * they are the only thing on the row that is about the clock rather than about the counts.
+ *
+ * Three cases carry one, and nothing else does. A badge on every row is a second background
+ * colour: the stalled section alone holds eight projects in production, and washing all eight in
+ * amber would leave the reader with no way to tell the eight apart — which is the state this page
+ * was already in when every row looked the same.
+ */
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a project may go without a single task write before the row says so out loud.
+ *
+ * A day, because everything that advances a project on its own advances it far faster than that:
+ * the coordinator's reconciler ticks every 10s (PROJECT_RECONCILE_TIMER_MS) and the ready-task
+ * sweep every 60s (RECONCILE_INTERVAL_MS), so 24 quiet hours is some 8,600 coordinator passes and
+ * 1,400 sweeps that produced no write at all — not a lull, a day of nothing.
+ *
+ * Anything shorter reads the ordinary gaps as trouble: one long turn, a night, a Sunday morning.
+ * A badge that fires on those is a badge the reader learns to scroll past, and an ignored badge is
+ * worse than no badge — it is the same failure as the flat list, arriving one screen later.
+ */
+export const QUIET_MS = 1 * DAY_MS;
+
+/** `warning` is amber and means something is wrong; `brand` is blue and means something is merely
+ *  unfinished. Named by what they MEAN — the row picks the tokens (see .project-row-chip-*), so
+ *  this module never spells a colour. */
+export type AttentionChipTone = 'warning' | 'brand';
+
+export interface AttentionChip {
+  tone: AttentionChipTone;
+  text: string;
+}
+
+/**
+ * Whole days of silence, or null when the project has not been quiet long enough to say.
+ *
+ * Reuses `activityRank`, so a null or unparseable `lastActivityAt` is -Infinity and returns null
+ * rather than "56 million days": a project with no tasks is not a project that has stalled. A
+ * negative age — an instant in the future, which a clock skew between the server and the reader
+ * makes reachable — is below the threshold and returns null too.
+ *
+ * `d` rather than "2 days": that is how every other age in this app is spelled (lib/runnerEngines'
+ * `ago`, the Transcript's timestamps, the background tray's), and a badge is the wrong place to
+ * introduce a second vocabulary for the same fact.
+ */
+function quietDays(lastActivityAt: string | null, now: number): number | null {
+  const rank = activityRank(lastActivityAt);
+  if (rank === -Infinity) return null;
+  const quiet = now - rank;
+  return quiet < QUIET_MS ? null : Math.floor(quiet / DAY_MS);
+}
+
+/**
+ * The badge one row carries, or null on the rows that carry none — which is most of them.
+ *
+ *   - Stalled and quiet for a day: how long the pile has been sitting there. The section says
+ *     nothing is running; this says nobody has been back since Tuesday.
+ *   - In progress and quiet for a day: a ZOMBIE RUN. The project holds a task whose status says
+ *     RUNNING while nothing has been written for days, so the section header — the one place a
+ *     reader would look — is actively telling them the opposite of the truth. Production has two
+ *     of these right now and the page has no signal for either.
+ *   - Wrapping up: not a fault and not amber. Every task is settled and the project is still OPEN,
+ *     so the ask is one click and the badge carries the count that justifies it.
+ *
+ * The section is recomputed here rather than passed in. It is cheap, and a caller that could hand
+ * over the WRONG key is a caller that can put "No progress" on a stalled row.
+ */
+export function attentionChipOf(project: AttentionProject, now: number): AttentionChip | null {
+  const section = attentionSectionOf(project);
+  const { running, ready, blocked, done, cancelled } = project.buckets;
+
+  if (section === 'wrapping-up') {
+    const settled = done + cancelled;
+    // Written as settled-of-total rather than as `${settled}/${settled}`: the two numbers are the
+    // two facts, and the badge does not depend on the section rule to be read. "settled", not
+    // "done", because cancelled work is in that count and was never done — it is also the word
+    // the header right above already uses.
+    return {
+      tone: 'brand',
+      text: `${settled}/${running + ready + blocked + settled} settled · still open`,
+    };
+  }
+
+  const days = quietDays(project.lastActivityAt, now);
+  if (days === null) return null;
+
+  if (section === 'stalled') return { tone: 'warning', text: `Stalled ${days}d` };
+  // `running > 0` and not just the section: In progress also holds the OPEN project with NO TASKS
+  // at all (see attentionSectionOf), and a project nobody has filed against yet is not a run that
+  // has died. Its `lastActivityAt` is null so `quietDays` already refuses it — this states the
+  // rule anyway, so the badge does not depend on that coincidence holding.
+  if (section === 'running' && running > 0) return { tone: 'warning', text: `No progress ${days}d` };
+  return null;
+}
+
+/** At most this many Stalled rows get the tint. Two, because a wash that covers a section is that
+ *  section's background: eight tinted rows in production would say "this whole area is amber",
+ *  which is a statement about the page, not about any project on it. */
+const STALLED_SPOTLIGHT = 2;
+
+/**
+ * Which rows get a wash of `--warning-bg` behind them: the head of Stalled, and nothing else.
+ *
+ * Stalled is ordered by `ready` descending, so its first rows ARE the largest piles of work that
+ * could start and isn't — the two the reader should deal with first. `ready > 0` is required
+ * rather than assumed: the tail of that section is the projects blocked entirely on another
+ * project's work (again see `attentionSectionOf`), and on a short list one of those can be in the
+ * top two. Tinting it would point the reader at the one row there that has nothing to pick up.
+ */
+export function spotlitProjectIds<T extends AttentionProject & SectionProject>(
+  sections: readonly ProjectSection<T>[],
+): Set<string> {
+  const stalled = sections.find((s) => s.key === 'stalled')?.projects ?? [];
+  return new Set(
+    stalled
+      .slice(0, STALLED_SPOTLIGHT)
+      .filter((p) => p.buckets.ready > 0)
+      .map((p) => p.id),
+  );
+}

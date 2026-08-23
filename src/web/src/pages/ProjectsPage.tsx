@@ -34,7 +34,11 @@ import {
 } from '../lib/coordinatorStatus';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
-import { projectAttentionSections } from '../lib/projectAttention';
+import {
+  attentionChipOf,
+  projectAttentionSections,
+  spotlitProjectIds,
+} from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
   providersQuery,
@@ -196,6 +200,15 @@ export function ProjectsPage() {
   // `lastActivityAt` every row carries. The rules and the reason for that order live in
   // lib/projectAttention; the server's unrendered `createdAt desc` no longer orders anything here.
   const sections = useMemo(() => projectAttentionSections(matches), [matches]);
+  // The two biggest piles of startable work nobody is starting — the head of Stalled — get a wash
+  // of amber behind them. Two and no more: see spotlitProjectIds for why a tint that covers a
+  // whole section stops being a signal.
+  const spotlit = useMemo(() => spotlitProjectIds(sections), [sections]);
+  // ONE instant for the whole render, read here rather than per row: the badges are ages, and two
+  // rows reading the clock a millisecond apart could land either side of a day boundary and
+  // disagree about how long the same silence has been. Re-read on every render, so a page left
+  // open does not keep reporting the age it had when it mounted.
+  const now = Date.now();
   const empty = projectsEmptyKind(projects.data?.length ?? 0, matches.length, filter, search);
 
   return (
@@ -265,8 +278,15 @@ export function ProjectsPage() {
             // occupy depends on how much of them is CJK, which is what had these rows jumping
             // between one and three lines. The box truncates instead (see .project-row-goal).
             const goal = markdownToPlainText(p.goal) || 'No goal set';
+            // What is WRONG with this row, past which section it landed in — how long it has been
+            // quiet, or that it is finished and still open. Null on most rows, which is the point
+            // (see attentionChipOf).
+            const chip = attentionChipOf(p, now);
             return (
-              <List.Item className="project-row" style={{ padding: '11px 10px' }}>
+              <List.Item
+                className={`project-row${spotlit.has(p.id) ? ' project-row-spotlit' : ''}`}
+                style={{ padding: '11px 10px' }}
+              >
                 {/* One link spanning the whole row — meta and count alike — so the entire row is a
                     single click and a single tab stop, rather than a title-sized target with dead
                     space either side. The short public id, never the raw UUID: the same spelling
@@ -278,6 +298,11 @@ export function ProjectsPage() {
                   <div className="project-row-main">
                     <div className="project-row-head">
                       <span className="project-row-title">{p.title}</span>
+                      {chip ? (
+                        <span className={`project-row-chip project-row-chip-${chip.tone}`}>
+                          {chip.text}
+                        </span>
+                      ) : null}
                       <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
                     </div>
                     <div className="project-row-goal">{goal}</div>

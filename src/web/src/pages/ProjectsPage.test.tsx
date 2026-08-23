@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { QUIET_MS } from '../lib/projectAttention';
 import {
   EMPTY_NEW_TASK_DRAFT,
   NewProjectTaskForm,
@@ -2636,5 +2637,168 @@ describe('the New task form’s Start at control', () => {
     expect(out.indexOf('>Start at<')).toBeLessThan(out.indexOf('>Assignee<'));
     expect(out).toContain('value="Ship it"');
     expect(out).toContain('Copy is signed off');
+  });
+});
+
+describe('ProjectsPage — badges', () => {
+  /**
+   * The badges are ages, and the page reads the real clock — so the fixtures are written as
+   * offsets from `Date.now()` rather than as fixed instants that would age out of the case they
+   * were chosen for. QUIET_MS is imported rather than restated: a test carrying its own copy of
+   * the threshold cannot fail when the threshold moves, which is the one thing it is here for.
+   */
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+  const listRow = (
+    id: string,
+    title: string,
+    over: Record<string, unknown> & { buckets?: Partial<Record<string, number>> },
+  ) => ({
+    id,
+    title,
+    status: 'OPEN',
+    goal: `The goal of ${title}`,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-02T00:00:00Z',
+    _count: { tasks: 5 },
+    lastActivityAt: ago(2 * QUIET_MS),
+    ...over,
+    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
+  });
+
+  /** Every row of the page, read back out of the markup: which section it is in, what its badge
+   *  says, and whether it is tinted. The assertions below are about the rendered row — a rule
+   *  that is right in lib/projectAttention and unwired here has to fail. */
+  function rowsOf(html: string): Array<{ section: string; title: string; chip: string | null; tone: string | null; spotlit: boolean }> {
+    const out = [];
+    const marks = [...html.matchAll(/data-section="([^"]+)"/g)];
+    for (const [i, m] of marks.entries()) {
+      const block = html.slice(m.index, i + 1 < marks.length ? marks[i + 1].index : html.length);
+      for (const li of block.matchAll(/<li [^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/li>/g)) {
+        const chip = /class="project-row-chip project-row-chip-(\w+)">([^<]*)</.exec(li[2]);
+        out.push({
+          section: m[1],
+          title: /class="project-row-title">([^<]*)</.exec(li[2])?.[1] ?? '',
+          chip: chip?.[2] ?? null,
+          tone: chip?.[1] ?? null,
+          spotlit: li[1].split(' ').includes('project-row-spotlit'),
+        });
+      }
+    }
+    return out;
+  }
+
+  function render(rows: ReturnType<typeof listRow>[]) {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], rows);
+    return rowsOf(renderPage(qc));
+  }
+
+  const rowFor = (rows: ReturnType<typeof render>, title: string) => rows.find((r) => r.title === title)!;
+
+  it('badges a stalled project with how long it has been quiet', () => {
+    const rows = render([listRow(P1, 'Ledger Migration', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(4 * QUIET_MS) })]);
+
+    expect(rowFor(rows, 'Ledger Migration')).toMatchObject({
+      section: 'stalled',
+      chip: 'Stalled 4d',
+      tone: 'warning',
+    });
+  });
+
+  it('badges a run that says RUNNING and has written nothing for days', () => {
+    // The zombie, and the reason this unit exists: the section header over this row reads "Work in
+    // flight" while the project has not been touched since Thursday. Production held two of these
+    // and the page said nothing about either.
+    const rows = render([listRow(P2, 'Fair Scheduling', { buckets: { running: 1, ready: 1, blocked: 9, done: 5 }, lastActivityAt: ago(2 * QUIET_MS) })]);
+
+    expect(rowFor(rows, 'Fair Scheduling')).toMatchObject({
+      section: 'running',
+      chip: 'No progress 2d',
+      tone: 'warning',
+    });
+  });
+
+  it('badges a finished project nobody closed with the count that justifies closing it', () => {
+    const rows = render([listRow(P3, 'Inbox Redesign', { _count: { tasks: 12 }, buckets: { done: 12 } })]);
+
+    expect(rowFor(rows, 'Inbox Redesign')).toMatchObject({
+      section: 'wrapping-up',
+      chip: '12/12 settled · still open',
+      tone: 'brand',
+    });
+  });
+
+  it('leaves a stalled project touched inside the threshold unbadged', () => {
+    // The negative case the threshold is FOR. Same section, same buckets, three hours instead of
+    // four days: the section already says nothing is running, and a badge here would say only
+    // that the reader should stop reading badges.
+    const rows = render([
+      listRow(P1, 'Quiet For Days', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(4 * QUIET_MS) }),
+      listRow(P4, 'Touched This Morning', { buckets: { ready: 6118, blocked: 17324 }, lastActivityAt: ago(3 * 60 * 60 * 1000) }),
+    ]);
+
+    expect(rowFor(rows, 'Touched This Morning').section).toBe('stalled');
+    expect(rowFor(rows, 'Touched This Morning').chip).toBeNull();
+    expect(rowFor(rows, 'Quiet For Days').chip).toBe('Stalled 4d');
+  });
+
+  it('leaves a running project that just wrote something unbadged', () => {
+    const rows = render([listRow(P5, 'LFS Build', { buckets: { running: 1, blocked: 117 }, lastActivityAt: ago(3 * 60 * 1000) })]);
+
+    expect(rowFor(rows, 'LFS Build').section).toBe('running');
+    expect(rowFor(rows, 'LFS Build').chip).toBeNull();
+  });
+
+  it('badges nothing else on a page full of rows', () => {
+    // Three badges out of eight rows. A badge on every row is a second background colour: the
+    // stalled section alone holds eight projects in production, and the reader would be back to
+    // a page where nothing stands out — one screen further down than before.
+    const rows = render([
+      listRow(P1, 'Stalled Quiet', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(2 * QUIET_MS) }),
+      listRow(P2, 'Stalled Fresh', { buckets: { ready: 40 }, lastActivityAt: ago(60 * 1000) }),
+      listRow(P3, 'Zombie Run', { buckets: { running: 1, blocked: 9 }, lastActivityAt: ago(3 * QUIET_MS) }),
+      listRow(P4, 'Healthy Run', { buckets: { running: 2 }, lastActivityAt: ago(90 * 1000) }),
+      listRow(P5, 'Needs Closing', { _count: { tasks: 7 }, buckets: { done: 4, cancelled: 3 } }),
+      listRow(P6, 'Long Done', { status: 'DONE', buckets: { done: 16 }, lastActivityAt: ago(90 * QUIET_MS) }),
+      listRow(P7, 'Abandoned', { status: 'CANCELLED', buckets: { done: 7 }, lastActivityAt: ago(50 * QUIET_MS) }),
+      listRow(P8, 'Brand New', { _count: { tasks: 0 }, lastActivityAt: null }),
+    ]);
+
+    expect(rows.filter((r) => r.chip).map((r) => [r.title, r.chip])).toEqual([
+      ['Stalled Quiet', 'Stalled 2d'],
+      ['Needs Closing', '7/7 settled · still open'],
+      ['Zombie Run', 'No progress 3d'],
+    ]);
+  });
+
+  it('tints the head of Stalled and nothing below it', () => {
+    // At most two rows, and only in Stalled — see spotlitProjectIds. Eight tinted rows would make
+    // amber the section's background rather than a mark on the rows worth starting.
+    const rows = render([
+      listRow(P1, 'Biggest Pile', { buckets: { ready: 6118, blocked: 17324 } }),
+      listRow(P2, 'Second Pile', { buckets: { ready: 9, blocked: 1 } }),
+      listRow(P3, 'Third Pile', { buckets: { ready: 4 } }),
+      listRow(P4, 'Blocked Elsewhere', { buckets: { blocked: 30 } }),
+      listRow(P5, 'Running', { buckets: { running: 1, ready: 99 } }),
+    ]);
+
+    expect(rows.filter((r) => r.spotlit).map((r) => r.title)).toEqual(['Biggest Pile', 'Second Pile']);
+  });
+
+  it('spells its colours as theme tokens, never as a hex', () => {
+    // Both tones and the tint are named in index.css off --warning-*/--brand-*, so they follow the
+    // palette into dark mode. A hex on this row would be a light-mode-only badge — and the row
+    // itself carries no colour at all, only the class that picks one.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const rules = /\.project-row-chip[\s\S]*?\.project-row-spotlit\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
+
+    expect(rules).toContain('var(--warning-bg)');
+    expect(rules).toContain('var(--warning-border)');
+    expect(rules).toContain('var(--brand-tint)');
+    expect(rules).toContain('var(--brand-border)');
+    expect(rules).toContain('var(--brand-strong)');
+    expect(rules).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(source).not.toMatch(/project-row-chip[^`]*#[0-9a-f]{3}/i);
   });
 });

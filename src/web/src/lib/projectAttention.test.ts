@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  QUIET_MS,
+  attentionChipOf,
   attentionSectionOf,
   orderWithinSection,
   projectAttentionSections,
+  spotlitProjectIds,
   type AttentionProject,
   type AttentionSectionKey,
 } from './projectAttention';
@@ -242,5 +245,177 @@ describe('projectAttentionSections', () => {
     // an empty section is not worth a header, and deciding it twice is how the two drift.
     expect(sections).toHaveLength(4);
     expect(sections.find((s) => s.key === 'stalled')!.projects).toEqual([]);
+  });
+});
+
+describe('attentionChipOf', () => {
+  // A fixed instant to measure ages against, so the assertions below say what they mean rather
+  // than what the clock happened to be during the run.
+  const NOW = Date.parse('2026-08-23T18:55:05.000Z');
+  const HOUR = 60 * 60 * 1000;
+  /** An ISO instant `ms` before NOW — the way every case here spells "quiet this long". */
+  const quietFor = (ms: number) => new Date(NOW - ms).toISOString();
+
+  it('says how long a stalled project has been quiet', () => {
+    const chip = attentionChipOf(
+      project({ buckets: { ready: 9, blocked: 1 }, lastActivityAt: quietFor(2 * QUIET_MS) }),
+      NOW,
+    );
+
+    expect(chip).toEqual({ tone: 'warning', text: 'Stalled 2d' });
+  });
+
+  it('calls out a project whose run says RUNNING and has written nothing for days', () => {
+    // The zombie: `running > 0` puts it under a header that reads "Work in flight", and nothing
+    // has moved since three days ago. Production had two of these with no signal at all.
+    const chip = attentionChipOf(
+      project({ buckets: { running: 1, ready: 3, blocked: 10 }, lastActivityAt: quietFor(3 * QUIET_MS) }),
+      NOW,
+    );
+
+    expect(chip).toEqual({ tone: 'warning', text: 'No progress 3d' });
+  });
+
+  it('counts the settled work on a finished project nobody closed', () => {
+    const chip = attentionChipOf(project({ buckets: { done: 12 } }), NOW);
+
+    expect(chip).toEqual({ tone: 'brand', text: '12/12 settled · still open' });
+    // Cancelled work is in the count and was never "done" — which is why the badge says settled,
+    // the same word the section header above it uses.
+    expect(attentionChipOf(project({ buckets: { done: 5, cancelled: 7 } }), NOW)?.text).toBe(
+      '12/12 settled · still open',
+    );
+  });
+
+  it('is the only badge that does not depend on the clock', () => {
+    // Wrapping up is not an age: the ask is "close this", and it is equally true one minute after
+    // the last task finished as it is a week later.
+    const justFinished = project({ buckets: { done: 12 }, lastActivityAt: quietFor(1000) });
+
+    expect(attentionChipOf(justFinished, NOW)?.tone).toBe('brand');
+  });
+
+  it('leaves a stalled project that was touched inside the threshold unbadged', () => {
+    // The negative case the whole threshold exists for: nothing is running here either, and the
+    // section already says so. Three hours of quiet is a long turn, not a problem.
+    const recent = project({ buckets: { ready: 6118, blocked: 17324 }, lastActivityAt: quietFor(3 * HOUR) });
+
+    expect(attentionSectionOf(recent)).toBe('stalled');
+    expect(attentionChipOf(recent, NOW)).toBeNull();
+  });
+
+  it('leaves a running project that just wrote something unbadged', () => {
+    const busy = project({ buckets: { running: 2, blocked: 117 }, lastActivityAt: quietFor(3 * 60 * 1000) });
+
+    expect(attentionSectionOf(busy)).toBe('running');
+    expect(attentionChipOf(busy, NOW)).toBeNull();
+  });
+
+  it('holds the threshold exactly: one second short of a day is silent, one second past is not', () => {
+    const buckets = { ready: 4 };
+
+    expect(attentionChipOf(project({ buckets, lastActivityAt: quietFor(QUIET_MS - 1000) }), NOW)).toBeNull();
+    expect(attentionChipOf(project({ buckets, lastActivityAt: quietFor(QUIET_MS + 1000) }), NOW)?.text).toBe(
+      'Stalled 1d',
+    );
+  });
+
+  it('never badges a completed project, however long ago it was finished', () => {
+    for (const status of ['DONE', 'CANCELLED'] as const) {
+      const closed = project({ status, buckets: { done: 16 }, lastActivityAt: quietFor(90 * QUIET_MS) });
+      expect(attentionChipOf(closed, NOW)).toBeNull();
+    }
+  });
+
+  it('never badges a project that has no tasks to have stalled', () => {
+    // In progress by section (see attentionSectionOf) but `running` is 0 and there is no activity
+    // to be old — "No progress 19,000d" measured from the epoch is what a bare section test would
+    // have shipped.
+    const untouched = project({ buckets: {}, lastActivityAt: null });
+
+    expect(attentionSectionOf(untouched)).toBe('running');
+    expect(attentionChipOf(untouched, NOW)).toBeNull();
+    expect(attentionChipOf(project({ buckets: {}, lastActivityAt: 'not a date' }), NOW)).toBeNull();
+  });
+
+  it('reads an activity stamp in the future as silence, not as a badge', () => {
+    // A reader's clock behind the server's makes this reachable, and `now - at` is negative.
+    const skewed = project({ buckets: { ready: 9 }, lastActivityAt: new Date(NOW + 5 * HOUR).toISOString() });
+
+    expect(attentionChipOf(skewed, NOW)).toBeNull();
+  });
+
+  it('badges only the three cases, over every combination of buckets and statuses', () => {
+    const counts = [0, 1, 5];
+    const badged: string[] = [];
+
+    for (const status of ['OPEN', 'DONE', 'CANCELLED'] as const)
+      for (const running of counts)
+        for (const ready of counts)
+          for (const blocked of counts)
+            for (const done of counts)
+              for (const cancelled of counts) {
+                const p = project({
+                  status,
+                  buckets: { running, ready, blocked, done, cancelled },
+                  lastActivityAt: quietFor(2 * QUIET_MS),
+                });
+                const chip = attentionChipOf(p, NOW);
+                if (!chip) continue;
+                badged.push(`${attentionSectionOf(p)}:${chip.tone}`);
+              }
+
+    // Three shapes and no fourth. Completed never appears — a finished project is not an ask —
+    // and no section ever produces two different tones.
+    expect([...new Set(badged)].sort()).toEqual([
+      'running:warning',
+      'stalled:warning',
+      'wrapping-up:brand',
+    ]);
+  });
+});
+
+describe('spotlitProjectIds', () => {
+  const row = (id: string, ready: number) => ({
+    id: `0195c0de-0000-7000-8000-0000000000${id}`,
+    title: `Project ${id}`,
+    _count: { tasks: 1 },
+    ...project({ buckets: { ready, blocked: 1 } }),
+  });
+
+  const idsOf = (...rows: ReturnType<typeof row>[]) =>
+    [...spotlitProjectIds(projectAttentionSections(rows))].map(
+      (id) => rows.find((r) => r.id === id)!.title,
+    );
+
+  it('tints the two biggest piles of startable work and no more', () => {
+    // Eight stalled rows is what production actually holds. Washing all eight in amber would make
+    // amber this section's background colour, and the badges unreadable against it.
+    const rows = Array.from({ length: 8 }, (_, i) => row(`0${i + 1}`, (8 - i) * 10));
+
+    expect(idsOf(...rows)).toEqual(['Project 01', 'Project 02']);
+  });
+
+  it('follows the order the section is in, not the order the rows arrived in', () => {
+    expect(idsOf(row('01', 3), row('02', 90), row('03', 40))).toEqual(['Project 02', 'Project 03']);
+  });
+
+  it('skips a stalled project with nothing ready to pick up', () => {
+    // The externally-blocked case: it belongs in Stalled and can reach the top two on a short
+    // list, but there is no pile here to point at — tinting it would send the reader to the one
+    // row in the section with nothing to start.
+    const blockedOnly = { ...row('02', 0) };
+
+    expect(idsOf(row('01', 9), blockedOnly)).toEqual(['Project 01']);
+  });
+
+  it('tints nothing outside Stalled', () => {
+    const sections = projectAttentionSections([
+      { id: '0195c0de-0000-7000-8000-000000000011', title: 'Running', _count: { tasks: 1 }, ...project({ buckets: { running: 1, ready: 99 } }) },
+      { id: '0195c0de-0000-7000-8000-000000000012', title: 'Wrapping', _count: { tasks: 1 }, ...project({ buckets: { done: 12 } }) },
+      { id: '0195c0de-0000-7000-8000-000000000013', title: 'Done', _count: { tasks: 1 }, ...project({ status: 'DONE', buckets: { done: 4 } }) },
+    ]);
+
+    expect(spotlitProjectIds(sections).size).toBe(0);
   });
 });
