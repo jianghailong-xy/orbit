@@ -23,6 +23,14 @@ import {
   scheduledStart,
   RUN_AT_IMPOSSIBLE,
   canCreateProjectTask,
+  canCreateProject,
+  invalidateAfterProjectCreate,
+  matchesProjectSearch,
+  noMatchDescription,
+  newProjectBody,
+  projectsEmptyKind,
+  projectsPath,
+  projectsQueryKey,
   type NewProjectTaskDraft,
 } from './ProjectsPage';
 
@@ -183,7 +191,16 @@ describe('ProjectsPage', () => {
       (m) => m[1].trim().replace(/,$/, ''),
     );
     expect(apiCalls).toEqual([
-      "'/projects'",
+      // The list read. The URL itself is built by `projectsPath`, because the status filter is
+      // part of it — held there rather than interpolated here so there is ONE place the
+      // `?status=` spelling is decided, asserted directly by its own unit tests below. What this
+      // line still fixes is that the page reads the projects collection exactly once and passes
+      // it nothing but the filter.
+      "projectsPath(filter)",
+      // The write that creates a project: the collection itself, POST, and a body built in one
+      // place so no caller can send an untrimmed title or a goal of spaces. Held as literally as
+      // the task create below, for the same reason — the body IS the contract.
+      "'/projects', { method: 'POST', body: newProjectBody(draft) }",
       '`/projects/${encodeURIComponent(id!)}`',
       // The Coordinator surface's manual trigger. Held here as literally as the rest because both
       // body fields are its whole contract: `expectedConfigRevision` is what makes a press
@@ -262,7 +279,7 @@ describe('ProjectsPage', () => {
     // Well past any sensible row-length cap — proves long goals get truncated, not just shown.
     const longGoal = 'Ship the new marketing site. '.repeat(10);
     const qc = newClient();
-    qc.setQueryData(['projects'], [
+    qc.setQueryData(['projects', 'ALL'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -308,7 +325,7 @@ describe('ProjectsPage', () => {
 
   it('links the whole row to its project at the short public id, never the raw UUID', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], [
+    qc.setQueryData(['projects', 'ALL'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -338,7 +355,7 @@ describe('ProjectsPage', () => {
 
   it('shows an empty state when there are no projects', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['projects', 'ALL'], []);
     const html = renderPage(qc);
     expect(html).toContain('No projects yet');
   });
@@ -346,7 +363,7 @@ describe('ProjectsPage', () => {
   it('shows an error with a Retry action when the load fails', async () => {
     const qc = newClient();
     // Seed a settled error state for the exact same key the page reads, independent of apiMock.
-    await qc.prefetchQuery({ queryKey: ['projects'], queryFn: () => Promise.reject(new Error('network down')) });
+    await qc.prefetchQuery({ queryKey: ['projects', 'ALL'], queryFn: () => Promise.reject(new Error('network down')) });
     const html = renderPage(qc);
     expect(html).toContain('Projects could not be loaded');
     expect(html).toContain('network down');
@@ -407,7 +424,7 @@ describe('ProjectsPage — sections', () => {
 
   function renderMixed(): string {
     const qc = newClient();
-    qc.setQueryData(['projects'], MIXED);
+    qc.setQueryData(['projects', 'ALL'], MIXED);
     return renderPage(qc);
   }
 
@@ -461,11 +478,14 @@ describe('ProjectsPage — sections', () => {
 
   it('leaves out a section with nothing in it', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], MIXED.filter((p) => p.status === 'OPEN'));
+    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.status === 'OPEN'));
     const html = renderPage(qc);
     expect(html).toContain('data-section="active"');
     expect(html).not.toContain('data-section="completed"');
-    expect(html).not.toContain('Completed');
+    // Below the toolbar only: "Completed" is also the name of a filter segment, which is on the
+    // page whether or not anything is completed — the word must be gone from the LIST, not from
+    // the controls that ask for one.
+    expect(html.slice(html.indexOf('<section'))).not.toContain('Completed');
   });
 
   it('keeps the sections in the server’s own order within each one', () => {
@@ -474,6 +494,150 @@ describe('ProjectsPage — sections', () => {
     expect(html.indexOf('Website Revamp')).toBeLessThan(html.indexOf('Ledger Migration'));
   });
 });
+
+describe('ProjectsPage — toolbar', () => {
+  it('builds the list URL from the segment, sending no parameter for All', () => {
+    // 'ALL' is the absence of the parameter, not `?status=ALL` — which the endpoint would 400 on,
+    // since it validates against the three real statuses (ProjectsController.parseStatus).
+    expect(projectsPath('ALL')).toBe('/projects');
+    expect(projectsPath('OPEN')).toBe('/projects?status=OPEN');
+    expect(projectsPath('DONE')).toBe('/projects?status=DONE');
+  });
+
+  it('keys the cache by the filter, under the prefix every write invalidates', () => {
+    expect(projectsQueryKey('ALL')).toEqual(['projects', 'ALL']);
+    expect(projectsQueryKey('OPEN')).toEqual(['projects', 'OPEN']);
+    // Same first element for all three: `['projects']` is what invalidateAfterProjectCreate and
+    // invalidateAfterProjectTaskCreate invalidate, and a prefix only matches if it is one.
+    expect(projectsQueryKey('DONE')[0]).toBe('projects');
+  });
+
+  it('stays on screen while the list is loading and after it fails', () => {
+    // The controls are how a slow or failed read is narrowed and retried; a toolbar that appeared
+    // only once rows did would take them away exactly when they are wanted.
+    const loading = renderPage(newClient());
+    expect(loading).toContain('Search projects');
+    expect(loading).toContain('New project');
+
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], undefined);
+    expect(renderPage(qc)).toContain('Search projects');
+  });
+
+  it('offers all three statuses and a way to make a project', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], []);
+    const html = renderPage(qc);
+    expect(html).toContain('Search projects');
+    expect(html).toContain('>All<');
+    expect(html).toContain('>In progress<');
+    expect(html).toContain('>Completed<');
+    // Twice: once in the toolbar, once as the empty page's own call to action.
+    expect(html.split('New project').length - 1).toBe(2);
+  });
+});
+
+describe('ProjectsPage — search matching', () => {
+  const project = (over: { title?: string; goal?: string | null }) => ({
+    title: 'Website Revamp',
+    goal: 'Ship the new marketing site',
+    ...over,
+  });
+
+  it('matches the goal with its Markdown removed, not its source', () => {
+    // What the row shows is `Ship the new marketing site`; what the field HOLDS is the line below.
+    // A reader typing what they can see has to find it, which a match over the source cannot do.
+    const p = project({ goal: '## Goal\n\n**Ship** the new marketing `site`' });
+    expect(matchesProjectSearch(p, 'ship the new marketing site')).toBe(true);
+    // The marks themselves are not searchable text — nobody types them, and matching them would
+    // make `*` find every project with an emphasis in its goal.
+    expect(matchesProjectSearch(p, '**')).toBe(false);
+    expect(matchesProjectSearch(p, '## Goal')).toBe(false);
+  });
+
+  it('matches the title, ignores case and surrounding space, and lets a blank search through', () => {
+    expect(matchesProjectSearch(project({}), 'REVAMP')).toBe(true);
+    expect(matchesProjectSearch(project({}), '  revamp  ')).toBe(true);
+    expect(matchesProjectSearch(project({}), 'ledger')).toBe(false);
+    // An empty box is not a filter — and neither is one holding only spaces.
+    expect(matchesProjectSearch(project({}), '')).toBe(true);
+    expect(matchesProjectSearch(project({}), '   ')).toBe(true);
+  });
+
+  it('survives a project with no goal at all', () => {
+    const p = project({ goal: null });
+    expect(matchesProjectSearch(p, 'revamp')).toBe(true);
+    expect(matchesProjectSearch(p, 'ship')).toBe(false);
+  });
+});
+
+describe('ProjectsPage — which empty state', () => {
+  it('says "no projects" only when nothing is being narrowed', () => {
+    expect(projectsEmptyKind(0, 0, 'ALL', '')).toBe('none');
+    // The same zero rows, but with a reason: an account with projects the filter is hiding must
+    // not be told it has none.
+    expect(projectsEmptyKind(0, 0, 'OPEN', '')).toBe('no-match');
+    expect(projectsEmptyKind(0, 0, 'ALL', 'zzz')).toBe('no-match');
+    expect(projectsEmptyKind(3, 0, 'ALL', 'zzz')).toBe('no-match');
+    // A search of nothing but spaces narrows nothing, so it cannot be the reason either.
+    expect(projectsEmptyKind(0, 0, 'ALL', '   ')).toBe('none');
+  });
+
+  it('is not an empty state at all when something matched', () => {
+    expect(projectsEmptyKind(3, 1, 'ALL', 'revamp')).toBeNull();
+    expect(projectsEmptyKind(3, 3, 'OPEN', '')).toBeNull();
+  });
+
+  it('names whichever narrowing emptied the list, the search first', () => {
+    expect(noMatchDescription('ALL', 'ledger')).toBe('No projects match “ledger”');
+    // Both on: the search is the one that was just typed, so it is the one named.
+    expect(noMatchDescription('OPEN', 'ledger')).toBe('No projects match “ledger”');
+    expect(noMatchDescription('OPEN', '')).toBe('No projects are in progress');
+    expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
+  });
+});
+
+describe('ProjectsPage — creating a project', () => {
+  it('opens the create only on a title that names something', () => {
+    expect(canCreateProject({ title: '' })).toBe(false);
+    expect(canCreateProject({ title: '   ' })).toBe(false);
+    expect(canCreateProject({ title: 'Ledger Migration' })).toBe(true);
+    // The goal is optional — a project can be named before it is explained.
+    expect(canCreateProject({ title: 'Ledger Migration', goal: '' })).toBe(true);
+  });
+
+  it('trims the title and leaves an unfilled goal out of the body entirely', () => {
+    expect(newProjectBody({ title: '  Ledger Migration  ' })).toEqual({ title: 'Ledger Migration' });
+    expect(newProjectBody({ title: 'Ledger Migration', goal: '  ' })).toEqual({
+      title: 'Ledger Migration',
+    });
+    expect(newProjectBody({ title: 'Ledger Migration', goal: '  Move the ledger  ' })).toEqual({
+      title: 'Ledger Migration',
+      goal: 'Move the ledger',
+    });
+  });
+
+  it('refreshes every filter’s list, not only the one that is showing', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], []);
+    qc.setQueryData(['projects', 'OPEN'], []);
+    qc.setQueryData(['projects', 'DONE'], []);
+    qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
+
+    invalidateAfterProjectCreate(qc);
+
+    const invalidated = (key: unknown[]) =>
+      qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
+    // A project created while Completed is selected must not be missing from All when it is
+    // switched back to — which is what one invalidation on the shared prefix buys.
+    expect(invalidated(['projects', 'ALL'])).toBe(true);
+    expect(invalidated(['projects', 'OPEN'])).toBe(true);
+    expect(invalidated(['projects', 'DONE'])).toBe(true);
+    // Scoped, though: a new project with no tasks moves no task view.
+    expect(invalidated(['tasks', 'counts', null, []])).toBe(false);
+  });
+});
+
 
 describe('ProjectDetailPage', () => {
   it('renders the title, status, total tasks, per-status tallies and the full long-form fields', () => {
@@ -1546,7 +1710,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     const qc = newClient();
     qc.setQueryData(['project', encodeId(P1)], detail());
     qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['projects', 'ALL'], []);
     qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
     // Another project's page, open in another tab: it must not be dragged along.
     qc.setQueryData(['project', encodeId(P2)], detail({ id: P2 }));
@@ -1560,8 +1724,10 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     expect(invalidated(tasksKey(P1))).toBe(true);
     // ...the document whose total and per-status tallies it moved...
     expect(invalidated(['project', encodeId(P1)])).toBe(true);
-    // ...the list row carrying the same count...
-    expect(invalidated(['projects'])).toBe(true);
+    // ...the list row carrying the same count, under whichever status filter is showing —
+    // `['projects']` is the prefix of every filter's entry, which is what makes one invalidation
+    // enough...
+    expect(invalidated(['projects', 'ALL'])).toBe(true);
     // ...and the task views elsewhere in the app, which have never heard of this page.
     expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
     // Scoped, though: another project's page is left exactly where it was.
