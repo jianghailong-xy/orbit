@@ -39,6 +39,15 @@ export type DependencyState = 'NONE' | 'READY' | 'BLOCKED' | 'BLOCKED_FAILED';
 export interface DependencyPrerequisiteFact {
   status: TaskStatus;
   verificationGate?: VerificationEpochGate | null;
+  /**
+   * `[K5]`: this gate will not resolve without somebody acting — see `verificationLiveness`.
+   *
+   * Additive, and read only to move an answer from BLOCKED to BLOCKED_FAILED. A caller that does
+   * not set it gets exactly the behaviour it had before the field existed, which is what keeps the
+   * three spellings of §13.3 (this reduction, the SQL sweep and the chain walk) in agreement about
+   * SATISFACTION while only one of them speaks about liveness.
+   */
+  verificationGateStalled?: boolean;
 }
 
 export function computeDependencyState(
@@ -54,6 +63,13 @@ export function computeDependencyState(
   if (prerequisites.some((p) => p.verificationGate != null
     && VERIFICATION_EPOCH_GATES_NEEDING_A_HUMAN.has(p.verificationGate)))
     return 'BLOCKED_FAILED';
+  // `[K5]` / `[H0V2]` observation 1. The static set above names the gates that are terminal by
+  // their own value; this names the ones that are terminal by the FACTS behind them — a check that
+  // is DONE with no verdict, a PASS with no revision to apply, a run that was taken away. The
+  // module's own promise about the remainder ("everything else resolves on its own as the check
+  // runs") is false for exactly those, and reporting them as an ordinary wait is how a project
+  // sits stopped with every liveness check green.
+  if (prerequisites.some((p) => p.verificationGateStalled === true)) return 'BLOCKED_FAILED';
   if (prerequisites.every((p) => p.status === TaskStatus.DONE && p.verificationGate == null))
     return 'READY';
   return 'BLOCKED';
@@ -138,6 +154,23 @@ export function dependencyEpochGate(
   // conclusion it exists to reach.
   if (dependentVerifiesTaskId != null && entry.subjectTaskId === dependentVerifiesTaskId) return null;
   return entry.gate;
+}
+
+/**
+ * `[K5]`: does that same gate need somebody to act, rather than time to pass?
+ *
+ * A sibling of `dependencyEpochGate` and not a field on its return, because it has to observe the
+ * SAME self-exemption: a check waiting on its own subject is not gated at all, so it is not stalled
+ * either — telling a person to go and unstick a check that is about to conclude the thing it is
+ * waiting for would be advice to break it.
+ */
+export function dependencyEpochStalled(
+  prerequisiteId: string,
+  epochOf: ReadonlyMap<string, VerificationEpochEntry> | undefined,
+  dependentVerifiesTaskId?: string | null,
+): boolean {
+  if (dependencyEpochGate(prerequisiteId, epochOf, dependentVerifiesTaskId) == null) return false;
+  return epochOf?.get(prerequisiteId)?.stalled === true;
 }
 
 /** A dependency edge: `taskId` (the dependent) waits on `dependsOnTaskId` (the prerequisite). */

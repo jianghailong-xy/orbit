@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TasksService } from './tasks.service';
+import { fakeReceiptStore } from './task-run-receipt-fake';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -17,6 +18,8 @@ function promptFor(task: {
 }) {
   const created: any[][] = [];
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: {
       findFirst: async () => ({
         id: TASK_ID,
@@ -38,7 +41,11 @@ function promptFor(task: {
       }),
     },
     taskDependency: { findMany: async () => [] },
-    session: { findFirst: async () => null },
+    // A paused run's delivery is read by its own turn key before it is written (H2F).
+    conversationTurn: { findUnique: async () => null },
+    session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findFirst: async () => null },
   } as never;
   const sessions = {
     create: async (...args: any[]) => {

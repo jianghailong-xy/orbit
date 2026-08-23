@@ -48,6 +48,33 @@ export const PROJECT_BLOCKER_KINDS = [
   'AGGREGATE_PARENT_UNSATISFIABLE',
   'SUCCESSOR_OUTSIDE_SUBTREE',
   'VERIFICATION_REQUIRED',
+  /**
+   * `[K5]` / `[H0V2]`: a check of this task is FINISHED and concluded nothing, so the subject can
+   * never reach the PASS its policy waits for and everything downstream of it stays blocked.
+   *
+   * `HUMAN` recovery and `USER` owner, both for the same reason: no event the current rows can
+   * still produce changes this, and the loop must not answer it by filing another check.
+   */
+  'VERIFICATION_CANNOT_CONCLUDE',
+  /**
+   * `[K5]` §3: a finding classified `ENVIRONMENT` — the machine, the config or the toolchain is
+   * broken, and changing the code does not fix it. CL1 exempts it from the attempt budget for the
+   * reason this row exists: re-running cannot change the answer, so spending attempts on it would
+   * trip the breaker with a diagnosis that is not the task's.
+   */
+  'ENVIRONMENT_BROKEN',
+  /** `[K5]` §3: a finding classified `HUMAN_REQUIRED` — somebody's judgment or somebody's access. */
+  'HUMAN_DECISION_REQUIRED',
+  /**
+   * `[K5]` criterion 7: a conclusion the loop reached and then could not make durable.
+   *
+   * §13.2's consequences are applied by one action under a PERMANENT key, and its retries are
+   * bounded (`VERDICT_APPLY_MAX_ATTEMPTS`). When they are spent the check has a verdict, the
+   * subject cannot pass, every dependent is held, and no pass will propose the action again — so
+   * this is the row that says so. Distinct from `VERIFICATION_CANNOT_CONCLUDE`, which is the check
+   * having nothing to apply: here there IS a conclusion and it is the applying that stopped.
+   */
+  'VERDICT_APPLY_EXHAUSTED',
   'UNKNOWN_FAILURE',
 ] as const;
 
@@ -322,6 +349,58 @@ export const PROJECT_BLOCKER_POLICY: Readonly<Record<ProjectBlockerKind, Project
     pollMs: null,
     escalateMs: 60 * 60_000,
     requiredAction: 'This task completes only on a passing verification and has none; file a verification task for it, or change its completion policy.',
+  },
+  VERIFICATION_CANNOT_CONCLUDE: {
+    // `[K5]`. WARNING rather than CRITICAL for the same reason `[H0V2]` did not call this a FAIL:
+    // nothing is let through — every dependent stays blocked — and what was lost is liveness.
+    // BL4: `opensTurn` tracks the DEFAULT OWNER and nothing else. A turn is the coordinator being
+    // asked to judge something; a row whose owner is a person is not the coordinator's to judge,
+    // and opening one would wake it to look at a question addressed to somebody else.
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'WARNING',
+    pollMs: null,
+    escalateMs: 60 * 60_000,
+    requiredAction: 'A verification of this task finished without recording a verdict, so it can never pass: record the verdict, or cancel that check and file a replacement.',
+  },
+  ENVIRONMENT_BROKEN: {
+    // SYSTEM rather than USER: the environment is the thing that has to change, and naming a person
+    // as the owner of "the runner's toolchain is wrong" sends the row to somebody who may not be
+    // the one who can fix it. CRITICAL because the work has stopped, and `HUMAN` recovery because
+    // no event these rows can produce repairs a machine.
+    owner: 'SYSTEM',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'CRITICAL',
+    pollMs: null,
+    escalateMs: 30 * 60_000,
+    requiredAction: 'A verification found the environment broken rather than the code: repair what the finding names — re-running this task cannot resolve it.',
+  },
+  HUMAN_DECISION_REQUIRED: {
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'CRITICAL',
+    pollMs: null,
+    escalateMs: 30 * 60_000,
+    requiredAction: 'A verification found something only a person can decide or authorise: read the finding and answer it.',
+  },
+  VERDICT_APPLY_EXHAUSTED: {
+    // CRITICAL, unlike `VERIFICATION_CANNOT_CONCLUDE`'s WARNING: that one is a check that never
+    // answered, and nobody is waiting on an answer that does not exist. This one has the answer —
+    // it is the consequences that did not happen, so a subject that IS verified is being held and
+    // so is everything behind it.
+    //
+    // `USER` and `HUMAN` for the reason the retries are bounded at all: three passes against three
+    // freshly captured worlds have already failed, so a fourth is not what is missing.
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'CRITICAL',
+    pollMs: null,
+    escalateMs: 30 * 60_000,
+    requiredAction: 'A verification verdict could not be applied within its retry budget, so its subject can never pass: read the refusal on the action, resolve what it names, then revoke and re-record the verdict to give it a fresh revision.',
   },
   UNKNOWN_FAILURE: {
     // BL2: the way an unclassified failure exists is that this row gets opened, not that the pass

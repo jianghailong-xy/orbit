@@ -250,7 +250,10 @@ test('parent aggregation converges on PostgreSQL', { skip: !URL, timeout: 180_00
         reason: 'ALL_CHILDREN_DONE',
         evidence: {
           children: { total: 2, done: 1, cancelled: 1, outstanding: 0 },
-          verifications: { total: 0, passed: 0, outstanding: 0 },
+          // `[K5]` added the fourth tally. Written out rather than loosened to a subset match:
+          // this assertion's job is to pin the WHOLE evidence object an aggregation records, and a
+          // partial one would stop noticing a field that quietly went missing.
+          verifications: { total: 0, passed: 0, outstanding: 0, unconcludable: 0 },
         },
       });
       assert.equal(base62ToUuid(audited[0].taskId), target.ids.p);
@@ -386,13 +389,23 @@ test('parent aggregation converges on PostgreSQL', { skip: !URL, timeout: 180_00
       await settle(events);
       assert.equal((await statuses(db, target)).p, 'OPEN', 'children alone are not enough');
 
-      // A verification that merely finished is not a pass. This is the case that decides whether
-      // the policy means anything: DONE is the verifier reporting it ran.
-      await db.task.update({ where: { id: target.ids.v }, data: { status: TaskStatus.DONE } });
+      // A verification that merely finished is not a pass — and since `[K5]`'s 0141 it is not even
+      // a row. The shape this used to write in two steps (DONE now, a verdict later) is what left a
+      // subject unable to pass and nobody able to say so, so the database refuses to REACH DONE
+      // without one. Asserted here rather than skipped: this test is where the policy's meaning is
+      // decided, and "DONE alone is not enough" is now enforced one layer lower than the policy.
+      await assert.rejects(
+        db.task.update({ where: { id: target.ids.v }, data: { status: TaskStatus.DONE } }),
+        /VERDICT_REQUIRED_WITH_DONE/,
+      );
       await settle(events);
       assert.equal((await statuses(db, target)).p, 'OPEN');
 
-      await db.task.update({ where: { id: target.ids.v }, data: { verdict: TaskVerdict.PASS } });
+      // The legal way to say it: the terminal status and the conclusion in ONE write.
+      await db.task.update({
+        where: { id: target.ids.v },
+        data: { status: TaskStatus.DONE, verdict: TaskVerdict.PASS },
+      });
       await settle(events);
       assert.equal((await statuses(db, target)).p, 'DONE');
 

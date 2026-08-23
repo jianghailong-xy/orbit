@@ -5,6 +5,10 @@ import { SessionNotSendable, SessionsService } from './sessions.service';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
 import type { SessionTurnDto, SessionInterruptDto } from './dto';
 
+// `[K3]` guards attempts at this door; nothing here is an attempt, so both calls are no-ops. A
+// stub rather than `{}` so a guard that starts being called shows up as a test change, not a crash.
+const ATTEMPTS = { assertMayEndSession: async () => undefined, chargeSteer: async () => undefined };
+
 /**
  * Every door onto a session — the browser, macOS/iOS, the HTTP API, the runner's MCP tools and
  * CLI — reaches ONE service. This pins that: the same intent, expressed at any of them, arrives
@@ -45,7 +49,7 @@ function doors() {
   const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never);
   const runner = new RunnerSessionsController(sessions as never, {
     assert: async () => undefined,
-  } as never, {} as never);
+  } as never, {} as never, ATTEMPTS as never);
   return { turns, interrupts, browser, runner };
 }
 

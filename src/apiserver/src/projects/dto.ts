@@ -259,3 +259,38 @@ export class RecordMergeEvidenceDto {
   /** The raw observation behind the hash: the command, its output, the blob ids it read. */
   @IsOptional() detail?: Record<string, unknown>;
 }
+
+/**
+ * `[K5]` §6: the only shape a verification Session may submit.
+ *
+ * The DTO IS the ownership rule. There is no field here for the subject's acceptance criteria, its
+ * title, its description or its scope revision content — §1 OW1 forbids a verifier from touching
+ * any of them, and OW2 forbids a worker from approving its own new criterion. What a reporter that
+ * wants the scope changed does instead is submit this with `scopeClassification: 'SCOPE_EXPANSION'`
+ * and let CL3 answer, which is a freeze and a request rather than a change.
+ *
+ * `scopeRevision` is required and is not defaulted to "whatever it is now" on purpose (FD4): a
+ * finding measured against a revision the task has moved past is an answer to a question nobody is
+ * asking, and defaulting it would silently re-address the conclusion to the new question.
+ */
+export class SubmitVerificationFindingDto {
+  @IsIn(['P0', 'P1', 'P2', 'P3']) severity!: 'P0' | 'P1' | 'P2' | 'P3';
+  @IsString() @MinLength(1) @MaxLength(200) violatedInvariant!: string;
+  @IsString() @MinLength(1) @MaxLength(4000) minimalRepro!: string;
+  @Matches(/^[0-9a-f]{64}$/, {
+    message: 'failureFingerprint must be the 64-character sha256 digest §5 defines',
+  })
+  failureFingerprint!: string;
+  @IsIn([
+    'TRANSIENT', 'IN_SCOPE_DEFECT', 'PREREQUISITE', 'SCOPE_EXPANSION', 'ENVIRONMENT',
+    'HUMAN_REQUIRED',
+  ])
+  scopeClassification!: string;
+  /** Commands, key output, SHAs, environment — as JSON rather than prose, in Base62 ids. */
+  evidence!: Record<string, unknown>;
+  /** §6 has two values: a check that passed has nothing to report and no consequence to produce. */
+  @IsIn(['FAIL', 'INCONCLUSIVE']) verdict!: 'FAIL' | 'INCONCLUSIVE';
+  @IsInt() @Min(1) scopeRevision!: number;
+  /** Which check is reporting. Recorded for the audit, never dereferenced. */
+  @IsOptional() @IsPublicId() reporterTaskId?: string | null;
+}

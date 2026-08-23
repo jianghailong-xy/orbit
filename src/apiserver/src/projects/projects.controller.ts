@@ -21,8 +21,12 @@ import {
   OpenProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   TriggerProjectCoordinatorDto,
+  SubmitVerificationFindingDto,
   UpdateProjectDto,
 } from './dto';
+import { ConvergenceLedgerService } from './convergence-ledger.service';
+import { VerificationFindingService } from './verification-finding.service';
+import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectsService } from './projects.service';
 
@@ -34,6 +38,9 @@ export class ProjectsController {
   constructor(
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
+    private readonly convergence: ConvergenceLedgerService,
+    private readonly findings: VerificationFindingService,
+    private readonly attempts: SessionAttemptService,
   ) {}
 
   @Post()
@@ -114,6 +121,107 @@ export class ProjectsController {
   @Get(':id/dependency-graph')
   dependencyGraph(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.dependencyGraph(user.userId, id);
+  }
+
+  /**
+   * Why this TASK is or is not still being attempted (`[K2]`, convergence contract §1/§4/§8).
+   *
+   * `/coordinator/status` answers the same question for the project; this is the per-task half, and
+   * the one that can distinguish the two things a stopped task looks identical from the outside:
+   * a task that is converging slowly, and a task whose breaker tripped and is waiting for a person.
+   *
+   * It serves the RESOLVED thresholds rather than the project's override columns — a caller asking
+   * why a task stopped needs the limit that applied, not a null that means "the default did". Every
+   * scope revision is returned, superseded ones included: the old rows are the audit that says what
+   * the task was asking for while the attempts charged to that revision were being spent.
+   *
+   * Ids leave as Base62, including the ones buried inside the two machine keys, which the
+   * interceptor cannot see into.
+   */
+  @Get(':id/tasks/:taskId/convergence')
+  async convergenceLedger(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.convergence.describe(user.userId, taskId);
+  }
+
+  /**
+   * `[K5]` §6: submit a finding about this task, and get back the ONE thing it produced.
+   *
+   * The user door. A person reporting a finding is a `USER` reporter, which §3's `谁能定` column
+   * makes the only actor who may put a failure in any of the six classes — an agent's door is
+   * narrower, and deliberately: `TRANSIENT` and `ENVIRONMENT` are read from system evidence, so an
+   * agent that could write them could buy itself another attempt for ever without spending a budget
+   * that charges neither (CL1). That is §0's incident with a nicer name on it.
+   *
+   * A repeat submission of the same failure returns the original finding with `duplicate: true` and
+   * writes nothing (FD1). It is not an error: a reporter that retried a request it never saw the
+   * answer to must be able to ask again and learn what happened, and the alternative — a refusal —
+   * is what makes a caller file the same defect under a different fingerprint.
+   */
+  @Post(':id/tasks/:taskId/findings')
+  async submitFinding(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: SubmitVerificationFindingDto,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.findings.submit({
+      ownerId: user.userId,
+      subjectTaskId: taskId,
+      reporter: 'USER',
+      scopeRevision: dto.scopeRevision,
+      reporterTaskId: dto.reporterTaskId ?? null,
+      decidedBy: 'USER',
+      finding: {
+        severity: dto.severity,
+        violatedInvariant: dto.violatedInvariant,
+        minimalRepro: dto.minimalRepro,
+        failureFingerprint: dto.failureFingerprint,
+        scopeClassification: dto.scopeClassification as never,
+        evidence: dto.evidence,
+        verdict: dto.verdict,
+      },
+    });
+  }
+
+  /** Every finding on this task, newest first: what was found, and which Task or row it became. */
+  @Get(':id/tasks/:taskId/findings')
+  async taskFindings(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.findings.describe(user.userId, taskId);
+  }
+
+  /**
+   * How much of this TASK's current attempt is left, per dimension (`[K3]`, attempt budget §1).
+   *
+   * `.../convergence` answers "how many more tries does this task get"; this answers the other
+   * half — "how much is left of the try that is running". Both are needed and neither implies the
+   * other: a task with plenty of attempts left can be one turn from the end of the one in flight.
+   *
+   * Every dimension reports its own reading rather than a single boolean, because BD3's four states
+   * are not interchangeable: `UNMEASURED` (the runner has not reported a context window yet) is not
+   * `WITHIN` and is not `UNBOUNDED`, and collapsing them is how a budget silently stops applying.
+   * The live attempt is re-measured against the request's clock so the wall clock is current; a
+   * closed one reports the spend it was last measured at rather than one that kept running after
+   * the work stopped.
+   */
+  @Get(':id/tasks/:taskId/attempts')
+  async taskAttempts(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    return this.attempts.describe(user.userId, taskId, new Date());
   }
 
   /**

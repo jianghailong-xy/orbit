@@ -537,7 +537,9 @@ test('every planned write carries the evidence it was decided from', () => {
     reason: 'CHILDREN_OUTSTANDING',
     evidence: {
       children: { total: 3, done: 1, cancelled: 1, outstanding: 1 },
-      verifications: { total: 2, passed: 1, outstanding: 1 },
+      // `[K5]`: `w` is OPEN, so it is outstanding and can still conclude — `unconcludable` counts
+      // only the ones that are DONE with nothing recorded.
+      verifications: { total: 2, passed: 1, outstanding: 1, unconcludable: 0 },
     },
   }]);
 });
@@ -566,4 +568,75 @@ test('a deep chain does not overflow the stack', () => {
   }
   tasks.push(task('leaf', 'DONE', { parent: `n${String(depth - 1).padStart(6, '0')}` }));
   assert.equal(planTaskAggregation(tasks).aggregations.length, depth);
+});
+
+// `[K5]` / `[H0V2]`: the 20 cells that had no write, no gap, no condition and one WARN a minute.
+
+test('a roll-up whose only check is DONE with no verdict now reports a gap', () => {
+  const plan = planTaskAggregation([
+    task('p', 'OPEN', { policy: 'VERIFICATION_PASSED' }),
+    task('a', 'DONE', { parent: 'p' }),
+    task('v', 'DONE', { verifies: 'p' }),
+  ]);
+  // Still no write — the children are in but nothing passed, which is correct and unchanged.
+  assert.deepEqual(plan.aggregations, []);
+  assert.equal(plan.completionGaps.length, 1);
+  assert.equal(plan.completionGaps[0]?.reason, 'VERIFICATION_CANNOT_CONCLUDE');
+  assert.equal(plan.completionGaps[0]?.evidence.verifications.unconcludable, 1);
+});
+
+test('one check that can still conclude keeps it an ordinary wait', () => {
+  // The narrowness that makes the clause safe: a live check means somebody IS going to answer, and
+  // opening a row against that is telling a person to fix something that is not broken.
+  const plan = planTaskAggregation([
+    task('p', 'OPEN', { policy: 'VERIFICATION_PASSED' }),
+    task('a', 'DONE', { parent: 'p' }),
+    task('v', 'DONE', { verifies: 'p' }),
+    task('w', 'OPEN', { verifies: 'p' }),
+  ]);
+  assert.deepEqual(plan.completionGaps, []);
+});
+
+test('a FAIL is not this gap: §13.2 already raises its own row', () => {
+  for (const verdict of ['FAIL', 'INCONCLUSIVE'] as const) {
+    const plan = planTaskAggregation([
+      task('p', 'OPEN', { policy: 'VERIFICATION_PASSED' }),
+      task('a', 'DONE', { parent: 'p' }),
+      task('v', 'DONE', { verifies: 'p', verdict }),
+    ]);
+    assert.deepEqual(plan.completionGaps, [], verdict);
+  }
+});
+
+test('the missing-check gap still wins where there is no check at all', () => {
+  // Ordering, and it matters: `NO_VERIFICATION_FILED` is the one §13.2 V8 can close by itself, and
+  // reporting the un-closable one instead would send a person to look at a check that does not
+  // exist.
+  const plan = planTaskAggregation([
+    task('p', 'OPEN', { policy: 'VERIFICATION_PASSED' }),
+    task('a', 'DONE', { parent: 'p' }),
+  ]);
+  assert.equal(plan.completionGaps[0]?.reason, 'NO_VERIFICATION_FILED');
+});
+
+test('aggregation never completes a check that has concluded nothing', () => {
+  // The other end of migration 0141's trigger: the one writer with no person behind it must not
+  // mint `status = DONE, verdict = NULL` on a check. Reopening it stays allowed — that direction
+  // claims no conclusion.
+  const plan = planTaskAggregation([
+    task('v', 'OPEN', { verifies: 's', policy: 'ALL_CHILDREN_DONE' }),
+    task('c', 'DONE', { parent: 'v' }),
+    task('s', 'DONE', {}),
+  ]);
+  assert.deepEqual(plan.aggregations, []);
+});
+
+test('a check that DID conclude is aggregated exactly as before', () => {
+  const plan = planTaskAggregation([
+    task('v', 'OPEN', { verifies: 's', verdict: 'FAIL', policy: 'ALL_CHILDREN_DONE' }),
+    task('c', 'DONE', { parent: 'v' }),
+    task('s', 'DONE', {}),
+  ]);
+  assert.equal(plan.aggregations[0]?.taskId, 'v');
+  assert.equal(plan.aggregations[0]?.to, 'DONE');
 });

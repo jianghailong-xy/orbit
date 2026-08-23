@@ -388,6 +388,24 @@ export function isTaskWorkRefusedByDatabase(error: unknown): boolean {
  * migration 0130 raises deliberately; anything else is left alone, so an unrelated constraint
  * failure is never relabelled as a supersession conflict.
  */
+/**
+ * A fence that says "nothing was changed; retry" — the NOWAIT lock refusals, and the scope that
+ * moved while a write was being prepared.
+ *
+ * Coming back IS the whole remedy for these: every one of them rolled its statement back before
+ * anything landed, which is why each message ends by saying so. A caller whose request has a
+ * STABLE NAME can act on that advice itself rather than passing it to a person — two deliveries of
+ * one press contend on the project row the Session insert serializes on, and telling the loser to
+ * retry a request that is already idempotent is telling it to do what it could have done.
+ */
+export function isRetryableTaskFence(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return /SESSION_PROJECT_BUSY|TASK_SUPERSESSION_PROJECT_BUSY|SESSION_TASK_BUSY/.test(message)
+    || /TASK_VERIFICATION_SUBJECT_BUSY|TASK_AGGREGATE_PROJECT_BUSY|TASK_AGGREGATE_PARENT_BUSY/
+      .test(message)
+    || /TASK_AGGREGATE_SCOPE_MOVED/.test(message);
+}
+
 export function taskFenceConflictMessage(error: unknown): string | null {
   const message = error instanceof Error ? error.message : String(error ?? '');
   if (/TASK_SUPERSEDED|TASK_VERIFICATION_SUBJECT_SUPERSEDED/.test(message)) {

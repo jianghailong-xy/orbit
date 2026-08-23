@@ -143,6 +143,17 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'approvalId',
   'projectActionId',
   'decisionId',
+  // The same row as `decisionId`, under the name `[K2]`'s task ledger uses for it: a convergence
+  // decision names the project-level pass that produced it, and a caller may hand that back to
+  // `/projects/:id/coordinator/status`. Two names because the two ledgers are joined by a reader,
+  // not by a foreign key — a task's judgment must stay readable after the pass that made it is gone.
+  'projectDecisionId',
+  // `[K5]`: a finding names WHO reported it (which check, in which conversation) and WHAT it filed.
+  // All three are addresses a caller hands back — to read the check, to open the session, to run
+  // the defect — so all three are public ids like every other task and session reference here.
+  'reporterTaskId',
+  'reporterSessionId',
+  'effectTaskId',
   'resultSessionId',
   // ProjectAction subjects are currently tasks. Keep the generic wire name classified so an
   // action returned by the coordinator API can be handed back in either public-id spelling.
@@ -197,4 +208,10 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'mergeOperationOwner',
   'commitOperationId',
   'commitOperationOwner',
+  // The manual Project trigger's effect marker (`task_run_manual_trigger`, migration 0137). It
+  // names no row a caller can ask for: it is `taskRunManualTriggerId(pressToken, projectId)`, a
+  // value derived from the press so the marker and the outbox signal agree byte-for-byte about
+  // which request already happened. Decoding it on the way in would make that comparison lie, and
+  // it appears in no request and no response.
+  'requestId',
 ]);

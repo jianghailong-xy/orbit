@@ -43,6 +43,10 @@ import {
 } from './project-authorization.service';
 import {
   PlannedVerificationVerdict,
+  VERDICT_APPLY_EXHAUSTED,
+  verdictApplyAttempt,
+  verdictApplyExhausted,
+  verdictApplyRetryable,
   verificationVerdictActionKey,
 } from './task-verification-verdict';
 
@@ -51,6 +55,9 @@ export const PROJECT_RECONCILE_HEARTBEAT_MS = 20_000;
 export const PROJECT_RECONCILE_TIMER_MS = 10_000;
 export const PROJECT_RECONCILE_BACKSTOP_MS = 60_000;
 export const PROJECT_RECONCILE_STALE_MS = 5 * 60_000;
+export const PROJECT_TELEMETRY_RETENTION_MS = 2 * 24 * 60 * 60_000;
+export const PROJECT_TELEMETRY_PRUNE_INTERVAL_MS = 60 * 60_000;
+export const PROJECT_TELEMETRY_PRUNE_BATCH = 5_000;
 
 const ACTION_TYPES = [
   'DISPATCH_TASK',
@@ -86,6 +93,26 @@ export interface ProjectReconcileAction {
   type: ProjectReconcileActionType;
   subject: { type: string; id?: string | null };
   detail?: Prisma.InputJsonValue;
+  /**
+   * `[K5]`: this key may be CLAIMED again when the row already there is a refusal with budget left.
+   *
+   * Off for every caller but one, and the default is what every caller had before it existed: a key
+   * already in the ledger answers `ALREADY_APPLIED` and the effect does not run. That is right for
+   * an action whose refusal is a DECISION — a dispatch refused because the task is not OPEN is not
+   * waiting for another try.
+   *
+   * `APPLY_VERIFICATION_VERDICT` is the exception, because its refusals are not all decisions. A
+   * snapshot that moved under the apply is a race: the conclusion is still true, and nothing else
+   * in the system will ever apply it. The key is permanent, so "already in the ledger" and "already
+   * happened" had become the same sentence. This is what separates them again — bounded by
+   * `VERDICT_APPLY_MAX_ATTEMPTS`, because an unbounded retry is the other way to never finish.
+   */
+  reclaimRefused?: boolean;
+}
+
+export interface ProjectTelemetryPruneResult {
+  events: number;
+  decisions: number;
 }
 
 export type ProjectActionApplyResult =
@@ -146,6 +173,14 @@ interface ExistingActionRow {
   id: string;
   projectId: string;
   status: 'CLAIMED' | 'APPLIED' | 'REFUSED' | 'SUPERSEDED';
+}
+
+/** `[K5]`: the same row, plus the two columns a re-claim has to judge it on. */
+interface ReclaimableActionRow extends ExistingActionRow {
+  refusalCode: string | null;
+  /** The judgment that first proposed it. Frozen by migration 0120 once it is set. */
+  existingDecisionId: string | null;
+  detail: unknown;
 }
 
 /**
@@ -273,6 +308,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private unregisterHandler?: () => void;
   private ticking = false;
   private lastBackstopAt = 0;
+  private lastTelemetryPruneAt = 0;
   private _backstopHits = 0;
   private rotationExecutor?: ProjectRotationExecutor;
   private verdictExecutor?: ProjectVerdictExecutor;
@@ -399,6 +435,21 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       await this.events.drainAvailable();
       await this.flushPendingRotations();
       await this.flushPendingTurns();
+      // `decisions` is absent only in the pre-0120 isolated harnesses, whose schema has no
+      // project_decision table. Nest always supplies it after the audit migration.
+      if (this.decisions
+        && now.getTime() - this.lastTelemetryPruneAt >= PROJECT_TELEMETRY_PRUNE_INTERVAL_MS) {
+        this.lastTelemetryPruneAt = now.getTime();
+        // Retention is never load-bearing for reconciliation. A failed prune leaves history on
+        // disk and must not delay, consume or otherwise change a Project's durable work queue.
+        await this.pruneTelemetry(now).then(({ events, decisions }) => {
+          if (events + decisions > 0) {
+            this.log.debug(`Pruned ${events} idle Project event(s) and ${decisions} decision(s)`);
+          }
+        }).catch((cause: unknown) => {
+          this.log.error(`Project telemetry prune failed: ${errorText(cause)}`);
+        });
+      }
     } catch (cause) {
       this.log.error(`Project reconcile recovery tick failed: ${errorText(cause)}`);
     } finally {
@@ -949,7 +1000,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       );
       const stale = current.input.decisionInputHash !== decision.decisionInputHash;
 
-      const actionId = randomUUID();
+      const insertId = randomUUID();
       const detail = action.detail && typeof action.detail === 'object' && !Array.isArray(action.detail)
         ? { ...(action.detail as Record<string, Prisma.JsonValue>),
             decisionInputHash: decision.decisionInputHash,
@@ -976,7 +1027,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
           "id", "project_id", "idempotency_key", "type", "status", "subject_type",
           "subject_id", "fencing_token", "decision_id", "refusal_code", "detail", "updated_at"
         ) VALUES (
-          ${actionId}::uuid, ${lease.projectId}::uuid, ${action.idempotencyKey},
+          ${insertId}::uuid, ${lease.projectId}::uuid, ${action.idempotencyKey},
           ${action.type}::"project_action_type", ${stale ? 'REFUSED' : 'CLAIMED'}::"project_action_status",
           ${action.subject.type}, ${action.subject.id ?? null}::uuid, ${lease.fencingToken},
           ${decisionId}::uuid, ${stale ? 'STALE_SNAPSHOT' : null},
@@ -985,18 +1036,62 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         ON CONFLICT ("idempotency_key") DO NOTHING
         RETURNING "id"
       `);
-      if (!inserted[0]) {
-        const existing = (await tx.$queryRaw<ExistingActionRow[]>(Prisma.sql`
-          SELECT "id", "project_id" AS "projectId", "status"
+      let claimedId = inserted[0]?.id ?? null;
+      let ledgerDecisionId = decisionId;
+      if (!claimedId) {
+        const existing = (await tx.$queryRaw<ReclaimableActionRow[]>(Prisma.sql`
+          SELECT "id", "project_id" AS "projectId", "status", "refusal_code" AS "refusalCode",
+                 "decision_id" AS "existingDecisionId", "detail"
             FROM "project_action" WHERE "idempotency_key" = ${action.idempotencyKey}
         `))[0];
         if (!existing || existing.projectId !== lease.projectId) {
           throw new Error(`idempotency key ${action.idempotencyKey} belongs to another Project`);
         }
-        return {
-          status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
-        } as const;
+        // `[K5]`: one more attempt on a refusal that was a race rather than a decision. Not when
+        // THIS pass is already stale — a stale claim would spend an attempt on a snapshot the fence
+        // above has just refused, which is paying for the retry twice.
+        if (!(action.reclaimRefused === true && !stale && verdictApplyRetryable(existing))) {
+          return {
+            status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
+          } as const;
+        }
+        const attempt = verdictApplyAttempt(existing.detail) + 1;
+        // Conditional on the row STILL being the refusal that was read, so two passes racing to
+        // re-claim it cannot both win: the loser updates nothing and reads `ALREADY_APPLIED`,
+        // exactly as it did before this branch existed.
+        const reclaimed = await tx.$executeRaw(Prisma.sql`
+          UPDATE "project_action"
+             SET "status" = 'CLAIMED'::"project_action_status",
+                 "refusal_code" = NULL, "reason_code" = NULL,
+                 -- decision_id is NOT touched. Migration 0120 freezes it once it is set, and it
+                 -- is right that it does: the lineage says which judgment PROPOSED this action, and
+                 -- a retry is the same action being attempted again rather than a new one. Which
+                 -- decision drove each retry is recorded beside the counter instead. (No backticks
+                 -- in here: this is inside a template literal and one would close it early, which
+                 -- surfaces as a TS1005 pointing at the wrong line.)
+                 "fencing_token" = ${lease.fencingToken},
+                 -- The counter is the BOUND, so it is written with the CLAIM and not with the
+                 -- outcome: a process that dies between the two has still spent that attempt, and
+                 -- a crash loop cannot buy itself an unbounded number of them.
+                 "detail" = "detail" || ${JSON.stringify({
+                   verdictApplyAttempt: attempt, verdictApplyRetriedBy: uuidToBase62(decisionId),
+                 })}::jsonb,
+                 "updated_at" = ${now}
+           WHERE "id" = ${existing.id}::uuid AND "status" = 'REFUSED'
+             AND "refusal_code" = ${existing.refusalCode}
+        `);
+        if (reclaimed !== 1) {
+          return {
+            status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
+          } as const;
+        }
+        claimedId = existing.id;
+        // The row's own lineage, which the publish and refuse clauses below match on. A re-claim
+        // keeps the decision that first proposed it, so comparing against THIS pass's decision
+        // would match nothing and the publish would fail on a row it had just legally claimed.
+        ledgerDecisionId = existing.existingDecisionId ?? decisionId;
       }
+      const actionId = claimedId;
 
       // The attempt belongs to the permanently claimed action key, not to a process invocation.
       // It therefore advances once for stale/refused/applied outcomes and never on a replay.
@@ -1052,7 +1147,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
                  "detail" = "detail" || ${JSON.stringify(effectResult.detail ?? {})}::jsonb,
                  "updated_at" = ${now}
            WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
-             AND "decision_id" = ${decisionId}::uuid
+             AND "decision_id" = ${ledgerDecisionId}::uuid
         `);
         if (refused !== 1) throw new Error(`failed to refuse Project action ${actionId}`);
         return {
@@ -1065,7 +1160,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       const published = await tx.$executeRaw(Prisma.sql`
         UPDATE "project_action" SET "status" = 'APPLIED', "updated_at" = ${now}
          WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
-           AND "decision_id" = ${decisionId}::uuid
+           AND "decision_id" = ${ledgerDecisionId}::uuid
       `);
       if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
       return { status: 'APPLIED', actionId } as const;
@@ -1374,12 +1469,25 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     const planned = verificationVerdictPlan(input);
     if (!planned.length) return [];
     const keys = planned.map((verdict) => this.verdictKey(projectId, verdict));
-    const spent = await tx.$queryRaw<Array<{ idempotencyKey: string }>>(Prisma.sql`
-      SELECT "idempotency_key" AS "idempotencyKey" FROM "project_action"
+    const spent = await tx.$queryRaw<Array<{
+      idempotencyKey: string; status: string; refusalCode: string | null; detail: unknown;
+    }>>(Prisma.sql`
+      SELECT "idempotency_key" AS "idempotencyKey", "status"::text AS "status",
+             "refusal_code" AS "refusalCode", "detail"
+        FROM "project_action"
        WHERE "project_id" = ${projectId}::uuid
          AND "idempotency_key" IN (${Prisma.join(keys)})
     `);
-    const done = new Set(spent.map((row) => row.idempotencyKey));
+    // `[K5]` criterion 7. "A row exists" used to be the whole test, and that is what made a
+    // retryable refusal permanent: the row was there, so the conclusion was never proposed again,
+    // so DEP4's gate stayed `VERDICT_NOT_APPLIED` and every dependent waited on a pass that had
+    // stopped being able to do anything about it. A row with budget left is NOT spent.
+    const done = new Set(spent
+      .filter((row) => !verdictApplyRetryable(row))
+      .map((row) => row.idempotencyKey));
+    // …and a row with NO budget left is escalated here, on the pass that notices, whichever door
+    // spent the last attempt.
+    await this.stampExhaustedVerdictApplies(tx, projectId, planned, new Date(input.readAt));
     return planned.filter((verdict) => !done.has(this.verdictKey(projectId, verdict)));
   }
 
@@ -1435,6 +1543,8 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         idempotencyKey: this.verdictKey(lease.projectId, planned),
         subject: { type: 'TASK', id: base62ToUuid(planned.verifierTaskId) },
         detail: this.verdictExecutor.actionDetail(planned),
+        // The one action type whose refusals are not all decisions — see `reclaimRefused`.
+        reclaimRefused: true,
       },
       async (effectTx, actionId) => this.verdictExecutor!.applyVerdictInTransaction(
         effectTx, lease, { decisionId, planned }, actionId, now,
@@ -1448,6 +1558,57 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       );
     }
     return pending.length - 1;
+  }
+
+  /**
+   * `[K5]` criterion 7: mark every conclusion whose apply has run out of attempts.
+   *
+   * Derived on every pass from the ledger, rather than written by the attempt that happened to
+   * spend the last one. Two doors reach this action — the loop, and
+   * `ProjectVerificationVerdictService.apply` for a lease holder outside it — and only one of them
+   * is this method. A stamp written by the failing attempt would therefore be missing exactly when
+   * the other door exhausted the budget, which is the case a person most needs told about.
+   *
+   * `refusal_code` is left as the failure wrote it: that is the audit, and overwriting it would
+   * lose why the apply actually failed. `reason_code` is the BUCKET, which is how this table
+   * already uses it, and it is the field a condition detector can read — the decision snapshot
+   * carries `reasonCode` and carries no `detail`, so an attempt counter would be invisible to §11
+   * and this is not.
+   *
+   * Idempotent by its WHERE clause, so a pass that finds the stamp already there writes nothing and
+   * BL7's churn rule is never tripped.
+   */
+  private async stampExhaustedVerdictApplies(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    planned: readonly PlannedVerificationVerdict[],
+    now: Date,
+  ): Promise<void> {
+    if (!planned.length) return;
+    const keys = planned.map((verdict) => this.verdictKey(projectId, verdict));
+    const rows = await tx.$queryRaw<Array<{
+      id: string; status: string; refusalCode: string | null; detail: unknown;
+    }>>(Prisma.sql`
+      SELECT "id", "status"::text AS "status", "refusal_code" AS "refusalCode", "detail"
+        FROM "project_action"
+       WHERE "project_id" = ${projectId}::uuid
+         AND "idempotency_key" IN (${Prisma.join(keys)})
+    `);
+    for (const row of rows) {
+      if (!verdictApplyExhausted(row)) continue;
+      const stamped = await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_action"
+           SET "reason_code" = ${VERDICT_APPLY_EXHAUSTED}, "updated_at" = ${now}
+         WHERE "id" = ${row.id}::uuid AND "status" = 'REFUSED'
+           AND "reason_code" IS DISTINCT FROM ${VERDICT_APPLY_EXHAUSTED}
+      `);
+      if (stamped === 1) {
+        this.log.warn(
+          `Project ${uuidToBase62(projectId)} exhausted the retry budget applying a verdict `
+          + `(action ${row.id}, ${verdictApplyAttempt(row.detail)} attempts); escalating`,
+        );
+      }
+    }
   }
 
   /**
@@ -1807,7 +1968,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         "dedupe_key", "payload", "last_at"
       )
       SELECT gen_random_uuid(), p."id", 1, 'timer.due', ${now}, 'TIMER', p."id",
-             'timer.due:' || r."next_wake_at"::text,
+             'timer.due:' || COALESCE(r."next_wake_reason", ''),
              jsonb_build_object('reason', r."next_wake_reason"), ${now}
         FROM "project" p JOIN "project_runtime" r ON r."project_id" = p."id"
        WHERE p."status" = 'OPEN' AND p."coordinator_enabled" = true
@@ -1816,6 +1977,99 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       DO UPDATE SET "occurrences" = "project_event"."occurrences" + 1,
                     "last_at" = GREATEST("project_event"."last_at", EXCLUDED."last_at")
     `);
+  }
+
+  /**
+   * Bound the two high-volume, idle control-loop traces without touching live work or business
+   * audit. Forty-eight hours keeps the current and previous day available for incident diagnosis,
+   * while bounding a continuously executing Project to roughly 2,880 one-minute timer rows (plus
+   * at most one hour's newly expired rows) instead of an unbounded history. Each call takes a
+   * 5,000-row `SKIP LOCKED` batch: more than ten times the observed hourly growth, without making
+   * cleanup contend with delivery or with another replica.
+   *
+   * Event eligibility is deliberately narrower than "old and consumed": only a normally
+   * reconciled `timer.due` is disposable. Pending, retrying, DEAD, backstop, user, blocker and all
+   * other event rows are outside the predicate. A consumed row is no longer in the partial unique
+   * index, so deleting it cannot suppress a later wake.
+   *
+   * Decision eligibility is narrower again. The row must be the single-candidate in-flight poll
+   * and carry no signal, action, authorization, turn, aggregation or blocker observation. Refused
+   * and applied actions and acceptance-run lineage are also protected relationally by anti-joins
+   * (and by their FKs). This trades only repetitive idle snapshots for the storage bound; any
+   * non-idle audit remains.
+   */
+  async pruneTelemetry(now = new Date()): Promise<ProjectTelemetryPruneResult> {
+    const cutoff = new Date(now.getTime() - PROJECT_TELEMETRY_RETENTION_MS);
+    const events = await this.prisma.$executeRaw(Prisma.sql`
+      WITH "candidates" AS (
+        SELECT e."id"
+          FROM "project_event" e
+         WHERE e."kind" = 'timer.due'
+           AND e."disposition" = 'RECONCILED'
+           AND e."consumed_at" IS NOT NULL
+           AND e."consumed_at" < ${cutoff}
+         ORDER BY e."consumed_at", e."id"
+         LIMIT ${PROJECT_TELEMETRY_PRUNE_BATCH}
+         FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM "project_event" e
+       USING "candidates" c
+       WHERE e."id" = c."id"
+    `);
+    const decisions = await this.prisma.$executeRaw(Prisma.sql`
+      WITH "candidates" AS (
+        SELECT d."id"
+          FROM "project_decision" d
+         WHERE d."reason" = 'in-flight session may end'
+           AND d."created_at" < ${cutoff}
+           AND d."decision_input"->'signals' = '[]'::jsonb
+           AND d."outcome"->>'reason' = 'in-flight session may end'
+           AND d."outcome"->>'runStateBefore' = 'EXECUTING'
+           AND d."outcome"->>'runStateAfter' = 'EXECUTING'
+           AND d."outcome"->>'nextWakeReason' = 'in-flight session may end'
+           AND d."outcome"->>'nextWakeAt' IS NOT NULL
+           AND d."outcome"->'actions' = '[]'::jsonb
+           AND d."outcome"->'authorizations' = '[]'::jsonb
+           AND d."outcome"->'blockersOpened' = '[]'::jsonb
+           AND d."outcome"->'blockersCleared' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,raised}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,touched}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,cleared}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,escalated}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,open}' = '[]'::jsonb
+           AND d."outcome"->'aggregations' = '[]'::jsonb
+           AND d."outcome"->'aggregationCycleTaskIds' = '[]'::jsonb
+           AND d."outcome"->'suppressedTurnReasons' = '[]'::jsonb
+           AND d."outcome"->'turnReason' = 'null'::jsonb
+           AND NOT (d."outcome" ? 'turn')
+           AND d."outcome"#>>'{coordinator,status}' = 'HEALTHY'
+           AND CASE
+                 WHEN jsonb_typeof(d."outcome"#>'{detail,wakeCandidates}') = 'array'
+                 THEN jsonb_array_length(d."outcome"#>'{detail,wakeCandidates}') = 1
+                 ELSE false
+               END
+           AND d."outcome"#>>'{detail,wakeCandidates,0,source}' = '5'
+           AND d."outcome"#>>'{detail,wakeCandidates,0,reason}' = 'in-flight session may end'
+           AND CASE
+                 WHEN jsonb_typeof(d."outcome"->'consumedEventIds') = 'array'
+                 THEN jsonb_array_length(d."outcome"->'consumedEventIds') = 1
+                 ELSE false
+               END
+           AND NOT EXISTS (
+             SELECT 1 FROM "project_action" a WHERE a."decision_id" = d."id"
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM "project_acceptance_run" r WHERE r."decision_id" = d."id"
+           )
+         ORDER BY d."created_at", d."id"
+         LIMIT ${PROJECT_TELEMETRY_PRUNE_BATCH}
+         FOR UPDATE OF d SKIP LOCKED
+      )
+      DELETE FROM "project_decision" d
+       USING "candidates" c
+       WHERE d."id" = c."id"
+    `);
+    return { events, decisions };
   }
 
   /**

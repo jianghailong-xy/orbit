@@ -174,6 +174,7 @@ export function ProjectAcceptanceCard({
   });
 
   const acceptance = detail.data?.acceptance ?? null;
+  const criteria = Array.isArray(acceptance?.criteria) ? acceptance.criteria : [];
   // A ratio is shown only once an attempt exists to have earned it. Before that there is nothing
   // to put here that is not a score: "0 / 0" and "0 / 53" both read as a result.
   const ran = acceptance !== null && acceptance.lastRunAt !== null;
@@ -207,7 +208,7 @@ export function ProjectAcceptanceCard({
       ) : (
         <>
           {ran ? null : (
-            <div style={{ marginBottom: acceptance.criteria.length > 0 ? 12 : 0 }}>
+            <div style={{ marginBottom: criteria.length > 0 ? 12 : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <Typography.Text strong>Acceptance has never been run</Typography.Text>
                 {action}
@@ -219,7 +220,7 @@ export function ProjectAcceptanceCard({
               </Typography.Paragraph>
             </div>
           )}
-          <AcceptanceCriteriaList criteria={acceptance.criteria} />
+          <AcceptanceCriteriaList criteria={criteria} />
           <OutcomeNote />
         </>
       )}

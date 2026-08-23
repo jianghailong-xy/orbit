@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { TasksService } from './tasks.service';
+import { fakeReceiptStore } from './task-run-receipt-fake';
 import { taskFenceConflictMessage } from './task-supersession';
 
 /**
@@ -90,6 +91,8 @@ function serviceFor(
   const started: string[] = [];
   const selects: Select[] = [];
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: {
       findFirst: async ({ where, select }: { where: { id: string }; select?: Select }) => {
         selects.push(select ?? {});
@@ -103,10 +106,17 @@ function serviceFor(
       count: async () => 0,
     },
     taskDependency: { findMany: async () => [] },
-    session: { findMany: async () => [] },
+    // A paused run's delivery is read by its own turn key before it is written (H2F).
+    conversationTurn: { findUnique: async () => null },
+    session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findMany: async () => [] },
   } as never;
   const service = new TasksService(prisma, {} as never, {} as never);
-  (service as unknown as Record<string, unknown>).runWorkspaceOnTask =
+  (service as unknown as Record<string, unknown>).planWorkspaceRun =
+    async (_o: string, task: { id: string }) =>
+      ({ kind: 'CREATE', sessionId: `00000000-0000-4000-8000-${task.id}` });
+  (service as unknown as Record<string, unknown>).applyWorkspaceRun =
     async (...args: unknown[]) => {
       const taskId = (args[1] as { id: string }).id;
       started.push(taskId);
@@ -231,17 +241,27 @@ test('a DB refusal that beat the pre-check reaches the caller as a 409 through t
   );
 });
 
-test('the same refusal in a bulk Run becomes a readable failure, not a 500', async () => {
+test('the same refusal in a bulk Run leaves the press retryable rather than falsely settled', async () => {
+  // A refusal that BEAT the pre-check arrives with no artifact behind it, and a bulk Run's answer
+  // is frozen for ever — so it cannot be written into one on the strength of an exception's text.
+  // The press says so instead: nothing decided, nothing frozen, ask again. If this refusal is
+  // genuinely permanent the next delivery meets it at the CLASSIFICATION, which is where a fact
+  // about the row lives, rather than at the dispatch.
   const { service } = serviceFor(
     [row({ id: TASK, completionPolicy: 'ALL_CHILDREN_DONE', children: [] })],
     { dispatch: () => Promise.reject(new Error(DB_REFUSAL)) },
   );
-  const result = await service.batchExecute('owner-1', [TASK]);
-  assert.equal(result.dispatched, 0);
-  const failed = result.failed.find((entry: { id: string }) => entry.id === TASK);
-  assert.ok(failed, 'the item is reported');
-  assert.match(String(failed!.error), /aggregating its subtasks/,
-    'and it says what happened rather than naming a constraint');
+
+  await assert.rejects(
+    () => service.batchExecute('owner-1', [TASK]),
+    (error: Error) => {
+      const body = (error as unknown as { getResponse?: () => Record<string, unknown> })
+        .getResponse?.() ?? {};
+      assert.equal(body.code, 'TASK_RUN_REQUEST_UNSETTLED', `got: ${error.message}`);
+      assert.equal(body.retryable, true);
+      return true;
+    },
+  );
 });
 
 test('deleting a parent that loses the lock race is a 409, not a 500', async () => {

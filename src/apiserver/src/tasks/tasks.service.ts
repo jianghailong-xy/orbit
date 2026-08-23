@@ -79,6 +79,7 @@ import {
   supersessionRefusal,
   taskOutcome,
   isLockNotAvailable,
+  isRetryableTaskFence,
   taskFenceConflictMessage,
   taskNotObsoleteSql,
   taskRetirement,
@@ -103,10 +104,40 @@ export {
 } from './task-retry-policy';
 import { TASK_OCCUPYING } from './reclaim-stalled-task';
 import {
+  TASK_RUN_ACTION,
+  TASK_RUN_LEASE_MS,
+  taskAlreadyRunning,
+  taskRunFingerprint,
+  taskRunInProgress,
+  taskRunPinConflict,
+  taskRunUnsettled,
+  TaskRunFenceLost,
+  type TaskRunEffectFence,
+  taskRunTokenMismatch,
+  taskRunUnreadableTarget,
+  type TaskRunBatchItemPlan,
+  type TaskRunExecuteTarget,
+  type TaskRunClaim,
+  type TaskRunLease,
+  type TaskRunTargetRecord,
+  type TaskRunBatchPlan,
+  type TaskRunPlan,
+  type TaskRunReceipt,
+} from './task-run-receipt';
+import {
+  TASK_RUN_TRIGGER,
+  taskRunBatchId,
+  taskRunDesiredSessionId,
+  taskRunManualTriggerId,
+  taskRunRequestKey,
+  taskRunResumeTurnId,
+} from './task-run-identity';
+import {
   canRun,
   computeDependencyState,
   dependenciesSatisfiedSql,
   dependencyEpochGate,
+  dependencyEpochStalled,
   statusPrerequisites,
   verificationGateMessage,
   type DependencyPrerequisiteFact,
@@ -136,8 +167,8 @@ export type CreationOrigin = {
   sourceTaskId: string | null;
 };
 
-/** What runWorkspaceOnTask needs off a task to dispatch it: its identity, and the provider/model
- *  pin that overrides the assignee workspace's own (null on both = inherit from the workspace). */
+/** What a planned run needs off a task to dispatch it: its identity, and the provider/model pin
+ *  that overrides the assignee workspace's own (null on both = inherit from the workspace). */
 type TaskRunTarget = {
   id: string;
   title: string;
@@ -177,6 +208,57 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // this set so it falls through to the resume path, where the trigger delivers its prompt
 // as a new turn instead of silently returning the parked session and doing nothing.
 const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
+
+/**
+ * What one run request answers with, and what its receipt stores verbatim.
+ *
+ * Spelled out rather than inferred because it is a WIRE shape now: a repeat of a request reads it
+ * back off the receipt, so the two branches have to be discriminable by a reader that did not
+ * watch the call — and every caller can ask for `sessionId` without first proving which branch it
+ * got, which is what the callers have always done.
+ */
+export type TaskRunAnswer =
+  | { ok: true; sessionId: string | undefined; skipped?: undefined }
+  | {
+      ok: false;
+      skipped:
+        | 'superseded'
+        | 'aggregate-parent'
+        | 'coordinator-authority'
+        | 'rescheduled'
+        /**
+         * The task this request was planned against was deleted before its Session could be
+         * written. Terminal by construction — the plan names a row that no longer exists and every
+         * later delivery would fail on the same foreign key — so it is frozen rather than released.
+         */
+        | 'target-tombstoned';
+      sessionId?: undefined;
+    };
+
+/**
+ * What one press of the bulk Run answers with, and what its receipt stores verbatim.
+ *
+ * `results` is the per-item half: the tally says how many started, and a repeat of the press has to
+ * be able to say WHICH — both because that is what a client refreshing the rows it just started
+ * needs, and because "the same answer" is only checkable if the answer names its parts.
+ */
+export interface TaskBatchRunResult {
+  dispatched: number;
+  failed: Array<{ id: string; ok: false; error: string; sessionId?: undefined }>;
+  skipped: Array<{ id: string; title: string; reason: string }>;
+  runnerIds: string[];
+  batchId: string | null;
+  maxConcurrent: number | null;
+  results: Array<
+    | { id: string; ok: true; sessionId: string | undefined }
+    | { id: string; ok: false; error: string; sessionId?: undefined }
+  >;
+}
+
+/** How many times a task run re-attempts its insert behind a NOWAIT fence that said "retry". */
+const TASK_RUN_FENCE_RETRIES = 3;
+/** First backoff, doubled per attempt: 20ms, 40ms, 80ms — a lock somebody is holding, not a queue. */
+const TASK_RUN_FENCE_BACKOFF_MS = 20;
 
 /**
  * §13.8: the delivery contract a comment written by THIS binary is under.
@@ -336,17 +418,63 @@ export const TASK_LIST_SELECT = {
  * path) — the Ready tab must never offer a run the API would reject.
  */
 /**
- * Was this duplicate-key error the SESSION EXECUTION CLAIM, and not some other unique index?
+ * Was this duplicate-key error one of the TWO unique keys a task run's Session insert can reach?
  *
- * Prisma reports the conflicting index in `meta.target` — for a partial unique index on one column
- * that is the column list. Narrowed here because the caller reads a duplicate as "somebody else is
- * already running this task", and a collision on an idempotency key, a dependency edge or anything
- * else is a different fact entirely.
+ * Two are in range and no others: `session_task_execution_claim_idx` (`task_id`), and — since the
+ * id is now derived from the request (`taskRunDesiredSessionId`) rather than drawn at random — the
+ * PRIMARY KEY. `project_action_id` and `share_token` are the table's only other unique keys, and a
+ * legacy task run leaves both NULL, which PostgreSQL treats as distinct.
+ *
+ * Still narrowed, for the reason it always was: a collision outside this pair is a different fact
+ * entirely, and the recovery below would answer it with a sentence about running a task.
+ *
+ * WHICH of the two it was is deliberately NOT decided here. The error says enough to know it
+ * belongs to this unit and not enough to name the row, and the row is the whole answer — so the
+ * classification is a READ, exactly as §7.7 D5-b1 has the Coordinator door do it.
  */
-function isExecutionClaimConflict(error: unknown): boolean {
-  const target = (error as { meta?: { target?: unknown } })?.meta?.target;
-  const named = Array.isArray(target) ? target.join(',') : String(target ?? '');
-  return /task_id/.test(named);
+function isTaskRunClaimConflict(error: unknown): boolean {
+  const named = conflictingUniqueKey(error);
+  return /task_id/.test(named) || /\bid\b/.test(named) || /session_pkey/.test(named);
+}
+
+/**
+ * WHICH unique key a duplicate came from, wherever this stack happens to have put it.
+ *
+ * There are three shapes, and a predicate that knows fewer than all of them is a guard that works
+ * in one place and silently does not in another — the same lesson `postgresSqlState` learned, at
+ * the same cost. This classifier read `meta.target` and nothing else, and **Prisma 7 with
+ * `@prisma/adapter-pg` — what this deployment runs — does not set it**. So every lost execution
+ * claim failed the test and the raw `P2002` was rethrown: not only the terminal and paused winners
+ * this unit set out to repair, but every one of them, arriving at the API as a 500 with a
+ * PostgreSQL sentence in it. Only a real server can show that; the shape is invisible to a double.
+ *
+ *  - Prisma before the driver adapter: `meta.target`, the conflicting column list;
+ *  - Prisma 7 with the pg adapter: `meta.driverAdapterError.cause.constraint.fields`, and the
+ *    constraint's own name inside `originalMessage`.
+ *
+ * The rendered `error.message` is deliberately NOT consulted: Prisma renders a code frame into it,
+ * so matching there would classify on whatever the surrounding source happens to say.
+ */
+function conflictingUniqueKey(error: unknown): string {
+  if (typeof error !== 'object' || error === null) return '';
+  const candidate = error as {
+    meta?: {
+      target?: unknown;
+      driverAdapterError?: {
+        cause?: { constraint?: { fields?: unknown; index?: unknown }; originalMessage?: unknown };
+      };
+    };
+  };
+  const adapter = candidate.meta?.driverAdapterError?.cause;
+  const parts: string[] = [];
+  for (const source of [candidate.meta?.target, adapter?.constraint?.fields]) {
+    if (Array.isArray(source)) parts.push(source.join(','));
+    else if (typeof source === 'string') parts.push(source);
+  }
+  for (const source of [adapter?.constraint?.index, adapter?.originalMessage]) {
+    if (typeof source === 'string') parts.push(source);
+  }
+  return parts.join('|');
 }
 
 const RUNNABLE_TASK_SQL = Prisma.sql`
@@ -1396,6 +1524,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     return new Map([...byTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
       status: entry.status,
       verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
+      verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
     }))]));
   }
 
@@ -4153,6 +4282,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       verificationGate: dependencyEpochGate(
         d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
       ),
+      verificationGateStalled: dependencyEpochStalled(
+        d.dependsOnTaskId, prerequisiteEpochs, task.verifiesTaskId,
+      ),
     })));
     const supersession = await this.supersession(ownerId, task);
     return {
@@ -4328,6 +4460,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.verdict != null && !verifiesTaskId) {
       throw new BadRequestException(
         'Only a verification task can carry a verdict — this task does not verify anything',
+      );
+    }
+    // `[K5]` criterion 6, and §13.2 V1 said as a refusal for the first time.
+    //
+    // "A check's carrier is its own TERMINAL state plus a structured result" has always been the
+    // rule and has never been enforced on the way IN: `status: DONE` with no verdict is accepted,
+    // and everything downstream then behaves correctly and uselessly — the subject can never reach
+    // the PASS its policy waits for, every dependent stays blocked, `planVerificationVerdicts`
+    // skips it as `NO_VERDICT`, and the whole of the loop's response is one WARN a minute. `[H0V2]`
+    // found that shape by exhaustion and could not find anybody it was reported to.
+    //
+    // Judged on the row AFTER the write, so both legal spellings survive: conclude and finish in
+    // one call, or write the verdict first and the status after. What stops being expressible is
+    // finishing a check without saying what it found. Migration 0141 carries the same rule for
+    // writers that never reach this method.
+    const concludedStatus = dto.status === undefined ? before.status : dto.status;
+    const concludedVerdict = dto.verdict === undefined ? before.verdict : (dto.verdict ?? null);
+    if (
+      verifiesTaskId && concludedStatus === TaskStatus.DONE && concludedVerdict == null
+      && before.status !== TaskStatus.DONE
+    ) {
+      throw new BadRequestException(
+        'A verification task cannot be DONE without a verdict — it would never conclude, and '
+          + 'everything waiting on its subject would stay blocked with nothing to act on. Record '
+          + 'PASS, FAIL or INCONCLUSIVE in this same call, or cancel the check instead',
       );
     }
     // §13.2 V7 is a monotonic counter, and everything it has already caused — a reverted subject,
@@ -5029,7 +5186,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       select: { id: true },
     });
-    await this.execute(ownerId, verification.id);
+    // The one run this check exists for. A retry of the filing above makes a DIFFERENT task, so
+    // "the first run of this task" names exactly one request for as long as the row exists.
+    await this.execute(ownerId, verification.id, undefined, TASK_RUN_TRIGGER.firstRun(verification.id));
     this.logger.log(`verification ${verification.id} filed for task ${taskId}`);
   }
 
@@ -5100,6 +5259,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         autoRunWhenReady: true,
         runAt: true,
         assignee: { select: { id: true, runnerId: true } },
+        // 0132's prerequisite revision, read here because it is what NAMES this dispatch: two
+        // passes — a second apiserver, or this one after a restart — that unlock the same task over
+        // the same prerequisite set are one request, and the Session they race for carries the id
+        // both of them derive. It is always present (the row is created with the task).
+        dependencyRevision: { select: { revision: true } },
       },
     });
     const now = new Date();
@@ -5118,7 +5282,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // scheduled this task for later, and starting it now would both jump the appointment and
         // erase it. `dep.runAt` is usually null — an unscheduled dependent — which is an assertion
         // of exactly that, not an absence of one.
-        await this.execute(ownerId, dep.id, { observedRunAt: dep.runAt });
+        await this.execute(
+          ownerId,
+          dep.id,
+          { observedRunAt: dep.runAt },
+          TASK_RUN_TRIGGER.dependency(dep.id, dep.dependencyRevision?.revision ?? 0n),
+        );
       } catch (e) {
         this.logger.warn(
           `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -5160,14 +5329,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         minFreeDiskMb: number | null;
         listId: string | null;
         runAt: Date | null;
+        dependencyRevision: bigint | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId", t.run_at AS "runAt"
+             t.list_id AS "listId", t.run_at AS "runAt", d.revision AS "dependencyRevision"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
+      -- 0132's prerequisite revision, joined here because it NAMES this sweep's dispatch: two
+      -- passes that unlock the same task over the same prerequisite set are one request, and both
+      -- derive the same Session id for it. Riding on this scan rather than a second round trip.
+      LEFT JOIN task_dependency_revision d ON d.task_id = t.id
       WHERE ${AUTO_RUN_READY_SQL}`;
     if (rows.length === 0) return;
     // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
@@ -5191,6 +5365,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
+      dependencyRevision: row.dependencyRevision,
       // Read here so the dispatch below can prove it is still acting on this row. The predicate
       // admits `run_at IS NULL OR run_at <= now()`, so this is null for almost every candidate —
       // and null is the assertion that matters, since scheduling a previously unscheduled task is
@@ -5276,7 +5451,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       try {
-        const res = await this.execute(t.ownerId, t.id, { observedRunAt: t.runAt });
+        const res = await this.execute(
+          t.ownerId,
+          t.id,
+          { observedRunAt: t.runAt },
+          TASK_RUN_TRIGGER.dependency(t.id, t.dependencyRevision ?? 0n),
+        );
         // A task scheduled out from under this pass is not dispatched and must not be logged as
         // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
         if (res.ok) this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
@@ -5350,7 +5530,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * The double-dispatch this leaves possible — this sweep and the auto-run sweep both finding the
    * same due, ready task — is absorbed where every other duplicate trigger in this service already
-   * is, by runWorkspaceOnTask's session dedup. Both sweeps also ride the same timer, sequentially,
+   * is, by the run doors' own session dedup (`planWorkspaceRun`). Both sweeps also ride the same timer, sequentially,
    * so in practice the second one runs after the first has already taken the task out of scope.
    */
   private async dispatchDueScheduledTasks(): Promise<void> {
@@ -5388,7 +5568,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // one on the row. A user who moves a due task to next week between the scan and here has
         // replaced the reason this loop had for starting it, and the sweep stands down: it starts
         // nothing, consumes nothing, and the new schedule is left to fire on its own.
-        const res = await this.execute(t.ownerId, t.id, { observedRunAt: t.runAt });
+        const res = await this.execute(
+          t.ownerId,
+          t.id,
+          { observedRunAt: t.runAt },
+          // The appointment being kept, and it names the request: two passes over the same due row
+          // are one dispatch, and the run this pass keeps consumes `run_at` back to NULL, so the
+          // next appointment is a different name that this one cannot be replayed into.
+          TASK_RUN_TRIGGER.scheduled(t.id, t.runAt),
+        );
         if (res.ok) dispatched += 1;
         else rescheduled += 1;
       } catch (e) {
@@ -5571,7 +5759,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           },
           select: { id: true },
         });
-        await this.execute(list.ownerId, task.id);
+        // As with a filed verification: this task was created in order to be run, once.
+        await this.execute(list.ownerId, task.id, undefined, TASK_RUN_TRIGGER.firstRun(task.id));
         this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
         // The id is encoded where it becomes prose. This detail is stored and replayed to agents
         // — `describeList` prints it verbatim beside the list's own base62 id — and
@@ -6255,110 +6444,455 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Create the Session for a task run, or read back the one that won the race.
+   * Create the Session THIS RUN REQUEST is named after, or read back the one it already has.
    *
-   * §7.7 D6's execution claim makes "one live run per task" a property of the database, so two
+   * §7.7 D5's execution claim makes "one live run per task" a property of the database, so two
    * callers arriving together produce one insert and one duplicate-key error. That error is not the
    * answer either of them wanted: both asked for the task to be running, and it is.
+   *
+   * The id is the request's own (`task-run-identity.ts`), so which row the insert hit is decided by
+   * READING — never inferred from the shape of the error, and never searched for:
+   *
+   *  1. **A row at that id.** It is this request's Session, because the id is a function of the
+   *     request and of nothing else. It is returned WHATEVER STATUS IT IS IN, and that is the whole
+   *     repair. The read this replaces was "the newest PENDING/RUNNING Session on this task", which
+   *     had two ways to be wrong about the caller's own run: a winner that had since reached
+   *     `SUCCEEDED`, `FAILED` or `CANCELLED` fell out of it, and the raw `P2002` then reached the
+   *     API as a 500; a winner parked at `AWAITING_INPUT` or `INTERRUPTED` fell out of it too, into
+   *     the branch below, where it was reported to its own caller as somebody ELSE's live claim.
+   *     There is no status in this read, so there is no status it can be wrong about.
+   *  2. **No row at that id, and a Session holding the claim.** Then this request did not run, and
+   *     the row in the way is not its own — it cannot be. Named, never adopted and never reported
+   *     as success, off the claim index's own predicate (`TASK_OCCUPYING` is the four statuses
+   *     `session_task_execution_claim_idx` lists, character for character) rather than off "the
+   *     newest" or "the live one".
+   *  3. **Neither.** The claim was released between the insert and the read, so nothing of this
+   *     request landed and there is nothing truthful to return. Refused with the reason — a raw
+   *     duplicate-key error is not an answer, it is a 500 with a PostgreSQL sentence in it.
    */
   private async createTaskSessionOrReadWinner(
     ownerId: string,
     task: TaskRunTarget,
     workspace: { id: string; runnerId: string | null },
+    /** This request's own name for its Session — see `taskRunDesiredSessionId`. */
+    desiredSessionId: string,
+    /** The right to write it, proved inside the insert's own transaction. */
+    fence: TaskRunEffectFence | undefined,
     dto: Parameters<SessionsService['create']>[1],
     opts: Parameters<SessionsService['create']>[2],
   ): Promise<{ id: string }> {
-    try {
-      return await this.sessions.create(ownerId, dto, opts);
-    } catch (e) {
-      // ...and only the EXECUTION CLAIM. Prisma names the conflicting index in `meta.target`, and a
-      // duplicate on any other unique key is a different bug that must not be read as "somebody
-      // else started this task".
-      if (!this.isDuplicateKey(e) || !isExecutionClaimConflict(e)) throw e;
-      const winner = await this.prisma.session.findFirst({
-        where: {
-          taskId: task.id,
-          ownerId,
-          deletedAt: null,
-          // PENDING or RUNNING only, and this workspace only. A paused run — or a run belonging to
-          // the workspace this task USED to be assigned to — was already there before this call
-          // began: it did not win a race with it, and it will never receive the prompt this call
-          // was carrying. Reporting it as success is a start that did not happen. The candidate has
-          // to be a row a concurrent create could actually have produced, which is one just
-          // inserted by somebody doing the same thing this call was doing.
-          workspaceId: workspace.id,
-          status: { in: SINGLE_RUN_DEDUP },
-        },
-        orderBy: { createdAt: 'desc' },
+    // Has this request already been served? Asked BEFORE the insert, not only after a conflict.
+    //
+    // It is the same read either way, and the difference is what it costs a redelivery: a replay
+    // that goes on to attempt the insert takes the Session insert's own locks — 0122's capacity
+    // serialization takes the PROJECT row — so two deliveries of one press landing together made
+    // one of them lose a lock it never needed and answer "retry" about work that was finished. A
+    // request whose row exists is a request that is over.
+    const served = await this.readOwnRun(ownerId, task, desiredSessionId);
+    if (served) {
+      this.logger.log(
+        `task ${uuidToBase62(task.id)}: this run request already holds session ` +
+          `${uuidToBase62(served.id)} (${served.status}); returning it`,
+      );
+      return { id: served.id };
+    }
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.sessions.create(ownerId, dto, { ...opts, id: desiredSessionId, fence });
+      } catch (e) {
+        // A NOWAIT fence, and the one two deliveries of ONE press reach: 0122's capacity
+        // serialization takes the PROJECT row, so the loser is refused before its insert can
+        // collide with the winner's — and "retry" is the entire remedy, which a request with a
+        // stable name can act on itself. Bounded, and every attempt re-reads this request's own row
+        // first, so the retry either finds the Session the contention was about or lands its own.
+        if (isRetryableTaskFence(e) && attempt < TASK_RUN_FENCE_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, TASK_RUN_FENCE_BACKOFF_MS << attempt));
+          const landed = await this.readOwnRun(ownerId, task, desiredSessionId);
+          if (landed) return { id: landed.id };
+          continue;
+        }
+        if (!this.isDuplicateKey(e) || !isTaskRunClaimConflict(e)) throw e;
+      // 1. This request's own row, written by whoever won the race with this call.
+      const mine = await this.readOwnRun(ownerId, task, desiredSessionId);
+      if (mine) {
+        this.logger.log(
+          `task ${uuidToBase62(task.id)}: lost the race for this run request to session ` +
+            `${uuidToBase62(mine.id)} (${mine.status}); returning it`,
+        );
+        return { id: mine.id };
+      }
+      // 2. Somebody else's claim. The unique index means there is at most one such row, so this is
+      // an exact read rather than a pick — no `orderBy`, because there is nothing to order. It
+      // carries no `owner_id` and no `workspace_id` filter for the same reason: the index carries
+      // neither, and a reader narrower than the index it is explaining answers "nothing holds the
+      // claim" for rows that do.
+      const holder = await this.prisma.session.findFirst({
+        where: { taskId: task.id, deletedAt: null, status: { in: TASK_OCCUPYING } },
         select: {
-          id: true, startsTaskWork: true, cancelRequestedAt: true, provider: true, model: true,
+          id: true, status: true, workspaceId: true, provider: true, model: true,
+          startsTaskWork: true, cancelRequestedAt: true,
         },
       });
-      if (!winner) {
-        // Something holds the claim, and it is not a concurrent run of this same call — a paused
-        // run, or one on another workspace after a reassignment. Named rather than reported as
-        // success, and rather than as a duplicate-key error nobody can read.
-        const holder = await this.prisma.session.findFirst({
-          where: {
-            taskId: task.id,
-            ownerId,
-            deletedAt: null,
-            status: {
-              in: [...SINGLE_RUN_DEDUP, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED],
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true, status: true, workspaceId: true },
-        });
-        if (!holder) throw e;
+      if (holder) throw this.foreignClaimRefusal(task, workspace, holder);
+      // 3. The insert collided and neither row is there now — the claim was released, or the id
+      // this request derives was briefly taken by something that has since gone. Nothing of this
+      // request is running, and saying so is the only honest answer: adopting a row would report a
+      // start that did not happen, and rethrowing would put a duplicate-key error in front of a
+      // person who asked for a task to run. A retry re-derives the same id.
         throw new ConflictException(
-          `task ${uuidToBase62(task.id)} could not be started: session ` +
-            `${uuidToBase62(holder.id)} (${holder.status}` +
-            (holder.workspaceId === workspace.id ? '' : ', on a different agent') +
-            ') holds its execution claim. Let that run reach a terminal status of its own, then ' +
-            'start the task again',
+          `task ${uuidToBase62(task.id)} could not be started: its execution claim was taken and ` +
+            'released while this request was writing, so nothing of it is running. Start the task ' +
+            'again',
         );
       }
-      // Not any duplicate, and not any winner. The claim index is the only one this insert can
-      // collide on for a task run, so a collision with nothing live behind it is a different bug
-      // and is rethrown. And the winner has to be the thing the caller asked for: a run that is
-      // DOING the work and is not on its way out. A salvage session or an ending run holding the
-      // claim means the task is NOT running, and reporting success would spend the schedule and
-      // record a manual request for work nothing is doing — the same half-success the fast path
-      // above refuses, reached by the other door. Same predicate, deliberately.
-      if (!winner) throw e;
-      // A run's provider is fixed for its lifetime, so a winner on another one is not this task's
-      // work being done — it is the previous pin still running. This deployment has shipped a
-      // provider mix-up before; reporting that as success is how it happens again.
-      if (task.provider && winner.provider !== task.provider) {
-        throw new ConflictException(
-          `task ${uuidToBase62(task.id)} is pinned to ${task.provider}, but session ` +
-            `${uuidToBase62(winner.id)} holds its execution claim on ${winner.provider}. Let that ` +
-            'run reach a terminal status of its own; the next attempt starts on the pinned provider',
-        );
-      }
-      if (task.model != null && winner.model !== task.model) {
-        throw new ConflictException(
-          `task ${uuidToBase62(task.id)} is pinned to model ${task.model}, but session ` +
-            `${uuidToBase62(winner.id)} holds its execution claim on ` +
-            `${winner.model ?? 'the agent default'}. A running session's model is not switched ` +
-            'under it; let it finish and the next attempt starts on the pinned model',
-        );
-      }
-      if (!winner.startsTaskWork || winner.cancelRequestedAt) {
-        throw new ConflictException(
-          `task ${uuidToBase62(task.id)} could not be started: session ` +
-            `${uuidToBase62(winner.id)} holds its execution claim and is ` +
-            (winner.cancelRequestedAt ? 'ending' : 'a session opened to look at the task, not run it') +
-            '. Wait for it to reach a terminal status of its own, then start the task again',
-        );
-      }
-      this.logger.log(
-        `task ${uuidToBase62(task.id)}: lost the execution claim to session ` +
-          `${uuidToBase62(winner.id)}; returning it`,
-      );
-      return winner;
     }
+  }
+
+  /**
+   * The receipt for this request, opened if it does not exist yet.
+   *
+   * Returns the row as it stands. `COMPLETED` is the whole answer and the caller must return it
+   * BEFORE any mutable check — that is what makes a repeat of one press the same request rather
+   * than a fresh evaluation of a world that has moved. `IN_FLIGHT` is not a latch: an attempt that
+   * crashed leaves one, and the caller resolves it from the artifacts this request names.
+   *
+   * The insert is `ON CONFLICT DO NOTHING` followed by a read, so two deliveries landing together
+   * settle it with the primary key rather than with an exception that would abort whatever
+   * transaction they were in.
+   */
+  private async leaseRunRequest(
+    ownerId: string,
+    actionKind: string,
+    requestToken: string,
+    fingerprint: string,
+  ): Promise<TaskRunLease> {
+    await this.prisma.$executeRaw`
+      INSERT INTO "task_run_request" ("owner_id", "action_kind", "request_token", "fingerprint")
+      VALUES (${ownerId}::uuid, ${actionKind}, ${requestToken}, ${fingerprint})
+      ON CONFLICT DO NOTHING`;
+    const holder = `${process.pid}:${randomUUID()}`;
+    // ONE STATEMENT, and ONE CLOCK — PostgreSQL's.
+    //
+    // The statement decides "is it answered / is somebody answering it / may I answer it" off the
+    // row rather than off a read this caller then acts on. The clock is the server's for a reason
+    // the lease cannot survive without: two apiservers whose wall clocks differ by more than the
+    // lease would take each other's requests over — the fast one declares a live lease expired, the
+    // slow one keeps extending one it has lost — and "one evaluator at a time" would be a property
+    // of NTP. `statement_timestamp()` is the same instant for both.
+    const [taken] = await this.prisma.$queryRaw<Array<{
+      attempt: number; status: 'OPEN' | 'BOUND'; target: unknown; fingerprint: string;
+    }>>`
+      UPDATE "task_run_request"
+         SET "lease_holder" = ${holder},
+             "lease_expires_at" =
+               statement_timestamp() + make_interval(secs => ${TASK_RUN_LEASE_MS / 1000}),
+             "attempt" = "attempt" + 1,
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${ownerId}::uuid
+         AND "action_kind" = ${actionKind}
+         AND "request_token" = ${requestToken}
+         AND "status" <> 'COMPLETED'
+         AND ("lease_holder" IS NULL OR "lease_expires_at" <= statement_timestamp())
+      RETURNING "attempt", "status", "target", "fingerprint"`;
+    if (taken) {
+      // One name, one request. A repeat carrying a different payload is refused rather than
+      // answered from a row that describes something else.
+      if (taken.fingerprint !== fingerprint) {
+        await this.releaseRunRequest({
+          ownerId, actionKind, requestToken, leaseHolder: holder, attempt: taken.attempt,
+        });
+        throw taskRunTokenMismatch(actionKind, requestToken);
+      }
+      return {
+        held: true,
+        claim: { ownerId, actionKind, requestToken, leaseHolder: holder, attempt: taken.attempt },
+        status: taken.status,
+        target: taken.target,
+      };
+    }
+    const [row] = await this.prisma.$queryRaw<Array<TaskRunReceipt>>`
+      SELECT "fingerprint", "status", "target", "result"
+        FROM "task_run_request"
+       WHERE "owner_id" = ${ownerId}::uuid
+         AND "action_kind" = ${actionKind}
+         AND "request_token" = ${requestToken}`;
+    if (!row) throw new Error(`run receipt for ${actionKind}:${requestToken} vanished`);
+    if (row.fingerprint !== fingerprint) throw taskRunTokenMismatch(actionKind, requestToken);
+    if (row.status === 'COMPLETED') return { held: false, result: row.result };
+    // Somebody else is evaluating it, and this delivery must not evaluate it a second time — that
+    // is how two deliveries of one press end up applying two different effects and freezing one of
+    // them as the answer.
+    throw taskRunInProgress(actionKind, requestToken);
+  }
+
+  /**
+   * Write down the plan, fenced, and hand back the one that is in force.
+   *
+   * A holder whose lease expired mid-evaluation loses this compare-and-set to whoever took over,
+   * and reads the target that takeover bound — so two evaluators cannot disagree about what the
+   * request is doing even when they overlapped.
+   */
+  private async bindRunRequest(claim: TaskRunClaim, target: unknown): Promise<unknown | null> {
+    await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "status" = 'BOUND',
+             "target" = ${JSON.stringify(target)}::jsonb,
+             "bound_at" = statement_timestamp(),
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${claim.ownerId}::uuid
+         AND "action_kind" = ${claim.actionKind}
+         AND "request_token" = ${claim.requestToken}
+         AND "status" = 'OPEN'
+         AND "lease_holder" = ${claim.leaseHolder}
+         AND "attempt" = ${claim.attempt}`;
+    // What the ROW says, and only that. A holder that lost this compare-and-set — its lease
+    // expired, somebody took over, that takeover bound its own plan — must carry out the plan in
+    // force, not the one it computed; and a row that is somehow still unbound means this delivery
+    // no longer owns the request at all, which is a refusal rather than a licence.
+    const [row] = await this.prisma.$queryRaw<Array<{ target: unknown }>>`
+      SELECT "target" FROM "task_run_request"
+       WHERE "owner_id" = ${claim.ownerId}::uuid
+         AND "action_kind" = ${claim.actionKind}
+         AND "request_token" = ${claim.requestToken}
+         AND "status" <> 'OPEN'`;
+    return row?.target ?? null;
+  }
+
+  /**
+   * Keep the right to evaluate, and say honestly when it is gone.
+   *
+   * A press over many tasks can take longer than one lease, and the danger is not that it stops —
+   * it is that it keeps going beside the takeover that replaced it. So the holder re-proves itself
+   * before each effect, and a `false` here means STOP: the request now belongs to somebody else.
+   */
+  private async renewRunRequest(claim: TaskRunClaim): Promise<boolean> {
+    const renewed = await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "lease_expires_at" =
+               statement_timestamp() + make_interval(secs => ${TASK_RUN_LEASE_MS / 1000}),
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${claim.ownerId}::uuid
+         AND "action_kind" = ${claim.actionKind}
+         AND "request_token" = ${claim.requestToken}
+         AND "status" <> 'COMPLETED'
+         AND "lease_holder" = ${claim.leaseHolder}
+         AND "attempt" = ${claim.attempt}`;
+    return renewed > 0;
+  }
+
+  /** Give the right to evaluate back, so a refused request can be asked again immediately. */
+  private async releaseRunRequest(claim: TaskRunClaim): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "lease_holder" = NULL, "lease_expires_at" = NULL,
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${claim.ownerId}::uuid
+         AND "action_kind" = ${claim.actionKind}
+         AND "request_token" = ${claim.requestToken}
+         AND "status" <> 'COMPLETED'
+         AND "lease_holder" = ${claim.leaseHolder}
+         AND "attempt" = ${claim.attempt}`;
+  }
+
+  /**
+   * Freeze what this door answered, so every later delivery of the same request answers the same.
+   *
+   * Compare-and-set on `IN_FLIGHT`: two deliveries that both got as far as producing an answer
+   * agree about it — they name the same artifacts — and the first one to land is the one the
+   * receipt keeps, rather than the last one to finish.
+   */
+  private async completeRunReceipt<T>(claim: TaskRunClaim, result: T): Promise<T> {
+    await this.prisma.$executeRaw`
+      UPDATE "task_run_request"
+         SET "status" = 'COMPLETED',
+             "result" = ${JSON.stringify(result)}::jsonb,
+             "lease_holder" = NULL,
+             "lease_expires_at" = NULL,
+             "updated_at" = statement_timestamp()
+       WHERE "owner_id" = ${claim.ownerId}::uuid
+         AND "action_kind" = ${claim.actionKind}
+         AND "request_token" = ${claim.requestToken}
+         AND "status" <> 'COMPLETED'
+         AND "lease_holder" = ${claim.leaseHolder}
+         AND "attempt" = ${claim.attempt}`;
+    // READ BACK, always, and return what the row says rather than what this call computed. A holder
+    // that lost its lease mid-flight loses this compare-and-set too, and returning its own local
+    // answer would hand a caller a result the request does not have — the exact half-success this
+    // whole unit exists to remove, one layer up.
+    const [row] = await this.prisma.$queryRaw<Array<{ result: unknown }>>`
+      SELECT "result" FROM "task_run_request"
+       WHERE "owner_id" = ${claim.ownerId}::uuid
+         AND "action_kind" = ${claim.actionKind}
+         AND "request_token" = ${claim.requestToken}
+         AND "status" = 'COMPLETED'`;
+    // No durable answer, no answer. This delivery lost its lease and the takeover that replaced it
+    // has not finished, so the only true things to say are "not yet" and "ask again" — returning
+    // the value THIS call computed would hand a caller a result the request does not have, which is
+    // the same half-success the recovery below it exists to remove.
+    if (!row) throw taskRunInProgress(claim.actionKind, claim.requestToken);
+    return row.result as T;
+  }
+
+  /**
+   * After a plan failed to apply: did it in fact happen, can it never happen, or is it worth
+   * coming back for?
+   *
+   * Read off the plan's OWN artifact, by the id the plan named, and per kind — because "the target
+   * is gone" means different rows for different plans:
+   *
+   *  - `CREATE` names a Session it writes. If that row is there the write landed after all (a lost
+   *    response, a retry that raced its own predecessor); if it is not and the TASK is gone, the
+   *    insert names a row `session_task_id_fkey` will refuse for ever.
+   *  - `RESUME` names a turn on somebody else's Session. If the turn is there the delivery landed;
+   *    if the Session has been hard-deleted, or has reached a terminal status, it can never receive
+   *    that turn — a run that has ended is not revived, which is the rule this whole unit is built
+   *    on. Checking only the TASK would miss both, and leave the request replaying for ever.
+   *  - `ADOPT` writes nothing, so nothing it could fail at is reachable here; it is still answered
+   *    from its own row rather than assumed.
+   *
+   * Everything else is transient by default. That is the safe direction: a request left BOUND is
+   * re-attempted, while a request wrongly frozen is a run that never happens.
+   */
+  private async resolveAppliedArtifact(
+    ownerId: string,
+    task: TaskRunTarget,
+    plan: TaskRunPlan,
+  ): Promise<
+    | { kind: 'DONE'; sessionId: string }
+    | { kind: 'GONE'; why: string }
+    | { kind: 'TRANSIENT' }
+  > {
+    if (plan.kind === 'RESUME') {
+      if (await this.hasTurn(plan.sessionId, plan.turnId)) {
+        return { kind: 'DONE', sessionId: plan.sessionId };
+      }
+      const target = await this.prisma.session.findUnique({
+        where: { id: plan.sessionId },
+        select: { id: true },
+      });
+      // Only a row that is GONE is monotone. A terminal status is NOT: `SessionsService.resume`
+      // revives an ended run deliberately, so freezing a tombstone on it would answer a request
+      // that could still be carried out — and answer it wrongly, for ever.
+      if (!target) return { kind: 'GONE', why: 'the run it was to continue has been deleted' };
+      return { kind: 'TRANSIENT' };
+    }
+    const mine = await this.readOwnRun(ownerId, task, plan.sessionId);
+    if (mine) return { kind: 'DONE', sessionId: mine.id };
+    const stillThere = await this.prisma.task.findFirst({
+      where: { id: task.id }, select: { id: true },
+    });
+    if (stillThere) return { kind: 'TRANSIENT' };
+    // READ COMMITTED, so the two reads above are two instants: another delivery could have
+    // committed this request's Session between them, and the task could have been deleted after
+    // that — `session_task_id_fkey` is `ON DELETE SET NULL`, so the winner survives with a null
+    // `task_id` and the first read simply missed it. Asked again HERE, after the task is known
+    // absent, the answer is monotone in the direction that matters: with no task row, no further
+    // insert can name it, so a winner that is not there now can never appear.
+    const late = await this.readOwnRun(ownerId, task, plan.sessionId);
+    if (late) return { kind: 'DONE', sessionId: late.id };
+    return { kind: 'GONE', why: 'the task has been deleted' };
+  }
+
+  /**
+   * Somebody else's run holds this task. Said once, in one shape, from both doors that can see it.
+   *
+   * The pre-insert read and the post-`P2002` read reach the same fact by different routes, and they
+   * used to answer it with two different sentences — so a client could not tell "wait for the run
+   * that is going" from "you reused a triggerId" without parsing English. The payload carries a
+   * stable code, the row in the way as a PUBLIC id, and what to do about it.
+   */
+  private foreignClaimRefusal(
+    task: TaskRunTarget,
+    workspace: { id: string },
+    holder: {
+      id: string;
+      status?: RunStatus;
+      workspaceId?: string | null;
+      provider?: string | null;
+      model?: string | null;
+      startsTaskWork?: boolean;
+      cancelRequestedAt?: Date | null;
+    },
+  ): ConflictException {
+    const taskPublicId = uuidToBase62(task.id);
+    const sessionPublicId = uuidToBase62(holder.id);
+    // A run's provider is fixed for its lifetime, so a holder on another one is not this task's
+    // work being done — it is the previous pin still running. This deployment has shipped a
+    // provider mix-up before; reporting that as success is how it happens again. Its own code,
+    // because the remedy differs: waiting fixes it, and so does clearing the pin.
+    if (task.provider && holder.provider != null && holder.provider !== task.provider) {
+      return taskRunPinConflict({
+        taskPublicId, sessionPublicId, field: 'provider',
+        pinned: task.provider, running: holder.provider,
+      });
+    }
+    if (task.model != null && holder.model !== undefined && holder.model !== task.model) {
+      return taskRunPinConflict({
+        taskPublicId, sessionPublicId, field: 'model',
+        pinned: task.model, running: holder.model ?? 'the agent default',
+      });
+    }
+    return taskAlreadyRunning({
+      taskPublicId,
+      sessionPublicId,
+      sessionStatus: holder.status ?? RunStatus.RUNNING,
+      onAnotherAgent: holder.workspaceId != null && holder.workspaceId !== workspace.id,
+      ending: holder.cancelRequestedAt != null,
+      notWork: holder.startsTaskWork === false,
+    });
+  }
+
+  /**
+   * Did THIS request already put its turn on that run?
+   *
+   * The durable result of a delivery to a paused run, read by the same key the delivery is written
+   * under (`taskRunResumeTurnId`) and made exact by `conversation_turn (session_id,
+   * client_turn_id)`. Without it a repeat of one press reads a run that is live again — because its
+   * own turn woke it — and refuses it as somebody else's work.
+   */
+  private hasDeliveredResumeTurn(requestToken: string, sessionId: string): Promise<boolean> {
+    return this.hasTurn(sessionId, taskRunResumeTurnId(requestToken, sessionId));
+  }
+
+  /** Is that turn already on that session? `(session_id, client_turn_id)` is unique. */
+  private async hasTurn(sessionId: string, clientTurnId: string): Promise<boolean> {
+    const turn = await this.prisma.conversationTurn.findUnique({
+      where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+      select: { id: true },
+    });
+    return turn != null;
+  }
+
+  /**
+   * The Session THIS request already has, if it has one.
+   *
+   * No status, no `deleted_at`, no ordering: every filter here is a property that MOVES while the
+   * lookup is being made, and the request is entitled to its Session in every state a Session can
+   * be in — which is the whole repair this unit makes.
+   *
+   * The id is the authority, because the id IS the request: nothing else can hold it. Owner and
+   * task are CHECKED rather than filtered on, so a row that belongs to something else is reported
+   * as absent and refused by the caller instead of being handed over as this caller's run.
+   *
+   * And the task check is only a collision guard, so it holds its tongue when the task is GONE.
+   * `session_task_id_fkey` is `ON DELETE SET NULL`: deleting a task tombstones its runs rather than
+   * destroying them, and requiring `task_id` to still match would make this request unable to find
+   * the Session IT CREATED — after which it would try to create a second one against a task that no
+   * longer exists and fail on the foreign key, for ever, under a token that can never answer. A
+   * null `task_id` is not somebody else's row; it is this row, outliving what it ran.
+   */
+  private async readOwnRun(
+    ownerId: string,
+    task: TaskRunTarget,
+    desiredSessionId: string,
+  ): Promise<{ id: string; status: RunStatus } | null> {
+    const row = await this.prisma.session.findUnique({
+      where: { id: desiredSessionId },
+      select: { id: true, taskId: true, ownerId: true, status: true },
+    });
+    if (!row || row.ownerId !== ownerId) return null;
+    if (row.taskId != null && row.taskId !== task.id) return null;
+    return { id: row.id, status: row.status };
   }
 
   /**
@@ -6972,64 +7506,70 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
 
   /**
-   * Run a workspace against a task: continue the workspace's most recent session for this task
-   * when it's resumable (live, or ended-but-revivable), otherwise start a fresh one.
-   * resume() throws ConflictException when the session can't be revived (never ran /
-   * runner offline / not started yet) — fall back to a new session. Returns the session id.
+   * DECIDE what this request will do, without doing any of it.
    *
-   * The task's own provider/model pin (when it has one) is what the run dispatches with,
-   * overriding the assignee workspace's defaults.
+   * Split from the doing so the decision can be written down first. Everything read here is
+   * mutable — which run holds the task, whether one is parked, what the task is pinned to — so a
+   * delivery that re-decided after a crash would answer something else: the run it started has
+   * ended, or a second one was opened, or the pin changed. The plan is what a takeover repeats.
    */
-  private async runWorkspaceOnTask(
+  private async planWorkspaceRun(
     ownerId: string,
     task: TaskRunTarget,
     workspace: { id: string; runnerId: string | null },
-    prompt: string,
-    newSessionTitle: string,
-    // Set only by batchExecute: tags the (re)claimed session with the batch's id +
-    // concurrency cap. Omitted for single runs (@-mention / 开始执行), which then
-    // clears any stale batch membership so the session escapes a prior batch's cap.
-    batch?: { id: string; maxConcurrent: number },
-    provenance?: {
-      dispatchOrigin: SessionDispatchOrigin;
-      runSource: SessionRunSource;
-      /** §13.6 SU6. True on every path through here: this method IS "run the task's work". */
-      startsTaskWork?: boolean;
-    },
-  ): Promise<string | undefined> {
-    if (!workspace.runnerId) return undefined;
-    // Dedup against a session already mid-flight (PENDING/RUNNING): don't spawn a
-    // duplicate. This is the guard the resume-or-create path below lacks: a leftover
-    // PENDING session (e.g. from an earlier batch the runner never claimed) makes
-    // resume() throw ConflictException, which would otherwise fall through to create()
-    // and double-queue the task. A session parked at AWAITING_INPUT/INTERRUPTED is
-    // deliberately excluded (see SINGLE_RUN_DEDUP): it's idle, so it falls through to
-    // the resume path and the trigger delivers its prompt as a new turn rather than
-    // no-oping (which is why "开始执行" on a parked task used to do nothing).
-    const occupying = await this.prisma.session.findFirst({
-      where: { taskId: task.id, status: { in: SINGLE_RUN_DEDUP }, startsTaskWork: true },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, startsTaskWork: true, cancelRequestedAt: true },
-    });
-    // §13.6 SU6, and the strongest half-success this unit found. Returning the occupying session's
-    // id means "the work is already under way, this call is idempotent" — which is true of a run
-    // that IS the work, and false of a session somebody opened against the task to look at it. A
-    // salvage session left this branch reporting success: no prompt was sent, nothing started, and
-    // the caller went on to record a manual request and spend the task's schedule.
+    requestToken: string,
+  ): Promise<TaskRunPlan> {
+    // THE NAME COMES FIRST, and every branch below is decided against it.
     //
-    // So the flag decides. A run doing the work is the idempotent answer it always was; a session
-    // that is not is a refusal with a name, before any of those writes.
-    // ...and only when it is genuinely going. A run with `cancel_requested_at` set is on its way to
-    // a terminal status: it will not receive this prompt, and returning its id reports a start that
-    // is about to become a CANCELLED row — while the caller goes on to record a manual request and
-    // spend the task's schedule for work nothing did.
-    if (occupying?.startsTaskWork && !occupying.cancelRequestedAt) return occupying.id;
-    if (occupying?.cancelRequestedAt && occupying.startsTaskWork) {
-      throw new ConflictException(
-        `task ${uuidToBase62(task.id)} has a run that is ending (session ` +
-          `${uuidToBase62(occupying.id)}); wait for it to reach its terminal status, then start ` +
-          'the task again',
-      );
+    // It is a pure function of the token this call was made under, so two doors racing over one
+    // task compute the same name and collapse onto one run — and a caller repeating a request it
+    // never got an answer to gets its own Session back, whatever status that run has reached.
+    // `task-run-identity` carries the whole argument, including why the token has to be CARRIED
+    // rather than derived from anything the database knows.
+    const desiredSessionId = taskRunDesiredSessionId(
+      taskRunRequestKey({ taskId: task.id, requestToken }),
+    );
+    // A run already mid-flight (PENDING/RUNNING) on this task. A session parked at
+    // AWAITING_INPUT/INTERRUPTED is deliberately excluded (see SINGLE_RUN_DEDUP): it is idle, so it
+    // falls through to the resume path below and is handed the prompt as a new turn rather than
+    // no-oping (which is why "开始执行" on a parked task used to do nothing).
+    //
+    // Spelled with the claim index's own `deleted_at IS NULL` and with no `orderBy`: at most one
+    // row can satisfy this, because `session_task_execution_claim_idx` says so, and ordering a set
+    // that cannot have two members only invites a reader to think it can.
+    const occupying = await this.prisma.session.findFirst({
+      where: {
+        taskId: task.id, deletedAt: null, status: { in: SINGLE_RUN_DEDUP }, startsTaskWork: true,
+      },
+      // Everything the refusal names, so this door and the post-conflict one describe the row in
+      // the way identically rather than one of them guessing.
+      select: {
+        id: true, status: true, workspaceId: true, provider: true, model: true,
+        startsTaskWork: true, cancelRequestedAt: true,
+      },
+    });
+    if (occupying) {
+      // WHOSE run is it? This used to return the id unconditionally — "the work is already under
+      // way, so this call is idempotent" — which is true of THIS request's own run and false of
+      // anybody else's. A different press, a sweep, a batch: each got somebody else's session id
+      // reported to it as its own start, went on to record a manual Project request for it and to
+      // spend the task's schedule, while the prompt it was carrying was never delivered.
+      //
+      // The name decides, and it is the same rule the conflict path below applies: this request's
+      // Session, or a refusal that names the row in the way.
+      if (occupying.id === desiredSessionId) return { kind: 'ADOPT', sessionId: occupying.id };
+      // ...or a run this request already DELIVERED to. A press that finds the task paused hands it
+      // the prompt as a turn on somebody else's Session (below), so that request's durable result
+      // is the TURN, not a Session of its own — and by the time a repeat of it arrives, the run it
+      // woke is live again and would be refused as foreign. `conversation_turn (session_id,
+      // client_turn_id)` is unique and the key is the request, so this is an exact read of what
+      // this request already did rather than an inference from what the task looks like now.
+      if (await this.hasDeliveredResumeTurn(requestToken, occupying.id)) {
+        return { kind: 'ADOPT', sessionId: occupying.id };
+      }
+      // The SAME refusal the post-conflict path gives, from the same builder. Two doors onto one
+      // fact answered in two shapes is how a client ends up parsing English to tell them apart.
+      throw this.foreignClaimRefusal(task, workspace, occupying);
     }
     // A CONVERSATION session on this task is not a reason to refuse: since 0130 the execution claim
     // covers work sessions only, so it holds nothing and a run can start beside it. That is what
@@ -7061,8 +7601,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         startsTaskWork: true,
       },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, provider: true, numTurns: true },
+      select: { id: true, provider: true },
     });
+    // This request's OWN paused run — the only way that row can carry this name is that this same
+    // request created it, so this call is a repeat of the one that did. Its prompt was delivered
+    // when the Session was written; delivering it again would put the task's brief in front of the
+    // agent twice for one press. The request already has its answer: the Session.
+    if (latest?.id === desiredSessionId) return { kind: 'ADOPT', sessionId: latest.id };
+    // ...and a paused run this request has already spoken to. `resume` would collapse on the same
+    // key anyway — that is what makes the delivery exactly-once — but reading it first keeps a
+    // repeat from re-entering the whole resume path (its worktree checks, its lifecycle refusals)
+    // for a turn that is already on the row.
+    if (latest && await this.hasDeliveredResumeTurn(requestToken, latest.id)) {
+      return { kind: 'ADOPT', sessionId: latest.id };
+    }
     // A session's provider is fixed for its lifetime — its runtime thread belongs to the CLI that
     // created it — so a task re-pinned to a different provider can't be continued on the old
     // session. Falling through to create() is what makes re-pinning take effect on the next run;
@@ -7080,48 +7632,84 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     if (latest) {
-      try {
-        await this.sessions.resume(
-          ownerId,
-          latest.id,
-          {
-            // A STABLE key, not a fresh uuid. Two Run Now clicks landing together — or a manual
-            // click racing the schedule sweep — both read this same paused run and both used to
-            // enqueue a turn, so the agent received the task's prompt twice and did the work twice.
-            // `conversation_turn (session_id, client_turn_id)` is unique, so one key means one turn
-            // and the loser returns the winner's.
-            //
-            // `numTurns` is what makes it collapse concurrent duplicates without collapsing a
-            // deliberate re-run: two requests that read the same paused run agree on it, and a
-            // click after that turn has been answered reads a higher one and gets its own key.
-            clientTurnId: `task-run:${task.id}:${latest.numTurns}`,
-            content: prompt,
-            ...(task.model != null ? { model: task.model } : {}),
-          },
-          // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
-          // row says so — otherwise a session first opened to look at the task keeps the salvage
-          // exemption while executing it, and the reaper never follows the task's lifecycle for it.
-          { batch: batch ?? null, startsTaskWork: true },
-        );
-        return latest.id;
-      } catch (e) {
-        // Rethrown, always. This used to swallow a ConflictException and fall through to create() —
-        // which made sense when the claim index covered two statuses and a second Session beside a
-        // paused one was possible. It is not any more: the paused run holds the task, so the create
-        // would fail on the unique index and reach the caller as a raw duplicate-key error instead
-        // of the reason the resume was refused (ending, a pending worktree operation, a
-        // supersession). The refusal IS the answer.
-        throw e;
-      }
+      return {
+        kind: 'RESUME',
+        sessionId: latest.id,
+        // A STABLE key, and stable in the only way that survives this turn being ANSWERED.
+        // `conversation_turn (session_id, client_turn_id)` is unique, so one key means one turn and
+        // the loser of a race returns the winner's.
+        //
+        // It used to be derived from `numTurns`, which collapses concurrent duplicates and nothing
+        // else: a delivery whose response was lost re-arrives after the turn it wrote has been
+        // answered, reads a HIGHER count, derives a different key and puts the task's brief in
+        // front of the agent a second time. The count moves; the press does not.
+        turnId: taskRunResumeTurnId(requestToken, latest.id),
+      };
     }
     // A fresh Session, and the execution claim decides the race. Two callers with no live run both
     // reach here; the unique index lets exactly one insert, and the loser reads back the winner
     // rather than surfacing a duplicate-key error — the outcome either of them wanted is "the task
     // is running", and it is.
+    return { kind: 'CREATE', sessionId: desiredSessionId };
+  }
+
+  /**
+   * DO exactly what the plan says, and nothing the plan does not say.
+   *
+   * Every branch is idempotent by the id the plan named: adopting is a no-op, a resume collapses on
+   * `conversation_turn (session_id, client_turn_id)`, and a create either lands the row or reads
+   * back the one already at that id. So a takeover can run this against a plan it did not make and
+   * produce the same one effect.
+   */
+  private async applyWorkspaceRun(
+    ownerId: string,
+    task: TaskRunTarget,
+    workspace: { id: string; runnerId: string | null },
+    prompt: string,
+    newSessionTitle: string,
+    batch: { id: string; maxConcurrent: number } | undefined,
+    provenance: {
+      dispatchOrigin: SessionDispatchOrigin;
+      runSource: SessionRunSource;
+      startsTaskWork?: boolean;
+    } | undefined,
+    plan: TaskRunPlan,
+    /**
+     * The right to make this effect, presented AT THE WRITE rather than checked before it. The
+     * lease fences who may bind a plan and who may freeze an answer; without this it does not fence
+     * the effect itself, and a holder whose lease expired mid-flight still commits the Session a
+     * takeover has already answered for.
+     */
+    fence?: TaskRunEffectFence,
+  ): Promise<string> {
+    // Already this request's run: nothing to do, and nothing that could be done twice.
+    if (plan.kind === 'ADOPT') return plan.sessionId;
+    if (plan.kind === 'RESUME') {
+      // The durable half of the delivery, read by the key the plan fixed. `resume` would collapse
+      // on the same key anyway — the unique index is what makes it exactly-once — but reading first
+      // keeps a takeover out of the whole resume path for a turn that is already on the row.
+      if (await this.hasTurn(plan.sessionId, plan.turnId)) return plan.sessionId;
+      await this.sessions.resume(
+        ownerId,
+        plan.sessionId,
+        {
+          clientTurnId: plan.turnId,
+          content: prompt,
+          ...(task.model != null ? { model: task.model } : {}),
+        },
+        // §13.6 SU6: a paused run being handed the task's prompt IS doing the task's work, so the
+        // row says so — otherwise a session first opened to look at the task keeps the salvage
+        // exemption while executing it, and the reaper never follows the task's lifecycle for it.
+        { batch: batch ?? null, startsTaskWork: true, fence },
+      );
+      return plan.sessionId;
+    }
     const session = await this.createTaskSessionOrReadWinner(
       ownerId,
       task,
       workspace,
+      plan.sessionId,
+      fence,
       {
         prompt,
         workspaceId: workspace.id,
@@ -7155,23 +7743,69 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * Persist one manual-run request for every affected Project.
    *
    * The outbox row is the authoritative state of this user action, so there is no second business
-   * row to coordinate with it. All Projects share one transaction and request id: the partial
-   * outbox key is Project-scoped, which makes a batch one signal per Project while preserving a
-   * distinct identity for the next click.
+   * row to coordinate with it, and the signal is named after the PRESS rather than after this call:
+   * `taskRunManualTriggerId(token, projectId)`. That is the difference between a retry and a second
+   * click. The id used to be a `randomUUID()` minted per call, so a press whose response was lost
+   * recovered its Session correctly on replay — and recorded a second durable USER trigger, and a
+   * second Coordinator wake, for the one press that produced it.
+   *
+   * Derived per Project rather than once for the whole press, because the outbox's unique key is
+   * `(project_id, dedupe_key)`: one signal per Project per press, across every delivery of it.
    */
   private async recordManualProjectTriggers(
     ownerId: string,
     projectIds: Array<string | null | undefined>,
+    /** The press this run request was made under — see `RunTaskDto.triggerId`. */
+    requestToken: string,
+    /** Which task's run recorded it. Audit only; the trigger is per Project, not per task. */
+    taskId?: string,
   ): Promise<void> {
     const distinct = [...new Set(projectIds.filter((id): id is string => !!id))].sort();
     if (distinct.length === 0) return;
-    const requestId = randomUUID();
-    // Retried whole, and safe because the identity is minted OUTSIDE the closure: every attempt
-    // passes `project_event_manual_trigger` the same request id over the same sorted project list,
-    // which is what that function deduplicates on. A retry therefore records the same trigger, not
-    // a second one.
+    // Retried whole, and safe because every id here is a pure function of the press and the
+    // Project: an attempt after a transient failure — and a delivery after a lost response — writes
+    // the same ledger row and enqueues the same signal.
+    //
+    // The LEDGER is what makes it exactly-once for the life of the request, and 0117's dedupe key
+    // could not be: `project_event_open_dedupe_idx` is unique only while an event is UNCONSUMED, so
+    // a delivery arriving after the Coordinator answered the first signal would enqueue a second
+    // one under the same key — a second audited USER request, and a second wake, for one press.
+    // `task_run_manual_trigger` outlives the signal, and the insert and the enqueue commit
+    // together, so there is no state in which the press was recorded and the signal was not.
     await withTransactionRetry(this.prisma, async (tx) => {
+      // CANONICAL ORDER FIRST, explicitly, before any write in here takes a lock implicitly.
+      //
+      // The marker insert's three foreign keys acquire `FOR KEY SHARE` on `project`, on `user` and
+      // (when the audit column is set) on `task` — in whatever order PostgreSQL checks them, which
+      // is not the order `docs/postgres-lock-order.md` fixes: user (10) -> project (40) -> task
+      // (50). A transaction that takes project before user can wait on one that holds user and
+      // wants a project key lock, and the cycle is closed by a writer nobody wrote a `FOR UPDATE`
+      // for. Taking the same locks up front, in rank order and in the weakest mode that covers what
+      // follows, leaves the foreign keys re-using locks this transaction already holds.
+      //
+      // One statement per relation with `ORDER BY id`, so a press spanning several Projects cannot
+      // interleave project/task/project with another press going the other way.
+      await tx.$executeRaw(Prisma.sql`
+        SELECT 1 FROM "user" WHERE "id" = ${ownerId}::uuid FOR KEY SHARE`);
+      await tx.$executeRaw(Prisma.sql`
+        SELECT 1 FROM "project" WHERE "id" = ANY(${distinct}::uuid[]) ORDER BY "id" FOR KEY SHARE`);
+      if (taskId) {
+        await tx.$executeRaw(Prisma.sql`
+          SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR KEY SHARE`);
+      }
       for (const projectId of distinct) {
+        const requestId = taskRunManualTriggerId(requestToken, projectId);
+        const recorded = await tx.$executeRaw(Prisma.sql`
+          INSERT INTO "task_run_manual_trigger" ("project_id", "request_id", "owner_id", "task_id")
+          VALUES (${projectId}::uuid, ${requestId}::uuid, ${ownerId}::uuid, ${taskId ?? null}::uuid)
+          ON CONFLICT DO NOTHING
+        `);
+        // Nothing inserted means this press already recorded this Project's trigger — a repeat, or
+        // the loser of two deliveries landing together. Either way the signal it would enqueue is
+        // one that already exists or has already been answered.
+        if (recorded === 0) continue;
+        // The authoritative producer, called rather than reimplemented: every Project event is
+        // enqueued by this function at the database write (migration 0117).
         await tx.$executeRaw(Prisma.sql`
           SELECT "project_event_manual_trigger"(
             ${projectId}::uuid,
@@ -7188,7 +7822,108 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * resume-first-else-create flow as an @-mention, but as a user-facing action, so a
    * missing assignee / runner becomes a hard error instead of a silent skip.
    */
-  async execute(ownerId: string, id: string, auto?: AutoDispatch) {
+  async execute(
+    ownerId: string,
+    id: string,
+    auto?: AutoDispatch,
+    /**
+     * What names this run REQUEST. A manual door passes the caller's `triggerId` — generated once
+     * per press or per tool invocation and reused by every retry of it — and an automatic one
+     * passes the durable fact it is acting on (`TASK_RUN_TRIGGER`).
+     *
+     * Absent, one is minted here. That is honest for a first press and it still makes two doors
+     * racing over this task collapse onto a single run, because each names its own Session; what it
+     * is NOT is lost-response idempotency. A token the caller never received is a token it cannot
+     * send again, so a repeat of it is a new request and is treated as one.
+     */
+    requestToken?: string,
+  ) {
+    // THE RECEIPT, BEFORE EVERYTHING.
+    //
+    // Every check below this line reads something mutable — the task's status, its hold, its
+    // prerequisites, its assignee and that agent's runner, its Project, whether it has been
+    // superseded — and a delivery of one press that arrives after any of them moved would answer a
+    // different thing from the delivery it repeats: a 400 where the first returned a Session, a
+    // second Session where the first returned one, a second Project trigger on a Project the press
+    // never named. Stable artifact ids cannot fix that, because the door refuses before it reaches
+    // them. So a request that has already been answered is answered from its answer.
+    const runRequestToken = requestToken ?? randomUUID();
+    const lease = await this.leaseRunRequest(
+      ownerId, TASK_RUN_ACTION.execute, runRequestToken, taskRunFingerprint.execute(id),
+    );
+    if (!lease.held) return lease.result as TaskRunAnswer;
+    try {
+      return await this.executeLeased(ownerId, id, auto, runRequestToken, lease);
+    } catch (e) {
+      // A refused request is not a frozen one. Nothing about "prerequisites are not complete" or
+      // "this list is paused" is an answer the caller should be given again after they have fixed
+      // it, so the lease goes back and the receipt stays OPEN — the same token asked again
+      // re-evaluates. What it does NOT do is leave the request evaluable by two deliveries at once,
+      // which is the property the lease exists for.
+      //
+      // Except when this delivery is no longer the one: `TaskRunFenceLost` comes from inside the
+      // effect's own transaction, so nothing was written, and the request now belongs to whoever
+      // took it over. The release below writes nothing in that case — it is fenced on the same
+      // holder and attempt — and the honest answer is that somebody else is answering it.
+      await this.releaseRunRequest(lease.claim).catch(() => undefined);
+      if (e instanceof TaskRunFenceLost) {
+        throw taskRunInProgress(TASK_RUN_ACTION.execute, runRequestToken);
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * End a delivery that is not going to start anything, without leaving the request held.
+   *
+   * A bare `return` from inside the lease is the one shape that wedges it: the receipt stays OPEN
+   * with a live holder, and the next delivery of the same durable token is told the request is in
+   * progress by a process that has already answered.
+   *
+   * RELEASED rather than frozen, for every stand-down, and §7.7 D5-b4(6) is the reason. Freezing
+   * needs the token to name a moment that cannot come back, and the automatic doors' tokens do not
+   * yet: `run_at` can go 09:00 -> 10:00 -> 09:00, and a prerequisite can go DONE -> reopened ->
+   * DONE under an unchanged edge set. A frozen stand-down would answer those legitimate second
+   * moments with the first one's refusal, for ever. `task_dispatch_epoch` (0137) is the name that
+   * makes freezing sound; wiring the doors onto it is H2G, and this is the safe reading until then.
+   */
+  private async standDown<T>(
+    lease: Extract<TaskRunLease, { held: true }>,
+    answer: T,
+  ): Promise<T> {
+    await this.releaseRunRequest(lease.claim).catch(() => undefined);
+    return answer;
+  }
+
+  /**
+   * `execute` with the right to answer this request in hand.
+   *
+   * Split out so the lease is released on exactly one path — every refusal below, and every
+   * unexpected failure, leaves the request askable again rather than held by a delivery that is
+   * gone.
+   */
+  private async executeLeased(
+    ownerId: string,
+    id: string,
+    auto: AutoDispatch | undefined,
+    runRequestToken: string,
+    lease: Extract<TaskRunLease, { held: true }>,
+  ): Promise<TaskRunAnswer> {
+    // ALREADY DECIDED. Not one mutable check below this line may run again: the holder that passed
+    // them wrote down what it decided with, and re-reading a world that has moved is how a repeat
+    // of one press answers something the press never asked — a 400 where it got a Session, a second
+    // Session where it got one, a trigger on a Project it never named.
+    if (lease.status === 'BOUND') {
+      const bound = lease.target as TaskRunTargetRecord;
+      // Dispatched on what the row SAYS it is, never on which door read it: a bulk Run's plan and a
+      // single run's are both `BOUND` receipts, and reading one as the other sends this takeover
+      // looking for rows the request never named. Anything this binary does not recognise — a newer
+      // version, a kind it has never heard of — is refused rather than guessed at: finishing
+      // somebody else's command is worse than saying it cannot, and the replica that DOES
+      // understand it still holds or will take the lease.
+      if (bound?.v === 1 && bound.kind === 'RUN') return this.applyExecuteTarget(lease, bound);
+      throw taskRunUnreadableTarget(lease.claim.actionKind, lease.claim.requestToken);
+    }
     const task = await this.prisma.task.findFirst({
       where: { id, ownerId },
       select: {
@@ -7237,7 +7972,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       subjectTerminalReason: task.verifies?.terminalReason ?? null,
     }, uuidToBase62);
     if (refusal) {
-      if (auto) return { ok: false as const, skipped: 'superseded' as const };
+      // A stand-down still ends this delivery's hold. Released rather than frozen: a supersession
+      // link can be removed, and the same durable fact arriving later must be able to evaluate
+      // again rather than replay a refusal from a world that has since changed back.
+      if (auto) return this.standDown(lease, { ok: false as const, skipped: 'superseded' as const });
       throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
     }
     // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
@@ -7247,7 +7985,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // The door this method IS: Run Now, `task_start`, `orbit task start`, the dependency-unlock
     // trigger, the auto-run sweep, the scheduled sweep, the foreman sweep and the verification
     // filer all reach the Session through here. `batchExecute` does NOT — it classifies and calls
-    // `runWorkspaceOnTask` itself, so it carries the same predicate in its own skip loop. The one
+    // `planWorkspaceRun`/`applyWorkspaceRun` itself, so it carries the same predicate in its own
+    // skip loop. The one
     // gate neither can bypass is migration 0132's trigger on the Session insert.
     //
     // An automatic caller SKIPS, like every other automatic stand-down here; a person gets a 409
@@ -7257,7 +7996,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       completionPolicy: task.completionPolicy,
       hasDirectChildren: task.children.length > 0,
     })) {
-      if (auto) return { ok: false as const, skipped: 'aggregate-parent' as const };
+      if (auto) {
+        return this.standDown(lease, { ok: false as const, skipped: 'aggregate-parent' as const });
+      }
       throw new ConflictException(
         `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
         + `(${task.completionPolicy}), so it has no work of its own to run — `
@@ -7265,7 +8006,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
-      return { ok: false as const, skipped: 'coordinator-authority' as const };
+      return this.standDown(
+        lease, { ok: false as const, skipped: 'coordinator-authority' as const },
+      );
     }
     // The schedule fence, and it comes before every other check because it decides whether this
     // call has any business running at all. Only automatic triggers pass `auto`: an explicit Run
@@ -7274,7 +8017,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // reschedule simply stands down — the task keeps whatever schedule it now has, and the sweep
     // that runs after that instant is the one that starts it.
     if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
-      return { ok: false as const, skipped: 'rescheduled' as const };
+      // RELEASED, like the three above, and §7.7 D5-b4(6) is why it is not frozen. Freezing needs
+      // the token to name a moment that can never come back, and `sched:<task>:<instant>` does not:
+      // `run_at` can go 09:00 -> 10:00 -> 09:00, and that second 09:00 is a legitimate appointment
+      // which re-derives this name. A frozen stand-down would answer it with this refusal for ever
+      // — the appointment silently never runs. H2G's monotone epoch is what makes freezing sound;
+      // until it lands, releasing is the only safe reading.
+      return this.standDown(lease, { ok: false as const, skipped: 'rescheduled' as const });
     }
     const depFacts = (await this.dependencyFactsFor([id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);
@@ -7318,61 +8067,155 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // cannot have — landing between them is refused by the database, and arrives here as a typed
     // marker rather than as a session. Translated so the caller sees the same 409 either way,
     // instead of a 500 that depends on how narrowly it lost the race.
-    const sessionId = await this.runTaskWorkTranslatingFences(() => this.runWorkspaceOnTask(
+    const planned = await this.planWorkspaceRun(
       ownerId,
       task,
       { id: task.assignee!.id, runnerId: task.assignee!.runnerId! },
+      runRequestToken,
+    );
+    const frozen: TaskRunExecuteTarget = {
+      v: 1,
+      kind: 'RUN',
+      plan: planned,
+      taskId: task.id,
+      title: `执行任务：${task.title}`,
       prompt,
-      `执行任务：${task.title}`,
+      workspaceId: task.assignee!.id,
+      runnerId: task.assignee!.runnerId!,
+      provider: task.provider ?? null,
+      model: task.model ?? null,
+      projectId: task.projectId ?? null,
       // The list doubles as a durable batch so its cap is enforced by the claim transaction's
       // existing batch gate — no second scheduler. Only when the list actually sets a cap:
-      // batch_id with a NULL batch_max_concurrent makes the gate's `count(*) < NULL` evaluate
-      // to NULL, and the session would never be claimed at all.
-      task.listId && task.list?.maxConcurrent != null
+      // batch_id with a NULL batch_max_concurrent makes the gate's `count(*) < NULL` evaluate to
+      // NULL, and the session would never be claimed at all.
+      batch: task.listId && task.list?.maxConcurrent != null
         ? { id: task.listId, maxConcurrent: task.list.maxConcurrent }
-        : undefined,
-      auto
-        ? {
-            dispatchOrigin: SessionDispatchOrigin.LEGACY_SWEEP,
-            runSource: SessionRunSource.TASK_LIST_AUTO,
-            startsTaskWork: true,
-          }
-        : {
-            // Run Now. `USER` because a person asked, `startsTaskWork` because what they asked for
-            // is the WORK — which is exactly the pair 0130's guard reads to tell this apart from an
-            // explicit session_create against the same task.
-            dispatchOrigin: SessionDispatchOrigin.USER,
-            runSource: SessionRunSource.MANUAL,
-            startsTaskWork: true,
-          },
-    ));
+        : null,
+      dispatchOrigin: auto ? SessionDispatchOrigin.LEGACY_SWEEP : SessionDispatchOrigin.USER,
+      runSource: auto ? SessionRunSource.TASK_LIST_AUTO : SessionRunSource.MANUAL,
+      runAt: task.runAt ? task.runAt.toISOString() : null,
+      clearFailed: task.status === TaskStatus.FAILED,
+      auto: auto != null,
+    };
+    return this.applyExecuteTarget(lease, frozen);
+  }
+
+  /**
+   * CARRY OUT a frozen command: bind it, apply it, apply its effects, freeze the answer.
+   *
+   * The only path that writes anything for a single run, reached identically by the holder that
+   * planned it and by a takeover that read it off the receipt — which is what makes "the same
+   * request, the same answer" a property of the code rather than of timing.
+   */
+  private async applyExecuteTarget(
+    lease: Extract<TaskRunLease, { held: true }>,
+    frozen: TaskRunExecuteTarget,
+  ): Promise<TaskRunAnswer> {
+    const { ownerId, requestToken } = lease.claim;
+    // The plan in force. A holder that lost its lease mid-plan loses this compare-and-set to
+    // whoever took over and gets THAT plan back; a `null` here means the row is not bound and this
+    // delivery no longer holds it, which is a refusal rather than a licence to use a local value.
+    const bound = await this.bindRunRequest(lease.claim, frozen) as TaskRunTargetRecord | null;
+    if (!bound) throw taskRunInProgress(lease.claim.actionKind, requestToken);
+    // The plan in force may not be the one this call computed — a takeover may have bound its own —
+    // and it may not even be a run. Both are read off the row rather than assumed.
+    if (!(bound.v === 1 && bound.kind === 'RUN')) {
+      throw taskRunUnreadableTarget(lease.claim.actionKind, requestToken);
+    }
+    const target = bound;
+    const task: TaskRunTarget = {
+      id: target.taskId,
+      title: target.title,
+      provider: target.provider,
+      model: target.model,
+    };
+    let sessionId: string;
+    try {
+      sessionId = await this.runTaskWorkTranslatingFences(() => this.applyWorkspaceRun(
+        ownerId,
+        task,
+        { id: target.workspaceId, runnerId: target.runnerId },
+        target.prompt,
+        target.title,
+        target.batch ?? undefined,
+        {
+          dispatchOrigin: target.dispatchOrigin as SessionDispatchOrigin,
+          runSource: target.runSource as SessionRunSource,
+          // Unconditionally true. Every door through here is starting the task's work — Run Now,
+          // the schedule sweep, the dependency sweep, a batch — and none of them is somebody
+          // opening a window onto a run that already happened. That is the distinction 0130's guard
+          // needs.
+          startsTaskWork: true,
+        },
+        target.plan,
+        lease.claim,
+      ));
+    } catch (e) {
+      // THE PLAN FAILED. Which of two very different things that is has to be READ, because the
+      // answers are opposite: a contended lock is worth coming back for, and a plan whose target no
+      // longer exists is a request that can only ever fail — and leaving THAT one BOUND makes every
+      // future delivery re-attempt the same doomed write for ever, under a token that can never
+      // produce an answer.
+      const settled = await this.resolveAppliedArtifact(ownerId, task, target.plan);
+      if (settled.kind === 'TRANSIENT') throw e;
+      if (settled.kind === 'DONE') {
+        this.logger.log(
+          `task ${uuidToBase62(target.taskId)}: the planned effect was already on the row; ` +
+            'answering from it rather than from the failure',
+        );
+        return this.completeRunReceipt<TaskRunAnswer>(
+          lease.claim, { ok: true as const, sessionId: settled.sessionId },
+        );
+      }
+      this.logger.warn(
+        `task ${uuidToBase62(target.taskId)}: this request's target is gone (${settled.why}); ` +
+          'answering it as tombstoned',
+      );
+      return this.completeRunReceipt<TaskRunAnswer>(
+        lease.claim, { ok: false as const, skipped: 'target-tombstoned' as const },
+      );
+    }
     // Everything below this line is a POST-COMMIT step, and the session already exists.
     //
     // A failure in any of them used to fail the whole call, which turned a live run into a 500 the
     // caller would retry — starting a second one. The Session commit is the authoritative success;
     // these three are idempotent recomputations of facts that follow from it (a compare-and-set on
-    // the status, a compare-and-set on the schedule, an outbox row keyed by this request), and the
-    // reconcile sweep re-derives any that did not land. So they are attempted, logged if they fail,
-    // and never allowed to contradict a run that is already going.
-    // The click is a durable semantic request to the Project coordinator, and it is recorded here —
-    // after `runWorkspaceOnTask` returned a session id, so it describes a run that exists.
-    // Automatic sweeps carry `auto` and deliberately produce no USER event.
-    if (!auto && task.projectId) {
-      await this.recordManualProjectTriggers(ownerId, [task.projectId]).catch((e) =>
-        this.logger.warn(`manual project trigger for task ${id} failed: ${e?.message ?? e}`));
+    // the status, a compare-and-set on the schedule, a durable signal keyed by this request), and a
+    // takeover re-derives any that did not land. So they are attempted, logged if they fail, and
+    // never allowed to contradict a run that is already going.
+    //
+    // Each is keyed by the FROZEN command, not by what the task looks like now: the Project is the
+    // one the press named, and the appointment is the one it kept.
+    if (!target.auto && target.projectId) {
+      await this.recordManualProjectTriggers(
+        ownerId, [target.projectId], requestToken, target.taskId,
+      ).catch((e) => this.logger.warn(
+        `manual project trigger for task ${target.taskId} failed: ${e?.message ?? e}`,
+      ));
     }
-    if (task.status === TaskStatus.FAILED) {
-      await this.clearFailedForRetry(ownerId, task.id).catch((e) =>
-        this.logger.warn(`clearFailedForRetry for task ${id} failed: ${e?.message ?? e}`));
+    if (target.clearFailed) {
+      await this.clearFailedForRetry(ownerId, target.taskId).catch((e) =>
+        this.logger.warn(`clearFailedForRetry for task ${target.taskId} failed: ${e?.message ?? e}`));
     }
     // The run is away, so the appointment has been kept — including when this call IS the button
     // that superseded it. A future run_at is deliberately not a veto on this path: "the earliest
     // time it starts by itself" says nothing about a person deciding to start it now, and a Run
     // button that refused would leave the only way to run a scheduled task early being to cancel
     // its schedule first.
-    await this.consumeRunAt(ownerId, task.id, task.runAt).catch((e) =>
-      this.logger.warn(`consumeRunAt for task ${id} failed: ${e?.message ?? e}`));
-    return { ok: true as const, sessionId };
+    await this.consumeRunAt(
+      ownerId, target.taskId, target.runAt ? new Date(target.runAt) : null,
+    ).catch((e) =>
+      this.logger.warn(`consumeRunAt for task ${target.taskId} failed: ${e?.message ?? e}`));
+    // Frozen last, and after the post-commit steps rather than before them: those are idempotent
+    // recomputations of facts that follow from the Session, so a repeat that lands before this
+    // write re-derives them harmlessly, while a repeat that lands after gets the same bytes without
+    // touching anything.
+    //
+    // The value RETURNED is the row's, not this call's. A holder whose lease expired mid-flight
+    // loses the compare-and-set to whoever took over, and handing back its own local answer would
+    // give a caller a result the request does not have.
+    return this.completeRunReceipt<TaskRunAnswer>(lease.claim, { ok: true as const, sessionId });
   }
 
   /**
@@ -7498,7 +8341,59 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async batchExecute(ownerId: string, taskIds: string[], maxConcurrent?: number) {
+  async batchExecute(
+    ownerId: string,
+    taskIds: string[],
+    maxConcurrent?: number,
+    /**
+     * What names this PRESS of the bulk Run. Each task inside it gets its own request name derived
+     * from the pair (`TASK_RUN_TRIGGER.batch`), so a retry of the press is the same request for
+     * every task in it while two different presses stay two. As on `execute`, a caller that sends
+     * none gets one minted here and is owed no lost-response idempotency for it.
+     */
+    requestToken?: string,
+  ): Promise<TaskBatchRunResult> {
+    // The receipt, before every mutable check, exactly as the single door does it — and here it
+    // decides more, because a bulk Run's answer is a TALLY. A repeat that re-evaluated the world
+    // would report its own live runs as "already running", its own batch as a second empty one, and
+    // a task that has since been paused as skipped: three different answers to one press.
+    const pressToken = requestToken ?? randomUUID();
+    const lease = await this.leaseRunRequest(
+      ownerId,
+      TASK_RUN_ACTION.batchExecute,
+      pressToken,
+      taskRunFingerprint.batchExecute(taskIds, maxConcurrent),
+    );
+    if (!lease.held) return lease.result as TaskBatchRunResult;
+    try {
+      // Already decided. As at the single door, not one mutable check may run again: a bulk Run's
+      // answer is a tally over rows that all move, so re-classifying is answering a different
+      // question with the same name on it.
+      if (lease.status === 'BOUND') {
+        const bound = lease.target as TaskRunTargetRecord;
+        if (!(bound?.v === 1 && bound.kind === 'BATCH')) {
+          throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
+        }
+        return await this.applyBatchPlan(lease, bound);
+      }
+      return await this.batchExecuteLeased(ownerId, taskIds, maxConcurrent, pressToken, lease);
+    } catch (e) {
+      await this.releaseRunRequest(lease.claim).catch(() => undefined);
+      if (e instanceof TaskRunFenceLost) {
+        throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
+      }
+      throw e;
+    }
+  }
+
+  /** `batchExecute` with the right to answer this press in hand. See `executeLeased`. */
+  private async batchExecuteLeased(
+    ownerId: string,
+    taskIds: string[],
+    maxConcurrent: number | undefined,
+    pressToken: string,
+    lease: Extract<TaskRunLease, { held: true }>,
+  ): Promise<TaskBatchRunResult> {
     const tasks = await this.prisma.task.findMany({
       where: { id: { in: taskIds }, ownerId },
       select: {
@@ -7532,7 +8427,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const states = new Map([...batchFacts]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
-    // task that's already running (runWorkspaceOnTask also guards this, but surfacing it here
+    // task that's already running (`planWorkspaceRun` also guards this, but surfacing it here
     // lets us report it as skipped rather than silently dispatched).
     //
     // SINGLE_RUN_DEDUP, not TASK_OCCUPYING: this must be the same "already running"
@@ -7543,13 +8438,33 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // TASK_OCCUPYING (which exists to answer reclaimStalledTask's different question —
     // "is anything still holding this task?") made bulk Run silently skip exactly the
     // tasks the list was offering as ready.
-    const occupied = new Set(
+    //
+    // It carries the SESSION, not just the fact, because "already running" is not the answer when
+    // the run that is already running is THIS PRESS'S OWN. A bulk Run whose response was lost
+    // re-arrives while its sessions are still live, and a set could only say "occupied" — so the
+    // replay reported `dispatched: 0, skipped: N` about work it had itself started, which is a
+    // different answer to the same request. The id is what tells the two apart.
+    //
+    // Spelled with the claim index's `deleted_at IS NULL` and `starts_task_work`, which is also
+    // what the comment above requires: the single-task button reads exactly this predicate, and a
+    // batch that read a wider one would call a task occupied by a conversation somebody opened
+    // against it.
+    const occupied = new Map(
       (
         await this.prisma.session.findMany({
-          where: { taskId: { in: tasks.map((t) => t.id) }, status: { in: SINGLE_RUN_DEDUP } },
-          select: { taskId: true },
+          where: {
+            taskId: { in: tasks.map((t) => t.id) },
+            deletedAt: null,
+            status: { in: SINGLE_RUN_DEDUP },
+            startsTaskWork: true,
+          },
+          select: { taskId: true, id: true },
         })
-      ).map((s) => s.taskId),
+      ).map((row) => [row.taskId!, row.id] as const),
+    );
+    /** What this press names the run it wants for one task — see `TASK_RUN_TRIGGER.batch`. */
+    const desiredFor = (taskId: string) => taskRunDesiredSessionId(
+      taskRunRequestKey({ taskId, requestToken: TASK_RUN_TRIGGER.batch(pressToken, taskId) }),
     );
     const runnable: typeof tasks = [];
     const skipped: { id: string; title: string; reason: string }[] = [];
@@ -7610,59 +8525,170 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               : 'Prerequisites not complete',
         });
       }
-      else if (occupied.has(t.id))
-        skipped.push({ id: t.id, title: t.title, reason: 'Already running or queued' });
+      // Somebody ELSE's live run — a different press, a sweep, the single-task button — is what
+      // "already running" means. This press's own live run is not: it is this request's authorised
+      // answer, so the item goes through the dispatch path, which recognises the name and returns
+      // that Session. A replay of one press therefore reports what the press reported.
+      else if (occupied.has(t.id) && occupied.get(t.id) !== desiredFor(t.id))
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: `Already running or queued (session ${uuidToBase62(occupied.get(t.id)!)})`,
+        });
       else runnable.push(t);
     }
     // taskIds with no matching owned task (deleted / not owned) are silently ignored.
 
     const runnerIds = [...new Set(runnable.map((t) => t.assignee!.runnerId!))];
-    // One id ties this batch's sessions together; the queue counts live siblings by it.
-    const batch = maxConcurrent != null ? { id: randomUUID(), maxConcurrent } : undefined;
+    // One id ties this batch's sessions together; the queue counts live siblings by it. Derived
+    // from the press, so a repeat of one press names the batch its own Sessions are already in
+    // rather than answering with a second, empty one whose cap governs nothing.
+    const batch = maxConcurrent != null
+      ? { id: taskRunBatchId(ownerId, pressToken), maxConcurrent }
+      : undefined;
 
-    const dispatch = async (t: (typeof runnable)[number]) => {
-      try {
-        const sessionId = await this.runTaskWorkTranslatingFences(() => this.runWorkspaceOnTask(
+    // THE PRESS'S PLAN, written down before any of it happens: which batch, which tasks are in it
+    // and where each one goes, and which were classified out and why. A takeover performs this — it
+    // does not re-classify, because a bulk Run's answer is a TALLY and every input to that tally is
+    // mutable. Re-classifying is how a repeat reports `dispatched: 0, skipped: N` about work the
+    // press itself started.
+    const planned: TaskRunBatchPlan = {
+      v: 1,
+      kind: 'BATCH',
+      batchId: batch?.id ?? null,
+      maxConcurrent: maxConcurrent ?? null,
+      skipped,
+      runnerIds,
+      items: [],
+    };
+    for (const t of runnable) {
+      planned.items.push({
+        taskId: t.id,
+        title: `执行任务：${t.title}`,
+        prompt: this.buildExecutePrompt(t),
+        workspaceId: t.assignee!.id,
+        runnerId: t.assignee!.runnerId!,
+        provider: t.provider ?? null,
+        model: t.model ?? null,
+        runAt: t.runAt ? t.runAt.toISOString() : null,
+        clearFailed: t.status === TaskStatus.FAILED,
+        projectId: t.projectId ?? null,
+        ...(await this.planWorkspaceRun(
           ownerId,
           t,
           { id: t.assignee!.id, runnerId: t.assignee!.runnerId },
-          this.buildExecutePrompt(t),
-          `执行任务：${t.title}`,
-          batch,
+          TASK_RUN_TRIGGER.batch(pressToken, t.id),
+        )),
+      });
+    }
+    const bound = await this.bindRunRequest(lease.claim, planned) as TaskRunTargetRecord | null;
+    if (!bound) throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
+    if (!(bound.v === 1 && bound.kind === 'BATCH')) {
+      throw taskRunUnreadableTarget(TASK_RUN_ACTION.batchExecute, pressToken);
+    }
+    return this.applyBatchPlan(lease, bound);
+  }
+
+  /**
+   * CARRY OUT a frozen bulk Run: every item, then the press's durable signals, then the answer.
+   *
+   * Reached identically by the holder that planned it and by a takeover that read the plan off the
+   * receipt, which is what makes a repeat of one press answer with the same tally, the same batch
+   * and the same Sessions.
+   */
+  private async applyBatchPlan(
+    lease: Extract<TaskRunLease, { held: true }>,
+    plan: TaskRunBatchPlan,
+  ): Promise<TaskBatchRunResult> {
+    const { ownerId, requestToken: pressToken } = lease.claim;
+    /** Items that ended in neither their artifact nor a monotone tombstone. */
+    const unsettled: string[] = [];
+    const dispatch = async (item: TaskRunBatchItemPlan) => {
+      // FENCED PER ITEM, and renewed as it goes. A press over many tasks can outlive a fixed lease,
+      // and a holder whose lease was taken over must stop rather than go on applying effects
+      // alongside its successor — which is the one way two evaluators can both write.
+      if (!(await this.renewRunRequest(lease.claim))) {
+        throw taskRunInProgress(TASK_RUN_ACTION.batchExecute, pressToken);
+      }
+      const task: TaskRunTarget = {
+        id: item.taskId, title: item.title, provider: item.provider, model: item.model,
+      };
+      try {
+        const sessionId = await this.runTaskWorkTranslatingFences(() => this.applyWorkspaceRun(
+          ownerId,
+          task,
+          { id: item.workspaceId, runnerId: item.runnerId },
+          item.prompt,
+          item.title,
+          plan.batchId != null && plan.maxConcurrent != null
+            ? { id: plan.batchId, maxConcurrent: plan.maxConcurrent }
+            : undefined,
+          { dispatchOrigin: SessionDispatchOrigin.USER, runSource: SessionRunSource.MANUAL },
+          item,
+          lease.claim,
         ));
         // Post-commit, exactly as the single Run treats them: the Session is the authoritative
         // success, and neither of these may turn a live run into a reported failure. Both are
         // compare-and-sets that the reconcile sweep re-derives, so a failure here is degraded
         // bookkeeping about a run that is already going — not a run that did not start.
-        if (t.status === TaskStatus.FAILED) {
-          await this.clearFailedForRetry(ownerId, t.id).catch((e) =>
-            this.logger.warn(`batchExecute: clearFailedForRetry for ${t.id} failed: ${e}`));
+        if (item.clearFailed) {
+          await this.clearFailedForRetry(ownerId, item.taskId).catch((e) =>
+            this.logger.warn(`batchExecute: clearFailedForRetry for ${item.taskId} failed: ${e}`));
         }
         // A bulk Run keeps the appointment the same way the single one does. Without this a task
         // started here would keep its schedule and be started again by the clock afterwards —
         // "one-shot" has to mean one run, not one run per way of starting it.
-        await this.consumeRunAt(ownerId, t.id, t.runAt).catch((e) =>
-          this.logger.warn(`batchExecute: consumeRunAt for ${t.id} failed: ${e}`));
-        return { id: t.id, ok: true as const, sessionId };
+        await this.consumeRunAt(
+          ownerId, item.taskId, item.runAt ? new Date(item.runAt) : null,
+        ).catch((e) =>
+          this.logger.warn(`batchExecute: consumeRunAt for ${item.taskId} failed: ${e}`));
+        return { id: item.taskId, ok: true as const, sessionId };
       } catch (e) {
-        this.logger.warn(`batchExecute: task ${t.id} failed: ${e}`);
-        return { id: t.id, ok: false as const, error: e instanceof Error ? e.message : String(e) };
+        // Losing the fence is not an item outcome at all — it says this DELIVERY is no longer the
+        // one, so it stops the press rather than being written into its tally.
+        if (e instanceof TaskRunFenceLost) throw e;
+        // The same reading the single door does, per item: an exception is not an answer. The
+        // Session or the turn may already be committed — a post-commit publish can throw, and a
+        // holder whose lease was taken over can be inside the write while this delivery gives up —
+        // so the item's result comes off its own durable artifact.
+        const settled = await this.resolveAppliedArtifact(ownerId, task, item);
+        if (settled.kind === 'DONE') {
+          return { id: item.taskId, ok: true as const, sessionId: settled.sessionId };
+        }
+        if (settled.kind === 'GONE') {
+          this.logger.warn(`batchExecute: task ${item.taskId} is gone: ${settled.why}`);
+          return { id: item.taskId, ok: false as const, error: settled.why };
+        }
+        // No artifact, and the ERROR does not get to decide what that means. NOTHING may put an
+        // item into a frozen tally except a fact about a row: the Session it created, the turn it
+        // delivered, or the monotone absence of the task it names. An exception is a description of
+        // one attempt, and a description is exactly what cannot be trusted here — the Session may
+        // be committing right now under a holder that is still writing, and a caller handed
+        // `{ ok: false }` has no reason to ask again while the next delivery would tell it that
+        // same item is running.
+        //
+        // That includes refusals that LOOK permanent. If one of them has to be final, it has to
+        // become a durable artifact this door can recover — which is what `GONE` is — rather than
+        // a string this code recognised once.
+        this.logger.warn(`batchExecute: task ${item.taskId} did not settle: ${e}`);
+        unsettled.push(item.taskId);
+        return { id: item.taskId, ok: false as const, error: 'did not settle' };
       }
     };
     // A fixed worker pool avoids an unbounded Promise.all fan-out while preserving the runnable
     // order in `results`, even when individual session initializations finish out of order.
-    const results = new Array<Awaited<ReturnType<typeof dispatch>>>(runnable.length);
+    const results = new Array<Awaited<ReturnType<typeof dispatch>>>(plan.items.length);
     let nextIndex = 0;
     const worker = async (): Promise<void> => {
       for (;;) {
         const index = nextIndex++;
-        if (index >= runnable.length) return;
-        results[index] = await dispatch(runnable[index]);
+        if (index >= plan.items.length) return;
+        results[index] = await dispatch(plan.items[index]);
       }
     };
     await Promise.all(
       Array.from(
-        { length: Math.min(BATCH_EXECUTE_DISPATCH_CONCURRENCY, runnable.length) },
+        { length: Math.min(BATCH_EXECUTE_DISPATCH_CONCURRENCY, plan.items.length) },
         () => worker(),
       ),
     );
@@ -7675,22 +8701,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // One transaction and one request id still name the whole click.
     // ...and it may not fail the call either. Several worker Sessions are live by now; a 500 here
     // would tell the caller nothing started, and a retry would start them all again.
+    //
+    // The Project of each item comes off the PLAN, not off the task as it stands now: a task moved
+    // to another Project between the plan and a takeover would otherwise have its press's signal
+    // filed against a Project the press never named, or — if it was deleted — no signal at all.
+    const started = new Set(results.filter((result) => result.ok).map((result) => result.id));
     await this.recordManualProjectTriggers(
       ownerId,
-      results
-        .filter((result) => result.ok)
-        .map((result) => runnable.find((task) => task.id === result.id)?.projectId ?? null),
+      plan.items.filter((item) => started.has(item.taskId)).map((item) => item.projectId),
+      pressToken,
     ).catch((e) =>
       this.logger.warn(`batchExecute: manual project triggers failed: ${e?.message ?? e}`));
 
-    return {
+    const answer = {
       dispatched: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok),
-      skipped,
-      runnerIds,
-      batchId: batch?.id ?? null,
-      maxConcurrent: maxConcurrent ?? null,
+      skipped: plan.skipped,
+      runnerIds: plan.runnerIds,
+      batchId: plan.batchId,
+      maxConcurrent: plan.maxConcurrent,
+      // The per-item half of the receipt: which task got which Session. The tally above says how
+      // many, and a repeat has to be able to answer WHICH — that is what a client refreshing the
+      // rows it just started needs, and what makes "the same bytes" checkable.
+      results,
     };
+    // A TALLY IS ONLY EVER FROZEN WHOLE. Every item in it is backed by its own row — the Session it
+    // created, the turn it delivered, or the monotone fact that its target is gone — and an item
+    // that ended in a contended lock or a lease taken over is none of those. Reporting that as a
+    // failed item would make this press's answer contradict what the database is about to say, and
+    // the caller would have no reason to ask again.
+    //
+    // So the request answers RETRYABLE and freezes nothing. Its plan is already bound, so the next
+    // delivery re-applies exactly it: every item that landed resolves to its artifact, and the
+    // answer that eventually freezes is one every part of which is true.
+    if (unsettled.length > 0) {
+      await this.releaseRunRequest(lease.claim).catch(() => undefined);
+      throw taskRunUnsettled({
+        actionKind: TASK_RUN_ACTION.batchExecute,
+        requestToken: pressToken,
+        pendingTaskIds: unsettled.map((id) => uuidToBase62(id)),
+        attempt: lease.claim.attempt,
+      });
+    }
+    return this.completeRunReceipt(lease.claim, answer);
   }
 
   /**

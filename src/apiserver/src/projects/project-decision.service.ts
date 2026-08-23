@@ -67,6 +67,26 @@ export type ProjectDecisionRunState =
   | 'ACCEPTANCE'
   | 'SETTLED';
 
+/** `[K5]`: one durable finding whose result is a §11 row, as the condition detector reads it. */
+export interface ProjectFindingFact {
+  /** Base62, like every id in this snapshot. */
+  findingId: string;
+  taskId: string;
+  /** FD1's key, project term stripped — the condition dedupes on it, so it is spelled publicly. */
+  dedupKey: string;
+  scopeRevision: number;
+  classification: string;
+  severity: string;
+  violatedInvariant: string;
+  minimalRepro: string;
+  /** The kind this finding's outcome says to raise. Recorded when the finding committed, so the
+   *  condition cannot pick a different one later from the same facts. */
+  blockerKind: string;
+  requiredAction: string;
+  owner: string;
+  createdAt: string;
+}
+
 export interface ProjectDecisionInput {
   v: typeof PROJECT_DECISION_INPUT_VERSION;
   readAt: string;
@@ -156,6 +176,20 @@ export interface ProjectDecisionInput {
        * whether the DEP rule is evaluated at all.
        */
       verdictApplied?: boolean;
+      /**
+       * `[K5]` criterion 7: the same action for the same `(task, verdictRevision)` is REFUSED with
+       * its retry budget spent.
+       *
+       * Keyed on the CURRENT revision exactly as `verdictApplied` is, and that is what makes the
+       * §11 row it raises able to CLEAR: the fix a person is asked for — revoke the verdict, record
+       * it again — advances the revision, so the next snapshot computes a different key, this reads
+       * false, and BL3 resolves the blocker. Read off the ACTION table instead and the stuck row
+       * would sit there for ever, telling somebody to do a thing that does not make it go away.
+       *
+       * Absent on snapshots captured before this unit, which readers treat as "not exhausted" —
+       * the fail-safe direction, since inventing one would escalate a wait that is still moving.
+       */
+      verdictApplyExhausted?: boolean;
       /**
        * §13.6 SU1's three columns, absent on decisions captured before migration 0129. Readers
        * must treat an absent field as "nothing retired this attempt", which is exactly what those
@@ -297,8 +331,22 @@ export interface ProjectDecisionInput {
      * only what a NEW capture contains, so it needs no gate of its own — an old snapshot is
      * replayed from its own stored bytes.
      */
-    protocol?: { completionGaps: true; verificationEpoch?: true };
+    protocol?: { completionGaps: true; verificationEpoch?: true; findings?: true };
     blockers?: ProjectBlockerFact[];
+    /**
+     * `[K5]` §6: the findings whose one legal result is a §11 row, and whose subject has not
+     * settled since.
+     *
+     * Only the two classes CL1 exempts from the attempt budget appear here — `ENVIRONMENT` and
+     * `HUMAN_REQUIRED` — because those are the two whose result IS a blocker. The four that produce
+     * a Task produced it in the finding's own transaction and have nothing left for a condition to
+     * recompute.
+     *
+     * Absent on decisions captured before this projection existed, which readers must treat as
+     * "this snapshot predates finding-driven blockers" and NOT as "there were none" — the reading
+     * `blockers` and `deadLetters` already ask for, and for the same reason.
+     */
+    findings?: ProjectFindingFact[];
     /**
      * §5.4 F22's UNACKNOWLEDGED dead letters — events this project lost for good, minus the ones
      * somebody has already dealt with.
@@ -515,6 +563,7 @@ interface TaskRow {
   terminalReason: string | null;
   /** §13.3 DEP4, per row: is THIS task's CURRENT verdict revision applied in the ledger? */
   verdictApplied: boolean;
+  verdictApplyExhausted: boolean;
   updatedAt: Date;
 }
 
@@ -622,6 +671,22 @@ interface BlockerRow {
   lastSeenAt: Date;
   occurrences: number;
   escalatedAt: Date | null;
+}
+
+/** `[K5]`: one `task_verification_finding` row as the snapshot reads it. */
+interface FindingRow {
+  id: string;
+  taskId: string;
+  dedupKey: string;
+  scopeRevision: number;
+  classification: string;
+  severity: string;
+  violatedInvariant: string;
+  minimalRepro: string;
+  blockerKind: string;
+  requiredAction: string;
+  owner: string;
+  createdAt: Date;
 }
 
 interface DeadLetterRow {
@@ -749,6 +814,20 @@ export class ProjectDecisionService {
                     AND va."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
                         || t."id"::text || ':' || t."verdict_revision"::text
                ) AS "verdictApplied",
+               -- [K5] criterion 7, the same correlated shape and the same key: the retries on
+               -- THIS revision's apply are spent. reason_code is the bucket the pass that spent
+               -- the last attempt stamped; refusal_code still says what actually failed. (No
+               -- backticks inside this template literal: one would close it early.)
+               EXISTS (
+                 SELECT 1 FROM "project_action" ve
+                  WHERE ve."project_id" = t."project_id"
+                    AND ve."type"::text = 'APPLY_VERIFICATION_VERDICT'
+                    AND ve."status"::text = 'REFUSED'
+                    AND ve."reason_code" = 'VERDICT_APPLY_EXHAUSTED'
+                    AND ve."subject_id" = t."id"
+                    AND ve."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
+                        || t."id"::text || ':' || t."verdict_revision"::text
+               ) AS "verdictApplyExhausted",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -886,6 +965,35 @@ export class ProjectDecisionService {
            AND b."resolved_at" IS NULL
          ORDER BY b."dedupe_key", b."id"
       `);
+    // `[K5]`: findings whose result is a blocker, on tasks in this project that have not settled.
+    // Restricted to the CURRENT scope revision on FD4's reasoning read one step on — a finding about
+    // a revision the task has moved past is a conclusion about a question nobody is asking, and a
+    // blocker recomputed from one would be unclosable by anything except editing history.
+    // Is 0141 applied here? Probed rather than assumed, and the answer is carried into the snapshot
+    // as `protocol.findings` — the same mixed-version shape `completionGaps` and `verificationEpoch`
+    // already have. A binary that reaches a database one migration behind must produce the answer
+    // its own world supports ("this snapshot predates finding-driven blockers"), not a 42P01 that
+    // stops the whole reconcile; and a decision captured then must replay to what it decided.
+    const [findingTable] = await tx.$queryRaw<Array<{ present: boolean }>>(Prisma.sql`
+      SELECT to_regclass('task_verification_finding') IS NOT NULL AS "present"
+    `);
+    const findingsAvailable = findingTable?.present === true;
+    const findingRows = !findingsAvailable ? [] : await tx.$queryRaw<FindingRow[]>(Prisma.sql`
+        SELECT f."id", f."task_id" AS "taskId", f."dedup_key" AS "dedupKey",
+               f."scope_revision" AS "scopeRevision",
+               f."effective_classification" AS "classification", f."severity",
+               f."violated_invariant" AS "violatedInvariant",
+               f."minimal_repro" AS "minimalRepro",
+               f."effect_blocker_kind" AS "blockerKind",
+               f."required_action" AS "requiredAction", f."owner", f."created_at" AS "createdAt"
+          FROM "task_verification_finding" f
+          JOIN "task" t ON t."id" = f."task_id"
+         WHERE t."project_id" = ${projectId}::uuid AND t."owner_id" = ${project.ownerId}::uuid
+           AND f."effect_blocker_kind" IS NOT NULL
+           AND f."scope_revision" = t."scope_revision"
+           AND t."status"::text NOT IN ('DONE', 'CANCELLED')
+         ORDER BY f."dedup_key", f."id"
+      `);
     const signalRows = await tx.$queryRaw<SignalRow[]>(Prisma.sql`
         SELECT e."id", e."kind", e."dedupe_key" AS "dedupeKey"
           FROM "project_event" e JOIN "project" p ON p."id" = e."project_id"
@@ -970,6 +1078,7 @@ export class ProjectDecisionService {
         supersededAt: iso(row.supersededAt),
         terminalReason: row.terminalReason,
         verdictApplied: row.verdictApplied,
+        verdictApplyExhausted: row.verdictApplyExhausted,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,
@@ -1157,7 +1266,23 @@ export class ProjectDecisionService {
       })),
       // §13.1 AG7's capability marker, stamped by the binary that captured this world. Constant by
       // construction — it says what THIS build computes, not what the project contains.
-      protocol: { completionGaps: true, verificationEpoch: true },
+      protocol: findingsAvailable
+        ? { completionGaps: true, verificationEpoch: true, findings: true }
+        : { completionGaps: true, verificationEpoch: true },
+      findings: !findingsAvailable ? undefined : findingRows.map((row) => ({
+        findingId: toPublicId(row.id),
+        taskId: toPublicId(row.taskId),
+        dedupKey: publicDedupeKey(row.dedupKey),
+        scopeRevision: row.scopeRevision,
+        classification: row.classification,
+        severity: row.severity,
+        violatedInvariant: row.violatedInvariant,
+        minimalRepro: row.minimalRepro,
+        blockerKind: row.blockerKind,
+        requiredAction: row.requiredAction,
+        owner: row.owner,
+        createdAt: isoRequired(row.createdAt),
+      })),
       blockers: blockerRows.map((row) => ({
         id: toPublicId(row.id),
         kind: row.kind as ProjectBlockerFact['kind'],

@@ -331,15 +331,45 @@ export class RefreshDependencyGraphNodesDto {
   taskIds!: string[];
 }
 
+/**
+ * The id of one PRESS of a run button, or of one tool invocation — never of the run it starts.
+ *
+ * Two calls carrying the same one are ONE request: the Session a task run writes is named after
+ * this token, so a client that retries a POST it never got an answer to gets back the Session its
+ * first attempt created, whatever status that run has reached by then, instead of starting a second
+ * one or being refused.
+ *
+ * Optional, and a caller that sends none is not refused: the server mints one, which still makes
+ * two doors racing over one task collapse onto a single run. What it cannot do is make a RETRY the
+ * same request — a token the caller never received is one it cannot send again — so a client that
+ * wants that property has to name its own press. Same field, same spelling and same reasoning as
+ * `TriggerProjectCoordinatorDto.triggerId`.
+ */
+export class RunTaskDto {
+  @IsOptional() @IsPublicId() triggerId?: string;
+}
+
+/** How many tasks one press of the bulk Run may name. See the field's own note. */
+export const BATCH_EXECUTE_MAX_TASKS = 200;
+
 export class BatchExecuteDto {
   // The tasks to run. Tasks without a responsible workspace / bound runner are skipped
   // server-side rather than failing the batch.
-  @IsArray() @IsPublicId({ each: true }) taskIds!: string[];
+  //
+  // Bounded, and the bound is a correctness one rather than a courtesy: one press is evaluated
+  // under a LEASE (0137), and a press whose dispatch loop can run for longer than the lease is one
+  // a takeover can join halfway through. The cap keeps the work inside a renewable lease's reach —
+  // and the loop re-proves its lease before every item, so a press that still outlives it stops
+  // instead of applying effects beside its successor.
+  @IsArray() @ArrayMaxSize(BATCH_EXECUTE_MAX_TASKS) @IsPublicId({ each: true }) taskIds!: string[];
 
   // When set, caps how many of THIS batch's tasks run at once. It applies only to this
   // batch (the claim queue gates the batch's live sessions on it) and never touches any
   // runner's persistent max_concurrent — independent of the per-runner cap. Rest queue.
   @IsOptional() @IsInt() @Min(1) @Max(64) maxConcurrent?: number;
+
+  /** This press's identity, exactly as on `RunTaskDto` — one press, one run per task in it. */
+  @IsOptional() @IsPublicId() triggerId?: string;
 }
 
 export class BatchStopDto {
