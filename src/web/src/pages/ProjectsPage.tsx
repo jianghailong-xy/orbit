@@ -27,6 +27,7 @@ import {
   type PolicyDraft,
 } from '../lib/coordinatorStatus';
 import { encodeId, routeId } from '../lib/idCodec';
+import { markdownToPlainText } from '../lib/markdownText';
 import {
   projectCoordinatorStatusQuery,
   providersQuery,
@@ -83,9 +84,10 @@ const STATUS_COLOR: Record<Project['status'], string> = {
   CANCELLED: 'default',
 };
 
-// Row text, not the full field — a project's goal can run to MAX_PROJECT_GOAL_CHARS (4,000 in the
-// apiserver DTO), far past what a list row should show, and a task's acceptance criteria is the
-// same shape of field read in the same shape of row.
+// Row text, not the full field — a task's acceptance criteria runs far past what a list row should
+// show. Read only by the detail page's task rows now: the projects list truncates its goal with
+// the box instead (see .project-row-goal), a cut that does not depend on how wide each character
+// happens to be, and so gives every row of that list the same height.
 const ROW_EXCERPT_LENGTH = 180;
 
 function excerpt(text: string | null | undefined, empty: string): string {
@@ -129,28 +131,37 @@ export function ProjectsPage() {
         <List
           dataSource={projects.data}
           rowKey="id"
-          renderItem={(p) => (
-            <List.Item>
-              {/* One link spanning the whole row — meta and count alike — so the entire row is a
-                  single click and a single tab stop, rather than a title-sized target with dead
-                  space either side. The short public id, never the raw UUID: the same spelling
-                  every other link in the app is built with (see encodeId). */}
-              <Link
-                to={`/projects/${encodeURIComponent(encodeId(p.id))}`}
-                style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%', color: 'inherit' }}
-              >
-                <List.Item.Meta
-                  title={
-                    <span>
-                      {p.title} <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
-                    </span>
-                  }
-                  description={excerpt(p.goal, 'No goal set')}
-                />
-                <div>{p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}</div>
-              </Link>
-            </List.Item>
-          )}
+          renderItem={(p) => {
+            // The same field the detail page renders as Markdown, degraded to the line it reads
+            // as — a row that shows `## 现状缺口` or `**一个依赖字段都没有**` is showing source,
+            // not a goal. Not sliced to a character count: how many rendered lines 180 characters
+            // occupy depends on how much of them is CJK, which is what had these rows jumping
+            // between one and three lines. The box truncates instead (see .project-row-goal).
+            const goal = markdownToPlainText(p.goal) || 'No goal set';
+            return (
+              <List.Item className="project-row" style={{ padding: '11px 10px' }}>
+                {/* One link spanning the whole row — meta and count alike — so the entire row is a
+                    single click and a single tab stop, rather than a title-sized target with dead
+                    space either side. The short public id, never the raw UUID: the same spelling
+                    every other link in the app is built with (see encodeId). */}
+                <Link
+                  to={`/projects/${encodeURIComponent(encodeId(p.id))}`}
+                  className="project-row-link"
+                >
+                  <div className="project-row-main">
+                    <div className="project-row-head">
+                      <span className="project-row-title">{p.title}</span>
+                      <Tag color={STATUS_COLOR[p.status]}>{p.status}</Tag>
+                    </div>
+                    <div className="project-row-goal">{goal}</div>
+                  </div>
+                  <div className="project-row-count">
+                    {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
+                  </div>
+                </Link>
+              </List.Item>
+            );
+          }}
         />
       )}
     </div>
