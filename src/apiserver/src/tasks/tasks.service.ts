@@ -123,6 +123,16 @@ import {
   type ScopeOperation,
   type ScopePrincipal,
 } from '../projects/project-scope-admission';
+import {
+  decideTaskOwnership,
+  ownershipMismatchMessage,
+  type TaskOwnershipAnswer,
+} from '../projects/project-ownership-gate';
+import {
+  ownershipFactsOf,
+  taskOwnershipQuery,
+  type TaskOwnershipRow,
+} from '../projects/project-ownership-read';
 import type { ScopeProjectStatus } from '../projects/project-scope-contract';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
@@ -390,6 +400,14 @@ export type TaskRunAnswer =
          * delivery of it is answering the same gone moment.
          */
         | 'stale-epoch'
+        /**
+         * Unit L6: this task counts towards a project it was not filed under, and no approved
+         * handoff explains the crossing. RELEASED rather than frozen, like every stand-down here
+         * except `stale-epoch`: the fact that refused it CAN be undone — refiling the work, or a
+         * person moving it into the project that owns it — so a later delivery of the same durable
+         * fact must evaluate again instead of replaying a refusal from a world that has changed.
+         */
+        | 'ownership-mismatch'
         /**
          * The task this request was planned against was deleted before its Session could be
          * written. Terminal by construction — the plan names a row that no longer exists and every
@@ -2316,6 +2334,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       origin,
       idempotencyKey,
       await this.pausedListIds(ownerId, [dto.listId]),
+      scopeWorld.scope,
     );
     // Initial edges and their task must become visible atomically. Taking the same owner lock
     // used by add/replace prevents a concurrent reverse-edge write from observing the new task
@@ -2565,6 +2584,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     origin: CreationOrigin | undefined,
     idempotencyKey: string | undefined,
     heldListIds: ReadonlySet<string>,
+    /**
+     * Unit L6: the scope this write was ADMITTED under, straight off `projectScopeWorld`. Not
+     * re-derived here — the pair that decided the write is the pair the row has to record, or the
+     * gate that reads it back would be checking a different question from the one that was asked.
+     */
+    scope: DerivedScope | null,
   ): Prisma.TaskUncheckedCreateInput {
     const sessionId = origin?.sessionId;
     return {
@@ -2611,6 +2636,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       triggerEvent: origin?.triggerEvent,
       sourceTaskId: origin?.sourceTaskId,
       sourceSessionId: sessionId,
+      // Unit L6 (migration 0156): the AUTHORITY half, and the reason it is a second column beside
+      // four that hold the same value today. Those four are evidence and §3 SC7 forbids a gate from
+      // reading them; this one exists to be read by one, at run time, when the derivation that
+      // produced it no longer works — a rotated coordinator is no longer named by
+      // `project.coordinator_session_id`, so a mis-filing stops being derivable the moment its
+      // author is replaced.
+      //
+      // A create outside any scope leaves both out of the INSERT, and NULL there means "no claim
+      // recorded" rather than "the claim was none": the gate never refuses on it. That is the same
+      // exemption §4 R1 gives the owner, kept at run time.
+      creatorCoordinatorProjectId: scope?.projectId,
+      creatorCoordinatorGeneration: scope ? BigInt(scope.generation) : undefined,
     };
   }
 
@@ -3160,6 +3197,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               origin,
               idempotencyKey,
               heldListIds,
+              scopeWorld.scope,
             ),
           }));
         // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
@@ -3409,6 +3447,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       projectId: project.id,
       generation: String(project.runtime?.coordinatorGeneration ?? 0n),
     };
+  }
+
+  /**
+   * Unit L6: the run-time ownership answer for a set of tasks, on the one statement every door
+   * asks it with (`project-ownership-read.ts`).
+   *
+   * A task with no row — deleted, or another tenant's — is absent from the map, and every caller
+   * treats absence as nothing to refuse. That is not leniency: a task that is not there is not
+   * running, and the paths below all have their own answer for a row that vanished.
+   */
+  private async taskOwnershipAnswers(
+    ownerId: string,
+    taskIds: readonly string[],
+  ): Promise<Map<string, TaskOwnershipAnswer>> {
+    if (!taskIds.length) return new Map();
+    const rows = await this.prisma.$queryRaw<TaskOwnershipRow[]>(
+      taskOwnershipQuery(ownerId, [...new Set(taskIds)]),
+    );
+    return new Map(
+      rows.map((row) => [row.taskId, decideTaskOwnership(ownershipFactsOf(row))]),
+    );
   }
 
   /**
@@ -9708,6 +9767,34 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         + 'run its subtasks, or set its completion policy to MANUAL',
       );
     }
+    // Unit L6, and BEFORE the routing answer below on purpose. `coordinator-authority` says "not
+    // my job, the control loop starts this one"; ownership says "this must not start at all", and a
+    // gate placed after a stand-down is a gate the busiest path never reaches. It costs one indexed
+    // read on a delivery that was going to stand down anyway, and buys the property AC1 actually
+    // asks for: every door through here refuses, not most of them.
+    //
+    // This is the door `task_start`, Run Now, `orbit task start`, the dependency-unlock trigger and
+    // all three sweeps arrive at. `batchExecute` carries the same predicate in its own skip loop,
+    // for the same reason it carries §13.1 AG6 and §13.6 SU6 there.
+    const ownership = (await this.taskOwnershipAnswers(ownerId, [id])).get(id);
+    if (ownership?.refuses) {
+      // An automatic caller SKIPS and RELEASES: a refile or a move makes this stop being true, and
+      // the same durable fact arriving afterwards has to be able to reach a different answer. A
+      // person gets the 409 with both project ids in it, because a manual Run is a real request
+      // that cannot be honoured rather than a sweep with nothing to do.
+      if (auto) {
+        return this.standDownReleasing(
+          lease, { ok: false as const, skipped: 'ownership-mismatch' as const },
+        );
+      }
+      throw new ConflictException(
+        `task ${uuidToBase62(id)}: ${ownershipMismatchMessage({
+          ...ownership,
+          fromProjectId: ownership.fromProjectId ? uuidToBase62(ownership.fromProjectId) : null,
+          toProjectId: ownership.toProjectId ? uuidToBase62(ownership.toProjectId) : null,
+        })}`,
+      );
+    }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
       return this.standDownReleasing(
         lease, { ok: false as const, skipped: 'coordinator-authority' as const },
@@ -10114,6 +10201,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const batchFacts = await this.dependencyFactsFor(ownerId, tasks.map((t) => t.id));
     const states = new Map([...batchFacts]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
+    // Unit L6: the same gate `executeLeased` puts in front of every other door, in the one place
+    // that does not go through it. `batchExecute` classifies and calls `planWorkspaceRun` itself,
+    // which is why §13.1 AG6 and §13.6 SU6 are already written out again below — this joins them,
+    // and for the same reason: a bulk Run that started fifty tasks would otherwise be the one way
+    // past a gate every single-task path enforces.
+    const ownership = await this.taskOwnershipAnswers(ownerId, tasks.map((t) => t.id));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
     // task that's already running (`planWorkspaceRun` also guards this, but surfacing it here
     // lets us report it as skipped rather than silently dispatched).
@@ -10181,6 +10274,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 ? 'Superseded (its successor has been deleted)'
                 : 'Abandoned')
             : 'Obsolete: it checks work that was replaced',
+        });
+      } else if (ownership.get(t.id)?.refuses) {
+        // Second, right behind SU6 and ahead of everything that can lift, exactly where the single
+        // Run puts it. Classified rather than dropped, so somebody who selected fifty tasks is told
+        // which of them are counting towards another project's goal instead of watching them
+        // silently not start.
+        const answer = ownership.get(t.id)!;
+        skipped.push({
+          id: t.id,
+          title: t.title,
+          reason: `Filed by project ${uuidToBase62(answer.fromProjectId!)}'s coordinator but counted `
+            + `towards project ${uuidToBase62(answer.toProjectId!)} — refile it before running`,
         });
       } else if (isAggregateParent({
         completionPolicy: t.completionPolicy,

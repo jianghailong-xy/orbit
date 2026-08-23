@@ -2559,6 +2559,48 @@ model Task {
   discovered              Task[]   @relation("TaskDiscoverySource")
   sourceSessionId         String?  @map("source_session_id") @db.Uuid
   sourceSession           Session? @relation("TaskDiscoverySession", fields: [sourceSessionId], references: [id], onDelete: SetNull)
+  /// The coordination scope this row was ADMITTED under (unit L6, migration 0156) — the pair the
+  /// run-time ownership gate compares `projectId` against.
+  ///
+  /// Read the four columns above and this one as opposite claims, because they are: those say where
+  /// the work was noticed and §3 SC7 forbids any gate from reading them, while this says what the
+  /// writer was coordinating and exists precisely to be read by one. They are computed the same way
+  /// today and kept apart anyway, exactly as `resolveOwnedSession` and `deriveProjectScope` are —
+  /// evidence and authority never share a value, so that neither can widen into the other.
+  ///
+  /// The column is what makes the question askable at RUN time at all. The derivation reads
+  /// `project.coordinatorSessionId`, so a coordinator that has since rotated no longer names the
+  /// project it was filing for: without this, a mis-filing becomes underivable the moment the
+  /// session that made it is replaced.
+  ///
+  /// No foreign key, for `ProjectDecision.coordinatorSessionId`'s reason: a historical marker, not
+  /// a live reference. A SET NULL here would mean that deleting the project the work was filed FROM
+  /// — which nothing prevents, since that project does not own the task — erases the claim and
+  /// opens the gate on the one row it exists for.
+  ///
+  /// Written once, at creation, from the server's own derivation, and frozen against every later
+  /// WRITER by `task_creator_scope_immutable_guard` — including emptying, which has no lawful form
+  /// here because there is no referential action to make room for.
+  ///
+  /// The one thing that does change it is not a writer: moving the task RETIRES the claim to NULL
+  /// (`task_creator_scope_retire_on_move`). The column says which scope this row's CURRENT
+  /// placement was admitted under, and a move means somebody with the authority to decide that —
+  /// an agent holding an answer from L4's ledger, or the owner, whom §4 R1 exempts — has decided it
+  /// again. Retiring is all it can do: the only value the trigger writes is NULL, and a statement
+  /// that moves the task while naming a new scope still meets the guard and is refused.
+  ///
+  /// Nothing about the audit is lost by that. `discoveredFromProjectId` above still records where
+  /// the work was noticed, frozen for ever and readable by no gate; what retires here is the
+  /// authority half — the claim, not the history.
+  creatorCoordinatorProjectId String? @map("creator_coordinator_project_id") @db.Uuid
+  /// `project_runtime.coordinator_generation` as it stood when the row was admitted, or NULL when
+  /// nothing recorded one (every row backfilled by 0156, and every row written outside a scope).
+  ///
+  /// Distinct from 0: a project that has never rotated genuinely is at generation 0, and reading an
+  /// absent record as that would let a replay claim a fact it does not have. Nothing REFUSES on
+  /// this half — a rotation is lawful and moves no work between projects — so it appears only in
+  /// the blocker's detail, where it answers "which run of the coordinator did this".
+  creatorCoordinatorGeneration BigInt? @map("creator_coordinator_generation")
   /// The task this one is a part of. Decomposition, not ordering: `TaskDependency` already says
   /// "B waits for A", and that is a different claim from "B is part of A" — a subtask can be
   /// unblocked and still belong to its parent, and a prerequisite can be finished work nobody

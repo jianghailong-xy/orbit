@@ -11,6 +11,7 @@ import { ProjectDispatchPassService } from './project-dispatch-pass.service';
 import { ProjectAuthorizationService } from './project-authorization.service';
 import { ProjectEventsService } from './project-events.service';
 import { ProjectFailureRecoveryService } from './project-failure-recovery.service';
+import { ProjectOwnershipAuditService } from './project-ownership-audit.service';
 import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
 import { ProjectCoordinatorTurnService } from './project-coordinator-turn.service';
 import { ProjectReconcileService } from './project-reconcile.service';
@@ -47,6 +48,7 @@ import { ProjectsService } from './projects.service';
     TaskCheckpointService,
     ProjectAvailabilityReaperService,
     ProjectFailureRecoveryService,
+    ProjectOwnershipAuditService,
   ],
   exports: [
     ProjectHandoffModule,
@@ -69,6 +71,7 @@ import { ProjectsService } from './projects.service';
     VerificationFindingService,
     TaskCheckpointService,
     ProjectFailureRecoveryService,
+    ProjectOwnershipAuditService,
   ],
 })
 export class ProjectsModule {}

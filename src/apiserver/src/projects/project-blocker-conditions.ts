@@ -30,6 +30,7 @@ import {
   projectDeadLetterCondition,
 } from './project-blocker';
 import { planCompletionGaps } from './project-completion-gap';
+import { decideTaskOwnership, ownershipMismatchCondition } from './project-ownership-gate';
 import { MAX_AUTO_RUN_FAILURES } from '../tasks/task-retry-policy';
 import { failedTaskBlockerKind } from './project-failed-retry';
 import { TaskRetirement, taskIsObsolete, taskRetirement } from '../tasks/task-supersession';
@@ -191,6 +192,7 @@ export function detectProjectBlockerConditions(
 ): ObservedBlockerCondition[] {
   const conditions: ObservedBlockerCondition[] = [
     ...refusedDispatchConditions(input),
+    ...ownershipMismatchConditions(input),
     ...verdictApplyExhaustedConditions(input),
     ...mergeConditions(input),
     ...spentFailureBudgetConditions(input),
@@ -300,6 +302,50 @@ function refusedDispatchConditions(input: ProjectDecisionInput): ObservedBlocker
  * get a new digest every pass, which is the churn BL7 excludes and §7.6 TR3 would read as a stream
  * of brand-new failures.
  */
+/**
+ * Unit L6: work in this project that another project's coordinator filed here.
+ *
+ * A detector rather than a refusal echo, and that is the whole point of it. The dispatcher's own
+ * gate refuses one attempt, which raises the row through BL2 — but only for a task something tried
+ * to start. A mis-filed task nobody has dispatched yet is just as wrong, distorts this project's
+ * acceptance just as much, and would sit invisible until a sweep happened to pick it. §11.4 asks
+ * "is this true of the world" and this is true of the world whether or not anything has run.
+ *
+ * `outsideBlockerScope` and not `taskObsolete`: a task that has been CANCELLED or is DONE is no
+ * longer counting towards anything, and — this is the part that matters for AC3 — the supported
+ * repair ABANDONS the mis-filed original, so the row it opened has to clear when the repair lands.
+ * Reading only the retirement half would leave a blocker demanding a refile that already happened.
+ */
+function ownershipMismatchConditions(input: ProjectDecisionInput): ObservedBlockerCondition[] {
+  const conditions: ObservedBlockerCondition[] = [];
+  for (const task of input.world.tasks) {
+    if (outsideBlockerScope(task, input)) continue;
+    const answer = decideTaskOwnership({
+      taskId: task.id,
+      // The project this snapshot IS of. Every task in `world.tasks` is selected by
+      // `project_id = <this project>`, so reading it from the world is reading the same column the
+      // detector would otherwise re-fetch — and reading it from the row instead would let a
+      // snapshot with a task that has since moved answer about a project it is not in.
+      projectId: input.world.project.id,
+      creatorCoordinatorProjectId: task.creatorCoordinatorProjectId ?? null,
+      creatorCoordinatorGeneration: task.creatorCoordinatorGeneration ?? null,
+      // Absent on pre-L6 snapshots, and `!== false` would be the wrong default: an unknown approval
+      // must not EXCUSE a crossing. It is `?? false`, and the pre-L6 snapshot is already excused a
+      // line above by carrying no scope at all.
+      approvedCrossing: task.ownershipCrossingApproved ?? false,
+    });
+    if (!answer.refuses) continue;
+    conditions.push(ownershipMismatchCondition({
+      taskPublicId: task.id,
+      taskTitle: task.title,
+      fromProjectPublicId: answer.fromProjectId!,
+      toProjectPublicId: answer.toProjectId!,
+      generation: answer.creatorCoordinatorGeneration,
+    }));
+  }
+  return conditions;
+}
+
 function verdictApplyExhaustedConditions(
   input: ProjectDecisionInput,
 ): ObservedBlockerCondition[] {

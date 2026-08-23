@@ -1333,8 +1333,8 @@ test('PC-CX-12 escalation changes the owner and nothing else', () => {
   const triggers = turnTriggerKinds();
   // Twenty-two through `[H0]`, plus `[K5]`'s four: the shape `[H0V2]` found unattended, §3's two
   // classes whose one legal result is a §11 row rather than a Task, and criterion 7's conclusion
-  // that could not be made durable.
-  assert.equal(table.length, 26, '§11.2 freezes twenty-six kinds');
+  // that could not be made durable. `[L6]`'s ownership mismatch is the twenty-seventh.
+  assert.equal(table.length, 27, '§11.2 freezes twenty-seven kinds');
 
   for (const row of table) {
     // BL4, stated on the constant column: opensTurn is a function of kind, and it agrees with the

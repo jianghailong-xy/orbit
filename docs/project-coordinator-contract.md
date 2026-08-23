@@ -3356,6 +3356,7 @@ SELECT p.id
 | `ENVIRONMENT_BROKEN` | `[K5]` §3：finding 归类 `ENVIRONMENT` —— 机器/配置/工具链坏了，改代码不解决。CL1 不计入 attempt 预算，正是因为再试一次不会改变答案 | `SYSTEM` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 | `HUMAN_DECISION_REQUIRED` | `[K5]` §3：finding 归类 `HUMAN_REQUIRED` —— 需要人的判断或权限 | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 | `VERDICT_APPLY_EXHAUSTED` | `[K5]` 条款 7：检查已给出 verdict，但把它变成持久后果的 `APPLY_VERIFICATION_VERDICT` 在重试预算（`VERDICT_APPLY_MAX_ATTEMPTS` = 3 趟，每趟一份新快照）内一直被拒。与 `VERIFICATION_REQUIRED`（没有检查）、`VERIFICATION_CANNOT_CONCLUDE`（有检查但没结论）、`COORDINATOR_UNAVAILABLE`（协调器根本没在跑）三条都不同：这里结论有、协调器在跑，停住的是**落地**这一步 | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
+| `PROJECT_OWNERSHIP_MISMATCH` | `[L6]`：该 Task 记录的建单归属（`creator_coordinator_project_id`，迁移 0156）与 `project_id` 不一致，且 `[L4]` 的移交台账里没有一条 `APPLIED` 答复解释这次跨越。创建层（`[L3]`）只能拦住此后的写入，拦不住历史上已经落库的行；这一条是运行前门禁在所有启动路径上拒绝它之后，留给人看的那一行。**不复用** `POLICY_MANUAL_HOLD`（没有人做过这个选择）、`AWAITING_USER_INPUT`（没有在等谁回话）或 `UNKNOWN_FAILURE`（这是一个明确诊断，且点名了两个 Project）。generation 只作为证据写进 detail，不参与拒绝：轮换是合法的，它不搬动任何工作 | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 | `UNKNOWN_FAILURE` | **兜底**：任何未归类的失败，含"该 Task 存在没有错误文本的失败运行"（§9.5 Q3-e，v1.18 起由快照直接检出，不再需要先发生一次派发拒绝） | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 
 **BL4（v1.2 修订，可机械核对）**：`opensTurn` 是 **`kind` 的函数**，与那一行 blocker **当前**的 `owner` 无关。本表的 `默认 owner` 列同样是 kind 的常量，两列逐行满足

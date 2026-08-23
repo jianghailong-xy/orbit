@@ -135,6 +135,19 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'binds provenance into a crossing identity and derives the trigger event; decides nothing',
   'src/apiserver/src/projects/project-handoff.service.ts':
     're-derives the source a declaration claims, and refuses one that does not match',
+  // Unit L6, and the distinction is the whole reason these three are listed rather than refused.
+  // The GATE — `taskOwnershipQuery` and `decideTaskOwnership` — names none of these columns: it
+  // compares `creator_coordinator_project_id` with `project_id` and nothing else, so SC7 holds
+  // exactly where it is about. What these files do with provenance is record and look up a REPAIR:
+  // 0128's supersession guard will not link a successor in another project, so the mapping from a
+  // mis-filed task to its replacement can only be `source_task_id` + `trigger_event`, and the
+  // question asked of it is "has somebody already refiled this", never "may this run".
+  'src/apiserver/src/projects/project-ownership-read.ts':
+    'finds an existing replacement by its provenance; the gate statement beside it names none of these',
+  'src/apiserver/src/projects/project-ownership-refile.ts':
+    'names the trigger event a replacement carries; decides nothing from it',
+  'src/apiserver/src/projects/project-ownership-refile.service.ts':
+    'writes the replacement mapping a user asked for, and reads it back for idempotence',
 };
 
 /**

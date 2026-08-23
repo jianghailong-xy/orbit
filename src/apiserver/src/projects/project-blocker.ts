@@ -75,6 +75,20 @@ export const PROJECT_BLOCKER_KINDS = [
    * having nothing to apply: here there IS a conclusion and it is the applying that stopped.
    */
   'VERDICT_APPLY_EXHAUSTED',
+  /**
+   * `[L6]`: this task counts towards a goal it was not filed under — the coordinator that wrote it
+   * held the scope of another project, and no approved handoff explains the crossing.
+   *
+   * `USER` and `HUMAN`, because the question it asks has exactly one kind of answer and no machine
+   * holds it: which project owns this work. The loop cannot decide it (deciding it is the authority
+   * L1 refuses to give a coordinator over another project's goal), and no event the current rows
+   * can produce changes it — the columns it compares are both frozen.
+   *
+   * Deliberately not `POLICY_MANUAL_HOLD` (nobody chose this), not `AWAITING_USER_INPUT` (there is
+   * no conversation waiting) and not `UNKNOWN_FAILURE` (this is a diagnosis, and it names the two
+   * projects it is between).
+   */
+  'PROJECT_OWNERSHIP_MISMATCH',
   'UNKNOWN_FAILURE',
 ] as const;
 
@@ -402,6 +416,22 @@ export const PROJECT_BLOCKER_POLICY: Readonly<Record<ProjectBlockerKind, Project
     escalateMs: 30 * 60_000,
     requiredAction: 'A verification verdict could not be applied within its retry budget, so its subject can never pass: read the refusal on the action, resolve what it names, then revoke and re-record the verdict to give it a fresh revision.',
   },
+  PROJECT_OWNERSHIP_MISMATCH: {
+    // `USER` and `HUMAN`, and neither is a fallback. Which project owns a piece of work is the
+    // authority L1 refuses to give a coordinator over somebody else's goal, so the loop answering
+    // it for itself would be the incident again with a different spelling. `HUMAN` because both
+    // columns compared are frozen: no event these rows can still produce makes this stop being true.
+    owner: 'USER',
+    recovery: 'HUMAN',
+    opensTurn: false,
+    severity: 'CRITICAL',
+    pollMs: null,
+    // The default rather than an hour. Work that is counting towards the wrong goal is distorting
+    // that goal's acceptance for as long as it sits there, and unlike a disabled agent or a missing
+    // runtime there is no chance somebody is already fixing it — nobody has been told yet.
+    escalateMs: PROJECT_BLOCKER_DEFAULT_ESCALATION_MS,
+    requiredAction: 'This task was filed by another project\'s coordinator and cannot run where it is: refile it into the project that owns the work (which files a replacement and abandons this one), or move it there yourself if that is where it belongs.',
+  },
   UNKNOWN_FAILURE: {
     // BL2: the way an unclassified failure exists is that this row gets opened, not that the pass
     // shrugs. Automatic dispatch for the project stops until somebody looks.
@@ -485,6 +515,11 @@ export const PROJECT_BLOCKER_REFUSAL_KINDS: Readonly<Record<string, ProjectBlock
   // A settled project takes no new work until somebody reopens it, and reopening is a user act
   // (§4 R8 sits above the approval rules precisely so an approval can never buy the way in).
   PROJECT_REOPEN_REQUIRED: 'AWAITING_USER_APPROVAL',
+  // Unit L6, and the one code in this map that names the kind after itself. It is carried across
+  // verbatim for §11.2's first-six reason: the refusal already IS the diagnosis, it already names
+  // both projects, and a second vocabulary between the dispatcher and the row would be one more
+  // place for them to disagree about what stopped.
+  PROJECT_OWNERSHIP_MISMATCH: 'PROJECT_OWNERSHIP_MISMATCH',
   UNKNOWN_FAILURE: 'UNKNOWN_FAILURE',
 };
 

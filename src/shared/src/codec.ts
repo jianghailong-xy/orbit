@@ -132,6 +132,13 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // (contract §3 SC7); what puts them here is that a person handed one has somewhere to hand it.
   'discoveredFromProjectId',
   'sourceSessionId',
+  // Unit L6's authority column on `task` (migration 0156): the coordination scope a row was
+  // admitted under. It sits here for the same one reason every other id does — a person told "this
+  // was filed by project X" has somewhere to hand X — and NOT because it is like its neighbours
+  // above. It is their opposite: those are evidence no gate may read, this is the half of the
+  // comparison the run-time gate is made of. The rendering is about addresses, not authority, and
+  // this list has never claimed otherwise.
+  'creatorCoordinatorProjectId',
   // Unit L4's recorded answer about one crossing (migration 0155): the two ends, the session that
   // asked, the person who answered and the one task the yes was spent on. Every one of them is an
   // address a reader follows — open that project, open that session, run that task — which is the

@@ -47,7 +47,7 @@ test('batch delete is exposed as POST tasks/batch-delete and forwards the authen
       return expected;
     },
   } as never;
-  const controller = new TasksController(tasks);
+  const controller = new TasksController(tasks, {} as never);
 
   const result = await controller.batchDelete(
     { userId: OWNER_ID, email: 'owner@example.com' },

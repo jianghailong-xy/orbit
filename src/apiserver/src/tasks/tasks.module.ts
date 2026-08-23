@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ProjectHandoffModule } from '../projects/project-handoff.module';
+import { ProjectOwnershipModule } from '../projects/project-ownership.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { TasksController } from './tasks.controller';
 import { ReferenceExpansionService } from './reference-expansion';
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [SessionsModule, ProjectHandoffModule],
+  imports: [SessionsModule, ProjectHandoffModule, ProjectOwnershipModule],
   controllers: [TasksController],
   providers: [TasksService, ReferenceExpansionService],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService

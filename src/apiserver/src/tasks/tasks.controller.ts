@@ -27,11 +27,16 @@ import {
   UpdateTaskDto,
 } from './dto';
 import { TasksService } from './tasks.service';
+import { ProjectOwnershipRefileService } from '../projects/project-ownership-refile.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(
+    private readonly tasks: TasksService,
+    /** Unit L6: the supported repair for a task the ownership gate refuses to run. */
+    private readonly ownership: ProjectOwnershipRefileService,
+  ) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) {
@@ -191,6 +196,18 @@ export class TasksController {
     @Body() dto: RunTaskDto,
   ) {
     return this.tasks.execute(user.userId, id, undefined, dto?.triggerId);
+  }
+
+  /**
+   * Unit L6: refile a mis-filed task into the project that actually owns the work.
+   *
+   * It takes no target. The project a replacement goes to is the scope that FILED the task, read
+   * off the row — letting the caller name one would hand back exactly the authority the scope
+   * contract withholds, which is deciding for yourself which goal your work counts towards.
+   */
+  @Post(':id/refile')
+  refile(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.ownership.refile(user.userId, id);
   }
 
   @Post(':id/comments')

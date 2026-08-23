@@ -206,6 +206,20 @@ export interface ProjectDecisionInput {
       supersededByTaskId?: string | null;
       supersededAt?: string | null;
       terminalReason?: string | null;
+      /**
+       * Unit L6, migration 0156: the coordination scope this row was ADMITTED under, and whether a
+       * person answered the crossing that made it differ from `project.id`.
+       *
+       * Absent on decisions captured before this unit, and readers must treat that as "no claim
+       * recorded" rather than as a mismatch — those snapshots were taken by a binary with no column
+       * to read, so replaying one has to reproduce what it decided rather than today's rules applied
+       * to yesterday's world. That is the same compatibility shape `verdictApplyExhausted` and the
+       * supersession trio already carry, and here it is also the safe direction: inventing a claim
+       * would refuse work on a snapshot that never made one.
+       */
+      creatorCoordinatorProjectId?: string | null;
+      creatorCoordinatorGeneration?: string | null;
+      ownershipCrossingApproved?: boolean;
       dependsOnTaskIds: string[];
       liveSessionIds: string[];
       failureCount: number;
@@ -564,6 +578,10 @@ interface TaskRow {
   /** §13.3 DEP4, per row: is THIS task's CURRENT verdict revision applied in the ledger? */
   verdictApplied: boolean;
   verdictApplyExhausted: boolean;
+  /** Unit L6: the scope this row was filed under, and whether a person answered the crossing. */
+  creatorCoordinatorProjectId: string | null;
+  creatorCoordinatorGeneration: string | null;
+  ownershipCrossingApproved: boolean;
   updatedAt: Date;
 }
 
@@ -828,6 +846,21 @@ export class ProjectDecisionService {
                     AND ve."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
                         || t."id"::text || ':' || t."verdict_revision"::text
                ) AS "verdictApplyExhausted",
+               -- Unit L6 (migration 0156). In the SNAPSHOT rather than re-read at the detector,
+               -- for the supersession columns' reason one block up: this is a fact the decision is
+               -- MADE OF, so it enters decisionInputHash and a row that is refiled after the
+               -- snapshot was taken fails the replay's hash check instead of quietly reaching a
+               -- different conclusion from the same recorded input. (No backticks in here: one
+               -- would close this template literal early.)
+               t."creator_coordinator_project_id" AS "creatorCoordinatorProjectId",
+               t."creator_coordinator_generation"::text AS "creatorCoordinatorGeneration",
+               EXISTS (
+                 SELECT 1 FROM "project_handoff_approval" h
+                  WHERE h."owner_id" = t."owner_id"
+                    AND h."state" = 'APPLIED'
+                    AND h."to_project_id" = t."project_id"
+                    AND (h."applied_task_id" = t."id" OR h."subject_task_id" = t."id")
+               ) AS "ownershipCrossingApproved",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -1079,6 +1112,11 @@ export class ProjectDecisionService {
         terminalReason: row.terminalReason,
         verdictApplied: row.verdictApplied,
         verdictApplyExhausted: row.verdictApplyExhausted,
+        // Unit L6. Base62 like every other id here; the generation stays a decimal string, as every
+        // BigInt does when it crosses this boundary, and stays NULL when nothing recorded one.
+        creatorCoordinatorProjectId: toPublicIdOrNull(row.creatorCoordinatorProjectId),
+        creatorCoordinatorGeneration: row.creatorCoordinatorGeneration,
+        ownershipCrossingApproved: row.ownershipCrossingApproved,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,

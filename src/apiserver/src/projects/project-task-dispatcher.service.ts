@@ -39,6 +39,11 @@ import {
   dispatchRuntimeSessionId,
 } from './project-dispatch-identity';
 import { DispatchBlockingRow, openBlockersStoppingDispatch } from './project-blocker-guard';
+import {
+  decideTaskOwnership,
+  OWNERSHIP_MISMATCH_REFUSAL,
+} from './project-ownership-gate';
+import { ownershipFactsOf, taskOwnershipQuery, type TaskOwnershipRow } from './project-ownership-read';
 
 const BUILTIN_PROVIDERS = Object.values(AgentProvider);
 const PROVIDER_RETRY_MS = 5 * 60_000;
@@ -244,6 +249,25 @@ export class ProjectTaskDispatcherService {
           subjectType: blocker.subjectType,
           requiredAction: blocker.requiredAction,
         })),
+      }, now);
+    }
+    // Unit L6, and it has to be here rather than left to the blocker guard above. That guard stops
+    // a dispatch once a row EXISTS; this is what refuses the very first one, before any pass has
+    // observed the condition — otherwise the first dispatch of every mis-filed task runs, and the
+    // gate only ever catches the second.
+    //
+    // The join above already answers "is this task in MY project" (`t.project_id = p.id`), which is
+    // the question that has always been asked and the one a mis-filing satisfies. This asks the
+    // other one: who filed it, and what were they coordinating.
+    const ownershipRows = await tx.$queryRaw<TaskOwnershipRow[]>(
+      taskOwnershipQuery(row.ownerId, [command.taskId]),
+    );
+    const ownership = ownershipRows[0] && decideTaskOwnership(ownershipFactsOf(ownershipRows[0]));
+    if (ownership?.refuses) {
+      return this.refusal(OWNERSHIP_MISMATCH_REFUSAL, OWNERSHIP_MISMATCH_REFUSAL, {
+        fromProjectId: ownership.fromProjectId,
+        toProjectId: ownership.toProjectId,
+        creatorCoordinatorGeneration: ownership.creatorCoordinatorGeneration,
       }, now);
     }
     if (row.runnerId) {
