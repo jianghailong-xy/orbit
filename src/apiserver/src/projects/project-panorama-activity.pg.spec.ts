@@ -13,6 +13,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import {
+  MAX_ACTIVITY_SCAN_ROWS,
   PROJECT_ACTIVITY_KINDS,
   PROJECT_ACTIVITY_OUTCOMES,
   ProjectActivityItem,
@@ -239,6 +240,57 @@ async function event(client: Client, spec: {
       spec.seconds, JSON.stringify(spec.payload ?? {})]);
 }
 
+/** A large timer run in one round trip. Its unique timestamps make source order independent of
+ *  UUID spelling; the generated ids remain inspectable when a paging assertion fails. */
+async function heartbeatRun(
+  client: Client,
+  project: string,
+  count: number,
+  newestSeconds: number,
+): Promise<void> {
+  await client.query(`
+    INSERT INTO "project_event" (
+      "id", "project_id", "kind", "occurred_at", "source_type", "source_id", "dedupe_key",
+      "payload", "last_at"
+    )
+    SELECT format('00000000-0000-7001-8000-%s', lpad(n::text, 12, '0'))::uuid,
+           $1::uuid, 'timer.due',
+           TIMESTAMP '${T0}' + make_interval(secs => $2::double precision - n),
+           'TIMER', $1::uuid, 'heartbeat-' || n, '{}'::jsonb, CURRENT_TIMESTAMP
+      FROM generate_series(1, $3::integer) AS n
+  `, [project, newestSeconds, count]);
+}
+
+/** The decision half of the real minute-by-minute heartbeat pair, at the same instants. */
+async function heartbeatDecisionRun(
+  client: Client,
+  project: string,
+  count: number,
+  newestSeconds: number,
+): Promise<void> {
+  await client.query(`
+    WITH source AS (
+      SELECT n,
+             format('00000000-0000-7000-8000-%s', lpad(n::text, 12, '0')) AS id,
+             md5(n::text) || md5(n::text) AS hash
+        FROM generate_series(1, $3::integer) AS n
+    )
+    INSERT INTO "project_decision" (
+      "id", "project_id", "input_version", "decision_input_hash", "decision_input", "outcome",
+      "decided_by", "fencing_token", "reason", "created_at"
+    )
+    SELECT id::uuid, $1::uuid, 1, hash,
+           jsonb_build_object('v', 1, 'decisionInputHash', hash),
+           jsonb_build_object(
+             'decisionInputHash', hash,
+             'runStateBefore', 'EXECUTING', 'runStateAfter', 'EXECUTING'
+           ),
+           'ORCHESTRATOR', 1, 'in-flight session may end',
+           TIMESTAMP '${T0}' + make_interval(secs => $2::double precision - n)
+      FROM source
+  `, [project, newestSeconds, count]);
+}
+
 /** `00000000-0000-7000-8000-0000000004NN`, so a row's position in the tie is decided by a digit. */
 function id(n: number): string {
   return `00000000-0000-7000-8000-0000000004${n.toString().padStart(2, '0')}`;
@@ -362,6 +414,10 @@ async function drain(
   }
 }
 
+function occurrenceIds(items: ProjectActivityItem[]): string[] {
+  return items.flatMap((item) => item.occurrences.map((occurrence) => occurrence.id));
+}
+
 test('the stream is every row of all three tables, newest first', { skip }, async (t) => {
   const { service } = await fixture(t);
 
@@ -409,6 +465,62 @@ test('every page size walks the same twelve rows in the same order', { skip }, a
     const { items } = await drain(service, PROJECT, limit);
     assert.deepEqual(items.map((item) => item.id), expected, `limit=${limit} walked a different set`);
   }
+});
+
+test('a run crossing two limit boundaries is folded before paging and loses no source row', { skip }, async (t) => {
+  const { client, service } = await fixture(t);
+  await event(client, {
+    id: id(93), project: EMPTY, kind: 'user.before-heartbeats', sourceType: 'USER',
+    sourceId: OWNER, seconds: 1_000,
+  });
+  await heartbeatRun(client, EMPTY, 25, 900);
+  await heartbeatDecisionRun(client, EMPTY, 25, 900);
+  await event(client, {
+    id: id(94), project: EMPTY, kind: 'user.after-heartbeats', sourceType: 'USER',
+    sourceId: OWNER, seconds: 800,
+  });
+
+  const { items, pages } = await drain(service, EMPTY, '10');
+  const wakes = items.filter((item) => item.kind === 'WAKE');
+  const decisions = items.filter((item) => item.kind === 'DECIDE');
+
+  // The source-row target lands inside these interleaved runs repeatedly. Folding before choosing
+  // the boundary makes one summary per lane; slicing first would return several WAKE/DECIDE
+  // summaries whose partial counts depend on the page boundary.
+  assert.equal(pages, 2);
+  assert.equal(wakes.length, 1);
+  assert.equal(wakes[0].occurrences.length, 25);
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0].occurrences.length, 25);
+  assert.deepEqual(items.map((item) => item.title), [
+    'user.before-heartbeats',
+    'timer.due',
+    'in-flight session may end',
+    'user.after-heartbeats',
+  ]);
+
+  // Expanding every summary is the original 52-row ledger exactly: no filter, duplicate or gap.
+  const ids = occurrenceIds(items);
+  assert.equal(ids.length, 52);
+  assert.equal(new Set(ids).size, 52);
+});
+
+test('one request has a hard source-row scan and response bound for a pathological run', { skip }, async (t) => {
+  const { client, service } = await fixture(t);
+  await heartbeatRun(client, EMPTY, MAX_ACTIVITY_SCAN_ROWS + 25, 2_000);
+
+  const first = await service.activity(OWNER, EMPTY, { limit: '10' });
+  assert.equal(first.items.length, 1);
+  assert.equal(first.items[0].occurrences.length, MAX_ACTIVITY_SCAN_ROWS);
+  assert.ok(first.nextCursor, 'the capped transport chunk must leave an exact continuation');
+
+  const second = await service.activity(OWNER, EMPTY, { limit: '10', cursor: first.nextCursor! });
+  assert.equal(second.items.length, 1);
+  assert.equal(second.items[0].occurrences.length, 25);
+  assert.equal(second.nextCursor, null);
+  const ids = occurrenceIds([...first.items, ...second.items]);
+  assert.equal(ids.length, MAX_ACTIVITY_SCAN_ROWS + 25);
+  assert.equal(new Set(ids).size, ids.length);
 });
 
 test('kind and outcome only ever come from the two closed sets', { skip }, async (t) => {

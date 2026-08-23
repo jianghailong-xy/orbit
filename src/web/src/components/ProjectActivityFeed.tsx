@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query';
 import { Alert, Button, Empty, Spin, Typography } from 'antd';
 import { Link } from 'react-router-dom';
@@ -24,6 +24,9 @@ import { api } from '../api';
  *    it should not require reading every line.
  *  - **The columns line up.** Time and kind are read DOWN the card, not across, so they are one
  *    grid (tabular figures, monospace kinds) rather than three per-row layouts that drift.
+ *  - **Repetition is summarized, never hidden.** Interleaved runs such as the minute-by-minute
+ *    WAKE/DECIDE heartbeat read as `×47` with a time span. Every source occurrence stays on the
+ *    wire and the summary expands back into the individual rows.
  *
  * FETCHES ITS OWN DATA, like the other panorama cards: it hangs on the project page beside cards
  * that each read a different endpoint, and taking rows as props would make the page decide when to
@@ -48,6 +51,7 @@ export type ProjectActivityKind =
   | 'APPLY_VERIFICATION_VERDICT'
   | 'REQUEST_APPROVAL'
   | 'RUN_PROJECT_ACCEPTANCE'
+  | 'FILE_VERIFICATION_TASK'
   | 'DECIDE'
   | 'WAKE'
   | 'SIGNAL';
@@ -56,9 +60,9 @@ export type ProjectActivityKind =
 export type ProjectActivityOutcome = 'APPLIED' | 'REFUSED' | 'RESOLVED' | 'INFO';
 
 export interface ProjectActivityItem {
-  /** Base62 by the time it leaves the API. The row key, and what its cursor was built from. */
+  /** Base62 by the time it leaves the API. The newest occurrence and stable display key. */
   id: string;
-  /** ISO instant; the server's `Date` crosses the wire as a string. */
+  /** The newest occurrence's ISO instant; the server's `Date` crosses the wire as a string. */
   at: string;
   kind: ProjectActivityKind | string;
   title: string;
@@ -66,6 +70,13 @@ export interface ProjectActivityItem {
   outcome: ProjectActivityOutcome | string;
   /** The task this row is ABOUT, when it is about one — an address the reader opens. */
   subjectTaskId: string | null;
+  /** Every source row represented by the summary, newest first. */
+  occurrences: ProjectActivityOccurrence[];
+}
+
+export interface ProjectActivityOccurrence {
+  id: string;
+  at: string;
 }
 
 export interface ProjectActivityPage {
@@ -114,7 +125,7 @@ const OUTCOME_COLOR: Record<string, string> = {
   INFO: 'var(--text-3)',
 };
 
-/** The eight kinds that came from the action ledger; `DECIDE` came from the decision audit and
+/** The nine kinds that came from the action ledger; `DECIDE` came from the decision audit and
  *  everything else from the event outbox. */
 const ACTION_KINDS: ReadonlySet<string> = new Set([
   'DISPATCH_TASK',
@@ -125,6 +136,7 @@ const ACTION_KINDS: ReadonlySet<string> = new Set([
   'APPLY_VERIFICATION_VERDICT',
   'REQUEST_APPROVAL',
   'RUN_PROJECT_ACCEPTANCE',
+  'FILE_VERIFICATION_TASK',
 ]);
 
 export interface ActivitySourceCounts {
@@ -148,9 +160,10 @@ export interface ActivitySourceCounts {
 export function activitySourceCounts(items: ProjectActivityItem[]): ActivitySourceCounts {
   const counts: ActivitySourceCounts = { events: 0, decisions: 0, actions: 0 };
   for (const item of items) {
-    if (ACTION_KINDS.has(item.kind)) counts.actions += 1;
-    else if (item.kind === 'DECIDE') counts.decisions += 1;
-    else counts.events += 1;
+    const sourceRows = activityOccurrences(item).length;
+    if (ACTION_KINDS.has(item.kind)) counts.actions += sourceRows;
+    else if (item.kind === 'DECIDE') counts.decisions += sourceRows;
+    else counts.events += sourceRows;
   }
   return counts;
 }
@@ -188,6 +201,43 @@ export function activityTime(at: string): string {
   });
 }
 
+function activityOccurrences(item: ProjectActivityItem): ProjectActivityOccurrence[] {
+  // The fallback keeps a rolling deployment readable while an older apiserver can still answer a
+  // newly loaded web bundle. The current endpoint always supplies `occurrences`.
+  return item.occurrences?.length ? item.occurrences : [{ id: item.id, at: item.at }];
+}
+
+function sameActivityRun(left: ProjectActivityItem, right: ProjectActivityItem): boolean {
+  return left.kind === right.kind
+    && left.outcome === right.outcome
+    && left.title === right.title
+    && left.detail === right.detail
+    && left.subjectTaskId === right.subjectTaskId;
+}
+
+/** Join the hard-capped transport chunks when a run spans more than one fetched page. */
+export function coalesceActivityRuns(items: ProjectActivityItem[]): ProjectActivityItem[] {
+  const runs: ProjectActivityItem[] = [];
+  const currentByKind = new Map<string, number>();
+
+  for (const item of items) {
+    const currentIndex = currentByKind.get(item.kind);
+    const current = currentIndex === undefined ? undefined : runs[currentIndex];
+    if (current && sameActivityRun(current, item)) {
+      runs[currentIndex!] = {
+        ...current,
+        occurrences: [...activityOccurrences(current), ...activityOccurrences(item)],
+      };
+      continue;
+    }
+
+    currentByKind.set(item.kind, runs.length);
+    runs.push({ ...item, occurrences: [...activityOccurrences(item)] });
+  }
+
+  return runs;
+}
+
 /** The card chrome, so the loading, error, empty and loaded states are one block on the page
  *  rather than four differently-sized ones. */
 function Card({ hint, children }: { hint?: string; children: ReactNode }) {
@@ -199,6 +249,9 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
         borderRadius: 10,
         padding: '18px 20px',
         marginBottom: 14,
+        maxHeight: 420,
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <header
@@ -215,14 +268,45 @@ function Card({ hint, children }: { hint?: string; children: ReactNode }) {
         </Typography.Title>
         {hint ? <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{hint}</span> : null}
       </header>
-      {children}
+      <div style={{ minHeight: 0, overflowY: 'auto' }}>{children}</div>
     </section>
   );
 }
 
-/** One row, as three cells of the enclosing grid — see {@link Feed} for why they are not a
- *  per-row layout of their own. */
+function ActivityDescription({ item }: { item: ProjectActivityItem }) {
+  return (
+    <>
+      {/* The outcome, as the word. Everything about this row's standing is in these characters;
+          the colour beside them repeats it and decides nothing. */}
+      <span
+        style={{
+          fontFamily: MONO,
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: 0.3,
+          color: OUTCOME_COLOR[item.outcome] ?? 'var(--text-3)',
+        }}
+      >
+        {item.outcome}
+      </span>{' '}
+      {item.subjectTaskId ? (
+        // The row is ABOUT a task, so its title is the way into that task. Ids arrive Base62
+        // from the interceptor; nothing is encoded here.
+        <Link to={`/tasks/${encodeURIComponent(item.subjectTaskId)}`}>{item.title}</Link>
+      ) : (
+        <span>{item.title}</span>
+      )}
+      {item.detail ? <span style={{ color: 'var(--text-2)' }}> — {item.detail}</span> : null}
+    </>
+  );
+}
+
+/** One collapsed run, as three cells of the enclosing grid. Expanding it reproduces every source
+ *  row with the same visible outcome, title and detail and its own original instant. */
 function Row({ item }: { item: ProjectActivityItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const occurrences = activityOccurrences(item);
+  const repeated = occurrences.length > 1;
   const refused = item.outcome === 'REFUSED';
   // The tint goes on all three cells, because the row itself is not an element in a grid whose
   // children are the cells — a background on a `display: contents` wrapper paints nothing.
@@ -231,6 +315,10 @@ function Row({ item }: { item: ProjectActivityItem }) {
     borderTop: '1px solid var(--border-subtle)',
     background: refused ? 'var(--fill-inset)' : undefined,
   };
+
+  const time = repeated
+    ? `${activityTime(occurrences[occurrences.length - 1].at)} – ${activityTime(occurrences[0].at)}`
+    : activityTime(item.at);
 
   return (
     <>
@@ -243,36 +331,54 @@ function Row({ item }: { item: ProjectActivityItem }) {
           whiteSpace: 'nowrap',
         }}
       >
-        {activityTime(item.at)}
+        {time}
       </div>
       <div style={{ ...cell, fontFamily: MONO, fontSize: 12, whiteSpace: 'nowrap' }}>
-        {item.kind}
+        {item.kind}{repeated ? ` ×${occurrences.length}` : ''}
       </div>
       <div style={{ ...cell, paddingRight: 2, minWidth: 0, overflowWrap: 'anywhere' }}>
-        {/* The outcome, as the word. Everything about this row's standing is in these characters;
-            the colour beside them repeats it and decides nothing. */}
-        <span
-          style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: 0.3,
-            color: OUTCOME_COLOR[item.outcome] ?? 'var(--text-3)',
-          }}
-        >
-          {item.outcome}
-        </span>{' '}
-        {item.subjectTaskId ? (
-          // The row is ABOUT a task, so its title is the way into that task. Ids arrive Base62
-          // from the interceptor; nothing is encoded here.
-          <Link to={`/tasks/${encodeURIComponent(item.subjectTaskId)}`}>{item.title}</Link>
-        ) : (
-          <span>{item.title}</span>
-        )}
-        {item.detail ? (
-          <span style={{ color: 'var(--text-2)' }}> — {item.detail}</span>
+        <ActivityDescription item={item} />
+        {repeated ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((open) => !open)}
+            style={{
+              marginLeft: 8,
+              padding: 0,
+              border: 0,
+              background: 'none',
+              color: 'var(--accent)',
+              cursor: 'pointer',
+              font: 'inherit',
+            }}
+          >
+            {expanded ? `Hide ${occurrences.length} rows` : `Show ${occurrences.length} rows`}
+          </button>
         ) : null}
       </div>
+
+      {expanded ? occurrences.map((occurrence) => (
+        <Fragment key={occurrence.id}>
+          <div
+            style={{
+              ...cell,
+              paddingLeft: 18,
+              fontVariantNumeric: 'tabular-nums',
+              color: 'var(--text-3)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {activityTime(occurrence.at)}
+          </div>
+          <div style={{ ...cell, fontFamily: MONO, fontSize: 12, whiteSpace: 'nowrap' }}>
+            {item.kind}
+          </div>
+          <div style={{ ...cell, paddingRight: 2, minWidth: 0, overflowWrap: 'anywhere' }}>
+            <ActivityDescription item={item} />
+          </div>
+        </Fragment>
+      )) : null}
     </>
   );
 }
@@ -282,7 +388,7 @@ export function ProjectActivityFeed({ projectId }: { projectId: string }) {
     ...projectActivityQuery(projectId),
     enabled: Boolean(projectId),
   });
-  const items = (feed.data?.pages ?? []).flatMap((page) => page.items);
+  const items = coalesceActivityRuns((feed.data?.pages ?? []).flatMap((page) => page.items));
 
   // Pull the next page when the end of the feed comes into view, so the stream is read by
   // scrolling. The button below is the same action for a reader who is not scrolling (and the only
