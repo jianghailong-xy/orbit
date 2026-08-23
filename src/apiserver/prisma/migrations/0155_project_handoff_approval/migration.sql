@@ -66,7 +66,7 @@
 -- claim is what keeps two units from arriving with one prefix — this repo has paid for that once.
 --
 -- RE-RUNNABILITY AND ROLLBACK
--- =========================== 
+-- ===========================
 -- Every statement is re-runnable: the table and indexes are `IF NOT EXISTS`, constraints are added
 -- inside a `duplicate_object` guard, the function is `CREATE OR REPLACE` and the trigger is dropped
 -- by name first. An interrupted apply that is retried reaches the same state as one that was not.
@@ -229,6 +229,18 @@ BEGIN
   -- The crossing this answer is about, and who asked it. Frozen in every arm: re-aiming an answer
   -- at another crossing, or at another asker, is the one move that would make an approval mean
   -- something nobody was shown.
+  -- The row's own name, first and on its own line, because nothing else on this table would notice.
+  -- A raw `UPDATE … SET id = <new uuid>` changes no state, no decision and no payload, so every
+  -- CHECK is satisfied and every branch below reads it as a no-op — and every reference anybody
+  -- holds to this answer (the refusal that named it, the client polling it, the audit trail) points
+  -- at a row that no longer exists, while the yes lives on under a name nobody was given. An
+  -- append-only fact whose primary key can move is not append-only.
+  IF NEW."id" IS DISTINCT FROM OLD."id" THEN
+    RAISE EXCEPTION 'PROJECT_HANDOFF_IMMUTABLE: handoff approval % cannot be renamed; the answer '
+                    'and the name it was given out under are one fact', OLD."id"
+      USING ERRCODE = 'raise_exception';
+  END IF;
+
   IF NEW."owner_id" IS DISTINCT FROM OLD."owner_id"
      OR NEW."from_project_id" IS DISTINCT FROM OLD."from_project_id"
      OR NEW."to_project_id" IS DISTINCT FROM OLD."to_project_id"

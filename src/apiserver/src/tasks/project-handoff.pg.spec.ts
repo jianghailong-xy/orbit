@@ -284,6 +284,47 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     }
   });
 
+  await t.test('an answer cannot be renamed, in any state', async () => {
+    const w = await seed('renamed');
+    const answer = await handoffs.declare(w.ownerId, declarationFor(w), await scopeOf(w), new Date());
+    const id = answer.row.id;
+    // Every state the row can be in, including the two that have no other outgoing edge. The
+    // statement changes nothing else, so every CHECK on this table is satisfied and every
+    // transition arm reads it as a no-op — which is exactly why the guard has to name the key.
+    const states: Array<[string, () => Promise<unknown>]> = [
+      ['PENDING', async () => undefined],
+      ['APPROVED', async () => handoffs.decide(w.ownerId, w.ownerId, id, 'APPROVE', new Date())],
+      ['APPLIED', async () => admin.query(
+        `UPDATE "project_handoff_approval" SET "state"='APPLIED',"applied_task_id"=$2::uuid,
+          "applied_at"=now() WHERE "id"=$1::uuid`, [id, w.taskInB])],
+    ];
+    for (const [state, reach] of states) {
+      await reach();
+      const before = (await rows(w.ownerId))[0];
+      await assert.rejects(
+        () => admin.query(
+          `UPDATE "project_handoff_approval" SET "id"=$2::uuid WHERE "id"=$1::uuid`,
+          [id, randomUUID()]),
+        /PROJECT_HANDOFF_(IMMUTABLE|SPENT)/,
+        `a ${state} answer was renamed`,
+      );
+      const after = (await rows(w.ownerId))[0];
+      assert.equal(after.id, id, `the ${state} answer kept the name it was given out under`);
+      assert.deepEqual(after, before, `something else moved while renaming a ${state} answer`);
+    }
+    // And the state with the only other terminal shape, on its own row: a refusal.
+    const refused = await seed('renamed-denied');
+    const denied = await handoffs.declare(
+      refused.ownerId, declarationFor(refused), await scopeOf(refused), new Date());
+    await handoffs.decide(refused.ownerId, refused.ownerId, denied.row.id, 'DENY', new Date());
+    await assert.rejects(
+      () => admin.query(
+        `UPDATE "project_handoff_approval" SET "id"=$2::uuid WHERE "id"=$1::uuid`,
+        [denied.row.id, randomUUID()]),
+      /PROJECT_HANDOFF_IMMUTABLE/);
+    assert.equal((await rows(refused.ownerId))[0].id, denied.row.id);
+  });
+
   await t.test('a refused crossing stays refused — no resurrection, by any writer', async () => {
     const w = await seed('denied');
     const answer = await handoffs.declare(w.ownerId, declarationFor(w), await scopeOf(w), new Date());
