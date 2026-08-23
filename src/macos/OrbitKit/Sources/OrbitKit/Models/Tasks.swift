@@ -266,6 +266,18 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     }
 }
 
+/// POST /tasks/:id/execute — the body of one Run now.
+///
+/// `triggerId` names the PRESS, not the run: the server keys this request's receipt on it, so every
+/// resend of one press — the 401 refresh-and-retry inside `APIClient.send`, a resend after a
+/// timeout, a second press over a visible failure — is answered from the first one's answer instead
+/// of starting a second run. A client that sends no body at all keeps working exactly as it did and
+/// is owed no such promise: a name the server minted is one this client never saw and cannot repeat.
+public struct RunTaskRequest: Encodable, Sendable {
+    public let triggerId: String
+    public init(triggerId: String) { self.triggerId = triggerId }
+}
+
 /// POST /tasks/batch-execute — `maxConcurrent` caps only this batch, not any runner's cap.
 public struct BatchExecuteRequest: Encodable, Sendable {
     public let taskIds: [String]

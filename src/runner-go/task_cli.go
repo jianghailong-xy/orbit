@@ -1464,7 +1464,14 @@ func cliTaskStart(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	raw, err := t.startTask(id)
+	// One name for THIS `orbit task start`, drawn once: every resend below it is the same
+	// request, and the next invocation of the command is a different one. A draw that fails stops
+	// the command rather than starting an unnamed run.
+	token, err := newRunRequestToken()
+	if err != nil {
+		return fmt.Errorf("start task: %w", err)
+	}
+	raw, err := t.startTask(id, token)
 	if err != nil {
 		return fmt.Errorf("start task: %w", err)
 	}
