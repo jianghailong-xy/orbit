@@ -144,4 +144,3 @@ rows: ReadonlyArray<{ id: string; projectId: string | null; verdictRevision: big
   }
   return { applied, exhausted };
 }
-
