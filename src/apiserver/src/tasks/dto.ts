@@ -41,6 +41,24 @@ export const TASK_LABEL_MAX_LENGTH = 64;
 /** Same cap and same reasoning as the project's own criteria (see projects/dto.ts). */
 export const MAX_TASK_ACCEPTANCE_CRITERIA_CHARS = 4_000;
 
+/**
+ * Unit L4: this write DECLARES that it crosses into another project.
+ *
+ * Presence is the declaration — §4 SC5 turns on exactly that, and it is why `HANDOFF_TASK` is an
+ * operation rather than something the server infers: an inferred crossing would be satisfied by
+ * accident, and "I did not realise it was another project" and "I am asking to move work between
+ * two goals" would become the same request.
+ *
+ * It carries no authority. What it does is make the crossing askable: the server derives both ends,
+ * files the question against the crossing (never against the session that asked, so it survives a
+ * takeover), and refuses this write until somebody answers. The answer is the user's — or, when the
+ * owner has put BOTH projects on AUTO, their own standing policy.
+ */
+export class TaskHandoffDto {
+  /** Why this work belongs over there. Shown to whoever answers; never read by any gate. */
+  @IsOptional() @IsString() @MaxLength(1_000) reason?: string;
+}
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -64,6 +82,18 @@ export class CreateTaskDto {
   // the same way (§8 CM1 — a missing token is not authorization); all it loses is the ability to
   // be told WHICH half moved when a rotation refuses it.
   @IsOptional() @IsString() @MaxLength(128) scopeToken?: string;
+  // Unit L4: declare that this write crosses into another project (see TaskHandoffDto). Only
+  // meaningful together with an explicit `projectId` — a crossing has to name where it is going.
+  @IsOptional() @ValidateNested() @Type(() => TaskHandoffDto) handoff?: TaskHandoffDto;
+  // Unit L4: the acceptance epoch of the project this was planned against (`project.acceptanceEpoch`,
+  // migration 0150), as a decimal string.
+  //
+  // Optional, and checked only when sent. A reopen starts a new epoch, and work planned against the
+  // old one is work whose place in the goal was decided by an acceptance that has since been
+  // superseded — filing it silently is how a reopened project inherits a plan nobody re-read. A
+  // client that names none is not making the claim; inventing one for it would refuse every plan
+  // written before this field existed.
+  @IsOptional() @IsString() @MaxLength(40) projectAcceptanceEpoch?: string;
   // The task this one is a part of. Must be owned by the caller and belong to the same project —
   // a subtask of work in another project is a statement no reader could act on.
   @IsOptional() @IsPublicId() parentTaskId?: string;
@@ -222,6 +252,18 @@ export class UpdateTaskDto {
   @IsOptional() @IsPublicId() projectId?: string | null;
   // See CreateTaskDto.scopeToken. Compared, never trusted.
   @IsOptional() @IsString() @MaxLength(128) scopeToken?: string;
+  // Unit L4: declare that this write crosses into another project (see TaskHandoffDto). Only
+  // meaningful together with an explicit `projectId` — a crossing has to name where it is going.
+  @IsOptional() @ValidateNested() @Type(() => TaskHandoffDto) handoff?: TaskHandoffDto;
+  // Unit L4: the acceptance epoch of the project this was planned against (`project.acceptanceEpoch`,
+  // migration 0150), as a decimal string.
+  //
+  // Optional, and checked only when sent. A reopen starts a new epoch, and work planned against the
+  // old one is work whose place in the goal was decided by an acceptance that has since been
+  // superseded — filing it silently is how a reopened project inherits a plan nobody re-read. A
+  // client that names none is not making the claim; inventing one for it would refuse every plan
+  // written before this field existed.
+  @IsOptional() @IsString() @MaxLength(40) projectAcceptanceEpoch?: string;
   // null detaches from its parent; a string makes this task part of that one. Rejected for a
   // self-parent, for a cycle, and across projects.
   @IsOptional() @IsPublicId() parentTaskId?: string | null;

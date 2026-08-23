@@ -39,14 +39,18 @@ function makeService(options: { ownedTasks?: string[]; pausedLists?: string[] } 
   };
   const prisma = {
     $transaction: async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
-    workspace: { findFirst: async () => ({ id: 'workspace-1' }) },
+    workspace: { findFirst: async () => ({ id: 'workspace-1' }), findMany: async () => [] },
     taskList: {
       findFirst: async () => ({ id: 'list-1' }),
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         where.id.in.filter((id) => paused.has(id)).map((id) => ({ id })),
     },
-    modelProvider: { findFirst: async () => ({ slug: 'custom' }) },
-    project: { findFirst: async ({ where }: { where: { id: string } }) => ({ id: where.id }) },
+    modelProvider: { findFirst: async () => ({ slug: 'custom' }), findMany: async () => [] },
+    project: {
+      findFirst: async ({ where }: { where: { id: string } }) => ({ id: where.id }),
+      findMany: async () => [],
+    },
+    projectHandoffApproval: { findFirst: async () => null },
     session: { findFirst: async () => null },
     task: {
       count: async ({ where }: { where: { id: { in: string[] } } }) =>

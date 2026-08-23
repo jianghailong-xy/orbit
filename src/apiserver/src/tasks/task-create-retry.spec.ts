@@ -142,6 +142,8 @@ function fixture(opts: FixtureOptions = {}) {
       findUnique: async ({ where }: { where: { idempotencyKey?: string } }) =>
         findCommitted(where.idempotencyKey),
       count: async () => 1,
+      // Unit L4's preflight reads the tasks a plan links to; these cases link to none.
+      findMany: async () => [],
     },
     session: { findFirst: async () => ({ id: SESSION }) },
     conversationTurn: {
@@ -152,7 +154,10 @@ function fixture(opts: FixtureOptions = {}) {
       count: async () => 0,
     },
     taskList: { findMany: async () => [] },
-    project: { findFirst: async () => ({ id: PROJECT }), count: async () => 1 },
+    project: { findFirst: async () => ({ id: PROJECT }), count: async () => 1, findMany: async () => [] },
+    workspace: { findMany: async () => [] },
+    modelProvider: { findMany: async () => [] },
+    projectHandoffApproval: { findFirst: async () => null },
     $queryRaw: async () => [],
     $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => {
       attempts += 1;

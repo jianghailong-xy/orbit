@@ -39,9 +39,15 @@ function missingConnect(relation = 'ProjectToTask') {
 function serviceFailingWith(error: unknown, liveProjects: string[]) {
   const lookups: unknown[] = [];
   const client: Record<string, unknown> = {
+    workspace: { findMany: async () => [] },
+    modelProvider: { findMany: async () => [] },
+    projectHandoffApproval: { findFirst: async () => null },
     project: {
       // The pre-write ownership check passes: at that moment the project was still there.
       findFirst: async () => ({ id: PROJECT_ID }),
+      // Unit L4's preflight: the project is gone by the time this is asked, which is the whole
+      // point of these cases — an empty answer here leaves the refusal to the write itself.
+      findMany: async () => [],
       count: async (args: any) => {
         lookups.push(args.where);
         return liveProjects.filter((id) => (args.where.id.in as string[]).includes(id)).length;

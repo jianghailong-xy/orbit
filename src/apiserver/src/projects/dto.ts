@@ -294,3 +294,17 @@ export class SubmitVerificationFindingDto {
   /** Which check is reporting. Recorded for the audit, never dereferenced. */
   @IsOptional() @IsPublicId() reporterTaskId?: string | null;
 }
+
+/**
+ * Unit L4: the user's answer about one declared cross-project crossing.
+ *
+ * Only two values, and only from a person. §7 RB2 is explicit that the target project's coordinator
+ * is not the approver — an agent signing for another agent is the incident this unit exists for with
+ * one more actor in it — so there is no shape of this request an agent can make.
+ *
+ * A refusal is final for that crossing: §6 gives `ABANDONED` one exit and it is the user filing the
+ * work themselves, which is an ordinary write under their own authority. Nothing here revives it.
+ */
+export class DecideProjectHandoffDto {
+  @IsIn(['APPROVE', 'DENY']) decision!: 'APPROVE' | 'DENY';
+}

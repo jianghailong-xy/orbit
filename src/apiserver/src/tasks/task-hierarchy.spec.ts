@@ -25,6 +25,15 @@ function serviceOn(models: Record<string, unknown>, calls: string[] = []) {
   // rather than in each fixture so a case that adds one has to say so.
   const task = client.task as Record<string, unknown> | undefined;
   if (task && !task.findMany) task.findMany = async () => [];
+  // Unit L4's plan preflight reads the projects, workspaces and providers a plan names, and the
+  // recorded answer for any crossing it declares. None of these cases declares one or files across
+  // a project line, so the double answers "nothing to say" — spelled here rather than in each
+  // fixture so a case that DOES need one has to say so.
+  const project = client.project as Record<string, unknown> | undefined;
+  if (project && !project.findMany) project.findMany = async () => [];
+  client.workspace = client.workspace ?? { findMany: async () => [] };
+  client.modelProvider = client.modelProvider ?? { findMany: async () => [] };
+  client.projectHandoffApproval = client.projectHandoffApproval ?? { findFirst: async () => null };
   client.$queryRaw = async (strings: TemplateStringsArray | Prisma.Sql, ...bound: unknown[]) => {
     // Two calling conventions reach this double, and both are production shapes: a tagged template
     // (`tx.$queryRaw\`...\``) and a prepared `Prisma.sql` object. Handing the second to
@@ -125,7 +134,17 @@ test('creating a subtask reads its parent under the owner lock, in one transacti
 
   // The lock is taken before the parent is read, and the write happens before the commit — so no
   // other writer can observe or change the parent in between.
-  assert.deepEqual(calls, ['BEGIN', 'lock:user', 'readParent', 'createTask', 'COMMIT']);
+  // The project row is taken at rank 40, between the owner mutex and the parent read, since unit
+  // L4: this create was admitted against that project's status, acceptance epoch and budget, and a
+  // plan admitted on a world read without a lock has to re-read it under one before it writes.
+  assert.deepEqual(calls, [
+    'BEGIN',
+    'lock:user',
+    'raw:SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE',
+    'readParent',
+    'createTask',
+    'COMMIT',
+  ]);
 });
 
 // The other half of the same rule: an ordinary create must not queue behind another request's DAG
@@ -525,7 +544,13 @@ test('batch-create validates every item’s parent under the lock, before writin
   );
   // The batch opens its transaction and locks before it reads the first parent, and never reaches
   // a write — so item 1 is not left behind by item 2's rejection.
-  assert.deepEqual(calls, ['BEGIN', 'lock:user', 'readParent']);
+  // Rank 40 between the owner mutex and the parent read since unit L4 — see the single create.
+  assert.deepEqual(calls, [
+    'BEGIN',
+    'lock:user',
+    'raw:SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE',
+    'readParent',
+  ]);
 });
 
 test('a batch with parents but no dependencies still takes the lock', async () => {
@@ -549,7 +574,13 @@ test('a batch with parents but no dependencies still takes the lock', async () =
     tasks: [{ title: 'subtask', projectId: PROJECT_ID, parentTaskId: PARENT_ID }],
   } as never);
 
-  assert.deepEqual(calls, ['BEGIN', 'lock:user', 'createTask', 'COMMIT']);
+  assert.deepEqual(calls, [
+    'BEGIN',
+    'lock:user',
+    'raw:SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE',
+    'createTask',
+    'COMMIT',
+  ]);
 });
 
 test('a batch with neither parents nor dependencies still takes the owner lock', async () => {

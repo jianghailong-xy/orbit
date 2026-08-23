@@ -4,6 +4,7 @@ import { ProjectsController } from './projects.controller';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectHandoffModule } from './project-handoff.module';
 import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
 import { ProjectDecisionService } from './project-decision.service';
 import { ProjectDispatchPassService } from './project-dispatch-pass.service';
@@ -24,7 +25,7 @@ import { ProjectsService } from './projects.service';
 // from a duplicate `providers` entry is how the auto-run reconciler once ended up running twice a
 // minute. The task dispatcher uses the global queue only to wake an already committed Session.
 @Module({
-  imports: [SessionsModule],
+  imports: [SessionsModule, ProjectHandoffModule],
   controllers: [ProjectsController],
   providers: [
     ProjectsService,
@@ -46,6 +47,7 @@ import { ProjectsService } from './projects.service';
     ProjectFailureRecoveryService,
   ],
   exports: [
+    ProjectHandoffModule,
     ProjectsService,
     ConvergenceLedgerService,
     // Exported so the RUNNER door guards attempts through the same instance the user door reads

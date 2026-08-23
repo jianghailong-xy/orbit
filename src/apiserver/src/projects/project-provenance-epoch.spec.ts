@@ -124,6 +124,17 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // statement ABOUT the guard rather than a read of what the columns hold. It decides nothing; the
   // one thing that consults it is the test asserting the installed triggers are the declared ones.
   'src/apiserver/src/common/db-write-inventory.ts': 'declares which trigger fires on them',
+  // Unit L4. Both of these name the provenance columns for one reason and it is the opposite of a
+  // gate: a declared crossing has to be filed under the SOURCE it will actually be written with, so
+  // the four values are bound into the crossing's identity and re-DERIVED from the session row
+  // before a question is filed. Nothing here reads them to decide whether a write is allowed —
+  // `decideProjectScopeWrite` still never sees them — and what they buy is that two findings about
+  // two different tasks cannot collapse into one question whose answer files a task whose back-link
+  // points at whichever of them happened to be first.
+  'src/apiserver/src/projects/project-handoff.ts':
+    'binds provenance into a crossing identity and derives the trigger event; decides nothing',
+  'src/apiserver/src/projects/project-handoff.service.ts':
+    're-derives the source a declaration claims, and refuses one that does not match',
 };
 
 /**

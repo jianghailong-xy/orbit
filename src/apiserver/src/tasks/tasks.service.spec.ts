@@ -17,6 +17,7 @@ function taskServiceFixture(
   const published: unknown[][] = [];
 
   const task = {
+    findMany: async () => [],
     count: async ({ where }: any) =>
       where.id.in.filter((id: string) => ownedIds.has(id)).length,
     update: async ({ where, data }: any) => {
@@ -51,6 +52,12 @@ function taskServiceFixture(
   const prisma = {
     task,
     taskDependency,
+    // Unit L4's plan preflight: this fixture's world has no projects, workspaces or providers, and
+    // declares no crossing, so every one of these answers "nothing to say".
+    project: { findMany: async () => [] },
+    workspace: { findMany: async () => [] },
+    modelProvider: { findMany: async () => [] },
+    projectHandoffApproval: { findFirst: async () => null },
     $transaction: async (fn: (tx: any) => Promise<unknown>) => {
       calls.push('transaction');
       return fn({

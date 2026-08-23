@@ -63,12 +63,24 @@ function fixture(session: SessionRow | null) {
       // Unit L3 §4 R8 reads the status of both ends of a write. Both open, so the observed
       // decision is the interesting one — the undeclared crossing — rather than a settled project.
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
-        where.id.in.map((id) => ({ id, status: 'OPEN' })),
+        // Unit L4's preflight reads the acceptance epoch and the budgets off these same rows.
+        where.id.in.map((id) => ({
+          id,
+          status: 'OPEN',
+          acceptanceEpoch: 0n,
+          maxConcurrentTasks: 3,
+          sessionBudgetPerDay: null,
+          members: [],
+        })),
     },
     taskList: { findMany: async () => [] },
+    workspace: { findMany: async () => [] },
+    modelProvider: { findMany: async () => [] },
+    projectHandoffApproval: { findFirst: async () => null },
     session: { findFirst: async () => session },
     conversationTurn: { findFirst: async () => null },
     task: {
+      findMany: async () => [],
       findUnique: async () => null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);

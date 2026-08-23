@@ -121,10 +121,22 @@ function fixture(options: FixtureOptions = {}) {
         projectFindMany.push(args);
         return args.where.id.in
           .filter((id) => status[id])
-          .map((id) => ({ id, status: status[id] }));
+          // Unit L4's preflight selects the acceptance epoch and the budgets off the same rows the
+          // scope read uses, so the double answers both or it is modelling a row that cannot exist.
+          .map((id) => ({
+            id,
+            status: status[id],
+            acceptanceEpoch: 0n,
+            maxConcurrentTasks: 3,
+            sessionBudgetPerDay: null,
+            members: [],
+          }));
       },
     },
     taskList: { findMany: async () => [] },
+    workspace: { findMany: async () => [] },
+    modelProvider: { findMany: async () => [] },
+    projectHandoffApproval: { findFirst: async () => null },
     session: {
       findFirst: async (args: unknown) => {
         sessionFindFirst.push(args);
@@ -133,6 +145,7 @@ function fixture(options: FixtureOptions = {}) {
     },
     conversationTurn: { findFirst: async () => (turnId ? { id: turnId } : null) },
     task: {
+      findMany: async () => [],
       findUnique: async ({ where }: { where: { idempotencyKey: string } }) =>
         byKey.get(where.idempotencyKey) ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {

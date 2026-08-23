@@ -61,6 +61,25 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
+import type { HandoffApproval } from '../projects/project-scope-decision';
+import {
+  dependencyCrossingRefusal,
+  handoffPayloadDigest,
+  type HandoffRequestIdentity,
+} from '../projects/project-handoff';
+import {
+  ProjectHandoffService,
+  type HandoffAuthority,
+  type HandoffDeclaration,
+} from '../projects/project-handoff.service';
+import {
+  planPreflightRefusalBody,
+  planPreflightRefusals,
+  preflightPlan,
+  type PlanFacts,
+  type PlanPreflightFinding,
+  type PlanTaskFacts,
+} from './task-plan-preflight';
 import {
   CreateTaskBatchItemDto,
   CreateTaskCommentDto,
@@ -93,6 +112,7 @@ import {
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/project-coordinator-session';
 import {
   admitProjectScopeWrite,
+  type ScopeAdmission,
   derivedScopeToken,
   projectScopeMode,
   scopeObservationLine,
@@ -194,6 +214,69 @@ type ScopeWriteInput = {
   requestedProjectId: string | null | undefined;
   currentProjectId: string | null;
   scopeToken?: string | null;
+  /**
+   * Unit L4: the user's answer about this crossing, when the write declared one. Read by R9–R14,
+   * and by nothing else — a write that declares no crossing never reaches them.
+   */
+  approval?: HandoffApproval | null;
+};
+
+/** Unit L4: what a write that was allowed under an approval must spend inside its transaction. */
+type HandoffSpend = {
+  authority: HandoffAuthority;
+  handoffId: string;
+};
+
+/**
+ * Unit L4: the cross-project prerequisite edges a plan asks for.
+ *
+ * `answers` is what the preflight judges; `edges` is what the transaction re-judges under a lock,
+ * because a prerequisite can move between the two and `project_id` is not a key column.
+ */
+/**
+ * Unit L4: the authority facts a plan was admitted against, as captured before the transaction and
+ * compared inside it. Only fields that decide REFUSE or ALLOW are here — a warning that drifts is
+ * still only a warning, and locking rows to keep one stable would be paying for nothing.
+ */
+type PlanAuthoritySnapshot = {
+  projects: Record<string, {
+    status: string;
+    acceptanceEpoch: string;
+    maxConcurrentTasks: number;
+    sessionBudgetPerDay: number | null;
+    /**
+     * WHO the plan was judged against: the coordinating session and the team, as one digest.
+     *
+     * A team change is not cosmetic on this path — membership is what decides whether an assignee
+     * can ever be dispatched, and the coordinator pointer is who may write here at all. Both are
+     * read by the preflight without a lock, so both are compared under one. Fail-closed on purpose:
+     * a plan judged against one team and written against another is a plan nobody judged.
+     */
+    identityDigest: string;
+  }>;
+  workspaceIds: string[];
+  providerSlugs: string[];
+  taskProjects: Record<string, string | null>;
+};
+
+/** Unit L4: what a preflight concluded, and what the transaction has to re-check before writing. */
+type PlanAdmission = {
+  findings: PlanPreflightFinding[];
+  workspaceIds: string[];
+  providerSlugs: string[];
+  snapshot: PlanAuthoritySnapshot;
+};
+
+type DependencyCrossings = {
+  answers: Record<string, HandoffApproval | null>;
+  edges: Array<{
+    index: number;
+    from: string | null;
+    prerequisiteId: string;
+    authority: HandoffAuthority;
+    /** The recorded answer, when one exists — what the transaction spends. */
+    handoffId: string | null;
+  }>;
 };
 
 /**
@@ -1128,7 +1211,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // @Global RealtimeModule, so no import needed here (nor in RunnerApiModule, which also
     // instantiates this service). Used to push task changes to the owner's control-plane stream.
     private readonly realtime: RealtimeService,
-  ) {}
+    /**
+     * Unit L4: the only code that reads or writes a recorded cross-project answer. Injected rather
+     * than reimplemented here, so the write path and the user's decide/list endpoints cannot end up
+     * with two ideas of what an approval is.
+     *
+     * Optional in the signature and not in the wiring: Nest resolves it from `ProjectHandoffModule`,
+     * which both modules that construct this service import. The fallback is for the ~40 places that
+     * build this service directly — unit specs and the e2e harness — and it is a service over THIS
+     * prisma, so a directly-built TasksService behaves exactly as the injected one does rather than
+     * carrying a null that only explodes when a crossing is declared.
+     */
+    handoffs?: ProjectHandoffService,
+  ) {
+    this.handoffs = handoffs ?? new ProjectHandoffService(prisma);
+  }
+
+  private readonly handoffs: ProjectHandoffService;
 
   onModuleInit(): void {
     // Periodic backstop for auto-run edges triggerDependents can't catch (see
@@ -2166,7 +2265,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const scopeWorld = await this.projectScopeWorld(
       this.prisma, ownerId, creatorSessionId, [scopeWrite],
     );
-    const scopedProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
+    // Unit L4: one moment for the whole write. Outside the retry closure on purpose — a second
+    // attempt must spend the same approval under the same expiry, not a fresher one.
+    const now = new Date();
+    // Unit L4: does this write DECLARE that it crosses into another project (§4 SC5)? If it does,
+    // the answer the user gave about that crossing is what R9–R14 read, and a crossing with no
+    // answer yet files the question rather than failing silently.
+    const crossing = this.declaredCrossing(
+      ownerId,
+      dto,
+      this.handoffIdentityOf(dto as CreateTaskBatchItemDto, origin, new Map()),
+      scopeWorld.scope,
+      creatorSessionId,
+    );
+    const admitted = await this.admitDeclaredWrite(ownerId, scopeWorld, scopeWrite, crossing, now);
+    const scopedProjectId = admitted.projectId;
     // The derived project needs no `assertOwnedProject`: it is the project the scope derivation
     // already read under this owner. A project the CALLER named was checked above.
     if ((dto.projectId ?? null) !== scopedProjectId) {
@@ -2176,6 +2289,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
     if (dependsOnTaskIds.length) await this.assertOwnedTasks(ownerId, dependsOnTaskIds);
+    // Unit L4: a single create is a plan of one, and every dimension a fifty-item plan is judged on
+    // applies to it — the same function, the same facts, so the two can never answer differently.
+    const singleItem = [dto as CreateTaskBatchItemDto];
+    const noneFrozen = new Set<number>();
+    const preflighting = this.planNeedsPreflight(scopeWorld, singleItem);
+    const referencedTasks = preflighting
+      ? await this.referencedTaskFacts(ownerId, singleItem)
+      : {};
+    const dependencyCrossings: DependencyCrossings = preflighting
+      ? await this.resolveDependencyCrossings(
+          ownerId, singleItem,
+          [this.handoffIdentityOf(dto as CreateTaskBatchItemDto, origin, new Map())],
+          referencedTasks, scopeWorld, creatorSessionId, now, noneFrozen,
+        )
+      : { answers: {}, edges: [] };
+    const planAdmission = preflighting
+      ? await this.assertPlanPreflight(
+          ownerId, singleItem, scopeWorld, referencedTasks, dependencyCrossings.answers, noneFrozen,
+        )
+      : null;
     const data = this.taskCreateData(
       ownerId,
       dto,
@@ -2226,6 +2359,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ) {
             await this.lockDependencyGraph(tx, ownerId);
           }
+          // Unit L4, rank 15: the workspaces and providers this plan was admitted against, before
+          // the lists and sessions below and before anything is written.
+          if (planAdmission) {
+            await this.lockPlanExecutionIdentity(
+              tx, ownerId, planAdmission.workspaceIds, planAdmission.providerSlugs,
+            );
+          }
           // Rank 20 and 30, before the first Task/FK write below. A supersession writes a SECOND
           // task row — the predecessor's retirement — so that row's creator Session goes into the
           // same ordered rank-30 statement (lock-order.ts, I2): a task row written twice in one
@@ -2250,7 +2390,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           await this.refenceProjectScope(
             tx, ownerId, creatorSessionId, scopeWorld,
             [{ ...scopeWrite, boundProjectId: scopedProjectId }],
-            dto.supersedesTaskId ? [dto.projectId] : [],
+            // Unit L4: every project this write's admission depended on, in ONE sorted rank-40
+            // pass. The project it lands in is not enough — a declared crossing lands in B and
+            // derives its authority from A, a dependency edge is decided by the project at the far
+            // end of it, and a plan admitted against an acceptance epoch or a budget has to hold
+            // that project's row before it re-reads them. This is also the whole of the lock an
+            // owner's plan takes: §4 R1 exempts them from the SCOPE, not from the world moving.
+            [
+              scopedProjectId,
+              scopeWorld.scope?.projectId,
+              ...dependencyCrossings.edges.map((edge) => edge.authority.toProjectId),
+              ...(dto.supersedesTaskId ? [dto.projectId] : []),
+            ],
           );
           if (dto.supersedesTaskId && dto.projectId) {
             await tx.$queryRaw`
@@ -2272,7 +2423,37 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               dto.projectId ?? null,
             );
           }
+          // Unit L4: everything the preflight decided on, re-read under the locks now held. A
+          // reopen, a soft-deleted workspace, a disabled provider or a lowered budget between the
+          // admission and here refuses the whole write rather than being written past.
+          if (planAdmission) {
+            if (planAdmission) await this.assertPlanAuthorityUnchanged(tx, ownerId, planAdmission.snapshot);
+          }
+          // And the crossings again, under a lock on the prerequisites this time (rank 50, sorted).
+          // The preflight read their projects without one, and a move takes a mode that read does
+          // not conflict with.
+          await this.assertDependencyCrossingsAtEffect(
+            tx, ownerId, dependencyCrossings.edges, now,
+          );
           const created = await tx.task.create({ data });
+          // Unit L4's `APPLY`: the yes is spent on this task, in the transaction that wrote it. A
+          // second application updates no row, throws, and takes this task with it — which is what
+          // makes "one approval, one task" a property of the row rather than of the call order.
+          // Unit L4's `APPLY`, for every yes this write spends: the crossing that filed the task,
+          // and one per cross-project edge it draws. Sorted by approval id inside `spendAll`, so
+          // two batches naming the same approvals in opposite item orders cannot deadlock on them.
+          await this.handoffs.spendAll(tx, [
+            ...(admitted.spend
+              ? [{ ...admitted.spend, taskId: created.id }]
+              : []),
+            ...dependencyCrossings.edges
+              .filter((edge) => edge.handoffId)
+              .map((edge) => ({
+                authority: edge.authority,
+                handoffId: edge.handoffId!,
+                taskId: created.id,
+              })),
+          ], now, scopeWorld.scope?.generation);
           if (dependsOnTaskIds.length) {
             await tx.taskDependency.createMany({
               data: dependsOnTaskIds.map((dependsOnTaskId) => ({
@@ -2782,22 +2963,62 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const fresh = scopeWrites.filter((_, index) => !replayed[index]);
     const scopeWorld = await this.projectScopeWorld(this.prisma, ownerId, creatorSessionId, fresh);
     const scopeFences: Array<ScopeWriteInput & { boundProjectId: string | null }> = [];
-    const items = validated.map((item, index) => {
+    // Unit L4: one moment for the whole batch, outside the retry closure — a second attempt spends
+    // the same approvals under the same expiry rather than fresher ones.
+    const now = new Date();
+    // Unit L4: every item's full identity, with each ref resolved to the identity of the item it
+    // names. Computed over the batch as given, because the fields an approval binds — the plan, the
+    // structure, the execution identity and the source evidence — are not what the scope binding
+    // changes; that decides only WHICH project the write lands in, which the crossing states
+    // separately as its two ends.
+    const identities = this.handoffIdentities(validated, origin);
+    const spends = new Map<number, HandoffSpend>();
+    // Which items this call is NOT writing. A replayed winner is a frozen fact from here on: it is
+    // returned, it can be named by a later item's ref, and it is judged by nothing — re-judging a
+    // committed row against a world that has moved would turn a lost response into a refusal of
+    // work that already exists (§3 SC4).
+    const frozen = new Set<number>();
+    const items: CreateTaskBatchItemDto[] = [];
+    for (const [index, item] of validated.entries()) {
       const winner = replayed[index];
       if (winner) {
         this.auditReplayedProject(winner, item.projectId);
+        frozen.add(index);
         // Pinned to the row that already exists, so the item this batch carries and the row the
         // transaction finds cannot describe two different projects.
-        return (item.projectId ?? null) === (winner.projectId ?? null)
+        items.push((item.projectId ?? null) === (winner.projectId ?? null)
           ? item
-          : { ...item, projectId: winner.projectId ?? undefined };
+          : { ...item, projectId: winner.projectId ?? undefined });
+        continue;
       }
-      const projectId = this.admitScopedWrite(scopeWorld, scopeWrites[index]);
-      scopeFences.push({ ...scopeWrites[index], boundProjectId: projectId });
-      return (item.projectId ?? null) === projectId
+      const crossing = this.declaredCrossing(
+        ownerId, item, identities[index], scopeWorld.scope, creatorSessionId,
+      );
+      const admitted = await this.admitDeclaredWrite(
+        ownerId, scopeWorld, scopeWrites[index], crossing, now,
+      );
+      if (admitted.spend) spends.set(index, admitted.spend);
+      // Copied AFTER the admission, so the fence carries the operation and the answer this item was
+      // admitted under: re-deciding a declared crossing as an undeclared one would refuse at R7.
+      scopeFences.push({ ...scopeWrites[index], boundProjectId: admitted.projectId });
+      items.push((item.projectId ?? null) === admitted.projectId
         ? item
-        : { ...item, projectId: projectId ?? undefined };
-    });
+        : { ...item, projectId: admitted.projectId ?? undefined });
+    }
+    // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
+    // findings at once — and nothing written if any of them refuses (AC5).
+    const preflighting = this.planNeedsPreflight(scopeWorld, items);
+    const referencedTasks = preflighting ? await this.referencedTaskFacts(ownerId, items) : {};
+    const dependencyCrossings: DependencyCrossings = preflighting
+      ? await this.resolveDependencyCrossings(
+          ownerId, items, identities, referencedTasks, scopeWorld, creatorSessionId, now, frozen,
+        )
+      : { answers: {}, edges: [] };
+    const planAdmission = preflighting
+      ? await this.assertPlanPreflight(
+          ownerId, items, scopeWorld, referencedTasks, dependencyCrossings.answers, frozen,
+        )
+      : null;
 
     // Only parents that already exist. A parentRef points at a row this very transaction writes,
     // which no other request can see — let alone move into another project — so there is nothing
@@ -2831,6 +3052,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // canonical order (lock-order.ts, I1) is what keeps two multi-row Task writes from taking
       // the same rows in opposite orders.
       await this.lockDependencyGraph(tx, ownerId);
+      // Unit L4, rank 15: the workspaces and providers this plan was admitted against, taken before
+      // the lists and sessions below and before anything is written.
+      if (planAdmission) {
+        await this.lockPlanExecutionIdentity(
+          tx, ownerId, planAdmission.workspaceIds, planAdmission.providerSlugs,
+        );
+      }
       // Rank 20 and 30, in one ordered statement each and before the first Task/FK write: every
       // list this batch files into, the Session that created it, and — when items retire
       // predecessors — the creator Sessions of those predecessor rows, which this transaction
@@ -2859,7 +3087,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Both sets are taken here in ONE sorted pass, so the loop below re-locks rows this
       // transaction already holds instead of reaching backwards for a smaller id.
       await this.refenceProjectScope(
-        tx, ownerId, creatorSessionId, scopeWorld, scopeFences, supersessionProjectIds,
+        tx, ownerId, creatorSessionId, scopeWorld, scopeFences,
+        // As in `create`, and for the same three reasons: what each fresh item is bound to, the
+        // scope a declared crossing derives its authority from, and the far end of every edge.
+        // Frozen items are deliberately absent — they were written by an earlier attempt and this
+        // transaction neither re-judges nor re-writes them.
+        [
+          ...items.filter((_, index) => !frozen.has(index)).map((item) => item.projectId),
+          scopeWorld.scope?.projectId,
+          ...dependencyCrossings.edges.map((edge) => edge.authority.toProjectId),
+          ...supersessionProjectIds,
+        ],
       );
       for (const projectId of supersessionProjectIds) {
         await tx.$queryRaw`
@@ -2868,9 +3106,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
       // parent in item 40 must not leave items 1-39 written.
       if (hasParents) await this.assertBatchHierarchy(tx, ownerId, items);
+      // Unit L4: everything the preflight decided on, re-read under the locks now held — a reopen,
+      // a soft-deleted workspace, a disabled provider or a lowered budget between the admission and
+      // here refuses the whole batch rather than being written past.
+      if (planAdmission) await this.assertPlanAuthorityUnchanged(tx, ownerId, planAdmission.snapshot);
+      // And the crossings again, under a lock on the prerequisites (rank 50, sorted). The preflight
+      // read their projects without one, and a move takes a mode that read does not conflict with —
+      // so an edge that was inside one project when the plan was judged can be a crossing by the
+      // time it is written.
+      await this.assertDependencyCrossingsAtEffect(tx, ownerId, dependencyCrossings.edges, now);
+      // Unit L4: every yes this batch spends, collected as the rows are written and applied in one
+      // sorted pass at the end (see `spendAll`).
+      const handoffSpends: Array<{ authority: HandoffAuthority; handoffId: string; taskId: string }> = [];
       const idByRef = new Map<string, string>();
       const rows: Array<Task & { ref?: string }> = [];
-      for (const item of items) {
+      for (const [index, item] of items.entries()) {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
         // A ref pointing at a collapsed item therefore resolves to the surviving task's id.
@@ -2912,6 +3162,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               heldListIds,
             ),
           }));
+        // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
+        // first run wrote, and that run already spent the approval on it.
+        const spend = spends.get(index);
+        if (!existing && spend) handoffSpends.push({ ...spend, taskId: task.id });
+        if (!existing) {
+          for (const edge of dependencyCrossings.edges) {
+            if (edge.index === index && edge.handoffId) {
+              handoffSpends.push({
+                authority: edge.authority,
+                handoffId: edge.handoffId,
+                taskId: task.id,
+              });
+            }
+          }
+        }
         if (item.ref !== undefined) idByRef.set(item.ref, task.id);
         const dependsOnTaskIds = [
           ...new Set([
@@ -2949,6 +3214,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
         rows.push(item.ref === undefined ? task : { ...task, ref: item.ref });
       }
+      await this.handoffs.spendAll(tx, handoffSpends, now, scopeWorld.scope?.generation);
       return rows;
     }, this.transientWriteRetry('tasks.createMany')).catch(async (e) => {
       // §13.1 AG6's activation guard, FIRST and for the same reason `create` puts it first: 0132
@@ -3224,6 +3490,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       scope,
       presentedScopeToken: write.scopeToken,
       projectStatus,
+      // Unit L4. Carried on the write rather than looked up here, so the SAME answer the admission
+      // decided on is the one the effect-time fence re-decides on — the fence's job is to catch a
+      // scope that moved, and re-reading the approval there would silently change the question.
+      // What catches an approval that moved is the spend itself: one compare-and-set inside the
+      // transaction that writes the task, which fails and takes the task with it.
+      approval: write.approval ?? null,
     };
   }
 
@@ -3241,9 +3513,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * did before this unit — including the binding, which is a behaviour change like any other — so
    * that what enforcement would reject is countable before it is switched on.
    */
+  /**
+   * §4's decision over one write, WITHOUT the throw.
+   *
+   * Split out for unit L4: a declared crossing has to be able to read its own refusal — "there is
+   * no answer yet" is the one refusal that is answered by filing a question rather than by giving
+   * up — and an exception is not a value you can branch on without making control flow out of
+   * failure. `admitScopedWrite` is this plus the throw, so the ordinary paths are unchanged.
+   */
+  private decideScopedWrite(world: ScopeWorld, write: ScopeWriteInput): ScopeAdmission {
+    return admitProjectScopeWrite(
+      this.scopeRequest(world.principal, world.scope, write, world.projectStatus),
+    );
+  }
+
   private admitScopedWrite(world: ScopeWorld, write: ScopeWriteInput): string | null {
     const request = this.scopeRequest(world.principal, world.scope, write, world.projectStatus);
-    const admission = admitProjectScopeWrite(request);
+    const admission = this.decideScopedWrite(world, write);
     if (scopeWriteRefused(admission, world.mode)) {
       throw new ForbiddenException(scopeRefusalBody(admission.outcome!, write.taskId));
     }
@@ -3257,6 +3543,634 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         : write.currentProjectId;
     }
     return admission.projectId;
+  }
+
+
+  // ---------------------------------------------------------------------------------------------
+  // Unit L4: declared crossings, and the plan preflight.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * The full identity of one write — everything an approval for it binds.
+   *
+   * Every field, not just the prose. An approval that bound only the title and description would be
+   * a yes the writer could spend on a task with another assignee, another provider, another parent,
+   * another set of prerequisites or auto-run switched on: the user would have answered a question
+   * about words and authorised a change in WHO does the work, WITH WHAT, WHEN it starts and what it
+   * gates. The four provenance values come from `origin` — server-derived (`resolveOwnedSession`),
+   * never from the request — and `ProjectHandoffService` re-derives them again under its own locks,
+   * because binding a value into a digest makes it tamper-evident, not true.
+   */
+  private handoffIdentityOf(
+    item: CreateTaskBatchItemDto,
+    origin: CreationOrigin | undefined,
+    refDigests: ReadonlyMap<string, string>,
+  ): HandoffRequestIdentity {
+    return {
+      plan: {
+        title: item.title,
+        description: item.description ?? null,
+        acceptanceCriteria: item.acceptanceCriteria ?? null,
+        labels: item.labels ? normalizeTaskLabels(item.labels) : [],
+        assigneeId: item.assigneeId ?? null,
+        listId: item.listId ?? null,
+        provider: item.provider ?? null,
+        model: item.model ?? null,
+        autoRunWhenReady: item.autoRunWhenReady ?? null,
+        runAt: item.runAt ?? null,
+        dueDate: item.dueDate ?? null,
+        completionPolicy: item.completionPolicy ?? null,
+        parentTaskId: item.parentTaskId ?? null,
+        // A ref is a name local to one batch; two batches spell the same link differently and
+        // different links the same. So what is bound is the identity of the item it names.
+        parentRefDigest: item.parentRef ? (refDigests.get(item.parentRef) ?? null) : null,
+        verifiesTaskId: item.verifiesTaskId ?? null,
+        verifiesRefDigest: item.verifiesRef ? (refDigests.get(item.verifiesRef) ?? null) : null,
+        supersedesTaskId: item.supersedesTaskId ?? null,
+        dependsOnTaskIds: item.dependsOnTaskIds ?? [],
+        dependsOnRefDigests: (item.dependsOnRefs ?? []).map((ref) => refDigests.get(ref) ?? ref),
+      },
+      source: {
+        projectId: origin?.discoveredFromProjectId ?? null,
+        taskId: origin?.sourceTaskId ?? null,
+        sessionId: origin?.sessionId ?? null,
+        triggerEvent: origin?.triggerEvent ?? null,
+      },
+    };
+  }
+
+  /**
+   * Every item's identity, in order, with each ref resolved to the identity of the item it names.
+   *
+   * Order is what makes this possible at all: refs are backward-only, so by the time an item is
+   * reached every ref it can name has already been digested.
+   */
+  private handoffIdentities(
+    items: readonly CreateTaskBatchItemDto[],
+    origin: CreationOrigin | undefined,
+  ): HandoffRequestIdentity[] {
+    const refDigests = new Map<string, string>();
+    return items.map((item) => {
+      const identity = this.handoffIdentityOf(item, origin, refDigests);
+      if (item.ref !== undefined && !refDigests.has(item.ref)) {
+        refDigests.set(item.ref, handoffPayloadDigest(identity));
+      }
+      return identity;
+    });
+  }
+
+  /**
+   * The crossing a write DECLARES, or null when it declares none.
+   *
+   * Three of the four "no crossing here" answers are deliberate rather than lenient: a declaration
+   * from a session with no scope is left to R5, and one that names the project the session already
+   * coordinates is not a crossing at all — a redundant declaration is harmless and refusing it
+   * would punish a client for being explicit. The one refusal is a declaration that names no
+   * destination, because a crossing without an end is not a request anybody can answer.
+   */
+  private declaredCrossing(
+    ownerId: string,
+    item: CreateTaskDto,
+    identity: HandoffRequestIdentity,
+    scope: DerivedScope | null,
+    sessionId: string | undefined,
+  ): { declaration: HandoffDeclaration; authority: HandoffAuthority } | null {
+    if (!item.handoff) return null;
+    if (item.projectId === undefined || item.projectId === null) {
+      throw new BadRequestException(
+        'a declared crossing has to say where it is going — name the target project (projectId)',
+      );
+    }
+    if (!sessionId || !scope) return null;
+    if (item.projectId === scope.projectId) return null;
+    const declaration: HandoffDeclaration = {
+      fromProjectId: scope.projectId,
+      toProjectId: item.projectId,
+      kind: 'FILE_TASK',
+      subjectTaskId: null,
+      identity,
+      title: item.title,
+      reason: item.handoff.reason ?? null,
+      requestedBySessionId: sessionId,
+    };
+    return { declaration, authority: this.handoffs.authorityOf(ownerId, declaration) };
+  }
+
+  /**
+   * §4 for a write that may be a declared crossing: decide, ask if it has to, decide again.
+   *
+   * The order is the point. The decision runs FIRST against whatever answer already exists, so a
+   * crossing refused for another reason — a rotated scope, a settled destination, an approval aimed
+   * at something else — is refused without a question being filed. Only `CROSS_PROJECT_APPROVAL_REQUIRED`
+   * (R10: there is no answer yet) files one, and then the decision is re-run against what came back,
+   * because the answer may already BE yes: when the owner has put both projects on AUTO, filing the
+   * question and answering it are the same instant, and the write proceeds under R14.
+   *
+   * Returns what the caller must spend inside its transaction. Nothing is spent here: the approval
+   * is not consumed by being read, only by the task that was written under it.
+   */
+  private async admitDeclaredWrite(
+    ownerId: string,
+    world: ScopeWorld,
+    write: ScopeWriteInput,
+    crossing: { declaration: HandoffDeclaration; authority: HandoffAuthority } | null,
+    now: Date,
+  ): Promise<{ projectId: string | null; spend: HandoffSpend | null }> {
+    if (!crossing) return { projectId: this.admitScopedWrite(world, write), spend: null };
+    write.operation = 'HANDOFF_TASK';
+    const answer = await this.handoffs.answerFor(this.prisma, crossing.authority, now);
+    write.approval = answer?.approval ?? null;
+    let row = answer?.row ?? null;
+    let admission = this.decideScopedWrite(world, write);
+    if (admission.outcome?.code === 'CROSS_PROJECT_APPROVAL_REQUIRED' && world.scope) {
+      const filed = await this.handoffs.declare(ownerId, crossing.declaration, {
+        projectId: world.scope.projectId,
+        generation: world.scope.generation,
+      }, now);
+      write.approval = filed.approval;
+      row = filed.row;
+      admission = this.decideScopedWrite(world, write);
+    }
+    if (scopeWriteRefused(admission, world.mode)) {
+      // The refusal names the question, so the caller has something to poll and a person has
+      // something to open. `handoffId` is classified as a public id, so the exception filter
+      // renders it base62 like every other address in an error body.
+      throw new ForbiddenException({
+        ...scopeRefusalBody(admission.outcome!, write.taskId),
+        handoffId: row?.id ?? null,
+        handoffState: row?.state ?? null,
+      });
+    }
+    if (world.mode === 'observe') {
+      return { projectId: this.admitScopedWrite(world, write), spend: null };
+    }
+    return {
+      projectId: admission.projectId,
+      spend: row && admission.outcome?.decision === 'ALLOW' && admission.outcome.rule === 'R14_HANDOFF_APPROVED'
+        ? { authority: crossing.authority, handoffId: row.id }
+        : null,
+    };
+  }
+
+  /**
+   * The cross-project prerequisite edges a plan asks for, and the answer that exists for each.
+   *
+   * An edge does not move a task between projects, so L1's write decision never sees it as a
+   * crossing — and yet "my goal now waits on yours" is the same authority question about a
+   * different row. It is asked here, filed under the same table and refused with the same codes.
+   *
+   * A question is only filed for an edge whose DEPENDENT is in the project this session actually
+   * coordinates. A coordinator of A has no standing to ask B to wait on C, and the declaration
+   * service would refuse it — so the plan is simply refused instead, which is the honest answer.
+   */
+  private async resolveDependencyCrossings(
+    ownerId: string,
+    items: readonly CreateTaskBatchItemDto[],
+    identities: readonly HandoffRequestIdentity[],
+    tasks: Readonly<Record<string, { projectId: string | null }>>,
+    world: ScopeWorld,
+    sessionId: string | undefined,
+    now: Date,
+    frozen: ReadonlySet<number>,
+  ): Promise<DependencyCrossings> {
+    const answers: Record<string, HandoffApproval | null> = {};
+    const edges: DependencyCrossings['edges'] = [];
+    if (world.principal === 'USER') return { answers, edges };
+    for (const [index, item] of items.entries()) {
+      // A replayed winner is a fact, not a plan: its edges were written and its crossings spent by
+      // the attempt that committed them. Re-resolving them here would re-judge history against a
+      // world that has moved (§3 SC4), and re-spending is what the spend's own compare-and-set
+      // exists to refuse.
+      if (frozen.has(index)) continue;
+      const from = item.projectId ?? null;
+      if (!from) continue;
+      for (const prerequisiteId of item.dependsOnTaskIds ?? []) {
+        const to = tasks[prerequisiteId]?.projectId ?? null;
+        if (!to || to === from) continue;
+        const declaration: HandoffDeclaration = {
+          fromProjectId: from,
+          toProjectId: to,
+          kind: 'DEPEND_ON_TASK',
+          subjectTaskId: prerequisiteId,
+          dependentTaskId: null,
+          identity: identities[index],
+          title: item.title,
+          reason: item.handoff?.reason ?? null,
+          requestedBySessionId: sessionId ?? '',
+        };
+        const authority = this.handoffs.authorityOf(ownerId, declaration);
+        const existing = await this.handoffs.answerFor(this.prisma, authority, now);
+        if (existing) {
+          answers[`${index}:${prerequisiteId}`] = existing.approval;
+          edges.push({ index, from, prerequisiteId, authority, handoffId: existing.row.id });
+          continue;
+        }
+        // Only a declared crossing files a question, and only from the scope that holds the
+        // dependent end. Everything else is refused by the preflight with nothing written.
+        if (item.handoff && sessionId && world.scope && world.scope.projectId === from) {
+          const filed = await this.handoffs.declare(ownerId, declaration, {
+            projectId: world.scope.projectId,
+            generation: world.scope.generation,
+          }, now);
+          answers[`${index}:${prerequisiteId}`] = filed.approval;
+          edges.push({ index, from, prerequisiteId, authority, handoffId: filed.row.id });
+        } else {
+          answers[`${index}:${prerequisiteId}`] = null;
+          edges.push({ index, from, prerequisiteId, authority, handoffId: null });
+        }
+      }
+    }
+    return { answers, edges };
+  }
+
+  /**
+   * Everything a plan has to satisfy before any of it is written — all of it, in one answer.
+   *
+   * Runs before the transaction, so a refused plan costs no row and no lock (AC5). The facts come
+   * from bounded reads — one per kind of thing the plan names, not one per item — and the decision
+   * itself is `preflightPlan`, which is pure, so the preview card and the write cannot disagree
+   * about whether a plan is legal.
+   */
+  private async assertPlanPreflight(
+    ownerId: string,
+    items: readonly CreateTaskBatchItemDto[],
+    world: ScopeWorld,
+    referenced: Readonly<Record<string, PlanTaskFacts>>,
+    dependencyAnswers: Readonly<Record<string, HandoffApproval | null>>,
+    frozen: ReadonlySet<number>,
+  ): Promise<PlanAdmission> {
+    const fresh = items.filter((_, index) => !frozen.has(index));
+    const projectIds = [...new Set(fresh.map((item) => item.projectId).filter((id): id is string => !!id))];
+    const assigneeIds = [...new Set(fresh.map((item) => item.assigneeId).filter((id): id is string => !!id))];
+    const providerSlugs = [...new Set(fresh
+      .map((item) => item.provider)
+      .filter((provider): provider is string => !!provider)
+      .filter((provider) => !Object.values(AgentProvider).includes(provider as AgentProvider)))];
+    const [projects, workspaces, providers] = await Promise.all([
+      projectIds.length
+        ? this.prisma.project.findMany({
+            where: { id: { in: projectIds }, ownerId },
+            select: {
+              id: true,
+              status: true,
+              acceptanceEpoch: true,
+              maxConcurrentTasks: true,
+              sessionBudgetPerDay: true,
+              coordinatorSessionId: true,
+              members: { select: { agentId: true, role: true } },
+            },
+          })
+        : Promise.resolve([]),
+      assigneeIds.length
+        ? this.prisma.workspace.findMany({
+            where: { id: { in: assigneeIds }, ownerId, deletedAt: null },
+            select: { id: true, runnerId: true },
+          })
+        : Promise.resolve([]),
+      providerSlugs.length
+        ? this.prisma.modelProvider.findMany({
+            where: { slug: { in: providerSlugs }, enabled: true, OR: [{ ownerId: null }, { ownerId }] },
+            select: { slug: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const facts: PlanFacts = {
+      items: items.map((item, index) => ({
+        index,
+        frozen: frozen.has(index),
+        ref: item.ref ?? null,
+        projectId: item.projectId ?? null,
+        parentTaskId: item.parentTaskId ?? null,
+        parentRef: item.parentRef ?? null,
+        verifiesTaskId: item.verifiesTaskId ?? null,
+        verifiesRef: item.verifiesRef ?? null,
+        dependsOnTaskIds: item.dependsOnTaskIds ?? [],
+        dependsOnRefs: item.dependsOnRefs ?? [],
+        assigneeId: item.assigneeId ?? null,
+        listId: item.listId ?? null,
+        autoRunWhenReady: item.autoRunWhenReady !== false,
+        acceptanceEpoch: item.projectAcceptanceEpoch ?? null,
+      })),
+      world: {
+        principal: world.principal,
+        projects: Object.fromEntries(projects.map((project) => [project.id, {
+          status: project.status as 'OPEN' | 'DONE' | 'CANCELLED',
+          acceptanceEpoch: String(project.acceptanceEpoch),
+          maxConcurrentTasks: project.maxConcurrentTasks,
+          sessionBudgetPerDay: project.sessionBudgetPerDay,
+          memberWorkspaceIds: new Set(project.members.map((member) => member.agentId)),
+        }])),
+        tasks: referenced,
+        workspaces: Object.fromEntries(workspaces.map((row) => [row.id, { hasRunner: !!row.runnerId }])),
+        dependencyAnswers,
+      },
+    };
+    const findings = preflightPlan(facts);
+    const refusals = planPreflightRefusals(findings);
+    if (refusals.length) throw new BadRequestException(planPreflightRefusalBody(findings));
+    for (const warning of findings) {
+      this.logger.warn(
+        `plan preflight: ${warning.code} on item ${warning.index} (${warning.dimension})`,
+      );
+    }
+    return {
+      findings,
+      workspaceIds: assigneeIds,
+      providerSlugs,
+      // Only the facts that DECIDED something: the referenced tasks of fresh items, the projects
+      // they land in, the workspaces and providers they name. A frozen item's world is not in here
+      // — it is not being written, so nothing about it can drift into a refusal.
+      snapshot: this.planAuthoritySnapshot(projects, workspaces, providers, Object.fromEntries(
+        Object.entries(referenced).filter(([id]) => fresh.some((item) =>
+          item.parentTaskId === id
+          || item.verifiesTaskId === id
+          || (item.dependsOnTaskIds ?? []).includes(id))),
+      )),
+    };
+  }
+
+  /**
+   * Whether this plan has anything for the preflight to decide.
+   *
+   * §4 R1 puts the owner outside the scope contract, and AC5 is explicit that their path pays not
+   * one extra query for a boundary that does not apply to it — a promise this unit keeps as
+   * literally as L3 did. Every REFUSE the preflight can produce for a USER write is either already
+   * answered inside the transaction (the hierarchy rules, under the owner lock, where the answer
+   * still has to be true when the row is written) or is about a crossing the owner cannot make (§4
+   * R1 again: their edge is an authorization in itself).
+   *
+   * The one exception is the claim only a caller can make: "I planned this against acceptance epoch
+   * N". Nobody else can know it was made, so a plan that states it is judged on it whoever sent it.
+   */
+  private planNeedsPreflight(
+    world: ScopeWorld,
+    items: readonly CreateTaskBatchItemDto[],
+  ): boolean {
+    return world.principal !== 'USER'
+      || items.some((item) => item.projectAcceptanceEpoch !== undefined);
+  }
+
+  /** Every existing task a plan names, by id — the world its structural checks are judged against. */
+  private async referencedTaskFacts(
+    ownerId: string,
+    items: readonly CreateTaskBatchItemDto[],
+  ): Promise<Record<string, PlanTaskFacts>> {
+    const ids = [...new Set(items.flatMap((item) => [
+      item.parentTaskId,
+      item.verifiesTaskId,
+      ...(item.dependsOnTaskIds ?? []),
+    ]).filter((id): id is string => !!id))];
+    if (!ids.length) return {};
+    const rows = await this.prisma.task.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: { id: true, projectId: true, verifiesTaskId: true },
+    });
+    return Object.fromEntries(rows.map((row) => [row.id, {
+      projectId: row.projectId,
+      verifiesTaskId: row.verifiesTaskId,
+    }]));
+  }
+
+
+  /**
+   * Unit L4: every fact that decided this plan, captured at preflight and re-read before the first
+   * write.
+   *
+   * The rule it enforces is one sentence: a field that decided REFUSE or ALLOW has to still say the
+   * same thing inside the transaction that acts on it. The preflight reads the world without locks —
+   * that is what makes it cheap and what makes a refusal cost nothing — so between it and the first
+   * INSERT a project can be reopened (a new acceptance epoch, still OPEN), a workspace can be
+   * soft-deleted, a configured provider can be disabled, a budget can be lowered. Each of those
+   * would leave a plan admitted on a world that no longer exists, and none of them is visible to
+   * `refenceProjectScope`, which is about the coordination scope and answers a different question.
+   *
+   * So: snapshot at preflight, re-read under the locks, compare field by field, and refuse the
+   * WHOLE plan on any drift — no task, no edge, no approval spent. One helper for a single create
+   * and for a fifty-item batch, because two copies of this would be two answers to "was the plan
+   * still legal", and the one that drifted would be the one nobody ran.
+   */
+  private planProjectIdentityDigest(project: {
+    coordinatorSessionId: string | null;
+    members: ReadonlyArray<{ agentId: string; role: string }>;
+  }): string {
+    return createHash('sha256')
+      .update(JSON.stringify([
+        'plan-identity:v1',
+        project.coordinatorSessionId ?? null,
+        [...project.members]
+          .map((member) => [member.agentId, member.role] as const)
+          .sort(([a, aRole], [b, bRole]) => (a === b ? (aRole < bRole ? -1 : 1) : a < b ? -1 : 1)),
+      ]))
+      .digest('hex');
+  }
+
+  private planAuthoritySnapshot(
+    projects: ReadonlyArray<{
+      id: string;
+      status: string;
+      acceptanceEpoch: bigint;
+      maxConcurrentTasks: number;
+      sessionBudgetPerDay: number | null;
+      coordinatorSessionId: string | null;
+      members: ReadonlyArray<{ agentId: string; role: string }>;
+    }>,
+    workspaces: ReadonlyArray<{ id: string }>,
+    providers: ReadonlyArray<{ slug: string }>,
+    tasks: Readonly<Record<string, PlanTaskFacts>>,
+  ): PlanAuthoritySnapshot {
+    return {
+      projects: Object.fromEntries(projects.map((project) => [project.id, {
+        status: project.status,
+        acceptanceEpoch: String(project.acceptanceEpoch),
+        maxConcurrentTasks: project.maxConcurrentTasks,
+        sessionBudgetPerDay: project.sessionBudgetPerDay,
+        identityDigest: this.planProjectIdentityDigest(project),
+      }])),
+      workspaceIds: workspaces.map((workspace) => workspace.id).sort(),
+      providerSlugs: providers.map((provider) => provider.slug).sort(),
+      taskProjects: Object.fromEntries(
+        Object.entries(tasks).map(([id, facts]) => [id, facts.projectId]),
+      ),
+    };
+  }
+
+  /**
+   * Rank 15: the execution identity a plan was admitted against, locked before anything is written.
+   *
+   * `workspace` and `model_provider` are the two relations a plan's REFUSALS depend on that no
+   * other lock in this transaction covers. Both are taken `FOR SHARE` — the mode that conflicts
+   * with the `FOR NO KEY UPDATE` an ordinary `UPDATE` takes, which is what a soft-delete and a
+   * disable both are; `FOR KEY SHARE` would be a lock that does not conflict with the write it is
+   * protecting against, which is a comment rather than a lock.
+   *
+   * Rank 15 — after the owner mutex, before the task lists — is where they belong in the canonical
+   * order: a task write already takes both relations' rows through its own foreign keys at
+   * `FOR KEY SHARE`, and neither relation's writers wait on anything this transaction holds
+   * (`WorkspacesService.remove` takes its own row `FOR UPDATE` and then waits for nothing;
+   * `ProvidersService.update` writes one row and commits), so this adds an ordering, not an edge.
+   */
+  private async lockPlanExecutionIdentity(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    workspaceIds: readonly string[],
+    providerSlugs: readonly string[],
+  ): Promise<void> {
+    const ids = orderedIds(workspaceIds);
+    const slugs = [...new Set(providerSlugs)].sort();
+    if (!ids.length && !slugs.length) return;
+    // Rank 10 FIRST, unconditionally, in the mode the INSERT's own foreign key takes anyway.
+    // Without it this is an inversion: a plain create with an assignee takes no rank-10 lock of its
+    // own (`lockDependencyGraph` is conditional on the write restructuring the graph), so it would
+    // take `workspace` at 15 and then reach back to `user` at 10 when the row is written — exactly
+    // the shape the canonical order exists to make impossible. Re-locking a row this transaction
+    // already holds at FOR UPDATE costs nothing.
+    await tx.$queryRaw`SELECT "id" FROM "user" WHERE "id" = ${ownerId}::uuid FOR KEY SHARE`;
+    if (ids.length) {
+      await tx.$queryRaw`
+        SELECT "id" FROM "workspace"
+        WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+        ORDER BY "id"
+        FOR SHARE`;
+    }
+    if (slugs.length) {
+      await tx.$queryRaw`
+        SELECT "id" FROM "model_provider"
+        WHERE "slug" = ANY(${slugs}::text[])
+          AND ("owner_id" IS NULL OR "owner_id" = ${ownerId}::uuid)
+        ORDER BY "id"
+        FOR SHARE`;
+    }
+  }
+
+  /**
+   * The same facts, read again under the locks this transaction now holds, and compared.
+   *
+   * Called after `refenceProjectScope` (rank 40) and before the first row is written. The project
+   * rows are already held `FOR NO KEY UPDATE` by that fence, so a reopen — which writes `status`
+   * and `acceptance_epoch` on the same row — is either wholly before this read or wholly after this
+   * transaction. The workspaces and providers were taken at rank 15 above. The referenced tasks are
+   * taken here at rank 50, `FOR SHARE`, in one sorted statement.
+   */
+  private async assertPlanAuthorityUnchanged(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    snapshot: PlanAuthoritySnapshot,
+  ): Promise<void> {
+    const drift = (what: string): never => {
+      throw new ConflictException({
+        code: 'PLAN_AUTHORITY_MOVED',
+        message:
+          `${what} changed while this plan was being admitted — nothing was written; re-read the `
+          + 'world and submit the plan again',
+        requiredAction: 'RE_DERIVE_SCOPE',
+      });
+    };
+    const projectIds = orderedIds(Object.keys(snapshot.projects));
+    if (projectIds.length) {
+      const rows = await tx.project.findMany({
+        where: { id: { in: projectIds }, ownerId },
+        select: {
+          id: true,
+          status: true,
+          acceptanceEpoch: true,
+          maxConcurrentTasks: true,
+          sessionBudgetPerDay: true,
+          coordinatorSessionId: true,
+          members: { select: { agentId: true, role: true } },
+        },
+      });
+      if (rows.length !== projectIds.length) drift('a project this plan files into');
+      for (const row of rows) {
+        const before = snapshot.projects[row.id];
+        if (before.status !== String(row.status)) drift('a project status');
+        if (before.acceptanceEpoch !== String(row.acceptanceEpoch)) drift('a project acceptance epoch');
+        if (before.maxConcurrentTasks !== row.maxConcurrentTasks) drift('a project concurrency budget');
+        if (before.sessionBudgetPerDay !== row.sessionBudgetPerDay) drift('a project session budget');
+        if (before.identityDigest !== this.planProjectIdentityDigest(row)) {
+          drift('a project team or its coordinator');
+        }
+      }
+    }
+    if (snapshot.workspaceIds.length) {
+      const rows = await tx.workspace.findMany({
+        where: { id: { in: snapshot.workspaceIds }, ownerId, deletedAt: null },
+        select: { id: true },
+      });
+      if (rows.length !== snapshot.workspaceIds.length) drift('an assignee workspace');
+    }
+    if (snapshot.providerSlugs.length) {
+      const rows = await tx.modelProvider.findMany({
+        where: {
+          slug: { in: snapshot.providerSlugs },
+          enabled: true,
+          OR: [{ ownerId: null }, { ownerId }],
+        },
+        select: { slug: true },
+      });
+      if (new Set(rows.map((row) => row.slug)).size !== snapshot.providerSlugs.length) {
+        drift('a configured provider');
+      }
+    }
+    const taskIds = orderedIds(Object.keys(snapshot.taskProjects));
+    if (taskIds.length) {
+      const rows = await tx.$queryRaw<Array<{ id: string; project_id: string | null }>>(Prisma.sql`
+        SELECT "id", "project_id" FROM "task"
+         WHERE "id" = ANY(${taskIds}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+         ORDER BY "id"
+         FOR SHARE
+      `);
+      if (rows.length !== taskIds.length) drift('a task this plan links to');
+      for (const row of rows) {
+        if ((snapshot.taskProjects[row.id] ?? null) !== (row.project_id ?? null)) {
+          drift('the project of a task this plan links to');
+        }
+      }
+    }
+  }
+
+  /**
+   * The dependency crossings again, inside the transaction, under a lock on the prerequisites.
+   *
+   * The preflight reads a prerequisite's project without a lock, and `project_id` is not a key
+   * column — an ordinary move takes `FOR NO KEY UPDATE`, which nothing in that read conflicts with.
+   * So between the preflight and this transaction a prerequisite can move, turning an in-project
+   * edge into a crossing nobody approved. Here the rows are taken `FOR SHARE` (rank 50, sorted,
+   * the mode that DOES conflict with a move) and the question is asked again against what they say
+   * now. A refusal aborts the whole batch, which is the only honest answer: an approval that was
+   * about one shape of the graph is not an approval about another.
+   */
+  private async assertDependencyCrossingsAtEffect(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    edges: ReadonlyArray<{ from: string | null; prerequisiteId: string; authority: HandoffAuthority | null }>,
+    now: Date,
+  ): Promise<void> {
+    const ids = orderedIds(edges.map((edge) => edge.prerequisiteId));
+    if (!ids.length) return;
+    const rows = await tx.$queryRaw<Array<{ id: string; project_id: string | null }>>(Prisma.sql`
+      SELECT "id", "project_id" FROM "task"
+       WHERE "id" = ANY(${ids}::uuid[]) AND "owner_id" = ${ownerId}::uuid
+       ORDER BY "id"
+       FOR SHARE
+    `);
+    const projectOf = new Map(rows.map((row) => [row.id, row.project_id]));
+    for (const edge of edges) {
+      const to = projectOf.get(edge.prerequisiteId) ?? null;
+      if (!edge.from || !to || to === edge.from) continue;
+      const answer = edge.authority
+        ? await this.handoffs.answerFor(tx, edge.authority, now)
+        : null;
+      const refusal = dependencyCrossingRefusal(answer?.approval ?? null);
+      if (refusal) {
+        throw new ForbiddenException({
+          code: refusal,
+          message:
+            'this edge would make one project wait on another project\'s work and no approval names '
+            + 'it — nothing was written',
+          requiredAction: 'AWAIT_HANDOFF_APPROVAL',
+        });
+      }
+    }
   }
 
   /**
@@ -3396,26 +4310,57 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
      * statement re-locking a row already held is free, while a smaller id taken after a larger one
      * is the only shape at this rank that could make a cycle.
      */
-    alsoLock: ReadonlyArray<string | null | undefined> = [],
+    /**
+     * Every project this plan touched at admission time: the project each fresh item is bound to,
+     * the scope a declared crossing derives its authority FROM, the far end of every cross-project
+     * edge, and any project another mechanism in this transaction pre-locks (the supersession).
+     *
+     * Required, and checked below rather than defaulted. It was a defaulted `alsoLock` before, and
+     * that shape hid two holes at once: an ordinary USER plan passed nothing and locked NO project
+     * at all — leaving the acceptance epoch, the status and the budget this plan was admitted
+     * against free to move between the read and the INSERT — and a declared crossing passed only
+     * the project it lands IN, while the generation authorising it is read from the project it
+     * comes FROM. A parameter with a default is a parameter a call site can forget.
+     */
+    planProjects: ReadonlyArray<string | null | undefined>,
   ): Promise<void> {
-    // §4 R1: the owner is outside this contract, so there is nothing to fence and no lock to take.
-    if (admitted.principal === 'USER') return;
-    const fenced = writes.filter(
-      (write) => write.boundProjectId !== null || write.currentProjectId !== null,
-    );
-    if (!fenced.length && !alsoLock.some((id) => !!id)) return;
+    const fenced = admitted.principal === 'USER'
+      // §4 R1: the owner is outside this contract, so there is no scope to re-decide for them.
+      // The LOCKS below are still taken — unit L4 gave this transaction a second reason to hold
+      // the project rows, and that reason applies to every principal: a plan admitted against an
+      // acceptance epoch, a status or a budget read without a lock has to re-read them under one
+      // before it writes, and the owner's plans are admitted the same way.
+      ? []
+      : writes.filter((write) => write.boundProjectId !== null || write.currentProjectId !== null);
     // Sorted by UUID (§8.6 LO2), one statement each, so two writers touching the same two projects
     // in opposite request orders cannot make a cycle.
     const projectIds = [...new Set([
-      ...fenced.flatMap((write) => [write.boundProjectId, write.currentProjectId]),
-      ...alsoLock,
+      ...writes.flatMap((write) => [write.boundProjectId, write.currentProjectId]),
+      ...planProjects,
     ].filter((id): id is string => !!id))].sort();
+    // The invariant, asserted where it can actually be violated: every project the plan writes into
+    // or authorises against is in the set this transaction is about to lock. A call site that
+    // forgets one does not silently take fewer locks — it fails here, on every request, loudly.
+    for (const write of writes) {
+      for (const projectId of [write.boundProjectId, write.currentProjectId]) {
+        if (projectId && !projectIds.includes(projectId)) {
+          throw new Error(`plan project set is missing ${projectId} — the fence would not lock it`);
+        }
+      }
+    }
+    if (admitted.scope && writes.some((write) => write.operation === 'HANDOFF_TASK')
+        && !projectIds.includes(admitted.scope.projectId)) {
+      throw new Error(
+        'plan project set is missing the scope a declared crossing derives its authority from',
+      );
+    }
+    if (!projectIds.length) return;
     for (const projectId of projectIds) {
       await tx.$queryRaw`SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
     }
     // Nothing to re-decide: this call exists only to take the caller's rank-40 locks in one sorted
-    // pass with the fence's, and the caller had none of its own to fence.
-    if (!fenced.length) return;
+    // pass with the fence's — because the caller is the owner, or because it had none of its own.
+    if (!fenced.length || admitted.principal === 'USER') return;
     const scope = await this.deriveProjectScope(tx, ownerId, actingSessionId);
     const projectStatus = await this.projectScopeStatuses(tx, ownerId, [
       ...projectIds,

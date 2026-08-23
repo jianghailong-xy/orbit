@@ -132,6 +132,19 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // (contract §3 SC7); what puts them here is that a person handed one has somewhere to hand it.
   'discoveredFromProjectId',
   'sourceSessionId',
+  // Unit L4's recorded answer about one crossing (migration 0155): the two ends, the session that
+  // asked, the person who answered and the one task the yes was spent on. Every one of them is an
+  // address a reader follows — open that project, open that session, run that task — which is the
+  // only question this set asks. It says nothing about authority: the gate reads `crossing_key` and
+  // `state`, and neither is an id.
+  'fromProjectId',
+  'toProjectId',
+  'requestedBySessionId',
+  'decidedByUserId',
+  'appliedTaskId',
+  // The recorded answer itself, named in the refusal a declared crossing gets: the caller polls it
+  // and a person opens it, so it is an address like every other id in an error body.
+  'handoffId',
   'parentTaskId',
   'batchId',
   'listId',

@@ -66,7 +66,8 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'row it holds when project_acceptance_task_fact takes the project is one no other ' +
       'transaction can see, so it can never be the holding side of a project/task inversion — but ' +
       'the predecessor IS visible, so a supersession takes the project first.' +
-      ' Unit L3 adds one more taker at that same rank 40, in the same mode and the same UUID order: the effect-time scope fence, which re-locks and re-reads the project a coordinator write was admitted under so a rotation cannot commit inside the window between the decision and the row. Same rank, same mode, no new edge.',
+      ' Unit L3 adds one more taker at that same rank 40, in the same mode and the same UUID order: the effect-time scope fence, which re-locks and re-reads the project a coordinator write was admitted under so a rotation cannot commit inside the window between the decision and the row. Same rank, same mode, no new edge.' +
+      ' Unit L4 widens that one pass to every project the plan was ADMITTED against — the target, the scope a declared crossing derives its authority from, and the far end of every cross-project edge — and adds rank 15 (workspace, model_provider) ahead of the lists, because a plan is refused when its assignee is deleted or its provider disabled and both of those are non-key updates the FK lock does not conflict with.',
   },
   {
     file: 'tasks.service.ts',
@@ -77,7 +78,8 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
       'lockTaskLists(tx, items.map((item) => item.listId))',
       'await this.preLockCreatorSessions(',
       'items.map((item) => item.supersedesTaskId),',
-      'tx, ownerId, creatorSessionId, scopeWorld, scopeFences, supersessionProjectIds,',
+      'tx, ownerId, creatorSessionId, scopeWorld, scopeFences,',
+      'await this.lockPlanExecutionIdentity(',
     ],
     note:
       'Rank 10 unconditionally: a batch writes several `task` rows in item order, which is not an ' +

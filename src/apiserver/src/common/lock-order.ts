@@ -60,6 +60,19 @@ export const LOCK_ORDER = [
     why: 'The graph mutex every multi-row Task write takes first (I1).',
   },
   {
+    rank: 15,
+    relation: 'workspace, model_provider',
+    modes: 'FOR SHARE (unit L4 plan preflight) · FOR KEY SHARE (task.assignee_id FK)',
+    why:
+      'A plan is REFUSED when its assignee has been deleted or its provider disabled, and both of '
+      + 'those are ordinary UPDATEs of a non-key column — which FOR KEY SHARE does not conflict '
+      + 'with, so the FK lock a task INSERT takes anyway cannot keep the answer true. L4 takes both '
+      + 'at FOR SHARE before the first write and re-reads them there. Rank 15 rather than a place '
+      + 'of their own further down because the INSERT reaches them at 10 through user and would '
+      + 'otherwise be locking upward after having locked at 40; neither relation waits on anything '
+      + 'these paths hold (see LOCK_ORDER_COMPATIBLE), so this adds an ordering and no edge.',
+  },
+  {
     rank: 20,
     relation: 'task_list',
     modes: 'FOR UPDATE (list policy write) · FOR KEY SHARE (task.list_id FK)',
@@ -89,7 +102,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, conversation_turn, run_event, tool_call, attachment, project_event, project_action',
+    relation: 'task_dependency, conversation_turn, run_event, tool_call, attachment, project_event, project_action, project_handoff_approval',
     modes: 'INSERT/UPDATE/DELETE only',
     why: 'Child rows whose FK parents are already held by this point, so they add no wait edge of their own.',
   },
@@ -153,7 +166,8 @@ export const LOCK_ORDER_COMPATIBLE = [
   {
     relation: 'workspace',
     why:
-      'WorkspacesService.remove takes FOR UPDATE on the row and then waits for nothing — its only ' +
+      'Ranked at 15 since unit L4, and still incapable of joining a cycle for the reason below. '
+      + 'WorkspacesService.remove takes FOR UPDATE on the row and then waits for nothing — its only ' +
       'other statements are an unlocked count and the update of that same row. A transaction with ' +
       'no outgoing wait edge cannot be an element of a cycle. Every other path touches workspace ' +
       'at FOR KEY SHARE (FK) or FOR SHARE, which do not conflict with each other.',

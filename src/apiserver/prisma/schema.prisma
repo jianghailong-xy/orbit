@@ -267,6 +267,9 @@ model User {
   manualRunTriggers TaskRunManualTrigger[]
   runRequests       TaskRunRequest[]
 
+  /// Cross-project crossings recorded under this account (unit L4, 0155).
+  handoffApprovals ProjectHandoffApproval[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -1592,6 +1595,10 @@ model Project {
   /// Presses of Run Now recorded against this project's tasks (0137).
   manualRunTriggers TaskRunManualTrigger[]
 
+  /// Cross-project crossings decided about this project, in both directions (unit L4, 0155).
+  handoffsOut ProjectHandoffApproval[] @relation("ProjectHandoffFrom")
+  handoffsIn  ProjectHandoffApproval[] @relation("ProjectHandoffTo")
+
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
   // and the referencing one never, so without this every workspace delete has to scan project to
@@ -2191,6 +2198,82 @@ model ProjectMergeEvidence {
   @@unique([projectId, requirementId, targetBranch, refGeneration])
   @@index([projectId, requirementId, targetBranch])
   @@map("project_merge_evidence")
+}
+
+/// Unit L4 (migration 0155): one recorded ANSWER about one cross-project crossing, and the single
+/// task it was spent on.
+///
+/// `docs/project-coordinator-scope-contract.md` §6 makes `APPROVE` and `APPLY` two events — "or
+/// there is no state in which the approved move can wait for its own transaction" — so a yes that
+/// has been given and not yet spent has to survive between transactions. Nothing already in this
+/// schema can hold it: `approval` dies with its session while a question outlives a takeover,
+/// `project_blocker.detail` is display-only by BL7, and `project_action` has one project column
+/// where a crossing has two.
+///
+/// It stores the answer and nothing else. No work is filed here and no goal is stated here, so §8
+/// CM3 still holds where it can: `DISCOVERED`, `FILED`, `UNMAPPED` and `ABANDONED` remain derived
+/// from `task` columns. Same category of row as `project_blocker` — a control-plane record of a
+/// decision, not a fourth thing a user has to learn.
+model ProjectHandoffApproval {
+  id      String @id @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /// The two ends. Cascade on both: an answer about a project that no longer exists is not an
+  /// answer, and no crossing can name a deleted project, so nothing is loosened by removing it.
+  fromProjectId String  @map("from_project_id") @db.Uuid
+  fromProject   Project @relation("ProjectHandoffFrom", fields: [fromProjectId], references: [id], onDelete: Cascade)
+  toProjectId   String  @map("to_project_id") @db.Uuid
+  toProject     Project @relation("ProjectHandoffTo", fields: [toProjectId], references: [id], onDelete: Cascade)
+
+  /// FILE_TASK | MOVE_TASK | DEPEND_ON_TASK, frozen by a CHECK in 0155 rather than by a Prisma enum
+  /// (cf. `ProjectBlocker.kind`): the values are `project-handoff.ts`'s closed set, and a second
+  /// spelling is a second place for them to drift from.
+  kind String
+
+  /// MOVE_TASK: the task being moved. DEPEND_ON_TASK: the prerequisite. FILE_TASK: null — what it
+  /// authorises does not exist yet, and the source it was noticed on is bound through the digest.
+  /// No foreign key, deliberately: deleting the task must not delete the record of what was decided.
+  subjectTaskId String? @map("subject_task_id") @db.Uuid
+
+  /// The full request identity this answer is about — plan fields, structure, execution and source
+  /// evidence — and the identity of the crossing itself, which is what a retry looks itself up by.
+  payloadDigest String @map("payload_digest") @db.Char(64)
+  crossingKey   String @map("crossing_key") @db.Char(64)
+
+  /// PENDING | APPROVED | DENIED | APPLIED. `EXPIRED` is derived from `expiresAt`, never stored, so
+  /// nothing has to run for a stale yes to stop working.
+  state String
+
+  /// Display, never a gate.
+  title  String
+  reason String?
+
+  /// Historical attribution without a foreign key (cf. `ProjectDecision`): rotating or deleting the
+  /// session that asked must not rewrite who asked or delete the answer.
+  requestedBySessionId String   @map("requested_by_session_id") @db.Uuid
+  requestedAt          DateTime @map("requested_at")
+
+  decidedBy       String?   @map("decided_by")
+  decidedByUserId String?   @map("decided_by_user_id") @db.Uuid
+  decidedAt       DateTime? @map("decided_at")
+
+  /// When a live yes stops being spendable. Set only in APPROVED (R13).
+  expiresAt DateTime? @map("expires_at")
+
+  /// The one task this yes was spent on. No foreign key for the same reason as above; uniqueness is
+  /// a partial index in 0155 over FILE_TASK rows only, because a task may legitimately be moved
+  /// twice or made to wait on two projects.
+  appliedTaskId String?   @map("applied_task_id") @db.Uuid
+  appliedAt     DateTime? @map("applied_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@unique([ownerId, crossingKey])
+  @@index([toProjectId, state, requestedAt])
+  @@index([fromProjectId, state, requestedAt])
+  @@map("project_handoff_approval")
 }
 
 /// Append-only audit of everything that happened to a project's acceptance standing: a run opened

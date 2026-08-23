@@ -16,6 +16,7 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
+  DecideProjectHandoffDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
@@ -28,7 +29,9 @@ import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { VerificationFindingService } from './verification-finding.service';
 import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectsService } from './projects.service';
+import { HANDOFF_STORED_STATES, type HandoffStoredState } from './project-handoff';
 
 const PROJECT_STATUSES = Object.values(ProjectStatus);
 
@@ -38,6 +41,7 @@ export class ProjectsController {
   constructor(
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
+    private readonly handoffs: ProjectHandoffService,
     private readonly convergence: ConvergenceLedgerService,
     private readonly findings: VerificationFindingService,
     private readonly attempts: SessionAttemptService,
@@ -399,6 +403,56 @@ export class ProjectsController {
     @Body() dto: FinalizeAcceptanceRunDto,
   ) {
     return this.acceptance.finalizeRun(user.userId, id, runId, dto.criteria);
+  }
+
+  /**
+   * Unit L4: what has been asked and answered about work crossing into or out of this project.
+   *
+   * Both directions. The people on the target project are the ones being asked to take work; the
+   * people on the source are the ones waiting on the answer, and a list that showed one direction
+   * would leave one of them looking at a queue that never mentions what they are blocked on.
+   */
+  @Get(':id/handoffs')
+  listHandoffs(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('state') state?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (state !== undefined && !HANDOFF_STORED_STATES.includes(state as HandoffStoredState)) {
+      throw new BadRequestException(
+        `state must be one of ${HANDOFF_STORED_STATES.join(', ')}`,
+      );
+    }
+    return this.handoffs.listForProject(user.userId, id, {
+      state: state as HandoffStoredState | undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /**
+   * Unit L4: answer one declared crossing.
+   *
+   * The person, and only the person — §7 RB2. Approving a live yes writes nothing and returns the
+   * same row: it is a stable read-back rather than a second decision, so clicking approve twice
+   * cannot extend an authorization's own deadline. Denying is final for that crossing; if you change
+   * your mind, file the work yourself, which is an ordinary write under your own authority (R1).
+   */
+  @Post(':id/handoffs/:handoffId/decision')
+  async decideHandoff(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('handoffId', PublicIdPipe) handoffId: string,
+    @Body() dto: DecideProjectHandoffDto,
+  ) {
+    // The project in the path is not decoration: it is what makes this URL answerable by somebody
+    // looking at one project, and it is checked rather than trusted — an answer given from the
+    // wrong project's page would be an answer about a crossing this page never showed.
+    const answer = await this.handoffs.get(user.userId, handoffId, new Date());
+    if (answer.row.fromProjectId !== id && answer.row.toProjectId !== id) {
+      throw new BadRequestException('that crossing does not touch this project');
+    }
+    return this.handoffs.decide(user.userId, user.userId, handoffId, dto.decision, new Date());
   }
 
   /**

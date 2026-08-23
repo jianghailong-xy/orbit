@@ -598,6 +598,11 @@ function previewService(world: { pausedLists?: string[]; runners?: Record<string
           .map((id: string) => ({ id, name: id, runnerId: runners[id] })),
     },
     task: { findMany: async () => [] },
+    // Unit L4's plan preflight reads the projects a plan names and any recorded crossing. The
+    // preview's world has no projects, so an empty answer is the whole of the behaviour.
+    project: { findMany: async () => [] },
+    modelProvider: { findMany: async () => [] },
+    projectHandoffApproval: { findFirst: async () => null },
     taskList: {
       findMany: async ({ where }: any) =>
         (where?.id?.in ?? []).map((id: string) => ({
