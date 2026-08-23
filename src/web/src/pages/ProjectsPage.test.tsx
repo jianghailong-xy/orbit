@@ -23,6 +23,14 @@ import {
   scheduledStart,
   RUN_AT_IMPOSSIBLE,
   canCreateProjectTask,
+  canCreateProject,
+  invalidateAfterProjectCreate,
+  matchesProjectSearch,
+  noMatchDescription,
+  newProjectBody,
+  projectsEmptyKind,
+  projectsPath,
+  projectsQueryKey,
   type NewProjectTaskDraft,
 } from './ProjectsPage';
 
@@ -52,6 +60,7 @@ const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.m
 const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
+const P4 = '0195c0de-0000-7000-8000-000000000004';
 // A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
 // what goes on the wire has to be the short public id whichever spelling the row was handed.
 const T1 = '0195c0de-0000-7000-8000-0000000000a1';
@@ -82,6 +91,13 @@ function renderDetail(qc: QueryClient, urlId: string) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+// Every project row's goal line, in row order. The rows are what the assertions below are about,
+// and a bare `html.toContain` cannot tell the goal apart from the title, the count or the page's
+// own markup — this narrows to the one element the goal is rendered into.
+function goalLines(html: string): string[] {
+  return [...html.matchAll(/<div class="project-row-goal">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
 }
 
 function newClient() {
@@ -182,7 +198,16 @@ describe('ProjectsPage', () => {
       (m) => m[1].trim().replace(/,$/, ''),
     );
     expect(apiCalls).toEqual([
-      "'/projects'",
+      // The list read. The URL itself is built by `projectsPath`, because the status filter is
+      // part of it — held there rather than interpolated here so there is ONE place the
+      // `?status=` spelling is decided, asserted directly by its own unit tests below. What this
+      // line still fixes is that the page reads the projects collection exactly once and passes
+      // it nothing but the filter.
+      "projectsPath(filter)",
+      // The write that creates a project: the collection itself, POST, and a body built in one
+      // place so no caller can send an untrimmed title or a goal of spaces. Held as literally as
+      // the task create below, for the same reason — the body IS the contract.
+      "'/projects', { method: 'POST', body: newProjectBody(draft) }",
       '`/projects/${encodeURIComponent(id!)}`',
       // The Coordinator surface's manual trigger. Held here as literally as the rest because both
       // body fields are its whole contract: `expectedConfigRevision` is what makes a press
@@ -257,11 +282,11 @@ describe('ProjectsPage', () => {
     );
   });
 
-  it('renders each project’s title, status, task count and goal excerpt/fallback', () => {
-    // Well past any sensible row-length cap — proves long goals get truncated, not just shown.
+  it('renders each project’s title, status, task count and goal/fallback', () => {
+    // Well past any sensible row-length cap — what proves the row no longer slices the text.
     const longGoal = 'Ship the new marketing site. '.repeat(10);
     const qc = newClient();
-    qc.setQueryData(['projects'], [
+    qc.setQueryData(['projects', 'ALL'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -272,9 +297,11 @@ describe('ProjectsPage', () => {
         _count: { tasks: 5 },
       },
       {
+        // Open, like the other two: this test is about what ONE ROW says, and a finished project
+        // is folded into a pill rather than given a row — see the sections suite below.
         id: P2,
         title: 'Legacy Cleanup',
-        status: 'DONE',
+        status: 'OPEN',
         goal: null,
         createdAt: '2026-01-03T00:00:00Z',
         updatedAt: '2026-01-04T00:00:00Z',
@@ -296,17 +323,95 @@ describe('ProjectsPage', () => {
     expect(html).toContain('Ship the new marketing site');
     expect(html).toContain('5 tasks');
     expect(html).toContain('Legacy Cleanup');
-    expect(html).toContain('DONE');
     expect(html).toContain('No goal set'); // fallback for a null goal
     expect(html).toContain('1 task'); // singular, not "1 tasks"
     expect(html).toContain('Ledger Migration');
-    expect(html).not.toContain(longGoal); // the full 300-char goal must not reach the row
-    expect(html).toContain(`${longGoal.slice(0, 180)}…`); // capped at 180 chars + one ellipsis
+    // The whole goal reaches the row, whitespace-collapsed and nothing else: the cut is the box's
+    // (white-space:nowrap + text-overflow:ellipsis), which is why there is no character count and
+    // no ellipsis character here. A 180-character slice occupies one rendered line of Latin text
+    // and three of CJK — the same slice cannot give every row the same height.
+    expect(goalLines(html)).toContain(longGoal.trim());
+    expect(html).not.toContain('…'); // no hard-sliced excerpt left anywhere on the page
+  });
+
+  it('shows a Markdown goal as the line it reads as, not as source', () => {
+    // The shape of goal that actually shipped: a heading, bold, inline code, a path with a line
+    // number in it, a bullet and a link — all of it rendered as Markdown on the detail page.
+    const goal = [
+      '把 Project 详情页改造成全景视图。',
+      '',
+      '## 现状缺口（2026-08-22 现网实测）',
+      '',
+      '- 项目页 payload `ProjectTask`（src/web/src/pages/ProjectsPage.tsx:521）**一个依赖字段都没有**',
+      '- 详见 [依赖图设计](https://example.com/design)',
+    ].join('\n');
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], [
+      {
+        id: P1,
+        title: 'Panorama',
+        status: 'OPEN',
+        goal,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 5 },
+      },
+    ]);
+    const [line] = goalLines(renderPage(qc));
+
+    // The marks themselves are gone...
+    expect(line).not.toMatch(/[#*`]/);
+    expect(line).not.toContain('](');
+    expect(line).not.toContain('https://example.com/design');
+    // ...and every word they wrapped survived, in order, on one line.
+    expect(line).not.toContain('\n');
+    expect(line).toContain('现状缺口（2026-08-22 现网实测）');
+    expect(line).toContain('ProjectTask');
+    expect(line).toContain('一个依赖字段都没有');
+    expect(line).toContain('依赖图设计');
+    // A path with a line number carries no Markdown at all and has to come back untouched.
+    expect(line).toContain('src/web/src/pages/ProjectsPage.tsx:521');
+  });
+
+  it('gives every row the same height whatever its goal is', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], [
+      { id: P1, goal: 'Short', title: 'A' },
+      { id: P2, goal: null, title: 'B' },
+      { id: P3, goal: '## H\n\n- '.concat('长'.repeat(400)), title: 'C' },
+    ].map((p) => ({
+      status: 'OPEN' as const,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      _count: { tasks: 1 },
+      ...p,
+    })));
+    const html = renderPage(qc);
+
+    // Three rows, each a title line and exactly one goal line, in the same two elements. Same
+    // markup + same class = same height, whether the goal is five characters or four hundred.
+    expect(goalLines(html)).toHaveLength(3);
+    expect(html.match(/class="project-row-title"/g)).toHaveLength(3);
+    for (const line of goalLines(html)) expect(line).not.toContain('\n');
+
+    // The rows no longer slice the field to a character count — the constant that did it is not
+    // read here any more (it still serves the detail page's task rows, which this task left as
+    // they were), and what replaced it is the Markdown-to-text helper.
+    expect(source).toContain('markdownToPlainText(p.goal)');
+    expect(source).not.toMatch(/excerpt\(p\.goal/);
+
+    // The cut is the box's, and these three declarations are the cut. Asserted against the
+    // stylesheet because there is no layout in a static render to measure.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const rule = css.match(/\.project-row-goal\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('white-space: nowrap');
+    expect(rule).toContain('overflow: hidden');
+    expect(rule).toContain('text-overflow: ellipsis');
   });
 
   it('links the whole row to its project at the short public id, never the raw UUID', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], [
+    qc.setQueryData(['projects', 'ALL'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -336,7 +441,7 @@ describe('ProjectsPage', () => {
 
   it('shows an empty state when there are no projects', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['projects', 'ALL'], []);
     const html = renderPage(qc);
     expect(html).toContain('No projects yet');
   });
@@ -344,13 +449,281 @@ describe('ProjectsPage', () => {
   it('shows an error with a Retry action when the load fails', async () => {
     const qc = newClient();
     // Seed a settled error state for the exact same key the page reads, independent of apiMock.
-    await qc.prefetchQuery({ queryKey: ['projects'], queryFn: () => Promise.reject(new Error('network down')) });
+    await qc.prefetchQuery({ queryKey: ['projects', 'ALL'], queryFn: () => Promise.reject(new Error('network down')) });
     const html = renderPage(qc);
     expect(html).toContain('Projects could not be loaded');
     expect(html).toContain('network down');
     expect(html).toContain('Retry');
   });
 });
+
+describe('ProjectsPage — sections', () => {
+  /** One of each status, so the split has something to get wrong in both directions. */
+  const MIXED = [
+    {
+      id: P1,
+      title: 'Website Revamp',
+      status: 'OPEN',
+      goal: 'Ship the new marketing site',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      _count: { tasks: 5 },
+    },
+    {
+      id: P2,
+      title: 'Legacy Cleanup',
+      status: 'DONE',
+      goal: 'Retire the old admin',
+      createdAt: '2026-01-03T00:00:00Z',
+      updatedAt: '2026-01-04T00:00:00Z',
+      _count: { tasks: 1 },
+    },
+    {
+      id: P3,
+      title: 'Ledger Migration',
+      status: 'OPEN',
+      goal: 'Move the ledger',
+      createdAt: '2026-01-05T00:00:00Z',
+      updatedAt: '2026-01-06T00:00:00Z',
+      _count: { tasks: 2 },
+    },
+    {
+      id: P4,
+      title: 'Abandoned Rewrite',
+      status: 'CANCELLED',
+      goal: 'Never mind',
+      createdAt: '2026-01-07T00:00:00Z',
+      updatedAt: '2026-01-08T00:00:00Z',
+      _count: { tasks: 7 },
+    },
+  ];
+
+  /** The markup of ONE section, sliced off the flat render at the marker each one carries — the
+   *  assertions below are about which section a project landed in, which a whole-page `toContain`
+   *  cannot tell apart. */
+  function sectionOf(html: string, key: string): string {
+    const start = html.indexOf(`data-section="${key}"`);
+    expect(start).toBeGreaterThan(-1);
+    const nextSection = html.indexOf('<section', start);
+    return nextSection === -1 ? html.slice(start) : html.slice(start, nextSection);
+  }
+
+  function renderMixed(): string {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], MIXED);
+    return renderPage(qc);
+  }
+
+  it('cuts the list in two off the status every row already carries', () => {
+    const html = renderMixed();
+    const active = sectionOf(html, 'active');
+    const completed = sectionOf(html, 'completed');
+
+    expect(active).toContain('In progress');
+    expect(active).toContain('Website Revamp');
+    expect(active).toContain('Ledger Migration');
+    // The point of the section: neither a finished nor an abandoned project dilutes the half of
+    // the list that still needs the reader.
+    expect(active).not.toContain('Legacy Cleanup');
+    expect(active).not.toContain('Abandoned Rewrite');
+    expect(active).not.toContain('DONE');
+    expect(active).not.toContain('CANCELLED');
+
+    expect(completed).toContain('Completed');
+    expect(completed).toContain('Legacy Cleanup');
+    expect(completed).toContain('Abandoned Rewrite');
+    expect(completed).not.toContain('Website Revamp');
+  });
+
+  it('counts each section in its own header', () => {
+    const html = renderMixed();
+    // Two open, two finished — the badge is what a reader checks the split against.
+    expect(sectionOf(html, 'active')).toMatch(/In progress<\/h3>.*?>2</);
+    expect(sectionOf(html, 'completed')).toMatch(/Completed<\/h3>.*?>2</);
+  });
+
+  it('says what each section is ordered by', () => {
+    const html = renderMixed();
+    expect(sectionOf(html, 'active')).toContain('Newest first');
+    expect(sectionOf(html, 'completed')).toContain('folded by default');
+  });
+
+  it('folds the completed section by default, into a pill that still opens the project', () => {
+    const html = renderMixed();
+    const completed = sectionOf(html, 'completed');
+
+    // Folded means no row: the goal excerpt and the status tag a row carries are gone, while the
+    // project itself is still named, still counted and still one click from being opened.
+    expect(completed).not.toContain('Retire the old admin');
+    expect(completed).not.toContain('ant-list-item');
+    expect(completed).toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
+    expect(completed).toContain('Legacy Cleanup');
+    // ...and the section that needs attention is NOT folded — its rows are right there.
+    expect(sectionOf(html, 'active')).toContain('Ship the new marketing site');
+  });
+
+  it('leaves out a section with nothing in it', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.status === 'OPEN'));
+    const html = renderPage(qc);
+    expect(html).toContain('data-section="active"');
+    expect(html).not.toContain('data-section="completed"');
+    // Below the toolbar only: "Completed" is also the name of a filter segment, which is on the
+    // page whether or not anything is completed — the word must be gone from the LIST, not from
+    // the controls that ask for one.
+    expect(html.slice(html.indexOf('<section'))).not.toContain('Completed');
+  });
+
+  it('keeps the sections in the server’s own order within each one', () => {
+    const html = sectionOf(renderMixed(), 'active');
+    // createdAt desc is the server's; the page must not re-sort what it was handed.
+    expect(html.indexOf('Website Revamp')).toBeLessThan(html.indexOf('Ledger Migration'));
+  });
+});
+
+describe('ProjectsPage — toolbar', () => {
+  it('builds the list URL from the segment, sending no parameter for All', () => {
+    // 'ALL' is the absence of the parameter, not `?status=ALL` — which the endpoint would 400 on,
+    // since it validates against the three real statuses (ProjectsController.parseStatus).
+    expect(projectsPath('ALL')).toBe('/projects');
+    expect(projectsPath('OPEN')).toBe('/projects?status=OPEN');
+    expect(projectsPath('DONE')).toBe('/projects?status=DONE');
+  });
+
+  it('keys the cache by the filter, under the prefix every write invalidates', () => {
+    expect(projectsQueryKey('ALL')).toEqual(['projects', 'ALL']);
+    expect(projectsQueryKey('OPEN')).toEqual(['projects', 'OPEN']);
+    // Same first element for all three: `['projects']` is what invalidateAfterProjectCreate and
+    // invalidateAfterProjectTaskCreate invalidate, and a prefix only matches if it is one.
+    expect(projectsQueryKey('DONE')[0]).toBe('projects');
+  });
+
+  it('stays on screen while the list is loading and after it fails', () => {
+    // The controls are how a slow or failed read is narrowed and retried; a toolbar that appeared
+    // only once rows did would take them away exactly when they are wanted.
+    const loading = renderPage(newClient());
+    expect(loading).toContain('Search projects');
+    expect(loading).toContain('New project');
+
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], undefined);
+    expect(renderPage(qc)).toContain('Search projects');
+  });
+
+  it('offers all three statuses and a way to make a project', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], []);
+    const html = renderPage(qc);
+    expect(html).toContain('Search projects');
+    expect(html).toContain('>All<');
+    expect(html).toContain('>In progress<');
+    expect(html).toContain('>Completed<');
+    // Twice: once in the toolbar, once as the empty page's own call to action.
+    expect(html.split('New project').length - 1).toBe(2);
+  });
+});
+
+describe('ProjectsPage — search matching', () => {
+  const project = (over: { title?: string; goal?: string | null }) => ({
+    title: 'Website Revamp',
+    goal: 'Ship the new marketing site',
+    ...over,
+  });
+
+  it('matches the goal with its Markdown removed, not its source', () => {
+    // What the row shows is `Ship the new marketing site`; what the field HOLDS is the line below.
+    // A reader typing what they can see has to find it, which a match over the source cannot do.
+    const p = project({ goal: '## Goal\n\n**Ship** the new marketing `site`' });
+    expect(matchesProjectSearch(p, 'ship the new marketing site')).toBe(true);
+    // The marks themselves are not searchable text — nobody types them, and matching them would
+    // make `*` find every project with an emphasis in its goal.
+    expect(matchesProjectSearch(p, '**')).toBe(false);
+    expect(matchesProjectSearch(p, '## Goal')).toBe(false);
+  });
+
+  it('matches the title, ignores case and surrounding space, and lets a blank search through', () => {
+    expect(matchesProjectSearch(project({}), 'REVAMP')).toBe(true);
+    expect(matchesProjectSearch(project({}), '  revamp  ')).toBe(true);
+    expect(matchesProjectSearch(project({}), 'ledger')).toBe(false);
+    // An empty box is not a filter — and neither is one holding only spaces.
+    expect(matchesProjectSearch(project({}), '')).toBe(true);
+    expect(matchesProjectSearch(project({}), '   ')).toBe(true);
+  });
+
+  it('survives a project with no goal at all', () => {
+    const p = project({ goal: null });
+    expect(matchesProjectSearch(p, 'revamp')).toBe(true);
+    expect(matchesProjectSearch(p, 'ship')).toBe(false);
+  });
+});
+
+describe('ProjectsPage — which empty state', () => {
+  it('says "no projects" only when nothing is being narrowed', () => {
+    expect(projectsEmptyKind(0, 0, 'ALL', '')).toBe('none');
+    // The same zero rows, but with a reason: an account with projects the filter is hiding must
+    // not be told it has none.
+    expect(projectsEmptyKind(0, 0, 'OPEN', '')).toBe('no-match');
+    expect(projectsEmptyKind(0, 0, 'ALL', 'zzz')).toBe('no-match');
+    expect(projectsEmptyKind(3, 0, 'ALL', 'zzz')).toBe('no-match');
+    // A search of nothing but spaces narrows nothing, so it cannot be the reason either.
+    expect(projectsEmptyKind(0, 0, 'ALL', '   ')).toBe('none');
+  });
+
+  it('is not an empty state at all when something matched', () => {
+    expect(projectsEmptyKind(3, 1, 'ALL', 'revamp')).toBeNull();
+    expect(projectsEmptyKind(3, 3, 'OPEN', '')).toBeNull();
+  });
+
+  it('names whichever narrowing emptied the list, the search first', () => {
+    expect(noMatchDescription('ALL', 'ledger')).toBe('No projects match “ledger”');
+    // Both on: the search is the one that was just typed, so it is the one named.
+    expect(noMatchDescription('OPEN', 'ledger')).toBe('No projects match “ledger”');
+    expect(noMatchDescription('OPEN', '')).toBe('No projects are in progress');
+    expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
+  });
+});
+
+describe('ProjectsPage — creating a project', () => {
+  it('opens the create only on a title that names something', () => {
+    expect(canCreateProject({ title: '' })).toBe(false);
+    expect(canCreateProject({ title: '   ' })).toBe(false);
+    expect(canCreateProject({ title: 'Ledger Migration' })).toBe(true);
+    // The goal is optional — a project can be named before it is explained.
+    expect(canCreateProject({ title: 'Ledger Migration', goal: '' })).toBe(true);
+  });
+
+  it('trims the title and leaves an unfilled goal out of the body entirely', () => {
+    expect(newProjectBody({ title: '  Ledger Migration  ' })).toEqual({ title: 'Ledger Migration' });
+    expect(newProjectBody({ title: 'Ledger Migration', goal: '  ' })).toEqual({
+      title: 'Ledger Migration',
+    });
+    expect(newProjectBody({ title: 'Ledger Migration', goal: '  Move the ledger  ' })).toEqual({
+      title: 'Ledger Migration',
+      goal: 'Move the ledger',
+    });
+  });
+
+  it('refreshes every filter’s list, not only the one that is showing', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], []);
+    qc.setQueryData(['projects', 'OPEN'], []);
+    qc.setQueryData(['projects', 'DONE'], []);
+    qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
+
+    invalidateAfterProjectCreate(qc);
+
+    const invalidated = (key: unknown[]) =>
+      qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
+    // A project created while Completed is selected must not be missing from All when it is
+    // switched back to — which is what one invalidation on the shared prefix buys.
+    expect(invalidated(['projects', 'ALL'])).toBe(true);
+    expect(invalidated(['projects', 'OPEN'])).toBe(true);
+    expect(invalidated(['projects', 'DONE'])).toBe(true);
+    // Scoped, though: a new project with no tasks moves no task view.
+    expect(invalidated(['tasks', 'counts', null, []])).toBe(false);
+  });
+});
+
 
 describe('ProjectDetailPage', () => {
   it('renders the title, status, total tasks, per-status tallies and the full long-form fields', () => {
@@ -1423,7 +1796,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     const qc = newClient();
     qc.setQueryData(['project', encodeId(P1)], detail());
     qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['projects', 'ALL'], []);
     qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
     // Another project's page, open in another tab: it must not be dragged along.
     qc.setQueryData(['project', encodeId(P2)], detail({ id: P2 }));
@@ -1437,8 +1810,10 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     expect(invalidated(tasksKey(P1))).toBe(true);
     // ...the document whose total and per-status tallies it moved...
     expect(invalidated(['project', encodeId(P1)])).toBe(true);
-    // ...the list row carrying the same count...
-    expect(invalidated(['projects'])).toBe(true);
+    // ...the list row carrying the same count, under whichever status filter is showing —
+    // `['projects']` is the prefix of every filter's entry, which is what makes one invalidation
+    // enough...
+    expect(invalidated(['projects', 'ALL'])).toBe(true);
     // ...and the task views elsewhere in the app, which have never heard of this page.
     expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
     // Scoped, though: another project's page is left exactly where it was.

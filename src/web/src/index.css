@@ -9172,3 +9172,59 @@ html[data-theme='dark'] .session-tag-chip {
     grid-template-columns: 1fr;
   }
 }
+
+/* Projects list rows. Every row is exactly two lines tall — one title, one goal — because the
+   goal is truncated by the box rather than by a character count: how many rendered lines 180
+   characters occupy depends on how much of them is CJK (a full-width glyph is twice a Latin one),
+   which is what had these rows jumping between 150px and 220px. Sizes track
+   projects-redesign.html: 11px of row padding (set inline, where it beats AntD's own
+   token-generated rule), a 14px/600 title and a 12.5px goal in --text-3.
+
+   Laid out here rather than through List.Item.Meta: that component's title and description carry
+   their own margins, which a fixed row height cannot inherit, and its internal element names have
+   already been renamed under us once (antd 5 → 6). */
+.project-row-link {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  color: inherit;
+}
+/* min-width:0 the whole way down is what lets `text-overflow` fire at all: a flex item's floor is
+   its content's intrinsic width, so without this the row grows instead of the text ellipsing. */
+.project-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.project-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 3px;
+}
+/* The title is the only thing that gives up width; the status tag beside it keeps its own. */
+.project-row-head > * {
+  flex: none;
+}
+.project-row-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-row-goal {
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-row-count {
+  flex: none;
+  white-space: nowrap;
+}
