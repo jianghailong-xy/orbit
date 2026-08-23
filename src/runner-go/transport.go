@@ -24,6 +24,12 @@ const (
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
+	// Promises the control plane that every claim this binary takes reaches `activate-leases`,
+	// which is what lets the server put an unactivated claim back in the queue instead of
+	// leaving it RUNNING with nothing behind it. Naming it is a claim about this loop, not a
+	// request for a feature: a runner that advertised it and then walked away from a claim
+	// would have that session reclaimed under it after the lease deadline.
+	sessionClaimLeaseV1              = "session-claim-lease-v1"
 	// Mid-turn delivery for the codex runtime (`turn/steer`). Declared from the runtime table
 	// rather than listed here — see declaredSteerCapabilities — because a runner that names
 	// it is telling the control plane to file codex steers for this machine, and one whose
@@ -50,6 +56,7 @@ func init() {
 		sessionOrchestrationCredentialV1,
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
+		sessionClaimLeaseV1,
 	}, declaredSteerCapabilities()...), ",")
 }
 

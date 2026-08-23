@@ -144,6 +144,21 @@ test('activate-leases registers and installs a generation under the owned Sessio
   assert.match(sql(h.executeCalls[2]), /"lease_generation" IS DISTINCT FROM \?::uuid/);
 });
 
+test('installing a generation is what retires the claim lease', async () => {
+  // Activation is the runner confirming the handover: it is the first thing the engine that was
+  // handed the claim does, and until it happens nothing is driving the session. So the token and
+  // its deadline go in the SAME statement that installs the generation — one write, atomic with
+  // the fact that retires it, after which neither the claim's compensation nor the reaper's sweep
+  // can take this session back (common/claim-lease.ts).
+  const h = harness({ current: null });
+
+  await h.controller.activateLeases({ id: RUNNER_ID }, SESSION_ID, request);
+
+  const install = sql(h.executeCalls[1]);
+  assert.match(install, /SET "inbox_lease_generation" = \?::uuid,\s+"claim_token" = NULL,\s+"claim_lease_expires_at" = NULL/);
+  assert.deepEqual(h.executeCalls[1].slice(1), [GENERATION, SESSION_ID]);
+});
+
 test('an already-installed generation returns without taking the Session row lock', async () => {
   // A reclaim storm re-activates the same generation hundreds of times a minute; each
   // FOR UPDATE would starve the claim queue, so the installed case must not lock.

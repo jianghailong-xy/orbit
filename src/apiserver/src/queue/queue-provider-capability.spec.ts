@@ -7,6 +7,7 @@ async function capturedClaimCapability(
   supportedProviders: AgentProvider[],
 ): Promise<{ capability: unknown; claimSetting: unknown; settingSql: string; sql: string }> {
   let values: unknown[] = [];
+  let segments: readonly string[] = [];
   let sql = '';
   let claimSetting: unknown;
   let settingSql = '';
@@ -23,6 +24,7 @@ async function capturedClaimCapability(
     // than a tagged template: literal segments in `strings`, bound parameters in `values`.
     $queryRaw: async (statement: { strings: readonly string[]; values: unknown[] }) => {
       sql = statement.strings.join('?');
+      segments = statement.strings;
       values = statement.values;
       return [];
     },
@@ -35,8 +37,13 @@ async function capturedClaimCapability(
     id: '11111111-1111-4111-8111-111111111111',
     supportedProviders,
   });
-  // UPDATE interpolations are: upgrade error, runner id, capability, then runner ids/caps.
-  return { capability: values[2], claimSetting, settingSql, sql };
+  // Located by the literal it guards rather than by a count of the interpolations before it: a
+  // bound value sits between segment i and segment i+1, so the capability is the one immediately
+  // ahead of the OpenCode guard wherever else the statement grows.
+  const guard = segments.findIndex((segment) =>
+    segment.includes("OR COALESCE(s.provider, 'claude') <> 'opencode'"),
+  );
+  return { capability: values[guard - 1], claimSetting, settingSql, sql };
 }
 
 test('the atomic claim selection receives a false OpenCode capability for legacy runners', async () => {

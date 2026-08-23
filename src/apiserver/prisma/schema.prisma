@@ -862,6 +862,23 @@ model Session {
   source               String    @default("user")
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
+  // The PENDING->RUNNING handover this row is in the middle of (migration 0157). The claim writes
+  // it, activation clears it, so non-null means "a runner was handed this session and has not
+  // confirmed it". RUNNING is the runner-slot truth whether or not the handover completed, which is
+  // exactly why the incomplete case needs a name: `buildSession` runs after the claim commits, and
+  // every step of it — and the response itself — can fail with the slot already taken.
+  //
+  // It is a token rather than a flag because taking a claim back has to be a compare-and-set: only
+  // the claim that is still standing may be compensated, so a cancel, a resume, a re-claim or an
+  // activation that landed in between leaves a row this value no longer matches.
+  claimToken           String?   @map("claim_token") @db.Uuid
+  // When an unactivated claim may be reclaimed by the reaper, or NULL for one that may never be.
+  // The NULL is the compatibility policy rather than an absent value: a deadline is only written
+  // for a runner that advertised `session-claim-lease-v1` and will therefore activate. A runner
+  // that predates the capability still gets a token — the claim's own compensation protects it,
+  // and that runs before the runner is ever handed the job — but no sweep may pull a session out
+  // from under a turn it is really running.
+  claimLeaseExpiresAt  DateTime? @map("claim_lease_expires_at")
   // billing, accrued per turn
   sumInputTokens       Int       @default(0) @map("sum_input_tokens")
   sumOutputTokens      Int       @default(0) @map("sum_output_tokens")

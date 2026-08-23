@@ -15,6 +15,7 @@ import { initializesRuntimeDynamically } from '../common/runtime-provider';
 import { normalizeRuntimeProvider } from '../common/runtime-provider';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
+import { claimLeaseEnabled, requeueUnactivatedClaim } from '../common/claim-lease';
 import { PrismaService } from '../prisma/prisma.service';
 import { postRunFailureComment, reclaimStalledTask } from '../tasks/reclaim-stalled-task';
 import { RealtimeService } from './realtime.service';
@@ -107,6 +108,8 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         runtimeSessionId: true,
         lastTurnAt: true,
         cancelRequestedAt: true,
+        claimToken: true,
+        claimLeaseExpiresAt: true,
         endReason: true,
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
         // follows the task's lifecycle; see `shouldEndTerminalTask`.
@@ -186,6 +189,27 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
+        // A claim that committed but was never activated. The runner is online — the branch above
+        // already returned for one that isn't — so nothing here is stalled in the sense the rest of
+        // this sweep means: the session is RUNNING, it holds a slot, and the handover that was
+        // supposed to put a process behind it died between the claim's commit and the runner
+        // hearing about it. The claim's own compensation covers the failures the API server sees;
+        // this covers the ones it doesn't, which is a lost response and a runner that went away
+        // and came back without the job.
+        //
+        // Only ever for a runner that advertised `session-claim-lease-v1`, which is what a
+        // non-null deadline means. `cancelRequestedAt` is known null here (the cancel branches
+        // above return), and the write re-checks every one of these under the row.
+        if (
+          s.status === RunStatus.RUNNING &&
+          s.claimToken &&
+          s.claimLeaseExpiresAt &&
+          s.claimLeaseExpiresAt.getTime() <= now &&
+          claimLeaseEnabled()
+        ) {
+          await this.releaseExpiredClaim(s.id, s.claimToken);
+          continue;
+        }
         // Session.provider is NOT NULL, so there is nothing to inherit here — and a workspace
         // holds no provider to inherit from (workspace-provider.ts).
         const provider = normalizeRuntimeProvider(s.provider, s.providerBuiltin);
@@ -247,6 +271,26 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         // Isolate per-session failures so one doesn't skip the rest; retried next sweep.
         this.log.error(`reap of ${s.id} failed: ${(e as Error).message}`);
       }
+    }
+  }
+
+  /**
+   * Return one expired, unactivated claim to the queue.
+   *
+   * Deliberately not a finalize: nothing ran, nothing failed, and the work is still exactly as
+   * claimable as it was a moment before the claim. So this writes no error, ends no task and arms
+   * no retry — it undoes a handover, and the next claim is the retry.
+   *
+   * A compare-and-set on the token, re-checking the deadline against the database clock rather than
+   * this process's; `requeueUnactivatedClaim` says what each predicate refuses. Zero rows means the
+   * claim settled between the sweep's read and this write, which is the outcome that needs no log.
+   */
+  private async releaseExpiredClaim(sessionId: string, claimToken: string): Promise<void> {
+    const requeued = await this.prisma.$executeRaw(
+      requeueUnactivatedClaim(sessionId, claimToken, true),
+    );
+    if (requeued > 0) {
+      this.log.log(`claim lease expired for ${sessionId} before activation; session requeued`);
     }
   }
 

@@ -10,6 +10,7 @@ import {
   normalizeEffortForRuntimeModel,
 } from '../common/runtime-provider';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
+import { CLAIM_LEASE_MS, claimLeaseEnabled, requeueUnactivatedClaim } from '../common/claim-lease';
 import {
   batchActiveTurns,
   runnerActiveTurns,
@@ -58,10 +59,11 @@ export class QueueService {
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     waitMs = 0,
     supportsTerminalHandoff = false,
+    supportsClaimLease = false,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff);
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsClaimLease);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
@@ -72,8 +74,20 @@ export class QueueService {
   private async trySessionClaim(
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     supportsTerminalHandoff: boolean,
+    supportsClaimLease: boolean,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
+    // Minted ABOVE the closure, like every other identity a retried unit must not re-derive: an
+    // attempt the server discarded wrote nothing, so each attempt competes with the same token and
+    // the one that commits is the handover this call is entitled to take back. Null when the
+    // rollback flag is off, which is the whole of the old behaviour.
+    //
+    // The deadline is armed only for a runner that advertised the capability — see claim-lease.ts.
+    // A token with no deadline is still worth writing: the compensation below is synchronous and
+    // happens before that runner is handed anything, and being able to name the handover is what
+    // makes it a compare-and-set instead of a status write.
+    const claimToken = claimLeaseEnabled() ? randomUUID() : null;
+    const armLease = claimToken !== null && supportsClaimLease;
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -110,6 +124,14 @@ export class QueueService {
           error = CASE
             WHEN error = ${OPENCODE_RUNNER_UPGRADE_ERROR} THEN NULL
             ELSE error
+          END,
+          "claim_token" = ${claimToken}::uuid,
+          -- Computed by the database, not by this process: the reaper compares it against the same
+          -- clock, and a control plane whose replicas disagree about the time would otherwise
+          -- disagree about which claims have expired.
+          "claim_lease_expires_at" = CASE
+            WHEN ${armLease}::boolean THEN now() + (${CLAIM_LEASE_MS} * interval '1 millisecond')
+            ELSE NULL
           END,
           "started_at" = COALESCE("started_at", now()),
           "last_turn_at" = now(),
@@ -202,7 +224,7 @@ export class QueueService {
       `);
       }, loggedRetry(this.logger, 'queue.trySessionClaim'));
       if (rows.length === 0) return null;
-      return this.buildSession(rows[0].id);
+      return this.buildSessionOrRequeue(rows[0].id, claimToken);
     } catch (err: any) {
       // pg error 55P03 = lock_not_available: FOR UPDATE NOWAIT cannot lock the
       // candidate row because a concurrent transaction (e.g. activateLeases in a
@@ -215,6 +237,55 @@ export class QueueService {
         String(err?.message ?? '').includes('lock_not_available')
       ) {
         return null;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Build the payload for a claim that has already committed, and put the session back if it can't
+   * be built.
+   *
+   * This is the compensation half of the claim: the transition is durable the moment
+   * `trySessionClaim`'s transaction commits, so a failure anywhere below it leaves a RUNNING row
+   * holding a runner slot with no process behind it and no sweep that would notice — the reaper's
+   * liveness branch asks whether the runner is gone, and here it isn't.
+   *
+   * The compare-and-set is what makes taking it back safe; `requeueUnactivatedClaim` says which
+   * states it refuses to overwrite. A compensation that fails is logged and swallowed: it must
+   * never replace the failure the caller is about to be told about, and for a capable runner the
+   * lease deadline is already the backstop for exactly this.
+   *
+   * The error is then rethrown unchanged. The runner reads it as a failed claim and reconciles;
+   * because the session is queued again rather than stranded RUNNING, that reconciliation finds
+   * nothing to adopt and the row simply waits for the next claim — this one, or another runner's.
+   */
+  private async buildSessionOrRequeue(
+    sessionId: string,
+    claimToken: string | null,
+  ): Promise<ClaimedSession> {
+    try {
+      return await this.buildSession(sessionId);
+    } catch (err) {
+      if (claimToken) {
+        try {
+          const requeued = await this.prisma.$executeRaw(
+            requeueUnactivatedClaim(sessionId, claimToken, false),
+          );
+          this.logger.warn(
+            requeued > 0
+              ? `claim of ${sessionId} failed to build (${(err as Error).message}); session requeued`
+              : `claim of ${sessionId} failed to build (${(err as Error).message}); ` +
+                'the claim had already been superseded, so nothing was requeued',
+          );
+          // The row is claimable again — wake anything parked on the long poll rather than making
+          // it wait out its five-second tick.
+          if (requeued > 0) this.notifySessionQueued();
+        } catch (compensation) {
+          this.logger.error(
+            `could not requeue the failed claim of ${sessionId}: ${(compensation as Error).message}`,
+          );
+        }
       }
       throw err;
     }

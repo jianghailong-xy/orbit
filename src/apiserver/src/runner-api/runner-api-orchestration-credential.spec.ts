@@ -5,6 +5,7 @@ import { newTerminalResumeHandoffOwner } from '../common/session-inbox-fence';
 import {
   RunnerApiController,
   SESSION_ORCHESTRATION_CREDENTIAL_V1,
+  SESSION_CLAIM_LEASE_V1,
   SESSION_TERMINAL_HANDOFF_V1,
   runnerSupportsCapability,
 } from './runner-api.controller';
@@ -112,12 +113,31 @@ test('claim forwards terminal-handoff negotiation to the queue', async () => {
   const capable = makeController({ claimed: null });
   await capable.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1, 'claude,codex,opencode');
   assert.deepEqual(capable.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true],
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, false],
   ]);
 
   const legacy = makeController({ claimed: null });
   await legacy.controller.claim(RUNNER);
-  assert.deepEqual(legacy.claimCalls, [[{ id: RUNNER.id, supportedProviders: [] }, 25_000, false]]);
+  assert.deepEqual(legacy.claimCalls, [
+    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, false],
+  ]);
+});
+
+// The claim lease's compatibility gate, negotiated on the same header and independently of every
+// other capability: whether the queue may arm a deadline is a statement about whether THIS runner
+// activates, so a runner that names terminal handoff and not the lease must not get one.
+test('claim forwards claim-lease negotiation to the queue, independently', async () => {
+  const capable = makeController({ claimed: null });
+  await capable.controller.claim(RUNNER, `${SESSION_TERMINAL_HANDOFF_V1},${SESSION_CLAIM_LEASE_V1}`);
+  assert.deepEqual(capable.claimCalls, [
+    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, true, true],
+  ]);
+
+  const leaseOnly = makeController({ claimed: null });
+  await leaseOnly.controller.claim(RUNNER, SESSION_CLAIM_LEASE_V1);
+  assert.deepEqual(leaseOnly.claimCalls, [
+    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, true],
+  ]);
 });
 
 test('claim enables orchestration only when the runner negotiated credential v1', async () => {

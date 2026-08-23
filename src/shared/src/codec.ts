@@ -232,6 +232,11 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'inboxLeaseOwner',
   // Project coordinator lease ownership is an internal compare-and-swap fence, not a row address.
   'leaseHolder',
+  // The PENDING->RUNNING handover in flight (`session`, migration 0157). The server compares it
+  // byte-for-byte against what it wrote — that comparison is the whole of "may this claim still be
+  // taken back" — and interpolates it into raw SQL as `::uuid`. It names no row, appears in no
+  // request and no response, and a caller handed one would have nowhere to hand it.
+  'claimToken',
   'mergeOperationId',
   'mergeOperationOwner',
   'commitOperationId',

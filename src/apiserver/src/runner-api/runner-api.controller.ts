@@ -196,6 +196,11 @@ const RUNNER_PROVIDERS_HEADER = 'x-orbit-supported-providers';
 export const SESSION_ORCHESTRATION_CREDENTIAL_V1 = 'session-orchestration-credential-v1';
 export const SESSION_TERMINAL_HANDOFF_V1 = 'session-terminal-handoff-v1';
 export const SESSION_WORKTREE_OPS_V1 = 'session-worktree-ops-v1';
+// A runner that names this one promises the other half of the claim lease: that every claim it
+// takes reaches `activate-leases`, so a claim that has not is one nothing is driving. It is the
+// only thing that lets the reaper reclaim an unactivated claim — a runner that predates it would
+// otherwise have a live turn pulled out from under it (migration 0157).
+export const SESSION_CLAIM_LEASE_V1 = 'session-claim-lease-v1';
 
 export function runnerSupportsCapability(
   header: string | string[] | undefined,
@@ -1024,6 +1029,7 @@ export class RunnerApiController {
       { id: runner.id, supportedProviders },
       LONG_POLL_MS,
       supportsTerminalHandoff,
+      runnerSupportsCapability(capabilities, SESSION_CLAIM_LEASE_V1),
     );
     if (job?.allowOrchestration) {
       if (runnerSupportsCapability(capabilities, SESSION_ORCHESTRATION_CREDENTIAL_V1)) {
@@ -1465,9 +1471,20 @@ export class RunnerApiController {
       ) {
         throw new ConflictException('inbox generation has already been retired or reused');
       }
+      // Installing a generation IS the handover completing: this is the first thing the engine
+      // that was handed the claim does, and until it happens nothing is driving the session. So
+      // the claim lease is retired in the same statement — one write, atomic with the fact that
+      // retires it, and after it no compensation and no sweep can take this session back
+      // (claim-lease.ts).
+      //
+      // The idempotent fast path above needs no equivalent: it only answers when THIS generation
+      // is already installed, which means a previous attempt of this same activation committed
+      // this statement and cleared the token then.
       await tx.$executeRaw`
         UPDATE "session"
-        SET "inbox_lease_generation" = ${generation}::uuid
+        SET "inbox_lease_generation" = ${generation}::uuid,
+            "claim_token" = NULL,
+            "claim_lease_expires_at" = NULL
         WHERE id = ${sessionId}::uuid
       `;
       // A legacy NULL poll or a predecessor may have leased after reclaim but before this
