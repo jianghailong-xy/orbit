@@ -9,6 +9,7 @@ import {
   TasksService,
   autoDispatchStillValid,
 } from './tasks.service';
+import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 
@@ -717,41 +718,43 @@ test('a batch-created item stores its schedule, through the same helper a single
 });
 
 // ---------------------------------------------------------------------------
-// The reschedule race: a user moves the appointment while a sweep is acting on it.
+// The overtaken race: the world moves while a sweep is acting on what it selected.
 //
 // Every automatic trigger is a scan followed by a re-read, and a person changing the schedule in
 // that window is not exotic — it is the likeliest moment for them to change their mind. These
 // tests make the two reads disagree directly, so nothing here depends on timing.
+//
+// What the two reads disagree ABOUT is `task_dispatch_epoch` (§7.7 D5-b4), not `run_at`. A moved
+// appointment advances the epoch, and so does a reopened task and so does a prerequisite's status —
+// so one comparison covers every way a candidate scan can be overtaken. Comparing the instants
+// instead answered a strictly weaker question and got 09:00 -> 10:00 -> 09:00 wrong: two DIFFERENT
+// appointments compare equal, so a pass holding the first one's name was let through to start work
+// for an appointment that had already been replaced twice.
 // ---------------------------------------------------------------------------
 
-test('an automatic trigger is fenced on exactly what it observed', () => {
-  const t = new Date('2026-09-01T09:00:00.000Z');
-  const past = new Date(Date.now() - 60_000);
-  const future = new Date(Date.now() + 60_000);
-
-  // Unchanged and due: act.
-  assert.equal(autoDispatchStillValid(past, past), true);
-  assert.equal(autoDispatchStillValid(new Date(t), new Date(t), t.getTime() + 1), true);
-  // Unchanged and unscheduled: act. `null` is an assertion, not an absence of one.
-  assert.equal(autoDispatchStillValid(null, null), true);
-
-  // Rescheduled under us.
-  assert.equal(autoDispatchStillValid(future, past), false);
-  // Scheduled under us, having been picked up as an unscheduled task.
-  assert.equal(autoDispatchStillValid(future, null), false);
-  // Cancelled under us — the user withdrew the appointment this trigger was keeping.
-  assert.equal(autoDispatchStillValid(null, past), false);
-  // Moved earlier: still a different appointment, so stand down and let the next sweep take it.
-  assert.equal(autoDispatchStillValid(new Date(1000), new Date(2000)), false);
-  // Belt and braces: never start before the time, whatever a caller claims to have observed.
-  assert.equal(autoDispatchStillValid(future, future), false);
+test('an automatic trigger is fenced on exactly the moment it observed', () => {
+  // Unchanged: act.
+  assert.equal(autoDispatchStillValid(0n, 0n), true);
+  assert.equal(autoDispatchStillValid(9_007_199_254_740_995n, 9_007_199_254_740_995n), true);
+  // Overtaken: stand down. The epoch only goes up, so this is every way the world can have moved.
+  assert.equal(autoDispatchStillValid(4n, 3n), false);
+  // ...including the direction that cannot happen, stated so the comparison is equality rather
+  // than "is the row at least as new as I am" — a delivery from the FUTURE of this row is not a
+  // delivery this row can answer either.
+  assert.equal(autoDispatchStillValid(3n, 4n), false);
+  // No numeric coercion: the epoch is a BIGINT and 2^53 is inside its range, not the end of it.
+  assert.equal(autoDispatchStillValid(9_007_199_254_740_993n, 9_007_199_254_740_992n), false);
 });
 
 /**
- * A task whose two reads disagree: the candidate scan saw `scanRunAt`, and by the time the
- * dispatch re-reads the row it says `readRunAt`. That IS the race, expressed as data.
+ * A task whose two reads disagree: the candidate scan selected it at `scanEpoch`, and by the time
+ * the dispatch re-reads the row it is at `readEpoch`. That IS the race, expressed as data.
+ *
+ * `runAt` is carried too, at whatever the row says now, because the damaging half of losing this
+ * race is not the run that fails to start — it is the appointment a stood-down sweep must not
+ * consume on its way out.
  */
-function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
+function raceFixture(scanEpoch: bigint, readEpoch: bigint, runAt: Date | null = null) {
   const createdSessions: unknown[] = [];
   const writes: any[] = [];
   // COMPOSED, not stacked: this double answers `$queryRaw` with the sweep's candidate row, and
@@ -763,7 +766,7 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
         ownerId: OWNER_ID,
         runnerId: 'runner-1',
         listId: null,
-        runAt: scanRunAt,
+        dispatchEpoch: scanEpoch,
         workspaceId: 'workspace-1',
         freeBytes: null,
         minFreeDiskMb: null,
@@ -778,7 +781,8 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
         model: null,
         status: TaskStatus.OPEN,
         dispatchHold: false,
-        runAt: readRunAt,
+        runAt,
+        dispatchEpoch: { epoch: readEpoch },
         completionPolicy: 'MANUAL',
         children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
@@ -788,7 +792,8 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
           id: TASK_ID,
           status: 'OPEN',
           autoRunWhenReady: true,
-          runAt: scanRunAt,
+          runAt: null,
+          dispatchEpoch: { epoch: scanEpoch },
           completionPolicy: 'MANUAL',
         children: [],
         assignee: { id: 'workspace-1', runnerId: 'runner-1' },
@@ -817,9 +822,10 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
 }
 
 test('the scheduled sweep stands down when the task was moved to a later time mid-sweep', async () => {
-  const due = new Date(Date.now() - 60_000);
   const movedToNextWeek = new Date(Date.now() + 7 * 24 * 60 * 60_000);
-  const f = raceFixture(due, movedToNextWeek);
+  // Moving the appointment advanced the epoch, so the pass is holding a name for the appointment
+  // that was replaced.
+  const f = raceFixture(3n, 4n, movedToNextWeek);
 
   await (f.service as any).dispatchDueScheduledTasks();
 
@@ -830,22 +836,22 @@ test('the scheduled sweep stands down when the task was moved to a later time mi
   assert.equal(f.writes.length, 0);
 });
 
-test('the scheduled sweep still runs a task whose schedule did not move', async () => {
+test('the scheduled sweep still runs a task whose moment did not move', async () => {
   const due = new Date(Date.now() - 60_000);
-  const f = raceFixture(due, due);
+  const f = raceFixture(3n, 3n, due);
 
   await (f.service as any).dispatchDueScheduledTasks();
 
   assert.equal(f.createdSessions.length, 1);
-  // Kept, exactly once, and against the instant both reads agreed on.
+  // Kept, exactly once, and against the instant the dispatch's own read found.
   assert.equal(f.writes.length, 1);
   assert.deepEqual(f.writes[0].where.runAt, due);
   assert.equal(f.writes[0].data.runAt, null);
 });
 
 test('a cancelled schedule stops the sweep that was already acting on it', async () => {
-  const due = new Date(Date.now() - 60_000);
-  const f = raceFixture(due, null);
+  // `run_at` back to NULL is a write to `run_at`, so it advances the epoch like any other.
+  const f = raceFixture(3n, 4n, null);
 
   await (f.service as any).dispatchDueScheduledTasks();
 
@@ -855,10 +861,10 @@ test('a cancelled schedule stops the sweep that was already acting on it', async
   assert.equal(f.writes.length, 0);
 });
 
-test('a prerequisite finishing does not start a task scheduled in the same window', async () => {
-  // The dependent was unscheduled when triggerDependents selected it, and is scheduled for next
-  // week by the time the dispatch reads it. `null` as the observed value is what catches this.
-  const f = raceFixture(null, new Date(Date.now() + 7 * 24 * 60 * 60_000));
+test('a prerequisite finishing does not start a task overtaken in the same window', async () => {
+  // The dependent was unscheduled and READY when triggerDependents selected it, and has been
+  // scheduled for next week by the time the dispatch reads it — one of the writes the epoch counts.
+  const f = raceFixture(3n, 4n, new Date(Date.now() + 7 * 24 * 60 * 60_000));
 
   await (f.service as any).triggerDependents(OWNER_ID, OTHER_TASK_ID);
 
@@ -866,8 +872,8 @@ test('a prerequisite finishing does not start a task scheduled in the same windo
   assert.equal(f.writes.length, 0);
 });
 
-test('the reconcile sweep does not start a task scheduled in the same window', async () => {
-  const f = raceFixture(null, new Date(Date.now() + 7 * 24 * 60 * 60_000));
+test('the reconcile sweep does not start a task overtaken in the same window', async () => {
+  const f = raceFixture(3n, 4n, new Date(Date.now() + 7 * 24 * 60 * 60_000));
   (f.service as any).quotaGate = async () => ({ blocked: new Map(), blind: new Set() });
   (f.service as any).autoRunHoldOff = async () => new Set();
 
@@ -877,10 +883,11 @@ test('the reconcile sweep does not start a task scheduled in the same window', a
   assert.equal(f.writes.length, 0);
 });
 
-test('an explicit Run Now carries no fence — it is the person, not the clock', async () => {
-  // Same disagreement between the two reads, but this call came from a button. It must start the
-  // task and spend the schedule it pre-empted, which is exactly what the fence must not prevent.
-  const f = raceFixture(null, new Date(Date.now() + 7 * 24 * 60 * 60_000));
+test('an explicit Run Now carries no fence — it is the person, not the moment', async () => {
+  // The same disagreement between the two reads, but this call came from a button. It must start
+  // the task and spend the schedule it pre-empted, which is exactly what the fence must not
+  // prevent: a manual press names ITS OWN request and is not answering a moment at all.
+  const f = raceFixture(3n, 4n, new Date(Date.now() + 7 * 24 * 60 * 60_000));
 
   const result = await f.service.execute(OWNER_ID, TASK_ID);
 
@@ -888,6 +895,42 @@ test('an explicit Run Now carries no fence — it is the person, not the clock',
   assert.equal(f.createdSessions.length, 1);
   assert.equal(f.writes.length, 1);
   assert.equal(f.writes[0].data.runAt, null);
+});
+
+test('an overtaken automatic delivery is FROZEN, and a repeat of it re-reads that answer', async () => {
+  // The one automatic stand-down that may freeze: the epoch only goes up, so `sched:<task>:3` names
+  // a moment that can never come back and every later delivery of it is answering the same gone
+  // moment. Freezing is what makes the redelivery cost nothing and touch nothing.
+  const f = raceFixture(3n, 4n, new Date(Date.now() + 7 * 24 * 60 * 60_000));
+
+  const first = await f.service.execute(
+    OWNER_ID, TASK_ID, { observedEpoch: 3n }, TASK_RUN_TRIGGER.scheduled(TASK_ID, 3n),
+  );
+  const again = await f.service.execute(
+    OWNER_ID, TASK_ID, { observedEpoch: 3n }, TASK_RUN_TRIGGER.scheduled(TASK_ID, 3n),
+  );
+
+  assert.deepEqual(first, { ok: false, skipped: 'stale-epoch' });
+  assert.deepEqual(again, first, 'a redelivery of one moment is answered from the receipt');
+  assert.equal(f.createdSessions.length, 0);
+  assert.equal(f.writes.length, 0);
+});
+
+test('the moment AFTER an overtaken one is a new request, not a replay of its refusal', async () => {
+  // The half freezing must not cost: the pass that reads the NEW epoch derives a different name, so
+  // it evaluates rather than being handed the previous pass's stand-down for ever.
+  const f = raceFixture(4n, 4n, new Date(Date.now() - 60_000));
+
+  const stale = await f.service.execute(
+    OWNER_ID, TASK_ID, { observedEpoch: 3n }, TASK_RUN_TRIGGER.scheduled(TASK_ID, 3n),
+  );
+  const current = await f.service.execute(
+    OWNER_ID, TASK_ID, { observedEpoch: 4n }, TASK_RUN_TRIGGER.scheduled(TASK_ID, 4n),
+  );
+
+  assert.deepEqual(stale, { ok: false, skipped: 'stale-epoch' });
+  assert.equal(current.ok, true);
+  assert.equal(f.createdSessions.length, 1, 'the current moment starts exactly one run');
 });
 
 test('a scheduled item that could not run anyway is not called scheduled', async () => {

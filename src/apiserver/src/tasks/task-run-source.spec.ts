@@ -95,7 +95,7 @@ test('an automatic Task List run carries distinct auditable provenance', async (
   } as never;
   const service = new TasksService(prisma, sessions, {} as never);
 
-  await service.execute('owner-1', 'task-1', { observedRunAt: null }, 'sweep-tick-1');
+  await service.execute('owner-1', 'task-1', { observedEpoch: 0n }, 'sweep-tick-1');
 
   assert.deepEqual(createCalls[0][2], {
     source: 'user',
@@ -104,7 +104,7 @@ test('an automatic Task List run carries distinct auditable provenance', async (
     runSource: SessionRunSource.TASK_LIST_AUTO,
     startsTaskWork: true,
     // The sweep names its request exactly as the button does: one rule, both doors. Its token is
-    // the durable fact it acted on — here the appointment `observedRunAt` describes.
+    // the moment it acted on — the `task_dispatch_epoch` its candidate scan read.
     id: taskRunDesiredSessionId(taskRunRequestKey({
       taskId: 'task-1', requestToken: 'sweep-tick-1',
     })),
@@ -130,7 +130,7 @@ test('legacy automatic dispatch stands down after Coordinator authority takes ov
     },
   } as never, { create: async () => { creates += 1; } } as never, {} as never);
 
-  const result = await service.execute('owner-1', 'task-1', { observedRunAt: null });
+  const result = await service.execute('owner-1', 'task-1', { observedEpoch: 0n });
 
   assert.deepEqual(result, { ok: false, skipped: 'coordinator-authority' });
   assert.equal(creates, 0);

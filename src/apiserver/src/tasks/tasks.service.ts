@@ -136,6 +136,7 @@ import {
   type TaskRunBatchPlan,
   type TaskRunPlan,
   type TaskRunReceipt,
+  type TaskRunStandDownTarget,
 } from './task-run-receipt';
 import {
   TASK_RUN_TRIGGER,
@@ -299,7 +300,13 @@ export type TaskRunAnswer =
         | 'superseded'
         | 'aggregate-parent'
         | 'coordinator-authority'
-        | 'rescheduled'
+        /**
+         * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
+         * that produced this delivery. Terminal, and the one automatic stand-down that is — the
+         * epoch only goes up, so the moment this token names can never come back, and every later
+         * delivery of it is answering the same gone moment.
+         */
+        | 'stale-epoch'
         /**
          * The task this request was planned against was deleted before its Session could be
          * written. Terminal by construction — the plan names a row that no longer exists and every
@@ -759,8 +766,8 @@ const RECONCILE_INTERVAL_MS = 60_000;
 export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
 
 /**
- * What an automatic trigger saw when it picked a task, carried into the dispatch so the dispatch
- * can tell whether it is still acting on the same facts.
+ * WHICH MOMENT an automatic trigger is acting on, carried into the dispatch so the dispatch can
+ * tell whether that moment is still the current one.
  *
  * Every automatic path is a scan followed by a re-read: the sweep (or triggerDependents) selects
  * candidates, then `execute` loads each one again to dispatch it. A user editing the schedule in
@@ -769,34 +776,37 @@ export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
  * indistinguishable from a person pressing Run, and `execute` treats a future `runAt` as something
  * a person may override: it would start the task early AND consume the schedule they had just set.
  *
- * `observedRunAt` is deliberately nullable rather than optional, and `null` is a real assertion
- * rather than "no opinion": an unscheduled task that acquires a schedule mid-flight is the same
- * race, and reconcileReadyTasks/triggerDependents select unscheduled tasks all day.
+ * This USED to carry the `runAt` the scan saw and compare instants. That answered "did the schedule
+ * move", which is not the same question and is one a revertible value cannot answer: `run_at` going
+ * 09:00 -> 10:00 -> 09:00 compares EQUAL to a pass that scanned the first 09:00, so a redelivered
+ * old pass was allowed to start work for an appointment that had already been replaced twice — and
+ * the current pass, whose own request derives a different name, was then refused because the task
+ * was running. §7.7 D5-b4. It also said nothing at all about the dependency door, whose moment is
+ * not a value on the row.
+ *
+ * So what is carried is the MOMENT's name: `task_dispatch_epoch.epoch`, monotone, advanced once per
+ * statement that creates a moment at which an automatic door may legitimately start this task's
+ * work (a new or consumed appointment, this task reopening, a prerequisite's status moving, the
+ * waiting set changing). Equal epochs mean the world this pass selected under is the world the
+ * dispatch is writing into; different ones mean this delivery is answering a moment that is gone.
  */
 export interface AutoDispatch {
-  /** The task's `runAt` as the candidate scan saw it. `null` means it was unscheduled. */
-  observedRunAt: Date | null;
+  /** `task_dispatch_epoch.epoch` as the candidate scan read it, and the epoch its token names. */
+  observedEpoch: bigint;
 }
 
 /**
  * Whether an automatic trigger may still act, given what the dispatch's own read found.
  *
- * Two ways to lose the right: the value moved (rescheduled, cancelled, or newly scheduled under an
- * unscheduled candidate), or it now points into the future. The second is implied by the first for
- * every caller in this file — they all select `run_at IS NULL OR run_at <= now()` — and is stated
- * anyway, because "an automatic trigger never starts a task before its time" should be checkable
- * where the decision is made rather than by auditing three candidate scans.
- *
- * Comparison is by instant, not identity: these are two different Date objects for the same row.
+ * One comparison, because there is one question. What the previous spelling checked as a second
+ * clause — "an automatic trigger never starts a task before its time" — is decided by the candidate
+ * scans, and decided better there: all three evaluate `run_at <= now()` on the DATABASE's clock,
+ * inside the statement that selects the row, and the epoch then proves the row has not moved since.
+ * Re-deciding it here would have meant comparing a database instant against `Date.now()` in this
+ * process, which is the clock dependency the receipt's lease was deliberately built without.
  */
-export function autoDispatchStillValid(
-  current: Date | null,
-  observed: Date | null,
-  now: number = Date.now(),
-): boolean {
-  if ((current?.getTime() ?? null) !== (observed?.getTime() ?? null)) return false;
-  if (current !== null && current.getTime() > now) return false;
-  return true;
+export function autoDispatchStillValid(current: bigint, observed: bigint): boolean {
+  return current === observed;
 }
 
 // Brake on repeat foremen for the same stall.
@@ -5804,8 +5814,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     // The one run this check exists for. A retry of the filing above makes a DIFFERENT task, so
-    // "the first run of this task" names exactly one request for as long as the row exists.
-    await this.execute(ownerId, verification.id, undefined, TASK_RUN_TRIGGER.firstRun(verification.id));
+    // "the first run of this task, at the moment it was filed" names exactly one request for as
+    // long as the row exists.
+    await this.execute(
+      ownerId,
+      verification.id,
+      undefined,
+      TASK_RUN_TRIGGER.firstRun(verification.id, await this.dispatchEpochOf(verification.id)),
+    );
     this.logger.log(`verification ${verification.id} filed for task ${taskId}`);
   }
 
@@ -5853,6 +5869,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * WHICH MOMENT this task is at right now — `task_dispatch_epoch.epoch` (0137).
+   *
+   * The one-row read the doors that have no candidate scan need: the verification filer and the
+   * foreman create a task in order to run it once, immediately, so there is no sweep query to ride
+   * on. Both call it on a row they have just created, which is at the epoch its seed trigger gave
+   * it; the read is what makes that a fact this code took from the database rather than a constant
+   * it assumed, so a task ever filed for a first run at a later moment names a different request.
+   *
+   * The three sweeps do NOT call this — they join the epoch into the statement that selects their
+   * candidates, so the epoch they carry is the one every clause of their predicate was evaluated
+   * against. A second read would be a second snapshot, and the fence would then be comparing two
+   * different instants rather than proving one.
+   */
+  private async dispatchEpochOf(taskId: string): Promise<bigint> {
+    const [row] = await this.prisma.$queryRaw<Array<{ epoch: bigint }>>`
+      SELECT "epoch" FROM "task_dispatch_epoch" WHERE "task_id" = ${taskId}::uuid`;
+    return row?.epoch ?? 0n;
+  }
+
+  /**
    * A prerequisite (`doneTaskId`) just reached DONE: find every task that depends on it
    * and auto-run the ones this completion unblocked. A dependent fires only when it is
    * now fully READY (all its prerequisites DONE), still actionable (OPEN), opted into
@@ -5876,11 +5912,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         autoRunWhenReady: true,
         runAt: true,
         assignee: { select: { id: true, runnerId: true } },
-        // 0132's prerequisite revision, read here because it is what NAMES this dispatch: two
-        // passes — a second apiserver, or this one after a restart — that unlock the same task over
-        // the same prerequisite set are one request, and the Session they race for carries the id
-        // both of them derive. It is always present (the row is created with the task).
-        dependencyRevision: { select: { revision: true } },
+        // The moment this unlock IS (0137), read here because it is what NAMES this dispatch: two
+        // passes — a second apiserver, or this one after a restart — over the same moment are one
+        // request, and the Session they race for carries the id both of them derive. Read in the
+        // same statement as `status` and `runAt`, so the epoch is the one those values are at: the
+        // prerequisite's own DONE advanced it in the transaction that committed that status, and
+        // whatever moves either of them next advances it again. It is always present (the row is
+        // created with the task).
+        dispatchEpoch: { select: { epoch: true } },
       },
     });
     const now = new Date();
@@ -5894,16 +5933,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
+      const epoch = dep.dispatchEpoch?.epoch ?? 0n;
       try {
-        // Carrying what this scan read: between here and execute's own re-read, the user may have
-        // scheduled this task for later, and starting it now would both jump the appointment and
-        // erase it. `dep.runAt` is usually null — an unscheduled dependent — which is an assertion
-        // of exactly that, not an absence of one.
+        // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
+        // between here and its own re-read the user may have scheduled this task for later, or the
+        // prerequisite may have reopened, and either replaces the reason this loop had for starting
+        // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
         await this.execute(
           ownerId,
           dep.id,
-          { observedRunAt: dep.runAt },
-          TASK_RUN_TRIGGER.dependency(dep.id, dep.dependencyRevision?.revision ?? 0n),
+          { observedEpoch: epoch },
+          TASK_RUN_TRIGGER.dependency(dep.id, epoch),
         );
       } catch (e) {
         this.logger.warn(
@@ -5945,20 +5985,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
         listId: string | null;
-        runAt: Date | null;
-        dependencyRevision: bigint | null;
+        dispatchEpoch: bigint | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId", t.run_at AS "runAt", d.revision AS "dependencyRevision"
+             t.list_id AS "listId", e.epoch AS "dispatchEpoch"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
-      -- 0132's prerequisite revision, joined here because it NAMES this sweep's dispatch: two
-      -- passes that unlock the same task over the same prerequisite set are one request, and both
-      -- derive the same Session id for it. Riding on this scan rather than a second round trip.
-      LEFT JOIN task_dependency_revision d ON d.task_id = t.id
+      -- 0137's dispatch epoch, joined here because it NAMES this sweep's dispatch and fences it:
+      -- two passes over the same moment are one request and derive the same Session id, and a pass
+      -- whose moment has been overtaken between this scan and the dispatch is told so rather than
+      -- starting work for it. Read in the SAME statement as the predicate below, so the epoch is
+      -- the one every clause of AUTO_RUN_READY_SQL was evaluated against — a snapshot, not two.
+      -- Riding on this scan rather than a second round trip.
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
       WHERE ${AUTO_RUN_READY_SQL}`;
     if (rows.length === 0) return;
     // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
@@ -5982,12 +6024,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
-      dependencyRevision: row.dependencyRevision,
-      // Read here so the dispatch below can prove it is still acting on this row. The predicate
-      // admits `run_at IS NULL OR run_at <= now()`, so this is null for almost every candidate —
-      // and null is the assertion that matters, since scheduling a previously unscheduled task is
-      // the commonest way for this scan to be overtaken.
-      runAt: row.runAt,
+      // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
+      // previously unscheduled task is the commonest way for this scan to be overtaken, and it is
+      // one of the transitions that advances this counter — so is the task reopening, and so is any
+      // prerequisite's status moving. One number, compared once, rather than a value per fact.
+      dispatchEpoch: row.dispatchEpoch ?? 0n,
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
@@ -6023,7 +6064,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let atCapacity = 0;
-    let rescheduled = 0;
+    let overtaken = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
@@ -6071,13 +6112,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const res = await this.execute(
           t.ownerId,
           t.id,
-          { observedRunAt: t.runAt },
-          TASK_RUN_TRIGGER.dependency(t.id, t.dependencyRevision ?? 0n),
+          { observedEpoch: t.dispatchEpoch },
+          TASK_RUN_TRIGGER.dependency(t.id, t.dispatchEpoch),
         );
-        // A task scheduled out from under this pass is not dispatched and must not be logged as
+        // A task overtaken out from under this pass is not dispatched and must not be logged as
         // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
         if (res.ok) this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
-        else rescheduled += 1;
+        else overtaken += 1;
       } catch (e) {
         this.logger.warn(
           `reconcile auto-run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -6103,9 +6144,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `auto-run: ${atCapacity} ready task(s) left for a later sweep — no free slot to claim them`,
       );
     }
-    if (rescheduled > 0) {
+    if (overtaken > 0) {
+      // The moment this pass selected them under is gone — rescheduled, reopened, a prerequisite
+      // moved. Not a fault and not a retry: the pass that reads the NEW moment is the one that
+      // decides what happens next, and each of these stood down without touching anything.
       this.logger.log(
-        `auto-run: ${rescheduled} ready task(s) were rescheduled mid-sweep — their new schedule stands`,
+        `auto-run: ${overtaken} ready task(s) were overtaken mid-sweep — the moment they were ` +
+          'selected under has passed',
       );
     }
     for (const [listId, e] of perList) {
@@ -6155,12 +6200,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // longest-overdue work first rather than an arbitrary slice; `id` only breaks ties, so the
     // order is total and the same list twice in a row means the same decisions twice in a row.
     const due = await this.prisma.$queryRaw<
-      { id: string; ownerId: string; runnerId: string; listId: string | null; runAt: Date }[]
+      {
+        id: string; ownerId: string; runnerId: string; listId: string | null;
+        dispatchEpoch: bigint | null;
+      }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.runner_id AS "runnerId", t.list_id AS "listId",
-             t.run_at AS "runAt"
+             e.epoch AS "dispatchEpoch"
       FROM task t
       JOIN workspace a ON a.id = t.assignee_id
+      -- 0137's dispatch epoch: WHICH appointment this pass is keeping. Not the run_at instant,
+      -- which comes back — 09:00 -> 10:00 -> 09:00 is a second, legitimate appointment that would
+      -- re-derive the first one's name and be answered with the first one's Session (§7.7 D5-b4).
+      -- The epoch is advanced by every write to run_at, including the consumption a kept
+      -- appointment performs, so each appointment is its own moment and no moment repeats.
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
       WHERE ${SCHEDULED_DUE_SQL}
       ORDER BY t.run_at ASC, t.id ASC
       LIMIT ${SCHEDULED_DISPATCH_MAX_PER_SWEEP}`;
@@ -6170,7 +6224,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const budget = await this.materialisationBudget();
     let dispatched = 0;
     let atCapacity = 0;
-    let rescheduled = 0;
+    let overtaken = 0;
     for (const t of due) {
       // The same brake the auto-run sweep takes, for the same reason: materialising past what the
       // runner can claim produces sessions that sit PENDING and buy nothing. Here it is also what
@@ -6180,6 +6234,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         atCapacity += 1;
         continue;
       }
+      const epoch = t.dispatchEpoch ?? 0n;
       try {
         // The appointment this pass is keeping, carried so the dispatch can check it is still the
         // one on the row. A user who moves a due task to next week between the scan and here has
@@ -6188,14 +6243,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const res = await this.execute(
           t.ownerId,
           t.id,
-          { observedRunAt: t.runAt },
-          // The appointment being kept, and it names the request: two passes over the same due row
-          // are one dispatch, and the run this pass keeps consumes `run_at` back to NULL, so the
-          // next appointment is a different name that this one cannot be replayed into.
-          TASK_RUN_TRIGGER.scheduled(t.id, t.runAt),
+          { observedEpoch: epoch },
+          // The appointment being kept, and it names the request: two passes over the same moment
+          // are one dispatch, and the run this pass keeps consumes `run_at` back to NULL — which
+          // advances the epoch, so the next appointment is a different name that this one cannot be
+          // replayed into, and an older pass's name is one no future appointment can re-derive.
+          TASK_RUN_TRIGGER.scheduled(t.id, epoch),
         );
         if (res.ok) dispatched += 1;
-        else rescheduled += 1;
+        else overtaken += 1;
       } catch (e) {
         // The schedule is untouched on this path (execute consumes it only after a run is away),
         // so the next sweep tries again. Warn rather than error: a task whose runner went offline
@@ -6206,11 +6262,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (dispatched > 0) this.logger.log(`scheduled: ${dispatched} due task(s) dispatched`);
-    if (rescheduled > 0) {
+    if (overtaken > 0) {
       // Worth a line of its own: "the schedule fired and nothing ran" is otherwise indistinguishable
       // from a bug, and this is the one case where it is the correct outcome.
       this.logger.log(
-        `scheduled: ${rescheduled} due task(s) were rescheduled mid-sweep — their new schedule stands`,
+        `scheduled: ${overtaken} due task(s) were overtaken mid-sweep — the appointment they were ` +
+          'selected under has been replaced',
       );
     }
     if (atCapacity > 0) {
@@ -6377,7 +6434,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true },
         });
         // As with a filed verification: this task was created in order to be run, once.
-        await this.execute(list.ownerId, task.id, undefined, TASK_RUN_TRIGGER.firstRun(task.id));
+        await this.execute(
+          list.ownerId,
+          task.id,
+          undefined,
+          TASK_RUN_TRIGGER.firstRun(task.id, await this.dispatchEpochOf(task.id)),
+        );
         this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
         // The id is encoded where it becomes prose. This detail is stored and replayed to agents
         // — `describeList` prints it verbatim beside the list's own base62 id — and
@@ -8491,25 +8553,61 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * End a delivery that is not going to start anything, without leaving the request held.
+   * End a delivery that is not going to start anything, by RELEASING its hold.
    *
-   * A bare `return` from inside the lease is the one shape that wedges it: the receipt stays OPEN
-   * with a live holder, and the next delivery of the same durable token is told the request is in
-   * progress by a process that has already answered.
+   * One of the two endings a stand-down may take — the other is `applyStandDownTarget`, which
+   * freezes one — and §7.7 D5-b4(6) is the rule for choosing between them: freezing is sound
+   * exactly when the token names a moment that can never come back, and releasing is what every
+   * other case owes the request. It is a decision per refusal, not a house style.
    *
-   * RELEASED rather than frozen, for every stand-down, and §7.7 D5-b4(6) is the reason. Freezing
-   * needs the token to name a moment that cannot come back, and the automatic doors' tokens do not
-   * yet: `run_at` can go 09:00 -> 10:00 -> 09:00, and a prerequisite can go DONE -> reopened ->
-   * DONE under an unchanged edge set. A frozen stand-down would answer those legitimate second
-   * moments with the first one's refusal, for ever. `task_dispatch_epoch` (0137) is the name that
-   * makes freezing sound; wiring the doors onto it is H2G, and this is the safe reading until then.
+   * This is that other case, and every automatic refusal in `execute` except the stale epoch takes
+   * it: a supersession link can be removed, a completion policy can go back to MANUAL, a Project's
+   * coordinator can be turned off. None of those facts is in the epoch's transition table, so a
+   * later delivery can legitimately re-derive this very token — and it must be allowed to evaluate
+   * rather than be answered with a refusal from a world that has since changed back.
+   *
+   * What NEITHER ending may do is what a bare `return` from inside the lease does: leave the
+   * receipt OPEN with a live holder, so the next delivery of the same durable token is told the
+   * request is in progress by a process that has already answered it.
    */
-  private async standDown<T>(
+  private async standDownReleasing<T>(
     lease: Extract<TaskRunLease, { held: true }>,
     answer: T,
   ): Promise<T> {
     await this.releaseRunRequest(lease.claim).catch(() => undefined);
     return answer;
+  }
+
+  /**
+   * CARRY OUT a frozen stand-down: bind it, then answer from the plan in force.
+   *
+   * The same two steps `applyExecuteTarget` takes, and for the same reason rather than for symmetry:
+   * 0137's `task_run_request_target_check` says a receipt that is not OPEN HAS a plan, because a
+   * state that claims a decision was made and a plan that is missing are the same fact disagreeing
+   * with itself. Freezing an OPEN receipt straight to `COMPLETED` violates it — correctly, and this
+   * is what it was protecting: a delivery that dies between deciding "this moment is gone" and
+   * recording that answer must leave a row the next delivery can finish, and a bound plan is that
+   * row.
+   *
+   * Reached identically by the holder that decided it and by a takeover that read it off the
+   * receipt, which is what makes "the same request, the same answer" a property of the code.
+   */
+  private async applyStandDownTarget(
+    lease: Extract<TaskRunLease, { held: true }>,
+    frozen: TaskRunStandDownTarget,
+  ): Promise<TaskRunAnswer> {
+    const bound = await this.bindRunRequest(lease.claim, frozen) as TaskRunTargetRecord | null;
+    if (!bound) throw taskRunInProgress(lease.claim.actionKind, lease.claim.requestToken);
+    // The plan in force may not be the one this call computed — a takeover may have bound its own —
+    // and a plan that is not a stand-down is not this method's to carry out. Read off the row,
+    // never assumed from the door that got here.
+    if (!(bound.v === 1 && bound.kind === 'STAND_DOWN')) {
+      throw taskRunUnreadableTarget(lease.claim.actionKind, lease.claim.requestToken);
+    }
+    // The plan is to write nothing, so carrying it out is exactly freezing its answer.
+    return this.completeRunReceipt<TaskRunAnswer>(
+      lease.claim, { ok: false as const, skipped: bound.reason },
+    );
   }
 
   /**
@@ -8539,6 +8637,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // somebody else's command is worse than saying it cannot, and the replica that DOES
       // understand it still holds or will take the lease.
       if (bound?.v === 1 && bound.kind === 'RUN') return this.applyExecuteTarget(lease, bound);
+      // A stand-down that was decided and bound but not yet frozen — its holder died in between.
+      // The plan says the request writes nothing, so finishing it is recording that answer, which
+      // is exactly what the holder was about to do.
+      if (bound?.v === 1 && bound.kind === 'STAND_DOWN') {
+        return this.applyStandDownTarget(lease, bound);
+      }
       throw taskRunUnreadableTarget(lease.claim.actionKind, lease.claim.requestToken);
     }
     const task = await this.prisma.task.findFirst({
@@ -8559,6 +8663,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runAt: true,
         supersededByTaskId: true,
         terminalReason: true,
+        // WHICH MOMENT this row is at (0137). An automatic delivery names one, and this is what it
+        // is compared against — the fence below. Always present: the table is backfilled and seeded
+        // by a trigger on every INSERT, the same guarantee `dependencyRevision` carries.
+        dispatchEpoch: { select: { epoch: true } },
         // §13.1 AG6's two columns, plus the existence of one direct child. `take: 1` because the
         // question is existence, not a count — the parent of a hundred subtasks reads one row.
         completionPolicy: true,
@@ -8572,6 +8680,35 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    // THE MOMENT FENCE, and it is first because it decides whether this delivery has any business
+    // evaluating the gates below at all. Only automatic triggers pass `auto`; an explicit Run Now is
+    // a person deciding to start the work now, and there is no moment for it to be stale against.
+    //
+    // An automatic door names its request `<kind>:<task>:<epoch>` and carries the epoch its own
+    // candidate scan read. If the row has moved to a later one, everything that scan concluded is
+    // about a world that no longer exists — the appointment was replaced, the task reopened, a
+    // prerequisite moved — and the pass that reads the NEW epoch is the one that gets to decide what
+    // happens next. Starting anything here would take the execution claim under a name that belongs
+    // to a moment that has passed, and the current moment's own request would then be refused as
+    // "already running": the old event runs and the new one does not, which is the exact inversion
+    // §7.7 D5-b4 exists to remove.
+    //
+    // FROZEN rather than released, and this is the one stand-down that may be. The epoch only ever
+    // goes up, so this token names a moment that can never come back; every later delivery of it —
+    // a redelivered sweep tick, a second replica that scanned before the change — is answering the
+    // same gone moment and gets the same answer without touching a thing. Every other stand-down
+    // below releases, because the fact that refused it can be un-done.
+    const epoch = task.dispatchEpoch?.epoch ?? 0n;
+    if (auto && !autoDispatchStillValid(epoch, auto.observedEpoch)) {
+      return this.applyStandDownTarget(lease, {
+        v: 1,
+        kind: 'STAND_DOWN',
+        taskId: task.id,
+        reason: 'stale-epoch',
+        observedEpoch: auto.observedEpoch.toString(),
+        currentEpoch: epoch.toString(),
+      });
+    }
     // §13.6 SU6, BEFORE anything with an effect. Run Now used to reach the Session insert — which
     // 0130's guard deliberately allows, because the origin is USER and a person may open a run on a
     // replaced attempt — and only then reach `clearFailedForRetry`, whose `FAILED → IN_PROGRESS` a
@@ -8592,7 +8729,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A stand-down still ends this delivery's hold. Released rather than frozen: a supersession
       // link can be removed, and the same durable fact arriving later must be able to evaluate
       // again rather than replay a refusal from a world that has since changed back.
-      if (auto) return this.standDown(lease, { ok: false as const, skipped: 'superseded' as const });
+      if (auto) {
+        return this.standDownReleasing(lease, { ok: false as const, skipped: 'superseded' as const });
+      }
       throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
     }
     // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
@@ -8614,7 +8753,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       hasDirectChildren: task.children.length > 0,
     })) {
       if (auto) {
-        return this.standDown(lease, { ok: false as const, skipped: 'aggregate-parent' as const });
+        return this.standDownReleasing(
+          lease, { ok: false as const, skipped: 'aggregate-parent' as const },
+        );
       }
       throw new ConflictException(
         `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
@@ -8623,24 +8764,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
-      return this.standDown(
+      return this.standDownReleasing(
         lease, { ok: false as const, skipped: 'coordinator-authority' as const },
       );
-    }
-    // The schedule fence, and it comes before every other check because it decides whether this
-    // call has any business running at all. Only automatic triggers pass `auto`: an explicit Run
-    // Now is a person deciding to start the work despite the schedule, which is exactly the case
-    // the fence must NOT block (see the consumption below). A sweep that has been overtaken by a
-    // reschedule simply stands down — the task keeps whatever schedule it now has, and the sweep
-    // that runs after that instant is the one that starts it.
-    if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
-      // RELEASED, like the three above, and §7.7 D5-b4(6) is why it is not frozen. Freezing needs
-      // the token to name a moment that can never come back, and `sched:<task>:<instant>` does not:
-      // `run_at` can go 09:00 -> 10:00 -> 09:00, and that second 09:00 is a legitimate appointment
-      // which re-derives this name. A frozen stand-down would answer it with this refusal for ever
-      // — the appointment silently never runs. H2G's monotone epoch is what makes freezing sound;
-      // until it lands, releasing is the only safe reading.
-      return this.standDown(lease, { ok: false as const, skipped: 'rescheduled' as const });
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);
