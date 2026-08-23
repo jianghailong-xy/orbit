@@ -37,8 +37,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * One press, through the real options.
+ *
+ * `retryDelay` is the one thing overridden: the shipped schedule is 250ms → 500ms → 1s, and paying
+ * it here would put ~5s of real sleeping into the suite for something these tests do not assert.
+ * WHICH failures are resent, and HOW MANY times, is `runRequestResend.retry` and comes through
+ * untouched; the backoff schedule itself is pinned in runRequestToken.test.ts.
+ */
 const press = (qc: QueryClient) =>
-  new MutationObserver(qc, runNowMutationOptions(qc, toast(), TASK, null)).mutate({
+  new MutationObserver(qc, {
+    ...runNowMutationOptions(qc, toast(), TASK, null),
+    retryDelay: 0,
+  }).mutate({
     // The gesture. Every attempt below this line reuses what it drew.
     triggerId: newRunRequestToken(),
   });
@@ -122,6 +133,31 @@ describe('a Run now whose answer never arrives', () => {
 
     expect(sentBodies(fetchMock)).toHaveLength(4);
     expect(new Set(sentBodies(fetchMock)).size).toBe(1);
+  });
+
+  it('resends when a 2xx arrives but its body dies on the way', async () => {
+    // The narrowest response-loss window there is, and the one the runner had a real bug in: the
+    // server committed the run and sent the 200, and the BODY never finished. `fetch` has already
+    // resolved by then — the headers arrived — so the failure surfaces from `res.text()`, below
+    // every status check. It reaches `api()` as a TypeError rather than an `ApiError`, which is
+    // exactly what `isLostRunAnswer` keys on: no answer was received, and one may well exist.
+    const truncated = {
+      ok: true,
+      status: 200,
+      text: async () => {
+        throw new TypeError('network error');
+      },
+    } as unknown as Response;
+    const fetchMock = vi.fn();
+    fetchMock.mockResolvedValueOnce(truncated);
+    fetchMock.mockResolvedValueOnce(okJson());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await press(new QueryClient());
+
+    const bodies = sentBodies(fetchMock);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toBe(bodies[1]); // the same press, byte for byte
   });
 
   it('never resends an answer the server actually gave', async () => {

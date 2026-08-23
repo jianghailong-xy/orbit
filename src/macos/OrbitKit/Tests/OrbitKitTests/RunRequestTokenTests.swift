@@ -19,6 +19,11 @@ private enum StubbedAttempt {
     /// The connection dies with the request already delivered — a dropped link, a killed proxy.
     /// The server may well have committed the run; the client simply never learns.
     case transportFailure
+    /// A REAL 2xx whose body then dies on the way back — the narrowest response-loss window there
+    /// is. The run is committed and the status arrived; only the answer is missing. URLSession
+    /// surfaces it as a transport error rather than as a response, which is what lets the resend
+    /// see it at all.
+    case truncatedAnswer(status: Int, partial: Data)
 }
 
 private final class RunRequestURLProtocol: URLProtocol, @unchecked Sendable {
@@ -41,6 +46,12 @@ private final class RunRequestURLProtocol: URLProtocol, @unchecked Sendable {
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)
+        case .truncatedAnswer(let status, let partial):
+            let response = HTTPURLResponse(url: request.url!, statusCode: status,
+                                           httpVersion: nil, headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: partial)
+            client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
         }
     }
 
@@ -223,6 +234,26 @@ final class RunRequestTokenTests: XCTestCase {
     /// The control plane's own IN_PROGRESS body, verbatim in shape.
     private static let inProgressBody = Data(
         #"{"statusCode":409,"code":"TASK_RUN_REQUEST_IN_PROGRESS","message":"being answered"}"#.utf8)
+
+    func testA2xxWhoseBodyDiesOnTheWayIsResentUnderTheSameName() async throws {
+        // The status arrived, the run is committed, and the ANSWER is what went missing. URLSession
+        // fails the task rather than handing back a short body, so this lands in the same place a
+        // dropped connection does — and must be treated the same way, because a client that
+        // reports it as a failure sends the user back to press a button that starts a second run.
+        let recorder = BodyRecorder()
+        let attempts = Counter()
+        RunRequestURLProtocol.handler = { request in
+            recorder.append(request)
+            return attempts.next() == 1
+                ? .truncatedAnswer(status: 201, partial: Data(#"{"ok":tr"#.utf8))
+                : .answered(status: 201, data: Data())
+        }
+
+        try await client().executeTask("t1", triggerId: "341DOGTVEs0Fk0gAn1mje")
+
+        XCTAssertEqual(recorder.bodies.count, 2, "a lost body was not resent")
+        XCTAssertEqual(recorder.bodies.first, recorder.bodies.last)
+    }
 
     func testAnAnsweredRequestIsNeverResent() async throws {
         // 409 TASK_RUN_REQUEST_MISMATCH is the SAME status from the SAME door and means the

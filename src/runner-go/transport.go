@@ -176,7 +176,17 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 		return err
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	// A read that fails is a TRANSPORT failure, not an empty answer. `Do` returns as soon as the
+	// status line and headers arrive, so a connection that dies while the body is still streaming
+	// lands HERE — with a 2xx already received and the work behind it very possibly committed.
+	// Discarding this error made that case indistinguishable from a legitimately empty 200: the
+	// caller was told its request had succeeded, having been handed nothing that says so. Every
+	// caller is better served by the truth, and the one that can ACT on it — `startTask`, whose
+	// request carries a name — resends under that name rather than guessing.
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("%s %s: reading response body: %w", method, path, err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &transportHTTPError{method: method, path: path, statusCode: resp.StatusCode, body: string(data)}
 	}

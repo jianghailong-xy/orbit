@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -389,6 +390,96 @@ func TestTheTwoConflictsAreToldApartByCodeNotByStatus(t *testing.T) {
 	}
 	if !isResendableRunFailure(errors.New("connection reset")) {
 		t.Fatalf("a lost answer was not resendable")
+	}
+}
+
+// truncatedBodyThenAnswer answers the first `truncated` deliveries with a REAL 2xx — status line,
+// headers, a Content-Length promising a body — and then kills the connection without sending one.
+//
+// This is a strictly narrower window than a dropped connection, and the one a client is most likely
+// to get wrong: `http.Client.Do` has already returned SUCCESSFULLY by then, because it returns as
+// soon as the headers arrive. The run is committed, the 200 was real, and only the body is missing.
+// Written onto a hijacked connection rather than through the ResponseWriter so the bytes on the
+// wire are exactly this and nothing is helpfully completed for us.
+func truncatedBodyThenAnswer(t *testing.T, truncated int) (*httptest.Server, *[]map[string]interface{}) {
+	t.Helper()
+	const answer = `{"ok":true,"sessionId":"s1"}`
+	var bodies []map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		body := map[string]interface{}{}
+		_ = json.Unmarshal(raw, &body)
+		bodies = append(bodies, body)
+		if len(bodies) > truncated {
+			_, _ = w.Write([]byte(answer))
+			return
+		}
+		conn, bufrw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("hijack: %v", err)
+			return
+		}
+		fmt.Fprintf(bufrw, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"+
+			"Content-Length: %d\r\n\r\n", len(answer))
+		// Headers and nothing else, ever. NONE of the promised body arrives — which is the shape
+		// that used to read as success: `data` came back empty, and an empty 2xx body is a
+		// legitimate answer at this door, so the discarded read error was the only thing that could
+		// have told them apart. (A PARTIAL body was always caught, by `json.Unmarshal` failing on
+		// the fragment — a different bug with a different symptom.)
+		_ = bufrw.Flush()
+		_ = conn.Close()
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &bodies
+}
+
+func TestStartTaskResendsWhenA2xxBodyIsTruncated(t *testing.T) {
+	// The narrowest response-loss window there is: the server committed the run, sent the 200, and
+	// the body died on the way back. `Do` succeeds here — only the read fails — so a client that
+	// discards the read error calls this a SUCCESS with an empty answer, and one that calls it a
+	// plain failure sends the user back to press a button that starts a second run.
+	srv, bodies := truncatedBodyThenAnswer(t, 1)
+
+	raw, err := NewTransport(srv.URL, "tok").startTask("t1", "341DOGTVEs0Fk0gAn1mje")
+
+	if err != nil {
+		t.Fatalf("a truncated answer was not resent: %v", err)
+	}
+	if len(*bodies) != 2 {
+		t.Fatalf("expected one resend, got %d delivery/deliveries", len(*bodies))
+	}
+	for i, body := range *bodies {
+		if got := requestToken(t, body); got != "341DOGTVEs0Fk0gAn1mje" {
+			t.Fatalf("delivery %d carried %q — the resend must be the SAME request", i, got)
+		}
+	}
+	// And the WHOLE original answer reaches the caller.
+	if !strings.Contains(string(raw), `"sessionId":"s1"`) {
+		t.Fatalf("the caller got %s", raw)
+	}
+}
+
+func TestATruncated2xxIsNeverReportedAsSuccess(t *testing.T) {
+	// The bug this closes, pinned at the layer it lived at. `doHeaders` discarded `io.ReadAll`'s
+	// error, so a 2xx whose body never arrived was indistinguishable from a legitimately empty
+	// one — and `startTask` had nothing to resend on, because it had been told it succeeded.
+	srv, bodies := truncatedBodyThenAnswer(t, runRequestResendAttempts+5)
+
+	var out json.RawMessage
+	err := NewTransport(srv.URL, "tok").do(nil, "POST", "/runner/tasks/t1/execute",
+		map[string]string{"triggerId": "341DOGTVEs0Fk0gAn1mje"}, &out, taskOpTimeout)
+
+	if err == nil {
+		t.Fatalf("a 2xx whose body never arrived was reported as success (out = %s)", out)
+	}
+	if _, answered := err.(*transportHTTPError); answered {
+		t.Fatalf("a lost body was reported as an HTTP answer: %v", err)
+	}
+	if !isResendableRunFailure(err) {
+		t.Fatalf("a lost body was not resendable: %v", err)
+	}
+	if len(*bodies) != 1 {
+		t.Fatalf("`do` sent %d deliveries; it must not retry on its own", len(*bodies))
 	}
 }
 
