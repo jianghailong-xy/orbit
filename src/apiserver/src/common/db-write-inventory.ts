@@ -791,6 +791,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'projects/project-events.service.ts#enqueue', under: 'projectReconcile.applyAction and the outbox writers' },
   { at: 'projects/project-reconcile.service.ts#acquireLeaseInTransaction', under: 'projectReconcile.acquireLease' },
   { at: 'projects/project-reconcile.service.ts#applyAggregations', under: 'projectReconcile.repeatableRead' },
+  { at: 'projects/project-reconcile.service.ts#stampExhaustedVerdictApplies', under: "projectReconcile.repeatableRead — `[K5]`'s escalation stamp, written on the pass that notices a spent retry budget" },
   { at: 'projects/project-reconcile.service.ts#applyBlockers', under: 'projectReconcile.repeatableRead' },
   { at: 'projects/project-reconcile.service.ts#applyDecisionActionInTransaction', under: 'projectReconcile.repeatableRead' },
   { at: 'projects/project-reconcile.service.ts#claimBlockerAction', under: 'projectReconcile.repeatableRead' },

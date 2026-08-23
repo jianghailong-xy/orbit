@@ -39,6 +39,7 @@ import {
   TaskCompletionPolicyValue,
   isAggregateParent,
 } from './task-aggregation';
+import { VERDICT_APPLY_EXHAUSTED } from './task-verification-verdict';
 
 /** §9.4: the rolling window `sessionBudgetPerDay` is measured over. */
 export const PROJECT_SESSION_BUDGET_WINDOW_MS = 24 * 60 * 60_000;
@@ -191,6 +192,7 @@ export function detectProjectBlockerConditions(
 ): ObservedBlockerCondition[] {
   const conditions: ObservedBlockerCondition[] = [
     ...refusedDispatchConditions(input),
+    ...verdictApplyExhaustedConditions(input),
     ...mergeConditions(input),
     ...spentFailureBudgetConditions(input),
     ...verificationConditions(sources.verificationVerdicts),
@@ -274,6 +276,48 @@ function refusedDispatchConditions(input: ProjectDecisionInput): ObservedBlocker
       facts: { taskId: task.id, refusalCode: action.refusalCode },
       detail: {
         taskId: task.id,
+        refusalCode: action.refusalCode,
+        actionId: action.actionId,
+        refusedAt: action.createdAt,
+      },
+    });
+  }
+  return conditions;
+}
+
+/**
+ * `[K5]` criterion 7: a verdict whose apply ran out of attempts.
+ *
+ * Keyed on `reasonCode` and not on a count, because `reasonCode` is what a SNAPSHOT carries — the
+ * bucket is stamped on the action by the pass that spent the last attempt, so this reads a fact
+ * rather than re-deriving a budget from a `detail` the world does not include.
+ *
+ * The subject is the CHECK, matching the action's own subject and `VERIFICATION_CANNOT_CONCLUDE`'s
+ * neighbour on the subject side: two checks of one subject can each have a stuck conclusion, and a
+ * row per subject would collapse them into one sentence naming the wrong verifier.
+ *
+ * TF2: the facts, not the attempt number. A row that says "this has now failed four times" would
+ * get a new digest on every pass, which is the churn BL7 excludes and §7.6 TR3 would read as a
+ * stream of brand-new failures.
+ */
+function verdictApplyExhaustedConditions(
+  input: ProjectDecisionInput,
+): ObservedBlockerCondition[] {
+  const conditions: ObservedBlockerCondition[] = [];
+  const seen = new Set<string>();
+  for (const action of input.world.actions) {
+    if (action.type !== 'APPLY_VERIFICATION_VERDICT' || !action.subjectId) continue;
+    if (action.status !== 'REFUSED') continue;
+    if (action.reasonCode !== VERDICT_APPLY_EXHAUSTED) continue;
+    if (seen.has(action.subjectId)) continue;
+    seen.add(action.subjectId);
+    conditions.push({
+      kind: 'VERDICT_APPLY_EXHAUSTED',
+      subjectType: 'TASK',
+      subjectId: action.subjectId,
+      facts: { taskId: action.subjectId, refusalCode: action.refusalCode },
+      detail: {
+        taskId: action.subjectId,
         refusalCode: action.refusalCode,
         actionId: action.actionId,
         refusedAt: action.createdAt,

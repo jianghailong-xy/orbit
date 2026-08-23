@@ -45,7 +45,13 @@ import { ProjectEventsService } from './project-events.service';
 import { ProjectReconcileService } from './project-reconcile.service';
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
 import { ProjectsService } from './projects.service';
-import { verificationVerdictActionKey } from './task-verification-verdict';
+import {
+  VERDICT_APPLY_EXHAUSTED,
+  VERDICT_APPLY_MAX_ATTEMPTS,
+  verdictApplyAttempt,
+  verificationVerdictActionKey,
+} from './task-verification-verdict';
+import { loadVerificationEpochGates } from '../tasks/verification-epoch-read';
 import { prismaClientFor } from '../prisma/prisma-client';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -159,6 +165,26 @@ async function settle(
     }
   }
   assert.fail(`the loop did not converge within ${limit} delivery passes`);
+}
+
+/**
+ * `[K5]`: a settled verification run, so §13.3's epoch gets PAST `RUN_NOT_SETTLED`.
+ *
+ * The cases below are about the clause AFTER it — whether the conclusion was APPLIED — and without
+ * a run they would all stop one clause early and measure something else.
+ *
+ * `dispatch_origin = 'USER'`: migration 0122's boundary refuses a Session written straight onto a
+ * COORDINATOR-authority task, and what the epoch reads off the row is identical either way.
+ */
+async function settledRun(db: PrismaClient, target: Fixture, verifier: string): Promise<void> {
+  await db.$executeRawUnsafe(
+    `INSERT INTO "session" ("id","owner_id","workspace_id","task_id","title","prompt","creator_id",
+       "provider","status","end_reason","completed_at","starts_task_work","dispatch_origin",
+       "updated_at")
+     VALUES ($1,$2,$3,$4,'check run','run the check',$2,'claude','SUCCEEDED','task_done',now(),
+       true,'USER'::"session_dispatch_origin",now())`,
+    randomUUID(), target.ownerId, target.workspaceId, target.ids[verifier],
+  );
 }
 
 /** A verification agent's own write: conclude, through the ordinary task door. */
@@ -449,6 +475,124 @@ test('a verification verdict reaches production through the reconcile pass',
           assert.deepEqual(subjects.map((row) => row.status), ['OPEN', 'OPEN']);
           assert.equal((await defects(db, target)).length, 2);
         });
+
+      // ---- `[K5]` criterion 7: applying a conclusion is bounded, and the bound is visible ----
+      //
+      // The action key is PERMANENT (§8.2), and until this unit `pendingVerificationVerdicts`
+      // treated the mere existence of a row at that key as "already handled". A refusal that was a
+      // RACE — a snapshot that moved under the apply — therefore consumed the key for ever: DEP4's
+      // gate stayed `VERDICT_NOT_APPLIED`, every dependent stayed blocked, and no pass could
+      // propose the action again. The loop woke on its timer and had nothing it could do.
+      //
+      // Injected as the durable row the executor itself writes for that case, because that is the
+      // state a person would find on disk. Nothing here reaches into the effect.
+      const injectRefusal = async (target: Fixture, verifier: string, attempt: number) => {
+        const revision = (await db.task.findUniqueOrThrow({
+          where: { id: target.ids[verifier] },
+        })).verdictRevision;
+        await db.projectAction.create({
+          data: {
+            projectId: target.projectId,
+            idempotencyKey: verificationVerdictActionKey(
+              target.projectId, target.ids[verifier], String(revision),
+            ),
+            type: 'APPLY_VERIFICATION_VERDICT',
+            status: 'REFUSED',
+            subjectType: 'TASK',
+            subjectId: target.ids[verifier],
+            fencingToken: 1n,
+            refusalCode: 'STALE_SNAPSHOT',
+            reasonCode: 'STALE_SNAPSHOT',
+            detail: { v: 1, verdictApplyAttempt: attempt },
+          },
+        });
+      };
+
+      await t.test('a refusal that was a race is retried, and the gate clears', async () => {
+        const target = await fixture(db, 'retry', {
+          s: { status: TaskStatus.DONE },
+          d: { dependsOn: ['s'] },
+          v: { verifies: 's' },
+        });
+        await settledRun(db, target, 'v');
+        await conclude(tasks, target, 'v', TaskVerdict.PASS);
+        await injectRefusal(target, 'v', 1);
+
+        await settle(events, reconciler);
+
+        const [action] = await verdictActions(db, target.projectId);
+        assert.equal(action.status, 'APPLIED', 'the conclusion was never made durable');
+        // ONE row, not two: the retry re-claims the permanent key rather than minting a second.
+        assert.equal((await verdictActions(db, target.projectId)).length, 1);
+        assert.equal(verdictApplyAttempt(action.detail), 2, 'the attempt was not counted');
+        // …and DEP4 is satisfied, which is the whole point of applying it.
+        const epochs = await loadVerificationEpochGates(db as never, [target.ids.s]);
+        assert.equal(epochs.get(target.ids.s)?.gate, null, 'the epoch did not open');
+      });
+
+      await t.test('the retry is BOUNDED, and a spent budget is not tried again', async () => {
+        const target = await fixture(db, 'bounded', {
+          s: { status: TaskStatus.DONE },
+          v: { verifies: 's' },
+        });
+        await settledRun(db, target, 'v');
+        await conclude(tasks, target, 'v', TaskVerdict.PASS);
+        // The state three failed attempts leave behind.
+        await injectRefusal(target, 'v', VERDICT_APPLY_MAX_ATTEMPTS);
+
+        for (let round = 0; round < 4; round += 1) await settle(events, reconciler);
+
+        const [action] = await verdictActions(db, target.projectId);
+        assert.equal(action.status, 'REFUSED', 'a spent budget bought another attempt');
+        assert.equal(verdictApplyAttempt(action.detail), VERDICT_APPLY_MAX_ATTEMPTS);
+        // `refusal_code` still says what went wrong; `reason_code` says which bucket it ended in.
+        assert.equal(action.refusalCode, 'STALE_SNAPSHOT', 'the audit lost why it failed');
+        assert.equal(action.reasonCode, VERDICT_APPLY_EXHAUSTED);
+      });
+
+      await t.test('an exhausted apply escalates: one row, an owner, and a clock', async () => {
+        const target = await fixture(db, 'escalate', {
+          s: { status: TaskStatus.DONE },
+          d: { dependsOn: ['s'] },
+          v: { verifies: 's' },
+        });
+        await settledRun(db, target, 'v');
+        await conclude(tasks, target, 'v', TaskVerdict.PASS);
+        await injectRefusal(target, 'v', VERDICT_APPLY_MAX_ATTEMPTS);
+
+        // The stamp is written inside a pass whose snapshot was taken before it, so the row lands
+        // on the pass AFTER — one wake, which is the bound this escalation is quick within. Three
+        // wakes rather than one, because "it appears" and "it appears once" are two claims.
+        for (let wake = 1; wake <= 3; wake += 1) {
+          await reconciler.tick(new Date(Date.now() + wake * 120_000));
+          for (let i = 0; i < 20; i += 1) {
+            const result = await events.drainOnce();
+            if (result.status === 'IDLE' || result.status === 'NO_HANDLER'
+              || result.status === 'DEFERRED') break;
+          }
+        }
+
+        const blockers = await db.projectBlocker.findMany({
+          where: { projectId: target.projectId },
+        });
+        assert.equal(blockers.length, 1, 'a pass per wake would be one row per wake');
+        const [blocker] = blockers;
+        assert.equal(blocker.kind, 'VERDICT_APPLY_EXHAUSTED');
+        // The check, not the subject: two checks of one subject can each get stuck, and a row per
+        // subject would collapse them into one sentence naming the wrong verifier.
+        assert.equal(blocker.subjectId, target.ids.v);
+        assert.equal(blocker.dedupeKey, `VERDICT_APPLY_EXHAUSTED:TASK:${target.ids.v}`);
+        assert.equal(blocker.owner, 'USER');
+        assert.equal(blocker.recovery, 'HUMAN');
+        assert.ok((blocker.requiredAction ?? '').length > 40, 'no sentence anybody can act on');
+        assert.ok(blocker.nextCheckAt, 'no clock: nothing would ever look at it again');
+
+        // …and the epoch says the same thing in its own vocabulary, so a dependent reads
+        // BLOCKED_FAILED rather than an ordinary wait it will never come out of.
+        const epochs = await loadVerificationEpochGates(db as never, [target.ids.s]);
+        assert.equal(epochs.get(target.ids.s)?.gate, 'VERDICT_NOT_APPLIED');
+        assert.equal(epochs.get(target.ids.s)?.stalled, true, 'a permanent wait read as a wait');
+      });
 
       await t.test('the boundary: a Project with the coordinator off has no loop to run this',
         async () => {

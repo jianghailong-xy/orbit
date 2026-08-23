@@ -3302,6 +3302,7 @@ SELECT p.id
 | `VERIFICATION_CANNOT_CONCLUDE` | `[K5]`/`[H0V2]`：`VERIFICATION_PASSED` 且子任务已收敛，指向它的检查**已 DONE 却没有 verdict** —— 该行永不再动，subject 永远拿不到 PASS。与 `VERIFICATION_REQUIRED` 分开：那一条可由 §13.2 自动补一个检查，这一条必须先查清上一次为什么没结论，自动补只会每趟多一个检查 | `USER` | `HUMAN` | ✘ | 升级到期（+1h） | 已落地 |
 | `ENVIRONMENT_BROKEN` | `[K5]` §3：finding 归类 `ENVIRONMENT` —— 机器/配置/工具链坏了，改代码不解决。CL1 不计入 attempt 预算，正是因为再试一次不会改变答案 | `SYSTEM` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 | `HUMAN_DECISION_REQUIRED` | `[K5]` §3：finding 归类 `HUMAN_REQUIRED` —— 需要人的判断或权限 | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
+| `VERDICT_APPLY_EXHAUSTED` | `[K5]` 条款 7：检查已给出 verdict，但把它变成持久后果的 `APPLY_VERIFICATION_VERDICT` 在重试预算（`VERDICT_APPLY_MAX_ATTEMPTS` = 3 趟，每趟一份新快照）内一直被拒。与 `VERIFICATION_REQUIRED`（没有检查）、`VERIFICATION_CANNOT_CONCLUDE`（有检查但没结论）、`COORDINATOR_UNAVAILABLE`（协调器根本没在跑）三条都不同：这里结论有、协调器在跑，停住的是**落地**这一步 | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 | `UNKNOWN_FAILURE` | **兜底**：任何未归类的失败，含"该 Task 存在没有错误文本的失败运行"（§9.5 Q3-e，v1.18 起由快照直接检出，不再需要先发生一次派发拒绝） | `USER` | `HUMAN` | ✘ | 升级到期（+30min） | 已落地 |
 
 **BL4（v1.2 修订，可机械核对）**：`opensTurn` 是 **`kind` 的函数**，与那一行 blocker **当前**的 `owner` 无关。本表的 `默认 owner` 列同样是 kind 的常量，两列逐行满足

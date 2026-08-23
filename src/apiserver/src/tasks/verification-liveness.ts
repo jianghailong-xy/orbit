@@ -54,14 +54,17 @@ export type VerificationLiveness =
  *
  * `CONCLUDED_NOTHING` is a check that ran and finished with no answer — look at the run. `NO_RUN`
  * is a check nothing ever ran, or whose run was taken away — look at why the session ended.
- * `UNREVISIONED_VERDICT` is data older than the mechanism that applies verdicts — re-run it. The
- * three the epoch already escalated keep their own names so a caller can report all five in one
- * vocabulary rather than switching between two.
+ * `UNREVISIONED_VERDICT` is data older than the mechanism that applies verdicts — re-run it.
+ * `VERDICT_APPLY_EXHAUSTED` is the conclusion existing and its APPLY having failed to its bound —
+ * look at the refusal. The three the epoch already escalated keep their own names so a caller can
+ * report all of them in one vocabulary rather than switching between two.
  */
 export type VerificationStallReason =
   | 'CONCLUDED_NOTHING'
   | 'NO_RUN'
   | 'UNREVISIONED_VERDICT'
+  /** `[K5]`: the conclusion exists and the action that makes it durable ran out of attempts. */
+  | 'VERDICT_APPLY_EXHAUSTED'
   | 'CONCLUDED_FAIL'
   | 'CONCLUDED_INCONCLUSIVE'
   | 'NO_LIVE_CHECK';
@@ -159,11 +162,30 @@ export function verificationLiveness(
         owner: 'USER',
       };
 
-    // Genuine waits. `VERIFICATION_IN_FLIGHT` ends when the run does; `VERDICT_NOT_APPLIED` ends on
-    // the coordinator's next pass, which is a pass that is already scheduled; `SUBJECT_NOT_DONE`
-    // ends when the work is finished again. None of them needs a person told about it.
-    case 'VERIFICATION_IN_FLIGHT':
+    // `[K5]` criterion 7. Ordinarily a wait: the conclusion is recorded and the coordinator's next
+    // pass makes it durable, which is a pass that is already scheduled. What made that sentence
+    // false was the ledger, not the clock — the action key is permanent, and a refusal used to
+    // retire it, so "the next pass will do it" described a pass that could no longer propose it.
+    //
+    // The retries are bounded now, and when they are spent the ledger says so. THAT is the stall:
+    // the check has a verdict, the subject can never reach the PASS its policy waits for, and no
+    // pass is going to change either fact. Asked of the same row the gate was decided on, so the
+    // two faces cannot describe different worlds.
     case 'VERDICT_NOT_APPLIED':
+      if (!newest?.verdictApplyExhausted) return { state: 'WAITING' };
+      return {
+        state: 'STALLED',
+        reason: 'VERDICT_APPLY_EXHAUSTED',
+        requiredAction:
+          'the verdict was recorded but could not be applied within its retry budget: read the '
+          + 'refusal on the action, resolve what it names, then revoke and re-record the verdict '
+          + 'to give it a fresh revision',
+        owner: 'USER',
+      };
+
+    // Genuine waits. `VERIFICATION_IN_FLIGHT` ends when the run does; `SUBJECT_NOT_DONE` ends when
+    // the work is finished again. Neither needs a person told about it.
+    case 'VERIFICATION_IN_FLIGHT':
     case 'SUBJECT_NOT_DONE':
       return { state: 'WAITING' };
   }

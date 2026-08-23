@@ -292,3 +292,77 @@ function consequencesOf(verdict: TaskVerdictValue): VerificationVerdictConsequen
     opensCoordinatorTurn: true,
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// `[K5]` criterion 7: the bound on applying a conclusion, and what happens when it is spent.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * How many times the loop will try to apply ONE conclusion before it stops and tells somebody.
+ *
+ * The action key is permanent (§8.2), so before this bound existed the ledger had two states and
+ * no third: APPLIED, or a row that would never be proposed again. A retryable refusal — a snapshot
+ * that moved under the apply, a contended fact write — therefore consumed the key for ever, the
+ * DEP4 gate stayed `VERDICT_NOT_APPLIED`, and every dependent waited on a pass that could not
+ * propose the action any more. Nothing was unsafe; nothing was ever going to happen either.
+ *
+ * Three, not more: each attempt is a whole reconcile pass against a freshly captured world, so a
+ * cause that survives three of them is not a race — it is a condition, and a condition is what
+ * `VERDICT_APPLY_EXHAUSTED` exists to hand to a person.
+ */
+export const VERDICT_APPLY_MAX_ATTEMPTS = 3;
+
+/**
+ * The refusals that mean "try again", as opposed to "this conclusion is about a world that moved".
+ *
+ * Deliberately a closed list rather than a `retryable` flag read off `detail`: the flag is written
+ * by whoever refused, and a refusal nobody classified must NOT buy itself another attempt. The
+ * executor's own refusals land on `SUPERSEDED` rather than `REFUSED` and so are excluded without
+ * being named — a superseded conclusion is not a failed apply, and re-running it would apply a
+ * verdict about rows that are gone.
+ */
+const RETRYABLE_VERDICT_APPLY_REFUSALS: ReadonlySet<string> = new Set([
+  'STALE_SNAPSHOT',
+  'PROJECT_FACT_WRITE_CONTENDED',
+]);
+
+/**
+ * `reason_code` on the row whose retries are spent — the escalation's trigger, and only that.
+ *
+ * `refusal_code` keeps saying what actually went wrong on the last attempt, because that is the
+ * audit; this says which bucket the failure ended in. It is on `reason_code` for one concrete
+ * reason: the decision snapshot carries `reasonCode` and does NOT carry `detail`, so a condition
+ * detector reading the world can see this and could not see an attempt counter.
+ */
+export const VERDICT_APPLY_EXHAUSTED = 'VERDICT_APPLY_EXHAUSTED';
+
+/** How many attempts this action row has already spent. Absent reads as one — the first claim. */
+export function verdictApplyAttempt(detail: unknown): number {
+  const value = detail && typeof detail === 'object' && !Array.isArray(detail)
+    ? (detail as Record<string, unknown>).verdictApplyAttempt
+    : undefined;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : 1;
+}
+
+/**
+ * May this action key be claimed again — and is there budget left to do it with?
+ *
+ * `APPLIED` is absent from every branch on purpose. Re-claiming an applied conclusion would run
+ * §13.2's consequences a second time, which is the one thing the permanent key exists to prevent.
+ */
+export function verdictApplyRetryable(
+  action: { status: string; refusalCode: string | null; detail?: unknown },
+): boolean {
+  if (action.status !== 'REFUSED') return false;
+  if (!action.refusalCode || !RETRYABLE_VERDICT_APPLY_REFUSALS.has(action.refusalCode)) return false;
+  return verdictApplyAttempt(action.detail) < VERDICT_APPLY_MAX_ATTEMPTS;
+}
+
+/** A retryable refusal that has run out of attempts: nothing will apply this without a person. */
+export function verdictApplyExhausted(
+  action: { status: string; refusalCode: string | null; detail?: unknown },
+): boolean {
+  if (action.status !== 'REFUSED') return false;
+  if (!action.refusalCode || !RETRYABLE_VERDICT_APPLY_REFUSALS.has(action.refusalCode)) return false;
+  return verdictApplyAttempt(action.detail) >= VERDICT_APPLY_MAX_ATTEMPTS;
+}

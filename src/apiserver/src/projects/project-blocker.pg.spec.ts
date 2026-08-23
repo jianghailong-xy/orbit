@@ -58,11 +58,11 @@ const BLOCKER = migration('0125_project_blocker');
  * invalid" rather than "the fixture is old". Only the two `ALTER TABLE` statements are taken — the
  * same file's other statements touch tables this subset does not build.
  *
- * Points at whichever migration LAST rewrote the constraint — 0135 through `[H0]`, 0141 from
- * `[K5]` — because the fixture's job is to be the product's current closed set, not a snapshot
- * of the set on the day this file was written.
+ * Points at whichever migration LAST rewrote the constraint — 0135 through `[H0]`, then 0141 and
+ * now 0142 from `[K5]` — because the fixture's job is to be the product's current closed set, not
+ * a snapshot of the set on the day this file was written.
  */
-const KIND_CHECK = migration('0141_task_verification_finding')
+const KIND_CHECK = migration('0142_project_blocker_verdict_apply_exhausted')
   .split(';')
   // Comments stripped BEFORE the match, not after. A migration's prose legitimately names the
   // constraint it is about, and matching on the raw chunk drags the file header in as if it were

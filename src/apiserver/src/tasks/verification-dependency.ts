@@ -156,6 +156,19 @@ export interface VerificationEpochCheckFact {
    * for good. The verdict column and the settled run are the durable facts those rows have.
    */
   verdictApplied: boolean | null;
+  /**
+   * `[K5]` criterion 7: the apply was tried to its bound and refused every time.
+   *
+   * Separate from `verdictApplied: false`, and that separation is the whole point. "Not applied
+   * yet" is a wait — the next pass will do it. "Not applied, and the retries are spent" is a stall
+   * that has already been escalated to a person, and reading the two as one sentence is how a
+   * project sits stopped with every liveness check green.
+   *
+   * OPTIONAL, and absent reads as false: a caller that does not look at the ledger's refusals is
+   * not entitled to claim a stall, and inventing one would tell somebody to go and fix a pass that
+   * is about to succeed.
+   */
+  verdictApplyExhausted?: boolean;
   runs: readonly VerificationRunFact[];
 }
 
@@ -352,6 +365,8 @@ export interface VerificationEpochTaskRow {
   verdictRevision: string;
   /** See `VerificationEpochCheckFact.verdictApplied`; `null` for a check outside a Project. */
   verdictApplied: boolean | null;
+  /** See `VerificationEpochCheckFact.verdictApplyExhausted`. Absent reads as false. */
+  verdictApplyExhausted?: boolean;
   /** §13.6 SU1: `taskRetirement(row) != null`. */
   retired: boolean;
 }
@@ -415,6 +430,7 @@ export function verificationEpochGates(
       verdictRevision: task.verdictRevision,
       retired: task.retired,
       verdictApplied: task.verdictApplied,
+      verdictApplyExhausted: task.verdictApplyExhausted === true,
       runs: runsByTaskId.get(task.id) ?? [],
     };
     const list = checksBySubject.get(task.verifiesTaskId);

@@ -711,6 +711,7 @@ test('§13.1 AG7 / §13.2 V8 on real PostgreSQL', { skip, concurrency: 1 }, asyn
     const kinds = [
       'AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED',
       'VERIFICATION_CANNOT_CONCLUDE', 'ENVIRONMENT_BROKEN', 'HUMAN_DECISION_REQUIRED',
+      'VERDICT_APPLY_EXHAUSTED',
     ];
     for (const kind of kinds) {
       await db.$executeRawUnsafe(

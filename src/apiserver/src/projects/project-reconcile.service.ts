@@ -43,6 +43,10 @@ import {
 } from './project-authorization.service';
 import {
   PlannedVerificationVerdict,
+  VERDICT_APPLY_EXHAUSTED,
+  verdictApplyAttempt,
+  verdictApplyExhausted,
+  verdictApplyRetryable,
   verificationVerdictActionKey,
 } from './task-verification-verdict';
 
@@ -86,6 +90,21 @@ export interface ProjectReconcileAction {
   type: ProjectReconcileActionType;
   subject: { type: string; id?: string | null };
   detail?: Prisma.InputJsonValue;
+  /**
+   * `[K5]`: this key may be CLAIMED again when the row already there is a refusal with budget left.
+   *
+   * Off for every caller but one, and the default is what every caller had before it existed: a key
+   * already in the ledger answers `ALREADY_APPLIED` and the effect does not run. That is right for
+   * an action whose refusal is a DECISION — a dispatch refused because the task is not OPEN is not
+   * waiting for another try.
+   *
+   * `APPLY_VERIFICATION_VERDICT` is the exception, because its refusals are not all decisions. A
+   * snapshot that moved under the apply is a race: the conclusion is still true, and nothing else
+   * in the system will ever apply it. The key is permanent, so "already in the ledger" and "already
+   * happened" had become the same sentence. This is what separates them again — bounded by
+   * `VERDICT_APPLY_MAX_ATTEMPTS`, because an unbounded retry is the other way to never finish.
+   */
+  reclaimRefused?: boolean;
 }
 
 export type ProjectActionApplyResult =
@@ -146,6 +165,12 @@ interface ExistingActionRow {
   id: string;
   projectId: string;
   status: 'CLAIMED' | 'APPLIED' | 'REFUSED' | 'SUPERSEDED';
+}
+
+/** `[K5]`: the same row, plus the two columns a re-claim has to judge it on. */
+interface ReclaimableActionRow extends ExistingActionRow {
+  refusalCode: string | null;
+  detail: unknown;
 }
 
 /**
@@ -949,7 +974,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       );
       const stale = current.input.decisionInputHash !== decision.decisionInputHash;
 
-      const actionId = randomUUID();
+      const insertId = randomUUID();
       const detail = action.detail && typeof action.detail === 'object' && !Array.isArray(action.detail)
         ? { ...(action.detail as Record<string, Prisma.JsonValue>),
             decisionInputHash: decision.decisionInputHash,
@@ -976,7 +1001,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
           "id", "project_id", "idempotency_key", "type", "status", "subject_type",
           "subject_id", "fencing_token", "decision_id", "refusal_code", "detail", "updated_at"
         ) VALUES (
-          ${actionId}::uuid, ${lease.projectId}::uuid, ${action.idempotencyKey},
+          ${insertId}::uuid, ${lease.projectId}::uuid, ${action.idempotencyKey},
           ${action.type}::"project_action_type", ${stale ? 'REFUSED' : 'CLAIMED'}::"project_action_status",
           ${action.subject.type}, ${action.subject.id ?? null}::uuid, ${lease.fencingToken},
           ${decisionId}::uuid, ${stale ? 'STALE_SNAPSHOT' : null},
@@ -985,18 +1010,50 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         ON CONFLICT ("idempotency_key") DO NOTHING
         RETURNING "id"
       `);
-      if (!inserted[0]) {
-        const existing = (await tx.$queryRaw<ExistingActionRow[]>(Prisma.sql`
-          SELECT "id", "project_id" AS "projectId", "status"
+      let claimedId = inserted[0]?.id ?? null;
+      if (!claimedId) {
+        const existing = (await tx.$queryRaw<ReclaimableActionRow[]>(Prisma.sql`
+          SELECT "id", "project_id" AS "projectId", "status", "refusal_code" AS "refusalCode",
+                 "detail"
             FROM "project_action" WHERE "idempotency_key" = ${action.idempotencyKey}
         `))[0];
         if (!existing || existing.projectId !== lease.projectId) {
           throw new Error(`idempotency key ${action.idempotencyKey} belongs to another Project`);
         }
-        return {
-          status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
-        } as const;
+        // `[K5]`: one more attempt on a refusal that was a race rather than a decision. Not when
+        // THIS pass is already stale — a stale claim would spend an attempt on a snapshot the fence
+        // above has just refused, which is paying for the retry twice.
+        if (!(action.reclaimRefused === true && !stale && verdictApplyRetryable(existing))) {
+          return {
+            status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
+          } as const;
+        }
+        const attempt = verdictApplyAttempt(existing.detail) + 1;
+        // Conditional on the row STILL being the refusal that was read, so two passes racing to
+        // re-claim it cannot both win: the loser updates nothing and reads `ALREADY_APPLIED`,
+        // exactly as it did before this branch existed.
+        const reclaimed = await tx.$executeRaw(Prisma.sql`
+          UPDATE "project_action"
+             SET "status" = 'CLAIMED'::"project_action_status",
+                 "refusal_code" = NULL, "reason_code" = NULL,
+                 "decision_id" = ${decisionId}::uuid,
+                 "fencing_token" = ${lease.fencingToken},
+                 -- The counter is the BOUND, so it is written with the CLAIM and not with the
+                 -- outcome: a process that dies between the two has still spent that attempt, and
+                 -- a crash loop cannot buy itself an unbounded number of them.
+                 "detail" = "detail" || ${JSON.stringify({ verdictApplyAttempt: attempt })}::jsonb,
+                 "updated_at" = ${now}
+           WHERE "id" = ${existing.id}::uuid AND "status" = 'REFUSED'
+             AND "refusal_code" = ${existing.refusalCode}
+        `);
+        if (reclaimed !== 1) {
+          return {
+            status: 'ALREADY_APPLIED', actionId: existing.id, actionStatus: existing.status,
+          } as const;
+        }
+        claimedId = existing.id;
       }
+      const actionId = claimedId;
 
       // The attempt belongs to the permanently claimed action key, not to a process invocation.
       // It therefore advances once for stale/refused/applied outcomes and never on a replay.
@@ -1374,12 +1431,25 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
     const planned = verificationVerdictPlan(input);
     if (!planned.length) return [];
     const keys = planned.map((verdict) => this.verdictKey(projectId, verdict));
-    const spent = await tx.$queryRaw<Array<{ idempotencyKey: string }>>(Prisma.sql`
-      SELECT "idempotency_key" AS "idempotencyKey" FROM "project_action"
+    const spent = await tx.$queryRaw<Array<{
+      idempotencyKey: string; status: string; refusalCode: string | null; detail: unknown;
+    }>>(Prisma.sql`
+      SELECT "idempotency_key" AS "idempotencyKey", "status"::text AS "status",
+             "refusal_code" AS "refusalCode", "detail"
+        FROM "project_action"
        WHERE "project_id" = ${projectId}::uuid
          AND "idempotency_key" IN (${Prisma.join(keys)})
     `);
-    const done = new Set(spent.map((row) => row.idempotencyKey));
+    // `[K5]` criterion 7. "A row exists" used to be the whole test, and that is what made a
+    // retryable refusal permanent: the row was there, so the conclusion was never proposed again,
+    // so DEP4's gate stayed `VERDICT_NOT_APPLIED` and every dependent waited on a pass that had
+    // stopped being able to do anything about it. A row with budget left is NOT spent.
+    const done = new Set(spent
+      .filter((row) => !verdictApplyRetryable(row))
+      .map((row) => row.idempotencyKey));
+    // …and a row with NO budget left is escalated here, on the pass that notices, whichever door
+    // spent the last attempt.
+    await this.stampExhaustedVerdictApplies(tx, projectId, planned, new Date(input.readAt));
     return planned.filter((verdict) => !done.has(this.verdictKey(projectId, verdict)));
   }
 
@@ -1435,6 +1505,8 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         idempotencyKey: this.verdictKey(lease.projectId, planned),
         subject: { type: 'TASK', id: base62ToUuid(planned.verifierTaskId) },
         detail: this.verdictExecutor.actionDetail(planned),
+        // The one action type whose refusals are not all decisions — see `reclaimRefused`.
+        reclaimRefused: true,
       },
       async (effectTx, actionId) => this.verdictExecutor!.applyVerdictInTransaction(
         effectTx, lease, { decisionId, planned }, actionId, now,
@@ -1448,6 +1520,57 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       );
     }
     return pending.length - 1;
+  }
+
+  /**
+   * `[K5]` criterion 7: mark every conclusion whose apply has run out of attempts.
+   *
+   * Derived on every pass from the ledger, rather than written by the attempt that happened to
+   * spend the last one. Two doors reach this action — the loop, and
+   * `ProjectVerificationVerdictService.apply` for a lease holder outside it — and only one of them
+   * is this method. A stamp written by the failing attempt would therefore be missing exactly when
+   * the other door exhausted the budget, which is the case a person most needs told about.
+   *
+   * `refusal_code` is left as the failure wrote it: that is the audit, and overwriting it would
+   * lose why the apply actually failed. `reason_code` is the BUCKET, which is how this table
+   * already uses it, and it is the field a condition detector can read — the decision snapshot
+   * carries `reasonCode` and carries no `detail`, so an attempt counter would be invisible to §11
+   * and this is not.
+   *
+   * Idempotent by its WHERE clause, so a pass that finds the stamp already there writes nothing and
+   * BL7's churn rule is never tripped.
+   */
+  private async stampExhaustedVerdictApplies(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    planned: readonly PlannedVerificationVerdict[],
+    now: Date,
+  ): Promise<void> {
+    if (!planned.length) return;
+    const keys = planned.map((verdict) => this.verdictKey(projectId, verdict));
+    const rows = await tx.$queryRaw<Array<{
+      id: string; status: string; refusalCode: string | null; detail: unknown;
+    }>>(Prisma.sql`
+      SELECT "id", "status"::text AS "status", "refusal_code" AS "refusalCode", "detail"
+        FROM "project_action"
+       WHERE "project_id" = ${projectId}::uuid
+         AND "idempotency_key" IN (${Prisma.join(keys)})
+    `);
+    for (const row of rows) {
+      if (!verdictApplyExhausted(row)) continue;
+      const stamped = await tx.$executeRaw(Prisma.sql`
+        UPDATE "project_action"
+           SET "reason_code" = ${VERDICT_APPLY_EXHAUSTED}, "updated_at" = ${now}
+         WHERE "id" = ${row.id}::uuid AND "status" = 'REFUSED'
+           AND "reason_code" IS DISTINCT FROM ${VERDICT_APPLY_EXHAUSTED}
+      `);
+      if (stamped === 1) {
+        this.log.warn(
+          `Project ${uuidToBase62(projectId)} exhausted the retry budget applying a verdict `
+          + `(action ${row.id}, ${verdictApplyAttempt(row.detail)} attempts); escalating`,
+        );
+      }
+    }
   }
 
   /**
