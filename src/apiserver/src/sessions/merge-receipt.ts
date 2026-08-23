@@ -115,6 +115,9 @@ export interface MergeReceiptRow {
   recordedBy: string;
   detail: unknown;
   idempotencyKey: string;
+  /** `[K6]` §7: the checkpoint this landing is about, when the work is under convergence
+   *  management. Null for every merge that is not, which is almost all of them. */
+  checkpointId: string | null;
   createdAt: Date;
 }
 
@@ -138,6 +141,7 @@ export function mergeReceiptRow(r: MergeReceiptRow) {
     recordedBy: r.recordedBy,
     detail: r.detail,
     idempotencyKey: r.idempotencyKey,
+    checkpointId: r.checkpointId ?? null,
     createdAt: r.createdAt,
   };
 }

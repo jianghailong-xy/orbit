@@ -27,6 +27,8 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { MergeReceiptService } from './merge-receipt.service';
+import { TaskCheckpointService } from '../projects/task-checkpoint.service';
+import { ConvergenceLedgerService } from '../projects/convergence-ledger.service';
 import { mergeReceiptIdempotencyKey } from './merge-receipt';
 import { prismaClientFor } from '../prisma/prisma-client';
 
@@ -391,5 +393,175 @@ suite('merge receipts, on real PostgreSQL', async (t) => {
     }
     // ...and that nothing else in the row is a bare uuid a reader might mistake for one.
     assert.equal(receipt.idempotencyKey.length, 64, 'the key is a digest, not an id');
+  });
+
+  // ---------------------------------------------------------------------------------------------
+  // `[K6]` §7: what changes once the work behind a receipt has a checkpoint.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Put a task under `[K2]`'s management and give it one `ACCEPTED` checkpoint at `sha`. */
+  async function checkpointed(w: World, sha: string): Promise<string> {
+    const svc = new TaskCheckpointService(
+      db as unknown as PrismaService,
+      new ConvergenceLedgerService(db as unknown as PrismaService),
+    );
+    const tree = sha.replace(/./g, 'b');
+    const recorded = await svc.record({
+      ownerId: w.ownerId,
+      taskId: w.taskId,
+      scopeRevision: 1,
+      commit: { branch: 'orbit/25c-work', commitSha: sha, treeSha: tree, baseSha: BASE },
+      evidence: { suite: 'apiserver', treeSha: tree, passed: 10, failed: 0, skipped: 0 },
+      artifact: null,
+      recordedBy: 'WORKER',
+    });
+    assert.equal(typeof recorded === 'string' ? recorded : recorded.kind, 'ACCEPTED');
+    return (recorded as { checkpointId: string }).checkpointId;
+  }
+
+  await t.test('§7: a landing that is not the verified commit is refused, and the attempt is not', async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'gate');
+    await checkpointed(w, SRC);
+
+    // The branch committed past the commit the suite ran on. Those commits carry no evidence.
+    assert.match(
+      await message(() =>
+        receipts.record(w.ownerId, w.sessionId, {
+          result: 'MERGED', sourceSha: TGT_AFTER, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+        }, 'AGENT'),
+      ),
+      /BRANCH_TIP_MISMATCH/,
+    );
+    // A second measurement that disagrees with the recorded one is refused too.
+    assert.match(
+      await message(() =>
+        receipts.record(w.ownerId, w.sessionId, {
+          result: 'MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+          evidenceDigest: '1'.repeat(64),
+        }, 'AGENT'),
+      ),
+      /TEST_EVIDENCE_MISMATCH/,
+    );
+    // But a CONFLICT about the very commit the gate refuses is still recorded. It is the truth
+    // about an attempt somebody made, and swallowing it would delete the audit of the thing the
+    // gate exists to prevent.
+    const conflict = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'CONFLICT', sourceSha: TGT_AFTER, targetBranch: 'main', conflicts: ['src/a.ts'],
+    }, 'AGENT');
+    assert.equal(conflict.created, true);
+
+    // And the verified commit lands.
+    const ok = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+    }, 'AGENT');
+    assert.equal(ok.created, true);
+    assert.equal(ok.receipt.landed, true);
+
+    // The earlier CONFLICT is untouched: two events, two rows, neither rewritten.
+    const { receipts: all } = await receipts.list(w.ownerId, w.sessionId);
+    assert.equal(all.length, 2);
+    const kept = all.find((r) => r.id === conflict.receipt.id);
+    assert.equal(kept?.result, 'CONFLICT');
+    assert.deepEqual(kept?.conflicts, ['src/a.ts']);
+  });
+
+  await t.test('CP4: one landing is one receipt even when a second session reports it', async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'cp4');
+    const checkpointId = await checkpointed(w, SRC);
+    // A second session on the same task — a takeover, or a recovery on another runner. Keyed by
+    // session this is two receipts for one landing; keyed by the checkpoint it is one fact.
+    const second = randomUUID();
+    const original = await db.session.findUniqueOrThrow({ where: { id: w.sessionId } });
+    await db.session.create({
+      data: {
+        id: second, ownerId: w.ownerId, creatorId: w.ownerId, workspaceId: original.workspaceId,
+        taskId: w.taskId, title: 'takeover', prompt: 'p', status: RunStatus.SUCCEEDED,
+        branch: 'orbit/25c-work', isolationStatus: 'worktree',
+      },
+    });
+
+    const input = {
+      result: 'MERGED' as const, sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+    };
+    const first = await receipts.record(w.ownerId, w.sessionId, input, 'AGENT');
+    assert.equal(first.created, true);
+    assert.equal(first.receipt.checkpointId, checkpointId);
+    // The response was lost; the same session asks again.
+    const retry = await receipts.record(w.ownerId, w.sessionId, input, 'AGENT');
+    assert.equal(retry.created, false);
+    assert.equal(retry.receipt.id, first.receipt.id);
+    // ...and the takeover reports it too.
+    const takeover = await receipts.record(w.ownerId, second, input, 'RUNNER');
+    assert.equal(takeover.created, false, 'a second session minted a second receipt for one landing');
+    assert.equal(takeover.receipt.id, first.receipt.id);
+    assert.equal(takeover.receipt.sessionId, w.sessionId, 'the original report is what stands');
+  });
+
+  await t.test('CP4: a caller-supplied key cannot fragment one checkpoint-bound landing', async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'crossdoor');
+    const checkpointId = await checkpointed(w, SRC);
+
+    // The agent door with its OWN key — the shape a CLI or a script legitimately uses, and the one
+    // that used to win. The runner door derives the checkpoint key unconditionally, so a caller
+    // key surviving here is a second row in the unique index for one landing.
+    const custom = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+      idempotencyKey: 'run-42',
+    }, 'AGENT');
+    assert.equal(custom.created, true);
+    assert.notEqual(custom.receipt.idempotencyKey, 'run-42', 'the caller key won');
+    // Nothing is lost: what was asked for is on the row, so an audit can see why it is not the key.
+    assert.equal((custom.receipt.detail as { callerIdempotencyKey?: string }).callerIdempotencyKey, 'run-42');
+
+    // Now the runner door reports the same landing, deriving the key the way it always does.
+    await MergeReceiptService.fromRunnerMergeResult(db as unknown as PrismaClient, {
+      ownerId: w.ownerId, sessionId: w.sessionId, taskId: w.taskId, projectId: w.projectId,
+      result: 'MERGED', sourceBranch: 'orbit/25c-work', sourceSha: SRC, targetBranch: 'main',
+      targetShaBefore: TGT_BEFORE, targetShaAfter: TGT_AFTER, rebaseBaseSha: null, conflicts: [],
+      message: null, operationId: null, checkpointId,
+    });
+
+    const { receipts: all } = await receipts.list(w.ownerId, w.sessionId);
+    assert.equal(all.length, 1, 'the two doors wrote two rows for one landing');
+    assert.equal(all[0].id, custom.receipt.id);
+
+    // And the agent door asking a third time, with a THIRD key, still lands on the same row.
+    const again = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+      idempotencyKey: 'run-43',
+    }, 'AGENT');
+    assert.equal(again.created, false);
+    assert.equal(again.receipt.id, custom.receipt.id);
+    assert.equal((await receipts.list(w.ownerId, w.sessionId)).receipts.length, 1);
+  });
+
+  await t.test("§13.7: an external receipt does not cancel a merge that is still running", async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'fence');
+    const checkpointId = await checkpointed(w, SRC);
+    const operationId = randomUUID();
+    // Orbit's own merge is in flight: `pending` carries the operation fence the runner echoes back.
+    await db.session.update({
+      where: { id: w.sessionId },
+      data: { mergeStatus: 'pending', mergeOperationId: operationId, mergeTarget: 'main' },
+    });
+
+    const { created, receipt } = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'ALREADY_MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+    }, 'AGENT');
+
+    // The durable half never depends on the transient half: the receipt is written either way.
+    assert.equal(created, true);
+    assert.equal(receipt.landed, true);
+    assert.equal(receipt.checkpointId, checkpointId);
+    // The fence is intact — the in-flight operation still owns the session.
+    const session = await db.session.findUniqueOrThrow({ where: { id: w.sessionId } });
+    assert.equal(session.mergeStatus, 'pending');
+    assert.equal(session.mergeOperationId, operationId);
+    assert.equal(session.branchMerged, null, 'the projection jumped the fence');
+    assert.equal(session.mergedSourceSha, null);
   });
 });

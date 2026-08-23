@@ -965,6 +965,13 @@ type mergeOutcome struct {
 	TargetShaBefore string
 	RebaseBase      string
 	Conflicts       []string
+	// `[K6]` §7: the target already contained the frozen source, so this merge did nothing and
+	// moved nothing. Reported alongside Status "merged" rather than as a status of its own, so an
+	// older control plane — which validates that field against a closed set — still records the
+	// landing instead of rejecting the report and leaving the runner retrying forever. A control
+	// plane that knows the flag records §13.7 MR2's `ALREADY_MERGED`, which exists to keep "the
+	// target moved" and "it was already there" different facts.
+	AlreadyMerged bool
 }
 
 // mergeToMain brings a session's branch into a target branch on the runner's local repo by
@@ -1031,6 +1038,36 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return mergeOutcome{Status: "error", Message: fmt.Sprintf("could not resolve branch %q", req.Branch)}
 	}
 
+	// `[K6]` §7, asked before anything is decided about how to advance the target: is the source
+	// ALREADY in it?
+	//
+	// The incident this guard was written after had the source branch and `main` pointing at the
+	// SAME commit. The only guard in this path compared the two branch NAMES, which differed, so it
+	// did not fire — and the merge went on to replay twenty-two commits from a base the control
+	// plane had recorded days earlier onto a target that already contained every one of them. Every
+	// conflict it reported was between a commit and itself, and no amount of resolving them could
+	// help, because the resolution was already merged.
+	//
+	// Object names, never branch names: a name is a value that moves, and the question is about two
+	// specific commits. Asked twice, and both are load-bearing — here, so a target that already has
+	// the work costs no network call and no repository write at all; and again after the origin
+	// reconcile below, which is the case where the work landed upstream and this machine has only
+	// just learned it.
+	if tip, _ := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+target); targetContainsSource(repoRoot, sourceSha, tip) {
+		return alreadyMergedOutcome(req.SessionID, target, sourceSha, tip)
+	}
+
+	// The merge gate's tip half (§7 CP3 `BRANCH_TIP_MISMATCH`), decided here because this is the
+	// only party that can see the tip. The control plane names the commit its checkpoint verified;
+	// a branch that has moved past it is carrying commits no test evidence covers, and merging
+	// those is the whole shape §7 exists to refuse. Asked AFTER the question above, because a
+	// target that already contains the work has nothing to gate.
+	if req.RequiredSourceSha != "" && !strings.EqualFold(strings.TrimSpace(req.RequiredSourceSha), sourceSha) {
+		return mergeOutcome{Status: "error", SourceSha: sourceSha, TargetBranch: target, Message: fmt.Sprintf(
+			"BRANCH_TIP_MISMATCH: %s is at %s but the verified checkpoint is %s — the commits after it carry no test evidence",
+			req.Branch, shortSha(sourceSha), shortSha(req.RequiredSourceSha))}
+	}
+
 	// Decide how we'll advance the target after the rebase. If the repo root has the target checked
 	// out (usual for main), we fast-forward it in place. Otherwise the target must not be checked
 	// out in any worktree, so we can move its ref directly.
@@ -1063,6 +1100,13 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	// is the base the rebase actually used rather than the one this process started with.
 	targetBefore, _ := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+target)
 
+	// The same question again, now that the local target has caught up with origin. This is the
+	// shape the incident actually took: the work had been pushed to origin/main by another route,
+	// and this machine's checkout only learned it during the reconcile a moment ago.
+	if targetContainsSource(repoRoot, sourceSha, targetBefore) {
+		return alreadyMergedOutcome(req.SessionID, target, sourceSha, targetBefore)
+	}
+
 	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot,
 		replayAnchor(repoRoot, req.SessionID, sourceSha, req.BaseSha))
 	out.TargetBranch = target
@@ -1073,6 +1117,45 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		out.RebaseBase = targetBefore
 	}
 	return out
+}
+
+// targetContainsSource answers "is this source already in that target" for two specific object
+// names. Equality first, then ancestry — `git merge-base --is-ancestor X Y` already answers true
+// when X == Y, but spelling equality out keeps the cheapest and commonest case free of a subprocess
+// and makes the two answers the receipt distinguishes visible in the code that produces them.
+//
+// Conservative on every error: an unknown answer is "not contained", which routes to the ordinary
+// merge rather than to a claim that the work is already safe.
+func targetContainsSource(repoRoot, sourceSha, targetSha string) bool {
+	sourceSha = strings.TrimSpace(sourceSha)
+	targetSha = strings.TrimSpace(targetSha)
+	if sourceSha == "" || targetSha == "" {
+		return false
+	}
+	if strings.EqualFold(sourceSha, targetSha) {
+		return true
+	}
+	_, err := git(repoRoot, "merge-base", "--is-ancestor", sourceSha, targetSha)
+	return err == nil
+}
+
+// alreadyMergedOutcome is the receipt for a merge that had nothing to do.
+//
+// `TargetShaBefore == MergedSha` is the mechanical proof that no target moved, and `RebaseBase`
+// stays empty, which the control plane reads as `NOT_REBASED`. Nothing here touches the repository:
+// no temp worktree, no `reset --hard`, no rebase, no push. That is the entire point — the previous
+// behaviour did all four before discovering it had nothing to merge.
+func alreadyMergedOutcome(sessionID, target, sourceSha, targetSha string) mergeOutcome {
+	logln(fmt.Sprintf("%s already contains %s for session %s — nothing to merge",
+		target, shortSha(sourceSha), sessionID))
+	return mergeOutcome{
+		Status:          "merged",
+		AlreadyMerged:   true,
+		MergedSha:       targetSha,
+		SourceSha:       sourceSha,
+		TargetBranch:    target,
+		TargetShaBefore: targetSha,
+	}
 }
 
 // replayAnchor picks the commit the merge replays FROM: the session's fork point, so only the

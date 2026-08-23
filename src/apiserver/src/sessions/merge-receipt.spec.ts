@@ -109,9 +109,14 @@ test('a row says whether it landed and whether it was rebased, rather than makin
     targetBranch: 'feat/project', targetShaBefore: OTHER, targetShaAfter: OTHER,
     rebaseBaseSha: null,
     conflicts: [], recordedBy: 'AGENT', detail: {}, idempotencyKey: 'k',
+    checkpointId: null,
     createdAt: new Date(0),
   });
   assert.equal(row.landed, true);
   assert.equal(row.rebaseBaseSha, null);
   assert.equal(row.rebaseBaseShaAbsentReason, 'NOT_REBASED');
+  // `[K6]` §7: null is the answer for every merge not under convergence management, which is
+  // almost all of them — and it is stated rather than left off the row, so a reader never has to
+  // decide whether an absent field means "none" or "this build does not know".
+  assert.equal(row.checkpointId, null);
 });

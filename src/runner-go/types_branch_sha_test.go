@@ -47,6 +47,73 @@ func TestMergeResultSourceShaWireField(t *testing.T) {
 	}
 }
 
+// `[K6]` §7: the already-merged answer travels as a FLAG beside the status a control plane
+// already knows, not as a fifth status value.
+//
+// A control plane validates `status` against a closed set and rejects anything else with a 400 —
+// which, for a merge result, means the runner reports a completed merge forever. So a new status
+// would have made this unit undeployable without a lockstep upgrade. The flag is `omitempty`, so a
+// runner that did not take the short-circuit sends exactly the bytes it always sent, and an older
+// control plane that ignores the field records `MERGED`, which is true; a current one records
+// `ALREADY_MERGED`, which is truer.
+func TestMergeResultAlreadyMergedWireField(t *testing.T) {
+	decoded := func(t *testing.T, req MergeResultRequest) map[string]interface{} {
+		t.Helper()
+		encoded, err := json.Marshal(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got map[string]interface{}
+		if err := json.Unmarshal(encoded, &got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	landed := decoded(t, MergeResultRequest{
+		Status: "merged", MergedSha: "tip", SourceSha: "tip", AlreadyMerged: true,
+	})
+	if landed["status"] != "merged" {
+		t.Fatalf("status = %#v, want the value every control plane already accepts", landed["status"])
+	}
+	if landed["alreadyMerged"] != true {
+		t.Fatalf("alreadyMerged = %#v", landed["alreadyMerged"])
+	}
+
+	ordinary := decoded(t, MergeResultRequest{
+		Status: "merged", MergedSha: "new-tip", SourceSha: "source-tip",
+	})
+	if _, present := ordinary["alreadyMerged"]; present {
+		t.Fatalf("an ordinary merge sent a new field: %#v", ordinary)
+	}
+}
+
+// The other direction of the same upgrade window: a control plane that knows nothing about §7 sends
+// no `requiredSourceSha`, and the command it sends must be byte-identical to the one it always sent.
+func TestMergeCommandRequiredSourceShaWireField(t *testing.T) {
+	encode := func(t *testing.T, cmd MergeCommand) map[string]interface{} {
+		t.Helper()
+		encoded, err := json.Marshal(cmd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got map[string]interface{}
+		if err := json.Unmarshal(encoded, &got); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	gated := encode(t, MergeCommand{SessionID: "s1", Branch: "b", WorkDir: "/r", RequiredSourceSha: "abc"})
+	if gated["requiredSourceSha"] != "abc" {
+		t.Fatalf("requiredSourceSha = %#v", gated["requiredSourceSha"])
+	}
+	ungated := encode(t, MergeCommand{SessionID: "s1", Branch: "b", WorkDir: "/r"})
+	if _, present := ungated["requiredSourceSha"]; present {
+		t.Fatalf("an ungated merge carried the field: %#v", ungated)
+	}
+}
+
 func TestManualWorktreeFenceWireFields(t *testing.T) {
 	tests := []struct {
 		name        string
