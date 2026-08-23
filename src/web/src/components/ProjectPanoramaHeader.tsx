@@ -138,13 +138,25 @@ export function stalledOnReady(buckets: ProjectPanoramaBuckets): boolean {
 }
 
 /** A status marker as a SHAPE. `aria-hidden` because the cell's own text already names the status —
- *  a second reading of "Running" is noise, and the shape is here for the eye, not the screen reader. */
-function Glyph({ shape, color }: { shape: BucketGlyph; color: string }) {
+ *  a second reading of "Running" is noise, and the shape is here for the eye, not the screen reader.
+ *
+ *  `size` scales the drawing instead of redrawing it: the viewBox is fixed, so the projects list's
+ *  8px marks are these four geometries, stroke weights and all, and not a second set that could
+ *  drift from them. */
+export function Glyph({
+  shape,
+  color,
+  size = 12,
+}: {
+  shape: BucketGlyph;
+  color: string;
+  size?: number;
+}) {
   return (
     <svg
       data-glyph={shape}
-      width={12}
-      height={12}
+      width={size}
+      height={size}
       viewBox="0 0 12 12"
       aria-hidden="true"
       focusable="false"
@@ -224,15 +236,29 @@ function segmentRadius(index: number, total: number): string {
 }
 
 /**
- * The four numbers as one bar: segments in proportion, separated by 2px of the card surface rather
- * than by a stroke, rounded 4px at the two outer ends only.
+ * The four numbers as one bar: segments in proportion, separated by 2px of the surface behind them
+ * rather than by a stroke, rounded 4px at the two outer ends only.
  *
  * An empty bucket is DROPPED rather than drawn as a hairline: a sliver of colour for zero is a
- * value the reader cannot help but see, and this card's whole subject is a zero. The bar carries no
- * shape channel, so `role="img"` plus every number in the label is what makes it readable at all
- * without colour — including the buckets that have no segment.
+ * value the reader cannot help but see, and this card's whole subject is a zero. A bucket that is
+ * NOT empty keeps a 3px floor for the opposite reason — at the projects list's 196px the running
+ * task in a 1-of-118 project rounds to under two pixels, and work in flight that renders as
+ * nothing is the same lie the other way round.
+ *
+ * The bar carries no shape channel, so `role="img"` plus every number in the label is what makes
+ * it readable at all without colour — including the buckets that have no segment.
+ *
+ * Exported because the projects list draws the same four buckets in the same order from the same
+ * table, differing only in how tall the bar is: two implementations of this would be two answers
+ * to "is this project blocked?", and the list is where that question gets asked first.
  */
-function Meter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
+export function BucketMeter({
+  buckets,
+  height = 9,
+}: {
+  buckets: ProjectPanoramaBuckets;
+  height?: number;
+}) {
   const drawn = PANORAMA_BUCKETS.map((bucket) => ({ ...bucket, value: buckets[bucket.key] })).filter(
     (segment) => segment.value > 0,
   );
@@ -241,7 +267,7 @@ function Meter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
   ).join(', ')}`;
 
   return (
-    <div role="img" aria-label={label} style={{ display: 'flex', gap: 2, height: 9, marginTop: 14 }}>
+    <div role="img" aria-label={label} style={{ display: 'flex', gap: 2, height }}>
       {drawn.length === 0 ? (
         // Every bucket is zero: an empty track, so the bar reads as "no work" rather than as a
         // rendering failure.
@@ -253,6 +279,7 @@ function Meter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
             title={`${segment.label} ${segment.value}`}
             style={{
               flex: segment.value,
+              minWidth: 3,
               background: segment.color,
               borderRadius: segmentRadius(index, drawn.length),
             }}
@@ -468,7 +495,9 @@ export function ProjectPanoramaHeader({ projectId }: { projectId: string }) {
         ))}
       </div>
 
-      <Meter buckets={loaded} />
+      <div style={{ marginTop: 14 }}>
+        <BucketMeter buckets={loaded} />
+      </div>
 
       {stalled ? (
         <StalledBanner buckets={loaded} health={health.data} healthError={health.isError} />

@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { PANORAMA_BUCKETS } from '../components/ProjectPanoramaHeader';
 import {
   EMPTY_NEW_TASK_DRAFT,
   NewProjectTaskForm,
@@ -160,6 +161,18 @@ const task = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// What GET /projects reports about every project besides its name: the four buckets and when it
+// last moved. Spelled as a helper because the endpoint ALWAYS sends both — a project with no tasks
+// reports five zeroes and a null rather than dropping them — so a row fixture without them would
+// be testing a payload nobody sends. Named for what it answers: where this project stands.
+const standing = (
+  buckets: Partial<Record<'running' | 'ready' | 'blocked' | 'done' | 'cancelled', number>> = {},
+  lastActivityAt: string | null = '2026-01-02T00:00:00Z',
+) => ({
+  buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...buckets },
+  lastActivityAt,
+});
+
 const detail = (over: Record<string, unknown> = {}) => ({
   id: P1,
   title: 'Website Revamp',
@@ -277,6 +290,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        ...standing({ running: 1, ready: 2, done: 2 }),
       },
       {
         id: P2,
@@ -286,6 +300,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-03T00:00:00Z',
         updatedAt: '2026-01-04T00:00:00Z',
         _count: { tasks: 1 },
+        ...standing({ done: 1 }),
       },
       {
         id: P3,
@@ -295,6 +310,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-05T00:00:00Z',
         updatedAt: '2026-01-06T00:00:00Z',
         _count: { tasks: 2 },
+        ...standing({ ready: 1, blocked: 1 }),
       },
     ]);
     const html = renderPage(qc);
@@ -313,6 +329,158 @@ describe('ProjectsPage', () => {
     // and three of CJK — the same slice cannot give every row the same height.
     expect(goalLines(html)).toContain(longGoal.trim());
     expect(html).not.toContain('…'); // no hard-sliced excerpt left anywhere on the page
+  });
+
+  it('draws where the project stands as one meter, dropping the empty buckets and keeping the tiny one', () => {
+    const qc = newClient();
+    // The deployment's own worst row: one task running against seventeen thousand blocked. One
+    // flex unit in 23,442 is a fraction of a pixel across the 196px this column gets, so the
+    // running segment is exactly the one a proportional bar loses — and "nothing is running" is
+    // the opposite of what this row would then be saying.
+    qc.setQueryData(['projects'], [
+      {
+        id: P1,
+        title: 'FineWeb × Common Crawl',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 23442 },
+        ...standing({ running: 1, ready: 0, blocked: 17324, done: 6117 }),
+      },
+    ]);
+    const html = renderPage(qc);
+    const meter = html.match(/<div role="img"[\s\S]*?<\/div>/)?.[0] ?? '';
+
+    // Three segments for the three non-zero buckets, in the table's order, each wearing that
+    // bucket's token. `ready` is at zero and draws nothing: a hairline of colour for a bucket that
+    // is empty is the one value a reader cannot un-see.
+    const segments = [...meter.matchAll(/background:var\(--([a-z0-9-]+)\)/g)].map((m) => m[1]);
+    expect(segments).toEqual(['brand', 'text-3', 'success']);
+    expect(meter).not.toContain('warning-solid');
+
+    // The mark spec: 6px tall, 2px of surface between segments, 4px rounded at the two outer ends
+    // only, and a 3px floor under every segment that is drawn — which is what keeps the 1-of-23,442
+    // running task on the page at all.
+    expect(meter).toContain('height:6px');
+    expect(meter).toContain('gap:2px');
+    expect(meter.match(/min-width:3px/g)).toHaveLength(3);
+    expect(meter).toContain('border-radius:4px 2px 2px 4px');
+    expect(meter).toContain('border-radius:2px 4px 4px 2px');
+
+    // The bar has no room for a shape, so its label is where the buckets get named — all four of
+    // them, including the one with no segment.
+    expect(meter).toContain('aria-label="Task status: 1 running, 0 ready, 17324 blocked, 6117 done"');
+
+    // Beside it, a figure per drawn bucket, each with its own shape: amber --warning-solid and
+    // neutral --text-3 are 2.32:1 and 2.94:1 against this background, so nothing here may rest on
+    // colour alone. Thousands are grouped — 17,324 and 17324 are not read at the same speed.
+    const figures = html.match(/<div class="project-row-buckets"[\s\S]*?<\/div><\/div>/)?.[0] ?? '';
+    expect([...figures.matchAll(/data-glyph="([a-z]+)"/g)].map((m) => m[1])).toEqual([
+      'disc',
+      'square',
+      'check',
+    ]);
+    expect([...figures.matchAll(/<b>([\d,]+)<\/b>/g)].map((m) => m[1])).toEqual([
+      '1',
+      '17,324',
+      '6,117',
+    ]);
+  });
+
+  it('takes the buckets, their order, their shapes and their colours from the panorama’s own table', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects'], [
+      {
+        id: P1,
+        title: 'Website Revamp',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 10 },
+        ...standing({ running: 1, ready: 2, blocked: 3, done: 4 }),
+      },
+    ]);
+    const html = renderPage(qc);
+    const meter = html.match(/<div role="img"[\s\S]*?<\/div>/)?.[0] ?? '';
+
+    // Derived from the table rather than spelled here: a row that drew its own four colours would
+    // pass a hard-coded list and still disagree with the project page it links to. Change the
+    // table and this expectation changes with it — which is the only way one source can be proven.
+    expect([...meter.matchAll(/background:(var\(--[a-z0-9-]+\))/g)].map((m) => m[1])).toEqual(
+      PANORAMA_BUCKETS.map((bucket) => bucket.color),
+    );
+    const figures = html.match(/<div class="project-row-buckets"[\s\S]*?<\/div><\/div>/)?.[0] ?? '';
+    expect([...figures.matchAll(/data-glyph="([a-z]+)"/g)].map((m) => m[1])).toEqual(
+      PANORAMA_BUCKETS.map((bucket) => bucket.glyph),
+    );
+
+    // And it is an IMPORT that makes that true, not a copy that currently agrees.
+    expect(source).toMatch(/import \{[\s\S]*?PANORAMA_BUCKETS[\s\S]*?\} from '..\/components\/ProjectPanoramaHeader';/);
+    expect(source).toContain('<BucketMeter buckets={buckets} height={6} />');
+    // The row's meter decides no colour of its own: every one it draws arrives as `bucket.color`
+    // off the table. (The page still names tokens elsewhere — the detail page's task rows have
+    // their own status table — so this is scoped to the component under test.)
+    const component = source.match(/function ProjectRowMeter\([\s\S]*?\n\}\n/)?.[0] ?? '';
+    expect(component).toContain('color={bucket.color}');
+    expect(component).not.toContain('var(--');
+    // And nowhere on this page, nor in the rules it renders into, is a colour spelled as a hex.
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    for (const cls of ['project-row-meter', 'project-row-buckets', 'project-row-when', 'project-row-activity', 'project-row-count']) {
+      const rule = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+      expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    }
+  });
+
+  it('ends the row with when the project last moved, and the total demoted behind it', () => {
+    const qc = newClient();
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    qc.setQueryData(['projects'], [
+      {
+        id: P1,
+        title: 'Website Revamp',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 23442 },
+        ...standing({ running: 1, blocked: 6 }, threeHoursAgo),
+      },
+      {
+        id: P2,
+        title: 'Nothing Filed Yet',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-03T00:00:00Z',
+        updatedAt: '2026-01-04T00:00:00Z',
+        _count: { tasks: 0 },
+        // A project with no tasks: the endpoint sends five zeroes and a null rather than dropping
+        // the fields, and the row has to read that as "nothing has happened here" — not as a
+        // rendering failure, and not as a date nobody performed.
+        ...standing({}, null),
+      },
+    ]);
+    const html = renderPage(qc);
+
+    const activity = [...html.matchAll(/<span class="project-row-activity">([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(activity).toEqual(['3h ago', 'No activity']);
+    // The total survives as scale — 6 blocked out of 23,442 is not 6 out of 12 — but it is no
+    // longer the number the row leads with.
+    const totals = [...html.matchAll(/<span class="project-row-count">([\s\S]*?)<\/span>/g)].map((m) =>
+      m[1].replace(/<!-- -->/g, ''),
+    );
+    expect(totals).toEqual(['23,442 tasks', '0 tasks']);
+
+    // Which one is the quieter number is the stylesheet's to say, and it says it in tokens.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    expect(css.match(/\.project-row-activity\s*\{([^}]*)\}/)?.[1]).toContain('color: var(--text-2)');
+    expect(css.match(/\.project-row-count\s*\{([^}]*)\}/)?.[1]).toContain('color: var(--text-4)');
+
+    // An empty project still draws a bar — an empty track, the same one the project page draws —
+    // rather than an absent element that reads as a broken row.
+    expect(html).toContain('var(--fill-muted)');
   });
 
   it('shows a Markdown goal as the line it reads as, not as source', () => {
@@ -336,6 +504,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        ...standing({ ready: 5 }),
       },
     ]);
     const [line] = goalLines(renderPage(qc));
@@ -365,6 +534,7 @@ describe('ProjectsPage', () => {
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-02T00:00:00Z',
       _count: { tasks: 1 },
+      ...standing({ ready: 1 }),
       ...p,
     })));
     const html = renderPage(qc);
@@ -401,6 +571,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        ...standing({ running: 1, ready: 2, done: 2 }),
       },
     ]);
     const html = renderPage(qc);
