@@ -13,6 +13,13 @@
 --   * every provenance note ever written is gone. It is evidence, not authority, so nothing that
 --     decides anything changes — no task moves project, no dispatch changes, no acceptance moves.
 --     That is the compensation for the loss being acceptable at all.
+--   * the written-once rule goes with them, and that is the part worth saying out loud. While 0150
+--     is installed a note cannot be rewritten, retrofitted OR emptied: the three references may go
+--     to NULL only once the row they name is itself gone, which is what the referential action does
+--     and what a hand-written clearing cannot fake, and `trigger_event` — having no foreign key and
+--     so nothing deletable to empty it — may not go to NULL by any route. Rolling back does not
+--     relax that rule, it removes the columns it was about. Rolling back and forward again is
+--     therefore not a way to launder a note: what comes back is an empty column, not an edited one.
 --   * every project returns to "there is one acceptance history", the pre-0150 reading. A project
 --     reopened after a PASS is once again able to re-assert that PASS. Rolling back past this
 --     migration on a deployment where that has happened is a decision, not a formality.

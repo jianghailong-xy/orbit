@@ -54,6 +54,8 @@ const NOTICED = '00000000-0000-7000-8000-00000000a002';
 const TASK = '00000000-0000-7000-8000-00000000b001';
 const BARE_TASK = '00000000-0000-7000-8000-00000000b002';
 const RUN = '00000000-0000-7000-8000-00000000c001';
+const SOURCE_TASK = '00000000-0000-7000-8000-00000000b003';
+const SOURCE_SESSION = '00000000-0000-7000-8000-00000000d001';
 
 type ClientCtor = new (config: { connectionString?: string }) => Client;
 
@@ -382,6 +384,82 @@ test('0150 on a fresh PostgreSQL: the objects, and the rules they carry', async 
         assert.equal(rows[0].project_id, OWNED);
         assert.equal(rows[0].discovered_from_project_id, NOTICED,
           'where the work was noticed did not change when it changed hands');
+      } finally {
+        await client.query('ROLLBACK');
+      }
+    });
+
+    await t.test('provenance is never emptied by hand: only the loss of what it names clears it',
+      async () => {
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          `INSERT INTO "session"(id, title, prompt, owner_id, creator_id, updated_at)
+           VALUES ($1, 'noticing', 'p', $2, $2, CURRENT_TIMESTAMP)`,
+          [SOURCE_SESSION, USER],
+        );
+        await client.query(
+          `INSERT INTO "task"(id, title, owner_id, creator_type, creator_id, updated_at, project_id)
+           VALUES ($1, 'the work being done when it was noticed', $2, 'USER', $2,
+                   CURRENT_TIMESTAMP, $3)`,
+          [SOURCE_TASK, USER, OWNED],
+        );
+        // One row carrying all four, so each column is refused with the other three intact — a
+        // guard that only holds while its neighbours are empty is not a guard.
+        await client.query(
+          `INSERT INTO "task"(id, title, owner_id, creator_type, creator_id, updated_at,
+                              project_id, discovered_from_project_id, trigger_event,
+                              source_task_id, source_session_id)
+           VALUES ($1, 'noticed elsewhere', $2, 'USER', $2, CURRENT_TIMESTAMP, $3, $4,
+                   'task.verdict_failed', $5, $6)`,
+          [BARE_TASK, USER, OWNED, NOTICED, SOURCE_TASK, SOURCE_SESSION],
+        );
+
+        // Erasure is the rewrite nobody writes down. `NEW.<col> IS NOT NULL` on every arm reads
+        // like "let the referential action through" and means "let ANY write empty this", which is
+        // the same row-you-cannot-tell-apart the unit exists to prevent — reached by deleting the
+        // note instead of forging it. `trigger_event` is the sharpest case: it has no foreign key,
+        // so there is no delete that could ever clear it and no reading under which a plain write
+        // to NULL is anything but an edit.
+        for (const column of [
+          'discovered_from_project_id', 'trigger_event', 'source_task_id', 'source_session_id',
+        ]) {
+          const message = await refusal(
+            client, `UPDATE "task" SET ${column} = NULL WHERE id = $1`, [BARE_TASK],
+          );
+          assert.match(message, /TASK_PROVENANCE_IMMUTABLE/,
+            `${column} could be emptied by a plain write while what it names still exists`);
+        }
+        const intact = await client.query(
+          `SELECT discovered_from_project_id, trigger_event, source_task_id, source_session_id
+             FROM "task" WHERE id = $1`, [BARE_TASK],
+        );
+        assert.deepEqual(intact.rows[0], {
+          discovered_from_project_id: NOTICED,
+          trigger_event: 'task.verdict_failed',
+          source_task_id: SOURCE_TASK,
+          source_session_id: SOURCE_SESSION,
+        }, 'a refused clearing must leave the note exactly as it was');
+
+        // The one lawful way, and it is not an exemption granted to a caller: each delete removes
+        // the row a column names, and the column empties because what it pointed at is gone. Run
+        // through the SAME guard as the writes above, which is the point — no flag distinguishes
+        // them, the state of the referenced row does.
+        await client.query(`DELETE FROM "project" WHERE id = $1`, [NOTICED]);
+        await client.query(`DELETE FROM "task" WHERE id = $1`, [SOURCE_TASK]);
+        await client.query(`DELETE FROM "session" WHERE id = $1`, [SOURCE_SESSION]);
+        const after = await client.query(
+          `SELECT project_id, discovered_from_project_id, trigger_event,
+                  source_task_id, source_session_id
+             FROM "task" WHERE id = $1`, [BARE_TASK],
+        );
+        assert.deepEqual(after.rows[0], {
+          project_id: OWNED,
+          discovered_from_project_id: null,
+          trigger_event: 'task.verdict_failed',
+          source_task_id: null,
+          source_session_id: null,
+        }, 'the three references absorb the delete; the note that names nothing deletable survives');
       } finally {
         await client.query('ROLLBACK');
       }

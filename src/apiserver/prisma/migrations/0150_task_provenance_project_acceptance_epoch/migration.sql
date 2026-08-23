@@ -127,29 +127,73 @@ CREATE INDEX IF NOT EXISTS "task_source_session_idx"
 
 -- SC7, as a rule rather than as a comment: written at creation, read-only afterwards.
 --
--- The one transition allowed is to NULL, and it is not a concession — it is the SET NULL above
--- arriving as an UPDATE from the referenced row's delete. Refusing it would make deleting a project
--- fail against a task it does not own, which is the failure mode `discovered_from_project_id` was
--- given SET NULL to avoid in the first place.
---
 -- What is refused is every rewrite: NULL → a value (evidence cannot be retrofitted onto a write
--- that has already happened) and one value → another (evidence that can be edited is testimony).
+-- that has already happened), one value → another (evidence that can be edited is testimony), and
+-- a value → NULL (evidence that can be erased is worth no more than evidence that can be edited —
+-- the incident this unit exists for is somebody making a row indistinguishable from a deliberate
+-- one, and emptying the note does that as well as forging it would).
+--
+-- The three id columns have ONE lawful way to become NULL, and it is not a concession: it is the
+-- `ON DELETE SET NULL` above arriving as an UPDATE because the row they point at was deleted.
+-- Refusing it would make deleting a project fail against a task it does not own, which is the
+-- failure mode SET NULL was chosen to avoid.
+--
+-- Telling that apart from a hand-written clearing is not a matter of trusting the writer, and it
+-- needs no flag, no session setting and no convention: by the time the referential action runs the
+-- referenced row is GONE, and when a person clears the column themselves it is still there. So the
+-- rule is stated as the thing it actually means — this column may become empty only once what it
+-- named no longer exists — and PostgreSQL answers it the same way for every writer, including one
+-- that has never heard of this trigger. (Probed rather than assumed: with a NOT DEFERRABLE
+-- constraint the action runs inside the parent's own statement, after the row is gone.)
+--
+-- `trigger_event` gets no such exemption, because it has no foreign key: nothing can be deleted
+-- that would empty it, so it has no lawful NULL at all. Once written it is frozen against every
+-- change, emptying included — which is the difference between a column that records a fact and a
+-- column that holds a draft.
+--
 -- A `project_id` that MOVES — L4's declared handoff — leaves these four untouched, which is exactly
 -- right: where the work was noticed did not change when it changed hands.
 CREATE OR REPLACE FUNCTION task_provenance_immutable() RETURNS TRIGGER AS $$
 BEGIN
-  IF (NEW."discovered_from_project_id" IS DISTINCT FROM OLD."discovered_from_project_id"
-        AND NEW."discovered_from_project_id" IS NOT NULL)
-     OR (NEW."trigger_event" IS DISTINCT FROM OLD."trigger_event"
-        AND NEW."trigger_event" IS NOT NULL)
-     OR (NEW."source_task_id" IS DISTINCT FROM OLD."source_task_id"
-        AND NEW."source_task_id" IS NOT NULL)
-     OR (NEW."source_session_id" IS DISTINCT FROM OLD."source_session_id"
-        AND NEW."source_session_id" IS NOT NULL) THEN
+  -- No foreign key, so no lawful emptying: every change is a rewrite.
+  IF NEW."trigger_event" IS DISTINCT FROM OLD."trigger_event" THEN
     RAISE EXCEPTION
-      'TASK_PROVENANCE_IMMUTABLE: task % records where it was discovered; that is written once',
+      'TASK_PROVENANCE_IMMUTABLE: task % records why it was filed; that is written once and names nothing that can be deleted, so it has no way to become empty',
       OLD."id" USING ERRCODE = 'raise_exception';
   END IF;
+
+  -- The three references. `IS DISTINCT FROM` catches the retrofit and the rewrite; the second
+  -- clause is what leaves exactly one door open, and only the referential action can walk through
+  -- it, because only the referential action runs at a moment when the referenced row is gone.
+  IF NEW."discovered_from_project_id" IS DISTINCT FROM OLD."discovered_from_project_id"
+     AND NOT (NEW."discovered_from_project_id" IS NULL
+              AND OLD."discovered_from_project_id" IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM "project" p
+                               WHERE p."id" = OLD."discovered_from_project_id")) THEN
+    RAISE EXCEPTION
+      'TASK_PROVENANCE_IMMUTABLE: task % records the project it was noticed in; that is written once, and empties only when project % is itself gone',
+      OLD."id", OLD."discovered_from_project_id" USING ERRCODE = 'raise_exception';
+  END IF;
+
+  IF NEW."source_task_id" IS DISTINCT FROM OLD."source_task_id"
+     AND NOT (NEW."source_task_id" IS NULL
+              AND OLD."source_task_id" IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM "task" st WHERE st."id" = OLD."source_task_id")) THEN
+    RAISE EXCEPTION
+      'TASK_PROVENANCE_IMMUTABLE: task % records the task it was noticed from; that is written once, and empties only when task % is itself gone',
+      OLD."id", OLD."source_task_id" USING ERRCODE = 'raise_exception';
+  END IF;
+
+  IF NEW."source_session_id" IS DISTINCT FROM OLD."source_session_id"
+     AND NOT (NEW."source_session_id" IS NULL
+              AND OLD."source_session_id" IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM "session" ss
+                               WHERE ss."id" = OLD."source_session_id")) THEN
+    RAISE EXCEPTION
+      'TASK_PROVENANCE_IMMUTABLE: task % records the session it was noticed in; that is written once, and empties only when session % is itself gone',
+      OLD."id", OLD."source_session_id" USING ERRCODE = 'raise_exception';
+  END IF;
+
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;

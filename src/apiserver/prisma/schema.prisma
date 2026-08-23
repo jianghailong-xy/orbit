@@ -2318,8 +2318,13 @@ model Task {
   /// The referential actions are where that is stated in a language every writer meets: `projectId`
   /// is Restrict (a project that OWNS work cannot be deleted), these are SetNull (a project, task
   /// or session work was merely noticed in can be, and what survives is the absence). Written once,
-  /// at creation, and frozen afterwards by `task_provenance_immutable_guard` — the single exception
-  /// being the SetNull itself, which arrives as an UPDATE from the referenced row's delete.
+  /// at creation, and frozen afterwards by `task_provenance_immutable_guard` against every change,
+  /// emptying included. The three references have one lawful way to become null and it is the
+  /// SetNull itself, arriving as an UPDATE because the row they name was deleted; the guard admits
+  /// it by checking that the referenced row is GONE, which is true exactly when the referential
+  /// action is what is running and false when a person clears the column by hand. `triggerEvent`
+  /// has no foreign key, so nothing can be deleted that would empty it and it has no lawful null
+  /// at all.
   ///
   /// A handoff that moves `projectId` (unit L4) leaves all four untouched: where the work was
   /// noticed did not change when it changed hands.
