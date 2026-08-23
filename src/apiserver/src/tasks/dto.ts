@@ -73,7 +73,7 @@ export class CreateTaskDto {
   // a list decides how the task runs, a project states what it is for.
   @IsOptional() @IsPublicId() projectId?: string;
   // Unit L3: the coordination scope this write claims to be made under, as one opaque field
-  // (`psc:v1:<projectId>:<generation>`; see docs/project-coordinator-scope-contract.md §2).
+  // (`psc:v1:<projectId>:<generation>`).
   //
   // NOT a credential and not `@IsPublicId`: it contains no secret, any client can compute it, and
   // the server derives the real scope from the session row and only COMPARES. What it buys is that

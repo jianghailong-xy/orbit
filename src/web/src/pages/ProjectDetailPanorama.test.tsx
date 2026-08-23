@@ -377,7 +377,7 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('What the coordinator has been doing')).toBe(false);
   });
 
-  it('still carries the project’s own fields and its coordinator, below the panorama', async () => {
+  it('still carries the project’s own fields, below the panorama', async () => {
     serve();
     await mount(page());
 
@@ -389,15 +389,9 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('Instructions')).toBe(true);
     expect(shows('Land behind a flag, then flip it')).toBe(true);
 
-    // The coordinator surface, both halves of it: the control that opens the conversation and the
-    // section that reports what the loop is doing.
-    expect(shows('>Coordinator<')).toBe(true);
-    expect(shows('Start coordinator')).toBe(true);
-
     // Below the panorama, which is the move this assembly made: what the project was set up to be
     // is read once, where the panorama is what a reader comes back for.
     expect(at('Where the work stands')).toBeLessThan(at('Ship the new marketing site'));
     expect(at('>Tasks<')).toBeLessThan(at('Ship the new marketing site'));
-    expect(at('Ship the new marketing site')).toBeLessThan(at('>Coordinator<'));
   });
 });

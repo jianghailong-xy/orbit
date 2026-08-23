@@ -1,6 +1,5 @@
 /**
- * Unit L4: the explicit cross-project handoff — `docs/project-coordinator-scope-contract.md` §6's
- * three `HANDOFF_*` states, landed.
+ * Unit L4: the explicit cross-project handoff — its three `HANDOFF_*` states, landed.
  *
  * L1 froze the rules and left this unit one job (§10): make `HANDOFF_TASK` reachable. Today it is
  * not — `decideProjectScopeWrite` has R9–R14 and nothing in the product can produce the approval
@@ -36,7 +35,7 @@
 
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from './project-blocker';
+import { canonicalJson } from './canonical-json';
 import type { ScopeRefusalCode } from './project-scope-contract';
 import type { HandoffApproval, HandoffApprovalState } from './project-scope-decision';
 

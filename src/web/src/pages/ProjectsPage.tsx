@@ -10,22 +10,9 @@ import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
-import {
-  ProjectCoordinatorPanel,
-  type TriggerResult,
-} from '../components/ProjectCoordinatorPanel';
 import { ProjectPanoramaHeader } from '../components/ProjectPanoramaHeader';
-import {
-  isForbidden,
-  isStaleConfigRevision,
-  policyDraftOf,
-  policyPatchBody,
-  triggerBody,
-  type PolicyDraft,
-} from '../lib/coordinatorStatus';
 import { encodeId, routeId } from '../lib/idCodec';
 import {
-  projectCoordinatorStatusQuery,
   providersQuery,
   runnersQuery,
   workspacesQuery,
@@ -189,24 +176,6 @@ export function ProjectDetailPage() {
   const p = project.data;
   const byStatus = Object.entries(p?.tasksByStatus ?? {});
 
-  // Declared here, above the branch that decides whether the project loaded, because a hook cannot
-  // live inside it — the section it drives renders further down. Keyed by project, so two projects
-  // open in two tabs cannot read each other's in-flight or failed state.
-  const coordinator = useMutation({
-    mutationKey: ['project', id, 'coordinator'],
-    mutationFn: async () => {
-      // Not reachable from the button, which only exists inside the loaded branch — but the id is
-      // nullable up here, and a guard is what keeps `/projects/null/coordinator` off the wire
-      // rather than narrowing the type with an assertion that would send it.
-      if (!id) throw new Error('This link is missing a project id.');
-      return openProjectCoordinator(id);
-    },
-    // The id that gets navigated to is the one the SERVER just returned, never the pointer the
-    // project document arrived with: on a trashed binding those are two different sessions, and
-    // only the returned one is the live conversation.
-    onSuccess: (result) => navigate(coordinatorSessionPath(result.sessionId)),
-  });
-
   return (
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
     // and the ranking bars in the left one stop being readable at half of 900.
@@ -304,19 +273,6 @@ export function ProjectDetailPage() {
             empty="No acceptance criteria set"
           />
           <Field label="Instructions" text={p.instructions} empty="No instructions set" />
-          {/* A sibling of the fields above and the tasks below, not a wrapper around either: a
-              coordinator that fails to open costs the reader the coordinator and nothing else. */}
-          <ProjectCoordinatorControl
-            bound={Boolean(p.coordinatorSessionId)}
-            pending={coordinator.isPending}
-            error={coordinator.error}
-            onOpen={() => coordinator.mutate()}
-          />
-          {/* Under the button that opens the conversation, because they are two halves of one
-              question: that one is where a coordinator is TALKED to, this is what it has been
-              doing and what it is allowed to do. Inside the loaded branch for the same reason the
-              task page is — a project that 404s puts no second doomed request on the wire. */}
-          <ProjectCoordinatorSection projectId={id} />
           {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator
               because both are things a PERSON answers, and §7 RB2 is explicit that these two are
@@ -330,148 +286,6 @@ export function ProjectDetailPage() {
   );
 }
 
-/**
- * What the coordination-settings form is handed before the first status lands.
- *
- * Never rendered — the panel draws a spinner until a status exists — but the form's props are not
- * nullable, and a nullable path through it would be a branch nothing can reach. The values are the
- * conservative ones on purpose: if this ever DID render, it would render a project that is switched
- * off and manual, which is the safe reading of "we do not know yet".
- */
-const UNREAD_POLICY_DRAFT: PolicyDraft = {
-  coordinatorEnabled: false,
-  automationPolicy: 'MANUAL',
-  maxConcurrentTasks: 1,
-  sessionBudgetPerDay: null,
-};
-
-/** An id for one press of Run now, or null when this browser cannot mint one — in which case the
- *  server allocates it and only a retry loses its idempotency. */
-function newTriggerId(): string | null {
-  // `typeof crypto` rather than `crypto?.` — optional chaining still throws on an identifier that
-  // was never declared, which is the only case this guard is for.
-  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : null;
-}
-
-/**
- * The Coordinator surface's one stateful half: the read, the two control writes, and what each
- * refusal does to the form.
- *
- * Everything it decides is about the WRITE path, and there are only three decisions in it:
- *
- *  - A 403 latches the whole surface read-only. Not guessed from the payload — the status read
- *    carries no permission field — but taken from the one place the answer actually exists.
- *  - A 409 `STALE_CONFIG_REVISION` records the conflict and re-reads the project. The form stays
- *    CLOSED until the reader presses "Review current settings": the next submit would carry the
- *    revision that has just superseded theirs and would therefore succeed, writing their stale
- *    intent over the change that refused it.
- *  - A press of Run now keeps its `triggerId` until it is answered, so a retry is the same request.
- *
- * The draft is `null` until the reader touches something, so the form shows the server's values and
- * follows them as they move. The moment it is edited it stops following — an edit being overwritten
- * by a poll is the same silent loss the revision fence exists to stop, one layer up.
- */
-function ProjectCoordinatorSection({ projectId }: { projectId: string }) {
-  const qc = useQueryClient();
-  const statusQ = useQuery(projectCoordinatorStatusQuery(projectId));
-  const status = statusQ.data;
-
-  const [readOnly, setReadOnly] = useState(false);
-  const [draft, setDraft] = useState<PolicyDraft | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
-  const [conflict, setConflict] = useState<{ message: string } | null>(null);
-  const [triggerResult, setTriggerResult] = useState<TriggerResult | null>(null);
-  const triggerId = useRef<string | null>(null);
-
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['project', projectId] });
-  };
-
-  /** What a refused control write means for the surface. Both branches are latches on purpose: a
-   *  refusal that cleared itself on the next render would leave a button that keeps failing. */
-  const noteRefusal = (error: Error) => {
-    if (isForbidden(error)) setReadOnly(true);
-    if (isStaleConfigRevision(error)) {
-      setConflict({ message: error.message });
-      refresh();
-    }
-  };
-
-  const trigger = useMutation({
-    mutationFn: () => {
-      if (!status) throw new Error('The coordinator’s state has not loaded yet.');
-      triggerId.current = triggerId.current ?? newTriggerId();
-      return api<TriggerResult>(
-        `/projects/${encodeURIComponent(projectId)}/coordinator/trigger`,
-        { method: 'POST', body: triggerBody(status, triggerId.current) },
-      );
-    },
-    onSuccess: (result) => {
-      triggerId.current = null;
-      setTriggerResult(result);
-      refresh();
-    },
-    onError: noteRefusal,
-  });
-
-  const savePolicy = useMutation({
-    mutationFn: () => {
-      if (!status) throw new Error('The coordinator’s state has not loaded yet.');
-      return api(`/projects/${encodeURIComponent(projectId)}`, {
-        method: 'PATCH',
-        body: policyPatchBody(draft ?? policyDraftOf(status), status),
-      });
-    },
-    onSuccess: () => {
-      // Back to following the server: what was just written IS the server's value now, and a draft
-      // left behind would keep the form pinned to a revision that has moved.
-      setDraft(null);
-      setConfirmed(false);
-      refresh();
-    },
-    onError: noteRefusal,
-  });
-
-  return (
-    <ProjectCoordinatorPanel
-      status={status}
-      loading={statusQ.isLoading}
-      error={statusQ.error instanceof Error ? statusQ.error : null}
-      onRetry={() => void statusQ.refetch()}
-      readOnly={readOnly}
-      trigger={{
-        pending: trigger.isPending,
-        conflict: conflict !== null,
-        error: trigger.error,
-        result: triggerResult,
-        onRun: () => {
-          setTriggerResult(null);
-          trigger.mutate();
-        },
-      }}
-      policy={{
-        draft: draft ?? (status ? policyDraftOf(status) : UNREAD_POLICY_DRAFT),
-        onDraft: setDraft,
-        pending: savePolicy.isPending,
-        conflict,
-        confirmed,
-        onConfirm: setConfirmed,
-        error: savePolicy.error,
-        onSubmit: () => savePolicy.mutate(),
-        onReview: () => {
-          // The refreshed settings become the form's values again, and only then does Save reopen.
-          setDraft(null);
-          setConfirmed(false);
-          setConflict(null);
-          void statusQ.refetch();
-        },
-      }}
-    />
-  );
-}
-
 /** What POST /projects/:id/coordinator answers with. `created` tells the session this call opened
  *  apart from the one it found already bound; both are this project's coordinator, and this unit
  *  opens either of them the same way. */
@@ -481,85 +295,10 @@ export interface CoordinatorResult {
   workspaceId: string | null;
 }
 
-/**
- * Resolve-or-create this project's one coordinator session.
- *
- * A POST every time, including from a project whose detail payload already names a coordinator.
- * The pointer it carries can be stale — the session behind it may since have gone to Trash — and
- * the server is what notices and replaces it, handing back the live conversation. Deep-linking
- * straight to `coordinatorSessionId` would skip that repair and land the reader inside Trash.
- *
- * The body is `{}` rather than nothing: `workspaceId` is what picks where a FIRST coordinator
- * opens, and this unit deliberately has no picker, so it sends none and lets the server's own
- * fallback answer — down to its 400 when even that has nothing to go on, which names the two
- * things a reader can actually do about it.
- */
-export function openProjectCoordinator(projectId: string): Promise<CoordinatorResult> {
-  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} });
-}
-
 /** Where a resolved coordinator is read. Through `encodeId`, like every other link in the app, so
  *  a response carrying the raw UUID and one carrying the short public id land on one route. */
 export const coordinatorSessionPath = (sessionId: string): string =>
   `/sessions/${encodeURIComponent(encodeId(sessionId))}`;
-
-/**
- * The Coordinator section as a function of its state alone.
- *
- * Presentational, and exported for the same reason ProjectTaskLevel is: a static render cannot
- * press the button, so handing each state in directly is the only way to assert what pending and
- * failed actually put on screen.
- *
- * One control for both labels. `bound` changes what the button is called — a project that already
- * has a coordinator is being reopened, not started — and nothing else: both spellings fire the
- * same resolve-or-create request, because which of the two it turns out to be is the server's
- * answer, not this component's guess.
- */
-export function ProjectCoordinatorControl({
-  bound,
-  pending,
-  error,
-  onOpen,
-}: {
-  bound: boolean;
-  pending: boolean;
-  error: Error | null;
-  onOpen: () => void;
-}) {
-  return (
-    <div style={{ marginBottom: 24 }}>
-      <Typography.Title level={4}>Coordinator</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        A project has exactly one coordinator session. Opening it here reuses that conversation, or
-        starts it if there is none yet.
-      </Typography.Paragraph>
-
-      {/* `disabled` as well as `loading`: the spinner says a request is in flight, but only the
-          disabled state stops a second press from opening a second one. */}
-      <Button type="primary" loading={pending} disabled={pending} onClick={onOpen}>
-        {bound ? 'Open coordinator' : 'Start coordinator'}
-      </Button>
-
-      {/* The server's own message, verbatim. On the one failure a reader can act on — no workspace
-          to open in — it names both ways out, and this unit has no picker of its own to offer
-          instead. Inline, so a failure here leaves the project and its tasks where they were. */}
-      {error ? (
-        <Alert
-          style={{ marginTop: 16 }}
-          type="error"
-          showIcon
-          message="Coordinator could not be opened"
-          description={error.message}
-          action={
-            <Button size="small" danger onClick={onOpen}>
-              Retry
-            </Button>
-          }
-        />
-      ) : null}
-    </div>
-  );
-}
 
 /** One page of a project's task tree. `nextCursor` is non-null only when a further page really
  *  exists — the server reads one row past the limit rather than counting the remainder. */

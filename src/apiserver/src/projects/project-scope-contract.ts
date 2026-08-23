@@ -406,8 +406,7 @@ export function projectScopeToken(projectId: string, generation: bigint | string
  * criterion points at is a document the project can be declared DONE without ever having read;
  * mapping each clause onto a criterion the project ALREADY states means the acceptance run that
  * answers criterion 4 or 9 has to answer for these rules too. The criteria are not restated here —
- * §14 of `project-coordinator-contract.md` holds the twelve, and the contract spec checks every
- * ordinal below against that table rather than against a copy that can drift.
+ * the ordinals below name criteria the project itself states, rather than a copy that can drift.
  */
 export const SCOPE_ACCEPTANCE_MAP: Readonly<Record<string, readonly number[]>> = {
   // Scope is an authorization boundary before it is anything else.

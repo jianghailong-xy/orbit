@@ -947,59 +947,6 @@ func (t *Transport) getProjectReopenImpact(id string) (json.RawMessage, error) {
 	return out, err
 }
 
-// getProjectVerifications reads what every verification in one project concluded, and what those
-// conclusions are still holding up: each check's verdict and verdictRevision, each non-PASS
-// conclusion's defect subtask and the action that raised it, and the tasks the dispatch guard is
-// currently holding back with the reason for each.
-//
-// The question it answers is the one a coordinator cannot answer from the task list: a blocked
-// task looks exactly like an ordinary OPEN task, deliberately — the block is a precondition, not a
-// status somebody rewrote — so "why is this not running" has to be read from here.
-func (t *Transport) getProjectVerifications(id string) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/verifications", nil, &out, taskOpTimeout)
-	return out, err
-}
-
-// getProjectCoordinatorStatus reads everything the control loop knows about one project: its run
-// state, who coordinates it and where, the coordination session and generation, the automation
-// policy and whether it is switched on, the concurrency and budget it is spending against, the last
-// few decisions and the actions they produced, what is claimed and unpublished right now, what is
-// blocking it, when it next wakes and which candidates lost, and the acceptance evidence.
-//
-// The question it answers is "why is this project not moving", which otherwise has no answer a
-// caller can fetch — the state is spread over seven tables and the most common conclusion, that the
-// project is broken, is usually wrong: it is at its cap, out of budget, MANUAL, or waiting.
-//
-// Read only. Asking the coordinator to run now is the user API's door, deliberately not this one.
-func (t *Transport) getProjectCoordinatorStatus(id string) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/coordinator/status", nil, &out, taskOpTimeout)
-	return out, err
-}
-
-// getProjectBlockers reads what is stopping a project (contract §11), and with history the episodes
-// that are already over. Blocker rows are never deleted on resolution, so "what was blocking this
-// yesterday, and what ended it" stays answerable — this is the terminal's way of asking.
-func (t *Transport) getProjectBlockers(id string, history bool) (json.RawMessage, error) {
-	if err := validatePathSegmentID(id); err != nil {
-		return nil, err
-	}
-	path := "/runner/projects/" + url.PathEscape(id) + "/blockers"
-	if history {
-		path += "?history=1"
-	}
-	var out json.RawMessage
-	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
-	return out, err
-}
-
 // getProjectAcceptance reads a project's acceptance standing (contract §13.4): the stated criteria
 // as the server decomposes them, the digest of the facts a DONE would be checked against, every
 // attempt with its per-criterion conclusions and evidence, the newest merge observation per

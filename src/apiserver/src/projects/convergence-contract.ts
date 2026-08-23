@@ -1,9 +1,7 @@
 /**
  * `[K1]`: the bounded-convergence contract, in code.
  *
- * The normative source is `docs/project-coordinator-convergence-contract.md`;
- * `convergence-contract.spec.ts` walks that document's tables and asserts every constant here
- * against them, so the two cannot drift. Nothing in this file reads a clock, a database or a
+ * This file is the normative source for the constants below. Nothing in it reads a clock, a database or a
  * session — it is the vocabulary the rest of `[K2]..[K9]` is written in.
  *
  * The one sentence the whole unit exists for (§0 RL0): **progress is strict improvement toward

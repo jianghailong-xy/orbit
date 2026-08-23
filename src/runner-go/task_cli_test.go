@@ -40,17 +40,11 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
 		t.Fatalf("capabilities output is not JSON: %v\n%s", err, out.String())
 	}
-	// Three joined in 25C, all ungated reads/writes about the caller's own work: project_blockers
-	// (a blocker episode is never deleted, so "what was blocking this, and what ended it" is a
-	// question the audit answers — and the terminal was the one caller that could not ask it), and
-	// merge_receipt / merge_receipts (recording that a branch was merged is evidence about your own
-	// work, not a power over somebody else's session).
-	// Unit L7 took it to 36 with three READS: task_attribution (where this work counts, where it
-	// was noticed, which acceptance cites it, what is being asked and what is stopping it),
-	// project_crossings and project_reopen_impact. All three answer questions an agent previously
-	// could only learn by being refused; none of them writes, and the two writes they are about —
-	// answering a crossing, reopening a settled project — stay the account owner's.
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 36 {
+	// merge_receipt / merge_receipts are ungated: recording that a branch was merged is evidence
+	// about your own work, not a power over somebody else's session. Unit L7's three READS are
+	// here too — task_attribution, project_crossings and project_reopen_impact — all answering
+	// questions an agent could previously only learn by being refused, and none of them writing.
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 33 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script
@@ -87,8 +81,8 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	for _, want := range []string{
 		"task_dependency_graph", "task_dependency_add", "task_dependency_remove",
 		"tasklist_get", "tasklist_update", "tasklist_delete", "tasklist_propose_dag",
-		"provider_list", "notify", "task_labels", "project_get", "project_status",
-		"project_verifications", "project_create", "project_update", "project_delete",
+		"provider_list", "notify", "task_labels", "project_get",
+		"project_create", "project_update", "project_delete",
 	} {
 		found := false
 		for _, capability := range doc.Capabilities {

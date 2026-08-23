@@ -563,14 +563,6 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     await tasks.update(w.ownerId, check.id, { status: TaskStatus.DONE, verdict: TaskVerdict.PASS });
     const afterVerdict = await acceptance.digest(prisma, w.projectId);
     assert.notEqual(beforeVerdict, afterVerdict, 'a verdict is an acceptance fact, so it moves the digest');
-
-    const read = await projects.verifications(w.ownerId, w.projectId);
-    const one = read.verifications.find((row) => row.verifierTaskId === check.id);
-    assert.ok(one, 'the check has to appear in the project verification report at all');
-    assert.equal(one.verdict, TaskVerdict.PASS);
-    assert.equal(one.verdictRevision, '1', 'the first conclusion is revision 1 (§13.2 V7)');
-    assert.equal(one.subjectTaskId, phase.id, 'the report names what it concluded about');
-    assert.equal(one.subjectStatus, TaskStatus.DONE, 'and the phase that pass completed');
   });
 
   await t.test('a check is counted for the phase it points at, not for the one it sits under', async () => {

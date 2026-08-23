@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from './project-blocker';
+import { canonicalJson } from './canonical-json';
 import { AttemptBudget, ConvergenceClassification } from './convergence-contract';
 
 /**
  * `[K3]`: what ONE attempt is, what it may spend, and how it stops.
  *
- * The normative source is `docs/project-coordinator-attempt-budget.md`, checked table-by-table by
- * `attempt-budget.spec.ts` exactly as `[K1]`'s contract is. Nothing here reads a clock, a database
+ * This file is the normative source for the budget below. Nothing here reads a clock, a database
  * or a session: `now` and the measured spend arrive as arguments, because a budget decision is
  * replayed byte-for-byte and one that read `Date.now()` would let two replays of one world disagree
  * about whether an attempt was asked to stop.

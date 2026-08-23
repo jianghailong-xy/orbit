@@ -142,11 +142,8 @@ func TestMCPExposesExactlyTheThirteenProjectTools(t *testing.T) {
 			}
 		}
 		for _, want := range []string{
-			"project_get", "project_status", "project_verifications", "project_create",
+			"project_get", "project_create",
 			"project_update", "project_delete",
-			// Unit 25C: the blocker read, open and resolved. Ungated for the reason the rest are —
-			// the session that most needs to know why a project is not moving is its coordinator.
-			"project_blockers",
 			// Unit 25A: native acceptance. Three of the four are writes, and they are here rather
 			// than behind the orchestration gate for the reason project_create is — the session
 			// that most needs to run a project's acceptance is a coordinator, which has no
@@ -639,44 +636,6 @@ func TestMCPProjectCreateDescriptionStatesTheCoordinatorDefault(t *testing.T) {
 }
 
 // ── project_status (contract AC10, unit 20) ───────────────────────────────────────────────────
-
-// The same read the CLI and the web app get, through the tool a coordinator calls. It has to reach
-// the coordinator-status route specifically: the plain project read returns prose and tallies and
-// says nothing about why the loop is or is not moving.
-func TestMCPProjectStatusReadsTheCoordinatorStatusRoute(t *testing.T) {
-	var path string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path = r.URL.Path
-		_, _ = w.Write([]byte(`{"projectId":"proj-1","runtime":{"runState":"PLANNING"}}`))
-	}))
-	defer srv.Close()
-
-	mcp := &mcpServer{t: NewTransport(srv.URL, "tok")}
-	res := mcp.callTool("project_status", map[string]interface{}{"projectId": "proj-1"})
-	if res["isError"] == true {
-		t.Fatalf("project_status result = %#v", res)
-	}
-	if path != "/api/runner/projects/proj-1/coordinator/status" {
-		t.Fatalf("project_status hit %s", path)
-	}
-	content, _ := res["content"].([]map[string]interface{})
-	text, _ := content[0]["text"].(string)
-	if !strings.Contains(text, `"runState"`) {
-		t.Fatalf("project_status returned %q", text)
-	}
-}
-
-func TestMCPProjectStatusRequiresAProjectID(t *testing.T) {
-	mcp := &mcpServer{t: NewTransport("http://127.0.0.1:1", "tok")}
-	res := mcp.callTool("project_status", map[string]interface{}{})
-	if res["isError"] != true {
-		t.Fatalf("project_status without an id isError = %#v", res["isError"])
-	}
-	content, _ := res["content"].([]map[string]interface{})
-	if !strings.Contains(content[0]["text"].(string), "projectId is required") {
-		t.Fatalf("project_status without an id result = %#v", res)
-	}
-}
 
 // The fence is forwarded as the caller spelled it, and only when the caller sent it. Dropping it
 // would silently turn a compare-and-swap into a last-write-wins; inventing one would refuse writes

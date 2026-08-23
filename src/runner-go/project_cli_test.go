@@ -165,7 +165,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// The verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that the
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
-		"get", "status", "verifications", "create", "update", "delete",
+		"get", "create", "update", "delete",
 		"acceptance", "acceptance-run", "acceptance-verdict", "merge-evidence",
 	} {
 		out.Reset()
@@ -195,13 +195,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	for _, spec := range projectCLICapabilities {
 		specs[spec.Tool] = spec
 	}
-	// One per read/write the project family exposes. `project_blockers` joined them in 25C: the
-	// blocker history was already served to the web and the user API, and the terminal was the one
-	// caller that could not ask what had been stopping a project.
-	// Unit L7 took it to 13 with two reads: what has been asked about work crossing this project's
-	// line, and what reopening it would cost. Neither has a companion that WRITES — see
-	// TestMCPExposesExactlyTheThirteenProjectTools for why that absence is the point.
-	if len(specs) != 13 {
+	// One per read/write the project family exposes. Unit L7's two reads are here — what has been
+	// asked about work crossing this project's line, and what reopening it would cost. Neither has
+	// a companion that WRITES, and that absence is the point.
+	if len(specs) != 10 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]
@@ -216,18 +213,6 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	}
 	if spec.Mutates {
 		t.Fatal("project_get is advertised as mutating")
-	}
-	// The audit read is a read, and an agent decides from `mutates` whether it is safe to run
-	// while it is still working out what is going on — which is exactly when this one is wanted.
-	audit, ok := specs["project_verifications"]
-	if !ok {
-		t.Fatalf("project capabilities lost project_verifications: %#v", projectCLICapabilities)
-	}
-	if got := strings.Join(audit.Argv, " "); got != "orbit project verifications" {
-		t.Fatalf("project_verifications argv = %q", got)
-	}
-	if audit.Mutates {
-		t.Fatal("project_verifications is advertised as mutating")
 	}
 	// `project_acceptance` is a read like the two above, and the one an agent reaches for first
 	// when it is deciding whether a project can be closed at all.
@@ -939,32 +924,6 @@ const projectStatusJSON = `{"projectId":"proj-1","project":{"status":"OPEN"},` +
 	`"policy":{"coordinatorEnabled":false,"automationPolicy":"MANUAL","configRevision":"3"},` +
 	`"runtime":{"runState":"PLANNING","lease":null,"leaseAbsentReason":"NOT_LEASED"},` +
 	`"nextWake":{"at":null,"absentReason":"NO_WAKE_SCHEDULED"}}`
-
-func TestProjectStatusReadsTheCoordinatorStatusRoute(t *testing.T) {
-	var method, path, auth string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method, path = r.Method, r.URL.Path
-		auth = r.Header.Get("Authorization")
-		_, _ = w.Write([]byte(projectStatusJSON))
-	}))
-	defer srv.Close()
-
-	configureCLITestRunner(t, srv.URL)
-
-	var out bytes.Buffer
-	if err := cmdProjectCLI([]string{"status", "proj-1", "--json"}, strings.NewReader(""), &out); err != nil {
-		t.Fatalf("project status: %v", err)
-	}
-	if method != http.MethodGet || path != "/api/runner/projects/proj-1/coordinator/status" {
-		t.Fatalf("project status hit %s %s", method, path)
-	}
-	if auth != "Bearer runner-secret" {
-		t.Fatalf("project status sent authorization %q", auth)
-	}
-	if out.String() != projectStatusJSON+"\n" {
-		t.Fatalf("project status output = %q", out.String())
-	}
-}
 
 // No id, no request. The task commands default to ORBIT_TASK_ID; there is no ORBIT_PROJECT_ID and
 // guessing one would read a different project than the caller meant.

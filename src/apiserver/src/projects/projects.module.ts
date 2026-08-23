@@ -6,26 +6,13 @@ import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectAttributionModule } from './project-attribution.module';
 import { ProjectHandoffModule } from './project-handoff.module';
-import { ProjectAvailabilityReaperService } from './project-availability-reaper.service';
-import { ProjectDecisionService } from './project-decision.service';
-import { ProjectDispatchPassService } from './project-dispatch-pass.service';
-import { ProjectAuthorizationService } from './project-authorization.service';
-import { ProjectEventsService } from './project-events.service';
-import { ProjectFailureRecoveryService } from './project-failure-recovery.service';
-import { ProjectCoordinatorSessionService } from './project-coordinator-session.service';
-import { ProjectCoordinatorTurnService } from './project-coordinator-turn.service';
-import { ProjectReconcileService } from './project-reconcile.service';
-import { ProjectTaskDispatcherService } from './project-task-dispatcher.service';
-import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
-import { ProjectVerificationFilingService } from './project-verification-filing.service';
-import { VerificationFindingService } from './verification-finding.service';
 import { TaskCheckpointService } from './task-checkpoint.service';
 import { ProjectsService } from './projects.service';
 
-// PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
-// and never re-provided: SessionsService is a singleton with its own state, and a second instance
-// from a duplicate `providers` entry is how the auto-run reconciler once ended up running twice a
-// minute. The task dispatcher uses the global queue only to wake an already committed Session.
+// PrismaModule is @Global. SessionsModule is imported for Project reads that join Sessions and is
+// never re-provided: SessionsService is a singleton with its own state, and a second instance from
+// a duplicate `providers` entry is how the auto-run reconciler once ended up running twice a
+// minute.
 @Module({
   imports: [SessionsModule, ProjectHandoffModule, ProjectAttributionModule],
   controllers: [ProjectsController],
@@ -34,20 +21,7 @@ import { ProjectsService } from './projects.service';
     ConvergenceLedgerService,
     SessionAttemptService,
     ProjectAcceptanceService,
-    ProjectEventsService,
-    ProjectDecisionService,
-    ProjectAuthorizationService,
-    ProjectReconcileService,
-    ProjectCoordinatorSessionService,
-    ProjectCoordinatorTurnService,
-    ProjectTaskDispatcherService,
-    ProjectDispatchPassService,
-    ProjectVerificationVerdictService,
-    ProjectVerificationFilingService,
-    VerificationFindingService,
     TaskCheckpointService,
-    ProjectAvailabilityReaperService,
-    ProjectFailureRecoveryService,
   ],
   exports: [
     ProjectHandoffModule,
@@ -58,19 +32,7 @@ import { ProjectsService } from './projects.service';
     // them from. `[K3]` §3's refusals only mean anything at the door an agent actually knocks on.
     SessionAttemptService,
     ProjectAcceptanceService,
-    ProjectEventsService,
-    ProjectDecisionService,
-    ProjectAuthorizationService,
-    ProjectReconcileService,
-    ProjectCoordinatorSessionService,
-    ProjectCoordinatorTurnService,
-    ProjectTaskDispatcherService,
-    ProjectDispatchPassService,
-    ProjectVerificationVerdictService,
-    ProjectVerificationFilingService,
-    VerificationFindingService,
     TaskCheckpointService,
-    ProjectFailureRecoveryService,
   ],
 })
 export class ProjectsModule {}

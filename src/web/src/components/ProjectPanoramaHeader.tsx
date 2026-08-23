@@ -59,21 +59,6 @@ export interface ProjectPanorama {
   shape: ProjectPanoramaShape;
 }
 
-/** One PAC §12 refusal code and how often the control loop refused under it in the window. */
-export interface DispatchRefusal {
-  refusalCode: string;
-  count: number;
-  lastSeenAt: string;
-}
-
-export interface DispatchHealth {
-  windowHours: number;
-  dispatch: { applied: number; refused: number };
-  /** Server-ordered by count, descending — read in that order rather than re-sorted here. */
-  refusals: DispatchRefusal[];
-  openBlockers: Array<{ kind: string; severity: string; occurrences: number; firstSeenAt: string }>;
-}
-
 /**
  * Keyed UNDER `['project', projectId]`, like the coordinator surface, so the invalidation a
  * control write already fires for the project document refreshes this too.
@@ -87,20 +72,6 @@ export const projectPanoramaQuery = (projectId: string) =>
   queryOptions({
     queryKey: ['project', projectId, 'panorama'] as const,
     queryFn: () => api<ProjectPanorama>(`/projects/${encodeURIComponent(projectId)}/panorama`),
-    refetchInterval: 30_000,
-  });
-
-/** A day, matching the endpoint's own default: long enough that an idle night still shows why. */
-export const DISPATCH_HEALTH_WINDOW_HOURS = 24;
-
-/** The dispatch ledger behind the stalled banner — requested only when there is a stall to explain. */
-export const projectDispatchHealthQuery = (projectId: string) =>
-  queryOptions({
-    queryKey: ['project', projectId, 'panorama', 'dispatch-health'] as const,
-    queryFn: () =>
-      api<DispatchHealth>(
-        `/projects/${encodeURIComponent(projectId)}/panorama/dispatch-health?windowHours=${DISPATCH_HEALTH_WINDOW_HOURS}`,
-      ),
     refetchInterval: 30_000,
   });
 
@@ -263,45 +234,10 @@ function Meter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
   );
 }
 
-/** The refusal breakdown, most-refused first — the top three, and an honest count of the rest. */
-export function topRefusals(refusals: unknown, limit = 3): DispatchRefusal[] {
-  return Array.isArray(refusals) ? refusals.slice(0, limit) : [];
-}
 
-/** What the dispatch ledger says about the window, as one sentence. Absent when it could not be read
- *  — an unreadable ledger must not be reported as "nothing was refused". */
-function dispatchSentence(health: DispatchHealth): string {
-  const { applied, refused } = health.dispatch;
-  if (refused > 0) {
-    return ` The coordinator refused ${refused} of ${applied + refused} dispatch attempts in the last ${health.windowHours}h.`;
-  }
-  if (applied > 0) {
-    return ` The coordinator applied ${applied} dispatch attempts in the last ${health.windowHours}h and refused none.`;
-  }
-  return ` The coordinator has not attempted a dispatch in the last ${health.windowHours}h.`;
-}
-
-/**
- * Ready work, nothing running, and the ledger's account of why.
- *
- * The banner is driven by the BUCKETS alone: the dispatch health read explains the stall, it does
- * not decide there is one. So a failed or still-loading explanation degrades to a stated absence
- * rather than hiding the banner — the stall is a fact of the first read, and suppressing it because
- * the second read failed is how a stalled project comes to look idle.
- */
-function StalledBanner({
-  buckets,
-  health,
-  healthError,
-}: {
-  buckets: ProjectPanoramaBuckets;
-  health: DispatchHealth | undefined;
-  healthError: boolean;
-}) {
-  const refusals = health?.refusals;
-  const top = topRefusals(refusals);
-  const rest = Array.isArray(refusals) ? refusals.length - top.length : 0;
-
+/** Ready work exists and nothing is picking it up. The card names the shape of the stall and
+ *  points at the page where the usual cause (a provider refusing the assignee) is resolved. */
+function StalledBanner({ buckets }: { buckets: ProjectPanoramaBuckets }) {
   return (
     <div
       style={{
@@ -322,31 +258,11 @@ function StalledBanner({
         <b>
           {buckets.ready} task{buckets.ready === 1 ? '' : 's'} ready, {buckets.running} running.
         </b>
-        {health ? dispatchSentence(health) : null}
         <div style={{ color: 'var(--text-2)', marginTop: 3 }}>
-          {healthError ? (
-            'Why is not readable: the dispatch health read failed.'
-          ) : !health ? (
-            'Reading the dispatch ledger…'
-          ) : top.length === 0 ? (
-            'No dispatch was refused in the window, so nothing here explains the stall.'
-          ) : (
-            <>
-              {top.map((refusal, index) => (
-                <span key={refusal.refusalCode}>
-                  {index > 0 ? ' · ' : null}
-                  {refusal.count}× <code>{refusal.refusalCode}</code>
-                </span>
-              ))}
-              {rest > 0 ? ` · ${rest} more code${rest === 1 ? '' : 's'}` : null}
-              {health.dispatch.applied > 0 ? ` — ${health.dispatch.applied} applied.` : null}
-            </>
-          )}
+          Ready work is not being picked up. Check that the assignees have a runner online and a
+          provider that is not refusing them.
         </div>
       </div>
-      {/* The one action this card can name. It does not guess a destination per refusal code: the
-          codes are printed right above, and the providers page is where the refusal that dominates
-          them (PROVIDER_UNAVAILABLE) is actually resolved. */}
       <Link to="/providers">
         <Button type="primary" size="small">
           Check providers
@@ -384,12 +300,6 @@ export function ProjectPanoramaHeader({ projectId }: { projectId: string }) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
   const buckets = panorama.data?.buckets;
   const stalled = buckets ? stalledOnReady(buckets) : false;
-  // Only fetched when there is a stall to explain — the banner is the only reader of it, and a
-  // project whose queue is being served has nothing to look up.
-  const health = useQuery({
-    ...projectDispatchHealthQuery(projectId),
-    enabled: Boolean(projectId) && stalled,
-  });
 
   // `isPending`, not `isLoading`: a first render that has not dispatched its fetch yet (which is
   // every static render, and the first paint of a live one) is pending with `fetchStatus: 'idle'`,
@@ -471,7 +381,7 @@ export function ProjectPanoramaHeader({ projectId }: { projectId: string }) {
       <Meter buckets={loaded} />
 
       {stalled ? (
-        <StalledBanner buckets={loaded} health={health.data} healthError={health.isError} />
+        <StalledBanner buckets={loaded} />
       ) : null}
     </Card>
   );

@@ -80,17 +80,6 @@ function meterAttr(html: string, attr: string): string | undefined {
 }
 
 describe('ProjectPanoramaHeader', () => {
-  it('reads exactly the panorama and dispatch-health endpoints, and nothing else', () => {
-    // A static render never invokes queryFn, so this asserts on the one place the URLs are decided.
-    // Fails if a path changes, if a third endpoint appears, or if the window parameter is dropped.
-    const calls = [...source.matchAll(/\bapi(?:<[^>]*>)?\(([\s\S]*?)\)\s*,?\s*\n/g)].map((m) =>
-      m[1].trim().replace(/,$/, ''),
-    );
-    expect(calls).toEqual([
-      '`/projects/${encodeURIComponent(projectId)}/panorama`',
-      '`/projects/${encodeURIComponent(projectId)}/panorama/dispatch-health?windowHours=${DISPATCH_HEALTH_WINDOW_HOURS}`',
-    ]);
-  });
 
   it('reports Ready and Blocked as two separate readable buckets, never one OPEN count', () => {
     const qc = newClient();
@@ -111,47 +100,6 @@ describe('ProjectPanoramaHeader', () => {
     expect(html).toContain('unblocked, not dispatched');
     expect(html).toContain('waiting on prerequisites');
     expect(html).toContain('13% of 39'); // 5 of 39 tasks
-  });
-
-  it('raises the stalled banner, naming the most-refused code, when work is ready and none is running', () => {
-    const qc = newClient();
-    qc.setQueryData(panoramaKey, panorama());
-    qc.setQueryData(healthKey, health());
-    const html = render(qc);
-
-    expect(html).toContain('4 tasks ready, 0 running.');
-    expect(html).toContain('refused 361 of 408 dispatch attempts in the last 24h');
-    // The top three codes, most-refused first, with their counts...
-    expect(html).toContain('PROVIDER_UNAVAILABLE');
-    expect(html).toContain('318×');
-    expect(html).toContain('WHO_NOT_IN_TEAM');
-    expect(html).toContain('STALE_SNAPSHOT');
-    expect(html.indexOf('PROVIDER_UNAVAILABLE')).toBeLessThan(html.indexOf('WHO_NOT_IN_TEAM'));
-    // ...and the fourth is counted rather than silently dropped.
-    expect(html).not.toContain('UNSPECIFIED');
-    expect(html).toContain('1 more code');
-    // The action, and the one cell the stall tints.
-    expect(html).toContain('Check providers');
-    expect(html).toContain('href="/providers"');
-    expect(html).toContain('var(--warning-bg)');
-  });
-
-  it('treats a missing refusal breakdown as empty and still renders every status bucket', () => {
-    const qc = newClient();
-    qc.setQueryData(panoramaKey, panorama());
-    qc.setQueryData(healthKey, {
-      windowHours: 24,
-      dispatch: { applied: 0, refused: 0 },
-    });
-
-    let html = '';
-    expect(() => {
-      html = render(qc);
-    }).not.toThrow();
-
-    const cells = [...html.matchAll(/font-size:29px[^"]*">(\d+)<\/div>/g)].map((m) => m[1]);
-    expect(cells).toEqual(['0', '4', '30', '5']);
-    expect(html).toContain('nothing here explains the stall');
   });
 
   it('does not raise the banner when something is running, however much is ready', () => {
@@ -255,40 +203,5 @@ describe('ProjectPanoramaHeader', () => {
     // A failed read must not be drawn as a project with no work in it: no meter, no buckets.
     expect(meterAttr(html, 'aria-label')).toBeUndefined();
     expect(html).not.toContain('Running');
-  });
-
-  it('keeps the banner up when the dispatch ledger cannot be read, and states that instead', async () => {
-    const qc = newClient();
-    qc.setQueryData(panoramaKey, panorama());
-    await qc.prefetchQuery({ queryKey: healthKey, queryFn: () => Promise.reject(new Error('health down')) });
-    const html = render(qc);
-
-    // The stall is a fact of the first read; the second read only explains it.
-    expect(html).toContain('4 tasks ready, 0 running.');
-    expect(html).toContain('the dispatch health read failed');
-    expect(html).not.toContain('No dispatch was refused'); // never reported as "nothing refused"
-  });
-
-  it('says so when the window holds no refusals at all', () => {
-    const qc = newClient();
-    qc.setQueryData(panoramaKey, panorama());
-    qc.setQueryData(healthKey, health({ dispatch: { applied: 0, refused: 0 }, refusals: [] }));
-    const html = render(qc);
-
-    expect(html).toContain('has not attempted a dispatch in the last 24h');
-    expect(html).toContain('nothing here explains the stall');
-  });
-
-  it('takes the server’s refusal order as given and keeps three of it', () => {
-    const rows = health().refusals;
-    expect(topRefusals(rows).map((row) => row.refusalCode)).toEqual([
-      'PROVIDER_UNAVAILABLE',
-      'WHO_NOT_IN_TEAM',
-      'STALE_SNAPSHOT',
-    ]);
-    expect(topRefusals([])).toEqual([]);
-    expect(topRefusals(rows.slice(0, 2))).toHaveLength(2);
-    expect(topRefusals(undefined)).toEqual([]);
-    expect(topRefusals({ refusalCode: 'NOT_AN_ARRAY' })).toEqual([]);
   });
 });

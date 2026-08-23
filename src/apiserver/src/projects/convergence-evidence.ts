@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from './project-blocker';
+import { canonicalJson } from './canonical-json';
 import { SeverityTrend } from './convergence-contract';
 import { ProgressVector, normalizeFailureText } from './convergence-progress';
 

@@ -36,7 +36,6 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
-import { ProjectAuthorizationService } from '../projects/project-authorization.service';
 import {
   computeDependencyState,
   dependenciesSatisfiedSql,
@@ -684,66 +683,6 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
     assert.equal(await agreedGate(db, w), null);
     // A "restart": ask again from nothing. Same rows, same answer — there is no memory to lose.
     assert.equal(await agreedGate(db, w), null);
-  });
-
-  // -------------------------------------------------------------------------
-  // DEP0's fifth reader — §9.2's commit point
-  // -------------------------------------------------------------------------
-
-  await t.test('the commit gate DEFERs a downstream dispatch with VERIFICATION_NOT_PASSED', async () => {
-    const w = await world(db, { verdict: 'FAIL' });
-    const service = new ProjectAuthorizationService();
-    const authorize = () => db.$transaction(async (tx) => service.authorizeInTransaction(tx, {
-      ownerId: OWNER,
-      projectId: w.projectId,
-      coordinatorAgentId: w.agentId,
-      idempotencyKey: `pc:v1:${w.projectId}:dispatch:${w.downstreamId}:0`,
-      action: 'DISPATCH_TASK',
-      taskId: w.downstreamId,
-      sourceDecisionInputHash: 'h'.repeat(64),
-    }));
-    const refused = await authorize();
-    assert.equal(refused?.result.decision, 'DEFER');
-    assert.equal(refused?.result.reasonCode, 'VERIFICATION_NOT_PASSED');
-
-    // ...and the plain wait keeps its own word, so the two are told apart at the commit point too.
-    const plain = await task(db, { projectId: w.projectId, status: 'OPEN' });
-    const waiting = await task(db, { projectId: w.projectId, assignee: w.agentId });
-    await db.$executeRawUnsafe(
-      `INSERT INTO "task_dependency" ("id","task_id","depends_on_task_id") VALUES ($1,$2,$3)`,
-      randomUUID(), waiting, plain,
-    );
-    // ...and the SUBJECT edge — what callers are told to write — refuses for the same reason.
-    const subjectRefusal = await db.$transaction(async (tx) =>
-      service.authorizeInTransaction(tx, {
-        ownerId: OWNER,
-        projectId: w.projectId,
-        coordinatorAgentId: w.agentId,
-        idempotencyKey: `pc:v1:${w.projectId}:dispatch:${w.subjectDownstreamId}:0`,
-        action: 'DISPATCH_TASK',
-        taskId: w.subjectDownstreamId,
-        sourceDecisionInputHash: 'h'.repeat(64),
-      }));
-    assert.equal(subjectRefusal?.result.decision, 'DEFER');
-    assert.equal(subjectRefusal?.result.reasonCode, 'VERIFICATION_NOT_PASSED');
-
-    const plainRefusal = await db.$transaction(async (tx) =>
-      service.authorizeInTransaction(tx, {
-        ownerId: OWNER,
-        projectId: w.projectId,
-        coordinatorAgentId: w.agentId,
-        idempotencyKey: `pc:v1:${w.projectId}:dispatch:${waiting}:0`,
-        action: 'DISPATCH_TASK',
-        taskId: waiting,
-        sourceDecisionInputHash: 'h'.repeat(64),
-      }));
-    assert.equal(plainRefusal?.result.reasonCode, 'TASK_DEPENDENCIES_INCOMPLETE');
-
-    // Once the check passes, the same command stops being refused for this reason.
-    await applyVerdict(db, w.projectId, w.checkId, 'PASS');
-    const allowed = await authorize();
-    assert.notEqual(allowed?.result.reasonCode, 'VERIFICATION_NOT_PASSED');
-    assert.notEqual(allowed?.result.reasonCode, 'TASK_DEPENDENCIES_INCOMPLETE');
   });
 
   // -------------------------------------------------------------------------

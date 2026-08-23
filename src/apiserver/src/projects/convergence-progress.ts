@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { canonicalJson } from './project-blocker';
+import { canonicalJson } from './canonical-json';
 import {
   CLASSIFICATION_COUNTER,
   ConvergenceClassification,

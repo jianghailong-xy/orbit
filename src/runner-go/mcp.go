@@ -251,28 +251,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
-	case "project_status":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		raw, err := s.t.getProjectCoordinatorStatus(id)
-		if err != nil {
-			return toolResult("get project status failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
-	case "project_blockers":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		raw, err := s.t.getProjectBlockers(id, getBool(args, "history"))
-		if err != nil {
-			return toolResult("get project blockers failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
 	case "project_crossings":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -341,17 +319,6 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		raw, err := s.t.listMergeReceipts(id, int(getNumber(args, "limit")))
 		if err != nil {
 			return toolResult("list merge receipts failed: "+err.Error(), true)
-		}
-		return toolResult(prettyJSON(raw), false)
-
-	case "project_verifications":
-		id := getString(args, "projectId")
-		if id == "" {
-			return toolResult("projectId is required", true)
-		}
-		raw, err := s.t.getProjectVerifications(id)
-		if err != nil {
-			return toolResult("get project verifications failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -1479,61 +1446,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId"),
 		},
 		{
-			"name": "project_status",
-			"description": "Read everything the control loop knows about one project — the answer " +
-				"to \"why is this project not moving\", which nothing else gives you: the state is " +
-				"spread over seven tables and the usual conclusion, that the project is broken, is " +
-				"usually wrong. It returns its run state and lifecycle; which agent coordinates it, " +
-				"where it runs, and the coordination session with its generation (the agent " +
-				"outlives every session); whether the coordinator is switched on at all and how " +
-				"far it may go when it runs — MANUAL, GUARDED_AUTO or AUTO — with the " +
-				"configRevision a control write states back; tasks in flight against the " +
-				"concurrency cap and coordinator sessions against the daily budget, counted exactly " +
-				"as the admission gates count them; whether a pass currently holds the lease; when " +
-				"it next wakes, why, and which candidates lost; the last few decisions with the " +
-				"actions and idempotency keys each produced; actions claimed but not yet published; " +
-				"what is blocking it, who can fix it, what would clear it and when it is rechecked; " +
-				"durable signals still pending with their attempts and backoff; and the acceptance " +
-				"evidence — stated criteria, last acceptance run, verdict tallies and per-branch " +
-				"merge state. Read it before concluding a project is stuck, and before filing work " +
-				"to unstick it. Every absent fact is null beside a reason (agentIdAbsentReason, " +
-				"leaseAbsentReason, candidatesAbsentReason), so \"nothing is blocking this\" and " +
-				"\"this cannot be reported\" are different answers rather than the same empty one. " +
-				"Read only: asking the coordinator to run now is the account owner's, through the " +
-				"web app or the user API.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
-				},
-			}, "projectId"),
-		},
-		{
-			"name": "project_blockers",
-			"description": "Read what is stopping one project, and — with `history` — what used to. " +
-				"Each open blocker answers four questions a status column cannot: what kind of stop " +
-				"it is, WHO can clear it (owner), WHAT would clear it (recovery: a clock, an event, " +
-				"or a person), and the one executable sentence that would resolve it, plus when it " +
-				"is next rechecked and which action raised it. Read it when a project is OPEN and " +
-				"nothing is running: an open blocker is a dispatch precondition rather than a status " +
-				"anybody rewrote, so nothing else about the project looks unusual. `history` adds the " +
-				"episodes that are already over, with who or what ended them and when — those rows " +
-				"are never deleted, because the next episode on the same key takes its lifecycle " +
-				"generation from the whole history, which is also what makes \"what was blocking this " +
-				"last Tuesday\" a question the audit can still answer rather than one that needed " +
-				"somebody to have written a comment at the time.",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
-				},
-				"history": map[string]interface{}{
-					"type":        "boolean",
-					"description": "Include the episodes that are already resolved. Default false — the open ones only.",
-				},
-			}, "projectId"),
-		},
-		{
 			"name": "project_crossings",
 			"description": "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state (PENDING / APPROVED / DENIED / APPLIED), the crossing key that identifies the MOVE rather than the row, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question is still waiting, was refused, or has already been spent. There is deliberately no tool that ANSWERS one — the approver of a cross-project crossing is the account owner, never the target project's coordinator, because one agent accepting work on another goal's behalf is precisely the failure this boundary exists to prevent. Say what is waiting and on whom; do not answer it.",
 			"inputSchema": obj(map[string]interface{}{
@@ -1610,28 +1522,6 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"limit": map[string]interface{}{"type": "integer", "description": "Maximum receipts to return (default 50, cap 200)."},
 			}),
-		},
-		{
-			"name": "project_verifications",
-			"description": "Read what every verification in one project concluded, and what those " +
-				"conclusions are still holding up. Three things nothing else tells you: each " +
-				"check's verdict and which conclusion it is (verdictRevision — a re-run gets a new " +
-				"one, so the same verdict twice is two findings, not one); what each FAIL or " +
-				"INCONCLUSIVE left behind (the defect subtask filed under the subject, the action " +
-				"that raised it, and whether a later PASS has resolved it); and blockedTasks — the " +
-				"exact tasks that cannot be dispatched because of one, with the reason. Read this " +
-				"when a task looks ready and is not running: a blocked task looks like an ordinary " +
-				"OPEN task on purpose, because the block is a precondition rather than a status " +
-				"anybody rewrote, so this is the only place the reason is written down. A FAIL " +
-				"sends its subject back to OPEN and files the defect by itself — you do not have " +
-				"to do either, and fixing the defect is what makes the subject runnable again " +
-				"(the check still has to run again before the work downstream is released).",
-			"inputSchema": obj(map[string]interface{}{
-				"projectId": map[string]interface{}{
-					"type":        "string",
-					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
-				},
-			}, "projectId"),
 		},
 		{
 			"name": "project_acceptance",

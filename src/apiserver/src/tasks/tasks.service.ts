@@ -111,7 +111,7 @@ import {
   cascadedTaskClosure,
   touchesAcceptanceFact,
 } from './task-lock-order';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/project-coordinator-session';
+import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import {
   admitProjectScopeWrite,
   type ScopeAdmission,
@@ -204,7 +204,7 @@ export type CreationOrigin = {
 };
 
 /**
- * Unit L3: one task write, as `docs/project-coordinator-scope-contract.md` §4 reads it.
+ * Unit L3: one task write, under the coordination scope the session was opened with.
  *
  * `requestedProjectId` is three-state and every state means something different: `undefined` is a
  * write that did not mention the project at all — the silence the server fills — while `null` is a
@@ -3416,8 +3416,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   /**
    * Unit L3: the coordination scope this write is being made UNDER, derived from the session row.
    *
-   * `docs/project-coordinator-scope-contract.md` §2 defines it and §2 SC3 defines what it is not:
-   * the client never names it. The reverse lookup through `project.coordinator_session_id` is the
+   * The client never names it. The reverse lookup through `project.coordinator_session_id` is the
    * whole derivation for a coordinator, and a task-bound run takes the project of the task it is
    * executing — both are columns the server owns, and both are re-read on EVERY write rather than
    * cached, which is what makes a rotation, a restart and a takeover produce the same answer

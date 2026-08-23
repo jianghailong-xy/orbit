@@ -97,64 +97,6 @@ export class RunnerProjectsController {
     return this.projects.get(runner.ownerId, id);
   }
 
-  /**
-   * What every verification in this project concluded, and what is still blocked by one (§13.2).
-   *
-   * A read a coordinator needs and cannot reconstruct: which check failed, at which conclusion
-   * (`verdictRevision`), what defect subtask it filed, and exactly which tasks are not
-   * dispatchable because of it. Same service and same owner scoping as the user door.
-   */
-  @Get('projects/:id/verifications')
-  projectVerifications(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.projects.verifications(runner.ownerId, id);
-  }
-
-  /**
-   * Everything the control loop knows about this project (contract AC10), through the machine door.
-   *
-   * Same service, same owner scoping, same body as the user route — a coordinator that cannot read
-   * its own control state is left inferring it from whichever task it happens to be looking at,
-   * which is the failure this whole endpoint exists to remove. It is also the read a person gets at
-   * a terminal: `orbit project status` and the `project_status` MCP tool are this route.
-   *
-   * READ only. The manual trigger is deliberately not mirrored here: enqueuing a signal attributed
-   * to USER is how a person drives a MANUAL project, and an agent able to do it would be driving
-   * its own coordinator. `refuseGovernance` below draws the same line for the authorization set.
-   */
-  @Get('projects/:id/coordinator/status')
-  projectCoordinatorStatus(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-  ) {
-    return this.projects.coordinatorStatus(runner.ownerId, id);
-  }
-
-  /**
-   * This project's acceptance standing (contract §13.4), through the machine door.
-   *
-   * The read a coordinator has to make before it can settle anything: the criteria as the parser
-   * decomposes them, the digest of the facts a DONE would be checked against, every attempt with
-   * its per-criterion conclusions, the merge observations, the audit, and `doneGate` — what is
-   * still missing, in the same words the write path would refuse with.
-   */
-  /**
-   * One project's blockers (contract §11), open by default and with the resolved episodes when
-   * `history=1`.
-   *
-   * The terminal door onto a read the web and the user API have had since §11 landed. It is here
-   * because a blocker episode is never deleted — `lifecycleGeneration` is allocated over the key's
-   * whole history — so "what was blocking this yesterday, and what ended it" is a question the
-   * audit is supposed to answer, and a headless auditor was the one caller that could not ask it.
-   */
-  @Get('projects/:id/blockers')
-  blockers(
-    @CurrentRunner() runner: Runner,
-    @Param('id', PublicIdPipe) id: string,
-    @Query('history') history?: string,
-  ) {
-    return this.projects.blockers(runner.ownerId, id, history === '1' || history === 'true');
-  }
-
   @Get('projects/:id/acceptance')
   projectAcceptance(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
     return this.acceptance.overview(runner.ownerId, id);

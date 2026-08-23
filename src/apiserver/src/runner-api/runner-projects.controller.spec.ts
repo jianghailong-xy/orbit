@@ -382,7 +382,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // §11's blocker read, through the machine door (unit 25C). A read, and the one a headless
     // auditor needs most: an open blocker is a dispatch precondition rather than a status anybody
     // rewrote, so a project stopped by one looks entirely ordinary from every other endpoint.
-    'blockers',
     'createProject',
     // §13.4's acceptance, through the machine door: a coordinator runs the acceptance, so the
     // three writes are here. Listing, opening a coordinator and the manual trigger are still
@@ -398,8 +397,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     'listProjectHandoffs',
     'openAcceptanceRun',
     'projectAcceptance',
-    'projectCoordinatorStatus',
-    'projectVerifications',
     'recordMergeEvidence',
     'removeProject',
     'updateProject',
@@ -411,7 +408,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     ]),
   );
   assert.deepEqual(verbs, {
-    blockers: RequestMethod.GET,
     createProject: RequestMethod.POST,
     finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,
@@ -421,8 +417,6 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     listProjectHandoffs: RequestMethod.GET,
     openAcceptanceRun: RequestMethod.POST,
     projectAcceptance: RequestMethod.GET,
-    projectCoordinatorStatus: RequestMethod.GET,
-    projectVerifications: RequestMethod.GET,
     recordMergeEvidence: RequestMethod.POST,
     removeProject: RequestMethod.DELETE,
     updateProject: RequestMethod.PATCH,

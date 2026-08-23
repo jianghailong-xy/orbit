@@ -50,25 +50,6 @@ Run 'orbit project <command> --help' for options.
 `
 
 var projectActionHelp = map[string]string{
-	"blockers": `orbit project blockers — what is stopping this project, and what used to
-
-Usage:
-  orbit project blockers PROJECT_ID [--history] [--json]
-
-Each open blocker says four things: what kind of stop it is, who can clear it, what would clear
-it, and when it is next rechecked — plus one executable sentence rather than a restated error.
-
---history adds the episodes that are already over, with what ended them and when. Those rows are
-never deleted on resolution: the next episode on the same key takes its lifecycle generation from
-the whole history, so "what was blocking this last Tuesday" stays a question the audit answers.
-
-Read it when a project is OPEN and nothing is running. An open blocker is a precondition, not a
-status somebody rewrote, so nothing else about the project looks unusual.
-
-Options:
-  --history                Include resolved episodes
-  --json
-`,
 	"crossings": `orbit project crossings — what has been asked about work crossing this project's line
 
 Usage:
@@ -122,65 +103,6 @@ instructions, its status, the session and workspace it is coordinated from, and 
 tasks are distributed (_count plus tasksByStatus).
 
 Returns the shape of the project, not its tasks — use ` + "`orbit task list`" + ` for those.
-PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
-`,
-	"status": `orbit project status — what the coordinator is doing, and why it is not doing more
-
-Usage:
-  orbit project status PROJECT_ID [--json]
-
-The answer to "why is this project not moving". One read, eleven sections:
-
-  project        title, lifecycle status and how its tasks are distributed
-  coordination   which agent coordinates it, where it runs, the coordination session and
-                 which generation that is (the agent outlives every one of them)
-  policy         whether the coordinator is switched on at all, how far it may go when it
-                 runs (MANUAL / GUARDED_AUTO / AUTO), and configRevision
-  consumption    tasks in flight against the cap, coordinator sessions against the daily
-                 budget — the same numbers the admission gates compare against
-  runtime        run state, whether a pass holds the lease and until when, fencing token
-  nextWake       when it looks again and why, plus the candidates that lost
-  decisions      the last few judgments: what each decided, and the actions and idempotency
-                 keys it produced
-  pendingActions claimed but not yet published — what is in flight this second
-  blockers       what is stopping it, who can fix it, what would clear it, when it is
-                 rechecked, and the resolved episodes
-  events         durable signals still pending, with attempts and backoff, plus recent ones
-  acceptance     the stated criteria, the last acceptance run, verdict tallies and the
-                 per-branch merge evidence
-
-A fact that is absent is null with a reason beside it — agentIdAbsentReason,
-leaseAbsentReason, candidatesAbsentReason — never a missing field. "Nothing is blocking
-this project" and "this build cannot tell you" are different answers and read differently.
-
-Read only. Asking the coordinator to run now is the account owner's, through the Orbit web
-app or the user API; a runner credential names a machine, and a machine that could trigger
-its own coordinator would be driving the project MANUAL says only a person drives.
-
-PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
-`,
-	"verifications": `orbit project verifications — what the checks concluded, and what they hold up
-
-Usage:
-  orbit project verifications PROJECT_ID [--json]
-
-Returns three lists:
-  verifications  each check in the project, its subject, its verdict, and which conclusion
-                 that is (verdictRevision — a re-run gets a new one, so the same verdict
-                 twice is two findings rather than one)
-  failures       what each FAIL or INCONCLUSIVE left behind: the defect subtask filed under
-                 the subject, the action that raised it, and whether a later PASS resolved it
-  blockedTasks   the tasks that cannot be dispatched because of an unresolved failure, and
-                 the reason for each (SUBJECT_DEFECT_OPEN, or UPSTREAM for a dependent)
-
-Read it when a task looks ready and is not running. A blocked task looks like an ordinary
-OPEN task on purpose — the block is a dispatch precondition, not a status anybody rewrote —
-so this is the only place that says why.
-
-A FAIL sends its subject back to OPEN and files the defect on its own. Fixing the defect is
-what makes the subject runnable again; the check still has to run again before the work
-downstream is released, because an old verdict never becomes a pass by itself.
-
 PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID works too.
 `,
 	"acceptance": `orbit project acceptance — the evidence a DONE would be checked against
@@ -364,11 +286,8 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
-	{Tool: "project_status", Argv: []string{"orbit", "project", "status"}, Usage: "orbit project status PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read everything the control loop knows about one project — the answer to \"why is this project not moving\", which is otherwise spread over seven tables and usually misread as \"it is broken\". Returns its run state and lifecycle; which agent coordinates it, where, and the coordination session and generation; whether the coordinator is switched on and how far it may go (MANUAL / GUARDED_AUTO / AUTO) with the configRevision a control write states back; tasks in flight against the cap and coordinator sessions against the daily budget, counted exactly as the admission gates count them; whether a pass holds the lease; when it next wakes, why, and which candidates lost; the last few decisions with the actions and idempotency keys they produced; actions claimed but not yet published; what is blocking it, who can fix it, what would clear it and when it is rechecked; durable signals still pending with their attempts and backoff; and the acceptance evidence — stated criteria, last acceptance run, verdict tallies and per-branch merge state. Every absent fact is null beside a reason, so \"nothing is blocking this\" and \"this cannot be reported\" are different answers."},
-	{Tool: "project_blockers", Argv: []string{"orbit", "project", "blockers"}, Usage: "orbit project blockers PROJECT_ID [--history] [--json]", Arguments: []string{"[project-id] (required)", "--history (include the episodes that are already resolved)", "--json"}, Description: "Read what is stopping one project: each open blocker's kind, who can clear it (owner), what would clear it (recovery), what it is about, the one executable sentence that would resolve it, when it is next rechecked, and which action raised it. --history adds the episodes that are already over, with what ended them and when — those rows are never deleted, because the lifecycle generation of the next episode on the same key is allocated over the whole history, so \"what was blocking this yesterday\" stays a question the audit can answer. Read it when a project is OPEN and nothing is running: an open blocker is a precondition rather than a status anybody rewrote, so nothing else on the project looks unusual."},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_reopen_impact", Argv: []string{"orbit", "project", "reopen-impact"}, Usage: "orbit project reopen-impact PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what reopening a settled project would cost: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, readable afterwards and no longer a claim about the world the project is in — so an account owner asked for one should be asked with those numbers in hand. Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into."},
-	{Tool: "project_verifications", Argv: []string{"orbit", "project", "verifications"}, Usage: "orbit project verifications PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what every verification in one project concluded and what those conclusions are still holding up: each check's verdict and verdictRevision, the defect subtask each FAIL filed under its subject, the action that raised it, whether a later PASS resolved it, and blockedTasks — the exact tasks that cannot be dispatched because of an unresolved failure, with the reason. Read it when a task looks ready and is not running: a blocked task looks like an ordinary OPEN task on purpose, because the block is a dispatch precondition rather than a status anybody rewrote."},
 	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the evidence a project's DONE would be checked against, and whether it would be allowed right now. Returns the stated acceptance criteria decomposed one per line (the checklist an acceptance run has to answer item for item), acceptanceDigest — the digest of the criteria text, every task with its status and completion policy, every verification verdict and the newest merge observation per requirement — every attempt with its per-criterion conclusions and evidence, what each target branch was last observed to contain, the append-only audit of runs, bindings, refusals and reopens, and doneGate: allowed, or the code and sentence the write would be refused with (ACCEPTANCE_MISSING, ACCEPTANCE_EVIDENCE_STALE, ACCEPTANCE_BLOCKED). Read it before claiming a project is finished: a comment saying the tests passed is not evidence the server can check."},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Open a project acceptance attempt: the acceptance criteria are frozen with their digest and one empty row per stated criterion is created — the checklist project_acceptance_verdict then has to fill. Open it when you are about to CHECK the project, not when you are about to report on it: the digest of the facts is taken now, and a task, verdict, criteria or branch-content change afterwards makes this attempt stale rather than wrong. Opening an attempt supersedes any earlier live one, so there is never a choice of which conclusion to believe. A project stating no acceptance criteria is refused, because an acceptance with nothing to check would pass by having nothing to fail.", Mutates: true},
 	{Tool: "project_acceptance_verdict", Argv: []string{"orbit", "project", "acceptance-verdict"}, Usage: "orbit project acceptance-verdict PROJECT_ID --run-id ID --criteria JSON [--json]", Arguments: []string{"[project-id] (required)", "--run-id <id> (the attempt to conclude)", "--criteria <json> | --criteria-file - (one entry per stated criterion: {ordinal|criterionKey, verdict, summary, evidence, evidenceTaskId, evidenceSessionId})", "--json"}, Description: "Conclude a project acceptance attempt with one verdict per stated criterion. Address each criterion by ordinal (its position in the snapshot) or criterionKey (its content); every criterion must be answered, because a project-level PASS is the conjunction of them and one nobody checked is not a pass. The attempt's own verdict is DERIVED and cannot be supplied — all PASS is PASS, any FAIL is FAIL, anything else is INCONCLUSIVE — which is the whole difference between this and writing 'all green' in a task comment. Put real evidence in `evidence`: the command, its exit code, the key output, the SHA, the environment. Only a PASS recorded here lets the project be set DONE, and only while the facts it judged are still the current ones.", Mutates: true},
@@ -411,16 +330,10 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectUpdate(args[1:], in, out)
 	case "delete":
 		return cliProjectDelete(args[1:], out)
-	case "status":
-		return cliProjectCoordinatorStatus(args[1:], out)
-	case "blockers":
-		return cliProjectBlockers(args[1:], out)
 	case "crossings":
 		return cliProjectCrossings(args[1:], out)
 	case "reopen-impact":
 		return cliProjectReopenImpact(args[1:], out)
-	case "verifications":
-		return cliProjectVerifications(args[1:], out)
 	case "acceptance":
 		return cliProjectAcceptance(args[1:], out)
 	case "acceptance-run":
@@ -456,84 +369,6 @@ func cliProjectGet(args []string, out io.Writer) error {
 	raw, err := t.getProject(id)
 	if err != nil {
 		return fmt.Errorf("get project: %w", err)
-	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
-}
-
-// cliProjectCoordinatorStatus is the control loop's own state at a terminal: one GET, one raw body
-// through. Same shape as the two reads either side of it — the server decides what the sections
-// are, and a second opinion formatted here would be one that drifts from the API and the web UI.
-func cliProjectBlockers(args []string, out io.Writer) error {
-	id, rest := peelLeadingID(args)
-	fs := newCLIFlagSet("orbit project blockers")
-	history := fs.Bool("history", false, "include the episodes that are already resolved")
-	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	if err := fs.Parse(rest); err != nil {
-		return err
-	}
-	if err := rejectTrailing(fs); err != nil {
-		return err
-	}
-	if id == "" {
-		return fmt.Errorf("project id is required")
-	}
-	t, err := cliTransport()
-	if err != nil {
-		return err
-	}
-	raw, err := t.getProjectBlockers(id, *history)
-	if err != nil {
-		return fmt.Errorf("get project blockers: %w", err)
-	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
-}
-
-func cliProjectCoordinatorStatus(args []string, out io.Writer) error {
-	id, rest := peelLeadingID(args)
-	fs := newCLIFlagSet("orbit project status")
-	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	if err := fs.Parse(rest); err != nil {
-		return err
-	}
-	if err := rejectTrailing(fs); err != nil {
-		return err
-	}
-	if id == "" {
-		return fmt.Errorf("project id is required")
-	}
-	t, err := cliTransport()
-	if err != nil {
-		return err
-	}
-	raw, err := t.getProjectCoordinatorStatus(id)
-	if err != nil {
-		return fmt.Errorf("get project status: %w", err)
-	}
-	return writeCLIRawJSON(out, raw, *jsonOut)
-}
-
-// cliProjectVerifications is the read half of §13.2 at a terminal: what the checks concluded and
-// which tasks are waiting on one. Same shape as `get` — one path segment, one raw body through.
-func cliProjectVerifications(args []string, out io.Writer) error {
-	id, rest := peelLeadingID(args)
-	fs := newCLIFlagSet("orbit project verifications")
-	jsonOut := fs.Bool("json", false, "emit compact JSON")
-	if err := fs.Parse(rest); err != nil {
-		return err
-	}
-	if err := rejectTrailing(fs); err != nil {
-		return err
-	}
-	if id == "" {
-		return fmt.Errorf("project id is required")
-	}
-	t, err := cliTransport()
-	if err != nil {
-		return err
-	}
-	raw, err := t.getProjectVerifications(id)
-	if err != nil {
-		return fmt.Errorf("get project verifications: %w", err)
 	}
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }

@@ -91,7 +91,6 @@ const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'ta
 // The Coordinator surface's own entry, under the SAME `['project', id]` prefix as the document —
 // which is what makes one invalidation after a control write refresh both. Spelled out here for
 // the same reason tasksKey is: a key the page changed unilaterally should break these tests.
-const coordinatorKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'coordinator-status'];
 
 // Unit L7's two entries, under the same `['project', id]` prefix and for the same reason: what a
 // person is asked to ANSWER about this project (the crossings queue) and what reopening it would
@@ -105,16 +104,14 @@ const attributionKeys = (projectUuid: string) => {
   ];
 };
 
-// Every entry the panorama cards register, in the order they mount. Four, not five: the acceptance
-// card reads the project document under `['project', id]` — the entry the page already holds — and
-// the chain strip deliberately shares the header's `panorama` key and the ranking's `blocking`
-// one, so neither adds a request. `dispatch-health` is here because a disabled `useQuery` still
-// takes a cache entry; it is registered, not fetched, until the ready-but-idle banner needs it.
+// Every entry the panorama cards register, in the order they mount. Three, not four: the
+// acceptance card reads the project document under `['project', id]` — the entry the page already
+// holds — and the chain strip deliberately shares the header's `panorama` key and the ranking's
+// `blocking` one, so neither adds a request.
 const panoramaKeys = (projectUuid: string) => {
   const id = encodeId(projectUuid);
   return [
     ['project', id, 'panorama'],
-    ['project', id, 'panorama', 'dispatch-health'],
     ['project', id, 'panorama', 'blocking', 5],
     ['project', id, 'panorama', 'activity'],
   ];
@@ -157,7 +154,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the two coordinator writes, the coordinator POST, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if an eighth
@@ -173,32 +170,6 @@ describe('ProjectsPage', () => {
     expect(apiCalls).toEqual([
       "'/projects'",
       '`/projects/${encodeURIComponent(id!)}`',
-      // The Coordinator surface's manual trigger. Held here as literally as the rest because both
-      // body fields are its whole contract: `expectedConfigRevision` is what makes a press
-      // composed against settings that have since changed a refusal rather than a run, and
-      // `triggerId` is what makes a retry the same request instead of a second coordination pass.
-      // The read behind this surface is NOT in this list — it goes through the shared query
-      // factory, asserted by the import below.
-      [
-        '`/projects/${encodeURIComponent(projectId)}/coordinator/trigger`,',
-        "        { method: 'POST', body: triggerBody(status, triggerId.current) }",
-      ].join('\n'),
-      // The settings write, on the generic project route rather than a coordinator-specific one:
-      // the four authorization fields live on the project. Its body is built in one place so the
-      // compare-and-swap cannot be left off by a caller — see policyPatchBody.
-      [
-        '`/projects/${encodeURIComponent(projectId)}`, {',
-        "        method: 'PATCH',",
-        '        body: policyPatchBody(draft ?? policyDraftOf(status), status),',
-        '      }',
-      ].join('\n'),
-      // The write that opens the conversation, and the reason it is one: resolve-or-create, so a stale or
-      // trashed binding is repaired server-side rather than followed. Method and body are held
-      // here as literally as the path, because an empty body is the whole contract of this unit —
-      // a `workspaceId` appearing in it would be a workspace picker that no longer exists in the
-      // UI, and a method other than POST would be a read of a pointer this page must not trust.
-      // What it actually puts on the wire is asserted at runtime further down.
-      "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} }",
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read
@@ -237,7 +208,6 @@ describe('ProjectsPage', () => {
     expect(source).toContain(
       [
         'import {',
-        '  projectCoordinatorStatusQuery,',
         '  providersQuery,',
         '  runnersQuery,',
         '  workspacesQuery,',
@@ -528,7 +498,6 @@ describe('ProjectDetailPage — top-level tasks', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...panoramaKeys(P1),
-      coordinatorKey(P1),
       ...attributionKeys(P1),
     ]);
   });
@@ -719,7 +688,6 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       ['project', encodeId(P1)],
       tasksKey(P1),
       ...panoramaKeys(P1),
-      coordinatorKey(P1),
       ...attributionKeys(P1),
     ]);
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();
@@ -893,193 +861,6 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       nextCursor: null,
     });
     expect(renderLevel(qc, encodeId(P1), 't1')).not.toContain('More subtasks exist');
-  });
-});
-
-describe('ProjectDetailPage — coordinator', () => {
-  /** The section on its own, in one state. A static render cannot press the button, so every state
-   *  past the first is only reachable by handing it in. */
-  function renderControl(
-    props: Partial<Parameters<typeof ProjectCoordinatorControl>[0]> = {},
-  ): string {
-    return renderToStaticMarkup(
-      <ProjectCoordinatorControl
-        bound={false}
-        pending={false}
-        error={null}
-        onOpen={() => {}}
-        {...props}
-      />,
-    );
-  }
-
-  /** The one call `openProjectCoordinator` makes, read off the module mock. */
-  function postOf(projectId: string): [string, { method?: string; body?: unknown }] {
-    const apiMock = vi.mocked(api);
-    apiMock.mockClear();
-    void openProjectCoordinator(projectId);
-    expect(apiMock).toHaveBeenCalledTimes(1);
-    const [path, init] = apiMock.mock.calls[0];
-    return [path, (init ?? {}) as { method?: string; body?: unknown }];
-  }
-
-  it('posts an empty body to exactly this project’s coordinator, id escaped into the path', () => {
-    // A project id chosen unescapable-looking on purpose: a real base62 id has nothing to escape,
-    // so it would hide a missing encodeURIComponent here just as it would in the task pages.
-    const [path, init] = postOf('p/1');
-    expect(path).toBe('/projects/p%2F1/coordinator');
-    expect(init).toEqual({ method: 'POST', body: {} });
-
-    // Spelled out again, because `toEqual({...})` on an empty body is easy to misread as "any
-    // body": POST is what makes this resolve-or-create rather than a read, and the body must carry
-    // NO workspaceId — that emptiness is what makes this unit picker-free, and what hands the
-    // choice (and the actionable 400) to the server.
-    expect(init.method).toBe('POST');
-    expect(Object.keys(init.body as Record<string, unknown>)).toEqual([]);
-
-    // ...and an id that already arrived as a public id goes out unchanged, not mangled by the
-    // escaping above.
-    expect(postOf(encodeId(P1))[0]).toBe(`/projects/${encodeId(P1)}/coordinator`);
-  });
-
-  it('turns either spelling of the RETURNED session id into one canonical route', () => {
-    // The response is the only place this id comes from, and it can arrive in either spelling.
-    expect(coordinatorSessionPath(S1)).toBe(`/sessions/${encodeId(S1)}`);
-    expect(coordinatorSessionPath(encodeId(S1))).toBe(`/sessions/${encodeId(S1)}`);
-    expect(coordinatorSessionPath(S1)).not.toContain(S1); // the raw UUID must not reach the URL
-    // base62 has nothing to escape, so the string above cannot show whether it was escaped at all
-    // — the call itself is what keeps a future id alphabet safe. Same reason as the row link.
-    expect(source).toContain('`/sessions/${encodeURIComponent(encodeId(sessionId))}`');
-  });
-
-  it('offers to OPEN the coordinator a project already names — as a button, not a link', () => {
-    const out = renderControl({ bound: true });
-    expect(out).toContain('Coordinator');
-    expect(out).toContain('A project has exactly one coordinator session');
-    expect(out).toContain('Open coordinator');
-    expect(out).not.toContain('Start coordinator');
-    // Never a deep link: the bound id is an input to the LABEL and nothing else, so that a pointer
-    // which has since gone to Trash is repaired by the POST instead of followed into it.
-    expect(out).toMatch(/<button[^>]*>[\s\S]*?Open coordinator/);
-    expect(out).not.toContain('href');
-  });
-
-  it('offers to START one on a project that has never had a coordinator', () => {
-    const out = renderControl({ bound: false });
-    expect(out).toContain('Start coordinator');
-    expect(out).not.toContain('Open coordinator');
-    expect(out).not.toContain('href'); // same request from the same control, either way round
-  });
-
-  it('disables the action while one is being opened, so a second press cannot open a second', () => {
-    const out = renderControl({ bound: true, pending: true });
-    expect(out).toMatch(/<button[^>]*\bdisabled\b/);
-    expect(out).toContain('ant-btn-loading'); // and says so, rather than going quiet
-    expect(out).toContain('Open coordinator'); // still named, so the wait is attached to something
-  });
-
-  it('shows the server’s own message inline, with a Retry firing the same request', () => {
-    // The server's exact 400 for the one failure a reader can act on. This unit has no picker, so
-    // this message IS the fallback — it has to arrive whole rather than summarised into "failed".
-    const message =
-      'no workspace to open the coordinator in — none of this project’s tasks has an assignee ' +
-      'to borrow one from. Assign a task, or pass workspaceId.';
-    const out = renderControl({ bound: false, error: new Error(message) });
-    expect(out).toContain('Coordinator could not be opened');
-    expect(out).toContain(message);
-    expect(out).toContain('Retry');
-    // The primary action stays on screen beside the error, so the page is not left with Retry as
-    // its only control — and the failure stays inline rather than navigating anywhere.
-    expect(out).toContain('Start coordinator');
-
-    // Retry is the SAME handler the primary action uses — a static render cannot press either, so
-    // the one place both are wired is what says so.
-    expect(source).toContain(
-      '<Button type="primary" loading={pending} disabled={pending} onClick={onOpen}>',
-    );
-    expect(source).toMatch(/<Button size="small" danger onClick=\{onOpen\}>\s*Retry/);
-  });
-
-  it('navigates with the session the server returned, never the pointer the project carried', () => {
-    expect(source).toContain(
-      'onSuccess: (result) => navigate(coordinatorSessionPath(result.sessionId))',
-    );
-    // The bound id decides the label and nothing else. A route built from it would follow exactly
-    // the stale pointer the POST exists to repair.
-    expect(source).toContain('bound={Boolean(p.coordinatorSessionId)}');
-    expect(source).not.toMatch(/coordinatorSessionPath\(\s*p\.coordinatorSessionId/);
-    expect(source).not.toMatch(/\/sessions\/\$\{[^}]*coordinatorSessionId/);
-    // ...and the request is guarded by the normalized route id, keyed per project so two open in
-    // two tabs cannot share one in-flight or failed state.
-    expect(source).toContain('return openProjectCoordinator(id);');
-    expect(source).toContain("mutationKey: ['project', id, 'coordinator']");
-  });
-
-  it('appears only once the project itself has loaded', async () => {
-    // Still loading: nothing seeded.
-    expect(renderDetail(newClient(), encodeId(P1))).not.toContain('Coordinator');
-
-    // Failed: the page has no project to coordinate, so it must not offer to open one.
-    const failed = newClient();
-    await failed.prefetchQuery({
-      queryKey: ['project', encodeId(P1)],
-      queryFn: () => Promise.reject(new Error('network down')),
-    });
-    expect(renderDetail(failed, encodeId(P1))).not.toContain('Coordinator');
-
-    // No :id in the route at all — nothing was asked for, so there is nothing to open either.
-    const missingId = renderToStaticMarkup(
-      <QueryClientProvider client={newClient()}>
-        <MemoryRouter initialEntries={['/projects']}>
-          <Routes>
-            <Route path="/projects" element={<ProjectDetailPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
-    expect(missingId).not.toContain('Coordinator');
-  });
-
-  it('sits after the project’s own fields and its tasks, reading the bound pointer for its label', () => {
-    const qc = newClient();
-    qc.setQueryData(['project', encodeId(P1)], detail({ coordinatorSessionId: encodeId(S1) }));
-    qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    const out = renderDetail(qc, encodeId(P1));
-
-    // The section is there, named, and knows this project already has one...
-    expect(out).toContain('>Coordinator<');
-    expect(out).toContain('Open coordinator');
-    // ...below the tasks, and with everything else on the page still around it. Behind the
-    // panorama rather than ahead of it: what a coordinator is DOING is read off the activity feed
-    // above, and this is where it is talked to and configured.
-    expect(out.indexOf('>Coordinator<')).toBeGreaterThan(out.indexOf('>Tasks<'));
-    expect(out).toContain('Website Revamp');
-    expect(out).toContain('5 tasks');
-    expect(out).toContain('Land behind a flag, then flip it');
-    expect(out).toContain('Design the landing page');
-
-    // A null pointer is the other label, from the same control and the same request.
-    const unbound = newClient();
-    unbound.setQueryData(['project', encodeId(P1)], detail({ coordinatorSessionId: null }));
-    const out2 = renderDetail(unbound, encodeId(P1));
-    expect(out2).toContain('Start coordinator');
-    expect(out2).not.toContain('Open coordinator');
-  });
-
-  it('keeps a failed coordinator out of the project’s way', () => {
-    // The section is a sibling of the fields and of the task list, and the error lives INSIDE the
-    // section — so the only thing a failure can take down is the section itself. A static render
-    // cannot fail the mutation, so this reads the two places that decide it.
-    const control = source.indexOf('<ProjectCoordinatorControl');
-    expect(control).toBeGreaterThan(-1);
-    expect(control).toBeGreaterThan(source.indexOf('<ProjectTasks projectId={id}'));
-    // Nothing on the page is rendered conditionally on the coordinator's failure...
-    expect(source).not.toMatch(/coordinator\.(isError|error)\s*\?/);
-    // ...and the failed section still stands up whole on its own: heading, action and message.
-    const out = renderControl({ error: new Error('boom') });
-    expect(out).toContain('Coordinator');
-    expect(out).toContain('Start coordinator');
-    expect(out).toContain('boom');
   });
 });
 
@@ -1419,140 +1200,6 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     // route — never re-derived, and never picked in the form.
     expect(source).toContain('<ProjectTasks projectId={id}');
     expect(source).toContain('projectId={projectId}');
-  });
-
-  it('costs nothing until it is opened', () => {
-    // The dialog is mounted with the section, but its body — and therefore the three option
-    // queries it reads — only renders once it opens. Reading a project must not fetch the
-    // workspaces, providers and runners of a task nobody has asked to create.
-    const qc = newClient();
-    qc.setQueryData(['project', encodeId(P1)], detail());
-    qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    renderDetail(qc, encodeId(P1));
-    expect(qc.getQueryCache().getAll().map((q) => q.queryKey)).toEqual([
-      ['project', encodeId(P1)],
-      tasksKey(P1),
-      ...panoramaKeys(P1),
-      coordinatorKey(P1),
-      ...attributionKeys(P1),
-    ]);
-  });
-});
-
-/**
- * The Coordinator surface, from the page rather than from its components.
- *
- * The panel's own states are asserted in ProjectCoordinatorPanel.test.tsx, which can hand each of
- * them in directly. What is only observable HERE is the wiring: that the section is mounted on a
- * loaded project, that it reads the one endpoint through the shared factory, and that everything a
- * control write changes is refreshed by one invalidation rather than two that could drift.
- */
-describe('ProjectDetailPage — the Coordinator surface', () => {
-  /** Enough of GET …/coordinator/status for the page to paint. Every absent fact carries its
-   *  reason, which is the shape a project nobody has coordinated actually returns. */
-  const coordinatorStatus = () => ({
-    projectId: encodeId(P1),
-    readAt: '2026-08-20T10:00:00.000Z',
-    project: {
-      title: 'Website Revamp', status: 'OPEN',
-      createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z',
-      taskCount: 5, tasksByStatus: { OPEN: 2, DONE: 3 },
-    },
-    coordination: {
-      agentId: null, agentIdAbsentReason: 'NO_COORDINATOR_AGENT', agentName: null,
-      identitySource: 'DERIVED', workspaceId: null,
-      workspaceIdAbsentReason: 'NO_COORDINATION_WORKSPACE', generation: '0',
-      sessionId: null, sessionIdAbsentReason: 'COORDINATOR_NEVER_OPENED',
-      session: null, sessionAbsentReason: 'COORDINATOR_NEVER_OPENED',
-    },
-    policy: {
-      coordinatorEnabled: false, automationPolicy: 'MANUAL', configRevision: '0',
-      maxConcurrentTasks: 1, sessionBudgetPerDay: null, sessionBudgetPerDayAbsentReason: 'UNLIMITED',
-    },
-    consumption: {
-      tasksInFlight: 0, concurrencyRemaining: 1, coordinatorSessionsLast24h: 0,
-      budgetRemaining: null, budgetRemainingAbsentReason: 'UNLIMITED',
-      budgetWindowStartedAt: '2026-08-19T10:00:00.000Z',
-    },
-    runtime: {
-      runState: 'PLANNING', lease: null, leaseAbsentReason: 'NOT_LEASED',
-      fencingToken: '0', acceptanceAttempt: '0',
-    },
-    nextWake: {
-      at: null, reason: null, absentReason: 'NO_WAKE_SCHEDULED',
-      candidates: [], candidatesAbsentReason: 'NO_DECISION_YET', flooredBy: null, decisionId: null,
-    },
-    decisions: [], decisionsEmptyReason: 'NO_DECISION_YET',
-    pendingActions: [], pendingActionsEmptyReason: 'NO_PENDING_ACTION',
-    blockers: { open: [], openEmptyReason: 'NO_OPEN_BLOCKER', resolved: [] },
-    events: { pending: [], pendingEmptyReason: 'NO_PENDING_EVENT', recent: [] },
-    acceptance: {
-      criteria: null, criteriaAbsentReason: 'NO_ACCEPTANCE_CRITERIA', attempt: '0',
-      run: null, runAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
-      doneGate: {
-        allowed: false, runId: null, refusalCode: 'ACCEPTANCE_MISSING', reason: null,
-        acceptanceDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-      },
-      lastRun: null, lastRunAbsentReason: 'ACCEPTANCE_NOT_ATTEMPTED',
-      evidence: {
-        verifications: { total: 0, pending: 0, pass: 0, fail: 0, inconclusive: 0, unresolvedFailures: 0 },
-        merges: [], mergesEmptyReason: 'NO_MERGE_EVIDENCE',
-      },
-    },
-  });
-
-  it('paints the surface from the cached read, alongside — not instead of — the project’s own fields', () => {
-    const qc = newClient();
-    qc.setQueryData(['project', encodeId(P1)], detail());
-    qc.setQueryData(coordinatorKey(P1), coordinatorStatus());
-    const out = renderDetail(qc, encodeId(P1));
-
-    // The project document is untouched by any of this...
-    expect(out).toContain('Website Revamp');
-    expect(out).toContain('Lighthouse ≥ 90 on every page');
-    // ...and the surface sits under the button that opens the conversation.
-    expect(out.indexOf('Start coordinator')).toBeLessThan(out.indexOf('Coordination settings'));
-    // Absent facts read as their reasons, not as zero or as healthy.
-    expect(out).toContain('No agent holds this project’s coordinator seat');
-    expect(out).toContain('The coordination conversation has never been opened.');
-    expect(out).toContain('Deliberately uncapped');
-    expect(out).toContain('Project acceptance has never run here.');
-    // A project that has never been coordinated is left switched off, and the trigger says why it
-    // cannot be pressed rather than sitting there dead.
-    expect(out).toContain('It stays off until you turn it on.');
-    expect(out).toContain('would be discarded rather than acted on');
-  });
-
-  it('draws nothing about the coordinator while the project itself has not loaded', () => {
-    const qc = newClient();
-    qc.setQueryData(coordinatorKey(P1), coordinatorStatus());
-    const out = renderDetail(qc, encodeId(P1));
-    // The section lives inside the loaded branch, so a project that has not come back cannot show
-    // a coordinator state that would be about a project the reader is not looking at yet.
-    expect(out).not.toContain('Coordination settings');
-  });
-
-  it('refreshes the project and its coordinator state with one invalidation, not two', () => {
-    // Both live under `['project', projectId]`, so this prefix covers the document, its task
-    // levels and the coordinator read together. Two invalidations kept in step by hand are two
-    // that eventually are not.
-    expect(source).toContain("void qc.invalidateQueries({ queryKey: ['project', projectId] });");
-    expect(source).not.toMatch(/invalidateQueries\(\{ queryKey: \['project', projectId, 'coordinator/);
-  });
-
-  it('latches a permission refusal and an unacknowledged conflict rather than clearing them', () => {
-    // A 403 turns the whole surface read-only; a stale compare-and-swap records the conflict AND
-    // re-reads, and the form stays shut until the reader presses through it.
-    expect(source).toContain('if (isForbidden(error)) setReadOnly(true);');
-    expect(source).toContain('if (isStaleConfigRevision(error)) {');
-    // The one thing that must never happen automatically: retrying a refused write against the
-    // revision that has just superseded it.
-    expect(source).not.toMatch(/retry:\s*(true|\d)/);
-  });
-
-  it('keeps one trigger id for a press until that press is answered', () => {
-    expect(source).toContain('triggerId.current = triggerId.current ?? newTriggerId();');
-    expect(source).toContain('triggerId.current = null;');
   });
 });
 
