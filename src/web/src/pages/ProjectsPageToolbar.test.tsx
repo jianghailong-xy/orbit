@@ -76,12 +76,8 @@ const LEDGER = {
  * one. Anything unrouted rejects, so a request this page should not be making shows up as a
  * failure rather than as a silently empty list.
  */
-function serve(rows: Record<string, unknown[]>, onPost?: (body: unknown) => unknown) {
-  apiMock.mockImplementation((path: string, init?: { method?: string; body?: unknown }) => {
-    if (init?.method === 'POST') {
-      if (!onPost) return Promise.reject(new Error(`unexpected POST ${path}`));
-      return Promise.resolve(onPost(init.body)) as Promise<never>;
-    }
+function serve(rows: Record<string, unknown[]>) {
+  apiMock.mockImplementation((path: string) => {
     const answer = rows[path];
     if (!answer) return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
     return Promise.resolve(answer) as Promise<never>;
@@ -199,13 +195,6 @@ async function type(element: HTMLInputElement | HTMLTextAreaElement, value: stri
 const searchBox = () =>
   container.querySelector('input[aria-label="Search projects"]') as HTMLInputElement;
 
-/** The rows and pills — the list itself, with the toolbar's own labels cut off. "Completed" is a
- *  segment as well as a section, so a whole-page `toContain` cannot tell them apart. */
-const list = () => {
-  const first = container.querySelector('section');
-  return first ? (container.textContent ?? '').slice((container.textContent ?? '').indexOf('In progress', 1)) : '';
-};
-
 describe('ProjectsPage — status filter', () => {
   it('asks the server for the status that was pressed, instead of filtering the rows it holds', async () => {
     serve({
@@ -299,7 +288,10 @@ describe('ProjectsPage — empty states', () => {
     // control it comes with (create a project) would be the one thing that does not help.
     expect(text()).toContain('No projects match “zzzz”');
     expect(text()).not.toContain('No projects yet');
-    expect(list()).toBe('');
+    // And nothing of the list survives beside it — every section is a header that would be
+    // counting zero. ("Completed" is a segment as well as a section, which is why this asks the
+    // DOM rather than the page text.)
+    expect(container.querySelector('section')).toBeNull();
 
     // The way out is the search that caused it, not a new project.
     await click(button('Clear search'));
