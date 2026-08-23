@@ -3,8 +3,11 @@
 -- a deploy is burning.
 --
 -- Re-runnable in the same way the forward migration is (`IF EXISTS` throughout), and ordered
--- opposite to it: the DONE gate is restored to its 0127 body FIRST, so no window exists in which
--- the gate reads a column that has already been dropped.
+-- opposite to it: the DONE gate is restored to its pre-0150 body FIRST, so no window exists in
+-- which
+-- it reads a column that has already been dropped. That body is 0130's, not 0127's: 0130 replaced
+-- this same function after 0127, so restoring 0127's text would revert 0130 as a side effect of
+-- rolling back 0150.
 --
 -- WHAT ROLLING BACK COSTS, stated rather than discovered:
 --   * every provenance note ever written is gone. It is evidence, not authority, so nothing that
@@ -20,7 +23,7 @@
 
 BEGIN;
 
--- ── 1 · The DONE gate, back to its 0127 body ─────────────────────────────────────────────────
+-- ── 1 · The DONE gate, back to its 0130 body ─────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION project_acceptance_done_gate() RETURNS TRIGGER AS $$
 DECLARE
   run          "project_acceptance_run"%ROWTYPE;
@@ -52,6 +55,12 @@ BEGIN
     RAISE EXCEPTION 'ACCEPTANCE_EVIDENCE_STALE: acceptance run % was superseded at %',
       run."id", run."superseded_at" USING ERRCODE = 'raise_exception';
   END IF;
+  -- 0130's guard, restored with the rest of its body.
+  IF run."digest_version" <> 2 THEN
+    RAISE EXCEPTION
+      'ACCEPTANCE_EVIDENCE_STALE: acceptance run % was digested at version % and this deployment reads version 2 — re-run acceptance',
+      run."id", run."digest_version" USING ERRCODE = 'raise_exception';
+  END IF;
 
   SELECT count(*) INTO open_blocker FROM "project_blocker" b
    WHERE b."project_id" = NEW."id" AND b."resolved_at" IS NULL;
@@ -60,8 +69,15 @@ BEGIN
       USING ERRCODE = 'raise_exception';
   END IF;
 
-  SELECT count(*) INTO open_defect FROM "task_verification_failure" f
-   WHERE f."project_id" = NEW."id" AND f."resolved_at" IS NULL;
+  -- 0130's narrowed read, restored: a failure whose verifier or subject is terminal or superseded
+  -- does not block, and rolling back 0150 must not widen this back to counting them.
+  SELECT count(*) INTO open_defect
+    FROM "task_verification_failure" f
+    JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+    JOIN "task" subject  ON subject."id"  = f."subject_task_id"
+   WHERE f."project_id" = NEW."id" AND f."resolved_at" IS NULL
+     AND verifier."terminal_reason" IS NULL AND verifier."superseded_by_task_id" IS NULL
+     AND subject."terminal_reason" IS NULL AND subject."superseded_by_task_id" IS NULL;
   IF open_defect > 0 THEN
     RAISE EXCEPTION 'ACCEPTANCE_BLOCKED: project % has % unresolved verification failure(s)',
       NEW."id", open_defect USING ERRCODE = 'raise_exception';

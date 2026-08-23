@@ -120,6 +120,10 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   'src/apiserver/src/tasks/tasks.service.ts': 'the create path, and the only writer',
   // Both directions of the public-id classification.
   'src/shared/src/codec.ts': 'classifies the ids as addresses',
+  // The trigger inventory names the columns `task_provenance_immutable_guard` fires ON, which is a
+  // statement ABOUT the guard rather than a read of what the columns hold. It decides nothing; the
+  // one thing that consults it is the test asserting the installed triggers are the declared ones.
+  'src/apiserver/src/common/db-write-inventory.ts': 'declares which trigger fires on them',
 };
 
 /**

@@ -42,6 +42,13 @@ type SessionRow = {
 function fixture(session: SessionRow | null) {
   const writes: Array<Record<string, unknown>> = [];
   const prisma = {
+    // `TasksService.create` runs its write through `withTransactionRetry`, which calls
+    // `$transaction` afresh on every attempt. The fake commits by running the closure against
+    // itself, so what the create writes is still the row `writes` collects.
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
+    // The canonical lock order pre-locks the owner and the creator sessions before the write. Both
+    // are locks: nothing reads what they return, so an empty result is the whole of the behaviour.
+    $queryRaw: async () => [],
     project: { findFirst: async () => ({ id: OTHER }) },
     taskList: { findMany: async () => [] },
     session: { findFirst: async () => session },

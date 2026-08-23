@@ -55,8 +55,14 @@
 -- the opposite order and is re-runnable in the same way; it is not read by Prisma (which reads only
 -- `migration.sql`) and exists so a rollback is a reviewed script rather than one improvised at 3am.
 --
--- The band is 0150 on purpose. Migrations 0132–0141 are claimed by units that have not landed yet
--- (G, H, K), and a second 0132 is a merge conflict dressed up as a schema. The L unit takes 015x.
+-- The band is 0150 on purpose, and it has now been paid off rather than merely predicted. When this
+-- unit was written, 0132–0141 were claimed by units that had not landed and a second 0132 would
+-- have been a merge conflict dressed up as a schema; the L unit took 015x instead. Since then main
+-- has landed 0132–0136, and the rest of the band is still spoken for: H2F holds 0137, K holds
+-- 0138–0141, and G's integration follows them. This file is unchanged by all of it — which is the
+-- point of leaving the gap, and why it is left rather than closed here. Unit I renumbers the chain
+-- into one contiguous sequence once every claimant has landed; doing it from inside any one of them
+-- just moves the collision.
 
 BEGIN;
 
@@ -344,6 +350,17 @@ BEGIN
     RAISE EXCEPTION 'ACCEPTANCE_EVIDENCE_STALE: acceptance run % was superseded at %',
       run."id", run."superseded_at" USING ERRCODE = 'raise_exception';
   END IF;
+  -- The reading the evidence was taken under. A run recorded at an older version was digested over
+  -- a world that did not include §13.6 SU6's columns, so "the facts have not moved" is a claim it
+  -- was never in a position to make. Refused here rather than left to the service, because the
+  -- service that wrote it is the one that would have to notice.
+  -- Carried forward from 0130 unchanged: this function is CREATE OR REPLACE, so anything 0130 put
+  -- here and this file omits would be silently reverted by running the migration.
+  IF run."digest_version" <> 2 THEN
+    RAISE EXCEPTION
+      'ACCEPTANCE_EVIDENCE_STALE: acceptance run % was digested at version % and this deployment reads version 2 — re-run acceptance',
+      run."id", run."digest_version" USING ERRCODE = 'raise_exception';
+  END IF;
   IF run."acceptance_epoch" IS DISTINCT FROM NEW."acceptance_epoch" THEN
     RAISE EXCEPTION
       'ACCEPTANCE_EVIDENCE_STALE: acceptance run % passed in epoch %, and this project is now in epoch % — it was reopened after that run',
@@ -357,8 +374,16 @@ BEGIN
       USING ERRCODE = 'raise_exception';
   END IF;
 
-  SELECT count(*) INTO open_defect FROM "task_verification_failure" f
-   WHERE f."project_id" = NEW."id" AND f."resolved_at" IS NULL;
+  -- The one changed read (§13.6 SU6). The joins are inner on purpose: both tasks are NOT NULL FKs,
+  -- so a row that cannot reach them does not exist. Carried forward from 0130 for the same reason
+  -- as the digest_version guard above.
+  SELECT count(*) INTO open_defect
+    FROM "task_verification_failure" f
+    JOIN "task" verifier ON verifier."id" = f."verifier_task_id"
+    JOIN "task" subject  ON subject."id"  = f."subject_task_id"
+   WHERE f."project_id" = NEW."id" AND f."resolved_at" IS NULL
+     AND verifier."terminal_reason" IS NULL AND verifier."superseded_by_task_id" IS NULL
+     AND subject."terminal_reason" IS NULL AND subject."superseded_by_task_id" IS NULL;
   IF open_defect > 0 THEN
     RAISE EXCEPTION 'ACCEPTANCE_BLOCKED: project % has % unresolved verification failure(s)',
       NEW."id", open_defect USING ERRCODE = 'raise_exception';
