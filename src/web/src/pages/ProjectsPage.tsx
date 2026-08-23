@@ -293,9 +293,9 @@ export function ProjectDetailPage() {
           <ProjectPanoramaHeader projectId={id} />
 
           {/* Directly under the counts it is the picture of, so the graph lands where a reader is
-              already looking. `taskCount` is the page's own number: the section decides on it
-              whether a graph this size is worth drawing, without a second request. */}
-          <ProjectTasksGraph projectId={id} taskCount={p._count.tasks} />
+              already looking. Every project gets one, at any size: the section draws whatever the
+              graph endpoint serves and says so when the server truncates. */}
+          <ProjectTasksGraph projectId={id} />
 
           {/* Draws nothing at all unless this project is a chain: it reads the same shape the
               header above does and returns null for a mesh, so the strip is not something this

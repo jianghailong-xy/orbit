@@ -7142,6 +7142,151 @@ html[data-theme='dark'] .session-tag-chip {
   pointer-events: none;
 }
 
+/* A fold: one mark standing for a run of tasks, or for one stage of a motif the project repeats.
+   Dashed and tinted like `.tdg-aggregate-node`, which is the task graph's collapsed branch — the
+   vocabulary is deliberately shared, so "dashed means there is more behind this" is learned once. */
+.pdg-fold {
+  position: relative;
+  width: 252px;
+  height: 96px;
+  border: 1px dashed var(--brand-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--brand-tint) 30%, var(--bg-raised));
+  box-shadow: 0 2px 7px rgba(31, 35, 41, 0.05);
+}
+.pdg-fold.state-failed {
+  border-color: var(--error-border);
+  background: color-mix(in srgb, var(--error-bg) 45%, var(--bg-raised));
+}
+.pdg-fold.is-open {
+  border-style: solid;
+}
+.pdg-fold-main {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.pdg-fold-main:disabled {
+  cursor: default;
+}
+.pdg-fold-main:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.pdg-fold-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+.pdg-fold-title {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdg-fold-count {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pdg-fold-bar {
+  display: flex;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-sunken);
+}
+.pdg-fold-seg.is-done {
+  background: var(--success);
+}
+.pdg-fold-seg.is-active {
+  background: var(--brand);
+}
+/* A floor, not a fair share: 24 failures in 6,118 tasks is 0.4% of the bar, and the whole reason
+   to look at a folded batch is to see that they are there. */
+.pdg-fold-seg.is-failed {
+  min-width: 5px;
+  background: var(--error-solid);
+}
+.pdg-fold-seg.is-cancelled {
+  background: var(--text-4);
+  opacity: 0.6;
+}
+.pdg-fold-seg.is-open {
+  background: var(--text-4);
+  opacity: 0.3;
+}
+.pdg-fold-legend {
+  overflow: hidden;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pdg-fold-legend .is-failed {
+  color: var(--error-solid);
+  font-weight: 650;
+}
+.pdg-fold .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--bg-raised);
+  background: var(--brand-border);
+  pointer-events: none;
+}
+.pdg-fold-samples {
+  display: flex;
+  min-width: 220px;
+  max-width: 380px;
+  flex-direction: column;
+  gap: 6px;
+}
+.pdg-fold-samples-head {
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.pdg-fold-sample {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--text-1);
+}
+.pdg-fold-sample:hover {
+  background: var(--bg-sunken);
+}
+.pdg-fold-sample-title {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A parent task folded into the frame its subtasks sit in — see ProjectDependencyGraph.tsx for
    why parent/child is a box here and never an edge. */
 .pdg-group {

@@ -17,9 +17,9 @@ import {
  * The graph module is replaced by a stub that records the moment it is imported.
  *
  * This is the assertion that the `lazy()` boundary is real: the flag is flipped by the module
- * FACTORY, which vitest runs only when something actually imports the module — so an eager import
- * would set it even for the oversized project that must never pay for the chunk. Stubbing it also
- * keeps React Flow itself out of jsdom, which has no ResizeObserver for it to measure with.
+ * FACTORY, which vitest runs only when something actually imports the module, so a section that
+ * reached the graph eagerly would set it before the render. Stubbing it also keeps React Flow
+ * itself out of jsdom, which has no ResizeObserver for it to measure with.
  */
 const graphModule = vi.hoisted(() => ({ imported: false }));
 vi.mock('./ProjectDependencyGraph', async () => {
@@ -37,8 +37,7 @@ let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   // The module registry is reset per test so `graphModule.imported` measures THIS test's imports
-  // rather than accumulating across the file — otherwise the "never imported when oversized"
-  // claim would only hold for whichever test happened to run first.
+  // rather than accumulating across the file.
   vi.resetModules();
   graphModule.imported = false;
 });
@@ -72,102 +71,51 @@ const testid = (name: string) => container.querySelector(`[data-testid="${name}"
 describe('ProjectTasksGraph', () => {
   it('draws the graph on its own, with nothing for the reader to select first', async () => {
     const Section = await loadSection();
-    await mount(<Section projectId="p1" taskCount={12} />);
+    await mount(<Section projectId="p1" />);
 
     expect(graphModule.imported).toBe(true);
     expect(testid('project-dependency-graph')).not.toBeNull();
-    expect(testid('project-graph-too-large')).toBeNull();
     // Named: an unlabelled canvas under the panorama header does not say what it is a picture of.
     expect(container.textContent).toContain('Task graph');
   });
 
-  it('says so instead of drawing when the project has more nodes than the threshold', async () => {
-    const { PROJECT_GRAPH_MAX_NODES } = await import('./ProjectTasksGraph');
-    const Section = await loadSection();
-    // 118 is the real shape this guards against: the LFS project, which is a 118-task chain.
-    await mount(<Section projectId="p1" taskCount={118} />);
-
-    expect(testid('project-graph-too-large')).not.toBeNull();
-    expect(container.textContent).toContain('118');
-    expect(container.textContent).toContain(String(PROJECT_GRAPH_MAX_NODES));
-    expect(testid('project-dependency-graph')).toBeNull();
-    // The threshold sits on the eager side of the boundary, so an oversized project does not pay
-    // for the chunk in order to be told it cannot use it.
-    expect(graphModule.imported).toBe(false);
-  });
 });
 
 /**
- * The structural decision the Graph view is built on, asserted on the layout that implements it:
- * dependency edges are edges, parent/child is a box. Pure and DOM-free, so it is here rather than
- * in a second file — this is the same feature, and the rule is what makes the picture readable.
+ * The size that used to be refused.
+ *
+ * The section was handed the project's task total and printed "too large to draw" above 30, which
+ * is how the LFS project — a 118-task chain — got a message where its plan should have been. It
+ * takes no count now, so the guard against that returning is here: the real pipeline, at the real
+ * size, drawing every task and every edge.
  */
-describe('layoutProjectDependencyGraph', () => {
-  const task = (id: string, parentTaskId: string | null = null, status = 'OPEN') => ({
-    id,
-    title: `Task ${id}`,
-    status,
-    parentTaskId,
-  });
-
-  const graph: ProjectDependencyGraphResponse = {
-    nodes: [
-      task('parent'),
-      task('child-a', 'parent'),
-      task('child-b', 'parent'),
-      task('loner'),
-      task('after'),
-    ],
-    edges: [
-      { sourceTaskId: 'child-a', targetTaskId: 'child-b' },
-      { sourceTaskId: 'parent', targetTaskId: 'after' },
-    ],
+describe('a project past the old 30-task threshold', () => {
+  const chain = (length: number): ProjectDependencyGraphResponse => ({
+    marks: Array.from({ length }, (_, i) => ({
+      kind: 'TASK' as const,
+      id: `t${i}`,
+      taskId: `t${i}`,
+      title: `Step ${i + 1}`,
+      status: 'OPEN',
+      parentTaskId: null,
+    })),
+    edges: Array.from({ length: length - 1 }, (_, i) => ({
+      sourceMarkId: `t${i}`,
+      targetMarkId: `t${i + 1}`,
+    })),
+    taskCount: length,
+    folded: false,
     truncated: false,
-    limits: { maxNodes: 500 },
-  };
-
-  it('draws a parent as a box holding its subtasks, never as a node', () => {
-    const layout = layoutProjectDependencyGraph(graph);
-
-    expect(layout.groups.map((g) => g.task.id)).toEqual(['parent']);
-    expect(layout.groups[0].members.map((m) => m.id).sort()).toEqual(['child-a', 'child-b']);
-    // The parent is the frame, so it is not also placed as a node inside it.
-    expect(layout.placements.map((p) => p.task.id)).not.toContain('parent');
-    expect(layout.placements.find((p) => p.task.id === 'child-a')?.groupId).toBe('parent');
-    expect(layout.placements.find((p) => p.task.id === 'loner')?.groupId).toBeNull();
+    limits: { maxTasks: 50_000, maxMarks: 500 },
   });
 
-  it('carries dependency edges only — no edge is ever a parent/child link', () => {
-    const layout = layoutProjectDependencyGraph(graph);
+  it('lays out all 118 of its tasks, none of them dropped to fit', () => {
+    const layout = layoutProjectDependencyGraph(chain(118));
 
-    expect(layout.edges).toEqual(graph.edges);
-    // If membership were drawn there would be a parent→child edge in here; there is not.
-    expect(
-      layout.edges.some((e) => e.sourceTaskId === 'parent' && e.targetTaskId.startsWith('child')),
-    ).toBe(false);
-  });
-
-  it('keeps subtasks inside their box and boxes big enough to hold them', () => {
-    const layout = layoutProjectDependencyGraph(graph);
-    const box = layout.groups[0];
-
-    for (const member of ['child-a', 'child-b']) {
-      const at = layout.placements.find((p) => p.task.id === member)!;
-      // Member coordinates are relative to the box, which is what React Flow's `extent: 'parent'`
-      // expects — and they clear the header the box's own title sits in.
-      expect(at.x).toBeGreaterThan(0);
-      expect(at.y).toBeGreaterThan(0);
-      expect(at.x).toBeLessThan(box.width);
-      expect(at.y).toBeLessThan(box.height);
-    }
-  });
-
-  it('drops an edge naming a task the graph does not carry rather than drawing it to nothing', () => {
-    const layout = layoutProjectDependencyGraph({
-      ...graph,
-      edges: [...graph.edges, { sourceTaskId: 'loner', targetTaskId: 'not-in-this-project' }],
-    });
-
-    expect(layout.edges).toEqual(graph.edges);
+    expect(layout.placements).toHaveLength(118);
+    expect(layout.edges).toHaveLength(117);
+    // A chain laid out left to right is one rank per task, so no two tasks share an x: the whole
+    // plan is placed, end to end, rather than trimmed to a size a threshold would allow.
+    expect(new Set(layout.placements.map((placement) => placement.x)).size).toBe(118);
   });
 });

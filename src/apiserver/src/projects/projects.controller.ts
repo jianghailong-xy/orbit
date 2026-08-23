@@ -121,12 +121,14 @@ export class ProjectsController {
   }
 
   /**
-   * This project's dependency graph, whole: every task in it plus every in-project dependency
-   * edge, in the same `nodes` / `edges` vocabulary `GET /tasks/:id/dependency-graph` answers in.
+   * This project's dependency graph, whole and folded: `marks` and the edges between them, where
+   * a mark is one task, a folded run of tasks, or one stage of a motif the project repeats.
    *
    * Unpaged and unparameterised on purpose. It is not a page of a tree — a graph served in pieces
-   * is not a graph — and it is bounded instead by a server-side node cap that reports itself as
-   * `truncated` when it bites.
+   * is not a graph — and it is bounded by folding rather than by cutting: every task in the
+   * project is behind exactly one mark, however many tasks the project has. `truncated` is left
+   * for the two cases folding cannot save, both far above anything seen here: a project past the
+   * read ceiling, and a fold still too large to carry.
    */
   @Get(':id/dependency-graph')
   dependencyGraph(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
