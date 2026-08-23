@@ -52,6 +52,7 @@ const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.m
 const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
+const P4 = '0195c0de-0000-7000-8000-000000000004';
 // A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
 // what goes on the wire has to be the short public id whichever spelling the row was handed.
 const T1 = '0195c0de-0000-7000-8000-0000000000a1';
@@ -272,9 +273,11 @@ describe('ProjectsPage', () => {
         _count: { tasks: 5 },
       },
       {
+        // Open, like the other two: this test is about what ONE ROW says, and a finished project
+        // is folded into a pill rather than given a row — see the sections suite below.
         id: P2,
         title: 'Legacy Cleanup',
-        status: 'DONE',
+        status: 'OPEN',
         goal: null,
         createdAt: '2026-01-03T00:00:00Z',
         updatedAt: '2026-01-04T00:00:00Z',
@@ -296,7 +299,6 @@ describe('ProjectsPage', () => {
     expect(html).toContain('Ship the new marketing site');
     expect(html).toContain('5 tasks');
     expect(html).toContain('Legacy Cleanup');
-    expect(html).toContain('DONE');
     expect(html).toContain('No goal set'); // fallback for a null goal
     expect(html).toContain('1 task'); // singular, not "1 tasks"
     expect(html).toContain('Ledger Migration');
@@ -349,6 +351,127 @@ describe('ProjectsPage', () => {
     expect(html).toContain('Projects could not be loaded');
     expect(html).toContain('network down');
     expect(html).toContain('Retry');
+  });
+});
+
+describe('ProjectsPage — sections', () => {
+  /** One of each status, so the split has something to get wrong in both directions. */
+  const MIXED = [
+    {
+      id: P1,
+      title: 'Website Revamp',
+      status: 'OPEN',
+      goal: 'Ship the new marketing site',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      _count: { tasks: 5 },
+    },
+    {
+      id: P2,
+      title: 'Legacy Cleanup',
+      status: 'DONE',
+      goal: 'Retire the old admin',
+      createdAt: '2026-01-03T00:00:00Z',
+      updatedAt: '2026-01-04T00:00:00Z',
+      _count: { tasks: 1 },
+    },
+    {
+      id: P3,
+      title: 'Ledger Migration',
+      status: 'OPEN',
+      goal: 'Move the ledger',
+      createdAt: '2026-01-05T00:00:00Z',
+      updatedAt: '2026-01-06T00:00:00Z',
+      _count: { tasks: 2 },
+    },
+    {
+      id: P4,
+      title: 'Abandoned Rewrite',
+      status: 'CANCELLED',
+      goal: 'Never mind',
+      createdAt: '2026-01-07T00:00:00Z',
+      updatedAt: '2026-01-08T00:00:00Z',
+      _count: { tasks: 7 },
+    },
+  ];
+
+  /** The markup of ONE section, sliced off the flat render at the marker each one carries — the
+   *  assertions below are about which section a project landed in, which a whole-page `toContain`
+   *  cannot tell apart. */
+  function sectionOf(html: string, key: string): string {
+    const start = html.indexOf(`data-section="${key}"`);
+    expect(start).toBeGreaterThan(-1);
+    const nextSection = html.indexOf('<section', start);
+    return nextSection === -1 ? html.slice(start) : html.slice(start, nextSection);
+  }
+
+  function renderMixed(): string {
+    const qc = newClient();
+    qc.setQueryData(['projects'], MIXED);
+    return renderPage(qc);
+  }
+
+  it('cuts the list in two off the status every row already carries', () => {
+    const html = renderMixed();
+    const active = sectionOf(html, 'active');
+    const completed = sectionOf(html, 'completed');
+
+    expect(active).toContain('In progress');
+    expect(active).toContain('Website Revamp');
+    expect(active).toContain('Ledger Migration');
+    // The point of the section: neither a finished nor an abandoned project dilutes the half of
+    // the list that still needs the reader.
+    expect(active).not.toContain('Legacy Cleanup');
+    expect(active).not.toContain('Abandoned Rewrite');
+    expect(active).not.toContain('DONE');
+    expect(active).not.toContain('CANCELLED');
+
+    expect(completed).toContain('Completed');
+    expect(completed).toContain('Legacy Cleanup');
+    expect(completed).toContain('Abandoned Rewrite');
+    expect(completed).not.toContain('Website Revamp');
+  });
+
+  it('counts each section in its own header', () => {
+    const html = renderMixed();
+    // Two open, two finished — the badge is what a reader checks the split against.
+    expect(sectionOf(html, 'active')).toMatch(/In progress<\/h3>.*?>2</);
+    expect(sectionOf(html, 'completed')).toMatch(/Completed<\/h3>.*?>2</);
+  });
+
+  it('says what each section is ordered by', () => {
+    const html = renderMixed();
+    expect(sectionOf(html, 'active')).toContain('Newest first');
+    expect(sectionOf(html, 'completed')).toContain('folded by default');
+  });
+
+  it('folds the completed section by default, into a pill that still opens the project', () => {
+    const html = renderMixed();
+    const completed = sectionOf(html, 'completed');
+
+    // Folded means no row: the goal excerpt and the status tag a row carries are gone, while the
+    // project itself is still named, still counted and still one click from being opened.
+    expect(completed).not.toContain('Retire the old admin');
+    expect(completed).not.toContain('ant-list-item');
+    expect(completed).toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
+    expect(completed).toContain('Legacy Cleanup');
+    // ...and the section that needs attention is NOT folded — its rows are right there.
+    expect(sectionOf(html, 'active')).toContain('Ship the new marketing site');
+  });
+
+  it('leaves out a section with nothing in it', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects'], MIXED.filter((p) => p.status === 'OPEN'));
+    const html = renderPage(qc);
+    expect(html).toContain('data-section="active"');
+    expect(html).not.toContain('data-section="completed"');
+    expect(html).not.toContain('Completed');
+  });
+
+  it('keeps the sections in the server’s own order within each one', () => {
+    const html = sectionOf(renderMixed(), 'active');
+    // createdAt desc is the server's; the page must not re-sort what it was handed.
+    expect(html.indexOf('Website Revamp')).toBeLessThan(html.indexOf('Ledger Migration'));
   });
 });
 

@@ -13,6 +13,7 @@ import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
+import { ProjectSections, type ProjectSection } from '../components/ProjectSections';
 import {
   ProjectCoordinatorPanel,
   type TriggerResult,
@@ -94,12 +95,39 @@ function excerpt(text: string | null | undefined, empty: string): string {
   return trimmed.length > ROW_EXCERPT_LENGTH ? `${trimmed.slice(0, ROW_EXCERPT_LENGTH)}…` : trimmed;
 }
 
-/** Read-only index of the signed-in user's projects — newest first, no row interaction. */
+/** How the list is cut up. Built from the `status` every row already carries — the sections cost
+ *  no second request, and the OPEN half is left in the server's own `createdAt desc` order.
+ *
+ *  The completed half is everything that is NOT open, rather than DONE plus CANCELLED by name: a
+ *  status this page has not heard of must still land in a section, and "not open" is the only
+ *  spelling of that which cannot silently drop a project off the list. */
+function projectSections(all: Project[]): ProjectSection<Project>[] {
+  return [
+    {
+      key: 'active',
+      title: 'In progress',
+      note: 'Newest first',
+      projects: all.filter((p) => p.status === 'OPEN'),
+    },
+    {
+      key: 'completed',
+      title: 'Completed',
+      note: 'Newest first · folded by default',
+      projects: all.filter((p) => p.status !== 'OPEN'),
+      // Finished work is the list's background, not its subject: it stays counted and one click
+      // from being read, without spending a row apiece on the way to what still needs doing.
+      defaultCollapsed: true,
+    },
+  ];
+}
+
+/** Read-only index of the signed-in user's projects — in progress first, completed folded away. */
 export function ProjectsPage() {
   const projects = useQuery({
     queryKey: ['projects'],
     queryFn: () => api<Project[]>('/projects'),
   });
+  const sections = useMemo(() => projectSections(projects.data ?? []), [projects.data]);
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -126,10 +154,9 @@ export function ProjectsPage() {
       ) : (projects.data?.length ?? 0) === 0 ? (
         <Empty description="No projects yet" style={{ marginTop: 48 }} />
       ) : (
-        <List
-          dataSource={projects.data}
-          rowKey="id"
-          renderItem={(p) => (
+        <ProjectSections
+          sections={sections}
+          renderProject={(p) => (
             <List.Item>
               {/* One link spanning the whole row — meta and count alike — so the entire row is a
                   single click and a single tab stop, rather than a title-sized target with dead
