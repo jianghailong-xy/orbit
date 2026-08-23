@@ -521,6 +521,110 @@ test('mixed version: an old control plane cannot record a landing it is not enti
   }
 });
 
+test('mixed version: revision-managed with ZERO checkpoints is managed, not legacy', { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+
+    // The exact state the two halves used to disagree about: `[K2]` manages this task — it has a
+    // `task_scope_revision` row for its current revision — and nobody has recorded a checkpoint on
+    // it yet. The service already refuses every landing here (`NO_CHECKPOINT`). A database
+    // predicate that asked "does it have a checkpoint" instead would call this legacy and wave the
+    // old replica straight through, which is a hole in exactly the band of tasks that are under
+    // management and not yet verified.
+    await client.query(
+      `INSERT INTO "task_scope_revision"
+         ("id","task_id","owner_id","revision","scope_hash","title","reason",
+          "authorized_by_actor","authorized_by_principal","automation_policy")
+       VALUES (gen_random_uuid(), '${TASK}', '${OWNER}', 1, '${SCOPE}', 'T', 'baseline',
+               'USER', '${OWNER}', 'GUARDED_AUTO')`,
+    );
+    assert.equal(await count(client, 'task_checkpoint'), 0, 'setup: no checkpoint exists');
+    assert.equal(
+      rows<{ managed: boolean }>(
+        await client.query(`SELECT "task_is_convergence_managed"('${TASK}') AS "managed"`),
+      )[0].managed,
+      true,
+      'the database disagrees with the service about when management begins',
+    );
+    // The service's answer for the same task, from the same database.
+    assert.equal(
+      (await reportedLandingAuthority(prisma(client), {
+        ownerId: OWNER, taskId: TASK, mergeCheckpointId: null, sourceSha: E0[3].commit,
+      })).decision,
+      'NO_CHECKPOINT',
+    );
+
+    const session = async () =>
+      rows<{ mergeStatus: string | null; branchMerged: boolean | null; mergedSourceSha: string | null }>(
+        await client.query(
+          `SELECT "merge_status" AS "mergeStatus", "branch_merged" AS "branchMerged",
+                  "merged_source_sha" AS "mergedSourceSha" FROM "session" WHERE "id" = $1`,
+          [SESSION],
+        ),
+      )[0];
+    const before = await session();
+
+    // The old controller's transaction, in all three shapes it can take.
+    const oldController = async (sourceSha: string | null, key: string) => {
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          `UPDATE "session"
+              SET "merge_status" = 'merged', "branch_merged" = true, "merged_source_sha" = $2
+            WHERE "id" = $1`,
+          [SESSION, sourceSha],
+        );
+        if (sourceSha !== null) {
+          await client.query(
+            `INSERT INTO "session_merge_receipt"
+               ("owner_id","session_id","task_id","project_id","result","source_branch","source_sha",
+                "target_branch","target_sha_before","target_sha_after","recorded_by","idempotency_key")
+             VALUES ($1,$2,$3,$4,'MERGED','orbit/k6',$5,'main',$6,$5,'RUNNER',$7)`,
+            [OWNER, SESSION, TASK, PROJECT, sourceSha, E0_BASE, key],
+          );
+        }
+        await client.query('COMMIT');
+        return null;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        return String((error as Error).message);
+      }
+    };
+
+    for (const [label, sha] of [
+      ['a source no checkpoint verified', E0[3].commit],
+      ['the red tip', E0[4].commit],
+      ['no source at all — the shape that writes no receipt', null],
+    ] as const) {
+      assert.match(
+        String(await oldController(sha, `old:${sha ?? 'none'}`)),
+        /CHECKPOINT_AUTHORITY_REQUIRED/,
+        label,
+      );
+      assert.deepEqual(await session(), before, `${label} moved the session`);
+      assert.equal(await count(client, 'session_merge_receipt'), 0, `${label} wrote a receipt`);
+    }
+
+    // Redelivery and a restart replay change nothing: the answer is a property of the state, not
+    // of how many times it is asked.
+    for (let i = 0; i < 3; i++) {
+      assert.match(String(await oldController(E0[3].commit, 'old:replay')), /CHECKPOINT_AUTHORITY_REQUIRED/);
+    }
+    assert.deepEqual(await session(), before);
+    assert.equal(await count(client, 'session_merge_receipt'), 0);
+    assert.equal(await count(client, 'task_checkpoint'), 0, 'the guard invented a checkpoint');
+
+    // A task with no CURRENT revision row is the real legacy case, and it is untouched.
+    await receipt(client, {
+      result: 'MERGED', sourceSha: E0[0].commit, checkpointId: null, taskId: NEXT_TASK,
+    });
+    assert.equal(await count(client, 'session_merge_receipt'), 1);
+  } finally {
+    await client.end();
+  }
+});
+
 test('mixed version: the old controller transaction rolls back whole', { skip }, async () => {
   const client = await connect();
   try {

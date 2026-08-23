@@ -244,18 +244,42 @@ ALTER TABLE "session"
 --
 -- WHAT "MANAGED" MEANS, AND WHY LEGACY IS SAFE
 --
--- A task is checkpoint-managed exactly when it has at least one `task_checkpoint` row. Every task
--- that existed before this migration has none and is completely unaffected — no merge Orbit has
--- ever recorded changes behaviour. Management begins the moment somebody records a checkpoint,
--- which is also the moment §7 starts making claims about that task, and from then on the two halves
--- agree: the service refuses first with a reason, and the database refuses regardless of who asked.
+-- A task is managed exactly when `[K2]`'s own test says so: a `task_scope_revision` row exists for
+-- its CURRENT `scope_revision`. That is the same predicate `managedTaskRevision` applies in the
+-- service, and using anything else here would leave a band of tasks the service already refuses and
+-- the database still waves through. Every task filed before `[K2]` has no revision row and is
+-- completely unaffected — which is every merge Orbit has ever recorded.
 --
--- A task holding only `WIP_RED` checkpoints is managed and has nothing accepted, so every landed
--- claim about it fails — which is the correct reading of "known-red work is saved, not merged".
+-- So a managed task with NO checkpoint at all fails every landed claim, exactly as the service's
+-- `NO_CHECKPOINT` does; and a managed task holding only `WIP_RED` checkpoints fails too, which is
+-- the correct reading of "known-red work is saved, not merged".
 
-CREATE OR REPLACE FUNCTION "task_is_checkpoint_managed"(p_task_id UUID) RETURNS BOOLEAN AS $$
+/* WHEN MANAGEMENT BEGINS — one definition, and it is `[K2]`'s.
+ *
+ * A task is under convergence management exactly when a `task_scope_revision` row exists for its
+ * CURRENT `scope_revision`. That is the test `managedTaskRevision` makes in the service, it is what
+ * `[K2]` wrote as the whole compatibility story, and it is what decides whether §7 has anything to
+ * say about a task.
+ *
+ * The first version of this function asked a different question — does the task have any checkpoint
+ * — and the gap between the two answers was a hole. A managed task with a current revision and ZERO
+ * checkpoints is refused by the service (`NO_CHECKPOINT`, at dispatch and at landing), and was
+ * waved through by these triggers as "legacy", so the old replica the triggers exist for could
+ * still write the projection and a NULL-checkpoint receipt for it. Two predicates for one word is
+ * how a rule ends up true in the half of the system that already refuses and false in the half that
+ * is supposed to be the backstop.
+ *
+ * Legacy is now exactly what it says: a task with no current revision row — every task filed before
+ * `[K2]`, which is every merge Orbit has ever recorded. */
+CREATE OR REPLACE FUNCTION "task_is_convergence_managed"(p_task_id UUID) RETURNS BOOLEAN AS $$
   SELECT p_task_id IS NOT NULL
-     AND EXISTS (SELECT 1 FROM "task_checkpoint" WHERE "task_id" = p_task_id);
+     AND EXISTS (
+       SELECT 1
+         FROM "task" t
+         JOIN "task_scope_revision" r
+           ON r."task_id" = t."id" AND r."revision" = t."scope_revision"
+        WHERE t."id" = p_task_id
+     );
 $$ LANGUAGE sql STABLE;
 
 /* Is this commit one this task actually verified? Membership, not "the latest": a receipt for an
@@ -283,7 +307,7 @@ BEGIN
     -- The old-replica shape. Allowed for a task nobody has checkpointed — that is every merge in
     -- the system's history — and refused the moment §7 governs the task, because a landing with no
     -- verified point behind it is the exact claim this unit exists to stop.
-    IF "task_is_checkpoint_managed"(NEW."task_id") THEN
+    IF "task_is_convergence_managed"(NEW."task_id") THEN
       RAISE EXCEPTION
         'CHECKPOINT_AUTHORITY_REQUIRED: task % is checkpoint-managed, so a landed receipt must name the checkpoint it landed',
         NEW."task_id"
@@ -336,7 +360,7 @@ CREATE OR REPLACE FUNCTION "session_merge_projection_checkpoint_authority"() RET
 DECLARE
   claimed BOOLEAN;
 BEGIN
-  IF NOT "task_is_checkpoint_managed"(NEW."task_id") THEN
+  IF NOT "task_is_convergence_managed"(NEW."task_id") THEN
     RETURN NEW;
   END IF;
 
