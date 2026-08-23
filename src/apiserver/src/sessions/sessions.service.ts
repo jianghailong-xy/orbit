@@ -46,6 +46,7 @@ import {
   isLockNotAvailable,
   taskWorkRefusal,
 } from '../tasks/task-supersession';
+import { TaskRunFenceLost, type TaskRunEffectFence } from '../tasks/task-run-receipt';
 import {
   accountDefaultPermissionMode,
   resolvePermissionMode,
@@ -304,6 +305,58 @@ export class SessionsService {
   ) {}
 
   /**
+   * Do a write UNDER the right to do it, in one transaction.
+   *
+   * The lease on a run request (0137) fences the receipt's own rows — who may bind a plan, who may
+   * freeze an answer — and that is not the same as fencing the EFFECT. Without this, a holder whose
+   * lease expired mid-flight is already inside `session.create`, a takeover binds its own plan and
+   * answers, and the old holder then commits a Session for a request that has moved on. The receipt
+   * would refuse its `completeRunReceipt` afterwards, which is a report, not a prevention.
+   *
+   * So the write takes the receipt row FIRST, `FOR UPDATE`, and proves it is still `BOUND` to this
+   * holder and attempt. The lock is held to commit, so a takeover cannot bind past a holder that is
+   * legitimately mid-write, and a holder that has been taken over cannot write at all.
+   *
+   * With no fence — every caller that is not a task run — this is the bare write it always was.
+   */
+  private async writeFenced<T>(
+    fence: TaskRunEffectFence | undefined,
+    write: (client: PrismaService | Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    if (!fence) return write(this.prisma);
+    return withTransactionRetry(this.prisma, async (tx) => {
+      await this.assertFenceHeld(tx, fence);
+      return write(tx);
+    }, loggedRetry(this.logger, 'sessions.writeFenced'));
+  }
+
+  /**
+   * Take the run request's row and prove this delivery still owns it — inside the caller's
+   * transaction, so the lock is held until whatever it fences commits.
+   *
+   * `FOR UPDATE` rather than a bare read: a takeover's `UPDATE … SET lease_holder` has to WAIT for
+   * a holder that is legitimately mid-write, instead of overtaking it and leaving two writers.
+   */
+  private async assertFenceHeld(
+    tx: Prisma.TransactionClient,
+    fence: TaskRunEffectFence,
+  ): Promise<void> {
+    const [held] = await tx.$queryRaw<Array<{ attempt: number }>>(Prisma.sql`
+      SELECT "attempt" FROM "task_run_request"
+       WHERE "owner_id" = ${fence.ownerId}::uuid
+         AND "action_kind" = ${fence.actionKind}
+         AND "request_token" = ${fence.requestToken}
+         AND "status" = 'BOUND'
+         AND "lease_holder" = ${fence.leaseHolder}
+         AND "attempt" = ${fence.attempt}
+         FOR UPDATE
+    `);
+    // FAIL CLOSED. No row means this delivery no longer owns the request — its lease expired and
+    // somebody took it over — and the one thing it must not do is write the effect anyway.
+    if (!held) throw new TaskRunFenceLost(fence.requestToken);
+  }
+
+  /**
    * Ensure any workspace/runner a session references belongs to the caller — without
    * this a user could pin a session to another tenant's runner and have Claude
    * Code execute on a machine they don't own (cross-tenant RCE).
@@ -368,6 +421,18 @@ export class SessionsService {
        * or collides with the row it already wrote, instead of opening a second conversation.
        */
       id?: string;
+      /**
+       * The run request this Session is being written FOR, and the proof that this caller still
+       * holds it (0137).
+       *
+       * Passed through rather than checked by the caller, because a check the caller makes BEFORE
+       * the write is not a fence: a lease can expire between it and the insert, a takeover can bind
+       * its own plan, and the old holder would still commit a Session the request no longer wants.
+       * Given one, the insert happens inside a transaction that first takes the receipt row and
+       * proves it is still `BOUND` to this holder and attempt — so the write and the right to make
+       * it commit together, or neither does.
+       */
+      fence?: TaskRunEffectFence;
       /**
        * §13.6 SU6: this Session exists to DO the task's work, not to look at it.
        *
@@ -576,7 +641,7 @@ export class SessionsService {
       branch = null;
     }
     const runtimeSessionId = randomUUID();
-    const session = await this.prisma.session.create({
+    const session = await this.writeFenced(opts?.fence, (client) => client.session.create({
       data: {
         ...(opts?.id ? { id: opts.id } : {}),
         title,
@@ -614,7 +679,7 @@ export class SessionsService {
         creatorId: ownerId,
         ownerId,
       },
-    });
+    }));
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session.
@@ -3033,6 +3098,14 @@ export class SessionsService {
       clearSettledWorktreeState?: boolean;
       /** §13.6 SU6: this turn carries the task's prompt, so the row is doing the task's work. */
       startsTaskWork?: boolean;
+      /**
+       * The run request this turn is being delivered FOR — see `create`'s own `fence`.
+       *
+       * A LIVE paused run is handed the task's prompt through here rather than through the revive
+       * path below, so a fence that guarded only the revive would leave the door most task resumes
+       * actually take unfenced: a delivery whose lease was taken over would still commit the turn.
+       */
+      fence?: TaskRunEffectFence;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -3042,6 +3115,11 @@ export class SessionsService {
     // lock inside the closure. A victim wrote no turn, so a re-run enqueues once — and the delivery
     // notice to the runner is outside the loop, after commit.
     const queued = await withTransactionRetry(this.prisma, async (tx) => {
+      // THE RIGHT TO WRITE THIS TURN, first and held to commit. A delivery whose lease was taken
+      // over while it was getting here must not enqueue the prompt anyway — the receipt would
+      // refuse its answer afterwards, which reports the contradiction rather than preventing it.
+      // Taken before the session row because it fences the REQUEST rather than the conversation.
+      if (opts?.fence) await this.assertFenceHeld(tx, opts.fence);
       // Linearize against claim and turnComplete. If completion wins, it first releases
       // RUNNING->AWAITING_INPUT and this enqueue changes it to PENDING. If enqueue wins,
       // completion sees this turn and retains RUNNING. Neither ordering can lose a wakeup.
@@ -4102,6 +4180,12 @@ export class SessionsService {
        * so 0130's guard judges the value this turn is actually starting under.
        */
       startsTaskWork?: boolean;
+      /**
+       * The run request this turn is being delivered FOR — see `create`'s own `fence`. Proved
+       * inside the transaction that revives the session and writes the turn, so a holder whose
+       * lease was taken over cannot deliver a prompt the request no longer wants.
+       */
+      fence?: TaskRunEffectFence;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -4189,6 +4273,10 @@ export class SessionsService {
         // Carried through: a live paused run being handed the task's prompt is the task's work,
         // and the row has to say so in the same transaction that writes the turn.
         startsTaskWork: opts?.startsTaskWork,
+        // ...and so does the right to deliver it. This is the path a task resume actually takes —
+        // `AWAITING_INPUT` and `INTERRUPTED` are both LIVE — so a fence applied only to the revive
+        // below would be a fence on the branch nobody uses.
+        fence: opts?.fence,
       });
     }
     if (
@@ -4206,6 +4294,12 @@ export class SessionsService {
     // locks taken inside the closure and writes from that read; nothing outside it moves between
     // attempts, and the runner is notified after this returns.
     const revived = await withTransactionRetry(this.prisma, async (tx) => {
+      // THE RIGHT TO DO THIS, FIRST, and held to commit. A delivery whose lease was taken over
+      // while it was getting here must not write the turn anyway — the receipt would refuse its
+      // answer afterwards, which reports the contradiction rather than preventing it. Taken before
+      // the rows below because it is not one of them: it fences the REQUEST, and a request that is
+      // no longer this delivery's has no business taking a project, a task or a session at all.
+      if (opts?.fence) await this.assertFenceHeld(tx, opts.fence);
       // PROJECT FIRST — the one order this system takes these three rows in.
       //
       // A revive ends by writing a live status onto this row, which reaches

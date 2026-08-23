@@ -8,21 +8,40 @@ import { RunnerTasksController } from './runner-tasks.controller';
 const RUNNER = { id: 'runner-1', ownerId: 'owner-1' } as never;
 
 test('executeTask starts the owned task through TasksService', async () => {
-  const seen: { ownerId?: string; taskId?: string } = {};
+  const seen: { ownerId?: string; taskId?: string; triggerId?: string } = {};
   const expected = { ok: true, sessionId: 'session-1' };
   const tasks = {
-    execute: async (ownerId: string, taskId: string) => {
+    execute: async (ownerId: string, taskId: string, _auto: unknown, triggerId?: string) => {
       seen.ownerId = ownerId;
       seen.taskId = taskId;
+      seen.triggerId = triggerId;
       return expected;
     },
   } as never;
   const controller = new RunnerTasksController(tasks, {} as never);
 
-  const result = await controller.executeTask(RUNNER, 'task-1');
+  // The id of THIS `task_start`, which the runner reuses across every transport retry of it: two
+  // deliveries of one tool call must be one run, and that is only decidable from a carried token.
+  const result = await controller.executeTask(RUNNER, 'task-1', { triggerId: 'press-1' });
 
-  assert.deepEqual(seen, { ownerId: 'owner-1', taskId: 'task-1' });
+  assert.deepEqual(seen, { ownerId: 'owner-1', taskId: 'task-1', triggerId: 'press-1' });
   assert.equal(result, expected);
+});
+
+test('executeTask still starts the task for a runner that names no press', async () => {
+  // Every runner predating the field sends no body at all, and Nest hands the handler `{}`.
+  const seen: { triggerId?: string } = { triggerId: 'unset' };
+  const tasks = {
+    execute: async (_o: string, _t: string, _auto: unknown, triggerId?: string) => {
+      seen.triggerId = triggerId;
+      return { ok: true };
+    },
+  } as never;
+  const controller = new RunnerTasksController(tasks, {} as never);
+
+  await controller.executeTask(RUNNER, 'task-1', {});
+
+  assert.equal(seen.triggerId, undefined);
 });
 
 test('executeTask is exposed as POST tasks/:id/execute', () => {

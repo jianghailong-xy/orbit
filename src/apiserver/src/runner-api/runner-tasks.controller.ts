@@ -9,6 +9,7 @@ import {
   CreateTaskDto,
   CreateTasksBatchDto,
   ProposeDagDto,
+  RunTaskDto,
   UpdateTaskDto,
 } from '../tasks/dto';
 import { TasksService } from '../tasks/tasks.service';
@@ -194,9 +195,19 @@ export class RunnerTasksController {
     return this.tasks.remove(runner.ownerId, id);
   }
 
+  /**
+   * `task_start`, from the MCP tool and from `orbit task start`. The body carries `triggerId` —
+   * the id of THIS tool invocation, which the runner reuses across every transport retry of it, so
+   * a call whose answer was lost is the same request rather than a second run. Optional, because a
+   * runner predating the field sends no body.
+   */
   @Post('tasks/:id/execute')
-  executeTask(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
-    return this.tasks.execute(runner.ownerId, id);
+  executeTask(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RunTaskDto,
+  ) {
+    return this.tasks.execute(runner.ownerId, id, undefined, dto?.triggerId);
   }
 
   @Post('tasks/:id/dependencies')

@@ -187,4 +187,10 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'mergeOperationOwner',
   'commitOperationId',
   'commitOperationOwner',
+  // The manual Project trigger's effect marker (`task_run_manual_trigger`, migration 0137). It
+  // names no row a caller can ask for: it is `taskRunManualTriggerId(pressToken, projectId)`, a
+  // value derived from the press so the marker and the outbox signal agree byte-for-byte about
+  // which request already happened. Decoding it on the way in would make that comparison lie, and
+  // it appears in no request and no response.
+  'requestId',
 ]);

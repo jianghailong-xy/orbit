@@ -1002,13 +1002,47 @@ CREATE UNIQUE INDEX session_task_execution_claim_idx
 | 入口 | 插入方式 | 冲突时 | 对外结果 |
 |---|---|---|---|
 | 控制环 `DISPATCH_TASK` | `INSERT … ON CONFLICT DO NOTHING RETURNING id`（§8.5；自 v1.20 起不带推断子句，见 D5-b1） | 返回 0 行 | `project_action.status = SUPERSEDED`、`refusal_code = TASK_ALREADY_RUNNING`，或 D5-b2 的 `STALE_SNAPSHOT`；**本次事务照常提交**（事件被消费、blocker/decision/nextWake 落库）；`nextWakeAt = evaluation.epoch + 60s` |
-| 人工"开始执行" | 同上 | 返回 0 行 | 返回**既有的那条 Session**（与既有"重复点击 no-op"一致），**不是** 409、更不是 500 |
-| legacy sweep | 同上 | 返回 0 行 | 跳过该 Task，本轮不记失败（sweep 的下一轮会重新求值） |
+| 人工"开始执行" | 唯一约束冲突 → 按请求身份读（自 v1.20 起，见 D5-b3） | 冲突 | 派生 id 上有行 ⇒ 返回**那条 Session**（与既有"重复点击 no-op"一致），**不看它是什么状态**；否则 ⇒ 结构化 409（`TASK_ALREADY_RUNNING` 语义，点名占用者）。**永远不是 500、不是裸 P2002** |
+| legacy sweep | 同上 | 冲突 | 同上；sweep 侧把 409 当作"本轮跳过"，不记失败（下一轮重新求值） |
 
 **D5-a**：三个入口**都**必须用 `ON CONFLICT DO NOTHING RETURNING`，不允许任何一个靠捕获唯一约束异常来实现 —— 异常会中止整个事务，把 `PC-CX-01` 修成 `PC-CX-04`（见 §8.5）。
 **D5-b**：`ON CONFLICT` 对 partial unique index 的推断必须**逐字重复索引谓词**（`ON CONFLICT (task_id) WHERE task_id IS NOT NULL AND deleted_at IS NULL AND status IN ('PENDING','RUNNING') DO NOTHING`），否则 Postgres 推断不到索引而报错。Prisma 表达不了这个形状，因此这三处是 `$executeRaw`。**既有教训**：裸 SQL 躲得过编译期检查，构建通过 ≠ 改对了，所以这三处必须有跑在真实数据库上的测试，不能只有类型检查。
 **D5-b1（推断一条索引，还是一条都不推断，v1.20 新增，单元 H2）**：D5-b 说的是**推断**这条 partial unique index 时的写法，它一个字没变。变的是控制环那一处**不再推断任何索引**：自本单元起派发的 Session id 由请求身份派生（§8.2 的动作键，见 `dispatchDesiredSessionId`），于是这条 INSERT 能撞上的唯一索引有**三条** —— 主键（这个 id 上已经有一行）、`session_task_execution_claim_idx`、`session_project_action_id_key`。**Postgres 只允许一条推断子句**，所以点名 `task_id` 等于把另外两条留在"抛裸唯一约束错误"上，而那正是 D5-a 与 §8.5 C1 禁止的形状：异常中止整个事务，C2 的"其余 outcome 照常提交"在物理上不成立。因此控制环写**不带推断的 `ON CONFLICT DO NOTHING`**，再由一次**读**判定撞的是哪一条：live claim 被别的 Session 占着 ⇒ `TASK_ALREADY_RUNNING`（`detail.conflictingSessionId` 指名那一行，不是"最新的那条"）；否则 ⇒ D5-b2。那次读**仍然逐字重复索引谓词**，D5-b 对它逐字有效。本条只改控制环这一个入口，人工入口与 legacy sweep 不在本单元范围内。
 **D5-b2（撞上无法归因的唯一索引时的对外码，v1.20 新增，单元 H2）**：这一支的 `reasonCode` 是 `DISPATCH_SESSION_RACED`（可重试，`retryAt = now + 5s`，`detail.desiredSessionId` 记下撞上的那个 id），但**持久列 `refusal_code` 写 `STALE_SNAPSHOT`** —— 与 §13.1 AG6-e 同一条理由，不是另立一条：BL2 对旧副本不认识的码 fail-closed 成 `UNKNOWN_FAILURE`（PROJECT 主体、§11 BL1 读作"全停"、§11.4 永远解不开），所以滚动升级期间新副本**不得**往这一列写只有自己认识的词。语义也确实成立：本请求派生的 id 上已经有一行，而这次计划所依据的世界里没有它 —— "快照已过期、请重新计划"正是下一步。
+**D5-b3（legacy 两个入口的请求身份与状态无关恢复，v1.20 新增，单元 H2F）**：D5-b1 只改了控制环，并写明"人工入口与 legacy sweep 不在本单元范围内"。这两个入口共用 `TasksService.createTaskSessionOrReadWinner`，它当时的答案是**搜**出来的 ——「这个 Task 上最新的、且 `PENDING`/`RUNNING` 的那条 Session」—— 而这两个条件都在**查的过程中还在动**，于是同一个错误有两种反向的答法：真正的 winner 已经 `SUCCEEDED`/`FAILED`/`CANCELLED` 时读不到，裸 `P2002` 被原样抛出，点了"开始执行"的人拿到一个 500；winner 停在 `AWAITING_INPUT`/`INTERRUPTED` 时同样读不到，落进"别人占着 claim"那一支，于是**调用方自己的那次运行被当成别人的**报回去。修法与控制环同一条：Session 的 id 由请求身份派生（`taskRunDesiredSessionId`，命名空间与 `dispatchDesiredSessionId` 分开），于是恢复是**一次按 id 的读**，`WHERE id = <派生 id>`，**不带 status、不带 `deleted_at`、不带排序** —— winner 的七种状态共用同一条规则，没有任何一种能被漏掉。读不到自己的行时才去读 claim 持有者，并且**逐字重复索引谓词**（`TASK_OCCUPYING` 就是 `session_task_execution_claim_idx` 的那四个状态），点名拒绝而**不认领**；两者都没有时是可重试的结构化 409，绝不回退成裸唯一约束错误。请求身份取自这次调用**观察到的**东西：Task、Agent、provider/model pin，以及**该 Task 已有的全部 Session id 集合** —— 并发的重复请求看到同一份历史因而收敛到同一条运行，而上一次运行结束之后的新一次点击看到更长的历史，拿到属于自己的新 Session（否则"开始执行"会永远撞上那条已结束的 Session 并把它当成成功返回）。用集合而不是计数：回收站清理会**硬删**软删过的 Session，计数会退回去并重新派生出一个**仍然存在**的行的 id。
+
+**D5-b3 附注（Prisma 7 的唯一约束在哪里）**：这两个入口的分类器原本只读 `meta.target`，而 **Prisma 7 + `@prisma/adapter-pg`（本部署实际在跑的）根本不设这个字段** —— 冲突的键在 `meta.driverAdapterError.cause.constraint.fields`，索引名在同一处的 `originalMessage`。也就是说在真实服务器上，**每一次**丢掉执行 claim 的竞争都没能通过分类、裸 `P2002` 直接抛给了 API，而不只是本单元原本要修的终态/暂停两种。与 `postgresSqlState`（`55P03` 那次）同一条教训、同样只能由跑在真实 PostgreSQL 上的测试发现：单元测试构造什么形状就绿什么形状。
+
+**D5-b4（run request identity 契约与 transition table，v1.20 新增；契约与 `task_dispatch_epoch` 表由 H2F 交付，把自动入口的 token 接到 epoch 上由 H2G 交付）**：D5-b3 给 legacy 两个入口装了"请求即名字"的恢复，但**名字从哪来**当时只对人工入口说清楚了（`triggerId`，一次按下/一次工具调用生成、每次重试复用）。自动入口没有"按下"，当时的做法是**从当前可观察值派生** —— `sched:<task>:<run_at>`、`dep:<task>:<edge_revision>` —— 而这类值**可以 ABA**：
+
+* `run_at` 09:00 → 10:00 → 09:00：第二个**合法**的 09:00 约定复用第一次的 token。若第一次已被冻结为 `rescheduled`，这次约定**永远不会跑**；若第一次成功派发并被冻结，重放会拿回**上一条 Session**，同样永远不跑。
+* 边集合不变而 `dep:` 的 revision 不变，但前置可以 DONE → reopen → DONE，本任务也可以 DONE → reopen：**第二次合法的 READY transition** 命中第一次的 COMPLETED receipt，错误返回旧 Session。
+
+所以 identity **不得从可 ABA 的当前值猜**，而必须由一个**单调、持久、每个合法"该跑了"时刻恰好推进一次**的计数器命名。契约如下。
+
+**（1）名字的形状。** receipt 的 key 是 `(owner_id, action_kind, request_token)`，而每个 `request_token` 一律是 `<trigger-kind>:<task>:<epoch>` 或调用方携带的 `triggerId`。三段都不可省：kind 分开两个入口在同一 epoch 上的两种时刻，task 分开同一 owner 的两个任务，epoch 分开同一任务的两次时刻。
+
+**（2）epoch 是什么。** `task_dispatch_epoch (task_id PRIMARY KEY, epoch BIGINT)`，形状与理由与 0132 的 `task_dependency_revision` 完全一致：**每个 Task 一行**（空边集/无约定也可锁、可读），由**语句级触发器 + transition table** 推进，`ORDER BY task_id` 一条语句取锁，一条语句里改十行也只 +1。放在**独立表**而不是 `task` 行上，正是 0132 记下的三笔代价（写 `task` 行改 `xmin` → 重跑全部外键 → 撞上 creator Session 的 `FOR KEY SHARE`；每个 FOR EACH ROW 触发器白跑一遍；`updated_at` 是用户可见时钟）。锁序位置与 revision 同秩（70，最后一把）。
+
+**（3）transition table —— 什么推进 epoch，为什么。**
+
+| 变化 | 推进谁的 epoch | 它创造了哪个入口的"时刻" | 不推进会怎样 |
+|---|---|---|---|
+| `task.run_at` 写入且 `IS DISTINCT FROM` 旧值 | 该 Task | 定时入口：一个新约定（或约定被消费/取消） | 09→10→09 复用旧 token，第二个 09:00 永不执行 |
+| `task.status` 写入且 `IS DISTINCT FROM` 旧值 | 该 Task | 依赖入口：本任务 DONE/FAILED → reopen 后可再次 READY | reopen 后的合法 READY 命中旧 receipt，返回上一条 Session |
+| `task.status` 写入且 `IS DISTINCT FROM` 旧值 | **它的每个 dependent** | 依赖入口：前置状态变了，dependent 的 READY 可能刚成立 | 前置 DONE→reopen→DONE 的第二次 READY 复用旧 token |
+| `task_dependency` INSERT / UPDATE / DELETE | 受影响的 dependent | 依赖入口：等待集合变了 | 与 0132 的 revision 同因；这里由同一个计数器覆盖 |
+
+`task_dependency_revision` 因此**不再进入 token**：epoch 覆盖了它的全部触发面并且多覆盖了状态面。0132 那张表本身不动 —— 它是 dispatch 决策的**锁**，不是名字。
+
+**（4）一个计数器还是两个。** 一个，kind 在 token 里分。代价是**两次并发的同类投递可能被中间的一次无关 transition 拆成两个命令**（例如两个定时 pass 之间有前置 DONE）：结果是 claim index 只允许一次运行、输的一方拿到结构化 `TASK_ALREADY_RUNNING`——**安全但不是最优**。收益是只有一张表、一条推进规则、一张可核对的 transition table；两个计数器要把上表拆成两半并证明两半不重叠，而重叠恰恰是最容易出错的地方。
+
+**（5）什么仍然不需要 epoch。** 人工入口（Run Now / `task_start` / `orbit task start` / 批量）由调用方的 `triggerId` 命名——那是"一次按下"，服务端无从推断，也不该推断。批量按下再按任务派生（`batch:<press>:<task>`）。
+
+**（6）冻结（COMPLETED）的前提。** 只有当 token 命名的时刻**永远不会再来**时，stand-down 才可以冻结。有了 epoch 这一条成立：epoch 单调，任何"再来一次"都是新 epoch、新 token、新 command。反过来说，**在 epoch 接线之前，自动入口的 stand-down 一律只做 fenced release、不做 COMPLETE** —— 这是 H2F 交付的状态，也是没有 epoch 时唯一安全的写法；H2G 把 token 接到 epoch 上之后才谈得上冻结。
+
+**（7）必须由真实 PostgreSQL 覆盖的四种 ABA。** `run_at` 09→10→09；前置 DONE→reopen→DONE；本任务 DONE→reopen；以及**旧事件的重复与乱序投递**（同一 epoch 的第二次投递复用同一 receipt，跨 epoch 的旧投递既不启动也不阻塞新 epoch）。
+
 **D5-c**：迁移建索引前必须先**收敛存量重复**：对每个 Task 保留 `created_at` 最新的一条占位中 Session，其余置 `CANCELLED` 且 `end_reason = 'duplicate_live_session_reconciled'`，并把受影响的 id 数量打进迁移输出（§12.1 步骤 3b）。**不先收敛就建索引 = 迁移在生产上直接失败。**
 
 #### D6 · Dispatch Authority Guard（触发器）

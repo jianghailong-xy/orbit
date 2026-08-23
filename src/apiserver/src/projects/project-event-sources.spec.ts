@@ -59,14 +59,19 @@ test('the Project event producer migration owns the complete unit-06 source cont
 });
 
 test('manual task starts record one Project request and automatic starts do not', () => {
-  assert.match(tasksService, /if \(!auto && task\.projectId\) \{\s+await this\.recordManualProjectTriggers/);
+  // Both halves now read off the FROZEN command rather than off the task as it stands: `auto` and
+  // the Project are decided when the request is planned and recorded on its receipt, so a delivery
+  // arriving after the task moved Project cannot file the press's signal against a Project the
+  // press never named — or, if the task was deleted, lose it entirely.
+  assert.match(tasksService, /if \(!target\.auto && target\.projectId\) \{\s+await this\.recordManualProjectTriggers/);
   assert.match(tasksService, /SELECT "project_event_manual_trigger"\(/);
   // The batch records one request per project for the tasks that ACTUALLY STARTED, not for
   // everything it considered runnable (§13.6 SU6). A task whose supersession commits between the
   // classification and its dispatch is refused by the database, and an event written beforehand
   // would leave a durable USER request — and a Coordinator wake to answer it — for a run that never
   // existed.
-  assert.match(tasksService, /results\s*\n?\s*\.filter\(\(result\) => result\.ok\)/);
+  assert.match(tasksService, /started\.has\(item\.taskId\)/);
+  assert.match(tasksService, /results\.filter\(\(result\) => result\.ok\)/);
   assert.doesNotMatch(tasksService, /runnable\.map\(\(task\) => task\.projectId\)/);
 });
 

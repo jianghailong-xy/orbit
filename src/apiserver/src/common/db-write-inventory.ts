@@ -664,13 +664,24 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503. Capped at 2 attempts with a 60s per-attempt deadline, for the reason TaskListsService.remove gives.',
   },
   {
-    at: 'tasks/tasks.service.ts#recordManualProjectTriggers',
+    at: 'sessions/sessions.service.ts#writeFenced',
     shape: 'TX_RETRIED',
-    locks: "Whatever `project_event_manual_trigger` takes — the project row and its outbox — over a project list sorted above the closure.",
-    identity: 'A request id minted above the closure, which that function deduplicates on.',
+    locks: "The run request's row (`task_run_request`) FOR UPDATE, then whatever the write it wraps takes — for the only caller that passes a fence, a Session insert and its triggers. The receipt is not in the canonical Task/Session order because it is not in that graph: nothing else locks it, and it is taken first and released only at commit, so it adds no edge between the relations that are.",
+    identity: "The claim: owner, door, token, lease holder and attempt. The transaction writes nothing unless that exact row is still BOUND to this delivery.",
     isolation: '',
     attempts: 4,
-    replay: 'Same id and same sorted list on every attempt, so a re-run records the same trigger, not a second one.',
+    replay: 'The fence read and the write are the same transaction, so a retry re-proves the claim before re-writing. A delivery that lost its lease between attempts fails closed rather than writing under a claim it no longer has.',
+    effects: 'None. The realtime publishes and the runner nudge are outside, after the commit.',
+    answer: 'A lost fence is `TASK_RUN_REQUEST_IN_PROGRESS` from the door; anything else is the typed 503 from the global boundary.',
+  },
+  {
+    at: 'tasks/tasks.service.ts#recordManualProjectTriggers',
+    shape: 'TX_RETRIED',
+    locks: "Explicit and in canonical order, taken before anything implicit: `user` (10) FOR KEY SHARE, then every distinct `project` (40) FOR KEY SHARE in one id-ordered statement, then the audited `task` (50). 0137's marker insert has three foreign keys and PostgreSQL checks them in its own order, which is not the canonical one — taking them up front leaves each FK re-using a lock this transaction already holds. Then `task_run_manual_trigger` and whatever `project_event_manual_trigger` takes (the project row and its outbox).",
+    identity: '`taskRunManualTriggerId(token, projectId)` — a pure function of the PRESS and the Project, not a value minted per call. That is what makes a delivery of one press record one trigger.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every id is derived, so an attempt after a transient failure writes the same marker row and enqueues the same signal. The marker is what makes it exactly-once for the whole life of the request: 0117 deduplicates only while an event is UNCONSUMED, so the partial index alone would let a delivery arriving after the Coordinator answered enqueue a second one.',
     effects: 'None.',
     answer: 'Typed 503 from the global boundary.',
   },
@@ -722,6 +733,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'common/lock-order.ts#lockCreatorSessions', under: 'every rank-30 caller (I2)' },
   { at: 'common/lock-order.ts#lockTaskLists', under: 'every rank-20 caller (I2)' },
   { at: 'common/session-inbox-fence.ts#retireSessionInboxGeneration', under: 'runner-api takeover/activate/release leases' },
+  { at: 'sessions/sessions.service.ts#assertFenceHeld', under: 'sessions.writeFenced and sessions.resume' },
   { at: 'projects/project-acceptance.service.ts#writeAudit', under: 'projectAcceptance.openRun, .finalizeRun' },
   { at: 'projects/project-authorization.service.ts#authorizeInTransaction', under: 'projectReconcile.applyAction' },
   { at: 'projects/project-verification-filing.service.ts#fileInTransaction', under: 'projectReconcile.applyDecisionAction (FILE_VERIFICATION_TASK)' },
@@ -952,7 +964,12 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "tasks/tasks.service.ts#dispatchStalledListForemen", class: "INSERT", statements: 1 },
   { at: "tasks/tasks.service.ts#fileVerification", class: "INSERT", statements: 1 },
   { at: "tasks/tasks.service.ts#parkMentionDelivery", class: "RAW_FENCE", statements: 1 },
+  { at: "tasks/tasks.service.ts#bindRunRequest", class: "ONE_ROW_CAS", statements: 1, note: "Writes the frozen plan onto the run receipt (0137), fenced on `lease_holder` + `attempt` and on `status = 'OPEN'`. A holder that lost its lease matches nothing and reads back the plan the takeover bound instead of its own." },
+  { at: "tasks/tasks.service.ts#completeRunReceipt", class: "ONE_ROW_CAS", statements: 1, note: "Freezes the request's answer, fenced the same way. The value returned is read back from the row, never the local one, so a stale holder cannot answer with a result the database does not have." },
+  { at: "tasks/tasks.service.ts#leaseRunRequest", class: "RAW_FENCE", statements: 2, note: "One `INSERT … ON CONFLICT DO NOTHING` to open the receipt, then one `UPDATE … RETURNING` that takes the right to evaluate it — expiry and predicate both on `statement_timestamp()`, so two apiservers with different wall clocks cannot take each other's requests over." },
   { at: "tasks/tasks.service.ts#recordListEvent", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "tasks/tasks.service.ts#releaseRunRequest", class: "ONE_ROW_CAS", statements: 1, note: "Hands the right to evaluate back when a request was refused rather than answered, fenced on the same holder + attempt." },
+  { at: "tasks/tasks.service.ts#renewRunRequest", class: "ONE_ROW_CAS", statements: 1, note: "Re-proves the lease before each item of a bulk Run. `false` means a takeover has happened and this delivery must stop, which is the one way two evaluators could both write." },
   { at: "tasks/tasks.service.ts#removeComment", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/admin.controller.ts#deleteUser", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/admin.controller.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
@@ -1054,6 +1071,13 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "task", trigger: "task_claimed_project_move_guard", event: "BEFORE UPDATE OF \"project_id\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
   { table: "task", trigger: "task_dependency_revision_seed", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision WRITE"] },
   { table: "task", trigger: "task_dispatch_authority_derive", event: "BEFORE INSERT OR UPDATE OF \"project_id\", \"dispatch_authority\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
+  // Seeds one row per Task, so the epoch is readable and lockable for a Task with no edges and
+  // no appointment — 0132's argument for `task_dependency_revision`, and the same shape.
+  { table: "task", trigger: "task_dispatch_epoch_seed", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch WRITE"] },
+  // §7.7 D5-b4's transition table: the Task whose `run_at` or `status` moved, and the dependents
+  // of a Task whose `status` moved. It writes only the side table — never the dependent Task
+  // rows, which is the cost 0132 removed.
+  { table: "task", trigger: "task_dispatch_epoch_update", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch LOCK"] },
   { table: "task", trigger: "task_supersession_guard_insert", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0128_task_supersession_merge_receipt", takes: [] },
   { table: "task", trigger: "task_supersession_guard_update", event: "BEFORE UPDATE OF \"superseded_by_task_id\", \"status\", \"owner_id\", \"project_id\"", kind: "ROW/STATEMENT", since: "0128_task_supersession_merge_receipt", takes: [] },
   { table: "task", trigger: "task_supersession_live_session_guard", event: "BEFORE UPDATE OF \"superseded_by_task_id\", \"terminal_reason\"", kind: "ROW/STATEMENT", since: "0130_task_supersession_dispatch_guard", takes: [] },
@@ -1068,6 +1092,11 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "task_dependency", trigger: "task_dependency_revision_delete", event: "AFTER DELETE", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision LOCK"] },
   { table: "task_dependency", trigger: "task_dependency_revision_insert", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision LOCK"] },
   { table: "task_dependency", trigger: "task_dependency_revision_update", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0132_task_dependency_revision", takes: ["task_dependency_revision LOCK"] },
+  // The waiting set changed — the same surface 0132's revision watches, folded into this counter
+  // so a request token needs one number rather than two.
+  { table: "task_dependency", trigger: "task_dispatch_epoch_edges_delete", event: "AFTER DELETE", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch LOCK"] },
+  { table: "task_dependency", trigger: "task_dispatch_epoch_edges_insert", event: "AFTER INSERT", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch LOCK"] },
+  { table: "task_dependency", trigger: "task_dispatch_epoch_edges_update", event: "AFTER UPDATE", kind: "ROW/STATEMENT", since: "0137_task_run_request_receipt", takes: ["task_dispatch_epoch LOCK"] },
   { table: "workspace", trigger: "project_workspace_availability_event_source", event: "AFTER UPDATE OF \"enabled\", \"deleted_at\", \"runner_id\", \"work_dir_exists\", \"work_dir_free_bytes\"", kind: "ROW/STATEMENT", since: "0118_project_availability_event_sources", takes: ["project_event WRITE"] },
 ];
 
@@ -1091,6 +1120,10 @@ export const EXCLUDED_SOURCES: readonly ExcludedSource[] = [
   {
     path: 'deadlock/',
     why: 'Barrier fixtures and baselines. They open their own connections to a disposable server that `coordinator-pg-test-safety` refuses to point at a business database, and they run only from scripts/deadlock-barrier.sh.',
+  },
+  {
+    path: 'tasks/task-run-receipt-fake.ts',
+    why: 'The run receipt (0137) as an in-memory row, for the unit fixtures that drive the run doors against a fake Prisma. It IMPLEMENTS the raw-query methods rather than calling any, so the scan sees a write where there is no database at all; every door now opens a receipt, so five fixtures need it, and a sixth copy of the receipt lifecycle would be a sixth thing to keep in step with the migration.',
   },
   {
     path: 'projects/project-e2e-harness.ts',

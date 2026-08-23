@@ -52,7 +52,12 @@ export function dispatchRuntimeSessionId(idempotencyKey: string): string {
   return derivedUuid(`pc:v1:dispatch:runtime-session:${idempotencyKey}`);
 }
 
-function derivedUuid(name: string): string {
+/**
+ * A name folded into a UUID. Exported because the legacy task-run entrances derive their Session
+ * id the same way (see `tasks/task-run-identity.ts`): one derivation, two namespaces, so a reader
+ * comparing an id from either door is comparing the same shape.
+ */
+export function derivedUuid(name: string): string {
   const bytes = createHash('sha256').update(name).digest().subarray(0, 16);
   // RFC 9562 §4.2's version/variant fields: 5 (name-based) and 10x. See the note above on why the
   // digest is SHA-256 rather than the SHA-1 a literal v5 would use.
