@@ -91,8 +91,18 @@ function fixture(options: FixtureOptions = {}) {
     winners = {},
     turnId = null,
   } = options;
+  // Completed the way the database always completes them: a task row has an owner, a creating
+  // session and the key it is filed under, and the winner validator reads all three. A double that
+  // omits them is modelling a row PostgreSQL cannot hold.
   const byKey = new Map(
-    Object.entries(winners).map(([title, row]) => [keyFor(title), { ownerId: OWNER, ...row }]),
+    Object.entries(winners).map(([title, row]) => [keyFor(title), {
+      ownerId: OWNER,
+      creatorSessionId: SESSION,
+      title,
+      description: null,
+      idempotencyKey: keyFor(title),
+      ...row,
+    }]),
   );
   const writes: Array<Record<string, unknown>> = [];
   const transactions: number[] = [];

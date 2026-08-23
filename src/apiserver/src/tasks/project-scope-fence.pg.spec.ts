@@ -31,7 +31,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { CreatorType, type PrismaClient } from '@prisma/client';
 import { Client } from 'pg';
 import {
@@ -304,6 +304,225 @@ test('unit L3: a rotation cannot be written past', { skip, concurrency: 1, timeo
     assert.equal(after.code, 'PROJECT_SCOPE_MISMATCH');
     assert.equal(after.rule, 'R5_NO_SCOPE');
     assert.deepEqual(await tasksIn(w.projectId), ['l3-winner-task']);
+  });
+
+  // -------------------------------------------------------------------------
+  // The idempotency winner, on the concurrent path a real unique index produces
+  // -------------------------------------------------------------------------
+  //
+  // The unit tests decide what the validator concludes. What only a real index can decide is that
+  // the validator is reached at all: the read-back runs on a P2002 raised by PostgreSQL against a
+  // row that committed inside this write's own window, and a fixture that hands the winner over
+  // early never gets there. The window is forced the same way the rotation one is — the project row
+  // this write must take at rank 40 is held open, the competing row is committed while this write
+  // parks behind it, and only then is the lock released.
+
+  /** Insert a task straight into the table under `key`, as a racing writer or a fault would. */
+  async function forgeUnderKey(
+    client: Client,
+    w: World,
+    key: string,
+    over: { ownerId?: string; title?: string; creatorSessionId?: string | null } = {},
+  ): Promise<string> {
+    const id = randomUUID();
+    await client.query(
+      `INSERT INTO "task" ("id","title","status","owner_id","creator_type","creator_id",
+         "project_id","creator_session_id","idempotency_key","updated_at")
+       VALUES ($1::uuid,$2,'OPEN',$3::uuid,'USER',$3::uuid,$4::uuid,$5::uuid,$6,now())`,
+      [
+        id,
+        over.title ?? 'l3-key-race',
+        over.ownerId ?? w.ownerId,
+        over.ownerId ? null : w.projectId,
+        over.creatorSessionId === undefined ? w.sessionId : over.creatorSessionId,
+        key,
+      ],
+    );
+    return id;
+  }
+
+  /**
+   * Run `work` against a row that commits under `key` while `work` is parked at rank 40.
+   *
+   * The rotator connection is reused for its lock, not its rotation: it takes the project row, lets
+   * `work` read a world without the competing row, blocks it, commits the row, and releases. What
+   * `work` then does is exactly what it does in production when it loses the index.
+   */
+  async function underKeyRace<T>(
+    w: World,
+    key: string,
+    forge: (client: Client) => Promise<unknown>,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    await rotator.query('BEGIN');
+    await rotator.query(
+      'SELECT "id" FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', [w.projectId],
+    );
+    const running = work();
+    running.catch(() => undefined);
+    try {
+      await awaitBlockedBy(rotatorPid, 'the write parking behind the project row');
+      await forge(rotator);
+      await rotator.query('COMMIT');
+    } catch (e) {
+      await rotator.query('ROLLBACK').catch(() => undefined);
+      throw e;
+    }
+    return running;
+  }
+
+  /** The service's own key template, rebuilt here so the fixture can aim at a real key. */
+  async function keyOf(w: World, turnId: string, title: string): Promise<string> {
+    const { createHash } = await import('node:crypto');
+    return createHash('sha256')
+      .update(JSON.stringify(['task-create', w.sessionId, turnId, title, '']))
+      .digest('hex');
+  }
+
+  /** A live turn, so the create forms a key at all. */
+  async function openTurn(w: World): Promise<string> {
+    const turnId = randomUUID();
+    await admin.query(
+      `INSERT INTO "conversation_turn" ("id","session_id","seq","client_turn_id","kind","status")
+       VALUES ($1::uuid,$2::uuid,1,$3,'message','IN_FLIGHT')`,
+      [turnId, w.sessionId, turnId],
+    );
+    return turnId;
+  }
+
+  await t.test('a create that really loses the index returns the row that won it', async () => {
+    const w = await seed('l3-key-win');
+    const turnId = await openTurn(w);
+    const key = await keyOf(w, turnId, 'l3-key-race');
+    const service = serviceUnderTest();
+
+    const replay = await underKeyRace(
+      w, key,
+      (client) => forgeUnderKey(client, w, key),
+      () => service.create(
+        w.ownerId, { title: 'l3-key-race', projectId: w.projectId } as never,
+        agent(w), w.sessionId,
+      ),
+    );
+
+    assert.deepEqual(await tasksIn(w.projectId), ['l3-key-race'],
+      'exactly one row exists — the winner\'s');
+    assert.equal((replay as { title: string }).title, 'l3-key-race');
+  });
+
+  // The same interleaving, with the row that wins the index belonging to somebody else. Before the
+  // read-back was validated this returned that row to this caller as its own task.
+  await t.test('a create that loses the index to another account is refused, not answered', async () => {
+    const w = await seed('l3-key-foreign');
+    const stranger = await seed('l3-key-stranger');
+    const turnId = await openTurn(w);
+    const key = await keyOf(w, turnId, 'l3-key-foreign-race');
+    const service = serviceUnderTest();
+
+    await assert.rejects(
+      () => underKeyRace(
+        w, key,
+        (client) => forgeUnderKey(client, w, key, { ownerId: stranger.ownerId }),
+        () => service.create(
+          w.ownerId, { title: 'l3-key-foreign-race', projectId: w.projectId } as never,
+          agent(w), w.sessionId,
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException, `expected a 409, got ${error}`);
+        const body = error.getResponse() as { message?: string };
+        assert.match(String(body.message), /different account/);
+        return true;
+      },
+    );
+
+    assert.deepEqual(await tasksIn(w.projectId), [], 'and nothing of this write was left behind');
+  });
+
+  // Same account, same key, different payload — the shape a repair script or a rolled-back binary
+  // leaves. The index still fires; the row still is not this write.
+  await t.test('a create that loses the index to a different payload is refused', async () => {
+    const w = await seed('l3-key-payload');
+    const turnId = await openTurn(w);
+    const key = await keyOf(w, turnId, 'l3-key-payload-race');
+    const service = serviceUnderTest();
+
+    await assert.rejects(
+      () => underKeyRace(
+        w, key,
+        (client) => forgeUnderKey(client, w, key, { title: 'something else' }),
+        () => service.create(
+          w.ownerId, { title: 'l3-key-payload-race', projectId: w.projectId } as never,
+          agent(w), w.sessionId,
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException, `expected a 409, got ${error}`);
+        assert.match(
+          String((error.getResponse() as { message?: string }).message),
+          /different operation or payload/,
+        );
+        return true;
+      },
+    );
+
+    assert.deepEqual(await tasksIn(w.projectId), ['something else'],
+      'the forged row stands; this write added nothing');
+  });
+
+  // What a real server decides for a BATCH, and what it does not.
+  //
+  // The legitimate half is a genuine index loss: the row commits while this batch is parked at rank
+  // 40, its own INSERT loses, and the reconstruction answers with the winner. The foreign half is
+  // refused — but by the validator inside the transaction rather than the one in the catch, because
+  // under READ COMMITTED the batch's find-or-create sees the row the instant it commits and there
+  // is no lock between that read and the INSERT to hold it open any longer. That is not a gap: both
+  // reads call the SAME validator, which is the property being claimed. The catch-path
+  // reconstruction is driven directly, with the interleaving forced exactly, in
+  // `task-idempotency-winner.spec.ts` — and confirmed there by mutation.
+  await t.test('a batch that loses the index answers with its winner, or refuses it', async () => {
+    const w = await seed('l3-key-batch');
+    const turnId = await openTurn(w);
+    const key = await keyOf(w, turnId, 'l3-batch-race');
+    const service = serviceUnderTest();
+
+    const rows = await underKeyRace(
+      w, key,
+      (client) => forgeUnderKey(client, w, key, { title: 'l3-batch-race' }),
+      () => service.createMany(
+        w.ownerId, { tasks: [{ title: 'l3-batch-race', projectId: w.projectId }] } as never,
+        agent(w), w.sessionId,
+      ),
+    );
+
+    assert.deepEqual(rows.map((row) => row.title), ['l3-batch-race']);
+    assert.deepEqual(await tasksIn(w.projectId), ['l3-batch-race'], 'one row, not two');
+
+    // ...and the foreign version of the same race, on the batch's own path.
+    const other = await seed('l3-key-batch-foreign');
+    const otherTurn = await openTurn(other);
+    const otherKey = await keyOf(other, otherTurn, 'l3-batch-foreign');
+    const stranger = await seed('l3-key-batch-stranger');
+    await assert.rejects(
+      () => underKeyRace(
+        other, otherKey,
+        (client) => forgeUnderKey(client, other, otherKey, { ownerId: stranger.ownerId }),
+        () => service.createMany(
+          other.ownerId,
+          { tasks: [{ title: 'l3-batch-foreign', projectId: other.projectId }] } as never,
+          agent(other), other.sessionId,
+        ),
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof ConflictException, `expected a 409, got ${error}`);
+        assert.match(
+          String((error.getResponse() as { message?: string }).message),
+          /different account/,
+        );
+        return true;
+      },
+    );
+    assert.deepEqual(await tasksIn(other.projectId), []);
   });
 
   // The successor is not blocked by any of this: what the fence refuses is a scope that has moved,

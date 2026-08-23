@@ -64,7 +64,10 @@ test('a task created twice inside one turn collapses onto the first', async () =
   assert.ok(key && typeof key === 'string', 'an in-turn create is stamped with a key');
 
   // Second run of the SAME turn: the pre-check finds the original and returns it, creating nothing.
-  const replay = fixture({ inFlightTurn: 'turn-A', existingByKey: (k) => (k === key ? { id: 'task-orig', ownerId: OWNER } : null) });
+  const replay = fixture({ inFlightTurn: 'turn-A', existingByKey: (k) => (k === key
+      ? { id: 'task-orig', ownerId: OWNER, creatorSessionId: SESSION,
+          title: 'Ship the fix', description: null, idempotencyKey: k }
+      : null) });
   const got = await replay.service.create(OWNER, { title: 'Ship the fix' }, undefined, SESSION);
   assert.equal(replay.creates.length, 0, 'the re-run creates nothing');
   assert.equal((got as any).id, 'task-orig', 'the re-run returns the original task');
@@ -101,7 +104,21 @@ test('a re-run of a batch collapses every item and skips their edges', async () 
   // Re-run: both keys already exist, so nothing is created.
   const replay = fixture({
     inFlightTurn: 'turn-A',
-    existingByKey: (k) => (keys.has(k) ? { id: `orig-${k.slice(0, 4)}`, ownerId: OWNER } : null),
+    // Each winner carries what the database would: the item's own title under its own key, so the
+    // validator can rebuild the key from the row and agree it is this item's earlier attempt.
+    existingByKey: (k) => {
+      const original = first.creates.find((row) => row.idempotencyKey === k);
+      return original
+        ? {
+            id: `orig-${k.slice(0, 4)}`,
+            ownerId: OWNER,
+            creatorSessionId: SESSION,
+            title: original.title,
+            description: original.description ?? null,
+            idempotencyKey: k,
+          }
+        : null;
+    },
   });
   const rows = await replay.service.createMany(OWNER, { tasks: [{ title: 'A' }, { title: 'B' }] }, undefined, SESSION);
   assert.equal(replay.creates.length, 0, 'the batch re-run creates nothing');

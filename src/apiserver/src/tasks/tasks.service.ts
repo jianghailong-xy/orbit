@@ -195,6 +195,41 @@ type ScopeWriteInput = {
   scopeToken?: string | null;
 };
 
+/**
+ * One idempotent task write, as its key and its winner validator both read it.
+ *
+ * `operation` is a discriminator and not a comment: `idempotency_key` is one unique column shared
+ * by every subsystem that writes a task (§13.2's defect filer and §7.3's verification filing both
+ * key rows in it under their own templates), so what makes a row THIS request's earlier attempt is
+ * that the whole tuple below reproduces the key it is filed under — not that something was found.
+ */
+type IdempotentTaskWrite = {
+  operation: IdempotentTaskOperation;
+  sessionId: string;
+  turnId: string;
+  title: string;
+  description?: string | null;
+};
+
+export type IdempotentTaskOperation = 'CREATE_TASK';
+
+/**
+ * The operation's byte in the key preimage — FROZEN, and not the same string as the descriptor.
+ *
+ * `idempotency_key` is persisted, and every key already in the table was hashed over `task-create`.
+ * Renaming the literal to match the TypeScript spelling would recompute every key: a turn that
+ * committed its tasks before an upgrade and is redelivered after it would compute a key that
+ * matches nothing, find no winner and create the duplicates the whole mechanism exists to prevent
+ * — silently, once per in-flight turn, at every deploy. So the descriptor is free to be named for
+ * readers and the byte is not free to change at all.
+ *
+ * `task-idempotency-winner.spec.ts` pins the digest of a known input, so this table cannot be
+ * edited without a test saying so.
+ */
+const IDEMPOTENCY_OPERATION_TAG: Readonly<Record<IdempotentTaskOperation, string>> = {
+  CREATE_TASK: 'task-create',
+};
+
 /** Just the reads the scope derivation makes, so a transaction client is equally acceptable. */
 type ScopeReadClient = Pick<Prisma.TransactionClient, 'session' | 'project'>;
 
@@ -2065,8 +2100,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // only formed inside a live turn; without one this stays exactly the old create path. Checking
     // first lets the common (sequential) re-run return the original task without a write attempt.
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
-    const idempotencyKey =
-      sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, dto.title, dto.description) : undefined;
+    const idempotentWrite: IdempotentTaskWrite | undefined =
+      sessionId && turnId
+        ? {
+            operation: 'CREATE_TASK',
+            sessionId,
+            turnId,
+            title: dto.title,
+            description: dto.description,
+          }
+        : undefined;
+    const idempotencyKey = idempotentWrite ? this.taskIdempotencyKey(idempotentWrite) : undefined;
     // WINNER FIRST, and unit L3's gate strictly after it (§3 SC4, §6's `FILED --SCOPE_LOST--> FILED`).
     //
     // The order is the whole of the contract's promise that a replay is the same write. Gate first
@@ -2081,8 +2125,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // This grants nothing. The key is a hash over (session, turn, title, description) and the
     // session and turn are server-derived, so a caller cannot aim one at a row it did not write;
     // the winner is owner-checked below; and no row is written on this path at all.
-    const winner = idempotencyKey
-      ? await this.idempotencyWinner(this.prisma, ownerId, idempotencyKey)
+    const winner = idempotentWrite
+      ? await this.idempotencyWinner(this.prisma, ownerId, idempotentWrite)
       : null;
     if (winner) {
       // SU7-c: "already created" may not stand in for "already linked". See
@@ -2255,8 +2299,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (fenced) throw new ConflictException(fenced);
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
-      if (idempotencyKey && this.isDuplicateKey(e)) {
-        const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
+      if (idempotentWrite && this.isDuplicateKey(e)) {
+        // Through the SAME validator the pre-read uses. A read-back that trusted the index is a
+        // validator the concurrent path skips — and the concurrent path is the one a fault or a
+        // forged row is reached through on purpose.
+        const existing = await this.idempotencyWinner(this.prisma, ownerId, idempotentWrite);
         if (existing) {
           // The concurrent half of the same rule: this transaction rolled back, so whatever link it
           // was going to write does not exist. The winner's row is the only authority on whether
@@ -2695,11 +2742,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // be ADMITTED, and the find-or-create below decides what is actually written. A winner that
     // appears in between is simply found by the second read; the item was admitted, so nothing it
     // was allowed to do has been lost.
-    const replayed = await Promise.all(validated.map(async (item) => {
-      const key = sessionId && turnId
-        ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description)
+    // One descriptor per item, built once and used by every question asked about it: the pre-read
+    // below, the find-or-create inside the transaction, and the P2002 reconstruction after it.
+    const batchWriteOf = (item: CreateTaskBatchItemDto): IdempotentTaskWrite | undefined =>
+      sessionId && turnId
+        ? {
+            operation: 'CREATE_TASK',
+            sessionId,
+            turnId,
+            title: item.title,
+            description: item.description,
+          }
         : undefined;
-      return key ? await this.idempotencyWinner(this.prisma, ownerId, key) : null;
+    const replayed = await Promise.all(validated.map(async (item) => {
+      const write = batchWriteOf(item);
+      return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
     }));
     // Unit L3 §4, once for the whole batch and BEFORE the transaction: every item that is not a
     // replay is admitted and bound, or none is written. An item refused mid-transaction would be a
@@ -2807,10 +2864,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
         // A ref pointing at a collapsed item therefore resolves to the surviving task's id.
-        const idempotencyKey =
-          sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description) : undefined;
-        const existing = idempotencyKey
-          ? await this.idempotencyWinner(tx, ownerId, idempotencyKey)
+        const itemWrite = batchWriteOf(item);
+        const idempotencyKey = itemWrite ? this.taskIdempotencyKey(itemWrite) : undefined;
+        const existing = itemWrite
+          ? await this.idempotencyWinner(tx, ownerId, itemWrite)
           : null;
         // A parentRef names an item of this same batch, so the id it stands for only exists now.
         // Resolved into the field an already-existing parent would have used, so one write path
@@ -2901,30 +2958,48 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // write does not exist. Re-checking the winner's rows turns that into either a clean
       // idempotent answer or a typed 409 — never a batch that reports success over a supersession
       // nobody recorded. Read AFTER the rollback, deliberately: the winner is the only authority.
-      if (hasSupersessions && this.isDuplicateKey(e)) {
+      //
+      // EVERY shape of batch, not only one claiming a supersession. Gating this on
+      // `hasSupersessions` left the ordinary batch's concurrent path with no winner authority at
+      // all: it fell through to `translateProjectFk` and surfaced the index as an error, so the one
+      // shape the caller could actually retry safely was the one that got told to give up. A single
+      // create and a batch now answer a lost index the same way — with the winner, validated.
+      if (this.isDuplicateKey(e)) {
         // Rebuilt in INPUT ORDER, with each item's `ref` echoed, because this returns in place of
         // the batch's own result and a caller wiring refs to ids cannot tell the two apart. Every
         // item is reconstructed, not only the ones claiming a supersession: a partial answer would
         // be a batch that reported some of what it was asked for.
-        const replayed: Array<Task & { ref?: string }> = [];
+        //
+        // Resolved as a SET before anything is returned or asserted: all of them, or none. A batch
+        // is all-or-nothing on the way in, and reporting it item by item on the way out would let a
+        // half-identified batch answer half-successfully.
+        const winners: Array<Task | null> = [];
         for (const item of items) {
-          const key = sessionId && turnId
-            ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description)
-            : undefined;
-          const winner = key
-            ? await this.prisma.task.findUnique({ where: { idempotencyKey: key } })
-            : null;
-          if (!winner) {
-            // No key (outside a turn) or no winner: this batch cannot be shown to have happened,
-            // and its own transaction has already rolled back, so nothing of it exists. Saying so
-            // is the only honest answer — the alternative is reporting success for rows nobody
-            // can name.
-            throw new ConflictException(
-              'this batch lost a concurrent create and the winning tasks cannot all be identified, ' +
-                'so the supersession it claimed cannot be confirmed — nothing from this call was ' +
-                'written; retry',
-            );
-          }
+          // Same validator as everywhere else. This is the batch's own concurrent path, and it read
+          // rows back on the index alone — so a forged or foreign row under one item's key was
+          // returned to the caller as that item's result. A mismatch throws from in here, which is
+          // the typed 409 this whole branch owes the caller.
+          const write = batchWriteOf(item);
+          winners.push(write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null);
+        }
+        // Nothing of this batch is under any of its keys, so the index that fired was not ours —
+        // a project FK, a supersession guard, some other unique constraint. Say what it actually
+        // was rather than inventing a replay that did not happen.
+        if (winners.every((winner) => winner === null)) {
+          throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
+        }
+        if (winners.some((winner) => winner === null)) {
+          // Some items are on disk under their keys and some are not. Whatever happened, it was not
+          // this batch running twice — and this call's own transaction has already rolled back, so
+          // nothing here is a claim about rows that exist.
+          throw new ConflictException(
+            'this batch lost a concurrent create and the winning tasks cannot all be identified — '
+              + 'nothing from this call was written; retry',
+          );
+        }
+        const replayed: Array<Task & { ref?: string }> = [];
+        for (const [at, item] of items.entries()) {
+          const winner = winners[at]!;
           if (item.supersedesTaskId) {
             // SU7-c: the winner's rows are the only authority on whether the link happened. A
             // mismatch throws, and since this whole batch has already rolled back, throwing leaves
@@ -3190,16 +3265,30 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * The row already committed under an idempotency key, or null — the ONE place that question is
-   * asked, so the single create and the batch cannot answer it differently.
+   * The row already committed for an idempotent write, or null — the ONE place that question is
+   * asked and the ONE place the answer is validated.
    *
-   * Owner-checked, and a mismatch is a typed conflict rather than a miss. `idempotency_key` is
-   * unique across the whole table, so a key held by another tenant is not "no winner" — treating it
-   * as one would send this write into an INSERT that can only fail on the unique index, and the
-   * caller would get a raw P2002 instead of an answer. Returning the row instead would be worse
-   * still: a cross-tenant read. Neither is reachable in practice (the key hashes a session id, and
-   * a session belongs to one owner), and the point of writing the branch is that "not reachable"
-   * stops being an argument the moment the key template changes.
+   * Every path that can find a winner comes through here: the pre-read before the transaction, the
+   * find-or-create inside the batch's transaction, and BOTH P2002 read-backs (the single create's
+   * catch and the batch's supersession reconstruction). Those last two used to call `findUnique`
+   * directly and return whatever came back, which meant the validator was a thing the happy path
+   * did and the race path skipped — and the race path is the only one an attacker or a fault can
+   * reach on purpose.
+   *
+   * `idempotency_key` is unique across the WHOLE table and is written by other subsystems under
+   * their own templates, so "a row exists under this key" is not "this request already ran". Four
+   * facts are checked, and a failure of any is a typed 409 with nothing written:
+   *
+   *   - **owner** — a key held by another tenant is neither a miss (that would send this write into
+   *     an INSERT that can only fail on the index, surfacing a raw P2002) nor a hit (that would be
+   *     a cross-tenant read of somebody else's task).
+   *   - **operation and payload** — the key is REBUILT from the winner's own persisted title and
+   *     description, this request's session and turn, and this operation's discriminator. A row
+   *     that does not reproduce the key it is filed under was written by something other than this
+   *     request: a raw fault, a repair script, another operation reusing the column.
+   *   - **request identity** — the winner's `creator_session_id` must be the session asking. The
+   *     rebuild above already binds the session (it is in the preimage), but the rebuild cannot see
+   *     a row whose stored session was altered after the fact, and this can.
    *
    * `db` so the batch can ask inside its transaction, where the answer has to be the one its own
    * inserts will see.
@@ -3207,15 +3296,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async idempotencyWinner(
     db: Pick<Prisma.TransactionClient, 'task'>,
     ownerId: string,
-    idempotencyKey: string,
+    write: IdempotentTaskWrite,
   ): Promise<Task | null> {
+    const idempotencyKey = this.taskIdempotencyKey(write);
     const existing = await db.task.findUnique({ where: { idempotencyKey } });
     if (!existing) return null;
-    if (existing.ownerId !== ownerId) {
+    const mismatch = (why: string): never => {
+      // Deliberately says nothing about the row it refused: the caller has not been shown to own
+      // it, so naming its id, its title or its account would be the leak this branch exists to
+      // prevent. `why` is the SHAPE of the disagreement, which is all a retry needs.
       throw new ConflictException(
-        'that idempotency key belongs to another account\'s task — retry with a new request',
+        `that idempotency key is already held by a different write (${why}) — `
+          + 'nothing was written; retry with a new request',
       );
-    }
+    };
+    if (existing.ownerId !== ownerId) mismatch('different account');
+    if ((existing.creatorSessionId ?? null) !== write.sessionId) mismatch('different session');
+    // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
+    // normalised payload — or it is not this write's earlier attempt.
+    const rebuilt = this.taskIdempotencyKey({
+      operation: write.operation,
+      sessionId: write.sessionId,
+      turnId: write.turnId,
+      title: existing.title,
+      description: existing.description,
+    });
+    if (rebuilt !== existing.idempotencyKey) mismatch('different operation or payload');
     return existing;
   }
 
@@ -3347,15 +3453,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * turnId so two DIFFERENT turns that each legitimately create an identically worded task are
    * never merged. The tradeoff — two byte-identical creates within ONE turn collapse to one — is
    * deliberate and far rarer than the duplicate it prevents.
+   *
+   * The preimage is (operation, session, turn, normalised payload), and every one of those four is
+   * an INPUT rather than a literal spelled at the call site. That is what lets `idempotencyWinner`
+   * verify a row instead of assuming one: it rebuilds this key from the winner's own persisted
+   * columns and this request's identity, and a row that does not reproduce its own key is not this
+   * request's earlier attempt whatever the column says.
+   *
+   * The operation reaches the preimage through `IDEMPOTENCY_OPERATION_TAG`, which is frozen: the
+   * descriptor is for readers, the byte is for the rows already on disk.
    */
-  private taskIdempotencyKey(
-    sessionId: string,
-    turnId: string,
-    title: string,
-    description?: string,
-  ): string {
+  private taskIdempotencyKey(write: IdempotentTaskWrite): string {
     return createHash('sha256')
-      .update(JSON.stringify(['task-create', sessionId, turnId, title.trim(), (description ?? '').trim()]))
+      .update(JSON.stringify([
+        IDEMPOTENCY_OPERATION_TAG[write.operation],
+        write.sessionId,
+        write.turnId,
+        write.title.trim(),
+        (write.description ?? '').trim(),
+      ]))
       .digest('hex');
   }
 
