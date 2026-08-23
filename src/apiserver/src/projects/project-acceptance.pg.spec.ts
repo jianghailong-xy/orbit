@@ -418,6 +418,41 @@ test('unit 25A: project acceptance and the DONE hard gate', { skip, timeout: 900
     assert.equal(settled.acceptedRunId, second.id);
   });
 
+  await t.test('the route around the reopen branch: a PASS from a previous epoch is refused', async () => {
+    await emptyWorld(identity);
+    const target = await world(services.db, 'reopen-via-cancel', { acceptanceCriteria: CRITERIA });
+    const run = await passing(services, target.ownerId, target.projectId);
+    await services.projects.update(target.ownerId, target.projectId, { status: ProjectStatus.DONE } as never);
+
+    // The transition the branch above does not cover. `update`'s reopen tests `status = DONE`, so
+    // putting the project down and picking it up again retires nothing: the PASS stays live, the
+    // binding stays bound, and — since a reopen changes none of the four projections — the digest
+    // still matches perfectly. Before unit L2 that was a DONE granted on evidence gathered before
+    // the project was reopened.
+    await services.projects.update(target.ownerId, target.projectId, { status: ProjectStatus.CANCELLED } as never);
+    await services.projects.update(target.ownerId, target.projectId, { status: ProjectStatus.OPEN } as never);
+    const survivor = await services.db.projectAcceptanceRun.findUniqueOrThrow({ where: { id: run.id } });
+    assert.equal(survivor.supersededAt, null, 'nothing retired it — that is the premise of this test');
+    assert.equal(survivor.verdict, 'PASS');
+    assert.equal(String(survivor.acceptanceEpoch), '0', 'it keeps the epoch it was reached in');
+
+    const project = await services.db.project.findUniqueOrThrow({ where: { id: target.projectId } });
+    assert.equal(String(project.acceptanceEpoch), '1', 'the reopen advanced the epoch');
+
+    const refusal = await refusalOf(() =>
+      services.projects.update(target.ownerId, target.projectId, { status: ProjectStatus.DONE } as never));
+    assert.equal(refusal?.code, 'ACCEPTANCE_EVIDENCE_STALE');
+    assert.match(String(refusal?.message),
+      /passed in acceptance epoch 0, and this project is now in epoch 1/);
+
+    // And the way back is the same as everywhere else: a new attempt, in the epoch that is current.
+    const second = await passing(services, target.ownerId, target.projectId);
+    assert.equal(String(second.acceptanceEpoch), '1', 'a run opened now is stamped with the live epoch');
+    const settled = await services.projects.update(
+      target.ownerId, target.projectId, { status: ProjectStatus.DONE } as never);
+    assert.equal(settled.acceptedRunId, second.id);
+  });
+
   await t.test('a concluded run and its criteria cannot be rewritten', async () => {
     await emptyWorld(identity);
     const target = await world(services.db, 'immutable', { acceptanceCriteria: CRITERIA });
