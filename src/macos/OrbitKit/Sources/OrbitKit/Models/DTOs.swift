@@ -190,6 +190,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     public let runState: SessionRunState?
     /// OPEN / COMPLETED / TRASH, independent from execution state.
     public let lifecycleState: SessionLifecycleState?
+    /// The canonical execution atom (Session State V2 §2), absent until the server sends it. A
+    /// malformed one decodes to nil rather than failing the row; read `effectiveExecution`, which
+    /// falls back to the legacy fields when there is none.
+    public let execution: SessionExecution?
     /// When this session moved to Completed. Older control planes use a legacy wire key; decoding
     /// normalizes both spellings into this canonical property without reusing the mixed
     /// `sessionState=COMPLETED` value (which can also mean a succeeded run still in Open).
@@ -254,10 +258,23 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
     public let tags: [SessionTag]?
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    /// An unrecognized `runStatus` steps aside for `status`, the same way an unrecognized
+    /// `runState` steps aside for the raw status: the newer field is preferred, not obeyed.
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
+    }
+    /// The canonical atom the server sent, or the one derived from the legacy fields when it sent
+    /// none. Nothing in this build's presentation reads it yet — stage R adds the reading, stage C
+    /// moves the glyph, the row and the composer onto it.
+    public var effectiveExecution: SessionExecution {
+        execution ?? .derived(runState: effectiveRunState,
+                              engineTurnActive: engineTurnActive == true,
+                              ending: capabilities?.resumeBlockedReason == .ending)
     }
     /// Whether to draw this session as working — a port of the web console's `isGenerating`.
     /// `.running` is the dispatched case; a parked session with `engineTurnActive` is a turn the
@@ -309,6 +326,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        execution = values.decodeExecutionIfPresent(.execution)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         completedAt = try values.decodeIfPresent(String.self, forKey: .completedAt)
@@ -354,13 +372,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 engineTurnActive: Bool? = nil,
                 error: String? = nil, endReason: String? = nil, agent: SessionAgentRef? = nil,
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
-                tags: [SessionTag]? = nil, retryAt: String? = nil) {
+                tags: [SessionTag]? = nil, retryAt: String? = nil,
+                execution: SessionExecution? = nil) {
         self.id = id
         self.title = title
         self.status = status
         self.runStatus = runStatus
         self.sessionState = sessionState
         self.runState = runState
+        self.execution = execution
         self.lifecycleState = lifecycleState
         self.completedAt = completedAt
         self.deletedAt = deletedAt
@@ -698,6 +718,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// Product-facing execution state and lifecycle location, both optional for older servers.
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
+    /// The canonical execution atom, absent until the server sends it. See `effectiveExecution`.
+    public let execution: SessionExecution?
     /// Authoritative action availability from newer servers. nil retains legacy local inference.
     public let capabilities: SessionCapabilities?
     /// The isolated branch this session's work lives on (`orbit/<slug>-<hash>`), or nil pre-isolation.
@@ -737,9 +759,21 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
     public let retryAttempts: Int?
 
-    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    public var effectiveRunStatus: RunStatus? {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status ?? runStatus
+    }
     public var effectiveRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+    /// The canonical atom, or one derived from the legacy fields. Optional for the same reason
+    /// `effectiveRunState` is: this DTO is deliberately slim enough to carry no execution field at
+    /// all, and inventing an atom for a payload that states nothing would be worse than nil.
+    public var effectiveExecution: SessionExecution? {
+        if let execution { return execution }
+        guard let effectiveRunState else { return nil }
+        return .derived(runState: effectiveRunState,
+                        ending: capabilities?.resumeBlockedReason == .ending)
     }
     public var effectiveLifecycleState: SessionLifecycleState? {
         guard let lifecycleState, lifecycleState != .unknown else { return nil }
@@ -756,6 +790,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        execution = values.decodeExecutionIfPresent(.execution)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
@@ -787,12 +822,14 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
-                retryAt: String? = nil, retryAttempts: Int? = nil) {
+                retryAt: String? = nil, retryAttempts: Int? = nil,
+                execution: SessionExecution? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
         self.sessionState = sessionState
         self.runState = runState
+        self.execution = execution
         self.lifecycleState = lifecycleState
         self.capabilities = capabilities
         self.branch = branch
@@ -907,6 +944,8 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// New orthogonal execution and lifecycle dimensions. Optional for old search endpoints.
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
+    /// The canonical execution atom, absent until the server sends it. See `effectiveExecution`.
+    public let execution: SessionExecution?
     public let agent: SessionAgentRef?
     public let runnerId: String?
     public let taskId: String?
@@ -924,10 +963,19 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
     /// located client-side (see the web `splitHighlight`) — collapsing invalidates any offset.
     public let snippet: String?
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
+    }
+    /// The canonical atom, or one derived from the legacy fields. A search hit carries no
+    /// capabilities and no `engineTurnActive`, so the derived atom cannot express STOPPING or a
+    /// self-driven turn here — the palette's glyph never distinguished them either.
+    public var effectiveExecution: SessionExecution {
+        execution ?? .derived(runState: effectiveRunState)
     }
     public var effectiveLifecycleState: SessionLifecycleState {
         if let lifecycleState, lifecycleState != .unknown { return lifecycleState }
@@ -948,6 +996,7 @@ public struct SessionSearchHit: Codable, Equatable, Sendable, Identifiable {
         runStatus = try c.decodeIfPresent(RunStatus.self, forKey: .runStatus)
         sessionState = try c.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try c.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        execution = c.decodeExecutionIfPresent(.execution)
         let legacy = try decoder.container(keyedBy: LegacyCodingKeys.self)
         lifecycleState = try c.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)

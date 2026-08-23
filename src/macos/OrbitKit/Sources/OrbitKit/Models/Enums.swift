@@ -14,8 +14,23 @@ public enum RunStatus: String, Codable, Sendable {
     case awaitingInput = "AWAITING_INPUT"
     /// A turn was interrupted by the user; the session stays alive.
     case interrupted = "INTERRUPTED"
+    /// Forward compatibility: a status this build does not know — one a newer control plane added,
+    /// or the retired `PARKED` label Postgres cannot drop from the physical enum. Decoding it as a
+    /// value rather than an error is the whole point: a single unrecognized status used to fail the
+    /// entire session list, so one row nobody could read blanked every row anyone could.
+    ///
+    /// Fail-closed everywhere it lands (contract §6): neither live nor terminal below, `.blocked`
+    /// in `ComposerLogic.availability`, and `SessionRunState.unknown` out of `resolve` — never
+    /// `.ended`, which would be a verdict nothing supports.
+    case unknown = "UNKNOWN"
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = RunStatus(rawValue: raw) ?? .unknown
+    }
 
     /// Statuses where the session is live / resumable (composer should allow sending).
+    /// `.unknown` is deliberately not among them.
     public var isLive: Bool {
         switch self {
         case .running, .awaitingInput, .interrupted: return true
@@ -24,7 +39,8 @@ public enum RunStatus: String, Codable, Sendable {
     }
 
     /// The run is over: nothing more can be delivered to it without a resume. Not the inverse of
-    /// `isLive` — `pending` is neither (the session is queued, waiting for a runner).
+    /// `isLive` — `pending` is neither (the session is queued, waiting for a runner), and neither
+    /// is `.unknown`: a status we could not read is not permission to resume it either.
     public var isTerminal: Bool {
         switch self {
         case .succeeded, .failed, .cancelled: return true
@@ -91,6 +107,11 @@ public enum SessionRunState: String, Codable, Sendable {
             // retired PARKED-era 'idle'/'orphaned' reasons settle here. None of them differ in
             // what the user can do next.
             return .ended
+        case .unknown:
+            // Contract D1. A status we could not decode reads as unknown, never as `.ended`: the
+            // legacy mapping's silent slide to a neutral terminal (and, with `completedAt`, on to
+            // a "completed" reading) announced an ending that nothing in the payload said.
+            return .unknown
         }
     }
 

@@ -118,12 +118,39 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public let deletedAt: String?
     public let createdAt: String?
     public let agent: AgentNameRef?
+    /// The canonical execution atom, absent until the server sends it. See `effectiveExecution`.
+    public let execution: SessionExecution?
 
     /// Resolve the task detail's modern run state first, retaining compatibility with older
     /// servers that only returned the raw runner status or the legacy mixed session state.
     public var resolvedRunState: SessionRunState? {
         SessionRunState.resolveOptional(runState, legacy: sessionState,
                                         status: status, endReason: endReason)
+    }
+
+    /// The canonical atom, or one derived from the legacy fields. Optional because a reference
+    /// this thin may state no execution at all — `creatorSession` omits most of the row.
+    public var effectiveExecution: SessionExecution? {
+        if let execution { return execution }
+        guard let resolvedRunState else { return nil }
+        return .derived(runState: resolvedRunState)
+    }
+
+    /// Hand-written only so a malformed `execution` cannot fail the task payload it rides in; the
+    /// rest is what the compiler would have synthesized.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        status = try c.decodeIfPresent(RunStatus.self, forKey: .status)
+        runState = try c.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        sessionState = try c.decodeIfPresent(SessionState.self, forKey: .sessionState)
+        endReason = try c.decodeIfPresent(String.self, forKey: .endReason)
+        archivedAt = try c.decodeIfPresent(String.self, forKey: .archivedAt)
+        deletedAt = try c.decodeIfPresent(String.self, forKey: .deletedAt)
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt)
+        agent = try c.decodeIfPresent(AgentNameRef.self, forKey: .agent)
+        execution = c.decodeExecutionIfPresent(.execution)
     }
 }
 

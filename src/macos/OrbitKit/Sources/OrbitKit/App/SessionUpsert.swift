@@ -40,11 +40,16 @@ public extension Session {
             agent: agent ?? summary.agent.map {
                 SessionAgentRef(id: $0.id, name: $0.name, provider: nil, model: $0.model, effort: nil)
             },
-            // The one field here whose absence and whose null mean different things — see the
-            // DTO. It travels with the status because it qualifies it: the summary that turns a
-            // row FAILED is the same one that has to say the failure is being retried, and the
-            // summary that ends the retry is what stops the row saying so.
-            retryAt: summary.retryAt
+            // The two fields here whose absence and whose null mean different things — see the
+            // DTO. `retryAt` travels with the status because it qualifies it: the summary that
+            // turns a row FAILED is the same one that has to say the failure is being retried, and
+            // the summary that ends the retry is what stops the row saying so.
+            retryAt: summary.retryAt,
+            // The canonical atom is replaced WHOLE. Merging its halves — keeping an outcome
+            // because the new atom does not carry one — is how a resumed session would keep
+            // reporting the verdict of the run before it: the resume's atom is GENERATING with no
+            // outcome, and that missing outcome is the statement, not a gap to fill in.
+            execution: summary.execution
         )
     }
 
@@ -78,7 +83,8 @@ public extension Session {
                          agent: SessionAgentRef? = nil,
                          // Doubly optional so a caller can clear it: `nil` keeps the row's value,
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
-                         retryAt: String?? = nil) -> Session {
+                         retryAt: String?? = nil,
+                         execution: SessionExecution?? = nil) -> Session {
         Session(id: id,
                 title: title ?? self.title,
                 status: status ?? self.status,
@@ -111,6 +117,7 @@ public extension Session {
                 createdAt: createdAt,
                 lastTurnAt: lastTurnAt ?? self.lastTurnAt,
                 tags: tags,
-                retryAt: retryAt ?? self.retryAt)
+                retryAt: retryAt ?? self.retryAt,
+                execution: execution ?? self.execution)
     }
 }

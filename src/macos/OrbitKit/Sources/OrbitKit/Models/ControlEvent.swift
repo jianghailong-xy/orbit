@@ -85,6 +85,16 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// Orthogonal execution state and lifecycle location, omitted by older control planes.
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
+    /// The canonical execution atom this summary carries, if any.
+    ///
+    /// Doubly optional for the same reason `retryAt` is, and it matters more here: the atom is
+    /// replaced WHOLE or not at all (`SessionUpsert`), because its two halves belong to one
+    /// reading. `nil` is an older control plane that never sends the key — keep whatever the row
+    /// has. `.some(nil)` is this server saying it has no canonical atom (null, or an object that
+    /// isn't one) — drop the row's, which may be a previous epoch's. `.some(atom)` replaces it,
+    /// and an atom whose `outcome` is nil is precisely how a resumed run clears the SUCCEEDED the
+    /// row was still showing.
+    public let execution: SessionExecution??
     public let capabilities: SessionCapabilities?
     public let agentId: String?
     public let agent: AgentRef?
@@ -100,9 +110,19 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// — it maps an explicit null to nil as well — so the decoder asks `contains` instead.
     public let retryAt: String??
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+    /// The atom this summary states, or one derived from its legacy fields. The summary carries no
+    /// `engineTurnActive` — a self-driven turn is one of the fields it deliberately leaves to the
+    /// row — so the derived atom here cannot report GENERATING on a parked session.
+    public var effectiveExecution: SessionExecution {
+        (execution ?? nil) ?? .derived(runState: effectiveRunState,
+                                       ending: capabilities?.resumeBlockedReason == .ending)
     }
     public var effectiveLifecycleState: SessionLifecycleState? {
         guard let lifecycleState, lifecycleState != .unknown else { return nil }
@@ -120,6 +140,7 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         runStatus = try values.decodeIfPresent(RunStatus.self, forKey: .runStatus)
         sessionState = try values.decodeIfPresent(SessionState.self, forKey: .sessionState)
         runState = try values.decodeIfPresent(SessionRunState.self, forKey: .runState)
+        execution = values.decodeExecutionSlot(.execution)
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         capabilities = try values.decodeIfPresent(SessionCapabilities.self, forKey: .capabilities)
@@ -141,11 +162,20 @@ public struct ControlSessionEnded: Codable, Equatable, Sendable {
     public let runState: SessionRunState?
     public let lifecycleState: SessionLifecycleState?
     public let endReason: String?
+    /// The canonical execution atom for the run that just ended, if the control plane sends one.
+    public let execution: SessionExecution?
 
-    public var effectiveRunStatus: RunStatus { runStatus ?? status }
+    public var effectiveRunStatus: RunStatus {
+        if let runStatus, runStatus != .unknown { return runStatus }
+        return status
+    }
     public var effectiveRunState: SessionRunState {
         SessionRunState.resolve(runState, legacy: sessionState,
                                 status: effectiveRunStatus, endReason: endReason)
+    }
+    /// The atom this event states, or one derived from its legacy fields.
+    public var effectiveExecution: SessionExecution {
+        execution ?? .derived(runState: effectiveRunState)
     }
     public var effectiveLifecycleState: SessionLifecycleState? {
         guard let lifecycleState, lifecycleState != .unknown else { return nil }
@@ -164,6 +194,7 @@ public struct ControlSessionEnded: Codable, Equatable, Sendable {
         lifecycleState = try values.decodeIfPresent(SessionLifecycleState.self, forKey: .lifecycleState)
             ?? legacy.decodeIfPresent(SessionLifecycleState.self, forKey: .filingState)
         endReason = try values.decodeIfPresent(String.self, forKey: .endReason)
+        execution = values.decodeExecutionIfPresent(.execution)
     }
 }
 

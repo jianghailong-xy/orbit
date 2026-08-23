@@ -523,7 +523,12 @@ public struct TranscriptReducer: Sendable, Codable {
 
     private mutating func endTurn(_ ev: RunEvent) {
         flushStreaming()
-        if let s = str(ev, "status"), let st = RunStatus(rawValue: s) {
+        // `st != .unknown` keeps the reducer's reading of a status string it does not recognize
+        // exactly where it was before `RunStatus` gained that case: unrecognized falls to the
+        // parked default here, and is ignored in `applyStatus`. The forward-compat floor is for
+        // decoding a payload without losing it, not for latching a stream onto a status nothing
+        // in the composer will act on.
+        if let s = str(ev, "status"), let st = RunStatus(rawValue: s), st != .unknown {
             setStatus(st)
         } else {
             setStatus(.awaitingInput)
@@ -860,7 +865,7 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     private mutating func applyStatus(_ ev: RunEvent) {
-        if let s = str(ev, "status"), let st = RunStatus(rawValue: s) { setStatus(st) }
+        if let s = str(ev, "status"), let st = RunStatus(rawValue: s), st != .unknown { setStatus(st) }
     }
 
     // MARK: - helpers

@@ -33,6 +33,10 @@ public enum ComposerLogic {
         case .awaitingInput, .interrupted: return .sendNow
         case .running, .pending: return .queue
         case .succeeded, .failed, .cancelled: return .sendNow
+        // Fail closed (contract §6): a status this build could not decode says nothing about
+        // whether the session can take a message, and every wrong guess here is a send the
+        // server will refuse — or worse, one it will accept into a session that is being torn down.
+        case .unknown: return .blocked
         }
     }
 
@@ -134,7 +138,7 @@ public enum ComposerLogic {
     /// edits (model / permission / effort) apply immediately via PATCH /config. Terminal-but-
     /// resumable sessions instead carry the local pick on the next resume.
     public static func isLive(status: RunStatus) -> Bool {
-        !shouldResume(status: status)
+        status != .unknown && !shouldResume(status: status)
     }
 
     /// Whether the composer's single primary button shows STOP (interrupt the turn) instead of SEND.
