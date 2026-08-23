@@ -54,6 +54,16 @@ export class CreateTaskDto {
   // The project this task is work towards. Must be owned by the caller. Orthogonal to listId:
   // a list decides how the task runs, a project states what it is for.
   @IsOptional() @IsPublicId() projectId?: string;
+  // Unit L3: the coordination scope this write claims to be made under, as one opaque field
+  // (`psc:v1:<projectId>:<generation>`; see docs/project-coordinator-scope-contract.md §2).
+  //
+  // NOT a credential and not `@IsPublicId`: it contains no secret, any client can compute it, and
+  // the server derives the real scope from the session row and only COMPARES. What it buys is that
+  // a projectId which disagrees with the generation beside it is not representable, and that every
+  // write records which coordination scope authored it. A client that sends none is scoped exactly
+  // the same way (§8 CM1 — a missing token is not authorization); all it loses is the ability to
+  // be told WHICH half moved when a rotation refuses it.
+  @IsOptional() @IsString() @MaxLength(128) scopeToken?: string;
   // The task this one is a part of. Must be owned by the caller and belong to the same project —
   // a subtask of work in another project is a statement no reader could act on.
   @IsOptional() @IsPublicId() parentTaskId?: string;
@@ -210,6 +220,8 @@ export class UpdateTaskDto {
   // would leave this task in a different project from its parent or its subtasks — see
   // TasksService.assertHierarchyConsistent.
   @IsOptional() @IsPublicId() projectId?: string | null;
+  // See CreateTaskDto.scopeToken. Compared, never trusted.
+  @IsOptional() @IsString() @MaxLength(128) scopeToken?: string;
   // null detaches from its parent; a string makes this task part of that one. Rejected for a
   // self-parent, for a cycle, and across projects.
   @IsOptional() @IsPublicId() parentTaskId?: string | null;

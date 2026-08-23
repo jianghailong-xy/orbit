@@ -23,6 +23,13 @@ import { TasksService } from './tasks.service';
  * before and after; enforcement is unit L3's, and L2 refusing here would put the rule in the one
  * place the contract says it must not be — a service, ahead of the state it is supposed to leave
  * behind (§8 CM2's observe-then-enforce).
+ *
+ * L3 has since landed that enforcement, so the cross-project cases below run in the OBSERVE phase
+ * — which is not a way around the new rule but the phase §8 CM2 defines for exactly this: the
+ * write lands, the decision is audited, and the discrepancy row this unit exists to make readable
+ * is still written. Under `enforce` the same call is refused, which is
+ * `task-project-scope-enforcement.spec.ts`'s claim rather than this file's. Nothing here asserts
+ * anything about whether the write is allowed; every assertion is about what the row records.
  */
 
 const OWNER = '00000000-0000-7000-8000-000000000901';
@@ -49,7 +56,15 @@ function fixture(session: SessionRow | null) {
     // The canonical lock order pre-locks the owner and the creator sessions before the write. Both
     // are locks: nothing reads what they return, so an empty result is the whole of the behaviour.
     $queryRaw: async () => [],
-    project: { findFirst: async () => ({ id: OTHER }) },
+    project: {
+      findFirst: async ({ where }: { where: { id: string } }) => ({ where }.where.id
+        ? { id: where.id, runtime: null }
+        : null),
+      // Unit L3 §4 R8 reads the status of both ends of a write. Both open, so the observed
+      // decision is the interesting one — the undeclared crossing — rather than a settled project.
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.map((id) => ({ id, status: 'OPEN' })),
+    },
     taskList: { findMany: async () => [] },
     session: { findFirst: async () => session },
     conversationTurn: { findFirst: async () => null },
@@ -66,6 +81,22 @@ function fixture(session: SessionRow | null) {
   return { service, writes };
 }
 
+/**
+ * §8 CM2's observation phase. The default is `enforce`, so a cross-project create is refused —
+ * correctly, by L3. This file is about what such a write RECORDS, which is only observable in the
+ * phase where it still happens.
+ */
+async function observing<T>(run: () => Promise<T>): Promise<T> {
+  const before = process.env.ORBIT_PROJECT_SCOPE_MODE;
+  process.env.ORBIT_PROJECT_SCOPE_MODE = 'observe';
+  try {
+    return await run();
+  } finally {
+    if (before === undefined) delete process.env.ORBIT_PROJECT_SCOPE_MODE;
+    else process.env.ORBIT_PROJECT_SCOPE_MODE = before;
+  }
+}
+
 const COORDINATOR_SESSION: SessionRow = {
   id: SESSION,
   taskId: RUNNING_TASK,
@@ -75,12 +106,12 @@ const COORDINATOR_SESSION: SessionRow = {
 
 test('a coordinator filing into another project records the scope it wrote FROM', async () => {
   const { service, writes } = fixture(COORDINATOR_SESSION);
-  await service.create(
+  await observing(() => service.create(
     OWNER,
     { title: 'work', projectId: OTHER } as never,
     { type: CreatorType.AGENT, id: OWNER },
     SESSION,
-  );
+  ));
 
   assert.equal(writes.length, 1);
   const row = writes[0];
@@ -105,10 +136,10 @@ test('a session that coordinates nothing falls back to the project of the task i
     task: { projectId: COORDINATED },
     coordinatorForProject: null,
   });
-  await service.create(
+  await observing(() => service.create(
     OWNER, { title: 'work', projectId: OTHER } as never,
     { type: CreatorType.AGENT, id: OWNER }, SESSION,
-  );
+  ));
   assert.equal(writes[0].discoveredFromProjectId, COORDINATED);
   assert.equal(writes[0].triggerEvent, 'task.session_filed');
 });
@@ -117,10 +148,10 @@ test('a session that is neither guesses nothing', async () => {
   const { service, writes } = fixture({
     id: SESSION, taskId: null, task: null, coordinatorForProject: null,
   });
-  await service.create(
+  await observing(() => service.create(
     OWNER, { title: 'work', projectId: OTHER } as never,
     { type: CreatorType.AGENT, id: OWNER }, SESSION,
-  );
+  ));
   // Null rather than a guess: "I could not tell" and "it came from nowhere" are the same fact, and
   // inventing a scope here is where reading this column as authority would begin.
   assert.equal(writes[0].discoveredFromProjectId, null);
@@ -142,7 +173,7 @@ test('a user-API create records no provenance at all', async () => {
 
 test('nothing in a request body can reach the provenance columns', async () => {
   const { service, writes } = fixture(COORDINATOR_SESSION);
-  await service.create(
+  await observing(() => service.create(
     OWNER,
     {
       title: 'work',
@@ -155,7 +186,7 @@ test('nothing in a request body can reach the provenance columns', async () => {
     } as never,
     { type: CreatorType.AGENT, id: OWNER },
     SESSION,
-  );
+  ));
   const row = writes[0];
   assert.equal(row.discoveredFromProjectId, COORDINATED, 'the session decided, not the body');
   assert.equal(row.triggerEvent, 'coordinator.session_filed');

@@ -102,7 +102,20 @@ export type ProjectAuthorizationReasonCode =
   | 'SESSION_BUDGET_EXHAUSTED'
   | 'PROVIDER_UNAVAILABLE'
   | 'RUNNER_UNAVAILABLE'
-  | 'RUNTIME_REQUIREMENT_UNMET';
+  | 'RUNTIME_REQUIREMENT_UNMET'
+  // Unit L3 (`docs/project-coordinator-scope-contract.md` §5, EC6): the four codes the write-scope
+  // contract introduces. They join this union rather than living beside it because they are
+  // refusals the same resolution chain emits about the same principals, and BL2 is what makes
+  // "introduce a code" and "classify it" one act — a code in neither blocker list falls through to
+  // UNKNOWN_FAILURE and stops the project's automatic dispatch.
+  //
+  // The takeover answer is NOT here: a write from a rotated-away scope refuses with the existing
+  // `COORDINATOR_GENERATION_MOVED` (§5 EC1), which the coordinator turn executor has always
+  // treated as retryable rather than as a blocker.
+  | 'PROJECT_SCOPE_MISMATCH'
+  | 'UNMAPPED_PROJECT_WORK'
+  | 'CROSS_PROJECT_APPROVAL_REQUIRED'
+  | 'PROJECT_REOPEN_REQUIRED';
 
 export interface ExplicitProviderFallback {
   provider: string;

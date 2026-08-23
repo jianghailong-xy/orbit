@@ -80,6 +80,10 @@ function makeService(subject: Subject = {}) {
       },
     },
     taskDependency: { findMany: async () => [] },
+    // The filed check's dispatch epoch (0137). A row this method has just created is at the epoch
+    // its seed trigger gave it, and reading it is what makes the token below a fact taken from the
+    // database rather than a constant this code assumed.
+    $queryRaw: async () => [{ epoch: 0n }],
     // Honours the caller's filter rather than returning a fixed number: which question the
     // dispatcher asks of the session table is the contract under test.
     session: {
@@ -101,12 +105,17 @@ function makeService(subject: Subject = {}) {
     publishForUser() {},
     publishTaskChanged() {},
   } as never);
-  (service as unknown as { execute: unknown }).execute = async (_o: string, id: string) => {
+  const tokens: string[] = [];
+  (service as unknown as { execute: unknown }).execute = async (
+    _o: string, id: string, _auto: unknown, token: string,
+  ) => {
     executed.push(id);
+    tokens.push(token);
   };
   return {
     created,
     executed,
+    tokens,
     fileFor: () =>
       (
         service as unknown as { fileVerification(o: string, t: string): Promise<void> }
@@ -123,6 +132,11 @@ test('a task reporting DONE in an opted-in list gets a verification run', async 
   assert.equal(f.created[0].verifiesTaskId, TASK_ID);
   assert.equal(f.created[0].listId, 'list-1');
   assert.deepEqual(f.executed, ['verify-1']);
+  // The one run this check exists for, named `<kind>:<task>:<epoch>` like every other automatic
+  // request. Task-scoped, so two checks filed for two subjects are two requests rather than one
+  // answered with the other's Session; and stamped with the moment the row was filed at, so a
+  // redelivery is the same request and a later moment on the same row would not be.
+  assert.deepEqual(f.tokens, ['first-run:verify-1:0']);
 });
 
 test('the brief leads with the evidence question, not the content one', async () => {

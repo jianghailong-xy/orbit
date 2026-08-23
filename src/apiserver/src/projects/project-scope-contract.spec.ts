@@ -4,7 +4,11 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { bare, column, headingNumbers, section, tableRows, tables } from './contract-doc';
-import { PROJECT_BLOCKER_KINDS } from './project-blocker';
+import {
+  PROJECT_BLOCKER_KINDS,
+  PROJECT_BLOCKER_NON_BLOCKING_REFUSALS,
+  PROJECT_BLOCKER_REFUSAL_KINDS,
+} from './project-blocker';
 import {
   AUTHORITATIVE_OWNERSHIP_FIELD,
   SCOPE_ACCEPTANCE_MAP,
@@ -133,9 +137,25 @@ test('EC1: the reused codes are really reused, and the new ones are really new',
     const known = reasonCodes.has(code) || TURN_SERVICE.includes(`'${code}'`);
     assert.ok(known, `${code} is declared as reused but nothing else in the tree declares it`);
   }
+  // The other direction changed when unit L3 landed. Before it, "new" could be checked as "not in
+  // the union"; EC6 then REQUIRED L3 to put these four in that union and classify each one, so
+  // absence would now mean the wiring is missing rather than that the code is new. What "new" has
+  // always meant is what is asserted instead: it is not one of the reused codes, it is not a
+  // second spelling of one, and it is classified exactly once (PAC §12 E2 / §5 EC6).
+  const reused = new Set<string>(SCOPE_REUSED_REFUSAL_CODES);
   for (const code of SCOPE_NEW_REFUSAL_CODES) {
-    assert.ok(!reasonCodes.has(code),
-      `${code} is declared as new but already exists — it would be a synonym (PAC §12 E2)`);
+    assert.ok(!reused.has(code), `${code} is declared as both new and reused`);
+    assert.ok(reasonCodes.has(code),
+      `${code} is declared as new but L3 never added it to ProjectAuthorizationReasonCode (§5 EC6)`);
+    const inKinds = code in PROJECT_BLOCKER_REFUSAL_KINDS;
+    const inNonBlocking = PROJECT_BLOCKER_NON_BLOCKING_REFUSALS.has(code);
+    assert.ok(inKinds !== inNonBlocking,
+      `${code} must be classified exactly once — it is in ${inKinds && inNonBlocking ? 'both' : 'neither'} blocker list (§5 EC6)`);
+    assert.equal(
+      inKinds ? PROJECT_BLOCKER_REFUSAL_KINDS[code] : null,
+      SCOPE_REFUSAL_POLICY[code].blockerKind,
+      `${code}: §5's blocker kind and the classification disagree`,
+    );
   }
 });
 

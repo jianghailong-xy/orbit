@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 
 import { ArgumentsHost, ForbiddenException, HttpException, HttpServer } from '@nestjs/common';
@@ -341,7 +342,19 @@ function answerFor(raised: unknown) {
 test('a duplicate key is answered on the first attempt, not retried', async () => {
   // The concurrent re-run of one turn: the winner committed between this call's pre-check and its
   // INSERT. Retrying could only reach the same unique index a beat later.
-  const winner = { id: 'task-winner' };
+  // Spelled out the way the database holds it: the winner validator reads the owner, the creating
+  // session and the key the row is filed under, so a double that carries only an id is a row
+  // PostgreSQL could not have.
+  const winner = {
+    id: 'task-winner',
+    ownerId: OWNER,
+    creatorSessionId: SESSION,
+    title: 'Ship the fix',
+    description: null,
+    idempotencyKey: createHash('sha256')
+      .update(JSON.stringify(['task-create', SESSION, 'turn-A', 'Ship the fix', '']))
+      .digest('hex'),
+  };
   // The race in order: the pre-check misses, the winner commits, this INSERT collides, and the
   // post-collision lookup finds what the pre-check could not have seen.
   let lookups = 0;

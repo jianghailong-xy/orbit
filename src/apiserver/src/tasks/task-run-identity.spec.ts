@@ -52,25 +52,28 @@ test('the legacy door and the Coordinator door never mint the same id for the sa
   assert.notEqual(taskRunDesiredSessionId(key), dispatchDesiredSessionId(key));
 });
 
-test('an automatic door names the durable fact it acted on, and each fact is its own request', () => {
-  const appointment = new Date('2026-08-23T09:00:00.000Z');
-  assert.equal(
-    TASK_RUN_TRIGGER.scheduled(TASK, appointment),
-    `sched:${TASK}:2026-08-23T09:00:00.000Z`,
-  );
-  // Two passes over the same appointment are one dispatch; the next appointment is a new name.
-  assert.equal(
-    TASK_RUN_TRIGGER.scheduled(TASK, new Date(appointment)),
-    TASK_RUN_TRIGGER.scheduled(TASK, appointment),
-  );
-  assert.notEqual(
-    TASK_RUN_TRIGGER.scheduled(TASK, appointment),
-    TASK_RUN_TRIGGER.scheduled(TASK, new Date('2026-08-30T09:00:00.000Z')),
-  );
-  // The prerequisite revision, whichever numeric shape it arrives in from Prisma or raw SQL.
+test('an automatic door names the MOMENT it acted on, and each moment is its own request', () => {
+  assert.equal(TASK_RUN_TRIGGER.scheduled(TASK, 7n), `sched:${TASK}:7`);
   assert.equal(TASK_RUN_TRIGGER.dependency(TASK, 4n), `dep:${TASK}:4`);
-  assert.equal(TASK_RUN_TRIGGER.dependency(TASK, 4), TASK_RUN_TRIGGER.dependency(TASK, 4n));
-  assert.notEqual(TASK_RUN_TRIGGER.dependency(TASK, 4n), TASK_RUN_TRIGGER.dependency(TASK, 5n));
+  assert.equal(TASK_RUN_TRIGGER.firstRun(TASK, 0n), `first-run:${TASK}:0`);
+  // Whichever numeric shape the epoch arrives in — BigInt from Prisma, number or string from raw
+  // SQL — it is the same moment, so it must be the same name.
+  for (const kind of ['scheduled', 'dependency', 'firstRun'] as const) {
+    assert.equal(TASK_RUN_TRIGGER[kind](TASK, 4), TASK_RUN_TRIGGER[kind](TASK, 4n));
+    assert.equal(TASK_RUN_TRIGGER[kind](TASK, '4'), TASK_RUN_TRIGGER[kind](TASK, 4n));
+    // Two passes over the same moment are one request; the next moment is a new name.
+    assert.notEqual(TASK_RUN_TRIGGER[kind](TASK, 4n), TASK_RUN_TRIGGER[kind](TASK, 5n));
+  }
+  // The KIND is part of the name, so two doors acting at the same epoch are two requests rather
+  // than one answered with the other's Session.
+  assert.equal(
+    new Set([
+      TASK_RUN_TRIGGER.scheduled(TASK, 4n),
+      TASK_RUN_TRIGGER.dependency(TASK, 4n),
+      TASK_RUN_TRIGGER.firstRun(TASK, 4n),
+    ]).size,
+    3,
+  );
   // One press of a bulk Run is one request per task inside it, never one for the whole press.
   assert.notEqual(TASK_RUN_TRIGGER.batch(PRESS, TASK), TASK_RUN_TRIGGER.batch(PRESS, OTHER_TASK));
   assert.notEqual(TASK_RUN_TRIGGER.batch(PRESS, TASK), TASK_RUN_TRIGGER.batch('other-press', TASK));
@@ -78,16 +81,13 @@ test('an automatic door names the durable fact it acted on, and each fact is its
 
 test('every automatic token is TASK-scoped, so two tasks of one owner never share a receipt', () => {
   // The receipt is keyed `(owner, door, token)`. A token that says only what happened — "the first
-  // run", "revision 4", "the 09:00 appointment" — is a token two of one owner's tasks produce
-  // identically, and the second task's dispatch would be answered with the first task's receipt.
-  const at = new Date('2026-08-23T09:00:00.000Z');
-  assert.notEqual(TASK_RUN_TRIGGER.firstRun(TASK), TASK_RUN_TRIGGER.firstRun(OTHER_TASK));
-  assert.notEqual(
-    TASK_RUN_TRIGGER.dependency(TASK, 0n), TASK_RUN_TRIGGER.dependency(OTHER_TASK, 0n),
-  );
-  assert.notEqual(TASK_RUN_TRIGGER.scheduled(TASK, at), TASK_RUN_TRIGGER.scheduled(OTHER_TASK, at));
-  // ...and each is still stable for its own task, which is the half that makes it a name at all.
-  assert.equal(TASK_RUN_TRIGGER.firstRun(TASK), TASK_RUN_TRIGGER.firstRun(TASK));
+  // run", "epoch 4", "the appointment" — is a token two of one owner's tasks produce identically,
+  // and the second task's dispatch would be answered with the first task's receipt.
+  for (const kind of ['scheduled', 'dependency', 'firstRun'] as const) {
+    assert.notEqual(TASK_RUN_TRIGGER[kind](TASK, 4n), TASK_RUN_TRIGGER[kind](OTHER_TASK, 4n));
+    // ...and each is still stable for its own task, which is the half that makes it a name at all.
+    assert.equal(TASK_RUN_TRIGGER[kind](TASK, 4n), TASK_RUN_TRIGGER[kind](TASK, 4n));
+  }
 });
 
 test('TASK_OCCUPYING is still the execution claim index, character for character', () => {

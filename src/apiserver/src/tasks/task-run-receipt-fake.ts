@@ -84,6 +84,17 @@ export function fakeReceiptStore(): FakeReceiptStore {
           || row.attempt !== attempt) {
           return 0;
         }
+        // 0137's `task_run_request_target_check`: a receipt that is not OPEN HAS a plan, because a
+        // state claiming a decision was made and a missing plan are one fact disagreeing with
+        // itself. Enforced HERE and not only in PostgreSQL, because a double that accepts a write
+        // the database rejects is a unit test that goes green about an outcome production cannot
+        // reach — which is exactly what it did the first time a stand-down froze without binding.
+        if (row.status === 'OPEN') {
+          throw new Error(
+            'task_run_request_target_check: cannot COMPLETE a receipt that has no bound plan — ' +
+              'bind the plan first, as `applyExecuteTarget`/`applyStandDownTarget` do',
+          );
+        }
         row.status = 'COMPLETED';
         row.result = JSON.parse(result);
         row.leaseHolder = null;

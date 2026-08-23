@@ -44,11 +44,13 @@ function makeService(
   let sql = '';
   let historySql = '';
   const prisma = {
-    // Two raw queries reach this stub: the candidate scan, then the foreman history. Told apart
-    // by which one has already run, so a test can say "this list has N prior foremen" in one
-    // place without the scan's own SQL assertions changing.
+    // Three raw queries reach this stub: the candidate scan, the foreman history, and the dispatch
+    // epoch of each filed task. Told apart by what they ask for, so a test can say "this list has N
+    // prior foremen" in one place without the scan's own SQL assertions changing.
     $queryRaw: async (strings: TemplateStringsArray, ...bound: unknown[]) => {
       const text = Prisma.sql(strings, ...(bound as never[])).text;
+      // A row this sweep has just created is at the epoch its seed trigger gave it.
+      if (text.includes('task_dispatch_epoch')) return [{ epoch: 0n }];
       if (text.includes('is_foreman = true') && text.includes('GROUP BY')) {
         historySql = text;
         const prior = options.priorForemen;
@@ -76,13 +78,18 @@ function makeService(
     },
   } as never;
   const service = new TasksService(prisma, {} as never, {} as never);
-  (service as unknown as { execute: unknown }).execute = async (_o: string, id: string) => {
+  const tokens: string[] = [];
+  (service as unknown as { execute: unknown }).execute = async (
+    _o: string, id: string, _auto: unknown, token: string,
+  ) => {
     if (options.failExecuteFor?.includes(id)) throw new Error(`cannot start ${id}`);
     executed.push(id);
+    tokens.push(token);
   };
   return {
     created,
     executed,
+    tokens,
     events,
     sweep: () =>
       (
@@ -103,6 +110,10 @@ test('a stalled list gets a foreman task, filed and dispatched', async () => {
   assert.equal(f.created[0].listId, LIST.id);
   assert.equal(f.created[0].assigneeId, LIST.workspaceId);
   assert.deepEqual(f.executed, [TASK_IDS[0]]);
+  // Named `<kind>:<task>:<epoch>` like every other automatic request (§7.7 D5-b4): task-scoped, so
+  // two foremen filed for two stalled lists are two requests rather than one answered with the
+  // other's Session, and stamped with the moment the row was filed at.
+  assert.deepEqual(f.tokens, [`first-run:${TASK_IDS[0]}:0`]);
 });
 
 test('the foreman brief names the stall and stays a one-shot', async () => {

@@ -92,6 +92,19 @@ import {
 } from './task-lock-order';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/project-coordinator-session';
 import {
+  admitProjectScopeWrite,
+  derivedScopeToken,
+  projectScopeMode,
+  scopeObservationLine,
+  scopeRefusalBody,
+  scopeWriteRefused,
+  type DerivedScope,
+  type ScopeAdmissionRequest,
+  type ScopeOperation,
+  type ScopePrincipal,
+} from '../projects/project-scope-admission';
+import type { ScopeProjectStatus } from '../projects/project-scope-contract';
+import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
@@ -123,6 +136,7 @@ import {
   type TaskRunBatchPlan,
   type TaskRunPlan,
   type TaskRunReceipt,
+  type TaskRunStandDownTarget,
 } from './task-run-receipt';
 import {
   TASK_RUN_TRIGGER,
@@ -165,6 +179,67 @@ export type CreationOrigin = {
   discoveredFromProjectId: string | null;
   triggerEvent: string;
   sourceTaskId: string | null;
+};
+
+/**
+ * Unit L3: one task write, as `docs/project-coordinator-scope-contract.md` §4 reads it.
+ *
+ * `requestedProjectId` is three-state and every state means something different: `undefined` is a
+ * write that did not mention the project at all — the silence the server fills — while `null` is a
+ * caller explicitly asking for no project, which IS an ownership claim and is decided like one.
+ */
+type ScopeWriteInput = {
+  operation: ScopeOperation;
+  taskId: string | null;
+  requestedProjectId: string | null | undefined;
+  currentProjectId: string | null;
+  scopeToken?: string | null;
+};
+
+/**
+ * One idempotent task write, as its key and its winner validator both read it.
+ *
+ * `operation` is a discriminator and not a comment: `idempotency_key` is one unique column shared
+ * by every subsystem that writes a task (§13.2's defect filer and §7.3's verification filing both
+ * key rows in it under their own templates), so what makes a row THIS request's earlier attempt is
+ * that the whole tuple below reproduces the key it is filed under — not that something was found.
+ */
+type IdempotentTaskWrite = {
+  operation: IdempotentTaskOperation;
+  sessionId: string;
+  turnId: string;
+  title: string;
+  description?: string | null;
+};
+
+export type IdempotentTaskOperation = 'CREATE_TASK';
+
+/**
+ * The operation's byte in the key preimage — FROZEN, and not the same string as the descriptor.
+ *
+ * `idempotency_key` is persisted, and every key already in the table was hashed over `task-create`.
+ * Renaming the literal to match the TypeScript spelling would recompute every key: a turn that
+ * committed its tasks before an upgrade and is redelivered after it would compute a key that
+ * matches nothing, find no winner and create the duplicates the whole mechanism exists to prevent
+ * — silently, once per in-flight turn, at every deploy. So the descriptor is free to be named for
+ * readers and the byte is not free to change at all.
+ *
+ * `task-idempotency-winner.spec.ts` pins the digest of a known input, so this table cannot be
+ * edited without a test saying so.
+ */
+const IDEMPOTENCY_OPERATION_TAG: Readonly<Record<IdempotentTaskOperation, string>> = {
+  CREATE_TASK: 'task-create',
+};
+
+/** Just the reads the scope derivation makes, so a transaction client is equally acceptable. */
+type ScopeReadClient = Pick<Prisma.TransactionClient, 'session' | 'project'>;
+
+/** Everything §4 needs that is not the write itself, read once per call. */
+type ScopeWorld = {
+  principal: ScopePrincipal;
+  scope: DerivedScope | null;
+  projectStatus: Readonly<Record<string, ScopeProjectStatus>>;
+  mode: ReturnType<typeof projectScopeMode>;
 };
 
 /** What a planned run needs off a task to dispatch it: its identity, and the provider/model pin
@@ -225,7 +300,13 @@ export type TaskRunAnswer =
         | 'superseded'
         | 'aggregate-parent'
         | 'coordinator-authority'
-        | 'rescheduled'
+        /**
+         * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
+         * that produced this delivery. Terminal, and the one automatic stand-down that is — the
+         * epoch only goes up, so the moment this token names can never come back, and every later
+         * delivery of it is answering the same gone moment.
+         */
+        | 'stale-epoch'
         /**
          * The task this request was planned against was deleted before its Session could be
          * written. Terminal by construction — the plan names a row that no longer exists and every
@@ -685,8 +766,8 @@ const RECONCILE_INTERVAL_MS = 60_000;
 export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
 
 /**
- * What an automatic trigger saw when it picked a task, carried into the dispatch so the dispatch
- * can tell whether it is still acting on the same facts.
+ * WHICH MOMENT an automatic trigger is acting on, carried into the dispatch so the dispatch can
+ * tell whether that moment is still the current one.
  *
  * Every automatic path is a scan followed by a re-read: the sweep (or triggerDependents) selects
  * candidates, then `execute` loads each one again to dispatch it. A user editing the schedule in
@@ -695,34 +776,37 @@ export const SCHEDULED_DISPATCH_MAX_PER_SWEEP = 200;
  * indistinguishable from a person pressing Run, and `execute` treats a future `runAt` as something
  * a person may override: it would start the task early AND consume the schedule they had just set.
  *
- * `observedRunAt` is deliberately nullable rather than optional, and `null` is a real assertion
- * rather than "no opinion": an unscheduled task that acquires a schedule mid-flight is the same
- * race, and reconcileReadyTasks/triggerDependents select unscheduled tasks all day.
+ * This USED to carry the `runAt` the scan saw and compare instants. That answered "did the schedule
+ * move", which is not the same question and is one a revertible value cannot answer: `run_at` going
+ * 09:00 -> 10:00 -> 09:00 compares EQUAL to a pass that scanned the first 09:00, so a redelivered
+ * old pass was allowed to start work for an appointment that had already been replaced twice — and
+ * the current pass, whose own request derives a different name, was then refused because the task
+ * was running. §7.7 D5-b4. It also said nothing at all about the dependency door, whose moment is
+ * not a value on the row.
+ *
+ * So what is carried is the MOMENT's name: `task_dispatch_epoch.epoch`, monotone, advanced once per
+ * statement that creates a moment at which an automatic door may legitimately start this task's
+ * work (a new or consumed appointment, this task reopening, a prerequisite's status moving, the
+ * waiting set changing). Equal epochs mean the world this pass selected under is the world the
+ * dispatch is writing into; different ones mean this delivery is answering a moment that is gone.
  */
 export interface AutoDispatch {
-  /** The task's `runAt` as the candidate scan saw it. `null` means it was unscheduled. */
-  observedRunAt: Date | null;
+  /** `task_dispatch_epoch.epoch` as the candidate scan read it, and the epoch its token names. */
+  observedEpoch: bigint;
 }
 
 /**
  * Whether an automatic trigger may still act, given what the dispatch's own read found.
  *
- * Two ways to lose the right: the value moved (rescheduled, cancelled, or newly scheduled under an
- * unscheduled candidate), or it now points into the future. The second is implied by the first for
- * every caller in this file — they all select `run_at IS NULL OR run_at <= now()` — and is stated
- * anyway, because "an automatic trigger never starts a task before its time" should be checkable
- * where the decision is made rather than by auditing three candidate scans.
- *
- * Comparison is by instant, not identity: these are two different Date objects for the same row.
+ * One comparison, because there is one question. What the previous spelling checked as a second
+ * clause — "an automatic trigger never starts a task before its time" — is decided by the candidate
+ * scans, and decided better there: all three evaluate `run_at <= now()` on the DATABASE's clock,
+ * inside the statement that selects the row, and the epoch then proves the row has not moved since.
+ * Re-deciding it here would have meant comparing a database instant against `Date.now()` in this
+ * process, which is the clock dependency the receipt's lease was deliberately built without.
  */
-export function autoDispatchStillValid(
-  current: Date | null,
-  observed: Date | null,
-  now: number = Date.now(),
-): boolean {
-  if ((current?.getTime() ?? null) !== (observed?.getTime() ?? null)) return false;
-  if (current !== null && current.getTime() > now) return false;
-  return true;
+export function autoDispatchStillValid(current: bigint, observed: bigint): boolean {
+  return current === observed;
 }
 
 // Brake on repeat foremen for the same stall.
@@ -1470,8 +1554,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * dependent and reduce. Tasks with no prerequisites are absent (caller reads absent as
    * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
    */
-  private async dependencyStatesFor(taskIds: string[]): Promise<Map<string, DependencyState>> {
-    return new Map([...await this.dependencyFactsFor(taskIds)]
+  private async dependencyStatesFor(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, DependencyState>> {
+    return new Map([...await this.dependencyFactsFor(ownerId, taskIds)]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
   }
 
@@ -1484,6 +1571,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * that let the incident run: it describes a wait, and what happened was a refusal.
    */
   private async dependencyFactsFor(
+    ownerId: string,
     taskIds: string[],
   ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
     const byTask = new Map<string, Array<{ id: string; status: TaskStatus }>>();
@@ -1511,6 +1599,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const epochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       [...byTask.values()].flat().map((entry) => entry.id),
     );
     // §13.3 DEP's self-exemption: a check that depends on the subject it checks must not be made to
@@ -1622,6 +1711,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (edges.length === 0) return new Map();
     const epochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       edges.map((edge) => edge.dependsOnTaskId),
     );
     const counts = new Map<string, number>();
@@ -2020,20 +2110,67 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // only formed inside a live turn; without one this stays exactly the old create path. Checking
     // first lets the common (sequential) re-run return the original task without a write attempt.
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
-    const idempotencyKey =
-      sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, dto.title, dto.description) : undefined;
-    if (idempotencyKey) {
-      const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
-      if (existing) {
-        // SU7-c: "already created" may not stand in for "already linked". See
-        // `assertSupersessionAlreadyRecorded`.
-        if (dto.supersedesTaskId) {
-          await this.assertSupersessionAlreadyRecorded(
-            this.prisma, ownerId, dto.supersedesTaskId, existing.id,
-          );
-        }
-        return existing;
+    const idempotentWrite: IdempotentTaskWrite | undefined =
+      sessionId && turnId
+        ? {
+            operation: 'CREATE_TASK',
+            sessionId,
+            turnId,
+            title: dto.title,
+            description: dto.description,
+          }
+        : undefined;
+    const idempotencyKey = idempotentWrite ? this.taskIdempotencyKey(idempotentWrite) : undefined;
+    // WINNER FIRST, and unit L3's gate strictly after it (§3 SC4, §6's `FILED --SCOPE_LOST--> FILED`).
+    //
+    // The order is the whole of the contract's promise that a replay is the same write. Gate first
+    // and a retry stops being idempotent in both directions: after a lost response and a rotation,
+    // the retry is refused (R5/R2/R3) and can never reach the row it already committed, so the
+    // caller has no way to learn it succeeded; and a retry whose session has since drifted to
+    // another project is ADMITTED for that project and then handed the original row from the first
+    // one — an admission whose answer contradicts its own result. Reading the winner first makes
+    // both impossible: an already-committed unit of work is looked up, never re-decided, exactly as
+    // §6 says a takeover must not undo what is already persisted.
+    //
+    // This grants nothing. The key is a hash over (session, turn, title, description) and the
+    // session and turn are server-derived, so a caller cannot aim one at a row it did not write;
+    // the winner is owner-checked below; and no row is written on this path at all.
+    const winner = idempotentWrite
+      ? await this.idempotencyWinner(this.prisma, ownerId, idempotentWrite)
+      : null;
+    if (winner) {
+      // SU7-c: "already created" may not stand in for "already linked". See
+      // `assertSupersessionAlreadyRecorded`.
+      if (dto.supersedesTaskId) {
+        await this.assertSupersessionAlreadyRecorded(
+          this.prisma, ownerId, dto.supersedesTaskId, winner.id,
+        );
       }
+      this.auditReplayedProject(winner, dto.projectId);
+      return winner;
+    }
+    // Unit L3 §4: which project this create actually lands in. Decided by the server from the
+    // session's coordination scope, not from whatever the caller named — and decided before the
+    // transaction, so a refusal is deterministic and leaves nothing behind (AC1).
+    //
+    // Keyed on `creatorSessionId`, not on the `sessionId` that survived the ownership check: a
+    // session id that does not resolve must become an agent with NO scope (refused by R5), never
+    // an absent one — which is the owner, whom §4 R1 exempts from all of this.
+    const scopeWrite: ScopeWriteInput = {
+      operation: 'CREATE_TASK',
+      taskId: null,
+      requestedProjectId: dto.projectId === undefined ? undefined : (dto.projectId ?? null),
+      currentProjectId: null,
+      scopeToken: dto.scopeToken,
+    };
+    const scopeWorld = await this.projectScopeWorld(
+      this.prisma, ownerId, creatorSessionId, [scopeWrite],
+    );
+    const scopedProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
+    // The derived project needs no `assertOwnedProject`: it is the project the scope derivation
+    // already read under this owner. A project the CALLER named was checked above.
+    if ((dto.projectId ?? null) !== scopedProjectId) {
+      dto = { ...dto, projectId: scopedProjectId ?? undefined };
     }
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
@@ -2105,6 +2242,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // the order through this path is always user → task_list → session → project → task,
           // and SU3 guarantees there is exactly ONE project involved: the successor must be in
           // the predecessor's.
+          // Unit L3, rank 40: the scope this write was admitted under, re-locked and re-read here
+          // so a rotation that commits between the admission and this INSERT refuses it instead of
+          // being written straight past. It takes the supersession pre-lock's project too, so this
+          // transaction's rank-40 locks are one sorted pass — the statement below then re-locks a
+          // row it already holds, which costs nothing and cannot invert.
+          await this.refenceProjectScope(
+            tx, ownerId, creatorSessionId, scopeWorld,
+            [{ ...scopeWrite, boundProjectId: scopedProjectId }],
+            dto.supersedesTaskId ? [dto.projectId] : [],
+          );
           if (dto.supersedesTaskId && dto.projectId) {
             await tx.$queryRaw`
               SELECT 1 FROM "project" WHERE "id" = ${dto.projectId}::uuid FOR NO KEY UPDATE`;
@@ -2162,8 +2309,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (fenced) throw new ConflictException(fenced);
       // The unique index backstops a concurrent (not merely sequential) re-run that raced past the
       // pre-check above. Return the winner rather than surfacing a write conflict to the workspace.
-      if (idempotencyKey && this.isDuplicateKey(e)) {
-        const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
+      if (idempotentWrite && this.isDuplicateKey(e)) {
+        // Through the SAME validator the pre-read uses. A read-back that trusted the index is a
+        // validator the concurrent path skips — and the concurrent path is the one a fault or a
+        // forged row is reached through on purpose.
+        const existing = await this.idempotencyWinner(this.prisma, ownerId, idempotentWrite);
         if (existing) {
           // The concurrent half of the same rule: this transaction rolled back, so whatever link it
           // was going to write does not exist. The winner's row is the only authority on whether
@@ -2586,12 +2736,68 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     creator?: Creator,
     creatorSessionId?: string,
   ) {
-    const items = await this.assertBatchValid(ownerId, dto);
+    const validated = await this.assertBatchValid(ownerId, dto);
     const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
     const sessionId = origin?.sessionId;
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
     // create collapses a re-run of a batch, item by item, without merging distinct items.
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    // WINNER FIRST, exactly as `create` is and for the same reason (§3 SC4): an item this turn
+    // already committed is looked up, never re-decided. A batch re-run after a rotation would
+    // otherwise be refused on the items it already wrote, leaving a caller that cannot find rows it
+    // successfully created — and one whose session has drifted to another project would be admitted
+    // for that project and then handed the rows from the first.
+    //
+    // Read outside the transaction, and read AGAIN inside it: this pass decides what still has to
+    // be ADMITTED, and the find-or-create below decides what is actually written. A winner that
+    // appears in between is simply found by the second read; the item was admitted, so nothing it
+    // was allowed to do has been lost.
+    // One descriptor per item, built once and used by every question asked about it: the pre-read
+    // below, the find-or-create inside the transaction, and the P2002 reconstruction after it.
+    const batchWriteOf = (item: CreateTaskBatchItemDto): IdempotentTaskWrite | undefined =>
+      sessionId && turnId
+        ? {
+            operation: 'CREATE_TASK',
+            sessionId,
+            turnId,
+            title: item.title,
+            description: item.description,
+          }
+        : undefined;
+    const replayed = await Promise.all(validated.map(async (item) => {
+      const write = batchWriteOf(item);
+      return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
+    }));
+    // Unit L3 §4, once for the whole batch and BEFORE the transaction: every item that is not a
+    // replay is admitted and bound, or none is written. An item refused mid-transaction would be a
+    // batch that took the owner lock and rolled back; admitted here, a refusal costs no row and no
+    // lock (AC2).
+    const scopeWrites: ScopeWriteInput[] = validated.map((item) => ({
+      operation: 'CREATE_TASK',
+      taskId: null,
+      requestedProjectId: item.projectId === undefined ? undefined : (item.projectId ?? null),
+      currentProjectId: null,
+      scopeToken: item.scopeToken,
+    }));
+    const fresh = scopeWrites.filter((_, index) => !replayed[index]);
+    const scopeWorld = await this.projectScopeWorld(this.prisma, ownerId, creatorSessionId, fresh);
+    const scopeFences: Array<ScopeWriteInput & { boundProjectId: string | null }> = [];
+    const items = validated.map((item, index) => {
+      const winner = replayed[index];
+      if (winner) {
+        this.auditReplayedProject(winner, item.projectId);
+        // Pinned to the row that already exists, so the item this batch carries and the row the
+        // transaction finds cannot describe two different projects.
+        return (item.projectId ?? null) === (winner.projectId ?? null)
+          ? item
+          : { ...item, projectId: winner.projectId ?? undefined };
+      }
+      const projectId = this.admitScopedWrite(scopeWorld, scopeWrites[index]);
+      scopeFences.push({ ...scopeWrites[index], boundProjectId: projectId });
+      return (item.projectId ?? null) === projectId
+        ? item
+        : { ...item, projectId: projectId ?? undefined };
+    });
 
     // Only parents that already exist. A parentRef points at a row this very transaction writes,
     // which no other request can see — let alone move into another project — so there is nothing
@@ -2641,15 +2847,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // `project_acceptance_reopen`, which takes the PROJECT row, and the Coordinator holds
       // project-then-task. Sorted by UUID (§8.6 LO2), so two batches touching the same two
       // projects in opposite item orders cannot make a cycle.
-      if (hasSupersessions) {
-        const projectIds = [...new Set(items
-          .filter((item) => item.supersedesTaskId)
-          .map((item) => item.projectId)
-          .filter((projectId): projectId is string => !!projectId))].sort();
-        for (const projectId of projectIds) {
-          await tx.$queryRaw`
-            SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
-        }
+      const supersessionProjectIds = hasSupersessions
+        ? [...new Set(items
+            .filter((item) => item.supersedesTaskId)
+            .map((item) => item.projectId)
+            .filter((projectId): projectId is string => !!projectId))].sort()
+        : [];
+      // Unit L3, rank 40 and for the same reason the supersession pre-lock is: the scope every
+      // fresh item was admitted under, re-locked and re-read, so a rotation that commits between
+      // the admission and this transaction refuses the whole batch rather than being written past.
+      // Both sets are taken here in ONE sorted pass, so the loop below re-locks rows this
+      // transaction already holds instead of reaching backwards for a smaller id.
+      await this.refenceProjectScope(
+        tx, ownerId, creatorSessionId, scopeWorld, scopeFences, supersessionProjectIds,
+      );
+      for (const projectId of supersessionProjectIds) {
+        await tx.$queryRaw`
+          SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
       }
       // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
       // parent in item 40 must not leave items 1-39 written.
@@ -2660,10 +2874,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // find-or-create by the item's key: a re-run's items already exist (committed by the first
         // run), and a within-batch duplicate resolves to the row this same transaction just wrote.
         // A ref pointing at a collapsed item therefore resolves to the surviving task's id.
-        const idempotencyKey =
-          sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description) : undefined;
-        const existing = idempotencyKey
-          ? await tx.task.findUnique({ where: { idempotencyKey } })
+        const itemWrite = batchWriteOf(item);
+        const idempotencyKey = itemWrite ? this.taskIdempotencyKey(itemWrite) : undefined;
+        const existing = itemWrite
+          ? await this.idempotencyWinner(tx, ownerId, itemWrite)
           : null;
         // A parentRef names an item of this same batch, so the id it stands for only exists now.
         // Resolved into the field an already-existing parent would have used, so one write path
@@ -2754,30 +2968,48 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // write does not exist. Re-checking the winner's rows turns that into either a clean
       // idempotent answer or a typed 409 — never a batch that reports success over a supersession
       // nobody recorded. Read AFTER the rollback, deliberately: the winner is the only authority.
-      if (hasSupersessions && this.isDuplicateKey(e)) {
+      //
+      // EVERY shape of batch, not only one claiming a supersession. Gating this on
+      // `hasSupersessions` left the ordinary batch's concurrent path with no winner authority at
+      // all: it fell through to `translateProjectFk` and surfaced the index as an error, so the one
+      // shape the caller could actually retry safely was the one that got told to give up. A single
+      // create and a batch now answer a lost index the same way — with the winner, validated.
+      if (this.isDuplicateKey(e)) {
         // Rebuilt in INPUT ORDER, with each item's `ref` echoed, because this returns in place of
         // the batch's own result and a caller wiring refs to ids cannot tell the two apart. Every
         // item is reconstructed, not only the ones claiming a supersession: a partial answer would
         // be a batch that reported some of what it was asked for.
-        const replayed: Array<Task & { ref?: string }> = [];
+        //
+        // Resolved as a SET before anything is returned or asserted: all of them, or none. A batch
+        // is all-or-nothing on the way in, and reporting it item by item on the way out would let a
+        // half-identified batch answer half-successfully.
+        const winners: Array<Task | null> = [];
         for (const item of items) {
-          const key = sessionId && turnId
-            ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description)
-            : undefined;
-          const winner = key
-            ? await this.prisma.task.findUnique({ where: { idempotencyKey: key } })
-            : null;
-          if (!winner) {
-            // No key (outside a turn) or no winner: this batch cannot be shown to have happened,
-            // and its own transaction has already rolled back, so nothing of it exists. Saying so
-            // is the only honest answer — the alternative is reporting success for rows nobody
-            // can name.
-            throw new ConflictException(
-              'this batch lost a concurrent create and the winning tasks cannot all be identified, ' +
-                'so the supersession it claimed cannot be confirmed — nothing from this call was ' +
-                'written; retry',
-            );
-          }
+          // Same validator as everywhere else. This is the batch's own concurrent path, and it read
+          // rows back on the index alone — so a forged or foreign row under one item's key was
+          // returned to the caller as that item's result. A mismatch throws from in here, which is
+          // the typed 409 this whole branch owes the caller.
+          const write = batchWriteOf(item);
+          winners.push(write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null);
+        }
+        // Nothing of this batch is under any of its keys, so the index that fired was not ours —
+        // a project FK, a supersession guard, some other unique constraint. Say what it actually
+        // was rather than inventing a replay that did not happen.
+        if (winners.every((winner) => winner === null)) {
+          throw await this.translateProjectFk(e, ownerId, items.map((item) => item.projectId));
+        }
+        if (winners.some((winner) => winner === null)) {
+          // Some items are on disk under their keys and some are not. Whatever happened, it was not
+          // this batch running twice — and this call's own transaction has already rolled back, so
+          // nothing here is a claim about rows that exist.
+          throw new ConflictException(
+            'this batch lost a concurrent create and the winning tasks cannot all be identified — '
+              + 'nothing from this call was written; retry',
+          );
+        }
+        const replayed: Array<Task & { ref?: string }> = [];
+        for (const [at, item] of items.entries()) {
+          const winner = winners[at]!;
           if (item.supersedesTaskId) {
             // SU7-c: the winner's rows are the only authority on whether the link happened. A
             // mismatch throws, and since this whole batch has already rolled back, throwing leaves
@@ -2865,6 +3097,169 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Unit L3: the coordination scope this write is being made UNDER, derived from the session row.
+   *
+   * `docs/project-coordinator-scope-contract.md` §2 defines it and §2 SC3 defines what it is not:
+   * the client never names it. The reverse lookup through `project.coordinator_session_id` is the
+   * whole derivation for a coordinator, and a task-bound run takes the project of the task it is
+   * executing — both are columns the server owns, and both are re-read on EVERY write rather than
+   * cached, which is what makes a rotation, a restart and a takeover produce the same answer
+   * without anything having to notice that one happened (AC3).
+   *
+   * Not to be confused with the provenance `resolveOwnedSession` computes. That records where the
+   * work was NOTICED and §3 SC7 forbids any gate from reading it; this is the authority, and it is
+   * derived here a second time on purpose so that "evidence" and "authority" never share a value.
+   *
+   * The generation comes from `project_runtime.coordinator_generation` — the counter a rotation
+   * advances — so a presented token can be compared against both halves of the pair at once.
+   */
+  private async deriveProjectScope(
+    db: ScopeReadClient,
+    ownerId: string,
+    sessionId?: string,
+  ): Promise<DerivedScope | null> {
+    if (!sessionId) return null;
+    const session = await db.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: {
+        coordinatorForProject: { select: { id: true } },
+        task: { select: { projectId: true } },
+      },
+    });
+    if (!session) return null;
+    const projectId = session.coordinatorForProject?.id ?? session.task?.projectId ?? null;
+    if (!projectId) return null;
+    // Scoped by owner as well as by id: a scope is a tenant fact before it is a project fact, and
+    // a project row reached without the owner clause would be an authority derived across tenants.
+    const project = await db.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { id: true, runtime: { select: { coordinatorGeneration: true } } },
+    });
+    if (!project) return null;
+    // A project with no runtime row has never been rotated, which is generation 0 — the same
+    // default the column carries. Reading it as "no generation" would make every token presented
+    // against a freshly created project fail R3 for a rotation that never happened.
+    return {
+      projectId: project.id,
+      generation: String(project.runtime?.coordinatorGeneration ?? 0n),
+    };
+  }
+
+  /**
+   * §4 R8's world, read fail closed: a project this owner does not have simply is not in the map,
+   * and `decideProjectScopeWrite` reads an absent status as NOT open.
+   */
+  private async projectScopeStatuses(
+    db: ScopeReadClient,
+    ownerId: string,
+    projectIds: Array<string | null | undefined>,
+  ): Promise<Record<string, ScopeProjectStatus>> {
+    const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (!ids.length) return {};
+    const rows = await db.project.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: { id: true, status: true },
+    });
+    return Object.fromEntries(
+      rows.map((row) => [row.id, row.status as unknown as ScopeProjectStatus]),
+    );
+  }
+
+  /**
+   * §4's world for a set of writes: who is writing, under which scope, and which of the projects
+   * they touch are still open.
+   *
+   * Built once for a whole call so a fifty-item batch costs the same two reads a single create
+   * does. It is also the only place the principal is decided, and it is decided from the SHAPE of
+   * the call rather than from anything the caller declares: a write with no acting session came
+   * through the user-facing controller or a CLI acting for the owner, and §4 R1 puts the owner
+   * outside this contract entirely (AC5 — the explicit user path is untouched and pays not one
+   * extra query for a boundary that does not apply to it).
+   *
+   * Keyed on the RAW session id, not on one that survived an ownership check: a session id that
+   * does not resolve must become an agent with NO scope (refused by R5), never an absent one.
+   */
+  private async projectScopeWorld(
+    db: ScopeReadClient,
+    ownerId: string,
+    actingSessionId: string | undefined,
+    writes: readonly ScopeWriteInput[],
+  ): Promise<ScopeWorld> {
+    const scope = await this.deriveProjectScope(db, ownerId, actingSessionId);
+    const principal: ScopePrincipal = !actingSessionId
+      ? 'USER'
+      : scope
+        ? 'COORDINATOR'
+        : 'WORKER';
+    const mode = projectScopeMode();
+    if (principal === 'USER') return { principal, scope, projectStatus: {}, mode };
+    // The target and the surface are settled before any rule runs, so this pass answers both
+    // without a status read — and the binding rule stays written in exactly one place.
+    const candidates = writes.flatMap((write) => [
+      admitProjectScopeWrite(this.scopeRequest(principal, scope, write, {})).projectId,
+      write.currentProjectId,
+      scope?.projectId ?? null,
+    ]);
+    return {
+      principal,
+      scope,
+      projectStatus: await this.projectScopeStatuses(db, ownerId, candidates),
+      mode,
+    };
+  }
+
+  /** One write, as §4 reads it. Server-derived throughout; `scopeToken` is compared, never trusted. */
+  private scopeRequest(
+    principal: ScopePrincipal,
+    scope: DerivedScope | null,
+    write: ScopeWriteInput,
+    projectStatus: Readonly<Record<string, ScopeProjectStatus>>,
+  ): ScopeAdmissionRequest {
+    return {
+      principal,
+      operation: write.operation,
+      taskId: write.taskId,
+      requestedProjectId: write.requestedProjectId,
+      currentProjectId: write.currentProjectId,
+      scope,
+      presentedScopeToken: write.scopeToken,
+      projectStatus,
+    };
+  }
+
+  /**
+   * §4, applied to one real write: which project it lands in, and whether it happens at all.
+   *
+   * Returns the project id the caller must write — the server-derived binding this whole unit
+   * exists for. A coordinator write that names no project is filed under the project the server
+   * says that session coordinates; one that names another project does not happen.
+   *
+   * Synchronous and total, so a batch can admit every item BEFORE opening its transaction: a
+   * refusal then costs no row, no lock and no partial batch (AC1, AC2).
+   *
+   * §8 CM2's two phases: in `observe` the decision is audited and the write proceeds EXACTLY as it
+   * did before this unit — including the binding, which is a behaviour change like any other — so
+   * that what enforcement would reject is countable before it is switched on.
+   */
+  private admitScopedWrite(world: ScopeWorld, write: ScopeWriteInput): string | null {
+    const request = this.scopeRequest(world.principal, world.scope, write, world.projectStatus);
+    const admission = admitProjectScopeWrite(request);
+    if (scopeWriteRefused(admission, world.mode)) {
+      throw new ForbiddenException(scopeRefusalBody(admission.outcome!, write.taskId));
+    }
+    if (world.mode === 'observe') {
+      if (admission.outcome && admission.outcome.decision !== 'ALLOW') {
+        this.logger.warn(scopeObservationLine(admission, request));
+      }
+      // Pre-L3 behaviour, to the letter: what the caller asked for, or what the row already says.
+      return write.requestedProjectId !== undefined
+        ? write.requestedProjectId
+        : write.currentProjectId;
+    }
+    return admission.projectId;
+  }
+
+  /**
    * The conversation turn a task create belongs to, or undefined. The inbox delivers at most one
    * message/shell turn IN_FLIGHT per session at a time (the claim SQL only hands out a PENDING one
    * when none is in flight), so this is unambiguous. A redelivered turn keeps its row id, which is
@@ -2880,21 +3275,213 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * The row already committed for an idempotent write, or null — the ONE place that question is
+   * asked and the ONE place the answer is validated.
+   *
+   * Every path that can find a winner comes through here: the pre-read before the transaction, the
+   * find-or-create inside the batch's transaction, and BOTH P2002 read-backs (the single create's
+   * catch and the batch's supersession reconstruction). Those last two used to call `findUnique`
+   * directly and return whatever came back, which meant the validator was a thing the happy path
+   * did and the race path skipped — and the race path is the only one an attacker or a fault can
+   * reach on purpose.
+   *
+   * `idempotency_key` is unique across the WHOLE table and is written by other subsystems under
+   * their own templates, so "a row exists under this key" is not "this request already ran". Four
+   * facts are checked, and a failure of any is a typed 409 with nothing written:
+   *
+   *   - **owner** — a key held by another tenant is neither a miss (that would send this write into
+   *     an INSERT that can only fail on the index, surfacing a raw P2002) nor a hit (that would be
+   *     a cross-tenant read of somebody else's task).
+   *   - **operation and payload** — the key is REBUILT from the winner's own persisted title and
+   *     description, this request's session and turn, and this operation's discriminator. A row
+   *     that does not reproduce the key it is filed under was written by something other than this
+   *     request: a raw fault, a repair script, another operation reusing the column.
+   *   - **request identity** — the winner's `creator_session_id` must be the session asking. The
+   *     rebuild above already binds the session (it is in the preimage), but the rebuild cannot see
+   *     a row whose stored session was altered after the fact, and this can.
+   *
+   * `db` so the batch can ask inside its transaction, where the answer has to be the one its own
+   * inserts will see.
+   */
+  private async idempotencyWinner(
+    db: Pick<Prisma.TransactionClient, 'task'>,
+    ownerId: string,
+    write: IdempotentTaskWrite,
+  ): Promise<Task | null> {
+    const idempotencyKey = this.taskIdempotencyKey(write);
+    const existing = await db.task.findUnique({ where: { idempotencyKey } });
+    if (!existing) return null;
+    const mismatch = (why: string): never => {
+      // Deliberately says nothing about the row it refused: the caller has not been shown to own
+      // it, so naming its id, its title or its account would be the leak this branch exists to
+      // prevent. `why` is the SHAPE of the disagreement, which is all a retry needs.
+      throw new ConflictException(
+        `that idempotency key is already held by a different write (${why}) — `
+          + 'nothing was written; retry with a new request',
+      );
+    };
+    if (existing.ownerId !== ownerId) mismatch('different account');
+    if ((existing.creatorSessionId ?? null) !== write.sessionId) mismatch('different session');
+    // The winner rebuilt from what it actually holds. Same operation, same session, same turn, same
+    // normalised payload — or it is not this write's earlier attempt.
+    const rebuilt = this.taskIdempotencyKey({
+      operation: write.operation,
+      sessionId: write.sessionId,
+      turnId: write.turnId,
+      title: existing.title,
+      description: existing.description,
+    });
+    if (rebuilt !== existing.idempotencyKey) mismatch('different operation or payload');
+    return existing;
+  }
+
+  /**
+   * A replay that asks for a different project than the row it is being handed.
+   *
+   * Not a refusal: the write already happened, under the scope that made it, and §6 says a later
+   * takeover does not reach back into it. But it is worth a line — a retry that changed its mind
+   * about where the work belongs is a coordinator whose plan moved between attempts, and the only
+   * place that is visible is here.
+   */
+  private auditReplayedProject(winner: Task, requestedProjectId?: string | null): void {
+    if (requestedProjectId === undefined) return;
+    if ((requestedProjectId ?? null) === (winner.projectId ?? null)) return;
+    this.logger.warn(
+      `project scope replay: an idempotent retry asked for a different project than the row it `
+      + `already committed; the committed project stands (task ${uuidToBase62(winner.id)})`,
+    );
+  }
+
+  /**
+   * §4 a second time, inside the transaction that writes the row, under the project's own lock.
+   *
+   * The admission before the transaction reads the world and decides. Between that read and the
+   * INSERT there is a window, and a rotation is precisely the thing that can commit inside it: T1
+   * derives scope (A, G) and is allowed; T2 atomically rotates the coordinator to a new session and
+   * G+1 and commits; T1 then writes into A, authorized by a fact that is no longer true. Nothing
+   * downstream would notice — the row is indistinguishable from one the CURRENT holder wrote, which
+   * is §0's incident with a race in place of a mistake.
+   *
+   * Closing it needs two things, and one of them is not enough on its own:
+   *
+   *  1. **The lock.** `FOR NO KEY UPDATE` on the project row, which is what a rotation's own
+   *     `UPDATE "project" SET "coordinator_session_id" = …` must take to commit. Whichever of the
+   *     two gets it first is the one that happened first; there is no third outcome.
+   *  2. **The re-read.** Holding a lock proves nothing about what was read before it. So the scope
+   *     is derived AGAIN from the locked world, and the decision is re-run — with the scope the
+   *     admission acted under presented as the claim. That is not a second, parallel rule: it is
+   *     §4 R2/R3 doing exactly what they were written for, with the server's own earlier reading in
+   *     the place a client's token would be. A rotation therefore refuses with
+   *     `COORDINATOR_GENERATION_MOVED` and `YIELD_TO_CURRENT_SCOPE`, which is the same answer a
+   *     stale client gets, because it is the same fact.
+   *
+   * Rank 40 in the canonical lock order (`common/lock-order.ts`) — after the owner mutex, the task
+   * lists and the creator Sessions, before any task row — which is where this path ALREADY takes
+   * the project row for `project_acceptance_reopen`. Same rank, same mode, same UUID ordering, so
+   * it adds no edge to the lock graph and no new deadlock is reachable through it.
+   *
+   * Replays never reach here: the idempotency winner is returned before the transaction opens, so a
+   * write that already committed is never re-decided by a scope that has moved since (§3 SC4).
+   */
+  private async refenceProjectScope(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    actingSessionId: string | undefined,
+    admitted: ScopeWorld,
+    writes: ReadonlyArray<ScopeWriteInput & { boundProjectId: string | null }>,
+    /**
+     * Projects the SAME transaction takes at rank 40 for another reason — the supersession
+     * pre-lock. Folded into this one sorted pass and taken here, so the transaction's rank-40
+     * acquisitions are one non-decreasing sequence rather than two overlapping ones: a later
+     * statement re-locking a row already held is free, while a smaller id taken after a larger one
+     * is the only shape at this rank that could make a cycle.
+     */
+    alsoLock: ReadonlyArray<string | null | undefined> = [],
+  ): Promise<void> {
+    // §4 R1: the owner is outside this contract, so there is nothing to fence and no lock to take.
+    if (admitted.principal === 'USER') return;
+    const fenced = writes.filter(
+      (write) => write.boundProjectId !== null || write.currentProjectId !== null,
+    );
+    if (!fenced.length && !alsoLock.some((id) => !!id)) return;
+    // Sorted by UUID (§8.6 LO2), one statement each, so two writers touching the same two projects
+    // in opposite request orders cannot make a cycle.
+    const projectIds = [...new Set([
+      ...fenced.flatMap((write) => [write.boundProjectId, write.currentProjectId]),
+      ...alsoLock,
+    ].filter((id): id is string => !!id))].sort();
+    for (const projectId of projectIds) {
+      await tx.$queryRaw`SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
+    }
+    // Nothing to re-decide: this call exists only to take the caller's rank-40 locks in one sorted
+    // pass with the fence's, and the caller had none of its own to fence.
+    if (!fenced.length) return;
+    const scope = await this.deriveProjectScope(tx, ownerId, actingSessionId);
+    const projectStatus = await this.projectScopeStatuses(tx, ownerId, [
+      ...projectIds,
+      scope?.projectId,
+    ]);
+    // The claim being checked is the server's OWN earlier reading, expressed the way §2 spells a
+    // scope on the wire. A caller-supplied token has already been compared against it before the
+    // transaction, so substituting this one loses nothing and states more.
+    const presented = admitted.scope ? derivedScopeToken(admitted.scope) : undefined;
+    for (const write of fenced) {
+      // The other half of the same window, for an edit: the TASK can be re-filed between the
+      // admission and this transaction, and an edit authorised against the project it used to be
+      // in is the same defect seen from the row's side. Re-read under the lock this transaction
+      // now holds on that project — a move out of it has to take the same row (0127's reopen
+      // reaches both ends), so what is read here cannot change before the write.
+      const currentProjectId = write.operation === 'UPDATE_TASK' && write.taskId
+        ? ((await tx.task.findFirst({
+            where: { id: write.taskId, ownerId },
+            select: { projectId: true },
+          }))?.projectId ?? null)
+        : write.currentProjectId;
+      const outcome = admitProjectScopeWrite(this.scopeRequest(
+        actingSessionId ? (scope ? 'COORDINATOR' : 'WORKER') : 'USER',
+        scope,
+        // The bound project, not what the caller asked for: what is fenced is the write that is
+        // about to happen, including the project the server derived for it.
+        { ...write, currentProjectId, requestedProjectId: write.boundProjectId, scopeToken: presented },
+        projectStatus,
+      ));
+      if (!outcome.outcome || outcome.outcome.decision === 'ALLOW') continue;
+      if (admitted.mode === 'observe') {
+        this.logger.warn(
+          `project scope observe (effect): ${outcome.outcome.code} at ${outcome.outcome.rule}`,
+        );
+        continue;
+      }
+      throw new ForbiddenException(scopeRefusalBody(outcome.outcome, write.taskId));
+    }
+  }
+
+  /**
    * A best-effort key that collapses the SAME task created twice inside one turn — the shape of a
    * redelivered turn re-running its side effects (a lease expiry hands the turn back and the engine
    * re-creates the tasks it already created; see the runner's redelivery double-run). Scoped by
    * turnId so two DIFFERENT turns that each legitimately create an identically worded task are
    * never merged. The tradeoff — two byte-identical creates within ONE turn collapse to one — is
    * deliberate and far rarer than the duplicate it prevents.
+   *
+   * The preimage is (operation, session, turn, normalised payload), and every one of those four is
+   * an INPUT rather than a literal spelled at the call site. That is what lets `idempotencyWinner`
+   * verify a row instead of assuming one: it rebuilds this key from the winner's own persisted
+   * columns and this request's identity, and a row that does not reproduce its own key is not this
+   * request's earlier attempt whatever the column says.
+   *
+   * The operation reaches the preimage through `IDEMPOTENCY_OPERATION_TAG`, which is frozen: the
+   * descriptor is for readers, the byte is for the rows already on disk.
    */
-  private taskIdempotencyKey(
-    sessionId: string,
-    turnId: string,
-    title: string,
-    description?: string,
-  ): string {
+  private taskIdempotencyKey(write: IdempotentTaskWrite): string {
     return createHash('sha256')
-      .update(JSON.stringify(['task-create', sessionId, turnId, title.trim(), (description ?? '').trim()]))
+      .update(JSON.stringify([
+        IDEMPOTENCY_OPERATION_TAG[write.operation],
+        write.sessionId,
+        write.turnId,
+        write.title.trim(),
+        (write.description ?? '').trim(),
+      ]))
       .digest('hex');
   }
 
@@ -2924,7 +3511,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     const withRun = await this.withRunning(ownerId, tasks);
-    const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
+    const states = await this.dependencyStatesFor(ownerId, tasks.map((t) => t.id));
     return withRun.map((t) => {
       const dependencyState = states.get(t.id) ?? 'NONE';
       // `blocked` drives the list's lock indicator; canRun is the single source of truth
@@ -3049,7 +3636,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
     const [withRun, states] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
-      this.dependencyStatesFor(pageTasks.map((task) => task.id)),
+      this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -3173,7 +3760,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const [withRun, states] = await Promise.all([
       this.withRunning(ownerId, rows, true),
-      this.dependencyStatesFor(rows.map((task) => task.id)),
+      this.dependencyStatesFor(ownerId, rows.map((task) => task.id)),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -4275,6 +4862,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // a task with no prerequisites costs no extra read at all.
     const prerequisiteEpochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       task.dependsOn.map((d) => d.dependsOnTaskId),
     );
     const dependencyState = computeDependencyState(task.dependsOn.map((d) => ({
@@ -4404,6 +4992,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
     if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
+    // Unit L3 §4. An update never re-files a task on its own — a write that does not mention the
+    // project leaves it exactly where it is — so this binds nothing and only refuses: it is what
+    // stops a coordinator editing work inside another project's goal (R6), moving work across the
+    // line without declaring it (R7), or emptying a task out of the project that counts it (R4).
+    // Before the transaction, so a refusal writes nothing and takes no lock.
+    let scopeWorld: ScopeWorld | undefined;
+    let scopeFence: (ScopeWriteInput & { boundProjectId: string | null }) | undefined;
+    {
+      const scopeWrite: ScopeWriteInput = {
+        operation: 'UPDATE_TASK',
+        taskId: id,
+        requestedProjectId: dto.projectId === undefined ? undefined : (dto.projectId ?? null),
+        currentProjectId: before.projectId ?? null,
+        scopeToken: dto.scopeToken,
+      };
+      scopeWorld = await this.projectScopeWorld(
+        this.prisma, ownerId, actingSessionId, [scopeWrite],
+      );
+      const boundProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
+      // Only a write that actually claims a goal is fenced. The owner's edits and edits to tasks
+      // that belong to no project keep the one-statement path exactly as they had it.
+      if (scopeWorld.principal !== 'USER'
+        && (boundProjectId !== null || scopeWrite.currentProjectId !== null)) {
+        scopeFence = { ...scopeWrite, boundProjectId };
+      }
+    }
     // Whether this write can move the task within the project/subtask structure. It decides both
     // that the hierarchy rules are checked at all and that the write takes the owner lock: the
     // check and the update it authorises have to be one serialized step, not two.
@@ -4754,7 +5368,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // dependent Task, so replacing prerequisites alone leaves the row written exactly once.
     const rewritesTaskRow = !!supersession;
     const updated = await (
-      !restructures && !(touchesAcceptanceFacts && before.projectId)
+      // `scopeFence` joins the two conditions that already force the transaction branch, and for
+      // the same kind of reason: a scope re-check that runs outside the transaction it is meant to
+      // fence is a check the rotation it exists for can simply commit past. An agent edit inside a
+      // project therefore takes the transaction; nothing else changes shape.
+      !restructures && !(touchesAcceptanceFacts && before.projectId) && !scopeFence
         ? this.prisma.task.update({ where: { id }, data })
         // Retried whole, on the transaction branch only. The one-statement branch is an
         // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
@@ -4831,12 +5449,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // (`concludesVerdict || supersession`) left exactly that case with an empty list.
             const movesProject = dto.projectId !== undefined
               && (dto.projectId ?? null) !== current!.projectId;
+            // Unit L3's fence takes rank 40 first and takes the acceptance projects with it, so
+            // this transaction's project locks are one non-decreasing sequence; the loop below then
+            // re-locks rows it already holds.
             const acceptanceProjects = touchesAcceptanceFacts || supersession
               ? [...new Set([
                 current!.projectId,
                 dto.projectId === undefined ? current!.projectId : (dto.projectId ?? null),
               ].filter((projectId): projectId is string => !!projectId))].sort()
               : [];
+            if (scopeWorld && scopeFence) {
+              await this.refenceProjectScope(
+                tx, ownerId, actingSessionId, scopeWorld, [scopeFence], acceptanceProjects,
+              );
+            }
             for (const projectId of acceptanceProjects) {
               await tx.$queryRaw`
                 SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
@@ -4854,6 +5480,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 [...acceptanceProjects, ...(dto.projectId ? [dto.projectId] : [])],
               );
             }
+
             // ...and the task row IMMEDIATELY after, before anything else in this transaction
             // touches it. `tx.task.update` below takes the same row with an ordinary blocking lock,
             // so a NOWAIT taken only at `writeSupersession` would be reached AFTER the wait it was
@@ -5187,8 +5814,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     // The one run this check exists for. A retry of the filing above makes a DIFFERENT task, so
-    // "the first run of this task" names exactly one request for as long as the row exists.
-    await this.execute(ownerId, verification.id, undefined, TASK_RUN_TRIGGER.firstRun(verification.id));
+    // "the first run of this task, at the moment it was filed" names exactly one request for as
+    // long as the row exists.
+    await this.execute(
+      ownerId,
+      verification.id,
+      undefined,
+      TASK_RUN_TRIGGER.firstRun(verification.id, await this.dispatchEpochOf(verification.id)),
+    );
     this.logger.log(`verification ${verification.id} filed for task ${taskId}`);
   }
 
@@ -5236,6 +5869,26 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * WHICH MOMENT this task is at right now — `task_dispatch_epoch.epoch` (0137).
+   *
+   * The one-row read the doors that have no candidate scan need: the verification filer and the
+   * foreman create a task in order to run it once, immediately, so there is no sweep query to ride
+   * on. Both call it on a row they have just created, which is at the epoch its seed trigger gave
+   * it; the read is what makes that a fact this code took from the database rather than a constant
+   * it assumed, so a task ever filed for a first run at a later moment names a different request.
+   *
+   * The three sweeps do NOT call this — they join the epoch into the statement that selects their
+   * candidates, so the epoch they carry is the one every clause of their predicate was evaluated
+   * against. A second read would be a second snapshot, and the fence would then be comparing two
+   * different instants rather than proving one.
+   */
+  private async dispatchEpochOf(taskId: string): Promise<bigint> {
+    const [row] = await this.prisma.$queryRaw<Array<{ epoch: bigint }>>`
+      SELECT "epoch" FROM "task_dispatch_epoch" WHERE "task_id" = ${taskId}::uuid`;
+    return row?.epoch ?? 0n;
+  }
+
+  /**
    * A prerequisite (`doneTaskId`) just reached DONE: find every task that depends on it
    * and auto-run the ones this completion unblocked. A dependent fires only when it is
    * now fully READY (all its prerequisites DONE), still actionable (OPEN), opted into
@@ -5250,7 +5903,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
     if (!dependentIds.length) return;
-    const states = await this.dependencyStatesFor(dependentIds);
+    const states = await this.dependencyStatesFor(ownerId, dependentIds);
     const dependents = await this.prisma.task.findMany({
       where: { id: { in: dependentIds }, ownerId },
       select: {
@@ -5259,11 +5912,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         autoRunWhenReady: true,
         runAt: true,
         assignee: { select: { id: true, runnerId: true } },
-        // 0132's prerequisite revision, read here because it is what NAMES this dispatch: two
-        // passes — a second apiserver, or this one after a restart — that unlock the same task over
-        // the same prerequisite set are one request, and the Session they race for carries the id
-        // both of them derive. It is always present (the row is created with the task).
-        dependencyRevision: { select: { revision: true } },
+        // The moment this unlock IS (0137), read here because it is what NAMES this dispatch: two
+        // passes — a second apiserver, or this one after a restart — over the same moment are one
+        // request, and the Session they race for carries the id both of them derive. Read in the
+        // same statement as `status` and `runAt`, so the epoch is the one those values are at: the
+        // prerequisite's own DONE advanced it in the transaction that committed that status, and
+        // whatever moves either of them next advances it again. It is always present (the row is
+        // created with the task).
+        dispatchEpoch: { select: { epoch: true } },
       },
     });
     const now = new Date();
@@ -5277,16 +5933,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // the later of the two is the one that fires.
       if (dep.runAt && dep.runAt > now) continue;
       if (!dep.assignee?.runnerId) continue; // nothing to run it on — stays ready for later
+      const epoch = dep.dispatchEpoch?.epoch ?? 0n;
       try {
-        // Carrying what this scan read: between here and execute's own re-read, the user may have
-        // scheduled this task for later, and starting it now would both jump the appointment and
-        // erase it. `dep.runAt` is usually null — an unscheduled dependent — which is an assertion
-        // of exactly that, not an absence of one.
+        // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
+        // between here and its own re-read the user may have scheduled this task for later, or the
+        // prerequisite may have reopened, and either replaces the reason this loop had for starting
+        // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
         await this.execute(
           ownerId,
           dep.id,
-          { observedRunAt: dep.runAt },
-          TASK_RUN_TRIGGER.dependency(dep.id, dep.dependencyRevision?.revision ?? 0n),
+          { observedEpoch: epoch },
+          TASK_RUN_TRIGGER.dependency(dep.id, epoch),
         );
       } catch (e) {
         this.logger.warn(
@@ -5328,20 +5985,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         freeBytes: bigint | null;
         minFreeDiskMb: number | null;
         listId: string | null;
-        runAt: Date | null;
-        dependencyRevision: bigint | null;
+        dispatchEpoch: bigint | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId", t.run_at AS "runAt", d.revision AS "dependencyRevision"
+             t.list_id AS "listId", e.epoch AS "dispatchEpoch"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
-      -- 0132's prerequisite revision, joined here because it NAMES this sweep's dispatch: two
-      -- passes that unlock the same task over the same prerequisite set are one request, and both
-      -- derive the same Session id for it. Riding on this scan rather than a second round trip.
-      LEFT JOIN task_dependency_revision d ON d.task_id = t.id
+      -- 0137's dispatch epoch, joined here because it NAMES this sweep's dispatch and fences it:
+      -- two passes over the same moment are one request and derive the same Session id, and a pass
+      -- whose moment has been overtaken between this scan and the dispatch is told so rather than
+      -- starting work for it. Read in the SAME statement as the predicate below, so the epoch is
+      -- the one every clause of AUTO_RUN_READY_SQL was evaluated against — a snapshot, not two.
+      -- Riding on this scan rather than a second round trip.
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
       WHERE ${AUTO_RUN_READY_SQL}`;
     if (rows.length === 0) return;
     // The provider is no longer a column on the workspace (migration 0088) — it is derived from the
@@ -5365,12 +6024,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
-      dependencyRevision: row.dependencyRevision,
-      // Read here so the dispatch below can prove it is still acting on this row. The predicate
-      // admits `run_at IS NULL OR run_at <= now()`, so this is null for almost every candidate —
-      // and null is the assertion that matters, since scheduling a previously unscheduled task is
-      // the commonest way for this scan to be overtaken.
-      runAt: row.runAt,
+      // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
+      // previously unscheduled task is the commonest way for this scan to be overtaken, and it is
+      // one of the transitions that advances this counter — so is the task reopening, and so is any
+      // prerequisite's status moving. One number, compared once, rather than a value per fact.
+      dispatchEpoch: row.dispatchEpoch ?? 0n,
     }));
     // Two independent brakes. The quota gate comes first because it is the one that knows
     // *when* work can resume, and it prevents the doomed run rather than reacting to it.
@@ -5406,7 +6064,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let quotaHeld = 0;
     let diskHeld = 0;
     let atCapacity = 0;
-    let rescheduled = 0;
+    let overtaken = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
     // own console needs "is MY campaign moving", and one spent provider quota holds back every
@@ -5454,13 +6112,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const res = await this.execute(
           t.ownerId,
           t.id,
-          { observedRunAt: t.runAt },
-          TASK_RUN_TRIGGER.dependency(t.id, t.dependencyRevision ?? 0n),
+          { observedEpoch: t.dispatchEpoch },
+          TASK_RUN_TRIGGER.dependency(t.id, t.dispatchEpoch),
         );
-        // A task scheduled out from under this pass is not dispatched and must not be logged as
+        // A task overtaken out from under this pass is not dispatched and must not be logged as
         // though it were; the budget it spent is returned by the next sweep reading capacity afresh.
         if (res.ok) this.logger.log(`reconciled ready task ${t.id} -> auto-run`);
-        else rescheduled += 1;
+        else overtaken += 1;
       } catch (e) {
         this.logger.warn(
           `reconcile auto-run of task ${t.id} failed: ${e instanceof Error ? e.message : e}`,
@@ -5486,9 +6144,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `auto-run: ${atCapacity} ready task(s) left for a later sweep — no free slot to claim them`,
       );
     }
-    if (rescheduled > 0) {
+    if (overtaken > 0) {
+      // The moment this pass selected them under is gone — rescheduled, reopened, a prerequisite
+      // moved. Not a fault and not a retry: the pass that reads the NEW moment is the one that
+      // decides what happens next, and each of these stood down without touching anything.
       this.logger.log(
-        `auto-run: ${rescheduled} ready task(s) were rescheduled mid-sweep — their new schedule stands`,
+        `auto-run: ${overtaken} ready task(s) were overtaken mid-sweep — the moment they were ` +
+          'selected under has passed',
       );
     }
     for (const [listId, e] of perList) {
@@ -5538,12 +6200,21 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // longest-overdue work first rather than an arbitrary slice; `id` only breaks ties, so the
     // order is total and the same list twice in a row means the same decisions twice in a row.
     const due = await this.prisma.$queryRaw<
-      { id: string; ownerId: string; runnerId: string; listId: string | null; runAt: Date }[]
+      {
+        id: string; ownerId: string; runnerId: string; listId: string | null;
+        dispatchEpoch: bigint | null;
+      }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.runner_id AS "runnerId", t.list_id AS "listId",
-             t.run_at AS "runAt"
+             e.epoch AS "dispatchEpoch"
       FROM task t
       JOIN workspace a ON a.id = t.assignee_id
+      -- 0137's dispatch epoch: WHICH appointment this pass is keeping. Not the run_at instant,
+      -- which comes back — 09:00 -> 10:00 -> 09:00 is a second, legitimate appointment that would
+      -- re-derive the first one's name and be answered with the first one's Session (§7.7 D5-b4).
+      -- The epoch is advanced by every write to run_at, including the consumption a kept
+      -- appointment performs, so each appointment is its own moment and no moment repeats.
+      LEFT JOIN task_dispatch_epoch e ON e.task_id = t.id
       WHERE ${SCHEDULED_DUE_SQL}
       ORDER BY t.run_at ASC, t.id ASC
       LIMIT ${SCHEDULED_DISPATCH_MAX_PER_SWEEP}`;
@@ -5553,7 +6224,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const budget = await this.materialisationBudget();
     let dispatched = 0;
     let atCapacity = 0;
-    let rescheduled = 0;
+    let overtaken = 0;
     for (const t of due) {
       // The same brake the auto-run sweep takes, for the same reason: materialising past what the
       // runner can claim produces sessions that sit PENDING and buy nothing. Here it is also what
@@ -5563,6 +6234,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         atCapacity += 1;
         continue;
       }
+      const epoch = t.dispatchEpoch ?? 0n;
       try {
         // The appointment this pass is keeping, carried so the dispatch can check it is still the
         // one on the row. A user who moves a due task to next week between the scan and here has
@@ -5571,14 +6243,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const res = await this.execute(
           t.ownerId,
           t.id,
-          { observedRunAt: t.runAt },
-          // The appointment being kept, and it names the request: two passes over the same due row
-          // are one dispatch, and the run this pass keeps consumes `run_at` back to NULL, so the
-          // next appointment is a different name that this one cannot be replayed into.
-          TASK_RUN_TRIGGER.scheduled(t.id, t.runAt),
+          { observedEpoch: epoch },
+          // The appointment being kept, and it names the request: two passes over the same moment
+          // are one dispatch, and the run this pass keeps consumes `run_at` back to NULL — which
+          // advances the epoch, so the next appointment is a different name that this one cannot be
+          // replayed into, and an older pass's name is one no future appointment can re-derive.
+          TASK_RUN_TRIGGER.scheduled(t.id, epoch),
         );
         if (res.ok) dispatched += 1;
-        else rescheduled += 1;
+        else overtaken += 1;
       } catch (e) {
         // The schedule is untouched on this path (execute consumes it only after a run is away),
         // so the next sweep tries again. Warn rather than error: a task whose runner went offline
@@ -5589,11 +6262,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (dispatched > 0) this.logger.log(`scheduled: ${dispatched} due task(s) dispatched`);
-    if (rescheduled > 0) {
+    if (overtaken > 0) {
       // Worth a line of its own: "the schedule fired and nothing ran" is otherwise indistinguishable
       // from a bug, and this is the one case where it is the correct outcome.
       this.logger.log(
-        `scheduled: ${rescheduled} due task(s) were rescheduled mid-sweep — their new schedule stands`,
+        `scheduled: ${overtaken} due task(s) were overtaken mid-sweep — the appointment they were ` +
+          'selected under has been replaced',
       );
     }
     if (atCapacity > 0) {
@@ -5760,7 +6434,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           select: { id: true },
         });
         // As with a filed verification: this task was created in order to be run, once.
-        await this.execute(list.ownerId, task.id, undefined, TASK_RUN_TRIGGER.firstRun(task.id));
+        await this.execute(
+          list.ownerId,
+          task.id,
+          undefined,
+          TASK_RUN_TRIGGER.firstRun(task.id, await this.dispatchEpochOf(task.id)),
+        );
         this.logger.log(`foreman dispatched for stalled list ${list.id} (task ${task.id})`);
         // The id is encoded where it becomes prose. This detail is stored and replayed to agents
         // — `describeList` prints it verbatim beside the list's own base62 id — and
@@ -7874,25 +8553,61 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * End a delivery that is not going to start anything, without leaving the request held.
+   * End a delivery that is not going to start anything, by RELEASING its hold.
    *
-   * A bare `return` from inside the lease is the one shape that wedges it: the receipt stays OPEN
-   * with a live holder, and the next delivery of the same durable token is told the request is in
-   * progress by a process that has already answered.
+   * One of the two endings a stand-down may take — the other is `applyStandDownTarget`, which
+   * freezes one — and §7.7 D5-b4(6) is the rule for choosing between them: freezing is sound
+   * exactly when the token names a moment that can never come back, and releasing is what every
+   * other case owes the request. It is a decision per refusal, not a house style.
    *
-   * RELEASED rather than frozen, for every stand-down, and §7.7 D5-b4(6) is the reason. Freezing
-   * needs the token to name a moment that cannot come back, and the automatic doors' tokens do not
-   * yet: `run_at` can go 09:00 -> 10:00 -> 09:00, and a prerequisite can go DONE -> reopened ->
-   * DONE under an unchanged edge set. A frozen stand-down would answer those legitimate second
-   * moments with the first one's refusal, for ever. `task_dispatch_epoch` (0137) is the name that
-   * makes freezing sound; wiring the doors onto it is H2G, and this is the safe reading until then.
+   * This is that other case, and every automatic refusal in `execute` except the stale epoch takes
+   * it: a supersession link can be removed, a completion policy can go back to MANUAL, a Project's
+   * coordinator can be turned off. None of those facts is in the epoch's transition table, so a
+   * later delivery can legitimately re-derive this very token — and it must be allowed to evaluate
+   * rather than be answered with a refusal from a world that has since changed back.
+   *
+   * What NEITHER ending may do is what a bare `return` from inside the lease does: leave the
+   * receipt OPEN with a live holder, so the next delivery of the same durable token is told the
+   * request is in progress by a process that has already answered it.
    */
-  private async standDown<T>(
+  private async standDownReleasing<T>(
     lease: Extract<TaskRunLease, { held: true }>,
     answer: T,
   ): Promise<T> {
     await this.releaseRunRequest(lease.claim).catch(() => undefined);
     return answer;
+  }
+
+  /**
+   * CARRY OUT a frozen stand-down: bind it, then answer from the plan in force.
+   *
+   * The same two steps `applyExecuteTarget` takes, and for the same reason rather than for symmetry:
+   * 0137's `task_run_request_target_check` says a receipt that is not OPEN HAS a plan, because a
+   * state that claims a decision was made and a plan that is missing are the same fact disagreeing
+   * with itself. Freezing an OPEN receipt straight to `COMPLETED` violates it — correctly, and this
+   * is what it was protecting: a delivery that dies between deciding "this moment is gone" and
+   * recording that answer must leave a row the next delivery can finish, and a bound plan is that
+   * row.
+   *
+   * Reached identically by the holder that decided it and by a takeover that read it off the
+   * receipt, which is what makes "the same request, the same answer" a property of the code.
+   */
+  private async applyStandDownTarget(
+    lease: Extract<TaskRunLease, { held: true }>,
+    frozen: TaskRunStandDownTarget,
+  ): Promise<TaskRunAnswer> {
+    const bound = await this.bindRunRequest(lease.claim, frozen) as TaskRunTargetRecord | null;
+    if (!bound) throw taskRunInProgress(lease.claim.actionKind, lease.claim.requestToken);
+    // The plan in force may not be the one this call computed — a takeover may have bound its own —
+    // and a plan that is not a stand-down is not this method's to carry out. Read off the row,
+    // never assumed from the door that got here.
+    if (!(bound.v === 1 && bound.kind === 'STAND_DOWN')) {
+      throw taskRunUnreadableTarget(lease.claim.actionKind, lease.claim.requestToken);
+    }
+    // The plan is to write nothing, so carrying it out is exactly freezing its answer.
+    return this.completeRunReceipt<TaskRunAnswer>(
+      lease.claim, { ok: false as const, skipped: bound.reason },
+    );
   }
 
   /**
@@ -7922,6 +8637,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // somebody else's command is worse than saying it cannot, and the replica that DOES
       // understand it still holds or will take the lease.
       if (bound?.v === 1 && bound.kind === 'RUN') return this.applyExecuteTarget(lease, bound);
+      // A stand-down that was decided and bound but not yet frozen — its holder died in between.
+      // The plan says the request writes nothing, so finishing it is recording that answer, which
+      // is exactly what the holder was about to do.
+      if (bound?.v === 1 && bound.kind === 'STAND_DOWN') {
+        return this.applyStandDownTarget(lease, bound);
+      }
       throw taskRunUnreadableTarget(lease.claim.actionKind, lease.claim.requestToken);
     }
     const task = await this.prisma.task.findFirst({
@@ -7942,6 +8663,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         runAt: true,
         supersededByTaskId: true,
         terminalReason: true,
+        // WHICH MOMENT this row is at (0137). An automatic delivery names one, and this is what it
+        // is compared against — the fence below. Always present: the table is backfilled and seeded
+        // by a trigger on every INSERT, the same guarantee `dependencyRevision` carries.
+        dispatchEpoch: { select: { epoch: true } },
         // §13.1 AG6's two columns, plus the existence of one direct child. `take: 1` because the
         // question is existence, not a count — the parent of a hundred subtasks reads one row.
         completionPolicy: true,
@@ -7955,6 +8680,35 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!task) throw new NotFoundException('task not found');
+    // THE MOMENT FENCE, and it is first because it decides whether this delivery has any business
+    // evaluating the gates below at all. Only automatic triggers pass `auto`; an explicit Run Now is
+    // a person deciding to start the work now, and there is no moment for it to be stale against.
+    //
+    // An automatic door names its request `<kind>:<task>:<epoch>` and carries the epoch its own
+    // candidate scan read. If the row has moved to a later one, everything that scan concluded is
+    // about a world that no longer exists — the appointment was replaced, the task reopened, a
+    // prerequisite moved — and the pass that reads the NEW epoch is the one that gets to decide what
+    // happens next. Starting anything here would take the execution claim under a name that belongs
+    // to a moment that has passed, and the current moment's own request would then be refused as
+    // "already running": the old event runs and the new one does not, which is the exact inversion
+    // §7.7 D5-b4 exists to remove.
+    //
+    // FROZEN rather than released, and this is the one stand-down that may be. The epoch only ever
+    // goes up, so this token names a moment that can never come back; every later delivery of it —
+    // a redelivered sweep tick, a second replica that scanned before the change — is answering the
+    // same gone moment and gets the same answer without touching a thing. Every other stand-down
+    // below releases, because the fact that refused it can be un-done.
+    const epoch = task.dispatchEpoch?.epoch ?? 0n;
+    if (auto && !autoDispatchStillValid(epoch, auto.observedEpoch)) {
+      return this.applyStandDownTarget(lease, {
+        v: 1,
+        kind: 'STAND_DOWN',
+        taskId: task.id,
+        reason: 'stale-epoch',
+        observedEpoch: auto.observedEpoch.toString(),
+        currentEpoch: epoch.toString(),
+      });
+    }
     // §13.6 SU6, BEFORE anything with an effect. Run Now used to reach the Session insert — which
     // 0130's guard deliberately allows, because the origin is USER and a person may open a run on a
     // replaced attempt — and only then reach `clearFailedForRetry`, whose `FAILED → IN_PROGRESS` a
@@ -7975,7 +8729,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // A stand-down still ends this delivery's hold. Released rather than frozen: a supersession
       // link can be removed, and the same durable fact arriving later must be able to evaluate
       // again rather than replay a refusal from a world that has since changed back.
-      if (auto) return this.standDown(lease, { ok: false as const, skipped: 'superseded' as const });
+      if (auto) {
+        return this.standDownReleasing(lease, { ok: false as const, skipped: 'superseded' as const });
+      }
       throw new ConflictException(`task ${uuidToBase62(id)}: ${refusal}`);
     }
     // §13.1 AG6, in the same position and for the same reason it holds in §7.8's pass and at the
@@ -7997,7 +8753,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       hasDirectChildren: task.children.length > 0,
     })) {
       if (auto) {
-        return this.standDown(lease, { ok: false as const, skipped: 'aggregate-parent' as const });
+        return this.standDownReleasing(
+          lease, { ok: false as const, skipped: 'aggregate-parent' as const },
+        );
       }
       throw new ConflictException(
         `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
@@ -8006,26 +8764,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       );
     }
     if (auto && task.dispatchAuthority === 'COORDINATOR') {
-      return this.standDown(
+      return this.standDownReleasing(
         lease, { ok: false as const, skipped: 'coordinator-authority' as const },
       );
     }
-    // The schedule fence, and it comes before every other check because it decides whether this
-    // call has any business running at all. Only automatic triggers pass `auto`: an explicit Run
-    // Now is a person deciding to start the work despite the schedule, which is exactly the case
-    // the fence must NOT block (see the consumption below). A sweep that has been overtaken by a
-    // reschedule simply stands down — the task keeps whatever schedule it now has, and the sweep
-    // that runs after that instant is the one that starts it.
-    if (auto && !autoDispatchStillValid(task.runAt, auto.observedRunAt)) {
-      // RELEASED, like the three above, and §7.7 D5-b4(6) is why it is not frozen. Freezing needs
-      // the token to name a moment that can never come back, and `sched:<task>:<instant>` does not:
-      // `run_at` can go 09:00 -> 10:00 -> 09:00, and that second 09:00 is a legitimate appointment
-      // which re-derives this name. A frozen stand-down would answer it with this refusal for ever
-      // — the appointment silently never runs. H2G's monotone epoch is what makes freezing sound;
-      // until it lands, releasing is the only safe reading.
-      return this.standDown(lease, { ok: false as const, skipped: 'rescheduled' as const });
-    }
-    const depFacts = (await this.dependencyFactsFor([id])).get(id) ?? [];
+    const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);
     if (!canRun(depState)) {
       // §13.3 DEP: name the CHECK when a check is what refused. "Prerequisites are not all complete
@@ -8423,7 +9166,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    const batchFacts = await this.dependencyFactsFor(tasks.map((t) => t.id));
+    const batchFacts = await this.dependencyFactsFor(ownerId, tasks.map((t) => t.id));
     const states = new Map([...batchFacts]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a
