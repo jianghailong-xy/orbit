@@ -33,6 +33,17 @@ import {
 // queryFn by hand (see urlOf); the source-level endpoint check below is what fixes the shape of
 // every call, including the ones no test invokes.
 vi.mock('../api', () => ({ api: vi.fn(() => new Promise(() => {})) }));
+// The project page now draws the dependency graph itself, behind a `lazy()` boundary. A static
+// render only ever paints that boundary's fallback, so pulling React Flow into this
+// node-environment suite would buy nothing but its import cost — the graph is asserted in
+// ProjectTasksGraph's own suite, which mounts into a DOM.
+vi.mock('../components/ProjectDependencyGraph', async () => {
+  const { createElement } = await import('react');
+  return {
+    ProjectDependencyGraph: () =>
+      createElement('div', { 'data-testid': 'project-dependency-graph' }),
+  };
+});
 
 const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.meta.url)), 'utf8');
 

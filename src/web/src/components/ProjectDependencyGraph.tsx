@@ -1,6 +1,6 @@
 /**
- * A project's dependency graph, drawn — the optional Graph view behind `ProjectTasksViewToggle`,
- * never the default one.
+ * A project's dependency graph, drawn — the picture `ProjectTasksGraph` puts under the project's
+ * panorama header.
  *
  * ## The structural decision this component is built on
  *
@@ -16,8 +16,8 @@
  * A task with subtasks on this canvas is not a node — it IS the box its subtasks sit in, carrying
  * its own title and status in the box header, and its own dependency edges attach to the box. No
  * line on this canvas ever means "is part of"; every line means "waits on". A reader who wants the
- * tree reads the List view, which is the default view precisely because it holds both structures
- * without having to draw either.
+ * tree reads the task list further down the page, which holds both structures without having to
+ * draw either.
  *
  * Nesting stops at one level: a parent that is itself a subtask is lifted to the canvas as a box
  * of its own (see `groupIdOf` in `lib/projectDependencyGraph.ts`). Boxes inside boxes buy nothing
@@ -26,7 +26,7 @@
  * ## Weight
  *
  * React Flow and dagre are imported HERE and nowhere on the path to the project page. This module
- * is reached only through the `lazy()` boundary in `ProjectTasksViewToggle`, and the node-count
+ * is reached only through the `lazy()` boundary in `ProjectTasksGraph`, and the node-count
  * threshold is checked on the far side of that boundary — an oversized project never downloads
  * this chunk at all.
  */

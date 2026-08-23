@@ -7137,30 +7137,6 @@ html[data-theme='dark'] .session-tag-chip {
   pointer-events: none;
 }
 
-/* --- Project task section: List | Graph ------------------------------------------------- */
-.ptv-toggle-option {
-  padding: 3px 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-raised);
-  color: var(--text-2);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.ptv-toggle-option:hover {
-  border-color: var(--brand-border);
-  color: var(--text-1);
-}
-.ptv-toggle-option.is-selected {
-  border-color: var(--brand);
-  background: var(--brand-tint);
-  color: var(--brand-strong);
-  font-weight: 600;
-}
-.ptv-toggle-option:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
 /* A parent task folded into the frame its subtasks sit in — see ProjectDependencyGraph.tsx for
    why parent/child is a box here and never an edge. */
 .pdg-group {

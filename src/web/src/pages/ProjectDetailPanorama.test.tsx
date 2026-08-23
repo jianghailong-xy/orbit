@@ -21,6 +21,16 @@ import { ProjectDetailPage } from './ProjectsPage';
  * actually be dispatched for their absence to mean anything.
  */
 vi.mock('../api', () => ({ api: vi.fn() }));
+// The graph section reaches its drawing module through a `lazy()` boundary; it is stubbed here for
+// the reason ProjectTasksGraph's own suite stubs it — React Flow measures with a ResizeObserver
+// jsdom does not have, and what this file is about is which block comes after which.
+vi.mock('../components/ProjectDependencyGraph', async () => {
+  const { createElement } = await import('react');
+  return {
+    ProjectDependencyGraph: () =>
+      createElement('div', { 'data-testid': 'project-dependency-graph' }),
+  };
+});
 const { api } = await import('../api');
 const apiMock = vi.mocked(api);
 
@@ -275,19 +285,27 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     // Each block found by what it SAYS, not by a test id: these are the headings a reader steers
     // by, and a rename that leaves them unfindable is the thing worth failing on.
     const header = at('Where the work stands');
+    const graph = at('>Task graph<');
+    const chain = at('aria-label="Chain progress"');
+    const goal = at('Ship the new marketing site');
+    const tasks = at('>Tasks<');
     const ranking = at('Unblocks the most work');
     const acceptance = at('Acceptance</div>');
     const feed = at('What the coordinator has been doing');
-    const tasks = at('>Tasks<');
-    const chain = at('aria-label="Chain progress"');
 
     expect(header).toBeGreaterThan(-1);
-    expect(ranking).toBeGreaterThan(header);
+    // The picture the counts above are a summary of, then the chain reading of the same shape.
+    expect(graph).toBeGreaterThan(header);
+    expect(chain).toBeGreaterThan(graph);
+    // What the project was SET UP to be, between the picture and the list that carries it out —
+    // the graph and the list are two readings of one thing, and the fields are what they are for.
+    expect(goal).toBeGreaterThan(chain);
+    expect(tasks).toBeGreaterThan(goal);
+    // The three cards a reader consults less often than either, in their own order after both.
+    expect(ranking).toBeGreaterThan(tasks);
     // Side by side, so the ranking leads and acceptance follows within the same row.
     expect(acceptance).toBeGreaterThan(ranking);
     expect(feed).toBeGreaterThan(acceptance);
-    expect(tasks).toBeGreaterThan(feed);
-    expect(chain).toBeGreaterThan(tasks);
 
     // And the pair really is a pair — one grid, two cards, neither wrapping the other.
     const pair = container.querySelector('.project-panorama-pair');
@@ -394,10 +412,10 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('>Coordinator<')).toBe(true);
     expect(shows('Start coordinator')).toBe(true);
 
-    // Below the panorama, which is the move this assembly made: what the project was set up to be
-    // is read once, where the panorama is what a reader comes back for.
+    // Below the panorama header and its graph, and above the task list: what the project was set
+    // up to be is read on the way from the picture to the tasks that carry it out.
     expect(at('Where the work stands')).toBeLessThan(at('Ship the new marketing site'));
-    expect(at('>Tasks<')).toBeLessThan(at('Ship the new marketing site'));
+    expect(at('Ship the new marketing site')).toBeLessThan(at('>Tasks<'));
     expect(at('Ship the new marketing site')).toBeLessThan(at('>Coordinator<'));
   });
 });

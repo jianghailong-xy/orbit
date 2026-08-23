@@ -37,7 +37,7 @@ import {
   runAtProblem,
   scheduledStart,
 } from '../lib/taskSchedule';
-import { ProjectTasksViewToggle } from '../components/ProjectTasksViewToggle';
+import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -267,12 +267,41 @@ export function ProjectDetailPage() {
               state, so a panorama endpoint that 500s costs the reader that one card and leaves
               the rest of the page standing.
 
-              Ordered by how often each is asked for rather than by how complete it is: where the
-              work stands, then what to unblock and whether it is passing, then what the
-              coordinator has been doing, then the tasks themselves. All of it inside this branch
-              for the reason the tasks section already was — a project that 404s must not put a
-              row of doomed requests on the wire. */}
+              Ordered as the project reads top to bottom rather than by how complete each block
+              is: where the work stands, the picture those counts summarize, what the project was
+              set up to be, the tasks themselves, and then what to unblock, whether it is passing
+              and what the coordinator has been doing. All of it inside this branch for the reason
+              the tasks section already was — a project that 404s must not put a row of doomed
+              requests on the wire. */}
           <ProjectPanoramaHeader projectId={id} />
+
+          {/* Directly under the counts it is the picture of, so the graph lands where a reader is
+              already looking. `taskCount` is the page's own number: the section decides on it
+              whether a graph this size is worth drawing, without a second request. */}
+          <ProjectTasksGraph projectId={id} taskCount={p._count.tasks} />
+
+          {/* Draws nothing at all unless this project is a chain: it reads the same shape the
+              header above does and returns null for a mesh, so the strip is not something this
+              page decides to show — it is something a chain-shaped project has. Under the graph,
+              because on a chain it is the reading the graph cannot give. */}
+          <ProjectChainProgress projectId={id} />
+
+          {/* Between the picture and the list: these three are what the project was SET UP to be,
+              which is what a reader needs in hand before reading the tasks that carry it out. */}
+          <Field label="Goal" text={p.goal} empty="No goal set" />
+          <Field
+            label="Acceptance criteria"
+            text={p.acceptanceCriteria}
+            empty="No acceptance criteria set"
+          />
+          <Field label="Instructions" text={p.instructions} empty="No instructions set" />
+
+          {/* The same tasks the graph above draws, as an indented topological plan — and the only
+              one of the two that is exact at any size. Inside this branch on purpose: the tasks
+              page is only asked for once the project it belongs to came back, so a project that
+              404s never puts a second doomed request on the wire. `id` is the normalized route id
+              — the same spelling the project query above is keyed and fetched with. */}
+          <ProjectTasks projectId={id} />
 
           {/* 1.32 : 1, and one column below 860px. The ranking carries a bar per row and needs
               the width; acceptance is a column of short lines and does not. */}
@@ -283,28 +312,7 @@ export function ProjectDetailPage() {
 
           <ProjectActivityFeed projectId={id} />
 
-          {/* Inside this branch on purpose: the tasks page is only asked for once the project it
-              belongs to came back, so a project that 404s never puts a second doomed request on
-              the wire. `id` is the normalized route id — the same spelling the project query
-              above is keyed and fetched with. */}
-          <ProjectTasks projectId={id} taskCount={p._count.tasks} />
-
-          {/* Draws nothing at all unless this project is a chain: it reads the same shape the
-              header above does and returns null for a mesh, so the strip is not something this
-              page decides to show — it is something a chain-shaped project has. */}
-          <ProjectChainProgress projectId={id} />
-
-          {/* Below the panorama, not above it. These three are what the project was SET UP to be
-              — read once, when it is being understood or changed — where everything above is
-              where it stands right now, which is what a reader comes back for. */}
-          <Field label="Goal" text={p.goal} empty="No goal set" />
-          <Field
-            label="Acceptance criteria"
-            text={p.acceptanceCriteria}
-            empty="No acceptance criteria set"
-          />
-          <Field label="Instructions" text={p.instructions} empty="No instructions set" />
-          {/* A sibling of the fields above and the tasks below, not a wrapper around either: a
+          {/* A sibling of the fields and the tasks above, not a wrapper around either: a
               coordinator that fails to open costs the reader the coordinator and nothing else. */}
           <ProjectCoordinatorControl
             bound={Boolean(p.coordinatorSessionId)}
@@ -733,7 +741,7 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
  * what lets a page of tasks be handed in directly, without a project document standing in front
  * of it deciding whether the section renders at all.
  */
-export function ProjectTasks({ projectId, taskCount }: { projectId: string; taskCount: number }) {
+export function ProjectTasks({ projectId }: { projectId: string }) {
   // The dialog is opened from here rather than owning its own trigger, so the section that lists
   // the level a new task lands in is also the thing that offers to add one to it.
   const [creating, setCreating] = useState(false);
@@ -755,68 +763,63 @@ export function ProjectTasks({ projectId, taskCount }: { projectId: string; task
         </Button>
       </div>
 
-      {/* The list is this toggle's default and its `children`; Graph is the option beside it.
-          The heading and New task sit outside it on purpose — neither of them is a view of the
-          tasks, and both stay reachable whichever view is showing. */}
-      <ProjectTasksViewToggle projectId={projectId} taskCount={taskCount}>
-        {tasks.isLoading ? (
-          <div style={{ padding: 24, textAlign: 'center' }}>
-            <Spin />
-          </div>
-        ) : tasks.isError ? (
-          <Alert
-            type="error"
-            showIcon
-            message="Tasks could not be loaded"
-            description={tasks.error instanceof Error ? tasks.error.message : undefined}
-            action={
-              <Button size="small" danger onClick={() => tasks.refetch()}>
-                Retry
-              </Button>
-            }
-          />
-        ) : tasks.data && tasks.data.items.length > 0 ? (
-          <>
-            {projectTaskGroups(tasks.data.items).map((group) => (
-              // The finished band is dimmed rather than dropped: it is still the answer to "did that
-              // land?", just not to "what can run now", which is what the levels above it answer.
-              <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
-                <div
-                  data-topo-group={group.key}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    justifyContent: 'space-between',
-                    gap: 16,
-                    marginTop: 16,
-                  }}
-                >
-                  <Typography.Text strong={group.level !== null} type="secondary">
-                    {group.heading}
-                  </Typography.Text>
-                  <Typography.Text type="secondary">
-                    {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
-                  </Typography.Text>
-                </div>
-                <List
-                  dataSource={group.tasks}
-                  rowKey="id"
-                  renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
-                />
+      {tasks.isLoading ? (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Spin />
+        </div>
+      ) : tasks.isError ? (
+        <Alert
+          type="error"
+          showIcon
+          message="Tasks could not be loaded"
+          description={tasks.error instanceof Error ? tasks.error.message : undefined}
+          action={
+            <Button size="small" danger onClick={() => tasks.refetch()}>
+              Retry
+            </Button>
+          }
+        />
+      ) : tasks.data && tasks.data.items.length > 0 ? (
+        <>
+          {projectTaskGroups(tasks.data.items).map((group) => (
+            // The finished band is dimmed rather than dropped: it is still the answer to "did that
+            // land?", just not to "what can run now", which is what the levels above it answer.
+            <div key={group.key} style={group.level === null ? { opacity: 0.55 } : undefined}>
+              <div
+                data-topo-group={group.key}
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  marginTop: 16,
+                }}
+              >
+                <Typography.Text strong={group.level !== null} type="secondary">
+                  {group.heading}
+                </Typography.Text>
+                <Typography.Text type="secondary">
+                  {group.tasks.length} task{group.tasks.length === 1 ? '' : 's'}
+                </Typography.Text>
               </div>
-            ))}
-            {/* Said outright rather than shown as a button: this unit reads one page and sends no
-                cursor, so a silent stop here would read as "that is all of them". */}
-            {tasks.data.nextCursor ? (
-              <Typography.Text type="secondary">
-                More top-level tasks exist beyond this first page.
-              </Typography.Text>
-            ) : null}
-          </>
-        ) : (
-          <Empty description="No top-level tasks yet" />
-        )}
-      </ProjectTasksViewToggle>
+              <List
+                dataSource={group.tasks}
+                rowKey="id"
+                renderItem={(t) => <ProjectTaskRow projectId={projectId} task={t} />}
+              />
+            </div>
+          ))}
+          {/* Said outright rather than shown as a button: this unit reads one page and sends no
+              cursor, so a silent stop here would read as "that is all of them". */}
+          {tasks.data.nextCursor ? (
+            <Typography.Text type="secondary">
+              More top-level tasks exist beyond this first page.
+            </Typography.Text>
+          ) : null}
+        </>
+      ) : (
+        <Empty description="No top-level tasks yet" />
+      )}
 
       <NewProjectTaskModal
         projectId={projectId}
