@@ -208,3 +208,43 @@ test('every id in a dependency graph is spelled the same as the node ids', async
   const raw = JSON.stringify(out).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g);
   assert.equal(raw, null, `raw uuids left in the response: ${raw}`);
 });
+
+/**
+ * The same invariant for the PROJECT graph, which speaks marks rather than nodes.
+ *
+ * Its own test because the shape above is no longer the only one: `GET /projects/:id/
+ * dependency-graph` answers with `marks` joined by `sourceMarkId` -> `targetMarkId`, and when
+ * those two names were introduced they landed outside the allowlist. Marks kept their encoded
+ * `id`, edges kept raw uuids, so the client's "both ends must be a mark" filter dropped every
+ * edge and dagre drew a project's whole plan as one column of disconnected cards.
+ *
+ * A mark id is not always a task id — a folded run is `run:1` — so the assertion is that the two
+ * spellings AGREE, whatever each one is, and the uuid sweep is scoped to the marks that carry a
+ * real task id.
+ */
+test('every edge in a project graph names a mark that is drawn', async () => {
+  const A = '019fe1dd-3f39-7610-8e5d-507e36a4ea9b';
+  const B = '019fcbf3-0fa8-7f83-9302-46b25389cb16';
+
+  const out = await through({
+    marks: [
+      { kind: 'TASK', id: A, taskId: A, title: 'prerequisite', parentTaskId: null },
+      { kind: 'TASK', id: B, taskId: B, title: 'dependent', parentTaskId: null },
+      { kind: 'RUN', id: 'run:1', title: '4 steps', taskCount: 4, parentTaskId: null },
+    ],
+    edges: [
+      { sourceMarkId: A, targetMarkId: B },
+      { sourceMarkId: B, targetMarkId: 'run:1' },
+    ],
+  });
+
+  const markIds = new Set(out.marks.map((mark) => mark.id));
+  for (const edge of out.edges) {
+    assert.ok(markIds.has(edge.sourceMarkId), `edge starts at no mark: ${edge.sourceMarkId}`);
+    assert.ok(markIds.has(edge.targetMarkId), `edge ends at no mark: ${edge.targetMarkId}`);
+  }
+  assert.equal(out.marks[2].id, 'run:1', 'a synthetic mark id is not a uuid and stays as it is');
+
+  const raw = JSON.stringify(out).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g);
+  assert.equal(raw, null, `raw uuids left in the response: ${raw}`);
+});
