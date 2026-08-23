@@ -373,3 +373,156 @@ test('turning automation on without saying how far writes nothing at all', { ski
     await teardown();
   }
 });
+
+// ── Moving a coordination workspace (`rebindCoordinator`) ──────────────────────────────────────
+//
+// The rules the unit spec cannot state, because every one of them is enforced by a trigger rather
+// than by the service: the pointer guard that makes the landing and the pointer one decision, the
+// reconciliation that carries a DERIVED identity with its landing and leaves an EXPLICIT one, and
+// the rotation counter that must NOT advance for a conversation nobody opened.
+
+test('rebinding a landing clears the pointer, spends no rotation, and takes a derived identity with it', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  const { prisma, service, teardown } = await open();
+  try {
+    await prisma.session.create({
+      data: {
+        id: SESSION_OLD,
+        ownerId: OWNER_ID,
+        creatorId: OWNER_ID,
+        workspaceId: AGENT_A,
+        title: 'first coordinator',
+        prompt: 'x',
+      },
+    });
+    const created: any = await service.create(OWNER_ID, { title: 'pcc03 rebind' } as never, {
+      sessionId: SESSION_OLD,
+      workspaceId: AGENT_A,
+    });
+    // Ended, so this is a move rather than the refusal below. Written after the binding because a
+    // project is recorded from a conversation somebody is having.
+    await prisma.session.update({ where: { id: SESSION_OLD }, data: { status: 'SUCCEEDED' } });
+
+    const result = await service.rebindCoordinator(OWNER_ID, created.id, AGENT_B);
+
+    assert.equal(result.moved, true);
+    assert.equal(result.coordinatorWorkspaceId, AGENT_B);
+    assert.equal(result.coordinatorSessionId, null);
+    assert.deepEqual(result.unbound, { sessionId: SESSION_OLD, workspaceId: AGENT_A });
+
+    const after = await prisma.project.findUnique({
+      where: { id: created.id },
+      include: { runtime: true, members: true },
+    });
+    assert.equal(after.coordinatorWorkspaceId, AGENT_B);
+    // Not tidiness: `project_coordinator_pointer_guard` refuses a project whose coordinator session
+    // runs anywhere but its coordination workspace, so a landing that moved while a pointer stayed
+    // is a row this database will not hold.
+    assert.equal(after.coordinatorSessionId, null);
+    // A cleared pointer is "a project waiting for its next run", not a rotation: no generation is
+    // spent on a conversation that was never opened.
+    assert.equal(after.runtime.coordinatorGeneration, 0n);
+    // WHO followed WHERE because nobody had chosen WHO — the database's rule, stated once, for
+    // every writer that moves this column.
+    assert.equal(after.members.length, 1);
+    assert.equal(after.members[0].agentId, AGENT_B);
+    assert.equal(after.runtime.coordinatorIdentitySource, 'DERIVED');
+    assert.equal(after.runtime.coordinatorIdentityLandingId, AGENT_B);
+    // And the conversation is where it always was. Detached is not deleted.
+    const old = await prisma.session.findUnique({ where: { id: SESSION_OLD } });
+    assert.equal(old.title, 'first coordinator');
+    assert.equal(old.workspaceId, AGENT_A);
+    assert.equal(old.deletedAt, null);
+  } finally {
+    await teardown();
+  }
+});
+
+test('a coordinator identity somebody chose does not move with the landing', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  const { prisma, service, teardown } = await open();
+  try {
+    const created: any = await service.create(OWNER_ID, { title: 'pcc03 rebind explicit' } as never);
+    // The owner deciding WHO, which is what makes the seat EXPLICIT.
+    await service.update(OWNER_ID, created.id, { coordinatorAgentId: AGENT_A } as never);
+    await prisma.project.update({
+      where: { id: created.id },
+      data: { coordinatorWorkspaceId: AGENT_A },
+    });
+
+    await service.rebindCoordinator(OWNER_ID, created.id, AGENT_B);
+
+    const after = await prisma.project.findUnique({
+      where: { id: created.id },
+      include: { runtime: true, members: true },
+    });
+    assert.equal(after.coordinatorWorkspaceId, AGENT_B, 'WHERE moved');
+    // PAC R3: WHO is not inferred from WHERE, in either direction. An owner who means to move both
+    // sends `coordinatorAgentId` as well, and gets to see that it was two decisions.
+    assert.equal(after.members[0].agentId, AGENT_A, 'and WHO did not');
+    assert.equal(after.runtime.coordinatorIdentitySource, 'EXPLICIT');
+  } finally {
+    await teardown();
+  }
+});
+
+test('a coordinator somebody is still in is not moved out from under, and rebinding where it already is is not refused by it', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  const { prisma, service, teardown } = await open();
+  try {
+    await prisma.session.create({
+      data: {
+        id: SESSION_OLD,
+        ownerId: OWNER_ID,
+        creatorId: OWNER_ID,
+        workspaceId: AGENT_A,
+        title: 'live coordinator',
+        prompt: 'x',
+        status: 'RUNNING',
+      },
+    });
+    const created: any = await service.create(OWNER_ID, { title: 'pcc03 rebind live' } as never, {
+      sessionId: SESSION_OLD,
+      workspaceId: AGENT_A,
+    });
+
+    await assert.rejects(
+      () => service.rebindCoordinator(OWNER_ID, created.id, AGENT_B),
+      (e: any) => e.status === 409 && e.getResponse().code === 'COORDINATOR_SESSION_LIVE',
+    );
+
+    const after = await prisma.project.findUnique({ where: { id: created.id } });
+    assert.equal(after.coordinatorWorkspaceId, AGENT_A, 'refused AND rolled back');
+    assert.equal(after.coordinatorSessionId, SESSION_OLD);
+
+    // The same project, the same live conversation, asked to stay where it is: a retry of a rebind
+    // that already landed must not be reported as a refusal.
+    const again = await service.rebindCoordinator(OWNER_ID, created.id, AGENT_A);
+    assert.equal(again.moved, false);
+    assert.equal(again.coordinatorSessionId, SESSION_OLD, 'and its coordinator is still bound');
+  } finally {
+    await teardown();
+  }
+});
+
+test('a landing that is not a live agent of this account is refused before anything moves', { skip: URL ? false : 'set COORDINATOR_PG_URL to run' }, async () => {
+  const { prisma, service, teardown } = await open();
+  try {
+    const created: any = await service.create(OWNER_ID, { title: 'pcc03 rebind dead' } as never);
+    await prisma.project.update({
+      where: { id: created.id },
+      data: { coordinatorWorkspaceId: AGENT_A },
+    });
+    // Agents are SOFT-deleted, so the foreign key would have accepted this one — which is the whole
+    // reason the check is a query rather than a constraint.
+    await prisma.workspace.update({ where: { id: AGENT_B }, data: { deletedAt: new Date() } });
+
+    await assert.rejects(
+      () => service.rebindCoordinator(OWNER_ID, created.id, AGENT_B),
+      (e: any) => e.status === 400,
+    );
+    assert.equal(
+      (await prisma.project.findUnique({ where: { id: created.id } })).coordinatorWorkspaceId,
+      AGENT_A,
+    );
+  } finally {
+    await teardown();
+  }
+});

@@ -69,6 +69,15 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 export const COORDINATOR_UNAVAILABLE_CODE = 'COORDINATOR_UNAVAILABLE';
 
 /**
+ * "This project's coordinator is a conversation somebody is still in."
+ *
+ * Exported for `COORDINATOR_UNAVAILABLE_CODE`'s reason, and spelled exactly as §7.5's rotation
+ * spells it in the action audit: one situation, one name, whether it was reached by the loop
+ * declining to rotate or by an owner trying to move the landing out from under a live run.
+ */
+export const COORDINATOR_SESSION_LIVE_CODE = 'COORDINATOR_SESSION_LIVE';
+
+/**
  * What a project created from inside a session is bound to: the conversation it is coordinated
  * from, and where that conversation runs.
  *
@@ -417,6 +426,16 @@ export class ProjectsService {
   private static readonly NO_SUCH_AGENT =
     'no such agent to coordinate this project — coordinatorAgentId must name an agent of this ' +
     'account that has not been deleted';
+
+  /** The same answer for a landing, which is a workspace rather than an identity and so has one
+   *  more way to be unusable: `enabled`. A disabled landing is refused HERE rather than left to
+   *  `sessions.create`, because accepting it would write the `COORDINATOR_UNAVAILABLE` this call
+   *  exists to resolve — the owner would rebind, get a 200, and find the coordinator just as
+   *  unopenable as before. See `lastCoordinatorWorkspace` for the read side of the same two
+   *  conditions. */
+  private static readonly NO_SUCH_LANDING =
+    'no such workspace to coordinate this project in — workspaceId must name an agent of this ' +
+    'account that has not been deleted or disabled';
 
   /**
    * One wording for "the session you said you are in is not one I will make a coordinator of",
@@ -2029,6 +2048,140 @@ export class ProjectsService {
       };
     }
     return { sessionId: session.id, created: true, workspaceId: runIn };
+  }
+
+  /**
+   * Move where this project's coordinator opens — the endpoint `coordinator` says is not it.
+   *
+   * §7.5 freezes a coordination run as "the SESSION is replaced; the agent and the workspace are
+   * not", and every automatic path is held to it: the control loop refuses a plan whose landing has
+   * moved (`COORDINATION_WORKSPACE_MOVED`), and asking `coordinator` for one somewhere else is
+   * `ELSEWHERE`. Both refusals name the same addressee — the owner — and until this door existed
+   * there was nothing for them to open. `COORDINATOR_UNAVAILABLE` has always said "rebind this
+   * project's coordination workspace"; a landing that could only be set once, by whichever call
+   * happened to bind it first, made that sentence an instruction with no verb behind it.
+   *
+   * What moves is WHERE, and only WHERE. WHO — the coordinator agent §11.2 keeps on a
+   * `project_member` row — is not written here, because PAC R3 forbids deriving either from the
+   * other. That is not the same as freezing it: `project_coordinator_reconcile` carries a DERIVED
+   * seat along with its landing and leaves an EXPLICIT one exactly where its owner put it, which is
+   * one rule, stated in the database, for every writer that ever moves this column. An owner who
+   * means to move both sends `coordinatorAgentId` to `PATCH :id` as well, and gets to see that it
+   * was two decisions.
+   *
+   * The session pointer is cleared by the same write, and that is not a policy choice either:
+   * `project_coordinator_pointer_guard` refuses a project whose coordinator session runs anywhere
+   * but its coordination workspace, so a landing that moves while a pointer stays is a row the
+   * database will not hold (`COORDINATOR_POINTER_RELOCATED`). The conversation itself is left
+   * alone — it is where the work was discussed, and `ELSEWHERE` has always ended "open it where it
+   * is" — and it is named in the response, so that detaching it is not the same as losing it.
+   *
+   * Not part of the authorization set, for `coordinatorAgentId`'s reason: it says where the next
+   * coordinator opens, not what a coordinator may do. So it bumps no `configRevision`, and a
+   * revision read before it is still the revision an authorization edit was composed against.
+   */
+  async rebindCoordinator(
+    ownerId: string,
+    id: string,
+    workspaceId: string,
+  ): Promise<{
+    coordinatorWorkspaceId: string;
+    coordinatorSessionId: string | null;
+    unbound: { sessionId: string; workspaceId: string } | null;
+    moved: boolean;
+  }> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      // The landing FIRST, and that order is `lock-order.ts`, not preference: `workspace` is rank
+      // 15 and `project` is rank 40, so reading the project before the workspace would lock upward
+      // — which is the exact shape rank 15 exists to keep out of these paths. Nothing here needs
+      // the project row to know which landing was named, so the ranks and the data agree.
+      //
+      // Held `FOR SHARE` for the reason `project_coordinator_reconcile` holds its own landing: a
+      // workspace is SOFT-deleted, so the foreign key below does not conflict with the delete, and
+      // the check and the write would otherwise straddle one.
+      const [target] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "workspace"
+         WHERE "id" = ${workspaceId}::uuid AND "owner_id" = ${ownerId}::uuid
+           AND "deleted_at" IS NULL AND "enabled" = TRUE
+         FOR SHARE`);
+      if (!target) throw new BadRequestException(ProjectsService.NO_SUCH_LANDING);
+
+      // Then the project row under its own lock, the way `update` takes one: this reads a pointer
+      // that `coordinator` and the rotation loop both write, and what it read has to still be true
+      // at the commit that clears it. `FOR NO KEY UPDATE` rather than `FOR UPDATE` — this settles
+      // nothing about acceptance, and §8.6 LO3 forbids starting weak and upgrading, so the strength
+      // is chosen here.
+      const [locked] = await tx.$queryRaw<Array<{
+        coordinator_workspace_id: string | null;
+        coordinator_session_id: string | null;
+      }>>(Prisma.sql`
+        SELECT "coordinator_workspace_id", "coordinator_session_id"
+          FROM "project"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('project not found');
+
+      // Already there, answered as a no-op and answered BEFORE the live-session check below. A
+      // client retrying a request whose response it never saw must not be told its own rebind was
+      // refused, and a call that moves nothing has no reason to care whether the conversation it is
+      // leaving alone happens to be running.
+      if (locked.coordinator_workspace_id === target.id) {
+        return {
+          coordinatorWorkspaceId: target.id,
+          coordinatorSessionId: locked.coordinator_session_id,
+          unbound: null,
+          moved: false,
+        };
+      }
+
+      const [current] = locked.coordinator_session_id
+        ? await tx.$queryRaw<Array<{ id: string; workspace_id: string; live: boolean }>>(Prisma.sql`
+            SELECT s."id", s."workspace_id",
+                   s."status"::text IN (${Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL)}) AS "live"
+              FROM "session" s
+             -- Trashed is not "no longer live", it is "not a conversation anybody can open": a
+             -- pointer into Trash unbinds nothing a caller could have been handed back.
+             WHERE s."id" = ${locked.coordinator_session_id}::uuid
+               AND s."deleted_at" IS NULL`)
+        : [];
+
+      // The same refusal §7.5's rotation makes, at the door instead of in the loop: a coordinator
+      // that is PENDING, RUNNING, AWAITING_INPUT or INTERRUPTED is a conversation somebody is in or
+      // paused, and this write would detach it from the project it believes it coordinates without
+      // its own turn ever being told. Ending it first is one deliberate act; having it happen as a
+      // side effect of moving a workspace is not.
+      if (current?.live) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: COORDINATOR_SESSION_LIVE_CODE,
+          message:
+            'this project’s coordinator is still running — ending or cancelling that conversation ' +
+            'is what frees this project to be coordinated somewhere else',
+          owner: 'USER',
+          requiredAction:
+            'end this project’s current coordinator session, then rebind its coordination workspace',
+        });
+      }
+
+      // One statement, and every consequence of it is the database's: the pointer guard checks the
+      // pair, `project_coordinator_companions_bind` re-seats a DERIVED identity at the new landing,
+      // `project_coordinator_identity_window_repair` writes down the derivation this leaves behind,
+      // and `project_coordinator_rotation_count` reads a cleared pointer as "a project waiting for
+      // its next run" rather than as a rotation, so no generation is spent on a conversation that
+      // was never opened.
+      await tx.project.update({
+        where: { id },
+        data: { coordinatorWorkspaceId: target.id, coordinatorSessionId: null },
+      });
+
+      return {
+        coordinatorWorkspaceId: target.id,
+        coordinatorSessionId: null,
+        unbound: current ? { sessionId: current.id, workspaceId: current.workspace_id } : null,
+        moved: true,
+      };
+    }, loggedRetry(this.logger, 'projects.rebindCoordinator'));
   }
 
   /**

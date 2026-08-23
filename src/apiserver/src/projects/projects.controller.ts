@@ -22,6 +22,7 @@ import {
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
+  RebindProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
   TriggerProjectCoordinatorDto,
@@ -415,6 +416,27 @@ export class ProjectsController {
     @Body() dto: OpenProjectCoordinatorDto,
   ) {
     return this.projects.coordinator(user.userId, id, dto?.workspaceId);
+  }
+
+  /**
+   * Move this project's coordination workspace — the endpoint the 409 above tells the owner about.
+   *
+   * The refusals around a coordinator's landing all end in the same instruction ("rebind this
+   * project's coordination workspace, then open the coordinator again") and all name `USER` as the
+   * one who can carry it out. This is what they name. It is a separate route rather than a field on
+   * `PATCH :id` on purpose: moving a coordinator detaches a conversation, and a decision with a
+   * consequence like that should not be reachable by a request that meant to rename something.
+   *
+   * Owner-only, like `coordinatorAgentId`, and for the same reason — the runner door refuses it, so
+   * a coordinator cannot relocate itself.
+   */
+  @Post(':id/coordinator/rebind')
+  rebindCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RebindProjectCoordinatorDto,
+  ) {
+    return this.projects.rebindCoordinator(user.userId, id, dto.workspaceId);
   }
 
   /**
