@@ -1131,6 +1131,7 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "session", trigger: "session_dispatch_attribution_check", event: "AFTER INSERT", kind: "CONSTRAINT", since: "0122_project_dispatch_boundary", takes: [] },
   { table: "session", trigger: "session_dispatch_authority_guard", event: "BEFORE INSERT", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["task LOCK"] },
   { table: "session", trigger: "session_dispatch_dependency_check", event: "AFTER INSERT", kind: "CONSTRAINT", since: "0132_task_dependency_revision", takes: [] },
+  { table: "session", trigger: "session_merge_projection_checkpoint_authority_trg", event: "BEFORE UPDATE OF \"merge_status\", \"merged_source_sha\", \"branch_merged\"", kind: "ROW/STATEMENT", since: "0152_task_checkpoint", takes: [] },
   { table: "session", trigger: "session_opencode_runner_claim_guard", event: "BEFORE UPDATE OF \"status\"", kind: "ROW/STATEMENT", since: "0080_opencode_runtime", takes: [] },
   { table: "session", trigger: "session_project_capacity_serialize_insert_delete", event: "BEFORE INSERT OR DELETE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["project WRITE"] },
   { table: "session", trigger: "session_project_capacity_serialize_update", event: "BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\"", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: ["project WRITE"] },

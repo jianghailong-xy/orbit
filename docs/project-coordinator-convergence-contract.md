@@ -337,6 +337,18 @@ checkpoint 记录下来的形状——`ACCEPTED` 与 `WIP_RED` 共用一张表�
 - **CP6**：`ACCEPTED` checkpoint 是后续 Task 的**唯一**合法起点，且「最新」按 `seq` 判定而不按时钟：
   两个写者可以在同一毫秒落库，而这条规则的全部内容就是「最新」这个词。
 
+- **CP7**：以上判定必须**对不认识它们的进程也成立**。一个任务一旦有了 checkpoint（即进入
+  checkpoint-managed），任何「这份工作已落地」的记录——merge receipt 与 session 上的
+  `merge_status/merged_source_sha` 投影——都必须指名一个 `ACCEPTED` checkpoint 且 commit 相符，
+  否则在**同一个事务里**被拒绝，投影与回执一起回滚。
+
+  这条不是重复 CP3，而是 CP3 的**执行位置**。混合版本部署里两个 build 同时写一个库：旧 build 的
+  merge-result 路径先写投影、再写一条 `checkpoint_id` 为空的回执（那一列在它编译时还不存在），而
+  runner 没上报 source 时它连回执都不写。只靠服务层的检查，这条规则就只在「所有进程都是新的」时成立
+  ——那是发布说明，不是规则。因此判定下沉到数据库（0152 的两个 trigger，拒绝码
+  `CHECKPOINT_AUTHORITY_REQUIRED`），旧副本因此**无法**为受管任务记录它无权记录的落地；管理开始之前
+  的历史路径完全不受影响，那是系统里已有的每一次合并。
+
 ## 8. 默认熔断策略
 
 `GUARDED_AUTO` 的默认阈值。每一个都是**有限**的；`null` 表示无限，只有带一个 `actor` 为 `USER` 的

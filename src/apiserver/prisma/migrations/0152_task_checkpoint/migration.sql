@@ -1,5 +1,5 @@
--- `[K6]` §7: the checkpoint table, and the two guards that make §7's first row a property of the
--- database rather than of whoever is holding the lease.
+-- `[K6]` §7: the checkpoint table, and the guards that make §7 a property of the database rather
+-- than of whichever build happens to be holding the lease.
 --
 -- `[K1]` froze §7's two kinds and its five refusal codes. `[K3]` gave `task_attempt` the POINTER
 -- half — a sha, a kind, an evidence digest — and said in its own comment that the table and the
@@ -9,19 +9,30 @@
 -- `git stash` on one runner, neither lost nor reachable, so the next generation resumed from a
 -- baseline missing it and re-derived the same failure.
 --
--- Three additions and no rewrites:
+-- Five additions and no rewrites:
 --
 --   1. `task_checkpoint`: append-only, content-keyed, immutable by trigger (CP1).
 --   2. `session_merge_receipt.checkpoint_id` plus a trigger refusing a LANDED receipt that names a
 --      `WIP_RED` checkpoint — §7's "可否进入依赖分支/main = 否", enforced where it can be enforced.
---   3. Nothing else. `task.known_good_sha` keeps its meaning and its writer (`[K3]`'s attempt
+--   3. `session.merge_checkpoint_id`: which checkpoint a QUEUED merge was authorised for, so the
+--      server judges the result it gets back against a fact it persisted rather than one the
+--      runner chose to send.
+--   4. Two triggers that hold §7 against a process that does not know it exists — the mixed-version
+--      case, where the previous build is writing to the same database. See section 4.
+--   5. Nothing else. `task.known_good_sha` keeps its meaning and its writer (`[K3]`'s attempt
 --      close); this table is what that pointer now points INTO.
 --
--- DEPLOYMENT ORDER — this migration goes FIRST, and both halves are safe in a rolling window. The
--- table is one an old replica never reads or writes. The receipt column is nullable, so an old
--- replica keeps inserting receipts with no checkpoint and the trigger has nothing to judge; what it
--- cannot do is record a landed receipt AGAINST a red checkpoint, which requires writing a column it
--- does not know exists.
+-- DEPLOYMENT ORDER — this migration goes FIRST, and the rolling window is safe in the direction
+-- that matters. The table is one an old replica never reads or writes, and the new columns are
+-- nullable, so every merge an old replica handles for an UNMANAGED task behaves exactly as it
+-- always did — which is every merge that exists today.
+--
+-- What an old replica loses is the ability to record a landing for a task that IS
+-- checkpoint-managed without naming the verified commit. That is deliberate, and it is the whole
+-- point of putting the rule here: an old replica has no legal use for that write, and a window in
+-- which one of the two processes can still perform it is a window in which §7 is advisory. The
+-- refusal surfaces as a failed transaction on the old replica — the merge stays pending and is
+-- retried by whichever process picks it up next, which on a rolling deploy is the new one.
 
 -- ---------------------------------------------------------------------------------------------
 -- 1. The checkpoint.
@@ -213,27 +224,92 @@ CREATE UNIQUE INDEX "session_merge_receipt_checkpoint_key"
 ALTER TABLE "session"
   ADD COLUMN "merge_checkpoint_id" UUID REFERENCES "task_checkpoint"("id") ON DELETE SET NULL;
 
--- §7's second row, in the one place a database can hold it: a LANDED receipt may not name a
--- `WIP_RED` checkpoint.
+-- ---------------------------------------------------------------------------------------------
+-- 4. The authority no control plane can route around.
+-- ---------------------------------------------------------------------------------------------
+-- §7's second row, in the one place that holds it against a process that does not know the rule:
+-- once a task is CHECKPOINT-MANAGED, nothing may record that its work landed except the verified
+-- commit itself.
 --
--- The table cannot stop a `git merge`; what it can stop is the control plane recording that
--- known-red work landed, which is what every downstream reader — the baseline, the project's
--- acceptance evidence, the dependent task's dispatch — actually consults. A red checkpoint that
--- reached main is an incident; a red checkpoint the control plane BELIEVES reached main is the same
--- incident with the audit agreeing with it.
+-- WHY THIS IS A TRIGGER AND NOT A SERVICE CHECK
+--
+-- The service checks exist and are the ones that produce a readable refusal. They are also the ones
+-- an OLD replica does not have. A mixed-version deployment runs both builds against one database,
+-- and the previous build's merge-result path writes the landed projection and then a receipt whose
+-- `checkpoint_id` is NULL — not maliciously, but because the column did not exist when it was
+-- compiled. Project AC9 says a mixed-version deployment must not act beyond its authority, and a
+-- rule that holds only while every process is new is not a rule; it is a release note. So the
+-- database decides, and an old replica's whole transaction — projection AND receipt — rolls back
+-- together, which is the only outcome that leaves no half-recorded landing behind.
+--
+-- WHAT "MANAGED" MEANS, AND WHY LEGACY IS SAFE
+--
+-- A task is checkpoint-managed exactly when it has at least one `task_checkpoint` row. Every task
+-- that existed before this migration has none and is completely unaffected — no merge Orbit has
+-- ever recorded changes behaviour. Management begins the moment somebody records a checkpoint,
+-- which is also the moment §7 starts making claims about that task, and from then on the two halves
+-- agree: the service refuses first with a reason, and the database refuses regardless of who asked.
+--
+-- A task holding only `WIP_RED` checkpoints is managed and has nothing accepted, so every landed
+-- claim about it fails — which is the correct reading of "known-red work is saved, not merged".
+
+CREATE OR REPLACE FUNCTION "task_is_checkpoint_managed"(p_task_id UUID) RETURNS BOOLEAN AS $$
+  SELECT p_task_id IS NOT NULL
+     AND EXISTS (SELECT 1 FROM "task_checkpoint" WHERE "task_id" = p_task_id);
+$$ LANGUAGE sql STABLE;
+
+/* Is this commit one this task actually verified? Membership, not "the latest": a receipt for an
+   earlier accepted checkpoint, re-reported after a newer one was recorded, is still a true
+   statement about a landing that happened. */
+CREATE OR REPLACE FUNCTION "task_has_accepted_checkpoint_at"(p_task_id UUID, p_sha TEXT)
+RETURNS BOOLEAN AS $$
+  SELECT p_task_id IS NOT NULL AND p_sha IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM "task_checkpoint"
+        WHERE "task_id" = p_task_id AND "kind" = 'ACCEPTED' AND "commit_sha" = lower(btrim(p_sha))
+     );
+$$ LANGUAGE sql STABLE;
+
 CREATE OR REPLACE FUNCTION "session_merge_receipt_checkpoint_accepted"() RETURNS TRIGGER AS $$
 DECLARE
   cp_kind TEXT;
+  cp_sha  TEXT;
 BEGIN
-  IF NEW."checkpoint_id" IS NULL OR NEW."result" NOT IN ('MERGED', 'ALREADY_MERGED') THEN
+  IF NEW."result" NOT IN ('MERGED', 'ALREADY_MERGED') THEN
     RETURN NEW;
   END IF;
-  SELECT "kind" INTO cp_kind FROM "task_checkpoint" WHERE "id" = NEW."checkpoint_id";
-  IF cp_kind IS NOT NULL AND cp_kind <> 'ACCEPTED' THEN
+
+  IF NEW."checkpoint_id" IS NULL THEN
+    -- The old-replica shape. Allowed for a task nobody has checkpointed — that is every merge in
+    -- the system's history — and refused the moment §7 governs the task, because a landing with no
+    -- verified point behind it is the exact claim this unit exists to stop.
+    IF "task_is_checkpoint_managed"(NEW."task_id") THEN
+      RAISE EXCEPTION
+        'CHECKPOINT_AUTHORITY_REQUIRED: task % is checkpoint-managed, so a landed receipt must name the checkpoint it landed',
+        NEW."task_id"
+        USING ERRCODE = '23514',
+              DETAIL = 'a landed claim with no verified point behind it (§7 CP3)';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  SELECT "kind", "commit_sha" INTO cp_kind, cp_sha
+    FROM "task_checkpoint" WHERE "id" = NEW."checkpoint_id";
+  IF cp_kind IS NULL THEN
+    RETURN NEW; -- the checkpoint was deleted; the FK's SET NULL will have taken the id with it
+  END IF;
+  IF cp_kind <> 'ACCEPTED' THEN
     RAISE EXCEPTION
       'CHECKPOINT_NOT_ACCEPTED: checkpoint % is %, which may not be recorded as landed',
       NEW."checkpoint_id", cp_kind
       USING ERRCODE = '23514', DETAIL = 'known-red work is saved, not merged (§7)';
+  END IF;
+  IF lower(btrim(NEW."source_sha")) <> cp_sha THEN
+    RAISE EXCEPTION
+      'BRANCH_TIP_MISMATCH: receipt lands % but checkpoint % verified %',
+      lower(btrim(NEW."source_sha")), NEW."checkpoint_id", cp_sha
+      USING ERRCODE = '23514',
+            DETAIL = 'the commits after a verified one carry no test evidence (§7 CP3)';
   END IF;
   RETURN NEW;
 END;
@@ -242,3 +318,47 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER "session_merge_receipt_checkpoint_accepted_trg"
   BEFORE INSERT OR UPDATE ON "session_merge_receipt"
   FOR EACH ROW EXECUTE FUNCTION "session_merge_receipt_checkpoint_accepted"();
+
+-- ---------------------------------------------------------------------------------------------
+-- 5. The same rule on the PROJECTION, because a receipt is not the only way to claim a landing.
+-- ---------------------------------------------------------------------------------------------
+-- The previous build writes `merge_status`, `branch_merged` and `merged_source_sha` BEFORE it
+-- writes any receipt, and it skips the receipt entirely when the runner named no source commit —
+-- so the receipt trigger above never sees that case, and the session is left saying the branch
+-- landed. Every reader of "did this task's work land" reads these columns.
+--
+-- Narrow on purpose. It fires when a writer moves a managed session INTO `merge_status='merged'`,
+-- or names a merged source commit — the two shapes that assert a specific landing. It does NOT
+-- fire on `branch_merged` alone, which is the turn-end heartbeat's conservative ancestry
+-- observation: that one carries no commit, is recomputed every turn, and gating it would fail a
+-- heartbeat over a claim it never made.
+CREATE OR REPLACE FUNCTION "session_merge_projection_checkpoint_authority"() RETURNS TRIGGER AS $$
+DECLARE
+  claimed BOOLEAN;
+BEGIN
+  IF NOT "task_is_checkpoint_managed"(NEW."task_id") THEN
+    RETURN NEW;
+  END IF;
+
+  claimed :=
+    (NEW."merge_status" = 'merged' AND OLD."merge_status" IS DISTINCT FROM 'merged')
+    OR (NEW."merged_source_sha" IS NOT NULL
+        AND NEW."merged_source_sha" IS DISTINCT FROM OLD."merged_source_sha");
+  IF NOT claimed THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT "task_has_accepted_checkpoint_at"(NEW."task_id", NEW."merged_source_sha") THEN
+    RAISE EXCEPTION
+      'CHECKPOINT_AUTHORITY_REQUIRED: session % may not record a landing at % — task % has no accepted checkpoint there',
+      NEW."id", coalesce(lower(btrim(NEW."merged_source_sha")), '<none>'), NEW."task_id"
+      USING ERRCODE = '23514',
+            DETAIL = 'an unverified or unnamed commit cannot be projected as landed (§7 CP3)';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "session_merge_projection_checkpoint_authority_trg"
+  BEFORE UPDATE OF "merge_status", "merged_source_sha", "branch_merged" ON "session"
+  FOR EACH ROW EXECUTE FUNCTION "session_merge_projection_checkpoint_authority"();

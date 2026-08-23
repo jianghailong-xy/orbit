@@ -226,6 +226,7 @@ async function receipt(
     checkpointId?: string | null;
     idempotencyKey?: string;
     conflicts?: string[];
+    taskId?: string;
   } = {},
 ): Promise<string> {
   const result = over.result ?? 'MERGED';
@@ -245,7 +246,7 @@ async function receipt(
     [
       OWNER,
       over.sessionId ?? SESSION,
-      TASK,
+      over.taskId ?? TASK,
       PROJECT,
       result,
       sourceSha,
@@ -461,37 +462,186 @@ test('§7: a landed receipt may not name known-red work', { skip }, async () => 
   }
 });
 
-test('mixed version: an old replica keeps writing receipts, and cannot write the broken one', { skip }, async () => {
+test('mixed version: an old control plane cannot record a landing it is not entitled to', { skip }, async () => {
   const client = await connect();
   try {
     await reset(client);
     const svc = service(client);
-    const red = (await svc.record({
-      ownerId: OWNER, taskId: TASK, scopeRevision: 1,
-      commit: { branch: 'orbit/k6', commitSha: E0[4].commit, treeSha: E0[4].tree, baseSha: E0_BASE },
-      evidence: null,
-      artifact: { kind: 'GIT_BUNDLE', ref: 'bundle:k6:red', digest: BUNDLE },
-      recordedBy: 'WORKER',
-    })) as { checkpointId: string };
 
-    // A replica running the previous build does not know the column exists, so it writes NULL.
-    // 0152's trigger has nothing to judge and the receipt lands, which is the whole deployment
-    // argument: the rolling window costs an old process nothing it used to be able to do.
-    await receipt(client, { result: 'MERGED', sourceSha: E0[4].commit, checkpointId: null });
-    assert.equal(await count(client, 'session_merge_receipt'), 1);
+    // A task nobody has checkpointed — every task that existed before this unit. The previous
+    // build's shape (a landed receipt with no `checkpoint_id`) is exactly right for it and must
+    // keep working, because that is every merge Orbit has ever recorded.
+    await receipt(client, {
+      result: 'MERGED', sourceSha: E0[0].commit, checkpointId: null, taskId: NEXT_TASK,
+    });
     assert.equal(await count(client, 'session_merge_receipt', `"checkpoint_id" IS NULL`), 1);
 
-    // What it cannot do is claim that RED work landed AGAINST the checkpoint — that requires
-    // writing the column, which is what the new build does.
+    // Now the task becomes checkpoint-managed. From here on §7 makes claims about it, and the
+    // database holds them against a process that has never heard of §7.
+    const accepted = (await svc.record({
+      ownerId: OWNER, taskId: TASK, scopeRevision: 1,
+      commit: { branch: 'orbit/k6', commitSha: E0[3].commit, treeSha: E0[3].tree, baseSha: E0_BASE },
+      evidence: green(E0[3].tree), artifact: null, recordedBy: 'WORKER',
+    })) as { checkpointId: string };
+
+    // The old replica's receipt shape, on a managed task. It is not malicious — the column did not
+    // exist when that build was compiled — and it is refused anyway, because a rule that holds only
+    // while every process is new is a release note rather than a rule.
+    await assert.rejects(
+      receipt(client, { result: 'MERGED', sourceSha: E0[3].commit, checkpointId: null }),
+      /CHECKPOINT_AUTHORITY_REQUIRED/,
+      'an old replica recorded a landing with nothing verified behind it',
+    );
+    // Including for the RED tip, which is the version of it that actually loses work.
+    await assert.rejects(
+      receipt(client, { result: 'ALREADY_MERGED', sourceSha: E0[4].commit, checkpointId: null }),
+      /CHECKPOINT_AUTHORITY_REQUIRED/,
+    );
+    // A receipt that names the checkpoint but the WRONG commit is refused by the database too —
+    // the service checks this first, and the service is the half an old replica does not have.
     await assert.rejects(
       receipt(client, {
-        result: 'MERGED', sourceSha: E0[4].commit, checkpointId: red.checkpointId,
-        idempotencyKey: 'other',
+        result: 'MERGED', sourceSha: E0[4].commit, checkpointId: accepted.checkpointId,
+        idempotencyKey: 'wrong-commit',
       }),
-      /CHECKPOINT_NOT_ACCEPTED/,
+      /BRANCH_TIP_MISMATCH/,
     );
 
-    // ...and the old receipt is left exactly where it was. An upgrade rewrites no history.
+    // Nothing of it landed, and the legacy row from before management is untouched.
+    assert.equal(await count(client, 'session_merge_receipt'), 1);
+    assert.equal(await count(client, 'session_merge_receipt', `"task_id" = '${NEXT_TASK}'`), 1);
+
+    // The verified commit still lands, from any writer.
+    await receipt(client, {
+      result: 'MERGED', sourceSha: E0[3].commit, checkpointId: accepted.checkpointId,
+    });
+    assert.equal(await count(client, 'session_merge_receipt'), 2);
+  } finally {
+    await client.end();
+  }
+});
+
+test('mixed version: the old controller transaction rolls back whole', { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+    const svc = service(client);
+    const accepted = (await svc.record({
+      ownerId: OWNER, taskId: TASK, scopeRevision: 1,
+      commit: { branch: 'orbit/k6', commitSha: E0[3].commit, treeSha: E0[3].tree, baseSha: E0_BASE },
+      evidence: green(E0[3].tree), artifact: null, recordedBy: 'WORKER',
+    })) as { checkpointId: string };
+
+    // The previous build's merge-result path, statement for statement: the projection FIRST, then
+    // a receipt with no checkpoint — and, when the runner named no source at all, no receipt.
+    // Both halves are in one transaction, which is what makes rolling back the right answer.
+    const oldController = async (sourceSha: string | null) => {
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          `UPDATE "session"
+              SET "merge_status" = 'merged', "branch_merged" = true, "merged_source_sha" = $2
+            WHERE "id" = $1`,
+          [SESSION, sourceSha],
+        );
+        if (sourceSha !== null) {
+          await client.query(
+            `INSERT INTO "session_merge_receipt"
+               ("owner_id","session_id","task_id","project_id","result","source_branch","source_sha",
+                "target_branch","target_sha_before","target_sha_after","recorded_by","idempotency_key")
+             VALUES ($1,$2,$3,$4,'MERGED','orbit/k6',$5,'main',$6,$5,'RUNNER',$7)`,
+            [OWNER, SESSION, TASK, PROJECT, sourceSha, E0_BASE, `old:${sourceSha}`],
+          );
+        }
+        await client.query('COMMIT');
+        return null;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        return String((error as Error).message);
+      }
+    };
+
+    const session = async () =>
+      rows<{ mergeStatus: string | null; branchMerged: boolean | null; mergedSourceSha: string | null }>(
+        await client.query(
+          `SELECT "merge_status" AS "mergeStatus", "branch_merged" AS "branchMerged",
+                  "merged_source_sha" AS "mergedSourceSha" FROM "session" WHERE "id" = $1`,
+          [SESSION],
+        ),
+      )[0];
+
+    const before = await session();
+
+    // 1. A runner that ignored `requiredSourceSha` and merged the red tip.
+    assert.match(String(await oldController(E0[4].commit)), /CHECKPOINT_AUTHORITY_REQUIRED/);
+    assert.deepEqual(await session(), before, 'the projection survived a refused landing');
+    assert.equal(await count(client, 'session_merge_receipt'), 0);
+
+    // 2. A runner too old to name a source at all — the case that writes NO receipt, so the
+    //    receipt trigger never sees it. This is why the projection carries its own guard.
+    assert.match(String(await oldController(null)), /CHECKPOINT_AUTHORITY_REQUIRED/);
+    assert.deepEqual(await session(), before);
+
+    // 3. Redelivery: the old controller retries, twice. Same answer, still nothing written.
+    for (let i = 0; i < 2; i++) {
+      assert.match(String(await oldController(E0[4].commit)), /CHECKPOINT_AUTHORITY_REQUIRED/);
+    }
+    assert.deepEqual(await session(), before);
+    assert.equal(await count(client, 'session_merge_receipt'), 0);
+
+    // 4. And the old shape is refused even when it names the RIGHT commit. That is the boundary,
+    //    stated: the authority is "name the verified point", not "happen to guess a sha that
+    //    matches one". An old replica cannot name it — the column did not exist when it was
+    //    compiled — so it cannot record landings for managed work at all, and the merge simply
+    //    stays pending until a process that can picks it up. On a rolling deploy that is the new
+    //    one; the alternative is a window in which §7 is advisory.
+    assert.match(String(await oldController(E0[3].commit)), /CHECKPOINT_AUTHORITY_REQUIRED/);
+    assert.deepEqual(await session(), before);
+    assert.equal(await count(client, 'session_merge_receipt'), 0);
+
+    // 5. The CURRENT controller's shape — the same transaction, with the checkpoint named — lands.
+    const newController = async (idempotencyKey: string) => {
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          `UPDATE "session"
+              SET "merge_status" = 'merged', "branch_merged" = true, "merged_source_sha" = $2
+            WHERE "id" = $1`,
+          [SESSION, E0[3].commit],
+        );
+        await client.query(
+          `INSERT INTO "session_merge_receipt"
+             ("owner_id","session_id","task_id","project_id","result","source_branch","source_sha",
+              "target_branch","target_sha_before","target_sha_after","recorded_by",
+              "idempotency_key","checkpoint_id")
+           VALUES ($1,$2,$3,$4,'MERGED','orbit/k6',$5,'main',$6,$5,'RUNNER',$7,$8)`,
+          [OWNER, SESSION, TASK, PROJECT, E0[3].commit, E0_BASE, idempotencyKey,
+           accepted.checkpointId],
+        );
+        await client.query('COMMIT');
+        return null;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        return String((error as Error).message);
+      }
+    };
+    assert.equal(await newController('cp:landed'), null);
+    const landed = await session();
+    assert.equal(landed.mergeStatus, 'merged');
+    assert.equal(landed.branchMerged, true);
+    assert.equal(landed.mergedSourceSha, E0[3].commit);
+    assert.equal(await count(client, 'session_merge_receipt'), 1);
+
+    // 6. A restart replays it. The receipt's own key decides, and the projection re-asserts the
+    //    same commit rather than a second claim, so the guard has nothing to object to.
+    assert.match(String(await newController('cp:landed')), /duplicate key|idempotency/);
+    assert.deepEqual(await session(), landed);
+    assert.equal(await count(client, 'session_merge_receipt'), 1);
+
+    // 7. ...and once a landing is on the books, an old replica still cannot add a second one on a
+    //    different commit beside it.
+    assert.match(String(await oldController(E0[4].commit)), /CHECKPOINT_AUTHORITY_REQUIRED/);
+    assert.deepEqual(await session(), landed);
     assert.equal(await count(client, 'session_merge_receipt'), 1);
   } finally {
     await client.end();
