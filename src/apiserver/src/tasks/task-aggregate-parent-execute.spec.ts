@@ -147,11 +147,12 @@ for (const policy of ['ALL_CHILDREN_DONE', 'VERIFICATION_PASSED'] as const) {
 
 test('an automatic caller STANDS DOWN on an aggregate parent rather than throwing', async () => {
   // Every automatic stand-down in `execute` is a skip, not an exception: a sweep that has nothing
-  // to do must not look like a failure. `runAt` is what the sweeps pass as `auto`.
+  // to do must not look like a failure. The dispatch epoch is what the sweeps pass as `auto` — the
+  // moment they selected this row under — and an unmoved row is at the epoch its seed gave it.
   const { service, started } = serviceFor([
     row({ id: PARENT, completionPolicy: 'ALL_CHILDREN_DONE', children: [{ id: CHILD }] }),
   ]);
-  const result = await service.execute('owner-1', PARENT, { observedRunAt: null });
+  const result = await service.execute('owner-1', PARENT, { observedEpoch: 0n });
   assert.deepEqual(result, { ok: false, skipped: 'aggregate-parent' });
   assert.deepEqual(started, []);
 });

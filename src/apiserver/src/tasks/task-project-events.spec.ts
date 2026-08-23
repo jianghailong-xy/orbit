@@ -101,7 +101,7 @@ test('manual Project task starts persist a request before dispatch; automatic st
   assert.deepEqual(manual.lockOrder(), ['user', 'project', 'task', 'marker', 'enqueue']);
 
   const automatic = eventFixture([runnableTask('task-1', PROJECT_A)]);
-  await automatic.service.execute(OWNER, 'task-1', { observedRunAt: null });
+  await automatic.service.execute(OWNER, 'task-1', { observedEpoch: 0n });
 
   assert.equal(automatic.transactions(), 0);
   assert.equal(automatic.eventWrites().length, 0);

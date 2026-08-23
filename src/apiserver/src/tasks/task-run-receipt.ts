@@ -118,6 +118,37 @@ export interface TaskRunBatchPlan {
 }
 
 /**
+ * THE FROZEN COMMAND for a request that is going to write NOTHING, and means it.
+ *
+ * An automatic door that stands down because the moment it names has passed is not refusing — it is
+ * ANSWERING, terminally, and §7.7 D5-b4(6) is why: `task_dispatch_epoch` only goes up, so the moment
+ * this token names can never come back and there is nothing a later delivery could usefully
+ * re-decide. So the answer is frozen like any other.
+ *
+ * Which makes it a plan, and it has to be written down as one. 0137's `task_run_request_target_check`
+ * says a receipt that is not OPEN has a target — the state and the plan are one fact and cannot
+ * disagree — and the reason that constraint exists applies here exactly: a delivery that crashes
+ * between deciding "this moment is gone" and freezing that answer leaves a row a takeover has to be
+ * able to read. Reading THIS says "carry out the plan: write nothing, answer `reason`", which is
+ * the same answer the holder would have given.
+ *
+ * `observedEpoch` and `currentEpoch` are the evidence rather than the mechanism — nothing re-reads
+ * them, and a takeover must not, because they are what the holder saw. They are here so that "why
+ * did this appointment never run" has an answer on the row somebody can look at.
+ */
+export interface TaskRunStandDownTarget {
+  v: 1;
+  kind: 'STAND_DOWN';
+  taskId: string;
+  /** The typed answer this request is frozen with. */
+  reason: 'stale-epoch';
+  /** The moment the delivery was answering, as text — `epoch` is a BIGINT and JSON has no bigint. */
+  observedEpoch: string;
+  /** The moment the row was actually at when the door read it. */
+  currentEpoch: string;
+}
+
+/**
  * Everything a receipt's `target` can be, discriminated.
  *
  * A takeover reads this off a row and acts on it, so "what kind of thing is this" cannot be
@@ -126,7 +157,10 @@ export interface TaskRunBatchPlan {
  * looking for a task that this request deliberately never touched. An unknown `kind` or `v` is
  * refused rather than guessed — a receipt written by a newer binary is not this one's to finish.
  */
-export type TaskRunTargetRecord = TaskRunExecuteTarget | TaskRunBatchPlan;
+export type TaskRunTargetRecord =
+  | TaskRunExecuteTarget
+  | TaskRunBatchPlan
+  | TaskRunStandDownTarget;
 
 /** A receipt as it comes back off the row. */
 export interface TaskRunReceipt {

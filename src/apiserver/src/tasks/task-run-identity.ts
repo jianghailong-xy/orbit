@@ -35,9 +35,10 @@ import { derivedUuid } from '../projects/project-dispatch-identity';
  * received is a token it cannot send again.
  *
  * The automatic doors have no press, so each carries the durable fact it is acting on instead (see
- * `TASK_RUN_TRIGGER`): the appointment being kept, the prerequisite revision that unlocked the
- * task, or the one run a freshly filed task exists for. Those are properties of committed rows, so
- * two sweep passes reading the same world name the same request.
+ * `TASK_RUN_TRIGGER`): the appointment being kept, the moment the task became READY, or the one run
+ * a freshly filed task exists for — each stamped with the monotone `task_dispatch_epoch` it was read
+ * under. Those are properties of committed rows, so two passes over the same moment name the same
+ * request, and two different moments never name the same one.
  */
 export function taskRunRequestKey(request: { taskId: string; requestToken: string }): string {
   return `task-run:v1:${request.taskId}:${request.requestToken}`;
@@ -59,12 +60,6 @@ export function taskRunDesiredSessionId(requestKey: string): string {
 /**
  * The request tokens the AUTOMATIC doors carry, each naming the durable fact that door acted on.
  *
- * SCOPE NOTE. Making these ABA-safe is H2G's unit, not this one: §7.7 D5-b4 writes down the
- * contract and the transition table, and 0137 already ships `task_dispatch_epoch` and its triggers
- * so that unit is a wiring change rather than a migration. What this unit owes is the rule that
- * keeps the gap safe in the meantime — an automatic stand-down releases its receipt instead of
- * freezing it, so a moment that re-derives an earlier name is still evaluated.
- *
  * Every one is `<kind>:<task>:<epoch>`, and all three parts carry weight:
  *
  *  - the KIND separates two doors that can both act at the same epoch;
@@ -75,40 +70,57 @@ export function taskRunDesiredSessionId(requestKey: string): string {
  *    fact's current value because those values come back. `run_at` 09:00 -> 10:00 -> 09:00 is a
  *    legitimate second appointment; a prerequisite going DONE -> reopened -> DONE is a legitimate
  *    second READY transition under an unchanged edge set. Naming either by what it looks like now
- *    hands the second moment the first moment's receipt, and it never runs. `task_dispatch_epoch`
- *    (0137) and §7.7 D5-b4's transition table are what make that impossible.
+ *    hands the second moment the first moment's receipt, and it never runs.
  *
- * Two passes over the same moment read the same epoch off a committed row — on two replicas,
- * before and after a restart — which is the half that makes a redelivered pass one request.
+ * `task_dispatch_epoch` (0137, advanced in one canonical batch since 0154) and §7.7 D5-b4's
+ * transition table are what make that impossible: the counter advances once per statement that
+ * creates a moment at which an automatic door may legitimately start this task's work, and it only
+ * ever goes up. Two passes over the same moment read the same epoch off a committed row — on two
+ * replicas, before and after a restart — which is the half that makes a redelivered pass ONE
+ * request; and a moment that has passed can never be re-entered, which is the half that lets an
+ * automatic stand-down FREEZE its answer instead of leaving the request open for ever.
+ *
+ * The epoch each token carries is the one that door's own candidate scan OBSERVED, not the one the
+ * dispatch finds. That is the point: `execute` compares them, and a delivery whose moment has since
+ * been overtaken is answered as stale rather than allowed to start work for a moment that is gone.
  */
 export const TASK_RUN_TRIGGER = {
   /**
-   * The appointment being kept. `run_at` is consumed back to NULL by the dispatch that keeps it, so
-   * two passes over one due row are one dispatch.
+   * The appointment being kept, at the epoch the sweep read it under.
    *
-   * NOT ABA-safe, and knowingly so: `run_at` can go 09:00 -> 10:00 -> 09:00, and the second 09:00
-   * is a legitimate second appointment that re-derives this name. §7.7 D5-b4 fixes that with a
-   * monotone `task_dispatch_epoch` (the table and its triggers ship in 0137; wiring these tokens
-   * onto it is H2G). Until then the rule that keeps it safe is the one D5-b4(6) states: a
-   * stand-down on this door may only RELEASE its receipt, never freeze it, so a second appointment
-   * that re-derives the name still evaluates.
+   * `run_at` is consumed back to NULL by the dispatch that keeps it, so two passes over one due row
+   * are one dispatch — and the consumption itself advances the epoch, so the NEXT appointment on
+   * this task is a different name that this one can never be replayed into. That is what makes
+   * 09:00 -> 10:00 -> 09:00 two requests: the second 09:00 is epoch+2, not epoch.
    */
-  scheduled: (taskId: string, runAt: Date): string => `sched:${taskId}:${runAt.toISOString()}`,
+  scheduled: (taskId: string, epoch: bigint | number | string): string =>
+    `sched:${taskId}:${epoch}`,
   /**
-   * The prerequisite set that unlocked the task, by `task_dependency_revision.revision` (0132).
+   * The moment this task became READY, at the epoch the unlock was read under.
    *
-   * Carries the same limit as `scheduled` and the same interim rule: the edge set does not change
-   * while a prerequisite goes DONE -> reopened -> DONE, so the revision cannot see the second
-   * legitimate READY transition. H2G re-keys it onto the epoch.
+   * Keyed on the epoch rather than on `task_dependency_revision` (0132), which is what H2F carried:
+   * the edge set does not change while a prerequisite goes DONE -> reopened -> DONE, nor while this
+   * task itself goes DONE -> reopened, so the revision cannot see the second legitimate READY
+   * transition and the second one was answered with the first one's Session. The epoch covers the
+   * revision's whole trigger surface and the status surface besides — §7.7 D5-b4(3) — so the token
+   * needs one number rather than two. 0132's table is untouched: it is the dispatch decision's
+   * LOCK, not a name.
    */
-  dependency: (taskId: string, revision: bigint | number | string): string =>
-    `dep:${taskId}:${revision}`,
+  dependency: (taskId: string, epoch: bigint | number | string): string =>
+    `dep:${taskId}:${epoch}`,
   /**
    * A task that was created in order to be run once, and immediately — the verification filer and
    * the foreman. Its id is the durable fact: a retry of the creation makes a different task, so
    * "the first run of THIS task" names one request for as long as the row exists.
+   *
+   * It carries the epoch too, for the uniformity the receipt's key is read under rather than for a
+   * race: a freshly filed task is at the epoch its seed trigger gave it and nothing has moved it,
+   * so this is that epoch. A task that were ever filed for a first run a second time — reopened,
+   * re-dispatched — would be at a later one, and would be a new command rather than a replay of the
+   * first filing's answer.
    */
-  firstRun: (taskId: string): string => `first-run:${taskId}`,
+  firstRun: (taskId: string, epoch: bigint | number | string): string =>
+    `first-run:${taskId}:${epoch}`,
   /** One press of a bulk Run, scoped to the task inside it that this dispatch is for. */
   batch: (pressToken: string, taskId: string): string => `batch:${pressToken}:${taskId}`,
 } as const;
