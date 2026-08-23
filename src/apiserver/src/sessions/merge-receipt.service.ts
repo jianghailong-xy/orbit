@@ -265,12 +265,22 @@ export class MergeReceiptService {
       checkpointId?: string | null;
     },
   ): Promise<void> {
-    const idempotencyKey = mergeReceiptIdempotencyKey({
-      sessionId: args.sessionId,
-      sourceSha: args.sourceSha,
-      targetBranch: args.targetBranch,
-      result: args.result,
-    });
+    // CP4: the same identity the other door derives. Both doors report the same landings — the
+    // runner's own merge and an agent recording one it made itself — so a key that differed between
+    // them would put two rows in the table for one merge, which is the exact thing MR4 exists to
+    // stop and which `[K6]` widened from "one session" to "one checkpoint".
+    const idempotencyKey = args.checkpointId
+      ? checkpointMergeReceiptKey({
+          checkpointId: args.checkpointId,
+          targetBranch: args.targetBranch,
+          result: args.result,
+        })
+      : mergeReceiptIdempotencyKey({
+          sessionId: args.sessionId,
+          sourceSha: args.sourceSha,
+          targetBranch: args.targetBranch,
+          result: args.result,
+        });
     // createMany + skipDuplicates rather than a find-then-create: the runner retries a merge result
     // on redelivery, and the unique index is the thing that has to decide, not a read that raced.
     await tx.sessionMergeReceipt.createMany({

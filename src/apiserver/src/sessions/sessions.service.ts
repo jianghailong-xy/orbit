@@ -3611,6 +3611,15 @@ export class SessionsService {
       }
       if (session.mergeStatus === 'pending') return null;
 
+      if (session.commitStatus === 'pending') {
+        throw new ConflictException('wait for the pending worktree commit to finish');
+      }
+      if (
+        !SessionsService.TERMINAL.includes(session.status) &&
+        (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt)
+      ) {
+        throw new ConflictException('wait for the current turn to finish before merging');
+      }
       // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
       // touched. Two questions, and the ORDER is the point.
       //
@@ -3637,15 +3646,7 @@ export class SessionsService {
       if (gate.decision !== 'ALLOWED') {
         throw new ConflictException(`${gate.decision}: ${gate.detail}`);
       }
-      if (session.commitStatus === 'pending') {
-        throw new ConflictException('wait for the pending worktree commit to finish');
-      }
-      if (
-        !SessionsService.TERMINAL.includes(session.status) &&
-        (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt)
-      ) {
-        throw new ConflictException('wait for the current turn to finish before merging');
-      }
+
       await tx.session.update({
         where: { id },
         data: {

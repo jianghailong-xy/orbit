@@ -457,6 +457,43 @@ test('§7: a landed receipt may not name known-red work', { skip }, async () => 
   }
 });
 
+test('mixed version: an old replica keeps writing receipts, and cannot write the broken one', { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+    const svc = service(client);
+    const red = (await svc.record({
+      ownerId: OWNER, taskId: TASK, scopeRevision: 1,
+      commit: { branch: 'orbit/k6', commitSha: E0[4].commit, treeSha: E0[4].tree, baseSha: E0_BASE },
+      evidence: null,
+      artifact: { kind: 'GIT_BUNDLE', ref: 'bundle:k6:red', digest: BUNDLE },
+      recordedBy: 'WORKER',
+    })) as { checkpointId: string };
+
+    // A replica running the previous build does not know the column exists, so it writes NULL.
+    // 0152's trigger has nothing to judge and the receipt lands, which is the whole deployment
+    // argument: the rolling window costs an old process nothing it used to be able to do.
+    await receipt(client, { result: 'MERGED', sourceSha: E0[4].commit, checkpointId: null });
+    assert.equal(await count(client, 'session_merge_receipt'), 1);
+    assert.equal(await count(client, 'session_merge_receipt', `"checkpoint_id" IS NULL`), 1);
+
+    // What it cannot do is claim that RED work landed AGAINST the checkpoint — that requires
+    // writing the column, which is what the new build does.
+    await assert.rejects(
+      receipt(client, {
+        result: 'MERGED', sourceSha: E0[4].commit, checkpointId: red.checkpointId,
+        idempotencyKey: 'other',
+      }),
+      /CHECKPOINT_NOT_ACCEPTED/,
+    );
+
+    // ...and the old receipt is left exactly where it was. An upgrade rewrites no history.
+    assert.equal(await count(client, 'session_merge_receipt'), 1);
+  } finally {
+    await client.end();
+  }
+});
+
 test('CP4: one landing is one receipt, across sessions and across redeliveries', { skip }, async () => {
   const client = await connect();
   try {

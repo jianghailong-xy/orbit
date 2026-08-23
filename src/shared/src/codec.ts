@@ -190,6 +190,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // clients see. The same classification `findingId` carries for the same reason.
   'checkpointId',
   'attemptId',
+  // Wire-only, like the aggregates above: `[K6]`'s read states §7 CP6's baseline rather than
+  // leaving a client to re-derive "the LATEST accepted one" by filtering. It is the same id under
+  // a name that says which one it is, so it follows the same rule.
+  'baselineCheckpointId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
