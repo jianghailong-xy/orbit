@@ -375,6 +375,31 @@ describe('ProjectDetailPage', () => {
     expect(html).toContain('href="/projects"'); // back to the list
   });
 
+  it('reads the long-form fields as Markdown rather than printing their source', () => {
+    // All three are written as prompts — a coordinator is handed them verbatim — so they arrive
+    // with headings, lists and emphasis in them, and the page that shows a human the same text
+    // must not be the one place it reads as source.
+    const qc = newClient();
+    qc.setQueryData(
+      ['project', encodeId(P1)],
+      detail({
+        goal: '## Ship it\n\n- new marketing site\n- **90** Lighthouse',
+        instructions: 'Land behind a flag,\nthen flip it',
+      }),
+    );
+    const html = renderDetail(qc, encodeId(P1));
+
+    expect(html).toContain('<h2>Ship it</h2>');
+    expect(html).toContain('<li>new marketing site</li>');
+    expect(html).toContain('<strong>90</strong>');
+    // ...and none of the markers are left standing where the reader can see them.
+    expect(html).not.toContain('## Ship it');
+    expect(html).not.toContain('**90**');
+    // A lone newline stays a line break: these are hand-laid-out fields that used to be rendered
+    // pre-wrapped, and CommonMark's soft break would run their lines together.
+    expect(html).toContain('Land behind a flag,<br/>');
+  });
+
   it('falls back for every empty field and for a project with no tasks', () => {
     const qc = newClient();
     qc.setQueryData(

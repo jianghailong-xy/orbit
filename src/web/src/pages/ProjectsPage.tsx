@@ -2,6 +2,9 @@ import { useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography } from 'antd';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import Markdown from 'react-markdown';
+import rehypeHighlight from 'rehype-highlight';
+import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
 import { ProjectActivityFeed } from '../components/ProjectActivityFeed';
@@ -38,6 +41,7 @@ import {
   scheduledStart,
 } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
+import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -160,12 +164,25 @@ function Field({ label, text, empty }: { label: string; text?: string | null; em
   return (
     <div style={{ marginBottom: 24 }}>
       <Typography.Title level={5}>{label}</Typography.Title>
-      <Typography.Paragraph
-        type={body ? undefined : 'secondary'}
-        style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}
-      >
-        {body || empty}
-      </Typography.Paragraph>
+      {/* These three are written the way task descriptions are — headings, lists, fenced commands —
+          and are handed to a coordinator that reads them as prompts, so they are read as Markdown
+          rather than shown as source. `remarkHardBreaks` because they are hand-laid-out text that
+          used to be rendered pre-wrapped here, and CommonMark's soft break would collapse a
+          multi-line goal into one run-on paragraph. react-markdown directly rather than the
+          transcript's `MD`: that one carries a session's attachment and link resolvers, and
+          importing it would pull the whole transcript module onto a page with no session on it —
+          the one piece worth sharing is the plugin, which is why it lives in lib. */}
+      {body ? (
+        <div className="md">
+          <Markdown remarkPlugins={[remarkGfm, remarkHardBreaks]} rehypePlugins={[rehypeHighlight]}>
+            {body}
+          </Markdown>
+        </div>
+      ) : (
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          {empty}
+        </Typography.Paragraph>
+      )}
     </div>
   );
 }
