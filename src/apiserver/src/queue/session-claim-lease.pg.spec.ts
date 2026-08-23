@@ -481,6 +481,36 @@ test('a legacy claim is still compensated when its build fails', { skip }, async
   assert.equal(await slotsHeld(), 0);
 });
 
+test('a writer that predates the columns still claims, and is still swept as it was', { skip }, async () => {
+  // The literal mixed-version case: an older API replica issues a claim that does not mention
+  // either column. It has to commit against the migrated schema — nullable, defaultless, and
+  // named by no constraint or trigger — and the row it leaves has to behave exactly as it did
+  // before 0157: no handover to undo, and nothing for the sweep to take back.
+  await client.query(
+    `UPDATE "session" SET status = 'RUNNING', "started_at" = COALESCE("started_at", now()),
+                          "last_turn_at" = now(), "updated_at" = now()
+      WHERE id = $1::uuid AND status = 'PENDING'`,
+    [SESSION],
+  );
+
+  const claimed = await read();
+  assert.equal(claimed.status, RunStatus.RUNNING);
+  assert.equal(claimed.claimToken, null);
+  assert.equal(claimed.expiresAt, null);
+  assert.equal(await slotsHeld(), 1);
+
+  await reaper().sweep();
+  assert.equal((await read()).status, RunStatus.RUNNING, 'the new sweep leaves an old claim alone');
+
+  // And the new activation path still works on it — clearing a NULL is a no-op, so a session an
+  // old replica claimed can be activated by a new one without either knowing about the other.
+  await controller().activateLeases({ id: RUNNER }, SESSION, {
+    leaseGeneration: randomUUID(),
+    leaseOwner: LEASE_OWNER,
+  });
+  assert.equal((await read()).status, RunStatus.RUNNING);
+});
+
 // ── Rollback ───────────────────────────────────────────────────────────────────────────────────
 
 test('the flag returns the old behaviour, and drains rather than stranding', { skip }, async () => {
