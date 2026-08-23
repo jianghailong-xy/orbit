@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
@@ -8,6 +11,7 @@ import {
   activityHint,
   activitySourceCounts,
   activityTime,
+  coalesceActivityRuns,
   projectActivityQuery,
   type ProjectActivityItem,
   type ProjectActivityPage,
@@ -72,16 +76,56 @@ function links(html: string): Array<[string, string]> {
   ]);
 }
 
-const item = (over: Partial<ProjectActivityItem> = {}): ProjectActivityItem => ({
-  id: 'row-1',
-  at: '2026-08-22T16:25:11.000Z',
-  kind: 'DISPATCH_TASK',
-  title: 'Dispatch task',
-  detail: 'PROVIDER_UNAVAILABLE',
-  outcome: 'REFUSED',
-  subjectTaskId: TASK,
-  ...over,
-});
+const item = (over: Partial<ProjectActivityItem> = {}): ProjectActivityItem => {
+  const merged: ProjectActivityItem = {
+    id: 'row-1',
+    at: '2026-08-22T16:25:11.000Z',
+    kind: 'DISPATCH_TASK',
+    title: 'Dispatch task',
+    detail: 'PROVIDER_UNAVAILABLE',
+    outcome: 'REFUSED',
+    subjectTaskId: TASK,
+    occurrences: [],
+    ...over,
+  };
+  return {
+    ...merged,
+    occurrences: over.occurrences ?? [{ id: merged.id, at: merged.at }],
+  };
+};
+
+function repeatedItem(count: number, over: Partial<ProjectActivityItem>): ProjectActivityItem {
+  const base = item(over);
+  const start = Date.parse(base.at);
+  const occurrences = Array.from({ length: count }, (_, index) => ({
+    id: `${base.id}-${index + 1}`,
+    at: new Date(start - index * 60_000).toISOString(),
+  }));
+  return { ...base, id: occurrences[0].id, at: occurrences[0].at, occurrences };
+}
+
+async function mountInteractive(qc: QueryClient) {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <ProjectActivityFeed projectId={PROJECT} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  });
+  return { container, root };
+}
+
+async function click(element: HTMLElement): Promise<void> {
+  await act(async () => {
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+}
 
 /** One row per outcome, in the four values the endpoint normalises to. */
 const fourOutcomes: ProjectActivityItem[] = [
@@ -155,6 +199,80 @@ describe('ProjectActivityFeed', () => {
     expect(text).toContain('0 events · 1 decision · 3 actions loaded');
   });
 
+  it('shows a collapsed run as a count and time span, then expands every original row', async () => {
+    const qc = newClient();
+    const run = repeatedItem(3, {
+      id: 'wake',
+      kind: 'WAKE',
+      title: 'timer.due',
+      detail: null,
+      outcome: 'INFO',
+      subjectTaskId: null,
+    });
+    seed(qc, { items: [run], nextCursor: null });
+
+    const collapsed = visibleText(render(qc));
+    const newest = activityTime(run.occurrences[0].at);
+    const middle = activityTime(run.occurrences[1].at);
+    const oldest = activityTime(run.occurrences[2].at);
+    expect(collapsed).toContain('WAKE ×3');
+    expect(collapsed).toContain(`${oldest} – ${newest}`);
+    expect(collapsed).toContain('INFO');
+    expect(collapsed).not.toContain(middle);
+
+    const { container, root } = await mountInteractive(qc);
+    try {
+      const button = Array.from(container.querySelectorAll('button')).find(
+        (candidate) => candidate.textContent?.trim() === 'Show 3 rows',
+      );
+      expect(button).toBeDefined();
+      await click(button!);
+
+      const expanded = container.textContent ?? '';
+      for (const occurrence of run.occurrences) {
+        expect(expanded).toContain(activityTime(occurrence.at));
+      }
+      // The summary plus all three restored rows still spell the outcome; colour is never the
+      // only channel in either state.
+      expect(expanded.match(/INFO/g)).toHaveLength(4);
+      expect(expanded).toContain('Hide 3 rows');
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
+  it('keeps the card bounded and scrolls its contents internally', () => {
+    const qc = newClient();
+    seed(qc, { items: fourOutcomes, nextCursor: null });
+    const html = render(qc);
+
+    expect(html).toContain('max-height:420px');
+    expect(html).toContain('overflow-y:auto');
+  });
+
+  it('keeps full source counts after folding 47 heartbeat pairs', () => {
+    const qc = newClient();
+    seed(qc, {
+      items: [
+        repeatedItem(47, {
+          id: 'wake', kind: 'WAKE', title: 'timer.due', detail: null,
+          outcome: 'INFO', subjectTaskId: null,
+        }),
+        repeatedItem(47, {
+          id: 'decide', kind: 'DECIDE', title: 'in-flight session may end', detail: null,
+          outcome: 'INFO', subjectTaskId: null,
+        }),
+        item({ id: 'action-1', kind: 'DISPATCH_TASK', outcome: 'APPLIED' }),
+        item({ id: 'action-2', kind: 'RAISE_BLOCKER', outcome: 'APPLIED' }),
+        item({ id: 'action-3', kind: 'REQUEST_APPROVAL', outcome: 'REFUSED' }),
+      ],
+      nextCursor: null,
+    });
+
+    expect(visibleText(render(qc))).toContain('47 events · 47 decisions · 3 actions loaded');
+  });
+
   it('renders an empty project as an empty state rather than an empty grid', () => {
     const qc = newClient();
     seed(qc, { items: [], nextCursor: null });
@@ -164,6 +282,14 @@ describe('ProjectActivityFeed', () => {
     expect(html).toContain('ant-empty');
     expect(links(html)).toEqual([]);
     expect(visibleText(html)).not.toContain('Load older activity');
+  });
+
+  it('treats a page with no activity list as empty', () => {
+    const qc = newClient();
+    qc.setQueryData(activityKey, { pages: [{ nextCursor: null }], pageParams: [null] });
+
+    const html = render(qc);
+    expect(visibleText(html)).toContain('The control loop has not recorded anything for this project yet.');
   });
 
   it('renders the loading state, and does not throw', () => {
@@ -263,6 +389,31 @@ describe('activitySourceCounts', () => {
 
   it('counts one row in the singular', () => {
     expect(activityHint([item({ kind: 'WAKE' })])).toBe('1 event · 0 decisions · 0 actions loaded');
+  });
+});
+
+describe('coalesceActivityRuns', () => {
+  it('rejoins bounded page chunks of the two interleaved heartbeat lanes', () => {
+    const wakeA = repeatedItem(2, {
+      id: 'wake-a', kind: 'WAKE', title: 'timer.due', detail: null,
+      outcome: 'INFO', subjectTaskId: null,
+    });
+    const decideA = repeatedItem(2, {
+      id: 'decide-a', kind: 'DECIDE', title: 'in-flight session may end', detail: null,
+      outcome: 'INFO', subjectTaskId: null,
+    });
+    const wakeB = repeatedItem(3, {
+      id: 'wake-b', kind: 'WAKE', title: 'timer.due', detail: null,
+      outcome: 'INFO', subjectTaskId: null,
+    });
+    const decideB = repeatedItem(3, {
+      id: 'decide-b', kind: 'DECIDE', title: 'in-flight session may end', detail: null,
+      outcome: 'INFO', subjectTaskId: null,
+    });
+
+    const joined = coalesceActivityRuns([wakeA, decideA, wakeB, decideB]);
+    expect(joined.map((run) => run.kind)).toEqual(['WAKE', 'DECIDE']);
+    expect(joined.map((run) => run.occurrences.length)).toEqual([5, 5]);
   });
 });
 

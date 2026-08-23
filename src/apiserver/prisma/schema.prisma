@@ -263,6 +263,10 @@ model User {
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
 
+  /// Presses of Run Now this user made, and the receipts of their requests (0137).
+  manualRunTriggers TaskRunManualTrigger[]
+  runRequests       TaskRunRequest[]
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -1559,6 +1563,9 @@ model Project {
   mergeEvidence   ProjectMergeEvidence[]
   mergeReceipts   SessionMergeReceipt[]
 
+  /// Presses of Run Now recorded against this project's tasks (0137).
+  manualRunTriggers TaskRunManualTrigger[]
+
   @@index([ownerId])
   // The referencing side of the workspace FK. Postgres indexes the REFERENCED column automatically
   // and the referencing one never, so without this every workspace delete has to scan project to
@@ -1873,6 +1880,87 @@ model ProjectBlocker {
 /// envelope to decide which Project to reconcile, then re-read the current world. Repeated signals
 /// with the same `dedupeKey` coalesce while pending; the partial unique index that enforces that is
 /// declared in migration 0116 because Prisma cannot express a partial unique constraint.
+/// A LEGACY run request's RECEIPT: what the caller asked for, and what the door authoritatively
+/// answered (migration 0137).
+///
+/// Deriving each artifact from the caller's token makes every artifact stable and still leaves the
+/// REQUEST non-idempotent, because the door re-runs its mutable gates first — prerequisites, the
+/// hold, the assignee, the aggregate/retirement rules, the Project the task is filed under. A
+/// delivery arriving after any of those moved answers something else. So the answer is recorded at
+/// the door and a repeat is served from here, before a single mutable check runs.
+/// The automatic doors' request identity (migration 0137): a monotone per-Task counter, advanced
+/// once per moment at which an automatic door may legitimately start this task's work.
+///
+/// A manual door is named by its caller (`triggerId`). An automatic one has no press, and naming it
+/// with the CURRENT VALUE of the fact it acted on is wrong because those values come back: `run_at`
+/// 09:00 -> 10:00 -> 09:00 is a legitimate second appointment that re-derives the first one's name,
+/// and a prerequisite going DONE -> reopened -> DONE is a legitimate second READY transition under
+/// an unchanged edge set. Both would be answered with the first request's receipt — silently never
+/// running. See §7.7 D5-b4 for the transition table.
+///
+/// A side table rather than a column on `task`, for the three costs 0132 measured: writing the Task
+/// row re-checks all its foreign keys, re-runs every row trigger on it, and moves a clock users
+/// can see.
+model TaskDispatchEpoch {
+  taskId String @id @map("task_id") @db.Uuid
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  epoch  BigInt @default(0)
+
+  @@map("task_dispatch_epoch")
+}
+
+model TaskRunRequest {
+  ownerId      String   @map("owner_id") @db.Uuid
+  owner        User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// `TASK_EXECUTE` or `TASK_BATCH_EXECUTE`: one token used at both doors is two requests.
+  actionKind   String   @map("action_kind")
+  /// The caller's `triggerId`, or the durable fact an automatic door acted on.
+  requestToken String   @map("request_token")
+  /// The canonical payload. The same token with a different one is refused, not answered.
+  fingerprint  String
+  /// OPEN | BOUND | COMPLETED — the request's own state machine, not a two-state cache.
+  status       String   @default("OPEN")
+  /// The immutable plan, written by a compare-and-set BEFORE any effect: which Session is created
+  /// or adopted, which turn is delivered under which key, which batch item goes where. A takeover
+  /// performs exactly this and never re-reads the mutable world that produced it.
+  target       Json?
+  boundAt      DateTime? @map("bound_at")
+  /// The answer, verbatim, so a repeat returns the same bytes.
+  result       Json?
+  /// One evaluator at a time. The holder is the only delivery that reads mutable state or applies
+  /// an effect; the lease expires so a dead holder does not wedge the request, and `attempt` fences
+  /// its writes so a resumed one cannot complete a request that has since been taken over.
+  leaseHolder    String?   @map("lease_holder")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  attempt        Int       @default(0)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([ownerId, actionKind, requestToken])
+  @@index([ownerId, createdAt(sort: Desc)], map: "task_run_request_owner_created_idx")
+  @@map("task_run_request")
+}
+
+/// The Project signal's EFFECT MARKER: one row per (Project, request), written in the same
+/// transaction as the enqueue (migration 0137). 0117's dedupe key is unique only while an event is
+/// unconsumed, so it coalesces an unanswered signal and cannot make the effect exactly-once.
+model TaskRunManualTrigger {
+  projectId String  @map("project_id") @db.Uuid
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// `taskRunManualTriggerId(token, projectId)` — a function of the press and this Project.
+  requestId String  @map("request_id") @db.Uuid
+  ownerId   String  @map("owner_id") @db.Uuid
+  owner     User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// Audit only. SetNull, so deleting a task cannot resurrect a press.
+  taskId    String? @map("task_id") @db.Uuid
+  task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([projectId, requestId])
+  @@index([ownerId, createdAt(sort: Desc)], map: "task_run_manual_trigger_owner_created_idx")
+  @@map("task_run_manual_trigger")
+}
+
 model ProjectEvent {
   id        String  @id @default(uuid(7)) @db.Uuid
   projectId String  @map("project_id") @db.Uuid
@@ -2484,6 +2572,8 @@ model Task {
   dependedOnBy TaskDependency[] @relation("DependencyToTask")
   /// The dispatch version of this task's prerequisite set (0132). Always present.
   dependencyRevision TaskDependencyRevision?
+  /// The automatic doors' request identity (0137). Always present.
+  dispatchEpoch      TaskDispatchEpoch?
   /// Verification conditions this task takes part in (§13.2): the ones it CONCLUDED as a verifier,
   /// the ones recorded ABOUT it as a subject, and the one it was filed to fix as a defect.
   verdictFailuresRaised   TaskVerificationFailure[] @relation("VerificationFailureVerifier")
@@ -2499,6 +2589,8 @@ model Task {
   /// `[K5]`: §6's findings ABOUT this task, and the ones whose one effect IS this task.
   verificationFindings    TaskVerificationFinding[] @relation("FindingSubject")
   filedByFinding          TaskVerificationFinding[] @relation("FindingEffectTask")
+  /// Presses of Run Now recorded against this task (0137).
+  manualRunTriggers       TaskRunManualTrigger[]
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")

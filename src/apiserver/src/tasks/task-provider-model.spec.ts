@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { TasksService } from './tasks.service';
+import { fakeReceiptStore } from './task-run-receipt-fake';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -17,6 +18,8 @@ function runFixture(
   const createCalls: any[][] = [];
   const resumeCalls: any[][] = [];
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: {
       findFirst: async () => ({
         id: TASK_ID,
@@ -33,7 +36,11 @@ function runFixture(
       }),
     },
     taskDependency: { findMany: async () => [] },
+    // A paused run's delivery is read by its own turn key before it is written (H2F).
+    conversationTurn: { findUnique: async () => null },
     session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null,
       // Two reads in runWorkspaceOnTask, and BOTH now filter on status (§13.6 SU6): the mid-flight
       // dedup asks for PENDING/RUNNING, and the continue-this-run read asks for the two PAUSED
       // statuses. A terminal session is no longer a candidate to continue at all — a new attempt
@@ -122,6 +129,8 @@ test('an unpinned task still resumes its last session whatever provider that ses
 function updateFixture() {
   const writes: any[] = [];
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: {
       update: async ({ data }: any) => {
         writes.push(data);
@@ -149,6 +158,8 @@ test('null clears a task\'s provider/model pin; omitting them leaves it alone', 
 
 test('a provider the caller cannot dispatch with is rejected on the write, not at run time', async () => {
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: { update: async () => ({ id: TASK_ID }) },
     // No configured row matches, and the slug isn't a built-in engine either.
     modelProvider: { findFirst: async () => null },
@@ -164,6 +175,8 @@ test('a provider the caller cannot dispatch with is rejected on the write, not a
 
 test('a built-in engine slug needs no configured provider row', async () => {
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: { update: async ({ data }: any) => ({ id: TASK_ID, ...data }) },
     modelProvider: {
       findFirst: async () => {

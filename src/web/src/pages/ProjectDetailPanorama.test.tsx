@@ -318,6 +318,27 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('Project could not be loaded')).toBe(false);
   });
 
+  it('keeps the page standing when dispatch health omits its refusal breakdown', async () => {
+    const stalled = panorama('chain');
+    serve({
+      [`${base}/panorama`]: () =>
+        Promise.resolve({
+          ...stalled,
+          buckets: { ...stalled.buckets, running: 0 },
+        }),
+      [`${base}/panorama/dispatch-health`]: () =>
+        Promise.resolve({ windowHours: 24, dispatch: { applied: 0, refused: 0 } }),
+    });
+    await mount(page());
+
+    expect(shows('Website Revamp')).toBe(true);
+    expect(shows('Where the work stands')).toBe(true);
+    expect(shows('Unblocks the most work')).toBe(true);
+    expect(shows('Acceptance')).toBe(true);
+    expect(shows('What the coordinator has been doing')).toBe(true);
+    expect(shows('Design the landing page')).toBe(true);
+  });
+
   it('draws the chain strip on a chain and nothing at all on a mesh', async () => {
     serve({}, 'chain');
     await mount(page());

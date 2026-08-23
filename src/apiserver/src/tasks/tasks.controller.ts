@@ -17,6 +17,7 @@ import {
   BatchAssignDto,
   BatchDeleteDto,
   BatchExecuteDto,
+  RunTaskDto,
   BatchStopDto,
   CreateTaskCommentDto,
   CreateTaskDto,
@@ -160,7 +161,7 @@ export class TasksController {
 
   @Post('batch-execute')
   batchExecute(@CurrentUser() user: AuthUser, @Body() dto: BatchExecuteDto) {
-    return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent);
+    return this.tasks.batchExecute(user.userId, dto.taskIds, dto.maxConcurrent, dto.triggerId);
   }
 
   @Post('batch-stop')
@@ -178,9 +179,18 @@ export class TasksController {
     return this.tasks.batchAssign(user.userId, dto.taskIds, dto.assigneeId);
   }
 
+  /**
+   * Run Now. The body is optional and carries one field: `triggerId`, this press's identity, which
+   * is what makes a retry of it the same request rather than a second run. A client that sends no
+   * body at all — every build predating the field — behaves exactly as it did.
+   */
   @Post(':id/execute')
-  execute(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
-    return this.tasks.execute(user.userId, id);
+  execute(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RunTaskDto,
+  ) {
+    return this.tasks.execute(user.userId, id, undefined, dto?.triggerId);
   }
 
   @Post(':id/comments')

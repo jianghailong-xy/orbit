@@ -163,6 +163,14 @@ describe('ProjectBlockingLeaderboard', () => {
     expect(container.textContent).toContain('Nothing here waits on anything else');
   });
 
+  it('treats a non-array blocking list as empty', async () => {
+    apiMock.mockResolvedValue({ remainingCount: 7, items: {}, truncated: null });
+    await mount(<ProjectBlockingLeaderboard projectId="p1" />);
+
+    expect(bars()).toHaveLength(0);
+    expect(container.textContent).toContain('Nothing here waits on anything else');
+  });
+
   it('renders while the ranking is in flight', async () => {
     apiMock.mockReturnValue(new Promise(() => {}));
     await mount(<ProjectBlockingLeaderboard projectId="p1" />);

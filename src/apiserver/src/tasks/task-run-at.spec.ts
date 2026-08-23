@@ -9,6 +9,7 @@ import {
   TasksService,
   autoDispatchStillValid,
 } from './tasks.service';
+import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -226,7 +227,15 @@ function sweepFixture(
 ) {
   const executed: string[] = [];
   let budgetReads = 0;
-  const { statements, $queryRaw } = recordingQueryRaw(() => due);
+  // The candidate scan selects `run_at` — its predicate is `run_at IS NOT NULL AND run_at <= now()`
+  // — and the dispatch carries that instant twice over: once as the fence it re-checks against the
+  // row, and once as the durable fact its request is named after. A row without one is a row the
+  // real query cannot return, so the fixture supplies it rather than letting a test assert against
+  // a shape production never sees.
+  const dueAt = new Date(Date.now() - 60_000);
+  const { statements, $queryRaw } = recordingQueryRaw(
+    () => due.map((row) => ({ runAt: dueAt, ...row })),
+  );
   const service = serviceWith({ $queryRaw });
   (service as any).materialisationBudget = async () => {
     budgetReads += 1;
@@ -340,6 +349,8 @@ function executeFixture(runAt: Date | null, options: { cleared?: number } = {}) 
   const writes: any[] = [];
   const published: any[][] = [];
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     task: {
       findFirst: async () => ({
         id: TASK_ID,
@@ -357,7 +368,9 @@ function executeFixture(runAt: Date | null, options: { cleared?: number } = {}) 
       updateMany: async (args: any) => (writes.push(args), { count: options.cleared ?? 1 }),
     },
     taskDependency: { findMany: async () => [] },
-    session: { findFirst: async () => null },
+    session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findFirst: async () => null },
   };
   const sessions = { create: async () => ({ id: 'session-1' }) };
   const realtime = { publishForUser: (...args: any[]) => published.push(args) };
@@ -431,6 +444,8 @@ test('a dispatch that never happened leaves the schedule alone', async () => {
   const writes: any[] = [];
   const service = serviceWith(
     {
+      // Every run door opens its receipt (0137) before anything else.
+      ...fakeReceiptStore(),
       task: {
         findFirst: async () => ({
           id: TASK_ID,
@@ -445,7 +460,9 @@ test('a dispatch that never happened leaves the schedule alone', async () => {
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
       },
       taskDependency: { findMany: async () => [] },
-      session: { findFirst: async () => null },
+      session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findFirst: async () => null },
     },
     { create: async () => ({ id: 'session-1' }) },
   );
@@ -461,6 +478,8 @@ test('a bulk run keeps the appointment the same way a single run does', async ()
   const writes: any[] = [];
   const service = serviceWith(
     {
+      // Every run door opens its receipt (0137) before anything else.
+      ...fakeReceiptStore(),
       task: {
         findMany: async () => [
           {
@@ -491,12 +510,17 @@ test('a bulk run keeps the appointment the same way a single run does', async ()
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
       },
       taskDependency: { findMany: async () => [] },
-      session: { findMany: async () => [] },
+      session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findMany: async () => [] },
     },
     {},
     { publishForUser: () => {} },
   );
-  (service as any).runWorkspaceOnTask = async () => 'session-1';
+  (service as unknown as Record<string, unknown>).planWorkspaceRun =
+    async (_o: string, task: { id: string }) =>
+      ({ kind: 'CREATE', sessionId: `00000000-0000-4000-8000-${task.id}` });
+  (service as any).applyWorkspaceRun = async () => 'session-1';
 
   const result = await service.batchExecute(OWNER_ID, [TASK_ID, OTHER_TASK_ID]);
 
@@ -530,7 +554,9 @@ test('an @-mention answers the comment without cancelling the schedule', async (
         updateMany: async (args: any) => (writes.push(args), { count: 1 }),
         update: async (args: any) => (writes.push(args), { id: TASK_ID }),
       },
-      session: { findFirst: async () => null },
+      session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findFirst: async () => null },
       conversationTurn: { findFirst: async () => null },
       $queryRaw: async () => [],
       $executeRaw: async () => 1,
@@ -562,6 +588,8 @@ test('an @-mention answers the comment without cancelling the schedule', async (
 function previewService(world: { pausedLists?: string[]; runners?: Record<string, string | null> } = {}) {
   const runners = world.runners ?? { w1: 'runner-1' };
   const prisma = {
+    // Every run door opens its receipt (0137) before anything else.
+    ...fakeReceiptStore(),
     workspace: {
       findMany: async ({ where }: any) =>
         (where?.id?.in ?? [])
@@ -726,7 +754,9 @@ test('an automatic trigger is fenced on exactly what it observed', () => {
 function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
   const createdSessions: unknown[] = [];
   const writes: any[] = [];
-  const prisma = {
+  // COMPOSED, not stacked: this double answers `$queryRaw` with the sweep's candidate row, and
+  // the receipt's own statements have to keep reaching the receipt.
+  const prisma = withReceiptStore({
     $queryRaw: async () => [
       {
         id: TASK_ID,
@@ -769,8 +799,10 @@ function raceFixture(scanRunAt: Date | null, readRunAt: Date | null) {
     taskDependency: {
       findMany: async () => [{ taskId: TASK_ID, dependsOnTaskId: OTHER_TASK_ID }],
     },
-    session: { findFirst: async () => null },
-  };
+    session: {
+      // The door reads THIS request's own Session by id before it writes (H2F).
+      findUnique: async () => null, findFirst: async () => null },
+  });
   const sessions = {
     create: async (...args: unknown[]) => (createdSessions.push(args), { id: 'session-1' }),
     resume: async () => ({ turnId: 't', seq: 1 }),

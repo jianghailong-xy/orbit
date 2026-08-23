@@ -43,7 +43,7 @@ export function ProjectBlockingLeaderboard({
   const [hovered, setHovered] = useState<string | null>(null);
 
   const data = ranking.data;
-  const items = data?.items ?? [];
+  const items = Array.isArray(data?.items) ? data.items : [];
 
   return (
     <div style={{ marginBottom: 24 }}>

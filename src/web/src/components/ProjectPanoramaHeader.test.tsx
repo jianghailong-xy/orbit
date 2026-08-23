@@ -136,6 +136,24 @@ describe('ProjectPanoramaHeader', () => {
     expect(html).toContain('var(--warning-bg)');
   });
 
+  it('treats a missing refusal breakdown as empty and still renders every status bucket', () => {
+    const qc = newClient();
+    qc.setQueryData(panoramaKey, panorama());
+    qc.setQueryData(healthKey, {
+      windowHours: 24,
+      dispatch: { applied: 0, refused: 0 },
+    });
+
+    let html = '';
+    expect(() => {
+      html = render(qc);
+    }).not.toThrow();
+
+    const cells = [...html.matchAll(/font-size:29px[^"]*">(\d+)<\/div>/g)].map((m) => m[1]);
+    expect(cells).toEqual(['0', '4', '30', '5']);
+    expect(html).toContain('nothing here explains the stall');
+  });
+
   it('does not raise the banner when something is running, however much is ready', () => {
     const qc = newClient();
     qc.setQueryData(panoramaKey, panorama({ running: 2 }));
@@ -270,5 +288,7 @@ describe('ProjectPanoramaHeader', () => {
     ]);
     expect(topRefusals([])).toEqual([]);
     expect(topRefusals(rows.slice(0, 2))).toHaveLength(2);
+    expect(topRefusals(undefined)).toEqual([]);
+    expect(topRefusals({ refusalCode: 'NOT_AN_ARRAY' })).toEqual([]);
   });
 });
