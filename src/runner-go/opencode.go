@@ -474,7 +474,7 @@ func runOpenCodeTurn(ctx context.Context, job *ClaimedSession, execDir, scratchD
 	if err != nil {
 		return failedOpenCodeSpawn("stderr", err, emit)
 	}
-	if err := cmd.Start(); err != nil {
+	if err := startSessionProcess(cmd); err != nil {
 		if ctx.Err() != nil {
 			return cancelledOpenCodeTurn(ctx, result.RuntimeSessionID)
 		}

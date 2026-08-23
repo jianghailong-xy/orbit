@@ -535,10 +535,25 @@ func shortSha(sha string) string {
 }
 
 // setupWorktree ensures a per-session git worktree exists for job and returns the dir
-// claude should run in. When job has no branch, baseDir isn't a git repo, or the repo has
-// no commits, it returns baseDir unchanged (shared-dir fallback) and records why on
-// job.IsolationStatus. Otherwise it sets job.WT and returns the checkout's exec dir.
+// claude should run in, creating baseDir first when it isn't there yet. When job has no
+// branch, baseDir isn't a git repo, or the repo has no commits, it returns baseDir
+// unchanged (shared-dir fallback) and records why on job.IsolationStatus. Otherwise it
+// sets job.WT and returns the checkout's exec dir.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
+	// An agent's workDir is a path the user typed against a machine the control plane
+	// cannot see, so it may simply not be there yet: a fresh runner, a reinstalled box, or
+	// a project the session is meant to start ("create the dir if it doesn't exist" is a
+	// thing people write in their very first prompt). Create it rather than fail over it —
+	// every isolation decision below reads that dir, and the runtime spawned afterwards
+	// chdirs into it. A dir we cannot create is left for startSessionProcess to report,
+	// which names the workDir instead of blaming the engine binary.
+	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
+		if mkErr := os.MkdirAll(baseDir, 0o755); mkErr != nil {
+			logln(fmt.Sprintf("session %s — cannot create workDir %q: %v", job.SessionID, baseDir, mkErr))
+		} else {
+			logln(fmt.Sprintf("session %s — created missing workDir %q", job.SessionID, baseDir))
+		}
+	}
 	if job.Branch == "" {
 		job.IsolationStatus = isoShared
 		return baseDir
