@@ -177,6 +177,20 @@ export interface ProjectDecisionInput {
        */
       verdictApplied?: boolean;
       /**
+       * `[K5]` criterion 7: the same action for the same `(task, verdictRevision)` is REFUSED with
+       * its retry budget spent.
+       *
+       * Keyed on the CURRENT revision exactly as `verdictApplied` is, and that is what makes the
+       * §11 row it raises able to CLEAR: the fix a person is asked for — revoke the verdict, record
+       * it again — advances the revision, so the next snapshot computes a different key, this reads
+       * false, and BL3 resolves the blocker. Read off the ACTION table instead and the stuck row
+       * would sit there for ever, telling somebody to do a thing that does not make it go away.
+       *
+       * Absent on snapshots captured before this unit, which readers treat as "not exhausted" —
+       * the fail-safe direction, since inventing one would escalate a wait that is still moving.
+       */
+      verdictApplyExhausted?: boolean;
+      /**
        * §13.6 SU1's three columns, absent on decisions captured before migration 0129. Readers
        * must treat an absent field as "nothing retired this attempt", which is exactly what those
        * rows held — the columns did not exist, so no task could name a successor. An old snapshot
@@ -549,6 +563,7 @@ interface TaskRow {
   terminalReason: string | null;
   /** §13.3 DEP4, per row: is THIS task's CURRENT verdict revision applied in the ledger? */
   verdictApplied: boolean;
+  verdictApplyExhausted: boolean;
   updatedAt: Date;
 }
 
@@ -799,6 +814,20 @@ export class ProjectDecisionService {
                     AND va."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
                         || t."id"::text || ':' || t."verdict_revision"::text
                ) AS "verdictApplied",
+               -- [K5] criterion 7, the same correlated shape and the same key: the retries on
+               -- THIS revision's apply are spent. reason_code is the bucket the pass that spent
+               -- the last attempt stamped; refusal_code still says what actually failed. (No
+               -- backticks inside this template literal: one would close it early.)
+               EXISTS (
+                 SELECT 1 FROM "project_action" ve
+                  WHERE ve."project_id" = t."project_id"
+                    AND ve."type"::text = 'APPLY_VERIFICATION_VERDICT'
+                    AND ve."status"::text = 'REFUSED'
+                    AND ve."reason_code" = 'VERDICT_APPLY_EXHAUSTED'
+                    AND ve."subject_id" = t."id"
+                    AND ve."idempotency_key" = 'pc:v1:' || t."project_id"::text || ':verdict:'
+                        || t."id"::text || ':' || t."verdict_revision"::text
+               ) AS "verdictApplyExhausted",
                t."updated_at" AS "updatedAt"
           FROM "task" t JOIN "project" p ON p."id" = t."project_id"
          WHERE t."project_id" = ${projectId}::uuid
@@ -1049,6 +1078,7 @@ export class ProjectDecisionService {
         supersededAt: iso(row.supersededAt),
         terminalReason: row.terminalReason,
         verdictApplied: row.verdictApplied,
+        verdictApplyExhausted: row.verdictApplyExhausted,
         dependsOnTaskIds: dependencies.get(row.id) ?? [],
         liveSessionIds: liveSessions.get(row.id) ?? [],
         failureCount: failures.length,

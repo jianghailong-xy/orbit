@@ -39,7 +39,6 @@ import {
   TaskCompletionPolicyValue,
   isAggregateParent,
 } from './task-aggregation';
-import { VERDICT_APPLY_EXHAUSTED } from './task-verification-verdict';
 
 /** §9.4: the rolling window `sessionBudgetPerDay` is measured over. */
 export const PROJECT_SESSION_BUDGET_WINDOW_MS = 24 * 60 * 60_000;
@@ -288,39 +287,41 @@ function refusedDispatchConditions(input: ProjectDecisionInput): ObservedBlocker
 /**
  * `[K5]` criterion 7: a verdict whose apply ran out of attempts.
  *
- * Keyed on `reasonCode` and not on a count, because `reasonCode` is what a SNAPSHOT carries — the
- * bucket is stamped on the action by the pass that spent the last attempt, so this reads a fact
- * rather than re-deriving a budget from a `detail` the world does not include.
+ * Read off the TASK and not off the action, and that is what makes the row able to clear. The fix
+ * this blocker asks for — revoke the verdict, record it again — advances `verdict_revision`, which
+ * is in the action key, so the next snapshot computes a different key and this reads false. Scanned
+ * from the action table instead, the spent row would sit on disk for ever and the blocker with it,
+ * telling somebody to do a thing that does not make it go away.
  *
- * The subject is the CHECK, matching the action's own subject and `VERIFICATION_CANNOT_CONCLUDE`'s
- * neighbour on the subject side: two checks of one subject can each have a stuck conclusion, and a
- * row per subject would collapse them into one sentence naming the wrong verifier.
+ * The subject is the CHECK, matching the action's own subject: two checks of one subject can each
+ * get stuck, and a row per subject would collapse them into one sentence naming the wrong verifier.
  *
- * TF2: the facts, not the attempt number. A row that says "this has now failed four times" would
- * get a new digest on every pass, which is the churn BL7 excludes and §7.6 TR3 would read as a
- * stream of brand-new failures.
+ * TF2: the facts, not the attempt number. A row that said "this has now failed four times" would
+ * get a new digest every pass, which is the churn BL7 excludes and §7.6 TR3 would read as a stream
+ * of brand-new failures.
  */
 function verdictApplyExhaustedConditions(
   input: ProjectDecisionInput,
 ): ObservedBlockerCondition[] {
   const conditions: ObservedBlockerCondition[] = [];
-  const seen = new Set<string>();
-  for (const action of input.world.actions) {
-    if (action.type !== 'APPLY_VERIFICATION_VERDICT' || !action.subjectId) continue;
-    if (action.status !== 'REFUSED') continue;
-    if (action.reasonCode !== VERDICT_APPLY_EXHAUSTED) continue;
-    if (seen.has(action.subjectId)) continue;
-    seen.add(action.subjectId);
+  for (const task of input.world.tasks) {
+    if (task.verdictApplyExhausted !== true) continue;
+    // `taskObsolete` and NOT `outsideBlockerScope`. The scope helper also excludes every SETTLED
+    // task, which is right for a condition about work still to be done and wrong for this one: a
+    // check that concluded is DONE, and its being DONE is the whole shape — the conclusion exists
+    // and is stuck. What must still be excluded is a check that was RETIRED or superseded, because
+    // nobody is waiting on a conclusion that has been replaced.
+    if (taskObsolete(task, input)) continue;
     conditions.push({
       kind: 'VERDICT_APPLY_EXHAUSTED',
       subjectType: 'TASK',
-      subjectId: action.subjectId,
-      facts: { taskId: action.subjectId, refusalCode: action.refusalCode },
+      subjectId: task.id,
+      facts: { taskId: task.id, verdictRevision: task.verdictRevision ?? null },
       detail: {
-        taskId: action.subjectId,
-        refusalCode: action.refusalCode,
-        actionId: action.actionId,
-        refusedAt: action.createdAt,
+        taskId: task.id,
+        subjectTaskId: task.verifiesTaskId ?? null,
+        verdict: task.verdict ?? null,
+        verdictRevision: task.verdictRevision ?? null,
       },
     });
   }

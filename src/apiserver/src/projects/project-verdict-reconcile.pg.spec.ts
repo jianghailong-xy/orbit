@@ -613,6 +613,30 @@ test('a verification verdict reaches production through the reconcile pass',
         const epochs = await loadVerificationEpochGates(db as never, [target.ids.s]);
         assert.equal(epochs.get(target.ids.s)?.gate, 'VERDICT_NOT_APPLIED');
         assert.equal(epochs.get(target.ids.s)?.stalled, true, 'a permanent wait read as a wait');
+
+        // And the row CLEARS when a person does what it asked. This is the half that decides
+        // whether the escalation is an instruction or an ornament: the required action is "revoke
+        // and re-record the verdict", which advances `verdict_revision` — so the stuck action's
+        // key stops being this revision's key, the condition stops holding, and BL3 resolves it.
+        // Keyed off the ACTION table instead, the spent row would outlive every fix.
+        await tasks.update(target.ownerId, target.ids.v, { verdict: null } as never);
+        await conclude(tasks, target, 'v', TaskVerdict.PASS);
+        for (let wake = 4; wake <= 6; wake += 1) {
+          await reconciler.tick(new Date(Date.now() + wake * 120_000));
+          for (let i = 0; i < 20; i += 1) {
+            const result = await events.drainOnce();
+            if (result.status === 'IDLE' || result.status === 'NO_HANDLER'
+              || result.status === 'DEFERRED') break;
+          }
+        }
+        const after = await db.projectBlocker.findMany({
+          where: { projectId: target.projectId, kind: 'VERDICT_APPLY_EXHAUSTED' },
+        });
+        assert.deepEqual(after.map((b) => b.resolvedAt !== null), [true],
+          'the escalation outlived the fix it asked for');
+        // …and the new revision's apply is a fresh key, so the conclusion actually lands.
+        const reopened = await loadVerificationEpochGates(db as never, [target.ids.s]);
+        assert.equal(reopened.get(target.ids.s)?.gate, null, 'the epoch never reopened');
       });
 
       await t.test('a restart and a redelivery do not turn one retry into two applies',
