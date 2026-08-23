@@ -673,19 +673,24 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     }
   });
 
-  await t.test('a team that changes mid-plan refuses it rather than writing against the old one', async () => {
+  await t.test('a team that is revoked mid-plan refuses it rather than writing against the old one', async () => {
     const w = await seed('barrier-team');
-    await barrier.query('BEGIN');
-    // Hold the project row in a conflicting mode AND change the team in the same transaction, so
-    // the create parks first and sees the new membership only once it is committed. Without the
-    // hold this would be a race the test could win by luck; with it, the ordering is forced.
-    await barrier.query('SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', [w.projectA]);
-    await barrier.query(
+    // COMMITTED before anything starts: the assignee is on the team, so the plan the preflight sees
+    // is an ALLOWED one. That is the whole shape of the case — a plan refused before the
+    // transaction proves nothing about what happens after it.
+    const membership = randomUUID();
+    await admin.query(
       `INSERT INTO "project_member" ("id","project_id","agent_id","role")
        VALUES ($1,$2,$3,'MEMBER'::"project_role")`,
-      [randomUUID(), w.projectA, w.workspaceId]);
+      [membership, w.projectA, w.workspaceId]);
+
+    await barrier.query('BEGIN');
+    // The authority lock this plan's own fence takes, held by somebody else, and the revocation in
+    // the same transaction: the writer parks first and sees the team change only once it commits.
+    await barrier.query('SELECT 1 FROM "project" WHERE "id" = $1::uuid FOR NO KEY UPDATE', [w.projectA]);
+    await barrier.query('DELETE FROM "project_member" WHERE "id" = $1::uuid', [membership]);
     const creating = tasks.create(w.ownerId, {
-      title: 'assigned to somebody the team did not have', projectId: w.projectA,
+      title: 'assigned to somebody the team no longer has', projectId: w.projectA,
       assigneeId: w.workspaceId, projectAcceptanceEpoch: '0',
     } as never, AGENT(w.ownerId), w.sessionA);
     creating.catch(() => undefined);
@@ -694,6 +699,28 @@ test('unit L4: a crossing is declared, answered and spent exactly once', { skip,
     const refusal = await refusalOf(() => creating) as { code: string; message: string };
     assert.equal(refusal.code, 'PLAN_AUTHORITY_MOVED');
     assert.match(refusal.message, /team or its coordinator/);
+    assert.equal((await tasksIn(w.projectA)).length, 1, 'only the fixture task is there');
+    assert.deepEqual(await rows(w.ownerId), [], 'and no crossing was spent');
+  });
+
+  await t.test('a budget lowered mid-plan refuses it, on the owner\'s own path', async () => {
+    const w = await seed('barrier-budget');
+    await barrier.query('BEGIN');
+    await barrier.query(
+      `UPDATE "project" SET "max_concurrent_tasks" = 1, "updated_at" = now() WHERE "id" = $1::uuid`,
+      [w.projectA]);
+    // No creator session: the user API path. §4 R1 exempts the owner from the SCOPE, not from the
+    // world moving underneath a plan they were shown.
+    const creating = tasks.create(w.ownerId, {
+      title: 'planned against a budget that has since been lowered', projectId: w.projectA,
+      projectAcceptanceEpoch: '0',
+    } as never);
+    creating.catch(() => undefined);
+    await awaitBlockedBy(barrierPid, 'the owner\'s create parking behind the project row');
+    await barrier.query('COMMIT');
+    const refusal = await refusalOf(() => creating) as { code: string; message: string };
+    assert.equal(refusal.code, 'PLAN_AUTHORITY_MOVED');
+    assert.match(refusal.message, /concurrency budget/);
     assert.equal((await tasksIn(w.projectA)).length, 1, 'only the fixture task is there');
   });
 
