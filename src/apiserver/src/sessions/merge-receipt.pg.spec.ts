@@ -499,6 +499,45 @@ suite('merge receipts, on real PostgreSQL', async (t) => {
     assert.equal(takeover.receipt.sessionId, w.sessionId, 'the original report is what stands');
   });
 
+  await t.test('CP4: a caller-supplied key cannot fragment one checkpoint-bound landing', async () => {
+    await emptyWorld(client);
+    const w = await world(db, 'crossdoor');
+    const checkpointId = await checkpointed(w, SRC);
+
+    // The agent door with its OWN key — the shape a CLI or a script legitimately uses, and the one
+    // that used to win. The runner door derives the checkpoint key unconditionally, so a caller
+    // key surviving here is a second row in the unique index for one landing.
+    const custom = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+      idempotencyKey: 'run-42',
+    }, 'AGENT');
+    assert.equal(custom.created, true);
+    assert.notEqual(custom.receipt.idempotencyKey, 'run-42', 'the caller key won');
+    // Nothing is lost: what was asked for is on the row, so an audit can see why it is not the key.
+    assert.equal((custom.receipt.detail as { callerIdempotencyKey?: string }).callerIdempotencyKey, 'run-42');
+
+    // Now the runner door reports the same landing, deriving the key the way it always does.
+    await MergeReceiptService.fromRunnerMergeResult(db as unknown as PrismaClient, {
+      ownerId: w.ownerId, sessionId: w.sessionId, taskId: w.taskId, projectId: w.projectId,
+      result: 'MERGED', sourceBranch: 'orbit/25c-work', sourceSha: SRC, targetBranch: 'main',
+      targetShaBefore: TGT_BEFORE, targetShaAfter: TGT_AFTER, rebaseBaseSha: null, conflicts: [],
+      message: null, operationId: null, checkpointId,
+    });
+
+    const { receipts: all } = await receipts.list(w.ownerId, w.sessionId);
+    assert.equal(all.length, 1, 'the two doors wrote two rows for one landing');
+    assert.equal(all[0].id, custom.receipt.id);
+
+    // And the agent door asking a third time, with a THIRD key, still lands on the same row.
+    const again = await receipts.record(w.ownerId, w.sessionId, {
+      result: 'MERGED', sourceSha: SRC, targetBranch: 'main', targetShaAfter: TGT_AFTER,
+      idempotencyKey: 'run-43',
+    }, 'AGENT');
+    assert.equal(again.created, false);
+    assert.equal(again.receipt.id, custom.receipt.id);
+    assert.equal((await receipts.list(w.ownerId, w.sessionId)).receipts.length, 1);
+  });
+
   await t.test("§13.7: an external receipt does not cancel a merge that is still running", async () => {
     await emptyWorld(client);
     const w = await world(db, 'fence');

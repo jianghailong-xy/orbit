@@ -3654,6 +3654,12 @@ export class SessionsService {
           mergeTarget: target,
           mergeRequestedAt: new Date(),
           mergeOperationId: randomUUID(),
+          // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
+          // operation id it is part of. When the result comes back the server checks the reported
+          // commit against this rather than against anything the runner sent — a gate that only
+          // holds when the client cooperates is not a gate. Null for unmanaged work, which is
+          // almost every merge, and which is then unaffected by all of this.
+          mergeCheckpointId: gate.checkpointId,
           mergeOperationOwner: null,
           mergeError: null,
           mergedAt: null,

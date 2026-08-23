@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { MERGE_GATE_REFUSALS } from './convergence-contract';
 import {
   CheckpointRequest,
+  authorizeReportedLanding,
   CheckpointTestEvidence,
   checkpointContentDigest,
   checkpointEvidenceDigest,
@@ -261,6 +262,40 @@ test('the already-there question has three answers and no fourth', () => {
   // An unknown target is not a landing. Conservative on purpose: guessing here routes work into a
   // no-op instead of into a merge.
   assert.equal(landedVerdict(COMMIT, null, false), 'NOT_LANDED');
+});
+
+test('a reported landing is judged against what the SERVER authorised, and fails closed', () => {
+  const expected = { id: 'cp1', kind: 'ACCEPTED' as const, commitSha: COMMIT };
+  const at = (
+    cp: Parameters<typeof authorizeReportedLanding>[0],
+    managed: boolean,
+    sha: string | null,
+  ) => authorizeReportedLanding(cp, managed, sha).decision;
+
+  assert.equal(at(expected, true, COMMIT), 'ALLOWED');
+  assert.equal(at(expected, true, COMMIT.toUpperCase()), 'ALLOWED', 'case is a spelling, not a sha');
+
+  // The defect this exists for: a runner that ignored `requiredSourceSha` and merged something
+  // else. Nothing about the report itself looks wrong — it is a well-formed successful merge.
+  assert.equal(at(expected, true, 'f'.repeat(40)), 'BRANCH_TIP_MISMATCH');
+  // ...and a runner too old to name a source at all. "It merged something" cannot be re-checked,
+  // so it is refused rather than believed — the old behaviour skipped the receipt here but wrote
+  // the projection anyway, which is the same fail-open by a quieter route.
+  assert.equal(at(expected, true, null), 'BRANCH_TIP_MISMATCH');
+  assert.equal(at(expected, true, '   '), 'BRANCH_TIP_MISMATCH');
+
+  // An authorisation that points at red work, however it got there.
+  assert.equal(at({ ...expected, kind: 'WIP_RED' }, true, COMMIT), 'CHECKPOINT_NOT_ACCEPTED');
+
+  // A managed task with no expectation at all fails CLOSED: the queue-time gate would not have
+  // authorised one, so a landing claiming otherwise is not a landing this server asked for.
+  assert.equal(at(null, true, COMMIT), 'NO_CHECKPOINT');
+
+  // ...and unmanaged work — every merge Orbit records today — is untouched by all of it.
+  assert.equal(at(null, false, COMMIT), 'ALLOWED');
+  assert.equal(at(null, false, null), 'ALLOWED');
+  assert.equal(authorizeReportedLanding(null, false, COMMIT).checkpointId, null);
+  assert.equal(authorizeReportedLanding(expected, true, COMMIT).checkpointId, 'cp1');
 });
 
 function bundle() {

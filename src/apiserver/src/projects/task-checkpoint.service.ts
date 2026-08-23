@@ -28,6 +28,8 @@ import {
   CheckpointTestEvidence,
   MergeGateCheckpoint,
   MergeGateDecision,
+  ReportedLandingDecision,
+  authorizeReportedLanding,
   decideMergeGate,
   landedVerdict,
   planCheckpoint,
@@ -465,4 +467,43 @@ export async function mergeDispatchGate(
     return { decision: 'ALLOWED', checkpointId: gate.checkpointId, sourceSha: checkpoint?.commitSha ?? null };
   }
   return gate as MergeDispatchDecision;
+}
+
+/**
+ * The server's own expectation for a reported landing, read inside the caller's transaction.
+ *
+ * `mergeCheckpointId` is what `mergeToMain` persisted when it authorised the operation, and it is
+ * preferred over anything re-derived: re-reading "the latest accepted checkpoint" at result time
+ * would judge the merge against work recorded AFTER it was dispatched. It is null only for an
+ * operation queued by a build that predates this column, and then the current baseline is the
+ * closest honest expectation — still fail-closed, because a managed task with no accepted
+ * checkpoint refuses rather than waves through.
+ */
+export async function reportedLandingAuthority(
+  db: Prisma.TransactionClient | PrismaService,
+  args: {
+    ownerId: string;
+    taskId: string | null;
+    mergeCheckpointId: string | null;
+    sourceSha: string | null;
+  },
+): Promise<ReportedLandingDecision> {
+  if (!args.taskId) return { decision: 'ALLOWED', checkpointId: null };
+  const managed = (await managedTaskRevision(db, args.ownerId, args.taskId)) !== null;
+  if (!managed) return { decision: 'ALLOWED', checkpointId: null };
+
+  let expected: { id: string; kind: CheckpointKind; commitSha: string } | null = null;
+  if (args.mergeCheckpointId) {
+    const [row] = await db.$queryRaw<Array<{ id: string; kind: string; commitSha: string }>>(
+      Prisma.sql`
+        SELECT "id", "kind", "commit_sha" AS "commitSha" FROM "task_checkpoint"
+         WHERE "id" = ${args.mergeCheckpointId}::uuid AND "owner_id" = ${args.ownerId}::uuid
+      `,
+    );
+    expected = row ? { id: row.id, kind: row.kind as CheckpointKind, commitSha: row.commitSha } : null;
+  } else {
+    const latest = await latestAcceptedCheckpoint(db, args.ownerId, args.taskId);
+    expected = latest ? { id: latest.id, kind: latest.kind, commitSha: latest.commitSha } : null;
+  }
+  return authorizeReportedLanding(expected, managed, args.sourceSha);
 }

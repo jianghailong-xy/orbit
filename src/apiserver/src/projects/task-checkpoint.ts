@@ -414,3 +414,71 @@ export function landedVerdict(
 export function verdictIsLanded(verdict: LandedVerdict): boolean {
   return verdict !== 'NOT_LANDED';
 }
+
+/**
+ * May the control plane believe this reported landing?
+ *
+ * Decided from what the SERVER persisted when it authorised the merge, never from what the runner
+ * sent back. `requiredSourceSha` rides on the command because the runner is the only party that can
+ * compare a commit against a working tree — but an older runner does not read it, a broken one can
+ * ignore it, and either would then report a merge of some other commit. Without this, the control
+ * plane writes `branch_merged`, `merged_source_sha` and a receipt for that commit, and because no
+ * checkpoint matches it the receipt carries a NULL `checkpoint_id`, which is exactly the shape
+ * §7's own trigger lets through. An unverified tip would end up recorded as landed, and every
+ * downstream reader — the baseline, the acceptance evidence, the dependent task — would believe it.
+ *
+ * Fail-closed on every uncertainty, and the uncertainties are the point:
+ *
+ *   - a managed task whose merge names no checkpoint at all is refused rather than waved through,
+ *     because the queue-time gate would not have authorised one;
+ *   - a landing that names no source commit is refused, because "it merged something" is not a
+ *     statement anybody can re-check;
+ *   - a source that is not the verified commit is refused, whatever else is true about it.
+ *
+ * Unmanaged work — every merge Orbit records today — has no expectation and is untouched (AC11).
+ */
+export type ReportedLandingDecision =
+  | { decision: 'ALLOWED'; checkpointId: string | null }
+  | { decision: MergeGateRefusal; checkpointId: string | null; detail: string };
+
+export function authorizeReportedLanding(
+  expected: { id: string; kind: CheckpointKind; commitSha: string } | null,
+  managed: boolean,
+  reportedSourceSha: string | null,
+): ReportedLandingDecision {
+  if (!expected) {
+    if (!managed) return { decision: 'ALLOWED', checkpointId: null };
+    return {
+      decision: 'NO_CHECKPOINT',
+      checkpointId: null,
+      detail:
+        'this task is under convergence management and has no accepted checkpoint, so no commit ' +
+        'of it may be recorded as landed',
+    };
+  }
+  if (expected.kind !== 'ACCEPTED') {
+    return {
+      decision: 'CHECKPOINT_NOT_ACCEPTED',
+      checkpointId: expected.id,
+      detail: `the merge was authorised for a ${expected.kind} checkpoint`,
+    };
+  }
+  const reported = reportedSourceSha?.trim().toLowerCase() ?? '';
+  if (reported === '') {
+    return {
+      decision: 'BRANCH_TIP_MISMATCH',
+      checkpointId: expected.id,
+      detail: 'the runner named no source commit, so this landing cannot be re-checked',
+    };
+  }
+  if (reported !== expected.commitSha) {
+    return {
+      decision: 'BRANCH_TIP_MISMATCH',
+      checkpointId: expected.id,
+      detail:
+        `the runner reports it merged ${reported}, but this merge was authorised for the ` +
+        `verified commit ${expected.commitSha}`,
+    };
+  }
+  return { decision: 'ALLOWED', checkpointId: expected.id };
+}

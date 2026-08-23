@@ -11,7 +11,11 @@ import {
 } from './coordinator-pg-test-safety';
 import { scopeHash } from './convergence-progress';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
-import { TaskCheckpointService, mergeDispatchGate } from './task-checkpoint.service';
+import {
+  TaskCheckpointService,
+  mergeDispatchGate,
+  reportedLandingAuthority,
+} from './task-checkpoint.service';
 import {
   CheckpointTestEvidence,
   checkpointEvidenceDigest,
@@ -620,6 +624,67 @@ test('the dispatch gate refuses red and stale work, and says nothing about unman
     });
     assert.equal(plain.decision, 'ALLOWED');
     assert.equal((plain as { checkpointId: string | null }).checkpointId, null);
+  } finally {
+    await client.end();
+  }
+});
+
+test('a reported landing is judged against the checkpoint the SERVER persisted', { skip }, async () => {
+  const client = await connect();
+  try {
+    await reset(client);
+    const svc = service(client);
+    const accepted = (await svc.record({
+      ownerId: OWNER, taskId: TASK, scopeRevision: 1,
+      commit: { branch: 'orbit/k6', commitSha: E0[3].commit, treeSha: E0[3].tree, baseSha: E0_BASE },
+      evidence: green(E0[3].tree), artifact: null, recordedBy: 'WORKER',
+    })) as { checkpointId: string };
+    const red = (await svc.record({
+      ownerId: OWNER, taskId: TASK, scopeRevision: 1,
+      commit: { branch: 'orbit/k6', commitSha: E0[4].commit, treeSha: E0[4].tree, baseSha: E0_BASE },
+      evidence: null,
+      artifact: { kind: 'GIT_BUNDLE', ref: 'bundle:k6:red', digest: BUNDLE },
+      recordedBy: 'WORKER',
+    })) as { checkpointId: string };
+
+    const ask = (mergeCheckpointId: string | null, sourceSha: string | null, taskId = TASK) =>
+      reportedLandingAuthority(prisma(client), {
+        ownerId: OWNER, taskId, mergeCheckpointId, sourceSha,
+      });
+
+    // The operation was authorised for the verified commit, and that is what came back.
+    const ok = await ask(accepted.checkpointId, E0[3].commit);
+    assert.equal(ok.decision, 'ALLOWED');
+    assert.equal(ok.checkpointId, accepted.checkpointId);
+
+    // A runner that ignored `requiredSourceSha` and merged the red tip instead. Nothing about the
+    // report looks wrong — it is a well-formed successful merge of a real commit.
+    assert.equal((await ask(accepted.checkpointId, E0[4].commit)).decision, 'BRANCH_TIP_MISMATCH');
+    // A runner too old to name a source at all.
+    assert.equal((await ask(accepted.checkpointId, null)).decision, 'BRANCH_TIP_MISMATCH');
+    // An authorisation that points at red work.
+    assert.equal((await ask(red.checkpointId, E0[4].commit)).decision, 'CHECKPOINT_NOT_ACCEPTED');
+
+    // An operation queued before this column existed: no persisted expectation, so the current
+    // baseline is the closest honest one — still fail-closed, never waved through.
+    assert.equal((await ask(null, E0[3].commit)).decision, 'ALLOWED');
+    assert.equal((await ask(null, E0[4].commit)).decision, 'BRANCH_TIP_MISMATCH');
+
+    // A managed task with nothing accepted refuses rather than waves through: the queue-time gate
+    // would not have authorised a merge of it in the first place.
+    assert.equal((await ask(null, E0[3].commit, NEXT_TASK)).decision, 'ALLOWED',
+      'sanity: an unmanaged task is untouched');
+    await svc.record({
+      ownerId: OWNER, taskId: NEXT_TASK, scopeRevision: 1,
+      commit: { branch: 'orbit/k6b', commitSha: E0[0].commit, treeSha: E0[0].tree, baseSha: E0_BASE },
+      evidence: null,
+      artifact: { kind: 'GIT_BUNDLE', ref: 'bundle:k6b:red', digest: BUNDLE },
+      recordedBy: 'WORKER',
+    });
+    assert.equal((await ask(null, E0[0].commit, NEXT_TASK)).decision, 'NO_CHECKPOINT');
+
+    // A session with no task is not under any of this.
+    assert.equal((await ask(null, E0[4].commit, null as unknown as string)).decision, 'ALLOWED');
   } finally {
     await client.end();
   }

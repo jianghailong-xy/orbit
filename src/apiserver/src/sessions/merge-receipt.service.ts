@@ -143,7 +143,7 @@ export class MergeReceiptService {
         commitSha: sourceSha,
       });
 
-      // CP4: keyed on the CHECKPOINT when there is one.
+      // CP4: keyed on the CHECKPOINT when there is one, and the caller does not get a vote.
       //
       // MR4's key is scoped to a session, which makes a redelivery from the same session a no-op
       // and is the right answer for a merge nobody planned. It is the wrong answer for verified
@@ -152,11 +152,21 @@ export class MergeReceiptService {
       // was lost mints a SECOND receipt for one landing. `result` stays in both keys — a conflict
       // and a successful merge of one checkpoint are two things that happened, not one reported
       // twice.
-      const idempotencyKey =
-        (input.idempotencyKey ?? '').trim() ||
-        (checkpointId
-          ? checkpointMergeReceiptKey({ checkpointId, targetBranch, result: input.result })
-          : mergeReceiptIdempotencyKey({ sessionId, sourceSha, targetBranch, result: input.result }));
+      //
+      // The caller's own key is OVERRIDDEN here rather than preferred, and that is the whole of
+      // "exactly once" across the two doors. A supplied key says "these two reports are the same
+      // report"; a checkpoint says the same thing more strongly, across sessions and across
+      // processes. Letting the weaker claim win is not a tie broken politely — the runner's door
+      // derives the checkpoint key unconditionally, so one caller key on the agent's door is a
+      // SECOND row in the unique index for one landing, which is the exact defect CP4 exists to
+      // prevent. Nothing is lost: what the caller asked for is kept on the receipt's `detail`, and
+      // the key it actually got comes back on the row.
+      const callerKey = (input.idempotencyKey ?? '').trim();
+      const idempotencyKey = checkpointId
+        ? checkpointMergeReceiptKey({ checkpointId, targetBranch, result: input.result })
+        : callerKey ||
+          mergeReceiptIdempotencyKey({ sessionId, sourceSha, targetBranch, result: input.result });
+      const overriddenKey = checkpointId && callerKey && callerKey !== idempotencyKey ? callerKey : null;
 
       // Looked up by whichever identity this receipt HAS. Reading by session when the row is keyed
       // by checkpoint would miss the receipt a different session already wrote, and the insert
@@ -187,7 +197,12 @@ export class MergeReceiptService {
           rebaseBaseSha,
           conflicts,
           recordedBy,
-          detail: (input.detail ?? {}) as Prisma.InputJsonValue,
+          detail: {
+            ...(input.detail ?? {}),
+            // Kept rather than dropped: an audit asking why this row is not under the key the
+            // caller asked for gets the answer on the row instead of having to infer it.
+            ...(overriddenKey ? { callerIdempotencyKey: overriddenKey } : {}),
+          } as Prisma.InputJsonValue,
           idempotencyKey,
         },
       });

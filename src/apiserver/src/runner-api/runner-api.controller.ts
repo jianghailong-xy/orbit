@@ -21,7 +21,10 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
-import { checkpointIdForCommit } from '../projects/task-checkpoint.service';
+import {
+  checkpointIdForCommit,
+  reportedLandingAuthority,
+} from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -3105,6 +3108,9 @@ export class RunnerApiController {
       throw new BadRequestException('released requires the claimed operation');
     }
     const merged = dto.status === 'merged';
+    // Set by the §7 authority below, and read by the receipt writer further down. Declared out here
+    // because `withTransactionRetry` may run the closure again, and each run re-derives it.
+    let landedCheckpointId: string | null = null;
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -3120,6 +3126,7 @@ export class RunnerApiController {
           taskId: string | null;
           branch: string | null;
           mergeTarget: string | null;
+          mergeCheckpointId: string | null;
         }>
       >`
         SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -3127,7 +3134,8 @@ export class RunnerApiController {
                "merge_operation_id" AS "mergeOperationId",
                "merge_operation_owner" AS "mergeOperationOwner",
                "owner_id" AS "ownerId", "task_id" AS "taskId",
-               "branch", "merge_target" AS "mergeTarget"
+               "branch", "merge_target" AS "mergeTarget",
+               "merge_checkpoint_id" AS "mergeCheckpointId"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -3163,6 +3171,36 @@ export class RunnerApiController {
         });
         return;
       }
+      // `[K6]` §7, fail-closed, and deliberately BEFORE every write below.
+      //
+      // The runner is handed `requiredSourceSha` and is the only party that can compare it against
+      // a working tree — but an older runner never reads it and a broken one can ignore it, and
+      // either would then report a merge of some other commit. What followed used to be: the
+      // projection is written (`branch_merged`, `merged_source_sha`), then a receipt is written,
+      // and because no checkpoint matches that commit the receipt gets a NULL `checkpoint_id` —
+      // which is precisely the shape 0152's own trigger is required to let through, for the old
+      // replicas that legitimately produce it. An unverified tip would land as a fact.
+      //
+      // So the decision is taken here, from what THIS server persisted when it authorised the
+      // operation, under the same row lock and inside the same fence that just proved this report
+      // belongs to the operation in flight. A refusal rolls the whole transaction back: no
+      // projection, no receipt, no state change of any kind. Only a LANDED claim is judged — a
+      // conflict or an error is the truth about an attempt somebody made, and refusing those would
+      // delete the audit and wedge the operation that is trying to report itself finished.
+      const reportedSourceSha = (dto.sourceSha ?? '').trim().toLowerCase() || null;
+      if (merged) {
+        const authority = await reportedLandingAuthority(tx, {
+          ownerId: current.ownerId,
+          taskId: current.taskId,
+          mergeCheckpointId: current.mergeCheckpointId,
+          sourceSha: reportedSourceSha,
+        });
+        if (authority.decision !== 'ALLOWED') {
+          throw new ConflictException(`${authority.decision}: ${authority.detail}`);
+        }
+        landedCheckpointId = authority.checkpointId;
+      }
+
       await tx.session.update({
         where: { id: sessionId },
         data: {
@@ -3234,11 +3272,17 @@ export class RunnerApiController {
           operationId: dto.operationId ?? null,
           // CP4: which verified point this landing is about, when there is one. Null for every
           // merge not under convergence management, which is almost all of them.
-          checkpointId: await checkpointIdForCommit(tx, {
-            ownerId: current.ownerId,
-            taskId: current.taskId,
-            commitSha: sourceSha,
-          }),
+          // The checkpoint the SERVER authorised, for a landing it has just proved is that
+          // checkpoint's commit. Looking one up FROM the reported sha would return null for
+          // exactly the report that most needs to be refused, and a null here is what makes
+          // 0152's acceptance trigger stand down.
+          checkpointId:
+            landedCheckpointId ??
+            (await checkpointIdForCommit(tx, {
+              ownerId: current.ownerId,
+              taskId: current.taskId,
+              commitSha: sourceSha,
+            })),
         });
       }
     }, loggedRetry(this.logger, 'runnerApi.mergeResult'));

@@ -190,6 +190,11 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // clients see. The same classification `findingId` carries for the same reason.
   'checkpointId',
   'attemptId',
+  // The checkpoint a QUEUED merge was authorised for (`session`, migration 0152). It names the
+  // same kind of thing `checkpointId` does and is read the same way — the server looks the row up
+  // by id when the merge reports back. Deliberately NOT a fence: no runner echoes it, nothing
+  // compares it byte-for-byte, and a reader handed one has somewhere to hand it.
+  'mergeCheckpointId',
   // Wire-only, like the aggregates above: `[K6]`'s read states §7 CP6's baseline rather than
   // leaving a client to re-derive "the LATEST accepted one" by filtering. It is the same id under
   // a name that says which one it is, so it follows the same rule.

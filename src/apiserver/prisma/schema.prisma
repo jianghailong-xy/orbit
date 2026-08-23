@@ -964,6 +964,16 @@ model Session {
   // produces a non-equivalent patch. A later worktree report clears merged state only after
   // its current branch tip differs from this SHA. Null for legacy merge results.
   mergedSourceSha      String?   @map("merged_source_sha")
+  /// `[K6]` §7: the checkpoint the QUEUED merge was authorised for (migration 0152).
+  ///
+  /// Written when the merge is queued and read when its result comes back, so the server decides
+  /// whether a reported landing is the verified one from a fact it persisted itself rather than
+  /// from a field the runner chose to send. `requiredSourceSha` travels on the command for the
+  /// runner's benefit — it is the only party that can compare a commit against a working tree —
+  /// but a runner that ignores it must not be able to make the control plane record an unverified
+  /// tip as landed. A gate that only holds when the client cooperates is not a gate.
+  mergeCheckpointId    String?         @map("merge_checkpoint_id") @db.Uuid
+  mergeCheckpoint      TaskCheckpoint? @relation("SessionMergeCheckpoint", fields: [mergeCheckpointId], references: [id], onDelete: SetNull)
   // The branch the user chose to merge into (from the status bar's branch dropdown). Null
   // means the default — the runner auto-detects main, else master. Relayed to the runner in
   // the MergeCommand and shown on the merged ✓ chip.
@@ -3130,8 +3140,9 @@ model TaskCheckpoint {
   attemptId  String?      @map("attempt_id") @db.Uuid
   attempt    TaskAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
 
-  /// The merges recorded against this checkpoint (CP4).
-  mergeReceipts SessionMergeReceipt[]
+  /// The merges recorded against this checkpoint (CP4), and the queued merges authorised for it.
+  mergeReceipts   SessionMergeReceipt[]
+  authorisedMerges Session[]            @relation("SessionMergeCheckpoint")
 
   createdAt DateTime @default(now()) @map("created_at")
 

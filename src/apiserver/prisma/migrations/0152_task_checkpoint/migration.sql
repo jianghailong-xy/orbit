@@ -194,6 +194,25 @@ CREATE UNIQUE INDEX "session_merge_receipt_checkpoint_key"
   ON "session_merge_receipt" ("checkpoint_id", "idempotency_key")
   WHERE "checkpoint_id" IS NOT NULL;
 
+-- ---------------------------------------------------------------------------------------------
+-- 3. The merge operation remembers which checkpoint it was authorised for.
+-- ---------------------------------------------------------------------------------------------
+-- Written when the merge is QUEUED, read when its result comes back — so the server decides whether
+-- a reported landing is the verified one from a fact it persisted itself, not from a field the
+-- runner chose to send.
+--
+-- That distinction is the whole column. `requiredSourceSha` travels on the command as a courtesy to
+-- the runner, which is the only party that can compare it against a working tree; but a runner that
+-- IGNORES it — an older build, or a broken one — would otherwise report a merge of any commit at
+-- all and the control plane would write `branch_merged` and a receipt for it, because nothing on
+-- the server side had an expectation to check against. A gate that only holds when the client
+-- cooperates is not a gate.
+--
+-- Nullable and SET NULL: most merges are not under convergence management and are unaffected, and
+-- deleting a checkpoint must not delete the merge request that pointed at it.
+ALTER TABLE "session"
+  ADD COLUMN "merge_checkpoint_id" UUID REFERENCES "task_checkpoint"("id") ON DELETE SET NULL;
+
 -- §7's second row, in the one place a database can hold it: a LANDED receipt may not name a
 -- `WIP_RED` checkpoint.
 --
