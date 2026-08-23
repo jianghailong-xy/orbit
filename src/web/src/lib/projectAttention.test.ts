@@ -131,20 +131,26 @@ describe('orderWithinSection', () => {
     const middle = days('2026-02-01T12:00:00.000Z');
     const stale = days('2026-01-01T12:00:00.000Z');
 
-    expect(orderWithinSection('running', [middle, stale, recent])).toEqual([
-      recent,
-      middle,
-      stale,
-    ]);
+    expect(orderWithinSection('running', [middle, stale, recent])).toEqual([recent, middle, stale]);
   });
 
   it('puts a project that has never had activity at the tail, not the head', () => {
     const never = project({ lastActivityAt: null });
-    const long_ago = project({ buckets: { running: 1 }, lastActivityAt: '2020-01-01T00:00:00.000Z' });
+    const longAgo = project({ buckets: { running: 1 }, lastActivityAt: '2020-01-01T00:00:00Z' });
 
     // Null is "nothing has ever happened here", which must not read as "happened at the epoch,
     // therefore newest" — nor sort above a project that moved six years ago.
-    expect(orderWithinSection('running', [never, long_ago])).toEqual([long_ago, never]);
+    expect(orderWithinSection('running', [never, longAgo])).toEqual([longAgo, never]);
+  });
+
+  it('gives two projects that have never had a task a definite order', () => {
+    const a = project({ lastActivityAt: null });
+    const b = project({ lastActivityAt: null });
+
+    // Neither outranks the other, so the incoming order stands — and stands the same way round
+    // whichever way it arrived. Never an order left to whatever the engine does with a NaN.
+    expect(orderWithinSection('running', [a, b])).toEqual([a, b]);
+    expect(orderWithinSection('running', [b, a])).toEqual([b, a]);
   });
 
   it('orders Wrapping up and Completed by activity too', () => {
@@ -180,12 +186,7 @@ describe('projectAttentionSections', () => {
 
     // In progress sits BELOW Stalled on purpose: work that is already running does not need the
     // reader, and work that could run but isn't does.
-    expect(sections.map((s) => s.key)).toEqual([
-      'stalled',
-      'wrapping-up',
-      'running',
-      'completed',
-    ]);
+    expect(sections.map((s) => s.key)).toEqual(['stalled', 'wrapping-up', 'running', 'completed']);
     expect(sections.map((s) => s.title)).toEqual([
       'Stalled',
       'Wrapping up',

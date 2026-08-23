@@ -130,9 +130,19 @@ function activityRank(at: string | null): number {
   return Number.isNaN(ms) ? -Infinity : ms;
 }
 
-/** Most recent first. The value is on the row, in its last column. */
+/**
+ * Most recent first. The value is on the row, in its last column.
+ *
+ * Compared rather than subtracted: two projects that have BOTH never had a task rank -Infinity
+ * apiece, and `-Infinity - -Infinity` is NaN. A sort reads that as "no opinion" only because the
+ * spec coerces it to zero, and two brand-new projects is an ordinary thing for an account to
+ * have — not a place to be leaning on that coercion.
+ */
 function byActivityDesc(a: AttentionProject, b: AttentionProject): number {
-  return activityRank(b.lastActivityAt) - activityRank(a.lastActivityAt);
+  const left = activityRank(a.lastActivityAt);
+  const right = activityRank(b.lastActivityAt);
+  if (left === right) return 0;
+  return right > left ? 1 : -1;
 }
 
 /**
@@ -141,7 +151,7 @@ function byActivityDesc(a: AttentionProject, b: AttentionProject): number {
  *
  * Stalled leads with `ready` because that is the size of the ask: the project with 6,118 tasks
  * that could start and nothing starting them is the first thing on the page. Ties break on
- * activity rather than on the incoming order, so two sections with the same ready count are still
+ * activity rather than on the incoming order, so two projects with the same ready count are still
  * in an order the reader can predict from the row — a stable-but-arbitrary tie is unverifiable,
  * which is the same defect as an unrendered sort key.
  *
@@ -153,9 +163,7 @@ export function orderWithinSection<T extends AttentionProject>(
   projects: readonly T[],
 ): T[] {
   if (key !== 'stalled') return [...projects].sort(byActivityDesc);
-  return [...projects].sort(
-    (a, b) => b.buckets.ready - a.buckets.ready || byActivityDesc(a, b),
-  );
+  return [...projects].sort((a, b) => b.buckets.ready - a.buckets.ready || byActivityDesc(a, b));
 }
 
 /**

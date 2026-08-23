@@ -546,9 +546,12 @@ describe('ProjectsPage — sections', () => {
     // The page's premise, in the order the sections appear: what could run but isn't, then what
     // only needs closing, then what is already being served, then what is finished. A reader
     // scanning top-down meets the projects that need them before the ones that don't.
-    expect(
-      [...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1]),
-    ).toEqual(['stalled', 'wrapping-up', 'running', 'completed']);
+    expect([...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      'stalled',
+      'wrapping-up',
+      'running',
+      'completed',
+    ]);
   });
 
   it('files each project by its buckets, not by its status alone', () => {

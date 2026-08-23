@@ -177,8 +177,9 @@ export function noMatchDescription(filter: ProjectFilter, search: string): strin
   return filter === 'OPEN' ? 'No projects are in progress' : 'No completed projects';
 }
 
-/** Index of the signed-in user's projects: search and status filter above, in progress first,
- *  completed folded away, and a way to start one from either the toolbar or an empty page. */
+/** Index of the signed-in user's projects: search and status filter above, then the four sections
+ *  in attention order — what has stalled, what only needs closing, what is already running, what
+ *  is finished and folded — and a way to start one from either the toolbar or an empty page. */
 export function ProjectsPage() {
   const [filter, setFilter] = useState<ProjectFilter>('ALL');
   const [search, setSearch] = useState('');
