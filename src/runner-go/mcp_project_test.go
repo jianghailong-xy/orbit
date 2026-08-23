@@ -129,7 +129,7 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 // project_status joined in unit 20 (contract AC10) and is a READ. The manual trigger that shipped
 // beside it deliberately did not: enqueuing a signal attributed to USER is how a person drives a
 // MANUAL project, so an agent able to do it would be driving its own coordinator.
-func TestMCPExposesExactlyTheElevenProjectTools(t *testing.T) {
+func TestMCPExposesExactlyTheThirteenProjectTools(t *testing.T) {
 	for _, tools := range [][]map[string]interface{}{
 		toolDescriptors(false, false),
 		toolDescriptors(true, true),
@@ -153,6 +153,13 @@ func TestMCPExposesExactlyTheElevenProjectTools(t *testing.T) {
 			// session_* tools at all.
 			"project_acceptance", "project_acceptance_run", "project_acceptance_verdict",
 			"project_merge_evidence",
+			// Unit L7: two READS and no third write. A coordinator refused
+			// CROSS_PROJECT_APPROVAL_REQUIRED or PROJECT_REOPEN_REQUIRED is entitled to know what
+			// it is waiting on and what asking a person for it would cost them; it is not entitled
+			// to answer the crossing (§7 RB2 — the approver is the account owner, never the target
+			// project's coordinator) or to reopen a settled project it wants to write into. The
+			// absence of a `project_reopen` beside `project_reopen_impact` is the whole point.
+			"project_crossings", "project_reopen_impact",
 		} {
 			if !seen[want] {
 				t.Fatalf("%s missing from the tools", want)

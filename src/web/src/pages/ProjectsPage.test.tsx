@@ -93,6 +93,18 @@ const tasksKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'ta
 // the same reason tasksKey is: a key the page changed unilaterally should break these tests.
 const coordinatorKey = (projectUuid: string) => ['project', encodeId(projectUuid), 'coordinator-status'];
 
+// Unit L7's two entries, under the same `['project', id]` prefix and for the same reason: what a
+// person is asked to ANSWER about this project (the crossings queue) and what reopening it would
+// cost. Both mount with the page, so an invalidation after either write refreshes them together
+// with the document.
+const attributionKeys = (projectUuid: string) => {
+  const id = encodeId(projectUuid);
+  return [
+    ['project', id, 'crossings'],
+    ['project', id, 'reopen'],
+  ];
+};
+
 // Every entry the panorama cards register, in the order they mount. Four, not five: the acceptance
 // card reads the project document under `['project', id]` — the entry the page already holds — and
 // the chain strip deliberately shares the header's `panorama` key and the ranking's `blocking`
@@ -517,6 +529,7 @@ describe('ProjectDetailPage — top-level tasks', () => {
       tasksKey(P1),
       ...panoramaKeys(P1),
       coordinatorKey(P1),
+      ...attributionKeys(P1),
     ]);
   });
 
@@ -707,6 +720,7 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
       tasksKey(P1),
       ...panoramaKeys(P1),
       coordinatorKey(P1),
+      ...attributionKeys(P1),
     ]);
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't1') })).toBeUndefined();
     expect(qc.getQueryCache().find({ queryKey: childKey(P1, 't2') })).toBeUndefined();
@@ -1110,6 +1124,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     const html = renderToStaticMarkup(
       <QueryClientProvider client={qc}>
         <NewProjectTaskForm
+          projectId={P1}
           draft={draft}
           onChange={() => {}}
           error={over.error ?? null}
@@ -1419,6 +1434,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
       tasksKey(P1),
       ...panoramaKeys(P1),
       coordinatorKey(P1),
+      ...attributionKeys(P1),
     ]);
   });
 });
@@ -1965,6 +1981,7 @@ describe('the New task form’s Start at control', () => {
     return renderToStaticMarkup(
       <QueryClientProvider client={qc}>
         <NewProjectTaskForm
+          projectId={P1}
           draft={draft}
           onChange={() => {}}
           error={null}
@@ -2102,8 +2119,8 @@ describe('the New task form’s Start at control', () => {
     // And the id is the form's own, not a constant: two forms in one document must not collide.
     const two = renderToStaticMarkup(
       <QueryClientProvider client={newClient()}>
-        <NewProjectTaskForm draft={{ title: 'a' }} onChange={() => {}} error={null} pending={false} />
-        <NewProjectTaskForm draft={{ title: 'b' }} onChange={() => {}} error={null} pending={false} />
+        <NewProjectTaskForm projectId={P1} draft={{ title: 'a' }} onChange={() => {}} error={null} pending={false} />
+        <NewProjectTaskForm projectId={P1} draft={{ title: 'b' }} onChange={() => {}} error={null} pending={false} />
       </QueryClientProvider>,
     );
     const ids = [...two.matchAll(/type="datetime-local"[^>]*aria-describedby="([^"]+)"/g)].map((m) => m[1]);

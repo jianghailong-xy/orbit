@@ -75,6 +75,8 @@ import {
 import {
   planPreflightRefusalBody,
   planPreflightRefusals,
+  planPreviewBody,
+  type PlanPreviewBody,
   preflightPlan,
   type PlanFacts,
   type PlanPreflightFinding,
@@ -265,6 +267,9 @@ type PlanAdmission = {
   workspaceIds: string[];
   providerSlugs: string[];
   snapshot: PlanAuthoritySnapshot;
+  /** Unit L7: the world the findings were judged against, so a preview and a refusal describe the
+   *  same plan rather than two reads of it. */
+  facts: PlanFacts;
 };
 
 type DependencyCrossings = {
@@ -2917,7 +2922,45 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     creator?: Creator,
     creatorSessionId?: string,
   ) {
+    // `dryRun: false` is what makes this a narrowing rather than a cast: the one branch below that
+    // returns a preview instead of rows is the branch this call has just switched off, so the
+    // callers of `createMany` keep the return type they have always had and the preview has a door
+    // of its own (`previewPlan`).
+    const written = await this.createManyPass(
+      ownerId, { ...dto, dryRun: false }, creator, creatorSessionId,
+    );
+    return written as Exclude<typeof written, PlanPreviewBody>;
+  }
+
+  /**
+   * Unit L7: judge a plan and write none of it.
+   *
+   * The same call as `createMany`, taken to the same point and stopped there — not a second
+   * validator. A preview implemented separately is a preview that drifts, and the drift always
+   * goes one way: it promises a plan the write then refuses.
+   */
+  async previewPlan(
+    ownerId: string,
+    dto: CreateTasksBatchDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+  ): Promise<PlanPreviewBody> {
+    return await this.createManyPass(
+      ownerId, { ...dto, dryRun: true }, creator, creatorSessionId,
+    ) as PlanPreviewBody;
+  }
+
+  private async createManyPass(
+    ownerId: string,
+    dto: CreateTasksBatchDto,
+    creator?: Creator,
+    creatorSessionId?: string,
+  ) {
     const validated = await this.assertBatchValid(ownerId, dto);
+    // Unit L7. Read once, here, because it changes three things further down and they have to
+    // agree: nothing is declared, the preflight reports instead of throwing, and the call returns
+    // before the transaction opens.
+    const dryRun = dto.dryRun === true;
     const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
     const sessionId = origin?.sessionId;
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
@@ -2995,7 +3038,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ownerId, item, identities[index], scopeWorld.scope, creatorSessionId,
       );
       const admitted = await this.admitDeclaredWrite(
-        ownerId, scopeWorld, scopeWrites[index], crossing, now,
+        ownerId, scopeWorld, scopeWrites[index], crossing, now, { declare: !dryRun },
       );
       if (admitted.spend) spends.set(index, admitted.spend);
       // Copied AFTER the admission, so the fence carries the operation and the answer this item was
@@ -3007,7 +3050,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
     // findings at once — and nothing written if any of them refuses (AC5).
-    const preflighting = this.planNeedsPreflight(scopeWorld, items);
+    // A dry run always preflights. `planNeedsPreflight` is false for the owner's own writes (§4 R1
+    // puts them outside the contract and AC5 promises they pay nothing for it) — but a preview is
+    // being asked FOR the answer, and "where would these fifty tasks land" is the part of it a user
+    // needs most. Paying for the read is the whole request here rather than an overhead on it.
+    const preflighting = dryRun || this.planNeedsPreflight(scopeWorld, items);
     const referencedTasks = preflighting ? await this.referencedTaskFacts(ownerId, items) : {};
     const dependencyCrossings: DependencyCrossings = preflighting
       ? await this.resolveDependencyCrossings(
@@ -3017,8 +3064,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const planAdmission = preflighting
       ? await this.assertPlanPreflight(
           ownerId, items, scopeWorld, referencedTasks, dependencyCrossings.answers, frozen,
+          { throwOnRefusal: !dryRun },
         )
       : null;
+    // Unit L7: judged, and not written. Before the transaction, before the locks — the same place
+    // a refused plan stops, so a preview costs exactly what a refusal costs and no row either way.
+    if (dryRun) return planPreviewBody(planAdmission!.findings, planAdmission!.facts);
 
     // Only parents that already exist. A parentRef points at a row this very transaction writes,
     // which no other request can see — let alone move into another project — so there is nothing
@@ -3675,6 +3726,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     write: ScopeWriteInput,
     crossing: { declaration: HandoffDeclaration; authority: HandoffAuthority } | null,
     now: Date,
+    // Unit L7: a dry run does not FILE the question either. Declaring a crossing writes a row and
+    // leaves a person something to answer, so a preview that declared one would be a read with a
+    // consequence — press it twice and there are two questions about a plan nobody submitted. The
+    // DECISION is unchanged: with no answer on file this is still R10, and the caller is told
+    // exactly that, which is what they wanted to know before submitting rather than after.
+    options: { declare?: boolean } = {},
   ): Promise<{ projectId: string | null; spend: HandoffSpend | null }> {
     if (!crossing) return { projectId: this.admitScopedWrite(world, write), spend: null };
     write.operation = 'HANDOFF_TASK';
@@ -3682,7 +3739,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     write.approval = answer?.approval ?? null;
     let row = answer?.row ?? null;
     let admission = this.decideScopedWrite(world, write);
-    if (admission.outcome?.code === 'CROSS_PROJECT_APPROVAL_REQUIRED' && world.scope) {
+    if (
+      options.declare !== false
+      && admission.outcome?.code === 'CROSS_PROJECT_APPROVAL_REQUIRED'
+      && world.scope
+    ) {
       const filed = await this.handoffs.declare(ownerId, crossing.declaration, {
         projectId: world.scope.projectId,
         generation: world.scope.generation,
@@ -3798,6 +3859,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     referenced: Readonly<Record<string, PlanTaskFacts>>,
     dependencyAnswers: Readonly<Record<string, HandoffApproval | null>>,
     frozen: ReadonlySet<number>,
+    // Unit L7: a dry run REPORTS what refuses instead of throwing it, so the preview lists every
+    // finding at once — which is the same completeness property the refusal body has, applied to a
+    // call that was never going to write anything.
+    options: { throwOnRefusal?: boolean } = {},
   ): Promise<PlanAdmission> {
     const fresh = items.filter((_, index) => !frozen.has(index));
     const projectIds = [...new Set(fresh.map((item) => item.projectId).filter((id): id is string => !!id))];
@@ -3812,6 +3877,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             where: { id: { in: projectIds }, ownerId },
             select: {
               id: true,
+              // Unit L7: read for the preview, never for a check. `PLAN_PREFLIGHT_COVERAGE` names
+              // every check and none of them matches on prose.
+              title: true,
               status: true,
               acceptanceEpoch: true,
               maxConcurrentTasks: true,
@@ -3854,6 +3922,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       world: {
         principal: world.principal,
         projects: Object.fromEntries(projects.map((project) => [project.id, {
+          title: project.title,
           status: project.status as 'OPEN' | 'DONE' | 'CANCELLED',
           acceptanceEpoch: String(project.acceptanceEpoch),
           maxConcurrentTasks: project.maxConcurrentTasks,
@@ -3867,7 +3936,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     };
     const findings = preflightPlan(facts);
     const refusals = planPreflightRefusals(findings);
-    if (refusals.length) throw new BadRequestException(planPreflightRefusalBody(findings));
+    if (refusals.length && options.throwOnRefusal !== false) {
+      throw new BadRequestException(planPreflightRefusalBody(findings, facts));
+    }
     for (const warning of findings) {
       this.logger.warn(
         `plan preflight: ${warning.code} on item ${warning.index} (${warning.dimension})`,
@@ -3875,6 +3946,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     return {
       findings,
+      facts,
       workspaceIds: assigneeIds,
       providerSlugs,
       // Only the facts that DECIDED something: the referenced tasks of fresh items, the projects

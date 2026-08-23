@@ -12,6 +12,7 @@ import {
   RunTaskDto,
   UpdateTaskDto,
 } from '../tasks/dto';
+import { ProjectAttributionService } from '../projects/project-attribution.service';
 import { TasksService } from '../tasks/tasks.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -44,6 +45,7 @@ export class RunnerTasksController {
   constructor(
     private readonly tasks: TasksService,
     private readonly taskLists: TaskListsService,
+    private readonly attribution: ProjectAttributionService,
   ) {}
 
   @Post('tasks')
@@ -59,6 +61,12 @@ export class RunnerTasksController {
   }
 
   // Literal path, declared before 'tasks/:id' so the param route can't shadow it.
+  //
+  // `dryRun` (unit L7) judges the plan and writes none of it — not even the question a declared
+  // crossing would otherwise file — and answers with where every item WOULD land: project id,
+  // title, status and acceptance epoch, plus every finding including the warnings a refusal body
+  // leaves out. Same route rather than a second one, because a preview served somewhere else is a
+  // preview that can disagree with the write.
   @Post('tasks/batch-create')
   async createTasks(
     @CurrentRunner() runner: Runner,
@@ -68,7 +76,9 @@ export class RunnerTasksController {
     @Body() dto: CreateTasksBatchDto,
   ) {
     const creator = await this.tasks.resolveAgentCreator(runner.ownerId, actingWorkspaceId(workspaceId, legacyAgentId));
-    return this.tasks.createMany(runner.ownerId, dto, creator, sessionId);
+    return dto.dryRun
+      ? this.tasks.previewPlan(runner.ownerId, dto, creator, sessionId)
+      : this.tasks.createMany(runner.ownerId, dto, creator, sessionId);
   }
 
   /**
@@ -158,6 +168,21 @@ export class RunnerTasksController {
       // pure waste — and a caller walking every page never reads them.
       counts: 'none',
     });
+  }
+
+  /**
+   * Unit L7: where this work counts, who noticed it, which acceptance criteria cite it, what is
+   * being asked about it and what is stopping it.
+   *
+   * The read a coordinator most needs before it writes anywhere, and the one it could not make:
+   * a task's project was an id, "where this was noticed" was four columns nothing read back, and
+   * whether a PASS still counted was a comparison nobody outside the server could perform.
+   *
+   * Declared before `tasks/:id` for the reason every literal here is.
+   */
+  @Get('tasks/:id/attribution')
+  getTaskAttribution(@CurrentRunner() runner: Runner, @Param('id', PublicIdPipe) id: string) {
+    return this.attribution.read(runner.ownerId, id);
   }
 
   @Get('tasks/:id')

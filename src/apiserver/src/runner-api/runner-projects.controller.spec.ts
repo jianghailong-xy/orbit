@@ -47,7 +47,7 @@ test('getProject reads the project through ProjectsService, scoped to the runner
       return expected;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   const result = await controller.getProject(RUNNER, 'project-1');
 
@@ -63,7 +63,7 @@ test('a project belonging to another owner stays a 404 from the service', async 
       throw new Error('project not found');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   await assert.rejects(() => controller.getProject(RUNNER, 'someone-elses-project'), /not found/);
 });
@@ -124,7 +124,7 @@ test('createProject writes into the runner owner, with the body untouched', asyn
       return created;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
   const dto: CreateProjectDto = {
     title: 'Crawl',
     goal: 'Index the corpus',
@@ -154,7 +154,7 @@ function createSpy() {
       return { id: 'project-1' };
     },
   } as never;
-  return { calls, controller: new RunnerProjectsController(projects, acceptanceDouble()) };
+  return { calls, controller: new RunnerProjectsController(projects, acceptanceDouble(), {} as never) };
 }
 
 // The whole point of the header: a project an agent records while working on it should be
@@ -237,7 +237,7 @@ test('a session the service refuses is not quietly downgraded to a headless crea
       throw new ForbiddenException('no workspace');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   await assert.rejects(
     () => controller.createProject(RUNNER, SESSION_ID, { title: 'Crawl' }),
@@ -284,7 +284,7 @@ test('updateProject writes into the runner owner, with the id and body untouched
       return updated;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
   const dto: UpdateProjectDto = { title: 'Crawl the archive', status: ProjectStatus.DONE };
 
   const result = await controller.updateProject(RUNNER, 'project-1', dto);
@@ -308,7 +308,7 @@ test('updateProject forwards an explicit null clear rather than dropping it', as
       return {};
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   await controller.updateProject(RUNNER, 'project-1', {
     goal: null,
@@ -328,7 +328,7 @@ test("updating another owner's project stays a 404 from the service", async () =
       throw new Error('project not found');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   await assert.rejects(
     () => controller.updateProject(RUNNER, 'someone-elses-project', { status: ProjectStatus.DONE }),
@@ -346,7 +346,7 @@ test('removeProject deletes through ProjectsService in the runner owner scope', 
       return expected;
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   const result = await controller.removeProject(RUNNER, 'project-1');
 
@@ -360,7 +360,7 @@ test('removeProject preserves the service refusal for a non-empty project', asyn
       throw new Error('This project still holds 2 task(s) and cannot be deleted');
     },
   } as never;
-  const controller = new RunnerProjectsController(projects, acceptanceDouble());
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never);
 
   await assert.rejects(() => controller.removeProject(RUNNER, 'project-1'), /still holds 2 task/);
 });
@@ -389,6 +389,13 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     // absent, which is the line this test exists to hold.
     'finalizeAcceptanceRun',
     'getProject',
+    // Unit L7's two, and both are GETs on purpose. §7 RB2 puts the ANSWER to a cross-project
+    // crossing with the user and §7 puts a settled project's reopen with the user too, so this
+    // door carries the question and what the reopen would cost, and neither of the two writes:
+    // an agent that could sign a crossing for another goal, or reopen a project it wanted to
+    // write into, is the incident this whole unit exists for wearing a different hat.
+    'getProjectReopenImpact',
+    'listProjectHandoffs',
     'openAcceptanceRun',
     'projectAcceptance',
     'projectCoordinatorStatus',
@@ -408,6 +415,10 @@ test('the runner project bridge exposes exactly create, the reads, update, and g
     createProject: RequestMethod.POST,
     finalizeAcceptanceRun: RequestMethod.POST,
     getProject: RequestMethod.GET,
+    // Unit L7: GET, both of them. The verbs are the assertion — a POST appearing on either would
+    // be a coordinator answering a crossing or reopening a settled project on a person's behalf.
+    getProjectReopenImpact: RequestMethod.GET,
+    listProjectHandoffs: RequestMethod.GET,
     openAcceptanceRun: RequestMethod.POST,
     projectAcceptance: RequestMethod.GET,
     projectCoordinatorStatus: RequestMethod.GET,

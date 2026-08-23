@@ -298,7 +298,83 @@ R9 与 R10 由"这份 `APPROVED` 说的是不是这次移交"分开；其余全�
 | **L4** | 显式跨 Project 移交与原子计划预检（§6 的 `HANDOFF_*` 三态落地） |
 | **L5** | DONE Project 的显式重开与新 acceptance epoch（R8 的出口） |
 | **L6** | 运行前归属门禁与既有错误任务的审计修复 |
-| **L7** | Web/API/CLI 展示归属边界、移交与重开影响 |
+| **L7** | Web/API/CLI 展示归属边界、移交与重开影响（**已交付**，见 §11） |
 
 本单元交付的是**四张冻结表 + 一个纯判定函数 + 两个 spec**，没有接线、没有 schema、没有调用点。
 业务层仍然只有 Project 与 Task 两个概念。
+
+---
+
+## 11. L7：把这条边界变成看得见的东西
+
+前六个单元把规则冻结、强制、给了门、给了出口。它们全都是**对的**，也全都**看不见**：
+目标 Project 是错误体里的一个 id，发现来源是四列没有任何东西读回来，
+"这条 PASS 属于一个已经结束的 epoch" 是一个没人渲染的 `superseded_at`。
+一条只有**被它拒绝**才会遇到的边界，是一条在你已经决定要做什么之后才学到的边界。
+
+所以 L7 交付的是**一次派生 + 三个门 + 三个客户端面**，而不是三份各自算一遍的渲染代码。
+
+### 11.1 一次派生
+
+`project-attribution-surface.ts` 是纯函数（不读时钟、不碰数据库、不 import 服务层），
+回答两个每个客户端都会算错的问题：
+
+| 判定 | 为什么必须只有一份 |
+|---|---|
+| 一条结论**还算不算数** | 三个客户端各自比较 `acceptanceEpoch` 与 `supersededAt`，就是三次对"这个项目验收了没有"的分歧 |
+| **重开要花什么代价** | 旧 epoch → 新 epoch、退役几条 attempt、legacy 戳记是否失效——这些数字必须在用户按下确认**之前**就存在 |
+
+**缺席即答案**：每一个为空的字段都带一个来自封闭集合的理由
+（`FILED_UNDER_NO_PROJECT` · `NO_DISCOVERY_RECORDED` · `NOT_CITED_BY_ACCEPTANCE` ·
+`NO_CROSSING_DECLARED` · `NOTHING_BLOCKING_ATTRIBUTION`）。
+"没有验收条件引用这个 Task" 和 "这个版本答不了" 是两个答案，而一个缺失的字段两个都不是。
+
+**陈旧有两种，必须分开说**：`EPOCH_ADVANCED`（有人重开了项目）与 `RUN_SUPERSEDED`（有人又跑了一次验收）。
+只说"已过期"会让读者无法知道下一步该做什么。
+
+**SC7 随数据一起走**：发现来源永远带着 `authority: 'EVIDENCE_ONLY'` 一起出去，
+而不是靠某个客户端记得在旁边写一句说明——客户端正是"我在这儿发现的"最容易被读成"所以它属于这儿"的地方。
+
+### 11.2 三个门
+
+| 门 | 谁能走 | 加了什么 |
+|---|---|---|
+| `GET /tasks/:id/attribution` | 用户 + runner | 归属、来源、映射的验收条件、跨越、归属 blocker |
+| `GET /projects/:id/reopen` | 用户 + runner | 重开的代价，以及写入要回述的 `acknowledgement` |
+| `POST /projects/:id/reopen` | **仅用户** | `acknowledgedAcceptanceEpoch` **必填**——这就是二次确认 |
+| `GET /projects/:id/handoffs` | 用户 + runner | 两端带**标题**，不只是 id |
+| `POST …/handoffs/:id/decision` | **仅用户** | 可选 `acknowledgedCrossingKey`；给了就必须对得上 |
+| `POST /tasks/batch-create` `dryRun` | 用户 + runner | 判定整份计划、**一行不写**，连声明跨越的那个提问都不写 |
+
+**两个写入没有 machine door，这是刻意的**：§7 RB2 说跨项目移交的批准人只有用户，
+§7 说终态项目由用户显式重开、Coordinator 不得自行重开。
+所以 runner 侧只有**读**——一个 Coordinator 有权知道自己在等谁、以及请人重开要花什么代价，
+无权替人签收，也无权把自己想写进去的项目重开。
+`project_crossings` 旁边没有 `project_crossing_decide`、`project_reopen_impact` 旁边没有 `project_reopen`，
+这两个**缺席**由 `TestNoMachineDoorAnswersACrossingOrReopensAProject` 钉住。
+
+### 11.3 三个新码（不属于 §5 的冻结集合）
+
+§5 冻结的是**写入作用域判定**会发出的码，`SCOPE_REFUSAL_CODES` 是它的代码形式。
+下面三个不是它的成员：它们属于**重开这道门**，回答的是"你确认的是不是你读到的那个项目"，
+而不是"这次写入允不允许"。PAC §12 E2 禁止同义码，这三个都不与既有码同义：
+
+| code | 什么时候 | 为什么不复用 |
+|---|---|---|
+| `PROJECT_NOT_SETTLED` | 对一个 OPEN 项目请求重开 | `PROJECT_SETTLED` 是它的**反面**（终态项目不接受触发），不是同一件事 |
+| `REOPEN_ACKNOWLEDGEMENT_REQUIRED` | 走了重开门却没说自己看的是哪个 epoch | `UNMAPPED_PROJECT_WORK` 说的是归属说不清，与确认无关 |
+| `REOPEN_ACKNOWLEDGEMENT_STALE` | 说了，但项目已经不在那个 epoch 上 | `STALE_CONFIG_REVISION` 是**另一列**的 CAS；两者混用会让"谁动了"指向错的字段 |
+
+**确认是一个数字，不是一个勾选框**。勾选框只证明"又按了一次按钮"；
+回述 preview 给出的 epoch 证明"按在了这个项目**现在**的样子上"——
+这正是同一个项目在两个标签页里打开时唯一有意义的区别。
+CAS 在 `ProjectsService.update` 的**行锁之内**复验（`PATCH` 上可选、`POST :id/reopen` 上必填），
+所以旧客户端与修复脚本保留它们一直有的重开（§8 CM1），而人走的那道门跳不过确认。
+
+### 11.4 展示纪律（对应任务验收 1 与 5）
+
+- 提交前必须能看到**目标 Project 的标题 + Base62 ID**。只有标题查不到，只有 id 读不出，
+  所以两个都渲染；服务端没给 Base62 孪生字段时回退到 uuid，而不是渲染空白（混合版本）。
+- **任何状态都不能只靠颜色或散文**。每个 chip 带词、带 `aria-label`，每个拒绝把**码**原样打印出来。
+- 终端上的拒绝先打 `refused: <code>` / `what:` / `owner:` / `do:` 四行，再附原始 body——
+  一个花了整份契约去冻结码和 requiredAction 的控制面，如果读它要用肉眼解析 JSON，那等于没冻结。

@@ -198,7 +198,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// One per read/write the project family exposes. `project_blockers` joined them in 25C: the
 	// blocker history was already served to the web and the user API, and the terminal was the one
 	// caller that could not ask what had been stopping a project.
-	if len(specs) != 11 {
+	// Unit L7 took it to 13 with two reads: what has been asked about work crossing this project's
+	// line, and what reopening it would cost. Neither has a companion that WRITES — see
+	// TestMCPExposesExactlyTheThirteenProjectTools for why that absence is the point.
+	if len(specs) != 13 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

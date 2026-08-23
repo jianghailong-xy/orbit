@@ -18,6 +18,7 @@ import { PublicIdPipe } from '../common/public-id';
 import {
   CreateProjectDto,
   DecideProjectHandoffDto,
+  ReopenProjectDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
@@ -520,6 +521,27 @@ export class ProjectsController {
     if (answer.row.fromProjectId !== id && answer.row.toProjectId !== id) {
       throw new BadRequestException('that crossing does not touch this project');
     }
+    // Unit L7: the second confirmation, when the caller offered one. The id in the path picks the
+    // ROW; the crossing key identifies the MOVE — the two ends and the subject — so a client that
+    // echoes it is saying which crossing it read, not merely which row it clicked. A queue that
+    // reordered between the render and the click is the case this catches, and it is answered with
+    // L1's existing code for an approval that names another move rather than a new one.
+    if (
+      dto.acknowledgedCrossingKey !== undefined
+      && dto.acknowledgedCrossingKey !== answer.row.crossingKey
+    ) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        code: 'APPROVAL_TARGET_MISMATCH',
+        message:
+          'that answer names a different crossing than the one at this id — re-read the queue and '
+          + 'answer what it says now',
+        owner: 'USER',
+        requiredAction: 'AWAIT_HANDOFF_APPROVAL',
+        crossingKey: answer.row.crossingKey,
+      });
+    }
     return this.handoffs.decide(user.userId, user.userId, handoffId, dto.decision, new Date());
   }
 
@@ -538,6 +560,36 @@ export class ProjectsController {
     @Body() dto: RecordMergeEvidenceDto,
   ) {
     return this.acceptance.recordMergeEvidence(user.userId, id, dto);
+  }
+
+  /**
+   * Unit L7: what reopening this project would cost, before anybody spends it.
+   *
+   * Which epoch it is in, which one a reopen would start, how many acceptance attempts stop being
+   * current, and the `acknowledgement` the write below has to echo back. Read it and show it: a
+   * confirmation dialog that says "are you sure" asks about a feeling, and this says what happens.
+   */
+  @Get(':id/reopen')
+  reopenPreview(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.reopenPreview(user.userId, id);
+  }
+
+  /**
+   * Unit L7: reopen a settled project, having named the epoch that decision was made against.
+   *
+   * `PATCH :id` with `status: OPEN` still reopens and still may — an older client, a repair script
+   * and the coordinator's own paths keep what they have always had (§8 CM1). This door differs in
+   * one way and it is the point of it: `acknowledgedAcceptanceEpoch` is REQUIRED, so the only way
+   * to reach it is to have read what the reopen costs. The response carries `reopened`, with the
+   * epoch it came from, the one it landed in and how many acceptance attempts were retired.
+   */
+  @Post(':id/reopen')
+  reopen(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: ReopenProjectDto,
+  ) {
+    return this.projects.reopen(user.userId, id, dto);
   }
 
   /** Also how a project is settled: `{ "status": "DONE" }` / `{ "status": "CANCELLED" }`. */

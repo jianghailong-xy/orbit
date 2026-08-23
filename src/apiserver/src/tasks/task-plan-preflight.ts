@@ -155,6 +155,9 @@ export interface PlanItemFacts {
 }
 
 export interface PlanProjectFacts {
+  /** Unit L7: what a person calls this project. Read by nothing that DECIDES — it is here so the
+   *  plan can be shown before it is written, and never so a check can match on prose. */
+  title: string;
   status: 'OPEN' | 'DONE' | 'CANCELLED';
   acceptanceEpoch: string;
   maxConcurrentTasks: number;
@@ -511,12 +514,66 @@ export function planPreflightRefusals(
 }
 
 /**
+ * Unit L7: where one item of a plan would land, said in the words a person reads.
+ *
+ * The whole reason this exists as a separate table rather than as fields on a finding: an item
+ * that passes every check has a landing too, and it is the one a person most needs to see BEFORE
+ * they submit. A plan is fifty titles on screen and a graph of work filed against somebody's goals
+ * underneath, and "which goal" was previously answerable only by reading the ids back out of the
+ * rows afterwards.
+ *
+ * `projectId` is emitted under that exact name so `PublicIdInterceptor` and
+ * `PublicIdExceptionFilter` render the Base62 twin beside it — an id inside prose is one no filter
+ * can find, which is why the title and the id are separate fields here rather than one sentence.
+ */
+export interface PlanItemLanding {
+  index: number;
+  ref: string | null;
+  /** The project this item would be FILED under — what the scope admission bound, not what the
+   *  request asked for. */
+  projectId: string | null;
+  /** Its title, or null when the item lands under no project or names one that cannot be read. */
+  projectTitle: string | null;
+  projectStatus: 'OPEN' | 'DONE' | 'CANCELLED' | null;
+  /** The acceptance epoch that project is in, so a plan made against an older one is visible. */
+  acceptanceEpoch: string | null;
+  /** True for an item an earlier attempt already committed: it is reported, not re-decided. */
+  frozen: boolean;
+}
+
+/**
+ * Every item's landing, in plan order.
+ *
+ * Total: an item whose project cannot be read gets a row with nulls and its id, not no row at all.
+ * A preview that silently omitted the items it could not resolve would be a preview that reads as
+ * "these are the ones there are".
+ */
+export function planItemLandings(facts: PlanFacts): PlanItemLanding[] {
+  return facts.items.map((item) => {
+    const project = item.projectId ? facts.world.projects[item.projectId] : undefined;
+    return {
+      index: item.index,
+      ref: item.ref,
+      projectId: item.projectId,
+      projectTitle: project?.title ?? null,
+      projectStatus: project?.status ?? null,
+      acceptanceEpoch: project?.acceptanceEpoch ?? null,
+      frozen: item.frozen === true,
+    };
+  });
+}
+
+/**
  * The refusal, as a response body.
  *
  * Every finding, not the first: a caller that has to fix a plan needs the whole list, and a body
  * that reported one problem at a time would make a fifty-item plan a fifty-round-trip negotiation.
  * No ids in the prose — the fields carry them, and `PublicIdExceptionFilter` maps an error body by
  * field name, so an id inside a sentence would ship as a raw uuid.
+ *
+ * `plan` (unit L7) is the landing of every item, refused ones included. A refusal that named only
+ * the broken items would leave the reader unable to see the thing most often actually wrong: the
+ * forty items that were about to be filed under a project nobody meant.
  */
 export interface PlanPreflightRefusalBody {
   code: 'PLAN_PREFLIGHT_FAILED';
@@ -524,10 +581,12 @@ export interface PlanPreflightRefusalBody {
   /** Nothing of the plan was written. Stated in the body because it is the caller first question. */
   written: 0;
   findings: PlanPreflightFinding[];
+  plan: PlanItemLanding[];
 }
 
 export function planPreflightRefusalBody(
   findings: readonly PlanPreflightFinding[],
+  facts: PlanFacts,
 ): PlanPreflightRefusalBody {
   const refusals = planPreflightRefusals(findings);
   return {
@@ -537,5 +596,42 @@ export function planPreflightRefusalBody(
       + `${refusals.length === 1 ? '' : 's'}; nothing was written`,
     written: 0,
     findings: refusals,
+    plan: planItemLandings(facts),
+  };
+}
+
+/**
+ * Unit L7: the whole plan, judged and not written.
+ *
+ * What `POST /tasks/batch-create` returns for `dryRun: true`. Same findings, same landings, same
+ * order — the difference is that `written` is 0 because nothing was attempted rather than because
+ * something was refused, and `wouldWrite` says how many rows the real call would add.
+ */
+export interface PlanPreviewBody {
+  dryRun: true;
+  /** True when the real call would go through: no finding refuses it. */
+  wouldWrite: number;
+  refused: boolean;
+  findings: PlanPreflightFinding[];
+  plan: PlanItemLanding[];
+}
+
+export function planPreviewBody(
+  findings: readonly PlanPreflightFinding[],
+  facts: PlanFacts,
+): PlanPreviewBody {
+  const refusals = planPreflightRefusals(findings);
+  return {
+    dryRun: true,
+    // The items that are neither already committed nor part of a refused plan. A refused plan
+    // writes nothing at all (AC5), so the count is zero rather than "the ones that were fine":
+    // reporting a partial number would describe an outcome this endpoint cannot produce.
+    wouldWrite: refusals.length ? 0 : facts.items.filter((item) => item.frozen !== true).length,
+    refused: refusals.length > 0,
+    // Every finding here, warnings included. A refusal body carries only what refuses because that
+    // is what has to be fixed; a preview is being read to decide, and a warning — "this will queue
+    // behind the budget" — is exactly the kind of thing a decision turns on.
+    findings: [...findings],
+    plan: planItemLandings(facts),
   };
 }

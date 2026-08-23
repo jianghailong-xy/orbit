@@ -24,8 +24,9 @@ Usage:
   orbit task list [--status STATUS] [--list-id ID] [--project-id ID] [--label L] [--limit N | --all [--cursor C]] [--json]
   orbit task labels [--list-id ID] [--json]
   orbit task get [task-id] [--json]
+  orbit task attribution [task-id] [--json]
   orbit task create --title TITLE [options]
-  orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
+  orbit task create-batch (--tasks JSON | --tasks-file -) [--dry-run] [--json]
   orbit task update [task-id] [options]
   orbit task delete [task-id] [--json]
   orbit task start [task-id] [--json]
@@ -169,7 +170,7 @@ but passing one field inline and the other on stdin is fine.
 	"create-batch": `orbit task create-batch — create several tasks in one atomic call
 
 Usage:
-  orbit task create-batch (--tasks JSON | --tasks-file -) [--json]
+  orbit task create-batch (--tasks JSON | --tasks-file -) [--dry-run] [--json]
 
 JSON is an array of task objects (or {"tasks": [...]}), each taking the same fields
 as 'orbit task create': title (required), description, assigneeId, listId, projectId,
@@ -214,6 +215,47 @@ VERIFICATION_PASSED parent counts:
 rejected. Filed as two calls instead, the window between them is a parent that can
 never complete. assigneeId defaults to ORBIT_AGENT_ID per item (pass null to leave
 an item unassigned). --tasks-file accepts only '-' (stdin).
+
+--dry-run judges the plan and writes none of it — not one task, and not even the
+question a declared crossing would otherwise file. It answers with "plan": where every
+item WOULD land (project id, title, status, acceptance epoch), "findings": every check
+that refuses or warns, in a fixed order, and "wouldWrite": how many rows the real call
+would add. Read it before a plan you cannot easily undo: a batch is the most
+consequential thing an agent does here and the least visible — the request is fifty
+titles, and the result is a graph of work filed against somebody's goals.
+
+Options:
+  --tasks JSON | --tasks-file -
+  --dry-run                   Judge the plan and write nothing
+  --json
+`,
+	"attribution": `orbit task attribution — where this work counts, and everything that follows
+
+Usage:
+  orbit task attribution [task-id] [--json]
+
+One read, five answers:
+
+  owning       the project this work COUNTS TOWARDS — its title, its Base62 id, its status
+               and the acceptance epoch it is in. The only authoritative attribution there is
+  discovery    where the work was NOTICED: the project it was found in, the trigger event, the
+               source task and the source session. Evidence, and labelled as evidence —
+               finding work somewhere grants nothing about where it may be filed
+  acceptance   the project's stated criteria that cite this task, with the verdict each
+               reached, the epoch it was reached in, and whether that is still the CURRENT
+               epoch — an old PASS stays readable and stops counting
+  crossing     the declared cross-project crossing that touches this task, its state, and the
+               stable code and required action a writer meeting it is given
+  blocker      the attribution blocker holding this work up, with its code, its owner and the
+               one sentence that would clear it
+
+Every absent fact is null beside a reason — NOT_CITED_BY_ACCEPTANCE and "this build cannot tell
+you" are different answers, and a missing field says neither.
+
+Read this BEFORE writing where you are not certain the work belongs. The alternative is learning
+it from the refusal, which is after the decision has been made.
+
+task-id defaults to ORBIT_TASK_ID.
 `,
 	"update": `orbit task update — update a task
 
@@ -403,6 +445,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskLabels(args[1:], out)
 	case "get":
 		return cliTaskGet(args[1:], out)
+	case "attribution":
+		return cliTaskAttributionRead(args[1:], out)
 	case "create":
 		return cliTaskCreate(args[1:], in, out)
 	case "create-batch":
@@ -890,6 +934,34 @@ func cliTaskGet(args []string, out io.Writer) error {
 	return writeCLIRawJSON(out, raw, *jsonOut)
 }
 
+// cliTaskAttributionRead is unit L7's read at a terminal: where this work counts, where it was
+// noticed, which acceptance criteria cite it, what is being asked about it and what is stopping it.
+//
+// Named `...Read` because `cliTaskAttribution` is already taken by the in-session identity helper
+// that decides which agent and session a write is attributed TO. Two different senses of the word,
+// and the older one is on the write path — renaming it here would be renaming it there.
+func cliTaskAttributionRead(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit task attribution")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	id, err := resolveTaskCLIId(id, fs.Args())
+	if err != nil {
+		return err
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getTaskAttribution(id)
+	if err != nil {
+		return fmt.Errorf("get task attribution: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task create")
 	title := fs.String("title", "", "task title")
@@ -1083,6 +1155,11 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	fs := newCLIFlagSet("orbit task create-batch")
 	tasks := fs.String("tasks", "", "JSON array of task objects")
 	tasksFile := fs.String("tasks-file", "", "read the JSON array from stdin (-)")
+	// Unit L7: judge the plan and write none of it. The most consequential thing an agent does
+	// here is also the least visible — the request is fifty titles and the result is a graph of
+	// work filed against somebody's goals — so this is the way to see WHERE those fifty land
+	// before any of them exists.
+	dryRun := fs.Bool("dry-run", false, "judge the plan and write nothing; report where each item would land")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -1107,9 +1184,15 @@ func cliTaskCreateBatch(args []string, in io.Reader, out io.Writer) error {
 	}
 	// In-session agent attribution + session link, same as `orbit task create`.
 	agentID, sessionID := cliTaskAttribution()
-	out2, err := t.createTasksBatch(agentID, sessionID, map[string]interface{}{"tasks": items})
+	body := map[string]interface{}{"tasks": items}
+	verb := "create tasks"
+	if *dryRun {
+		body["dryRun"] = true
+		verb = "preview plan"
+	}
+	out2, err := t.createTasksBatch(agentID, sessionID, body)
 	if err != nil {
-		return fmt.Errorf("create tasks: %w", err)
+		return fmt.Errorf("%s: %w", verb, err)
 	}
 	return writeCLIRawJSON(out, out2, *jsonOut)
 }
@@ -1793,7 +1876,8 @@ var baseCLICapabilities = []cliCapabilitySpec{
 	{Tool: "task_labels", Argv: []string{"orbit", "task", "labels"}, Usage: "orbit task labels [--list-id ID] [--json]", Arguments: []string{"--list-id <id>", "--json"}, Description: "Every label in use with its own status breakdown, counted over every task carrying it. One call answers for all labels, where task_list --label answers for one; also how to discover how a label is spelled before filtering on it."},
 	{Tool: "task_get", Argv: []string{"orbit", "task", "get"}, Usage: "orbit task get [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}},
 	{Tool: "task_create", Argv: []string{"orbit", "task", "create"}, Usage: "orbit task create --title TITLE [options]", Arguments: []string{"--title <text> (required)", "--description <text> | --description-file -", "--assignee-id <id> | --unassigned", "--list-id <id>", "--project-id <id> (file the task under this project; orthogonal to --list-id, must be owned by the caller)", "--parent-task-id <id> (create it as a subtask of this existing task; must be owned by the caller and in the same project)", "--verifies-task-id <id> (file it as a verification of this existing task: what makes a check a structured relation, and the precondition for a verdict; same project, not itself, and not itself a verification)", "--supersedes-task-id <id> (record in this same write that the new task REPLACES that stopped attempt: the predecessor must be CANCELLED or FAILED, owned by you and in the same project, and must not already have been replaced)", "--acceptance-criteria <text> | --acceptance-criteria-file - (what would settle that this task is done; max 4,000 characters)", "--due-date <ISO date>", "--provider <slug>", "--model <model>", "--depends-on <id[,id...]> (repeatable)", "--label <labels[,labels...]> (repeatable)", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's own completion is decided once it has subtasks; MANUAL, the default, never completes it automatically)", "--json"}, Description: "Create a task. Inside a session it is attributed to this agent (ORBIT_AGENT_ID), the same as the MCP task tools; run headless with no session it is attributed to the runner owner. ORBIT_AGENT_ID is also the default assignee. This only records the task; call task_start when it should run immediately. --project-id files the task under a project you own, which is orthogonal to --list-id: the project says what the work is for, the list decides how it is dispatched. --parent-task-id makes it a subtask of an existing task, which must be in the same project as the new task — pass both flags for a subtask under a project's task, since the project is not inherited from the parent. --acceptance-criteria states what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal; the server accepts up to 4,000 characters. --acceptance-criteria-file reads it from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream. --supersedes-task-id records, in the same transaction that creates this task, that it replaces an attempt that already stopped: the predecessor keeps the CANCELLED or FAILED it ended with and gains a pointer to this task plus terminalReason SUPERSEDED. Use it instead of creating the replacement and remembering to link it afterwards — the link is what every downstream reader actually consults, and an attempt that never got one is re-dispatched by the control loop as an ordinary unfinished failure.", Mutates: true},
-	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee.", Mutates: true},
+	{Tool: "task_attribution", Argv: []string{"orbit", "task", "attribution"}, Usage: "orbit task attribution [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Read one task's attribution boundary — where this work COUNTS (the project's title, Base62 id, status and acceptance epoch: the only authoritative attribution there is), where it was NOTICED (the discovery project, trigger event, source task and source session — evidence, and labelled as evidence, because finding work somewhere grants nothing about where it may be filed), the project acceptance criteria that CITE this task with the verdict each reached and whether that epoch is still the current one (an old PASS stays readable and stops counting), the declared cross-project crossing that touches it with the stable code and required action a writer meeting it is given, and the attribution blocker holding it up. Every absent fact is null beside a reason, so \"no acceptance criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs: the alternative is learning it from the refusal, which is after the decision was made."},
+	{Tool: "task_create_batch", Argv: []string{"orbit", "task", "create-batch"}, Usage: "orbit task create-batch (--tasks JSON | --tasks-file -) [--json]", Arguments: []string{"--tasks <json array> | --tasks-file - (required)", "--dry-run (judge the plan and write nothing; report where each item would land)", "--json"}, Description: "Create several tasks in one atomic call — the batch form of task_create. JSON is an array of task objects taking the same fields as task_create; nothing is written unless every item is valid. An item may carry \"ref\", and a later item may list that ref in \"dependsOnRefs\" to depend on it without knowing its id yet, or name it in \"parentRef\" to be created as a subtask of it — so a plan lands as a tree in one call. The two answer different questions: dependsOnRefs is when an item may run, parentRef is what it is a part of. \"parentTaskId\" is the same link to a task that already exists (same project as the item); one item cannot carry both. Attribution matches task_create: this agent inside a session, the runner owner headless. ORBIT_AGENT_ID is also each item's default assignee. --dry-run judges the plan and writes none of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file — answering instead with where every item WOULD land (project id, title, status and acceptance epoch), every finding that refuses or warns, and how many rows the real call would add. Use it before filing a plan whose attribution you are not certain of: a refusal tells you which item is wrong, and a dry run tells you where the ones that are RIGHT would go.", Mutates: true},
 	{Tool: "task_update", Argv: []string{"orbit", "task", "update"}, Usage: "orbit task update [task-id] [options]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--title <text>", "--description <text> | --description-file -", "--status <OPEN|IN_PROGRESS|DONE|CANCELLED|FAILED>", "--assignee-id <id> | --clear-assignee", "--list-id <id> | --clear-list", "--parent-task-id <id> | --clear-parent (move this task under that task, or detach it; same project, never itself or one of its own subtasks)", "--verifies-task-id <id> | --clear-verifies (point this task at the task it verifies, or detach it; refused once this verification has concluded anything)", "--due-date <ISO date> | --clear-due-date", "--provider <slug> | --clear-provider", "--model <model> | --clear-model", "--acceptance-criteria <text> | --acceptance-criteria-file - | --clear-acceptance-criteria (replaces what would settle that this task is done; max 4,000 characters)", "--depends-on <id[,id...]> (repeatable; replaces all)", "--clear-dependencies", "--label <labels[,labels...]> (repeatable; replaces all) | --clear-labels", "--auto-run-when-ready[=true|false]", "--completion-policy <MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED> (how this task's completion is decided once it has subtasks)", "--verdict <PASS|FAIL|INCONCLUSIVE> | --clear-verdict (this VERIFICATION task's conclusion about the task it verifies; revoking a PASS reopens a subject VERIFICATION_PASSED had completed)", "--superseded-by-task-id <id> | --clear-superseded ( the later attempt that replaced this one; only a CANCELLED or FAILED task may name one, and it must be in the same project)", "--terminal-reason <SUPERSEDED|ABANDONED> | --clear-terminal-reason (terminalReason: why this task stopped, when its status alone does not say)", "--json"}, Description: "Update a task. Only the flags you pass are sent, so a partial edit never blanks the rest of the task. --parent-task-id moves the task under another task you own and --clear-parent detaches it, which is how a decomposition is corrected once the tasks exist rather than by deleting and recreating them; the parent must be in the same project, and neither a task itself nor one of its own subtasks may be named (both close a loop). It is membership, not ordering — when a task runs is --depends-on. --acceptance-criteria replaces what would settle that this task is done — the observable, verifiable result, as opposed to --description, which says what work to perform, and to the project's own acceptance criteria, which settle the whole goal rather than this one task. It is a whole-field replacement: omitting it preserves the task's current criteria, text replaces them (\"\" records that there are none worth stating), and --clear-acceptance-criteria removes them, which is why clearing cannot be combined with either form. Expect to use it after creation — what proves a task done is often only clear once the work is understood. The server accepts up to 4,000 characters. --acceptance-criteria-file reads the replacement from stdin ('-' only) and cannot be combined with --description-file, which reads the same stream.", Mutates: true},
 	{Tool: "task_delete", Argv: []string{"orbit", "task", "delete"}, Usage: "orbit task delete [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},

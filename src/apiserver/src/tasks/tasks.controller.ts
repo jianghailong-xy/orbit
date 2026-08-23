@@ -26,12 +26,16 @@ import {
   RefreshDependencyGraphNodesDto,
   UpdateTaskDto,
 } from './dto';
+import { ProjectAttributionService } from '../projects/project-attribution.service';
 import { TasksService } from './tasks.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(
+    private readonly tasks: TasksService,
+    private readonly attribution: ProjectAttributionService,
+  ) {}
 
   @Post()
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTaskDto) {
@@ -138,6 +142,24 @@ export class TasksController {
     return this.tasks.dependencyGraphNodes(user.userId, id, dto.taskIds);
   }
 
+  /**
+   * Unit L7: where this work counts, who noticed it, which acceptance reads it, and what is being
+   * asked or refused about it.
+   *
+   * A read of its own rather than more fields on `GET :id`, and not because the task page is large:
+   * this one joins the project, its acceptance criteria, the crossing table and the open blockers,
+   * and the task page is fetched on every navigation. A screen that only wants the title should not
+   * pay for the boundary.
+   *
+   * Lives on the task and not under `/projects/:id/...`, unlike the other per-task project reads,
+   * for the case it exists to make visible: a task filed under NO project has an attribution
+   * boundary too, and it is the one most worth looking at.
+   */
+  @Get(':id/attribution')
+  attributionOf(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.attribution.read(user.userId, id);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.tasks.get(user.userId, id);
@@ -154,9 +176,17 @@ export class TasksController {
   }
 
   // Declared before ':id/execute' so the literal path isn't shadowed by the param route.
+  //
+  // `dryRun` (unit L7) judges the plan and writes none of it — not even the question a declared
+  // crossing would otherwise file — and returns where every item would land, every finding
+  // including the warnings a refusal body drops, and how many rows the real call would add. Same
+  // endpoint rather than a second one, because a preview served by a different route is a preview
+  // that can disagree with the write.
   @Post('batch-create')
   batchCreate(@CurrentUser() user: AuthUser, @Body() dto: CreateTasksBatchDto) {
-    return this.tasks.createMany(user.userId, dto);
+    return dto.dryRun
+      ? this.tasks.previewPlan(user.userId, dto)
+      : this.tasks.createMany(user.userId, dto);
   }
 
   @Post('batch-execute')

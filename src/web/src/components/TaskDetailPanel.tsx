@@ -39,6 +39,7 @@ import {
 import { PENDING_SLOT_LABEL } from '../lib/runnerSlots';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
+import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
 
@@ -1078,6 +1079,12 @@ export function TaskDetailPanel({
               </div>
             </section>
           )}
+
+          {/* Unit L7: where this work counts, who noticed it, which acceptance reads it and what
+              is being asked or refused about it. Above the runs because it is about the WORK
+              rather than about an attempt at it — and because a run of a task filed under the
+              wrong goal is the thing this section exists to make catchable before it happens. */}
+          <TaskAttributionCard taskId={taskId} />
 
           <section className="tdp-section">
             <div className="tdp-section-title">Runs ({sessions.length})</div>

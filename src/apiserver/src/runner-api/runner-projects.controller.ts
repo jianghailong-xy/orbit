@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -21,6 +22,8 @@ import {
   UpdateProjectDto,
 } from '../projects/dto';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
+import { HANDOFF_STORED_STATES, type HandoffStoredState } from '../projects/project-handoff';
+import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectsService } from '../projects/projects.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -54,6 +57,7 @@ export class RunnerProjectsController {
   constructor(
     private readonly projects: ProjectsService,
     private readonly acceptance: ProjectAcceptanceService,
+    private readonly handoffs: ProjectHandoffService,
   ) {}
 
   /**
@@ -213,6 +217,50 @@ export class RunnerProjectsController {
    * A project belonging to somebody else is the service's 404, decided by the same `assertOwned`
    * the user door goes through; nothing here checks ownership separately.
    */
+  /**
+   * Unit L7: what has been asked and answered about work crossing into or out of this project,
+   * both directions, with each end named as well as identified.
+   *
+   * READ ONLY, and the omission is the point. §7 RB2 is explicit that the approver of a
+   * cross-project crossing is the USER — the target project's coordinator is not, because an agent
+   * signing for another agent is the original incident with one more actor in it. So this door
+   * carries the question and never the answer: a coordinator can see that it is waiting on a
+   * person, and can say so, and cannot resolve it for them (PCC §9.3, never act on their behalf).
+   */
+  @Get('projects/:id/handoffs')
+  listProjectHandoffs(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('state') state?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (state !== undefined && !HANDOFF_STORED_STATES.includes(state as HandoffStoredState)) {
+      throw new BadRequestException(`state must be one of ${HANDOFF_STORED_STATES.join(', ')}`);
+    }
+    return this.handoffs.listForProject(runner.ownerId, id, {
+      state: state as HandoffStoredState | undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  /**
+   * Unit L7: what reopening this project would cost — the epoch it is in, the one a reopen would
+   * start, how many acceptance attempts stop being current, and whether its DONE rests on the
+   * legacy stamp.
+   *
+   * Also read only, and for the same reason: §7 says a settled project is reopened by the USER and
+   * that a coordinator does not reopen one on its own. What an agent is entitled to is to KNOW
+   * that its write was refused `PROJECT_REOPEN_REQUIRED` and what asking a person for would cost
+   * them — which is exactly this, and is not a door onto the write.
+   */
+  @Get('projects/:id/reopen')
+  getProjectReopenImpact(
+    @CurrentRunner() runner: Runner,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.projects.reopenPreview(runner.ownerId, id);
+  }
+
   @Patch('projects/:id')
   updateProject(
     @CurrentRunner() runner: Runner,

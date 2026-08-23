@@ -71,7 +71,10 @@ const TASK_WRITE_SOURCES: ReadonlyArray<{
   },
   {
     file: 'tasks.service.ts',
-    method: 'createMany',
+    // Unit L7 split the public entry point from the pass that writes: `createMany` and
+    // `previewPlan` both call `createManyPass`, which is where the locks and the rows are. The
+    // inventory names the writer, not the name a caller types.
+    method: 'createManyPass',
     statements: ['task.create', 'taskDependency.createMany'],
     holds: [
       'await this.lockDependencyGraph(tx, ownerId);',

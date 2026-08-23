@@ -25,7 +25,7 @@ function harness() {
       return { items: [{ id: 'page' }], nextCursor: null };
     },
   } as unknown as TasksService;
-  const controller = new RunnerTasksController(tasks, {} as TaskListsService);
+  const controller = new RunnerTasksController(tasks, {} as TaskListsService, {} as never);
   return { controller, calls };
 }
 

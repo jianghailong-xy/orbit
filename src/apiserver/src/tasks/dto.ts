@@ -217,6 +217,22 @@ export class CreateTasksBatchDto {
   @ValidateNested({ each: true })
   @Type(() => CreateTaskBatchItemDto)
   tasks!: CreateTaskBatchItemDto[];
+
+  /**
+   * Unit L7: judge this plan and write none of it.
+   *
+   * The same admission, the same preflight, the same order — and then it stops, returning where
+   * every item would land (project id, title, status, acceptance epoch), every finding including
+   * the warnings a refusal body leaves out, and how many rows the real call would add. A batch
+   * create is the most consequential thing an agent does here and the least visible: the request is
+   * fifty titles and the result is a graph of work filed against somebody's goals.
+   *
+   * Writes nothing at all, including the QUESTION a crossing would otherwise file: a dry run that
+   * declared a handoff would have a preview leaving a pending approval behind it. A crossing with
+   * no answer yet is reported as the refusal it is, which is what a reader wants to know before
+   * they submit rather than after.
+   */
+  @IsOptional() @IsBoolean() dryRun?: boolean;
 }
 
 export class DagOpDto {

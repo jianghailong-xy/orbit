@@ -642,7 +642,9 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary.',
   },
   {
-    at: 'tasks/tasks.service.ts#createMany',
+    // Unit L7 split the door from the pass: `createMany` (write) and `previewPlan` (dry run) both
+    // call `createManyPass`, and only the first of those reaches the transaction below.
+    at: 'tasks/tasks.service.ts#createManyPass',
     shape: 'TX_RETRIED',
     locks: 'Same ranks as create, taken unconditionally: a batch writes several task rows in item order, which is not an order any other writer shares.',
     identity: 'The per-item idempotency keys and the turn they are built from, all outside the closure; the find-or-create by key makes a half-committed attempt impossible to double up on.',

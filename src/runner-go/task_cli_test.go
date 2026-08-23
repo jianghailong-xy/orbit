@@ -45,7 +45,12 @@ func TestCapabilitiesJSONUsesMCPDescriptorsAndExposesOnlyPhase1(t *testing.T) {
 	// question the audit answers — and the terminal was the one caller that could not ask it), and
 	// merge_receipt / merge_receipts (recording that a branch was merged is evidence about your own
 	// work, not a power over somebody else's session).
-	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 33 {
+	// Unit L7 took it to 36 with three READS: task_attribution (where this work counts, where it
+	// was noticed, which acceptance cites it, what is being asked and what is stopping it),
+	// project_crossings and project_reopen_impact. All three answer questions an agent previously
+	// could only learn by being refused; none of them writes, and the two writes they are about —
+	// answering a crossing, reopening a settled project — stay the account owner's.
+	if doc.SchemaVersion != 1 || len(doc.Capabilities) != 36 {
 		t.Fatalf("capabilities = %#v", doc)
 	}
 	// The dependency trio reached CLI parity with the MCP tools; without them a script

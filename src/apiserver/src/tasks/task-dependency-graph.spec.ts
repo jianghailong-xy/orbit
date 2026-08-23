@@ -218,7 +218,7 @@ test('dependency graph is exposed as an owner-scoped GET route and forwards its 
       seen.push(...args);
       return expected;
     },
-  } as never);
+  } as never, {} as never);
 
   const result = await controller.dependencyGraph(
     { userId: OWNER_ID, email: 'owner@example.com' },
@@ -248,7 +248,7 @@ test('dependency graph expansion is exposed as an owner-scoped POST delta route'
       seen.push(...args);
       return expected;
     },
-  } as never);
+  } as never, {} as never);
   const dto = {
     anchorTaskId: FOCUS,
     direction: 'prerequisites' as const,
@@ -279,7 +279,7 @@ test('dependency graph node refresh is exposed as an owner-scoped POST route', a
       seen.push(...args);
       return expected;
     },
-  } as never);
+  } as never, {} as never);
 
   const result = await controller.dependencyGraphNodes(
     { userId: OWNER_ID, email: 'owner@example.com' },

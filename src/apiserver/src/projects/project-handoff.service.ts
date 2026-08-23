@@ -607,10 +607,27 @@ export class ProjectHandoffService {
         OR: [{ fromProjectId: projectId }, { toProjectId: projectId }],
         ...(options.state ? { state: options.state } : {}),
       },
-      select: HANDOFF_SELECT,
+      // Unit L7: the two ends by NAME as well as by id. A queue of crossings that showed only ids
+      // asks a person to approve work moving between two things they cannot read, and "which
+      // project is 3CuIHiS" is not a question the page should send them somewhere else to answer.
+      // The ids stay — they are what the decision is made against and what the public-id filter
+      // renders — and the titles are added beside them. What the crossing is ABOUT is already on
+      // the row: `title` is the plan's own title, bound into the digest the approval authorises.
+      select: {
+        ...HANDOFF_SELECT,
+        fromProject: { select: { title: true, status: true } },
+        toProject: { select: { title: true, status: true, acceptanceEpoch: true } },
+      },
       orderBy: { requestedAt: 'desc' },
       take: Math.min(Math.max(options.limit ?? 100, 1), 200),
-    })) as HandoffRow[];
+    })).map((row) => ({
+      ...row,
+      // BigInt has no JSON spelling, and the epoch is what says whether the landing project has
+      // been reopened since this crossing was asked about.
+      toProject: row.toProject
+        ? { ...row.toProject, acceptanceEpoch: String(row.toProject.acceptanceEpoch) }
+        : row.toProject,
+    })) as unknown as HandoffRow[];
   }
 
   /**

@@ -273,6 +273,43 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_crossings":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		state := getString(args, "state")
+		if state != "" && !isHandoffState(state) {
+			return toolResult("state must be one of PENDING, APPROVED, DENIED, APPLIED", true)
+		}
+		raw, err := s.t.getProjectHandoffs(id, state)
+		if err != nil {
+			return toolResult("get project crossings failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "project_reopen_impact":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		raw, err := s.t.getProjectReopenImpact(id)
+		if err != nil {
+			return toolResult("get project reopen impact failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "task_attribution":
+		id, ok := s.resolveTaskID(args)
+		if !ok {
+			return toolResult(noTaskMsg, true)
+		}
+		raw, err := s.t.getTaskAttribution(id)
+		if err != nil {
+			return toolResult("get task attribution failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "merge_receipt":
 		id := getString(args, "sessionId")
 		if id == "" {
@@ -525,6 +562,13 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				body["assigneeId"] = s.agentID
 			}
 			bodies = append(bodies, body)
+		}
+		// Unit L7: a dry run writes nothing, so there is nothing to ask a person about. It goes
+		// straight through rather than through `createBatchWithApproval`, whose whole subject is
+		// runs about to start — a preview starts none, and a card asking to approve a write that
+		// will not happen is a card that teaches people to click through cards.
+		if getBool(args, "dryRun") {
+			return s.createBatchNow(map[string]interface{}{"tasks": bodies, "dryRun": true})
 		}
 		return s.createBatchWithApproval(bodies)
 
@@ -1412,6 +1456,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
+			"name": "task_attribution",
+			"description": "Read one task's attribution boundary — five answers in one read. `owning`: the project this work COUNTS TOWARDS, with its title, Base62 id, status and acceptance epoch; that column is the only authoritative attribution there is. `discovery`: where the work was NOTICED — the project it was found in, the trigger event, the source task and the source session — carried as evidence and labelled `EVIDENCE_ONLY`, because finding work somewhere grants nothing about where you may file it. `acceptance`: the project's stated criteria that CITE this task, each with the verdict it reached, the epoch it was reached in, and whether that is still current — an old PASS stays readable and stops counting once the project is reopened. `crossing`: the declared cross-project crossing that touches this task, with the stable code and required action a writer meeting it is given. `blocker`: the attribution blocker holding this work up, with its code, its owner and the one sentence that would clear it. Every absent fact is null beside a reason, so \"no criterion cites this\" and \"this build cannot tell you\" read differently. Read it BEFORE writing where you are not certain the work belongs — the alternative is learning it from the refusal, which is after the decision was made.",
+			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
+		},
+		{
 			"name": "project_get",
 			"description": "Read one project's durable context: its goal, what would settle that " +
 				"the goal was reached (acceptanceCriteria), how the work is to be done " +
@@ -1481,6 +1530,31 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"history": map[string]interface{}{
 					"type":        "boolean",
 					"description": "Include the episodes that are already resolved. Default false — the open ones only.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_crossings",
+			"description": "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state (PENDING / APPROVED / DENIED / APPLIED), the crossing key that identifies the MOVE rather than the row, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question is still waiting, was refused, or has already been spent. There is deliberately no tool that ANSWERS one — the approver of a cross-project crossing is the account owner, never the target project's coordinator, because one agent accepting work on another goal's behalf is precisely the failure this boundary exists to prevent. Say what is waiting and on whom; do not answer it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+				"state": map[string]interface{}{
+					"type":        "string",
+					"enum":        []string{"PENDING", "APPROVED", "DENIED", "APPLIED"},
+					"description": "Only crossings in that state. Omit for all of them.",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_reopen_impact",
+			"description": "Read what reopening a settled project would COST: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, still readable and no longer a claim about the world the project is in — so an account owner being asked for one should be asked with those numbers rather than with \"can you reopen this\". Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
 				},
 			}, "projectId"),
 		},
@@ -1819,6 +1893,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"maxItems":    maxTaskBatchCreate,
 					"items":       obj(taskBatchItemProps(), "title"),
 					"description": "The tasks to create, in dependency order (prerequisites first).",
+				},
+				"dryRun": map[string]interface{}{
+					"type": "boolean",
+					"description": "Judge this plan and write NONE of it — not one task, and not even the approval question a declared cross-project crossing would otherwise file. Answers with `plan` (where every item would land: project id, title, status and acceptance epoch), `findings` (every check that refuses or warns, in a fixed order) and `wouldWrite` (how many rows the real call would add). Use it whenever you are not certain which project a plan files into: a refusal tells you which item is wrong, and this tells you where the items that are RIGHT would go. It asks nobody for approval, because it starts nothing.",
 				},
 			}, "tasks"),
 		},

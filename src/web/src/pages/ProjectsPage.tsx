@@ -7,6 +7,9 @@ import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
 import { ProjectActivityFeed } from '../components/ProjectActivityFeed';
 import { ProjectBlockingLeaderboard } from '../components/ProjectBlockingLeaderboard';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
+import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
+import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
+import { ProjectReopenControl } from '../components/ProjectReopenControl';
 import {
   ProjectCoordinatorPanel,
   type TriggerResult,
@@ -314,6 +317,13 @@ export function ProjectDetailPage() {
               doing and what it is allowed to do. Inside the loaded branch for the same reason the
               task page is — a project that 404s puts no second doomed request on the wire. */}
           <ProjectCoordinatorSection projectId={id} />
+          {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
+              500s costs the reader that card and leaves the page standing. Below the coordinator
+              because both are things a PERSON answers, and §7 RB2 is explicit that these two are
+              the person's alone — no coordinator signs a crossing for another goal, and none
+              reopens a settled project on its own. */}
+          <ProjectCrossingsCard projectId={id} />
+          <ProjectReopenControl projectId={id} />
         </>
       ) : null}
     </div>
@@ -1162,11 +1172,15 @@ function FormRow({ label, children }: { label: string; children: ReactNode }) {
  * which is why they come from that runner rather than from a table.
  */
 export function NewProjectTaskForm({
+  projectId,
   draft,
   onChange,
   error,
   pending,
 }: {
+  /** Unit L7 / AC1: where this create files. Required, not optional — a form that can be rendered
+   *  without saying where the work lands is the form the incident was submitted through. */
+  projectId: string;
   draft: NewProjectTaskDraft;
   onChange: (draft: NewProjectTaskDraft) => void;
   error: Error | null;
@@ -1198,6 +1212,10 @@ export function NewProjectTaskForm({
 
   return (
     <>
+      {/* Above the first field, not beside the submit button: the answer to "which project is
+          this going into" has to be visible while the form is being FILLED IN, which is when the
+          reader still has a cheap way to change their mind. */}
+      <ProjectFilingBanner projectId={projectId} />
       <FormRow label="Title">
         <Input
           value={draft.title}
@@ -1373,6 +1391,7 @@ export function NewProjectTaskModal({
       okButtonProps={{ disabled: !creatable }}
     >
       <NewProjectTaskForm
+        projectId={projectId}
         draft={draft}
         onChange={setDraft}
         error={create.error}

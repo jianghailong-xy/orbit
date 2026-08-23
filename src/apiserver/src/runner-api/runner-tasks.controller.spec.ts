@@ -18,7 +18,7 @@ test('executeTask starts the owned task through TasksService', async () => {
       return expected;
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, {} as never);
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
 
   // The id of THIS `task_start`, which the runner reuses across every transport retry of it: two
   // deliveries of one tool call must be one run, and that is only decidable from a carried token.
@@ -37,7 +37,7 @@ test('executeTask still starts the task for a runner that names no press', async
       return { ok: true };
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, {} as never);
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
 
   await controller.executeTask(RUNNER, 'task-1', {});
 
@@ -60,7 +60,7 @@ test('deleteTask removes the owned task through TasksService', async () => {
       return expected;
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, {} as never);
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
 
   const result = await controller.deleteTask(RUNNER, 'task-1');
 
@@ -90,7 +90,7 @@ test('dependency graph and edge edits stay owner-scoped through TasksService', a
       return { removed: true };
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, {} as never);
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
 
   await controller.getTaskDependencyGraph(RUNNER, 'task-1', '12', '300');
   await controller.addTaskDependency(RUNNER, 'task-1', { dependsOnTaskId: 'task-0' });
@@ -129,7 +129,7 @@ test('createTasks batches through TasksService with the acting workspace as crea
       return created;
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, {} as never);
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const dto = { tasks: [{ title: 'S0', ref: 's0' }] } as never;
 
   const result = await controller.createTasks(RUNNER, 'workspace-1', undefined, 'session-1', dto);
@@ -160,7 +160,7 @@ test('the acting workspace is read from either spelling of the header', async ()
     },
     addComment: async () => ({ ok: true }),
   } as never;
-  const controller = new RunnerTasksController(tasks, {} as never);
+  const controller = new RunnerTasksController(tasks, {} as never, {} as never);
   const dto = { body: 'x' } as never;
 
   await controller.addComment(RUNNER, undefined, 'legacy-workspace', 'task-1', dto);
@@ -182,7 +182,7 @@ test('updateList attributes the policy change to the acting workspace and sessio
       return { id: 'list-1' };
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, taskLists);
+  const controller = new RunnerTasksController(tasks, taskLists, {} as never);
   const dto = { paused: true, note: 'disk below floor' } as never;
 
   await controller.updateList(RUNNER, 'workspace-1', undefined, 'session-9', 'list-1', dto);
@@ -206,7 +206,7 @@ test('a headless runner update carries no agent author', async () => {
       return { id: 'list-1' };
     },
   } as never;
-  const controller = new RunnerTasksController(tasks, taskLists);
+  const controller = new RunnerTasksController(tasks, taskLists, {} as never);
 
   await controller.updateList(RUNNER, undefined, undefined, undefined, 'list-1', {} as never);
 
@@ -223,7 +223,7 @@ test('deleteList removes the owned list through TaskListsService', async () => {
       return expected;
     },
   } as never;
-  const controller = new RunnerTasksController({} as never, taskLists);
+  const controller = new RunnerTasksController({} as never, taskLists, {} as never);
 
   const result = await controller.deleteList(RUNNER, 'list-1');
 

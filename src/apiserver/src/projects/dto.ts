@@ -55,6 +55,13 @@ export const MAX_PROJECT_SESSION_BUDGET_PER_DAY = 10_000;
 export const CONFIG_REVISION_PATTERN = /^\d{1,20}$/;
 
 /**
+ * An `acceptanceEpoch` as it travels. Same shape, same reason, as `CONFIG_REVISION_PATTERN`: a
+ * 64-bit column served as a decimal string, so what a caller echoes back is validated as the
+ * string the read endpoint gave them rather than as a number that would lose its last digits.
+ */
+export const ACCEPTANCE_EPOCH_PATTERN = /^\d{1,20}$/;
+
+/**
  * Validate this field when the caller SENT it — including when what they sent was `null`.
  *
  * `@IsOptional()` skips `undefined` and `null` alike, which is right for a field whose `null`
@@ -148,6 +155,48 @@ export class UpdateProjectDto {
    * behaviour it has always had (last write wins). Nothing existing breaks by adding it, and
    * nothing new has to guess a revision it has no way to know.
    */
+  @IsOptional() @IsString() @Matches(CONFIG_REVISION_PATTERN, {
+    message: 'expectedConfigRevision must be the decimal configRevision you read from the project',
+  })
+  expectedConfigRevision?: string;
+
+  /**
+   * Unit L7: the acceptance epoch this reopen was decided against.
+   *
+   * Only read when `status` is OPEN and the project is settled — the one write that starts a new
+   * acceptance epoch and makes every PASS the project has stop being current. Sent, it is a
+   * compare-and-swap on that epoch: the reopen commits only if the project is still at the number
+   * the person was shown, and a 409 otherwise with nothing written.
+   *
+   * OPTIONAL here for the same compatibility reason `expectedConfigRevision` is, and REQUIRED on
+   * `POST /projects/:id/reopen` — the door a person acts through. A confirmation that a repair
+   * script has to learn about is a confirmation that stops repair scripts; one the UI cannot skip
+   * is one a person cannot spend by accident.
+   */
+  @IsOptional() @IsString() @Matches(ACCEPTANCE_EPOCH_PATTERN, {
+    message:
+      'acknowledgedAcceptanceEpoch must be the decimal acceptanceEpoch you read from the project',
+  })
+  acknowledgedAcceptanceEpoch?: string;
+}
+
+/**
+ * `POST /projects/:id/reopen` — reopen a settled project, on purpose.
+ *
+ * One field and it is required, which is the whole difference between this door and `PATCH :id`
+ * with `status: OPEN`: a reopen retires every acceptance attempt the project has and starts a new
+ * epoch, so the request has to name the epoch it was decided against. Naming it is the second
+ * confirmation — not a checkbox, which only proves a second button was pressed, but the number
+ * from the preview, which proves it was pressed on the project as it actually stands.
+ */
+export class ReopenProjectDto {
+  @IsString() @Matches(ACCEPTANCE_EPOCH_PATTERN, {
+    message:
+      'acknowledgedAcceptanceEpoch must be the decimal acceptanceEpoch you read from the project',
+  })
+  acknowledgedAcceptanceEpoch!: string;
+
+  /** As on UpdateProjectDto: the revision this request was composed against, or nothing. */
   @IsOptional() @IsString() @Matches(CONFIG_REVISION_PATTERN, {
     message: 'expectedConfigRevision must be the decimal configRevision you read from the project',
   })
@@ -347,4 +396,22 @@ export class RecordTaskCheckpointDto {
  */
 export class DecideProjectHandoffDto {
   @IsIn(['APPROVE', 'DENY']) decision!: 'APPROVE' | 'DENY';
+
+  /**
+   * Unit L7: the crossing this answer is about, echoed back.
+   *
+   * `crossingKey` is the digest of the two ends and the subject — the identity of the move itself,
+   * not of the row that records it — so echoing it says "I am answering the crossing I READ". A
+   * different one is refused with `APPROVAL_TARGET_MISMATCH`, which is L1's frozen code for an
+   * approval that names another move, rather than with a new fifth way to say the same thing.
+   *
+   * Optional, because the id in the path already picks the row out and an older client sends
+   * nothing. Sent, it is a fence, and the web app and the CLI always send it: a queue of crossings
+   * is exactly the screen where a list that reordered under a click turns one considered answer
+   * into an answer about somebody else's work.
+   */
+  @IsOptional() @IsString() @Matches(/^[0-9a-f]{64}$/, {
+    message: 'acknowledgedCrossingKey must be the crossingKey you read from the crossing',
+  })
+  acknowledgedCrossingKey?: string;
 }

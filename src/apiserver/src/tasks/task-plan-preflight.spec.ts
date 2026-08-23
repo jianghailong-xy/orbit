@@ -15,8 +15,10 @@ import { test } from 'node:test';
 import {
   PLAN_PREFLIGHT_COVERAGE,
   PLAN_PREFLIGHT_DIMENSIONS,
+  planItemLandings,
   planPreflightRefusalBody,
   planPreflightRefusals,
+  planPreviewBody,
   preflightPlan,
   type PlanFacts,
   type PlanItemFacts,
@@ -48,6 +50,7 @@ const item = (over: Partial<PlanItemFacts> = {}): PlanItemFacts => ({
 });
 
 const project = (over: Partial<PlanWorldFacts['projects'][string]> = {}) => ({
+  title: 'a project',
   status: 'OPEN' as const,
   acceptanceEpoch: '0',
   maxConcurrentTasks: 3,
@@ -254,9 +257,65 @@ test('every finding comes back, in a fixed order, and the body says nothing was 
     '2:PLAN_ACCEPTANCE_EPOCH_MOVED',
     '2:PLAN_ASSIGNEE_NOT_ON_PROJECT_TEAM',
   ]);
-  const body = planPreflightRefusalBody(once);
+  const body = planPreflightRefusalBody(once, plan);
   assert.equal(body.code, 'PLAN_PREFLIGHT_FAILED');
   assert.equal(body.written, 0);
   assert.equal(body.findings.length, 3, 'the body carries every refusal, and only refusals');
   assert.match(body.message, /3 checks/);
+  // Unit L7: a refusal says where every item WOULD have landed, not only the broken ones. The
+  // thing most often actually wrong with a refused plan is the items that were not refused.
+  assert.equal(body.plan.length, 3);
+  assert.deepEqual(body.plan.map((row) => row.projectTitle), ['a project', 'a project', 'a project']);
+  assert.deepEqual(body.plan.map((row) => row.acceptanceEpoch), ['10', '10', '10']);
+});
+
+test('L7: a dry run reports what a refusal throws, plus the warnings a refusal leaves out', () => {
+  const plan = facts([
+    item({ index: 0, ref: 'db' }),
+    item({ index: 1, assigneeId: WORKSPACE, autoRunWhenReady: true }),
+  ], { projects: { [A]: project({ title: 'Alpha', maxConcurrentTasks: 1 }), [B]: project() } });
+  const preview = planPreviewBody(preflightPlan(plan), plan);
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.refused, false);
+  assert.equal(preview.wouldWrite, 2);
+  assert.deepEqual(preview.plan.map((row) => [row.index, row.ref, row.projectTitle]), [
+    [0, 'db', 'Alpha'],
+    [1, null, 'Alpha'],
+  ]);
+  assert.ok(
+    preview.findings.some((finding) => finding.severity === 'WARN'),
+    'a preview is read to decide, so the warnings a refusal body drops belong in it',
+  );
+});
+
+test('L7: a refused plan would write nothing, not "the items that were fine"', () => {
+  const plan = facts([
+    item({ index: 0, parentTaskId: TASK_IN_B }),
+    item({ index: 1 }),
+  ]);
+  const preview = planPreviewBody(preflightPlan(plan), plan);
+  assert.equal(preview.refused, true);
+  assert.equal(preview.wouldWrite, 0);
+  assert.equal(preview.plan.length, 2, 'every item is still shown, refused or not');
+});
+
+test('L7: an item already committed by an earlier attempt is shown as frozen, not as a write', () => {
+  const plan = facts([item({ index: 0, frozen: true }), item({ index: 1 })]);
+  const preview = planPreviewBody(preflightPlan(plan), plan);
+  assert.deepEqual(preview.plan.map((row) => row.frozen), [true, false]);
+  assert.equal(preview.wouldWrite, 1, 'a replayed row is not a row this call would add');
+});
+
+test('L7: an item landing under a project nothing could be read for still gets a row', () => {
+  const plan = facts([item({ index: 0, projectId: null }), item({ index: 1 })], {
+    projects: { [B]: project() },
+  });
+  const landings = planItemLandings(plan);
+  assert.equal(landings.length, 2);
+  assert.deepEqual(landings[0], {
+    index: 0, ref: null, projectId: null, projectTitle: null, projectStatus: null,
+    acceptanceEpoch: null, frozen: false,
+  });
+  assert.equal(landings[1].projectId, A, 'the id is reported even when the project is unreadable');
+  assert.equal(landings[1].projectTitle, null);
 });

@@ -61,7 +61,43 @@ type transportHTTPError struct {
 }
 
 func (e *transportHTTPError) Error() string {
+	// Unit L7: a refusal that carries a stable code and an executable next step says both of them
+	// FIRST, on their own lines, and keeps the raw body underneath.
+	//
+	// The body has always contained them; what a person got was one line of JSON with the two
+	// fields that matter buried in the middle of it. The control plane's whole refusal discipline
+	// — one frozen code per event, one sentence naming what to do — is worth nothing at a terminal
+	// if reading it means parsing JSON by eye. The raw body stays because a code this build has
+	// never heard of, and every field neither of these names, is still in there.
+	if refusal := e.refusal(); refusal != "" {
+		return fmt.Sprintf("%s %s -> %d\n%s%s", e.method, e.path, e.statusCode, refusal, e.body)
+	}
 	return fmt.Sprintf("%s %s -> %d %s", e.method, e.path, e.statusCode, e.body)
+}
+
+// refusal is the "code / what / do" block for a body that carries a code, and "" for one that does
+// not — a validation error listing field messages, an upstream 502, an HTML error page.
+func (e *transportHTTPError) refusal() string {
+	var body struct {
+		Code           string `json:"code"`
+		Message        any    `json:"message"`
+		RequiredAction string `json:"requiredAction"`
+		Owner          string `json:"owner"`
+	}
+	if err := json.Unmarshal([]byte(e.body), &body); err != nil || body.Code == "" {
+		return ""
+	}
+	out := "  refused: " + body.Code + "\n"
+	if message, ok := body.Message.(string); ok && message != "" {
+		out += "  what:    " + message + "\n"
+	}
+	if body.Owner != "" {
+		out += "  owner:   " + body.Owner + "\n"
+	}
+	if body.RequiredAction != "" {
+		out += "  do:      " + body.RequiredAction + "\n"
+	}
+	return out
 }
 
 // code is the control plane's own machine-readable name for this refusal, when the body carried
@@ -855,6 +891,59 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 	}
 	var out json.RawMessage
 	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id), nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getTaskAttribution reads unit L7's attribution boundary for one task: the project the work
+// counts towards (title, Base62 id, status, acceptance epoch), where it was NOTICED (evidence, and
+// labelled as evidence — §3 SC7 is explicit that finding work somewhere grants no authority to
+// write there), the acceptance criteria that cite this task and whether each still counts, the
+// declared crossing that touches it, and the attribution blocker holding it up.
+//
+// The read a coordinator most needs before it writes anywhere. Without it, the only way to learn
+// where a write lands is to be refused by the gate that decides it, which is after the decision has
+// been made.
+func (t *Transport) getTaskAttribution(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/tasks/"+url.PathEscape(id)+"/attribution", nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProjectHandoffs reads what has been asked and answered about work crossing into or out of one
+// project, in both directions.
+//
+// Read only, and there is deliberately no companion that answers one: §7 RB2 puts the answer with
+// the USER, because an agent signing for another goal is the incident this whole unit exists for
+// with one more actor in it. What a coordinator gets is the ability to SEE that it is waiting on a
+// person, which is the difference between a blocked project and a silent one.
+func (t *Transport) getProjectHandoffs(id, state string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	path := "/runner/projects/" + url.PathEscape(id) + "/handoffs"
+	if state != "" {
+		path += "?state=" + url.QueryEscape(state)
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", path, nil, &out, taskOpTimeout)
+	return out, err
+}
+
+// getProjectReopenImpact reads what reopening a settled project would cost: the acceptance epoch it
+// is in, the one a reopen would start, how many acceptance attempts stop being current, and whether
+// its DONE rests on the pre-acceptance compatibility stamp.
+//
+// Also read only, and for the same reason. A write refused `PROJECT_REOPEN_REQUIRED` is entitled to
+// know what asking a person for a reopen would cost them; it is not entitled to perform one.
+func (t *Transport) getProjectReopenImpact(id string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.do(nil, "GET", "/runner/projects/"+url.PathEscape(id)+"/reopen", nil, &out, taskOpTimeout)
 	return out, err
 }
 

@@ -29,7 +29,9 @@ import {
   decodeTaskPageCursor,
   encodeTaskPageCursor,
 } from '../tasks/tasks.service';
-import { CreateProjectDto, UpdateProjectDto } from './dto';
+import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
+import { CreateProjectDto, ReopenProjectDto, UpdateProjectDto } from './dto';
+import { admitReopen, reopenImpact, type ReopenImpact } from './project-attribution-surface';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
 import { parseWindowHours, readDispatchHealth } from './project-panorama-dispatch-health';
 import { buildCoordinatorOpening, coordinatorSessionTitle } from './coordinator-opening';
@@ -2283,6 +2285,11 @@ export class ProjectsService {
     // changed" and "the project was accepted" two orderings rather than an interleaving. §8.6 LO3
     // forbids starting weak and upgrading, so the strength is chosen here, before the first read.
     const settling = dto.status === ProjectStatus.DONE;
+    // What the reopen below did, for the caller that asked for it. Declared outside the retry
+    // closure and overwritten by each attempt, so a retried transaction reports what the attempt
+    // that COMMITTED found rather than what an aborted one saw.
+    let reopened: { fromEpoch: string; toEpoch: string; retiredRuns: number; wasLegacy: boolean }
+      | null = null;
     try {
     // Retried whole. The project row is locked and re-read inside the closure, and every field the
     // update derives — the acceptance recompute, the coordinator rebind — comes from that read, so
@@ -2295,7 +2302,8 @@ export class ProjectsService {
         // below (project before its team row), which is the order every path takes.
         const select = Prisma.sql`
           SELECT "coordinator_enabled", "config_revision", "status"::text AS "status",
-                 "accepted_run_id" AS "accepted_run_id", "legacy_accepted_at" AS "legacy_accepted_at"
+                 "accepted_run_id" AS "accepted_run_id", "legacy_accepted_at" AS "legacy_accepted_at",
+                 "acceptance_epoch" AS "acceptance_epoch"
             FROM "project"
            WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
         const [locked] = await tx.$queryRaw<Array<{
@@ -2304,6 +2312,7 @@ export class ProjectsService {
           status: string;
           accepted_run_id: string | null;
           legacy_accepted_at: Date | null;
+          acceptance_epoch: bigint;
         }>>(settling
           ? Prisma.sql`${select} FOR UPDATE`
           : Prisma.sql`${select} FOR NO KEY UPDATE`);
@@ -2332,16 +2341,61 @@ export class ProjectsService {
           );
         }
 
+        // Unit L7: the second confirmation, evaluated HERE and not at the door that asked for it.
+        // A reopen starts a new acceptance epoch, and the number a person was shown when they
+        // decided that has to be the number the row still holds when the decision commits —
+        // otherwise a second tab that reopened it first turns one considered reopen into two.
+        //
+        // Judged on BOTH settled statuses, because that is what actually advances the epoch:
+        // migration 0150's `project_acceptance_advance_epoch` fires on DONE → OPEN and on
+        // CANCELLED → OPEN alike. Gating only on DONE would leave one reopen confirmed and the
+        // other silent while both cost the project its acceptance standing. What the branch below
+        // does — retiring runs, dropping the binding — is unchanged and still DONE's alone.
+        //
+        // The acknowledgement is optional on this path and required on `POST :id/reopen`, which is
+        // the door a person acts through: an older client and the repair paths keep the reopen they
+        // have always had (§8 CM1), and nothing that omits it gains a fence it never asked for.
+        if (dto.status === ProjectStatus.OPEN && locked.status !== ProjectStatus.OPEN) {
+          const impact = reopenImpact({
+            status: locked.status as 'DONE' | 'CANCELLED' | 'OPEN',
+            acceptanceEpoch: String(locked.acceptance_epoch),
+            liveAcceptanceRuns: 0,
+            legacyAccepted: locked.legacy_accepted_at !== null,
+          });
+          if (dto.acknowledgedAcceptanceEpoch !== undefined) {
+            const admitted = admitReopen(impact, dto.acknowledgedAcceptanceEpoch);
+            if (!admitted.allowed) {
+              throw new ConflictException({
+                statusCode: 409,
+                error: 'Conflict',
+                code: admitted.code,
+                message: admitted.message,
+                owner: 'USER',
+                requiredAction: impact.requiredAction,
+                fromEpoch: impact.fromEpoch,
+                toEpoch: impact.toEpoch,
+              });
+            }
+          }
+          reopened = {
+            fromEpoch: impact.fromEpoch,
+            toEpoch: impact.toEpoch,
+            retiredRuns: 0,
+            wasLegacy: impact.wasLegacy,
+          };
+        }
+
         // The reverse door, and the reason a stale PASS cannot be reused: reopening a project
         // retires every acceptance run it has. AE4 says old evidence does not need invalidating
         // because the digest stops matching — true for a fact change, and NOT true here, since a
         // reopen on its own changes none of the four projections. So this is the one invalidation
         // that has to be written rather than derived.
         if (dto.status === ProjectStatus.OPEN && locked.status === ProjectStatus.DONE) {
-          await tx.projectAcceptanceRun.updateMany({
+          const retired = await tx.projectAcceptanceRun.updateMany({
             where: { projectId: id, supersededAt: null },
             data: { supersededAt: new Date(), supersededReason: 'reopened_by_user' },
           });
+          if (reopened) reopened.retiredRuns = retired.count;
           data.acceptedRunId = null;
           // A legacy DONE that a person reopens stops being one: its next DONE has to earn a run
           // like any other, which is how the compatibility stamp expires instead of accumulating.
@@ -2358,7 +2412,10 @@ export class ProjectsService {
         }
         return tx.project.update({ where: { id }, data, include: COORDINATION_INCLUDE });
       }, loggedRetry(this.logger, 'projects.update'));
-      return withCoordination(project);
+      // `reopened` is absent — not null — on every write that did not reopen anything, so a client
+      // branching on it cannot read "this write reopened nothing" as "this write reopened
+      // something with no detail".
+      return reopened ? { ...withCoordination(project), reopened } : withCoordination(project);
     } catch (e) {
       // A refused DONE is a thing somebody has to be able to look up afterwards — "I pressed it and
       // nothing happened" is the report, and the refusal itself rolled back with the transaction
@@ -2394,6 +2451,78 @@ export class ProjectsService {
     }
   }
 
+
+  /**
+   * Unit L7: what reopening this project would cost, before anybody spends it.
+   *
+   * The read half of the second confirmation. It answers three questions a person cannot answer
+   * from the project page as it stands — which epoch the project is in, which one a reopen would
+   * start, and how many acceptance attempts stop being current when it does — and it hands back
+   * the `acknowledgement` the write then has to echo. That round trip is what makes the
+   * confirmation about THIS project at THIS moment rather than about a dialog somebody clicked
+   * through: an epoch read a minute ago and reopened now is refused, not merged.
+   *
+   * Read-only and unlocked on purpose. It is a preview, and a preview that took the row lock would
+   * serialize every project page against every acceptance write for a number that the write path
+   * re-reads under its own lock anyway.
+   */
+  async reopenPreview(ownerId: string, id: string): Promise<ReopenImpact> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { status: true, acceptanceEpoch: true, legacyAcceptedAt: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    // The attempts that are live TODAY: a run already superseded by a later attempt is not
+    // something this reopen retires, and counting it would overstate what the person is agreeing
+    // to. Only meaningful for a settled project, which is why `reopenImpact` zeroes it otherwise.
+    const liveAcceptanceRuns = await this.prisma.projectAcceptanceRun.count({
+      where: { projectId: id, supersededAt: null },
+    });
+    return reopenImpact({
+      status: project.status as 'OPEN' | 'DONE' | 'CANCELLED',
+      acceptanceEpoch: String(project.acceptanceEpoch),
+      liveAcceptanceRuns,
+      legacyAccepted: project.legacyAcceptedAt !== null,
+    });
+  }
+
+  /**
+   * Unit L7: reopen a settled project, having said which epoch that decision was made against.
+   *
+   * `update` with `status: OPEN` is what actually reopens — this is not a second implementation of
+   * it, and deliberately not: two paths that both reopen are two chances to disagree about what a
+   * reopen retires. What this door adds is that the acknowledgement is not optional here, so the
+   * only way to reach it is to have read what it costs.
+   *
+   * The refusals a person can hit are answered BEFORE the write rather than by letting the update
+   * fall over: an OPEN project has nothing to reopen (`PROJECT_NOT_SETTLED`), and an epoch that has
+   * moved since it was read is `REOPEN_ACKNOWLEDGEMENT_STALE` — raised again under the row lock by
+   * `update`, which is the copy that decides. Checking here as well is what makes the common case a
+   * clear answer instead of a rolled-back transaction.
+   */
+  async reopen(ownerId: string, id: string, dto: ReopenProjectDto) {
+    const impact = await this.reopenPreview(ownerId, id);
+    const admitted = admitReopen(impact, dto.acknowledgedAcceptanceEpoch);
+    if (!admitted.allowed) {
+      throw new ConflictException({
+        statusCode: 409,
+        error: 'Conflict',
+        code: admitted.code,
+        message: admitted.message,
+        owner: 'USER',
+        requiredAction: impact.requiredAction,
+        fromEpoch: impact.fromEpoch,
+        toEpoch: impact.toEpoch,
+      });
+    }
+    return this.update(ownerId, id, {
+      status: SharedProjectStatus.OPEN,
+      acknowledgedAcceptanceEpoch: dto.acknowledgedAcceptanceEpoch,
+      ...(dto.expectedConfigRevision !== undefined
+        ? { expectedConfigRevision: dto.expectedConfigRevision }
+        : {}),
+    });
+  }
 
   /**
    * "Look at this project now" — the owner's manual trigger (§7.6 TR2, §9.2's MANUAL row).

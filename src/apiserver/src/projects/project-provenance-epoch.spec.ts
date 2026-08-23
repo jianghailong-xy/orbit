@@ -135,6 +135,24 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'binds provenance into a crossing identity and derives the trigger event; decides nothing',
   'src/apiserver/src/projects/project-handoff.service.ts':
     're-derives the source a declaration claims, and refuses one that does not match',
+  // Unit L7. These two are read FACES and nothing else: the surface renders "where this was
+  // noticed" beside "where it counts", and stamps `authority: 'EVIDENCE_ONLY'` onto the payload so
+  // the distinction travels with the data instead of living in a caption a client may drop. No
+  // branch in either file consults a provenance value — they are copied into the view and never
+  // compared, which is what keeps SC7's "evidence grants nothing" true one screen further out.
+  'src/apiserver/src/projects/project-attribution-surface.ts':
+    'renders provenance as evidence, labelled as evidence; decides nothing',
+  'src/apiserver/src/projects/project-attribution.service.ts':
+    'reads the four columns back for the surface; decides nothing',
+  // Unit L7, the far side of the API. These render what the surface sent and are the reason the
+  // rule has to travel IN the payload rather than in a comment: a client is where "I found this
+  // here" would most plausibly be mistaken for "so it belongs here", and the card prints the
+  // server's own `authority: EVIDENCE_ONLY` next to it so the distinction cannot be dropped by a
+  // renderer that never read this file.
+  'src/web/src/lib/attribution.ts': 'types and labels for the read face; decides nothing',
+  'src/web/src/components/TaskAttributionCard.tsx':
+    'renders provenance beside authority, labelled evidence; decides nothing',
+  'src/web/src/components/TaskAttributionCard.test.tsx': 'asserts the label is rendered',
 };
 
 /**

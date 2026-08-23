@@ -35,6 +35,8 @@ Usage:
   orbit project get PROJECT_ID [--json]
   orbit project status PROJECT_ID [--json]
   orbit project blockers PROJECT_ID [--history] [--json]
+  orbit project crossings PROJECT_ID [--state STATE] [--json]
+  orbit project reopen-impact PROJECT_ID [--json]
   orbit project verifications PROJECT_ID [--json]
   orbit project acceptance PROJECT_ID [--json]
   orbit project acceptance-run PROJECT_ID [--json]
@@ -65,6 +67,49 @@ status somebody rewrote, so nothing else about the project looks unusual.
 
 Options:
   --history                Include resolved episodes
+  --json
+`,
+	"crossings": `orbit project crossings — what has been asked about work crossing this project's line
+
+Usage:
+  orbit project crossings PROJECT_ID [--state PENDING|APPROVED|DENIED|APPLIED] [--json]
+
+Every declared cross-project crossing this project is an end of, in BOTH directions: the ones
+asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by
+title and by id, what the crossing is about, its state, the crossing key that identifies the move
+itself, when it was asked, when it was answered and when the answer expires.
+
+Read only, and there is no command that answers one. The approver of a cross-project crossing is
+the USER — the target project's coordinator is not, because an agent signing for another goal is
+exactly the failure this whole boundary exists to prevent. What this gives a coordinator is the
+ability to SEE that it is waiting on a person, and to say so, which is the difference between a
+project that is blocked and one that is silently doing nothing.
+
+A write refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING is the write this list is
+about. Point the account owner at the project page to answer it.
+
+Options:
+  --state STATE            Only crossings in that state
+  --json
+`,
+	"reopen-impact": `orbit project reopen-impact — what reopening this project would cost
+
+Usage:
+  orbit project reopen-impact PROJECT_ID [--json]
+
+The acceptance epoch this project is in, the one a reopen would start, how many acceptance
+attempts stop being current when it does, whether its DONE rests on the pre-acceptance
+compatibility stamp, and the acknowledgement a reopen has to name.
+
+Read this when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo: it starts a
+NEW acceptance epoch, and every PASS the project has stops being current — readable afterwards,
+and no longer a claim about the world the project is in. That is what an account owner is being
+asked for, so ask for it with the number in your hand.
+
+Read only. Reopening is the account owner's door, through the Orbit web app or the user API; a
+coordinator does not reopen a settled project it wants to write into.
+
+Options:
   --json
 `,
 	"get": `orbit project get — one project's goal, acceptance criteria and instructions
@@ -321,6 +366,8 @@ var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
 	{Tool: "project_status", Argv: []string{"orbit", "project", "status"}, Usage: "orbit project status PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read everything the control loop knows about one project — the answer to \"why is this project not moving\", which is otherwise spread over seven tables and usually misread as \"it is broken\". Returns its run state and lifecycle; which agent coordinates it, where, and the coordination session and generation; whether the coordinator is switched on and how far it may go (MANUAL / GUARDED_AUTO / AUTO) with the configRevision a control write states back; tasks in flight against the cap and coordinator sessions against the daily budget, counted exactly as the admission gates count them; whether a pass holds the lease; when it next wakes, why, and which candidates lost; the last few decisions with the actions and idempotency keys they produced; actions claimed but not yet published; what is blocking it, who can fix it, what would clear it and when it is rechecked; durable signals still pending with their attempts and backoff; and the acceptance evidence — stated criteria, last acceptance run, verdict tallies and per-branch merge state. Every absent fact is null beside a reason, so \"nothing is blocking this\" and \"this cannot be reported\" are different answers."},
 	{Tool: "project_blockers", Argv: []string{"orbit", "project", "blockers"}, Usage: "orbit project blockers PROJECT_ID [--history] [--json]", Arguments: []string{"[project-id] (required)", "--history (include the episodes that are already resolved)", "--json"}, Description: "Read what is stopping one project: each open blocker's kind, who can clear it (owner), what would clear it (recovery), what it is about, the one executable sentence that would resolve it, when it is next rechecked, and which action raised it. --history adds the episodes that are already over, with what ended them and when — those rows are never deleted, because the lifecycle generation of the next episode on the same key is allocated over the whole history, so \"what was blocking this yesterday\" stays a question the audit can answer. Read it when a project is OPEN and nothing is running: an open blocker is a precondition rather than a status anybody rewrote, so nothing else on the project looks unusual."},
+	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
+	{Tool: "project_reopen_impact", Argv: []string{"orbit", "project", "reopen-impact"}, Usage: "orbit project reopen-impact PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what reopening a settled project would cost: the acceptance epoch it is in, the one a reopen would start, how many acceptance attempts stop being current when it does, whether its DONE rests on the pre-acceptance compatibility stamp, and the acknowledgement a reopen has to name. Read it when a write was refused PROJECT_REOPEN_REQUIRED. A reopen is not an undo — it starts a NEW acceptance epoch and every PASS the project has stops being current, readable afterwards and no longer a claim about the world the project is in — so an account owner asked for one should be asked with those numbers in hand. Read only: reopening is the owner's door, and a coordinator does not reopen a settled project it wants to write into."},
 	{Tool: "project_verifications", Argv: []string{"orbit", "project", "verifications"}, Usage: "orbit project verifications PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read what every verification in one project concluded and what those conclusions are still holding up: each check's verdict and verdictRevision, the defect subtask each FAIL filed under its subject, the action that raised it, whether a later PASS resolved it, and blockedTasks — the exact tasks that cannot be dispatched because of an unresolved failure, with the reason. Read it when a task looks ready and is not running: a blocked task looks like an ordinary OPEN task on purpose, because the block is a dispatch precondition rather than a status anybody rewrote."},
 	{Tool: "project_acceptance", Argv: []string{"orbit", "project", "acceptance"}, Usage: "orbit project acceptance PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Read the evidence a project's DONE would be checked against, and whether it would be allowed right now. Returns the stated acceptance criteria decomposed one per line (the checklist an acceptance run has to answer item for item), acceptanceDigest — the digest of the criteria text, every task with its status and completion policy, every verification verdict and the newest merge observation per requirement — every attempt with its per-criterion conclusions and evidence, what each target branch was last observed to contain, the append-only audit of runs, bindings, refusals and reopens, and doneGate: allowed, or the code and sentence the write would be refused with (ACCEPTANCE_MISSING, ACCEPTANCE_EVIDENCE_STALE, ACCEPTANCE_BLOCKED). Read it before claiming a project is finished: a comment saying the tests passed is not evidence the server can check."},
 	{Tool: "project_acceptance_run", Argv: []string{"orbit", "project", "acceptance-run"}, Usage: "orbit project acceptance-run PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "Open a project acceptance attempt: the acceptance criteria are frozen with their digest and one empty row per stated criterion is created — the checklist project_acceptance_verdict then has to fill. Open it when you are about to CHECK the project, not when you are about to report on it: the digest of the facts is taken now, and a task, verdict, criteria or branch-content change afterwards makes this attempt stale rather than wrong. Opening an attempt supersedes any earlier live one, so there is never a choice of which conclusion to believe. A project stating no acceptance criteria is refused, because an acceptance with nothing to check would pass by having nothing to fail.", Mutates: true},
@@ -368,6 +415,10 @@ func cmdProjectCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliProjectCoordinatorStatus(args[1:], out)
 	case "blockers":
 		return cliProjectBlockers(args[1:], out)
+	case "crossings":
+		return cliProjectCrossings(args[1:], out)
+	case "reopen-impact":
+		return cliProjectReopenImpact(args[1:], out)
 	case "verifications":
 		return cliProjectVerifications(args[1:], out)
 	case "acceptance":
@@ -490,6 +541,73 @@ func cliProjectVerifications(args []string, out io.Writer) error {
 // cliProjectAcceptance is the read a coordinator makes before it claims a project is finished:
 // what the criteria are, what has been checked, and whether a DONE would be allowed right now.
 // One GET, one raw body through, exactly like the two reads either side of it.
+// cliProjectCrossings lists the declared crossings this project is an end of. One GET, one raw body
+// through — the server decides what a crossing row says, and a second opinion formatted here would
+// be one that drifts from the API and the web UI.
+func cliProjectCrossings(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project crossings")
+	state := fs.String("state", "", "only crossings in that state")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	if *state != "" && !isHandoffState(*state) {
+		return fmt.Errorf("--state must be one of PENDING, APPROVED, DENIED, APPLIED")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getProjectHandoffs(id, *state)
+	if err != nil {
+		return fmt.Errorf("get project crossings: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
+// The four states a declared crossing can be stored in. Checked here so a typo is a sentence at the
+// terminal rather than a 400 from a round trip — the same reason every other enum flag is.
+func isHandoffState(state string) bool {
+	switch state {
+	case "PENDING", "APPROVED", "DENIED", "APPLIED":
+		return true
+	}
+	return false
+}
+
+// cliProjectReopenImpact reads what a reopen would cost. Read only: the reopen itself is the
+// account owner's door, and this exists so the ask can carry the numbers.
+func cliProjectReopenImpact(args []string, out io.Writer) error {
+	id, rest := peelLeadingID(args)
+	fs := newCLIFlagSet("orbit project reopen-impact")
+	jsonOut := fs.Bool("json", false, "emit compact JSON")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	if err := rejectTrailing(fs); err != nil {
+		return err
+	}
+	if id == "" {
+		return fmt.Errorf("project id is required")
+	}
+	t, err := cliTransport()
+	if err != nil {
+		return err
+	}
+	raw, err := t.getProjectReopenImpact(id)
+	if err != nil {
+		return fmt.Errorf("get project reopen impact: %w", err)
+	}
+	return writeCLIRawJSON(out, raw, *jsonOut)
+}
+
 func cliProjectAcceptance(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit project acceptance")
