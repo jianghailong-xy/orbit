@@ -32,6 +32,7 @@ import type { PrismaClient } from '@prisma/client';
 import { uuidToBase62 } from '@orbit/shared';
 import { assertCoordinatorPgUrlIsIsolated } from './coordinator-pg-test-safety';
 import type { PlannedVerificationFiling } from './project-completion-gap';
+import type { TaskCompletionGap } from './task-aggregation';
 import { ProjectVerificationFilingService } from './project-verification-filing.service';
 import type { ProjectReconcileLease } from './project-reconcile.service';
 
@@ -642,11 +643,76 @@ test('§13.1 AG7 / §13.2 V8 on real PostgreSQL', { skip, concurrency: 1 }, asyn
     assert.equal(filed.refusal, null);
   });
 
-  await t.test('the two blocker kinds are values this database accepts', async () => {
+  await t.test('`[K5]`: a check that concluded nothing raises its OWN kind, deduped', async () => {
+    // `[H0V2]`'s residue, end to end and on real rows. This is the shape the audit found in 20 of
+    // 13200 snapshots: children settled, a check pointing at the parent, the check DONE, and no
+    // verdict on it. Before `[K5]` the whole of the loop's response was one WARN a minute.
+    const { completionGapDisposition, planCompletionGaps } =
+      await import('./project-completion-gap.js');
+    const { ProjectDecisionService, completionGapPlan } =
+      await import('./project-decision.service.js');
+    const { PROJECT_BLOCKER_POLICY } = await import('./project-blocker.js');
     const f = await fixture(db);
-    for (const kind of [
+    const checkId = await task(db, { projectId: f.projectId, verifies: f.parentId });
+    // Legacy data, created the way legacy data came to exist: 0141 refuses this row REACHING DONE,
+    // and the point of the gap is what to do about the ones already on disk.
+    await db.$executeRawUnsafe(
+      `ALTER TABLE "task" DISABLE TRIGGER "task_verification_verdict_atomic_update"`);
+    await db.$executeRawUnsafe(
+      `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, checkId);
+    await db.$executeRawUnsafe(
+      `ALTER TABLE "task" ENABLE TRIGGER "task_verification_verdict_atomic_update"`);
+
+    const decisions = new ProjectDecisionService(db as never);
+    const captured = await db.$transaction(
+      async (tx) => decisions.capture(tx, f.projectId, new Date()),
+      { isolationLevel: 'RepeatableRead' },
+    );
+    const gaps = completionGapPlan(captured.input);
+    assert.deepEqual(gaps.map((g: TaskCompletionGap) => [g.taskId, g.reason]),
+      [[uuidToBase62(f.parentId), 'VERIFICATION_CANNOT_CONCLUDE']]);
+    assert.equal(gaps[0].evidence.verifications.unconcludable, 1);
+
+    // NOT `FILE_VERIFICATION`, and that is the whole distinction from `NO_VERIFICATION_FILED`:
+    // filing another check here would mint one more per pass, each able to end the same way.
+    const disposition = completionGapDisposition(captured.input, gaps[0]);
+    assert.equal(disposition.action, 'RAISE_BLOCKER');
+    assert.equal(disposition.action === 'RAISE_BLOCKER' && disposition.kind,
+      'VERIFICATION_CANNOT_CONCLUDE');
+
+    // §11.1: a person, and a sentence telling them what to do — not a severity and a shrug.
+    const policy = PROJECT_BLOCKER_POLICY.VERIFICATION_CANNOT_CONCLUDE;
+    assert.equal(policy.owner, 'USER');
+    assert.equal(policy.recovery, 'HUMAN');
+    assert.ok(policy.requiredAction.length > 40);
+
+    // Deduped: TF2 keys the condition on the SHAPE, so a second pass over the same world proposes
+    // the same key rather than a second row. Asserted across two real captures, because "the
+    // function is deterministic" is not the same claim as "two passes agree".
+    const planned = planCompletionGaps(captured.input, gaps);
+    const again = await db.$transaction(
+      async (tx) => decisions.capture(tx, f.projectId, new Date()),
+      { isolationLevel: 'RepeatableRead' },
+    );
+    const plannedAgain = planCompletionGaps(again.input, completionGapPlan(again.input));
+    assert.equal(planned.conditions.length, 1);
+    assert.deepEqual(
+      planned.conditions.map((c) => [c.kind, c.subjectType, c.subjectId]),
+      plannedAgain.conditions.map((c) => [c.kind, c.subjectType, c.subjectId]),
+    );
+    assert.deepEqual(planned.filings, []);
+  });
+
+  await t.test('every blocker kind these gaps raise is a value this database accepts', async () => {
+    const f = await fixture(db);
+    // `[K5]`'s three are here for the reason the other three are: a kind the code writes and the
+    // CHECK constraint has never heard of fails at the INSERT, in production, on the first project
+    // that hits the shape.
+    const kinds = [
       'AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED',
-    ]) {
+      'VERIFICATION_CANNOT_CONCLUDE', 'ENVIRONMENT_BROKEN', 'HUMAN_DECISION_REQUIRED',
+    ];
+    for (const kind of kinds) {
       await db.$executeRawUnsafe(
         `INSERT INTO "project_blocker" ("id","project_id","kind","owner","recovery","severity",
            "required_action","next_check_at","subject_type","subject_id","dedupe_key",
@@ -661,8 +727,7 @@ test('§13.1 AG7 / §13.2 V8 on real PostgreSQL', { skip, concurrency: 1 }, asyn
       `SELECT "kind" FROM "project_blocker" WHERE "project_id" = $1::uuid ORDER BY "kind"`,
       f.projectId,
     );
-    assert.deepEqual(rows.map((r) => r.kind),
-      ['AGGREGATE_PARENT_UNSATISFIABLE', 'SUCCESSOR_OUTSIDE_SUBTREE', 'VERIFICATION_REQUIRED']);
+    assert.deepEqual(rows.map((r) => r.kind), [...kinds].sort());
     await assert.rejects(db.$executeRawUnsafe(
       `INSERT INTO "project_blocker" ("id","project_id","kind","owner","recovery","severity",
          "required_action","next_check_at","subject_type","subject_id","dedupe_key",
