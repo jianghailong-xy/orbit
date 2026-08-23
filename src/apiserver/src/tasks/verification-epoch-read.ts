@@ -34,9 +34,18 @@ type EpochPrismaClient = Pick<PrismaService, 'task' | 'session' | 'projectAction
  *
  * The sibling walk is what makes it an epoch and not a verdict: every check of the same SUBJECT
  * is loaded, because a newer one closes what an older one opened.
+ *
+ * `ownerId` is required rather than inferred, and the owner clause is on the QUERY rather than on a
+ * filter afterwards (unit L3, scope contract §3 SC6). Both halves matter: a caller that cannot
+ * name the tenant it is asking about should not be able to ask, and a cross-tenant row that is read
+ * and then dropped has still been read. The project half cannot be a query clause — it is a
+ * self-join, "the check's project is the SUBJECT's project", which Prisma cannot express — so it is
+ * applied to the rows below, before anything is derived from them. `verificationEpochOpenSql` says
+ * the same thing in SQL; `verification-epoch.pg.spec` is what holds the two spellings together.
  */
 export async function loadVerificationEpochGates(
 prisma: EpochPrismaClient,
+ownerId: string,
 prerequisiteIds: string[],
 ): Promise<Map<string, VerificationEpochEntry>> {
   const unique = [...new Set(prerequisiteIds)];
@@ -46,19 +55,33 @@ prerequisiteIds: string[],
   const anchors = await prisma.task.findMany({
     where: {
       id: { in: unique },
+      ownerId,
       OR: [{ verifiesTaskId: { not: null } }, { verifiedBy: { some: {} } }],
     },
     select: { id: true, verifiesTaskId: true },
   });
   const subjectIds = [...new Set(anchors.map((a) => a.verifiesTaskId ?? a.id))];
   if (subjectIds.length === 0) return new Map();
-  const rows = await prisma.task.findMany({
-    where: { OR: [{ id: { in: subjectIds } }, { verifiesTaskId: { in: subjectIds } }] },
+  const loaded = await prisma.task.findMany({
+    where: { ownerId, OR: [{ id: { in: subjectIds } }, { verifiesTaskId: { in: subjectIds } }] },
     select: {
       id: true, status: true, verifiesTaskId: true, verdict: true, verdictRevision: true,
       projectId: true, supersededByTaskId: true, terminalReason: true,
     },
   });
+  // §3 SC6, the project half. A check answers for its subject only if it counts towards the same
+  // goal; one that does not is dropped here, before it can be the newest sibling of an epoch it
+  // does not belong to. A subject that was never loaded — the same tenant test above already
+  // removed it — takes its checks with it: fail closed, not "no subject, so no constraint".
+  const subjectProject = new Map(
+    loaded.filter((row) => subjectIds.includes(row.id)).map((row) => [row.id, row.projectId ?? null]),
+  );
+  const inSubjectScope = (row: { id: string; verifiesTaskId: string | null; projectId: string | null }) =>
+    row.verifiesTaskId === null
+      ? true
+      : subjectProject.has(row.verifiesTaskId)
+        && subjectProject.get(row.verifiesTaskId) === (row.projectId ?? null);
+  const rows = loaded.filter(inSubjectScope);
   const checkIds = rows.filter((row) => row.verifiesTaskId != null).map((row) => row.id);
   const [sessions, applied] = await Promise.all([
     prisma.session.findMany({

@@ -474,6 +474,17 @@ export const PROJECT_BLOCKER_REFUSAL_KINDS: Readonly<Record<string, ProjectBlock
   COORDINATOR_DISABLED: 'COORDINATOR_UNAVAILABLE',
   COORDINATOR_NOT_PROJECT_MEMBER: 'COORDINATOR_UNAVAILABLE',
   COORDINATOR_AGENT_DISABLED: 'COORDINATOR_UNAVAILABLE',
+  // Unit L3 / scope contract §5. `PROJECT_SCOPE_MISMATCH` is deliberately absent — see EC5 and the
+  // non-blocking list below.
+  //
+  // `UNMAPPED_PROJECT_WORK` is the one where "whose fault" and "who fixes it" differ: the
+  // coordinator behaved correctly by NOT picking an owner for work whose owner is unclear, and the
+  // question that remains is a person's to answer.
+  UNMAPPED_PROJECT_WORK: 'AWAITING_USER_INPUT',
+  CROSS_PROJECT_APPROVAL_REQUIRED: 'AWAITING_USER_APPROVAL',
+  // A settled project takes no new work until somebody reopens it, and reopening is a user act
+  // (§4 R8 sits above the approval rules precisely so an approval can never buy the way in).
+  PROJECT_REOPEN_REQUIRED: 'AWAITING_USER_APPROVAL',
   UNKNOWN_FAILURE: 'UNKNOWN_FAILURE',
 };
 
@@ -523,6 +534,15 @@ export const PROJECT_BLOCKER_NON_BLOCKING_REFUSALS: ReadonlySet<string> = new Se
   // §13.6 SU6: the attempt was replaced or abandoned. Nobody is being asked for anything — the
   // successor holds the work — so a row here would be a request addressed to no one, and §13.4's
   // DONE gate would hold the whole project open on it.
+  // Scope contract §5 EC5: the coordinator's own write to fix — file it in the project it actually
+  // coordinates, or declare the crossing and ask. A blocker here would be a request addressed to a
+  // user with nothing to decide, and a coordinator that keeps mismatching is a coordinator making
+  // no progress, which `[K5]`'s circuit breaker already counts once.
+  'PROJECT_SCOPE_MISMATCH',
+  // §5 EC1: the takeover answer, reused from the coordinator turn executor, which has always
+  // treated it as retryable. Nobody is being asked for anything — the successor scope holds the
+  // work and will decide again.
+  'COORDINATOR_GENERATION_MOVED',
   'TASK_SUPERSEDED',
   // §13.1 AG6: the task is completed by aggregating its children, so it is not work that failed to
   // start — it is not work. A blocker here is wrong in all three of BL1's axes at once: it names

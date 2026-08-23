@@ -265,10 +265,29 @@ export function verificationEpochGate(
  * SAME row. The two agree on every world except the empty one, and disagreeing there is how a
  * subject with no checks would quietly read as passed. (`max(uuid)` does not exist in PostgreSQL;
  * the ordering is the load-bearing part either way.)
+ *
+ * **Every check is scoped to its subject's owner AND project** (unit L3, scope contract §3 SC6).
+ * `assertVerificationEligible` already refuses to CREATE a check across either line, but a service
+ * rule is not a database boundary: a row that arrived by raw SQL, by a repair script or by a binary
+ * that never heard of the rule is read by this fragment exactly like a legitimate one. Unscoped,
+ * `epoch_newest` picks by `id DESC` across every owner, so a forged check in another owner's
+ * project — DONE, PASS, revision > 0, its own run settled, its own ledger APPLIED — becomes THE
+ * newest check of somebody else's subject and opens their epoch. The same hole runs the other way
+ * through `epoch_any`: one forged row makes a subject look verified-by-something and holds its
+ * dependents for ever. Both are closed by refusing to let a check answer for a subject it does not
+ * share an owner and a project with.
+ *
+ * `IS NOT DISTINCT FROM` on the project, never `=`: a subject and its check outside any project are
+ * both NULL, which is the ordinary non-project verification path, and `=` would read that as "not
+ * the same project" and hold every one of them.
  */
 export function verificationEpochOpenSql(alias = 't', dependent?: string): string {
   const occupying = TASK_OCCUPYING.map((status) => `'${status}'`).join(', ');
   const subject = `COALESCE(${alias}."verifies_task_id", ${alias}."id")`;
+  /** §3 SC6: a check only answers for a subject it shares an owner and a project with. */
+  const sameScope = (check: string, subjectAlias: string) =>
+    `${check}."owner_id" = ${subjectAlias}."owner_id"
+         AND ${check}."project_id" IS NOT DISTINCT FROM ${subjectAlias}."project_id"`;
   // `IS NOT DISTINCT FROM`, never `=`. An ordinary dependent has a NULL `verifies_task_id`, and a
   // bare `=` would make this disjunct NULL rather than FALSE — which propagates out of the whole
   // fragment and, in an aggregate that is not inside a WHERE, fails OPEN. `subject` is COALESCEd
@@ -280,7 +299,14 @@ export function verificationEpochOpenSql(alias = 't', dependent?: string): strin
   return `(NOT EXISTS (
       -- No check names this subject, so there is no epoch and DONE is the whole answer. The
       -- ordinary case, and the one that keeps this fragment inert for most of a project.
-      SELECT 1 FROM "task" epoch_any WHERE epoch_any."verifies_task_id" = ${subject}
+      --
+      -- Joined to the subject row so the scope test has something to compare against: a check
+      -- belonging to another owner or another project is not this subject's check, and must not be
+      -- able to invent an epoch that holds this subject's dependents for ever.
+      SELECT 1 FROM "task" epoch_any
+        JOIN "task" epoch_any_subject ON epoch_any_subject."id" = ${subject}
+       WHERE epoch_any."verifies_task_id" = ${subject}
+         AND ${sameScope('epoch_any', 'epoch_any_subject')}
     )${selfReferential}
     OR EXISTS (
       -- The same exemption verificationEpochGates makes: work that was REPLACED takes its checks
@@ -300,6 +326,10 @@ export function verificationEpochOpenSql(alias = 't', dependent?: string): strin
             WHERE epoch_check."id" = (
                     SELECT epoch_newest."id" FROM "task" epoch_newest
                      WHERE epoch_newest."verifies_task_id" = epoch_subject."id"
+                       -- Before the ordering, not after it: an out-of-scope row must not be able to
+                       -- BE the newest check and then be discarded, because a discarded winner is
+                       -- an epoch with no check at all rather than the epoch its real check states.
+                       AND ${sameScope('epoch_newest', 'epoch_subject')}
                        AND epoch_newest."status" <> 'CANCELLED'
                        AND ${taskNotRetiredSql('epoch_newest')}
                      ORDER BY epoch_newest."id" DESC LIMIT 1

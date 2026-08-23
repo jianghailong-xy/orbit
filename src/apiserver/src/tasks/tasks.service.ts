@@ -92,6 +92,19 @@ import {
 } from './task-lock-order';
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/project-coordinator-session';
 import {
+  admitProjectScopeWrite,
+  derivedScopeToken,
+  projectScopeMode,
+  scopeObservationLine,
+  scopeRefusalBody,
+  scopeWriteRefused,
+  type DerivedScope,
+  type ScopeAdmissionRequest,
+  type ScopeOperation,
+  type ScopePrincipal,
+} from '../projects/project-scope-admission';
+import type { ScopeProjectStatus } from '../projects/project-scope-contract';
+import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
   QUOTA_BLIND_RETRY_BACKOFF_MS,
@@ -165,6 +178,32 @@ export type CreationOrigin = {
   discoveredFromProjectId: string | null;
   triggerEvent: string;
   sourceTaskId: string | null;
+};
+
+/**
+ * Unit L3: one task write, as `docs/project-coordinator-scope-contract.md` §4 reads it.
+ *
+ * `requestedProjectId` is three-state and every state means something different: `undefined` is a
+ * write that did not mention the project at all — the silence the server fills — while `null` is a
+ * caller explicitly asking for no project, which IS an ownership claim and is decided like one.
+ */
+type ScopeWriteInput = {
+  operation: ScopeOperation;
+  taskId: string | null;
+  requestedProjectId: string | null | undefined;
+  currentProjectId: string | null;
+  scopeToken?: string | null;
+};
+
+/** Just the reads the scope derivation makes, so a transaction client is equally acceptable. */
+type ScopeReadClient = Pick<Prisma.TransactionClient, 'session' | 'project'>;
+
+/** Everything §4 needs that is not the write itself, read once per call. */
+type ScopeWorld = {
+  principal: ScopePrincipal;
+  scope: DerivedScope | null;
+  projectStatus: Readonly<Record<string, ScopeProjectStatus>>;
+  mode: ReturnType<typeof projectScopeMode>;
 };
 
 /** What a planned run needs off a task to dispatch it: its identity, and the provider/model pin
@@ -1470,8 +1509,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * dependent and reduce. Tasks with no prerequisites are absent (caller reads absent as
    * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
    */
-  private async dependencyStatesFor(taskIds: string[]): Promise<Map<string, DependencyState>> {
-    return new Map([...await this.dependencyFactsFor(taskIds)]
+  private async dependencyStatesFor(
+    ownerId: string,
+    taskIds: string[],
+  ): Promise<Map<string, DependencyState>> {
+    return new Map([...await this.dependencyFactsFor(ownerId, taskIds)]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
   }
 
@@ -1484,6 +1526,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * that let the incident run: it describes a wait, and what happened was a refusal.
    */
   private async dependencyFactsFor(
+    ownerId: string,
     taskIds: string[],
   ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
     const byTask = new Map<string, Array<{ id: string; status: TaskStatus }>>();
@@ -1511,6 +1554,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     }
     const epochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       [...byTask.values()].flat().map((entry) => entry.id),
     );
     // §13.3 DEP's self-exemption: a check that depends on the subject it checks must not be made to
@@ -1622,6 +1666,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (edges.length === 0) return new Map();
     const epochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       edges.map((edge) => edge.dependsOnTaskId),
     );
     const counts = new Map<string, number>();
@@ -2022,18 +2067,56 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
     const idempotencyKey =
       sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, dto.title, dto.description) : undefined;
-    if (idempotencyKey) {
-      const existing = await this.prisma.task.findUnique({ where: { idempotencyKey } });
-      if (existing) {
-        // SU7-c: "already created" may not stand in for "already linked". See
-        // `assertSupersessionAlreadyRecorded`.
-        if (dto.supersedesTaskId) {
-          await this.assertSupersessionAlreadyRecorded(
-            this.prisma, ownerId, dto.supersedesTaskId, existing.id,
-          );
-        }
-        return existing;
+    // WINNER FIRST, and unit L3's gate strictly after it (§3 SC4, §6's `FILED --SCOPE_LOST--> FILED`).
+    //
+    // The order is the whole of the contract's promise that a replay is the same write. Gate first
+    // and a retry stops being idempotent in both directions: after a lost response and a rotation,
+    // the retry is refused (R5/R2/R3) and can never reach the row it already committed, so the
+    // caller has no way to learn it succeeded; and a retry whose session has since drifted to
+    // another project is ADMITTED for that project and then handed the original row from the first
+    // one — an admission whose answer contradicts its own result. Reading the winner first makes
+    // both impossible: an already-committed unit of work is looked up, never re-decided, exactly as
+    // §6 says a takeover must not undo what is already persisted.
+    //
+    // This grants nothing. The key is a hash over (session, turn, title, description) and the
+    // session and turn are server-derived, so a caller cannot aim one at a row it did not write;
+    // the winner is owner-checked below; and no row is written on this path at all.
+    const winner = idempotencyKey
+      ? await this.idempotencyWinner(this.prisma, ownerId, idempotencyKey)
+      : null;
+    if (winner) {
+      // SU7-c: "already created" may not stand in for "already linked". See
+      // `assertSupersessionAlreadyRecorded`.
+      if (dto.supersedesTaskId) {
+        await this.assertSupersessionAlreadyRecorded(
+          this.prisma, ownerId, dto.supersedesTaskId, winner.id,
+        );
       }
+      this.auditReplayedProject(winner, dto.projectId);
+      return winner;
+    }
+    // Unit L3 §4: which project this create actually lands in. Decided by the server from the
+    // session's coordination scope, not from whatever the caller named — and decided before the
+    // transaction, so a refusal is deterministic and leaves nothing behind (AC1).
+    //
+    // Keyed on `creatorSessionId`, not on the `sessionId` that survived the ownership check: a
+    // session id that does not resolve must become an agent with NO scope (refused by R5), never
+    // an absent one — which is the owner, whom §4 R1 exempts from all of this.
+    const scopeWrite: ScopeWriteInput = {
+      operation: 'CREATE_TASK',
+      taskId: null,
+      requestedProjectId: dto.projectId === undefined ? undefined : (dto.projectId ?? null),
+      currentProjectId: null,
+      scopeToken: dto.scopeToken,
+    };
+    const scopeWorld = await this.projectScopeWorld(
+      this.prisma, ownerId, creatorSessionId, [scopeWrite],
+    );
+    const scopedProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
+    // The derived project needs no `assertOwnedProject`: it is the project the scope derivation
+    // already read under this owner. A project the CALLER named was checked above.
+    if ((dto.projectId ?? null) !== scopedProjectId) {
+      dto = { ...dto, projectId: scopedProjectId ?? undefined };
     }
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
@@ -2105,6 +2188,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           // the order through this path is always user → task_list → session → project → task,
           // and SU3 guarantees there is exactly ONE project involved: the successor must be in
           // the predecessor's.
+          // Unit L3, rank 40: the scope this write was admitted under, re-locked and re-read here
+          // so a rotation that commits between the admission and this INSERT refuses it instead of
+          // being written straight past. It takes the supersession pre-lock's project too, so this
+          // transaction's rank-40 locks are one sorted pass — the statement below then re-locks a
+          // row it already holds, which costs nothing and cannot invert.
+          await this.refenceProjectScope(
+            tx, ownerId, creatorSessionId, scopeWorld,
+            [{ ...scopeWrite, boundProjectId: scopedProjectId }],
+            dto.supersedesTaskId ? [dto.projectId] : [],
+          );
           if (dto.supersedesTaskId && dto.projectId) {
             await tx.$queryRaw`
               SELECT 1 FROM "project" WHERE "id" = ${dto.projectId}::uuid FOR NO KEY UPDATE`;
@@ -2586,12 +2679,58 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     creator?: Creator,
     creatorSessionId?: string,
   ) {
-    const items = await this.assertBatchValid(ownerId, dto);
+    const validated = await this.assertBatchValid(ownerId, dto);
     const origin = await this.resolveOwnedSession(ownerId, creatorSessionId);
     const sessionId = origin?.sessionId;
     // One turn for the whole batch (see create): the same key that collapses a re-run of a single
     // create collapses a re-run of a batch, item by item, without merging distinct items.
     const turnId = sessionId ? await this.currentTurnId(sessionId) : undefined;
+    // WINNER FIRST, exactly as `create` is and for the same reason (§3 SC4): an item this turn
+    // already committed is looked up, never re-decided. A batch re-run after a rotation would
+    // otherwise be refused on the items it already wrote, leaving a caller that cannot find rows it
+    // successfully created — and one whose session has drifted to another project would be admitted
+    // for that project and then handed the rows from the first.
+    //
+    // Read outside the transaction, and read AGAIN inside it: this pass decides what still has to
+    // be ADMITTED, and the find-or-create below decides what is actually written. A winner that
+    // appears in between is simply found by the second read; the item was admitted, so nothing it
+    // was allowed to do has been lost.
+    const replayed = await Promise.all(validated.map(async (item) => {
+      const key = sessionId && turnId
+        ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description)
+        : undefined;
+      return key ? await this.idempotencyWinner(this.prisma, ownerId, key) : null;
+    }));
+    // Unit L3 §4, once for the whole batch and BEFORE the transaction: every item that is not a
+    // replay is admitted and bound, or none is written. An item refused mid-transaction would be a
+    // batch that took the owner lock and rolled back; admitted here, a refusal costs no row and no
+    // lock (AC2).
+    const scopeWrites: ScopeWriteInput[] = validated.map((item) => ({
+      operation: 'CREATE_TASK',
+      taskId: null,
+      requestedProjectId: item.projectId === undefined ? undefined : (item.projectId ?? null),
+      currentProjectId: null,
+      scopeToken: item.scopeToken,
+    }));
+    const fresh = scopeWrites.filter((_, index) => !replayed[index]);
+    const scopeWorld = await this.projectScopeWorld(this.prisma, ownerId, creatorSessionId, fresh);
+    const scopeFences: Array<ScopeWriteInput & { boundProjectId: string | null }> = [];
+    const items = validated.map((item, index) => {
+      const winner = replayed[index];
+      if (winner) {
+        this.auditReplayedProject(winner, item.projectId);
+        // Pinned to the row that already exists, so the item this batch carries and the row the
+        // transaction finds cannot describe two different projects.
+        return (item.projectId ?? null) === (winner.projectId ?? null)
+          ? item
+          : { ...item, projectId: winner.projectId ?? undefined };
+      }
+      const projectId = this.admitScopedWrite(scopeWorld, scopeWrites[index]);
+      scopeFences.push({ ...scopeWrites[index], boundProjectId: projectId });
+      return (item.projectId ?? null) === projectId
+        ? item
+        : { ...item, projectId: projectId ?? undefined };
+    });
 
     // Only parents that already exist. A parentRef points at a row this very transaction writes,
     // which no other request can see — let alone move into another project — so there is nothing
@@ -2641,15 +2780,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // `project_acceptance_reopen`, which takes the PROJECT row, and the Coordinator holds
       // project-then-task. Sorted by UUID (§8.6 LO2), so two batches touching the same two
       // projects in opposite item orders cannot make a cycle.
-      if (hasSupersessions) {
-        const projectIds = [...new Set(items
-          .filter((item) => item.supersedesTaskId)
-          .map((item) => item.projectId)
-          .filter((projectId): projectId is string => !!projectId))].sort();
-        for (const projectId of projectIds) {
-          await tx.$queryRaw`
-            SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
-        }
+      const supersessionProjectIds = hasSupersessions
+        ? [...new Set(items
+            .filter((item) => item.supersedesTaskId)
+            .map((item) => item.projectId)
+            .filter((projectId): projectId is string => !!projectId))].sort()
+        : [];
+      // Unit L3, rank 40 and for the same reason the supersession pre-lock is: the scope every
+      // fresh item was admitted under, re-locked and re-read, so a rotation that commits between
+      // the admission and this transaction refuses the whole batch rather than being written past.
+      // Both sets are taken here in ONE sorted pass, so the loop below re-locks rows this
+      // transaction already holds instead of reaching backwards for a smaller id.
+      await this.refenceProjectScope(
+        tx, ownerId, creatorSessionId, scopeWorld, scopeFences, supersessionProjectIds,
+      );
+      for (const projectId of supersessionProjectIds) {
+        await tx.$queryRaw`
+          SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
       }
       // Under the lock, and before the first row: a batch is all-or-nothing, so an ineligible
       // parent in item 40 must not leave items 1-39 written.
@@ -2663,7 +2810,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         const idempotencyKey =
           sessionId && turnId ? this.taskIdempotencyKey(sessionId, turnId, item.title, item.description) : undefined;
         const existing = idempotencyKey
-          ? await tx.task.findUnique({ where: { idempotencyKey } })
+          ? await this.idempotencyWinner(tx, ownerId, idempotencyKey)
           : null;
         // A parentRef names an item of this same batch, so the id it stands for only exists now.
         // Resolved into the field an already-existing parent would have used, so one write path
@@ -2865,6 +3012,169 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Unit L3: the coordination scope this write is being made UNDER, derived from the session row.
+   *
+   * `docs/project-coordinator-scope-contract.md` §2 defines it and §2 SC3 defines what it is not:
+   * the client never names it. The reverse lookup through `project.coordinator_session_id` is the
+   * whole derivation for a coordinator, and a task-bound run takes the project of the task it is
+   * executing — both are columns the server owns, and both are re-read on EVERY write rather than
+   * cached, which is what makes a rotation, a restart and a takeover produce the same answer
+   * without anything having to notice that one happened (AC3).
+   *
+   * Not to be confused with the provenance `resolveOwnedSession` computes. That records where the
+   * work was NOTICED and §3 SC7 forbids any gate from reading it; this is the authority, and it is
+   * derived here a second time on purpose so that "evidence" and "authority" never share a value.
+   *
+   * The generation comes from `project_runtime.coordinator_generation` — the counter a rotation
+   * advances — so a presented token can be compared against both halves of the pair at once.
+   */
+  private async deriveProjectScope(
+    db: ScopeReadClient,
+    ownerId: string,
+    sessionId?: string,
+  ): Promise<DerivedScope | null> {
+    if (!sessionId) return null;
+    const session = await db.session.findFirst({
+      where: { id: sessionId, ownerId },
+      select: {
+        coordinatorForProject: { select: { id: true } },
+        task: { select: { projectId: true } },
+      },
+    });
+    if (!session) return null;
+    const projectId = session.coordinatorForProject?.id ?? session.task?.projectId ?? null;
+    if (!projectId) return null;
+    // Scoped by owner as well as by id: a scope is a tenant fact before it is a project fact, and
+    // a project row reached without the owner clause would be an authority derived across tenants.
+    const project = await db.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { id: true, runtime: { select: { coordinatorGeneration: true } } },
+    });
+    if (!project) return null;
+    // A project with no runtime row has never been rotated, which is generation 0 — the same
+    // default the column carries. Reading it as "no generation" would make every token presented
+    // against a freshly created project fail R3 for a rotation that never happened.
+    return {
+      projectId: project.id,
+      generation: String(project.runtime?.coordinatorGeneration ?? 0n),
+    };
+  }
+
+  /**
+   * §4 R8's world, read fail closed: a project this owner does not have simply is not in the map,
+   * and `decideProjectScopeWrite` reads an absent status as NOT open.
+   */
+  private async projectScopeStatuses(
+    db: ScopeReadClient,
+    ownerId: string,
+    projectIds: Array<string | null | undefined>,
+  ): Promise<Record<string, ScopeProjectStatus>> {
+    const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
+    if (!ids.length) return {};
+    const rows = await db.project.findMany({
+      where: { id: { in: ids }, ownerId },
+      select: { id: true, status: true },
+    });
+    return Object.fromEntries(
+      rows.map((row) => [row.id, row.status as unknown as ScopeProjectStatus]),
+    );
+  }
+
+  /**
+   * §4's world for a set of writes: who is writing, under which scope, and which of the projects
+   * they touch are still open.
+   *
+   * Built once for a whole call so a fifty-item batch costs the same two reads a single create
+   * does. It is also the only place the principal is decided, and it is decided from the SHAPE of
+   * the call rather than from anything the caller declares: a write with no acting session came
+   * through the user-facing controller or a CLI acting for the owner, and §4 R1 puts the owner
+   * outside this contract entirely (AC5 — the explicit user path is untouched and pays not one
+   * extra query for a boundary that does not apply to it).
+   *
+   * Keyed on the RAW session id, not on one that survived an ownership check: a session id that
+   * does not resolve must become an agent with NO scope (refused by R5), never an absent one.
+   */
+  private async projectScopeWorld(
+    db: ScopeReadClient,
+    ownerId: string,
+    actingSessionId: string | undefined,
+    writes: readonly ScopeWriteInput[],
+  ): Promise<ScopeWorld> {
+    const scope = await this.deriveProjectScope(db, ownerId, actingSessionId);
+    const principal: ScopePrincipal = !actingSessionId
+      ? 'USER'
+      : scope
+        ? 'COORDINATOR'
+        : 'WORKER';
+    const mode = projectScopeMode();
+    if (principal === 'USER') return { principal, scope, projectStatus: {}, mode };
+    // The target and the surface are settled before any rule runs, so this pass answers both
+    // without a status read — and the binding rule stays written in exactly one place.
+    const candidates = writes.flatMap((write) => [
+      admitProjectScopeWrite(this.scopeRequest(principal, scope, write, {})).projectId,
+      write.currentProjectId,
+      scope?.projectId ?? null,
+    ]);
+    return {
+      principal,
+      scope,
+      projectStatus: await this.projectScopeStatuses(db, ownerId, candidates),
+      mode,
+    };
+  }
+
+  /** One write, as §4 reads it. Server-derived throughout; `scopeToken` is compared, never trusted. */
+  private scopeRequest(
+    principal: ScopePrincipal,
+    scope: DerivedScope | null,
+    write: ScopeWriteInput,
+    projectStatus: Readonly<Record<string, ScopeProjectStatus>>,
+  ): ScopeAdmissionRequest {
+    return {
+      principal,
+      operation: write.operation,
+      taskId: write.taskId,
+      requestedProjectId: write.requestedProjectId,
+      currentProjectId: write.currentProjectId,
+      scope,
+      presentedScopeToken: write.scopeToken,
+      projectStatus,
+    };
+  }
+
+  /**
+   * §4, applied to one real write: which project it lands in, and whether it happens at all.
+   *
+   * Returns the project id the caller must write — the server-derived binding this whole unit
+   * exists for. A coordinator write that names no project is filed under the project the server
+   * says that session coordinates; one that names another project does not happen.
+   *
+   * Synchronous and total, so a batch can admit every item BEFORE opening its transaction: a
+   * refusal then costs no row, no lock and no partial batch (AC1, AC2).
+   *
+   * §8 CM2's two phases: in `observe` the decision is audited and the write proceeds EXACTLY as it
+   * did before this unit — including the binding, which is a behaviour change like any other — so
+   * that what enforcement would reject is countable before it is switched on.
+   */
+  private admitScopedWrite(world: ScopeWorld, write: ScopeWriteInput): string | null {
+    const request = this.scopeRequest(world.principal, world.scope, write, world.projectStatus);
+    const admission = admitProjectScopeWrite(request);
+    if (scopeWriteRefused(admission, world.mode)) {
+      throw new ForbiddenException(scopeRefusalBody(admission.outcome!, write.taskId));
+    }
+    if (world.mode === 'observe') {
+      if (admission.outcome && admission.outcome.decision !== 'ALLOW') {
+        this.logger.warn(scopeObservationLine(admission, request));
+      }
+      // Pre-L3 behaviour, to the letter: what the caller asked for, or what the row already says.
+      return write.requestedProjectId !== undefined
+        ? write.requestedProjectId
+        : write.currentProjectId;
+    }
+    return admission.projectId;
+  }
+
+  /**
    * The conversation turn a task create belongs to, or undefined. The inbox delivers at most one
    * message/shell turn IN_FLIGHT per session at a time (the claim SQL only hands out a PENDING one
    * when none is in flight), so this is unambiguous. A redelivered turn keeps its row id, which is
@@ -2877,6 +3187,157 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true },
     });
     return turn?.id;
+  }
+
+  /**
+   * The row already committed under an idempotency key, or null — the ONE place that question is
+   * asked, so the single create and the batch cannot answer it differently.
+   *
+   * Owner-checked, and a mismatch is a typed conflict rather than a miss. `idempotency_key` is
+   * unique across the whole table, so a key held by another tenant is not "no winner" — treating it
+   * as one would send this write into an INSERT that can only fail on the unique index, and the
+   * caller would get a raw P2002 instead of an answer. Returning the row instead would be worse
+   * still: a cross-tenant read. Neither is reachable in practice (the key hashes a session id, and
+   * a session belongs to one owner), and the point of writing the branch is that "not reachable"
+   * stops being an argument the moment the key template changes.
+   *
+   * `db` so the batch can ask inside its transaction, where the answer has to be the one its own
+   * inserts will see.
+   */
+  private async idempotencyWinner(
+    db: Pick<Prisma.TransactionClient, 'task'>,
+    ownerId: string,
+    idempotencyKey: string,
+  ): Promise<Task | null> {
+    const existing = await db.task.findUnique({ where: { idempotencyKey } });
+    if (!existing) return null;
+    if (existing.ownerId !== ownerId) {
+      throw new ConflictException(
+        'that idempotency key belongs to another account\'s task — retry with a new request',
+      );
+    }
+    return existing;
+  }
+
+  /**
+   * A replay that asks for a different project than the row it is being handed.
+   *
+   * Not a refusal: the write already happened, under the scope that made it, and §6 says a later
+   * takeover does not reach back into it. But it is worth a line — a retry that changed its mind
+   * about where the work belongs is a coordinator whose plan moved between attempts, and the only
+   * place that is visible is here.
+   */
+  private auditReplayedProject(winner: Task, requestedProjectId?: string | null): void {
+    if (requestedProjectId === undefined) return;
+    if ((requestedProjectId ?? null) === (winner.projectId ?? null)) return;
+    this.logger.warn(
+      `project scope replay: an idempotent retry asked for a different project than the row it `
+      + `already committed; the committed project stands (task ${uuidToBase62(winner.id)})`,
+    );
+  }
+
+  /**
+   * §4 a second time, inside the transaction that writes the row, under the project's own lock.
+   *
+   * The admission before the transaction reads the world and decides. Between that read and the
+   * INSERT there is a window, and a rotation is precisely the thing that can commit inside it: T1
+   * derives scope (A, G) and is allowed; T2 atomically rotates the coordinator to a new session and
+   * G+1 and commits; T1 then writes into A, authorized by a fact that is no longer true. Nothing
+   * downstream would notice — the row is indistinguishable from one the CURRENT holder wrote, which
+   * is §0's incident with a race in place of a mistake.
+   *
+   * Closing it needs two things, and one of them is not enough on its own:
+   *
+   *  1. **The lock.** `FOR NO KEY UPDATE` on the project row, which is what a rotation's own
+   *     `UPDATE "project" SET "coordinator_session_id" = …` must take to commit. Whichever of the
+   *     two gets it first is the one that happened first; there is no third outcome.
+   *  2. **The re-read.** Holding a lock proves nothing about what was read before it. So the scope
+   *     is derived AGAIN from the locked world, and the decision is re-run — with the scope the
+   *     admission acted under presented as the claim. That is not a second, parallel rule: it is
+   *     §4 R2/R3 doing exactly what they were written for, with the server's own earlier reading in
+   *     the place a client's token would be. A rotation therefore refuses with
+   *     `COORDINATOR_GENERATION_MOVED` and `YIELD_TO_CURRENT_SCOPE`, which is the same answer a
+   *     stale client gets, because it is the same fact.
+   *
+   * Rank 40 in the canonical lock order (`common/lock-order.ts`) — after the owner mutex, the task
+   * lists and the creator Sessions, before any task row — which is where this path ALREADY takes
+   * the project row for `project_acceptance_reopen`. Same rank, same mode, same UUID ordering, so
+   * it adds no edge to the lock graph and no new deadlock is reachable through it.
+   *
+   * Replays never reach here: the idempotency winner is returned before the transaction opens, so a
+   * write that already committed is never re-decided by a scope that has moved since (§3 SC4).
+   */
+  private async refenceProjectScope(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    actingSessionId: string | undefined,
+    admitted: ScopeWorld,
+    writes: ReadonlyArray<ScopeWriteInput & { boundProjectId: string | null }>,
+    /**
+     * Projects the SAME transaction takes at rank 40 for another reason — the supersession
+     * pre-lock. Folded into this one sorted pass and taken here, so the transaction's rank-40
+     * acquisitions are one non-decreasing sequence rather than two overlapping ones: a later
+     * statement re-locking a row already held is free, while a smaller id taken after a larger one
+     * is the only shape at this rank that could make a cycle.
+     */
+    alsoLock: ReadonlyArray<string | null | undefined> = [],
+  ): Promise<void> {
+    // §4 R1: the owner is outside this contract, so there is nothing to fence and no lock to take.
+    if (admitted.principal === 'USER') return;
+    const fenced = writes.filter(
+      (write) => write.boundProjectId !== null || write.currentProjectId !== null,
+    );
+    if (!fenced.length && !alsoLock.some((id) => !!id)) return;
+    // Sorted by UUID (§8.6 LO2), one statement each, so two writers touching the same two projects
+    // in opposite request orders cannot make a cycle.
+    const projectIds = [...new Set([
+      ...fenced.flatMap((write) => [write.boundProjectId, write.currentProjectId]),
+      ...alsoLock,
+    ].filter((id): id is string => !!id))].sort();
+    for (const projectId of projectIds) {
+      await tx.$queryRaw`SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
+    }
+    // Nothing to re-decide: this call exists only to take the caller's rank-40 locks in one sorted
+    // pass with the fence's, and the caller had none of its own to fence.
+    if (!fenced.length) return;
+    const scope = await this.deriveProjectScope(tx, ownerId, actingSessionId);
+    const projectStatus = await this.projectScopeStatuses(tx, ownerId, [
+      ...projectIds,
+      scope?.projectId,
+    ]);
+    // The claim being checked is the server's OWN earlier reading, expressed the way §2 spells a
+    // scope on the wire. A caller-supplied token has already been compared against it before the
+    // transaction, so substituting this one loses nothing and states more.
+    const presented = admitted.scope ? derivedScopeToken(admitted.scope) : undefined;
+    for (const write of fenced) {
+      // The other half of the same window, for an edit: the TASK can be re-filed between the
+      // admission and this transaction, and an edit authorised against the project it used to be
+      // in is the same defect seen from the row's side. Re-read under the lock this transaction
+      // now holds on that project — a move out of it has to take the same row (0127's reopen
+      // reaches both ends), so what is read here cannot change before the write.
+      const currentProjectId = write.operation === 'UPDATE_TASK' && write.taskId
+        ? ((await tx.task.findFirst({
+            where: { id: write.taskId, ownerId },
+            select: { projectId: true },
+          }))?.projectId ?? null)
+        : write.currentProjectId;
+      const outcome = admitProjectScopeWrite(this.scopeRequest(
+        actingSessionId ? (scope ? 'COORDINATOR' : 'WORKER') : 'USER',
+        scope,
+        // The bound project, not what the caller asked for: what is fenced is the write that is
+        // about to happen, including the project the server derived for it.
+        { ...write, currentProjectId, requestedProjectId: write.boundProjectId, scopeToken: presented },
+        projectStatus,
+      ));
+      if (!outcome.outcome || outcome.outcome.decision === 'ALLOW') continue;
+      if (admitted.mode === 'observe') {
+        this.logger.warn(
+          `project scope observe (effect): ${outcome.outcome.code} at ${outcome.outcome.rule}`,
+        );
+        continue;
+      }
+      throw new ForbiddenException(scopeRefusalBody(outcome.outcome, write.taskId));
+    }
   }
 
   /**
@@ -2924,7 +3385,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
     const withRun = await this.withRunning(ownerId, tasks);
-    const states = await this.dependencyStatesFor(tasks.map((t) => t.id));
+    const states = await this.dependencyStatesFor(ownerId, tasks.map((t) => t.id));
     return withRun.map((t) => {
       const dependencyState = states.get(t.id) ?? 'NONE';
       // `blocked` drives the list's lock indicator; canRun is the single source of truth
@@ -3049,7 +3510,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const pageTasks = hasMore ? rows.slice(0, limit) : rows;
     const [withRun, states] = await Promise.all([
       this.withRunning(ownerId, pageTasks),
-      this.dependencyStatesFor(pageTasks.map((task) => task.id)),
+      this.dependencyStatesFor(ownerId, pageTasks.map((task) => task.id)),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -3173,7 +3634,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
     const [withRun, states] = await Promise.all([
       this.withRunning(ownerId, rows, true),
-      this.dependencyStatesFor(rows.map((task) => task.id)),
+      this.dependencyStatesFor(ownerId, rows.map((task) => task.id)),
     ]);
     const items = withRun.map((task) => {
       const dependencyState = states.get(task.id) ?? 'NONE';
@@ -4275,6 +4736,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // a task with no prerequisites costs no extra read at all.
     const prerequisiteEpochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       task.dependsOn.map((d) => d.dependsOnTaskId),
     );
     const dependencyState = computeDependencyState(task.dependsOn.map((d) => ({
@@ -4404,6 +4866,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
     if (dto.provider) await this.assertUsableProvider(ownerId, dto.provider);
+    // Unit L3 §4. An update never re-files a task on its own — a write that does not mention the
+    // project leaves it exactly where it is — so this binds nothing and only refuses: it is what
+    // stops a coordinator editing work inside another project's goal (R6), moving work across the
+    // line without declaring it (R7), or emptying a task out of the project that counts it (R4).
+    // Before the transaction, so a refusal writes nothing and takes no lock.
+    let scopeWorld: ScopeWorld | undefined;
+    let scopeFence: (ScopeWriteInput & { boundProjectId: string | null }) | undefined;
+    {
+      const scopeWrite: ScopeWriteInput = {
+        operation: 'UPDATE_TASK',
+        taskId: id,
+        requestedProjectId: dto.projectId === undefined ? undefined : (dto.projectId ?? null),
+        currentProjectId: before.projectId ?? null,
+        scopeToken: dto.scopeToken,
+      };
+      scopeWorld = await this.projectScopeWorld(
+        this.prisma, ownerId, actingSessionId, [scopeWrite],
+      );
+      const boundProjectId = this.admitScopedWrite(scopeWorld, scopeWrite);
+      // Only a write that actually claims a goal is fenced. The owner's edits and edits to tasks
+      // that belong to no project keep the one-statement path exactly as they had it.
+      if (scopeWorld.principal !== 'USER'
+        && (boundProjectId !== null || scopeWrite.currentProjectId !== null)) {
+        scopeFence = { ...scopeWrite, boundProjectId };
+      }
+    }
     // Whether this write can move the task within the project/subtask structure. It decides both
     // that the hierarchy rules are checked at all and that the write takes the owner lock: the
     // check and the update it authorises have to be one serialized step, not two.
@@ -4754,7 +5242,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // dependent Task, so replacing prerequisites alone leaves the row written exactly once.
     const rewritesTaskRow = !!supersession;
     const updated = await (
-      !restructures && !(touchesAcceptanceFacts && before.projectId)
+      // `scopeFence` joins the two conditions that already force the transaction branch, and for
+      // the same kind of reason: a scope re-check that runs outside the transaction it is meant to
+      // fence is a check the rotation it exists for can simply commit past. An agent edit inside a
+      // project therefore takes the transaction; nothing else changes shape.
+      !restructures && !(touchesAcceptanceFacts && before.projectId) && !scopeFence
         ? this.prisma.task.update({ where: { id }, data })
         // Retried whole, on the transaction branch only. The one-statement branch is an
         // autocommit UPDATE with nothing to re-run: it has no transaction of its own, so a
@@ -4831,12 +5323,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             // (`concludesVerdict || supersession`) left exactly that case with an empty list.
             const movesProject = dto.projectId !== undefined
               && (dto.projectId ?? null) !== current!.projectId;
+            // Unit L3's fence takes rank 40 first and takes the acceptance projects with it, so
+            // this transaction's project locks are one non-decreasing sequence; the loop below then
+            // re-locks rows it already holds.
             const acceptanceProjects = touchesAcceptanceFacts || supersession
               ? [...new Set([
                 current!.projectId,
                 dto.projectId === undefined ? current!.projectId : (dto.projectId ?? null),
               ].filter((projectId): projectId is string => !!projectId))].sort()
               : [];
+            if (scopeWorld && scopeFence) {
+              await this.refenceProjectScope(
+                tx, ownerId, actingSessionId, scopeWorld, [scopeFence], acceptanceProjects,
+              );
+            }
             for (const projectId of acceptanceProjects) {
               await tx.$queryRaw`
                 SELECT 1 FROM "project" WHERE "id" = ${projectId}::uuid FOR NO KEY UPDATE`;
@@ -4854,6 +5354,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 [...acceptanceProjects, ...(dto.projectId ? [dto.projectId] : [])],
               );
             }
+
             // ...and the task row IMMEDIATELY after, before anything else in this transaction
             // touches it. `tx.task.update` below takes the same row with an ordinary blocking lock,
             // so a NOWAIT taken only at `writeSupersession` would be reached AFTER the wait it was
@@ -5250,7 +5751,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     });
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
     if (!dependentIds.length) return;
-    const states = await this.dependencyStatesFor(dependentIds);
+    const states = await this.dependencyStatesFor(ownerId, dependentIds);
     const dependents = await this.prisma.task.findMany({
       where: { id: { in: dependentIds }, ownerId },
       select: {
@@ -8025,7 +8526,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // until it lands, releasing is the only safe reading.
       return this.standDown(lease, { ok: false as const, skipped: 'rescheduled' as const });
     }
-    const depFacts = (await this.dependencyFactsFor([id])).get(id) ?? [];
+    const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);
     if (!canRun(depState)) {
       // §13.3 DEP: name the CHECK when a check is what refused. "Prerequisites are not all complete
@@ -8423,7 +8924,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
     });
 
-    const batchFacts = await this.dependencyFactsFor(tasks.map((t) => t.id));
+    const batchFacts = await this.dependencyFactsFor(ownerId, tasks.map((t) => t.id));
     const states = new Map([...batchFacts]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
     // Tasks that are already mid-flight: skip them so the batch doesn't double-queue a

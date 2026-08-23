@@ -545,7 +545,7 @@ test('a verification verdict reaches production through the reconcile pass',
         // than re-pointing the row, which the database would refuse outright.
         assert.equal(action.decisionId, injectedDecisionId, 'the retry moved the decision lineage');
         // …and DEP4 is satisfied, which is the whole point of applying it.
-        const epochs = await loadVerificationEpochGates(db as never, [target.ids.s]);
+        const epochs = await loadVerificationEpochGates(db as never, target.ownerId, [target.ids.s]);
         assert.equal(epochs.get(target.ids.s)?.gate, null, 'the epoch did not open');
       });
 
@@ -610,7 +610,7 @@ test('a verification verdict reaches production through the reconcile pass',
 
         // …and the epoch says the same thing in its own vocabulary, so a dependent reads
         // BLOCKED_FAILED rather than an ordinary wait it will never come out of.
-        const epochs = await loadVerificationEpochGates(db as never, [target.ids.s]);
+        const epochs = await loadVerificationEpochGates(db as never, target.ownerId, [target.ids.s]);
         assert.equal(epochs.get(target.ids.s)?.gate, 'VERDICT_NOT_APPLIED');
         assert.equal(epochs.get(target.ids.s)?.stalled, true, 'a permanent wait read as a wait');
 
@@ -635,7 +635,7 @@ test('a verification verdict reaches production through the reconcile pass',
         assert.deepEqual(after.map((b) => b.resolvedAt !== null), [true],
           'the escalation outlived the fix it asked for');
         // …and the new revision's apply is a fresh key, so the conclusion actually lands.
-        const reopened = await loadVerificationEpochGates(db as never, [target.ids.s]);
+        const reopened = await loadVerificationEpochGates(db as never, target.ownerId, [target.ids.s]);
         assert.equal(reopened.get(target.ids.s)?.gate, null, 'the epoch never reopened');
       });
 

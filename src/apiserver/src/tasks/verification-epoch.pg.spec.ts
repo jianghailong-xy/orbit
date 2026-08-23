@@ -310,7 +310,7 @@ async function epochOpenBySql(db: Db, checkId: string): Promise<boolean> {
 
 /** DEP0's TypeScript half, about one row's epoch. */
 async function gateByTs(db: Db, taskId: string): Promise<VerificationEpochGate | null | undefined> {
-  const epochs = await loadVerificationEpochGates(db, [taskId]);
+  const epochs = await loadVerificationEpochGates(db, OWNER, [taskId]);
   return epochs.has(taskId) ? epochs.get(taskId)!.gate : undefined;
 }
 
@@ -332,7 +332,7 @@ async function runnableByTs(db: Db, w: World, edge = w.checkId): Promise<boolean
   );
   const statusOf = new Map(rows.map((row) => [row.id, row.status]));
   const successorOf = new Map(rows.map((row) => [row.id, row.supersededByTaskId]));
-  const epochs = await loadVerificationEpochGates(db, [edge]);
+  const epochs = await loadVerificationEpochGates(db, OWNER, [edge]);
   return dependencySatisfied(edge, statusOf, successorOf, epochs);
 }
 
@@ -607,7 +607,7 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
       randomUUID(), dependent, plain,
     );
     assert.equal(await runnableBySql(db, dependent), true);
-    assert.deepEqual([...await loadVerificationEpochGates(db, [plain])], []);
+    assert.deepEqual([...await loadVerificationEpochGates(db, OWNER, [plain])], []);
   });
 
   await t.test('the SUBJECT edge is held while the subject sits at DONE with a FAIL', async () => {
@@ -792,6 +792,197 @@ test('§13.3 DEP on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
     // ...and the instant it commits, the release happens — once, and for the right task.
     assert.equal(await agreedGate(db, w), null);
     assert.equal(await runnableBySql(db, w.downstreamId), true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Unit L3 / scope contract §3 SC6 — a check answers only for a subject it shares an owner
+  // and a project with. Fault injection: the rows below are written by RAW SQL, which is what a
+  // repair script, a rolled-back binary or an attacker with a database handle has.
+  //
+  // `assertVerificationEligible` refuses to create any of them through the service. That is a
+  // service rule, and this is the file that says whether the rule is also a boundary: a row that
+  // got past it — or never went through it — must not be able to move anybody else's answer.
+  // -------------------------------------------------------------------------
+
+  /** A second tenant, with its own runner, workspace and project. Nothing of OWNER's is reused. */
+  async function foreignTenant(): Promise<{ ownerId: string; projectId: string; agentId: string }> {
+    const ownerId = randomUUID();
+    const runnerId = randomUUID();
+    const agentId = randomUUID();
+    const projectId = randomUUID();
+    await db.$executeRawUnsafe(
+      `INSERT INTO "user" ("id","email","name","password_hash") VALUES ($1,$2,'h0g2','x')`,
+      ownerId, `h0g2-${ownerId}@example.test`,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "runner" ("id","owner_id","name","status","token_hash","capabilities_reported_at")
+       VALUES ($1,$2,'h0g2','ONLINE',$3,now())`,
+      runnerId, ownerId, `h0g2-${runnerId}`,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "workspace" ("id","owner_id","name","runner_id","can_create_tasks","can_delegate")
+       VALUES ($1,$2,$3,$4,true,true)`,
+      agentId, ownerId, `agent-${agentId.slice(0, 8)}`, runnerId,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
+         "updated_at")
+       VALUES ($1,$2,'h0g2',true,'AUTO'::"project_automation_policy",now())`,
+      projectId, ownerId,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "project_runtime" ("project_id","updated_at") VALUES ($1,now())
+         ON CONFLICT ("project_id") DO NOTHING`, projectId,
+    );
+    return { ownerId, projectId, agentId };
+  }
+
+  /** A second project of the SAME owner — the cross-PROJECT half of the same invariant. */
+  async function siblingProject(): Promise<{ projectId: string; agentId: string }> {
+    const projectId = randomUUID();
+    const agentId = randomUUID();
+    await db.$executeRawUnsafe(
+      `INSERT INTO "workspace" ("id","owner_id","name","runner_id","can_create_tasks","can_delegate")
+       VALUES ($1,$2,$3,$4,true,true)`,
+      agentId, OWNER, `agent-${agentId.slice(0, 8)}`, RUNNER,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
+         "updated_at")
+       VALUES ($1,$2,'h0g-sib',true,'AUTO'::"project_automation_policy",now())`,
+      projectId, OWNER,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "project_runtime" ("project_id","updated_at") VALUES ($1,now())
+         ON CONFLICT ("project_id") DO NOTHING`, projectId,
+    );
+    return { projectId, agentId };
+  }
+
+  /**
+   * A check of `subjectId` that lives somewhere else, written straight to the table.
+   *
+   * Given everything the epoch rule asks for: DONE, PASS, a revision above zero, a naturally
+   * settled verification run, and an APPLIED ledger row keyed on its own project. The only thing
+   * wrong with it is WHOSE subject it names — which is exactly the thing under test.
+   */
+  async function forgeCheck(
+    scope: { ownerId: string; projectId: string; agentId: string },
+    subjectId: string,
+    id: string,
+    over: { status?: string; verdict?: string | null } = {},
+  ): Promise<string> {
+    const status = over.status ?? 'DONE';
+    const verdict = over.verdict === undefined ? 'PASS' : over.verdict;
+    await db.$executeRawUnsafe(
+      `INSERT INTO "task" ("id","title","status","owner_id","creator_type","creator_id","project_id",
+         "assignee_id","verifies_task_id","verdict","verdict_revision","updated_at")
+       VALUES ($1,'forged',$2::"task_status",$3,'USER',$3,$4,$5,$6,$7::"task_verdict",1,now())`,
+      id, status, scope.ownerId, scope.projectId, scope.agentId, subjectId, verdict,
+    );
+    if (status === 'DONE' && verdict === 'PASS') {
+      await db.$executeRawUnsafe(
+        `INSERT INTO "session" ("id","owner_id","workspace_id","task_id","title","prompt",
+           "creator_id","provider","status","end_reason","completed_at","starts_task_work",
+           "dispatch_origin","updated_at")
+         VALUES ($1,$2,$3,$4,'forged run','x',$2,'claude','SUCCEEDED'::"run_status",'task_done',
+           now(),true,'USER'::"session_dispatch_origin",now())`,
+        randomUUID(), scope.ownerId, scope.agentId, id,
+      );
+      await db.$executeRawUnsafe(
+        `INSERT INTO "project_action" ("id","project_id","idempotency_key","type","status",
+           "subject_type","subject_id","fencing_token","detail","updated_at")
+         VALUES ($1,$2,$3,'APPLY_VERIFICATION_VERDICT','APPLIED','TASK',$4,1,'{}'::jsonb,now())`,
+        randomUUID(), scope.projectId,
+        verificationVerdictActionKeyOf(scope.projectId, id, '1'), id,
+      );
+    }
+    return id;
+  }
+
+  /** Nothing downstream started — the assertion AC6 finally rests on. */
+  async function downstreamSessions(taskId: string): Promise<number> {
+    const rows = await db.$queryRawUnsafe<Array<{ n: bigint }>>(
+      `SELECT count(*) AS n FROM "session" WHERE "task_id" = $1::uuid`, taskId,
+    );
+    return Number(rows[0].n);
+  }
+
+  await t.test('a PASSing check forged in ANOTHER OWNER\'s project opens no epoch here', async () => {
+    const w = await world(db, { verdict: 'FAIL' });
+    assert.equal(await agreedGate(db, w), 'VERIFICATION_FAILED');
+
+    // Newer than the real check, so `ORDER BY id DESC` would pick it — the whole attack.
+    await forgeCheck(await foreignTenant(), w.subjectId, newerThan(w.checkId, 1));
+
+    assert.equal(await agreedGate(db, w), 'VERIFICATION_FAILED',
+      'a foreign PASS is not this subject\'s newest check');
+    assert.equal(await runnableBySql(db, w.downstreamId), false);
+    assert.equal(await runnableBySql(db, w.subjectDownstreamId), false);
+    assert.equal(await downstreamSessions(w.downstreamId), 0);
+    assert.equal(await downstreamSessions(w.subjectDownstreamId), 0);
+  });
+
+  await t.test('a PASSing check forged in another PROJECT of the same owner opens none either', async () => {
+    const w = await world(db, { verdict: 'FAIL' });
+    const sibling = await siblingProject();
+
+    await forgeCheck(
+      { ownerId: OWNER, projectId: sibling.projectId, agentId: sibling.agentId },
+      w.subjectId,
+      newerThan(w.checkId, 2),
+    );
+
+    assert.equal(await agreedGate(db, w), 'VERIFICATION_FAILED');
+    assert.equal(await runnableBySql(db, w.downstreamId), false);
+    assert.equal(await downstreamSessions(w.downstreamId), 0);
+  });
+
+  // The same hole, run the other way. A forged row that is NOT a pass would otherwise make a
+  // subject with no checks look verified-by-something and hold its dependents for ever: one raw
+  // INSERT in a project you own is enough to freeze somebody else's work.
+  await t.test('a foreign check cannot invent an epoch for a subject that has none', async () => {
+    const projectId = randomUUID();
+    await db.$executeRawUnsafe(
+      `INSERT INTO "project" ("id","owner_id","title","coordinator_enabled","automation_policy",
+         "updated_at")
+       VALUES ($1,$2,'h0g-plain',true,'AUTO'::"project_automation_policy",now())`,
+      projectId, OWNER,
+    );
+    await db.$executeRawUnsafe(
+      `INSERT INTO "project_runtime" ("project_id","updated_at") VALUES ($1,now())
+         ON CONFLICT ("project_id") DO NOTHING`, projectId,
+    );
+    const subjectId = await task(db, { projectId, status: 'DONE' });
+    const downstreamId = await task(db, { projectId });
+    await db.$executeRawUnsafe(
+      `INSERT INTO "task_dependency" ("id","task_id","depends_on_task_id") VALUES ($1,$2,$3)`,
+      randomUUID(), downstreamId, subjectId,
+    );
+    assert.equal(await runnableBySql(db, downstreamId), true, 'a DONE prerequisite with no checks');
+
+    await forgeCheck(await foreignTenant(), subjectId, randomUUID(), { status: 'OPEN', verdict: null });
+
+    assert.equal(await runnableBySql(db, downstreamId), true,
+      'a foreign row must not be able to freeze work it has nothing to do with');
+    assert.equal((await loadVerificationEpochGates(db, OWNER, [subjectId])).size, 0,
+      'and the TypeScript reader must not see an epoch either');
+  });
+
+  // The forgery is still THERE. The rule is about which rows may answer for a subject, not about
+  // deleting rows — and a fix that quietly removed the evidence would be the wrong fix.
+  await t.test('the legitimate epoch still opens beside the forgery, and the forgery is untouched', async () => {
+    const w = await world(db, { verdict: 'FAIL' });
+    const forged = await forgeCheck(await foreignTenant(), w.subjectId, newerThan(w.checkId, 3));
+
+    await applyVerdict(db, w.projectId, w.checkId, 'PASS');
+
+    assert.equal(await agreedGate(db, w), null, 'the subject\'s OWN check released it');
+    assert.equal(await runnableBySql(db, w.downstreamId), true);
+    const rows = await db.$queryRawUnsafe<Array<{ n: bigint }>>(
+      `SELECT count(*) AS n FROM "task" WHERE "id" = $1::uuid`, forged,
+    );
+    assert.equal(Number(rows[0].n), 1, 'the forged row is refused, not erased');
   });
 
   await t.test('a rolled-back verdict releases nothing at all', async () => {

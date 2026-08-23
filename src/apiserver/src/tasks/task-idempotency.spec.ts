@@ -22,7 +22,10 @@ function fixture(opts: { inFlightTurn: string | null; existingByKey?: (key: stri
     },
     create: async ({ data }: any) => {
       creates.push(data);
-      return { id: `task-${creates.length}`, ...data };
+      // `ownerId` on the way back because the winner lookup checks it: `idempotency_key` is unique
+      // across the whole table, so a key held by another tenant is a typed conflict rather than a
+      // miss, and a double that omitted the column would be testing a row the database cannot hold.
+      return { id: `task-${creates.length}`, ownerId: OWNER, ...data };
     },
     count: async () => 0,
   };
@@ -61,7 +64,7 @@ test('a task created twice inside one turn collapses onto the first', async () =
   assert.ok(key && typeof key === 'string', 'an in-turn create is stamped with a key');
 
   // Second run of the SAME turn: the pre-check finds the original and returns it, creating nothing.
-  const replay = fixture({ inFlightTurn: 'turn-A', existingByKey: (k) => (k === key ? { id: 'task-orig' } : null) });
+  const replay = fixture({ inFlightTurn: 'turn-A', existingByKey: (k) => (k === key ? { id: 'task-orig', ownerId: OWNER } : null) });
   const got = await replay.service.create(OWNER, { title: 'Ship the fix' }, undefined, SESSION);
   assert.equal(replay.creates.length, 0, 'the re-run creates nothing');
   assert.equal((got as any).id, 'task-orig', 'the re-run returns the original task');
@@ -98,7 +101,7 @@ test('a re-run of a batch collapses every item and skips their edges', async () 
   // Re-run: both keys already exist, so nothing is created.
   const replay = fixture({
     inFlightTurn: 'turn-A',
-    existingByKey: (k) => (keys.has(k) ? { id: `orig-${k.slice(0, 4)}` } : null),
+    existingByKey: (k) => (keys.has(k) ? { id: `orig-${k.slice(0, 4)}`, ownerId: OWNER } : null),
   });
   const rows = await replay.service.createMany(OWNER, { tasks: [{ title: 'A' }, { title: 'B' }] }, undefined, SESSION);
   assert.equal(replay.creates.length, 0, 'the batch re-run creates nothing');

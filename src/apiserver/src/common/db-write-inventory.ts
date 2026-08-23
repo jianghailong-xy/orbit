@@ -829,6 +829,10 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'tasks/reclaim-stalled-task.ts#postRunFailureComment', under: 'runnerApi.finalize, reaper.forceFinalize' },
   { at: 'tasks/tasks.service.ts#linkSupersededBy', under: 'tasks.create, tasks.update' },
   { at: 'tasks/tasks.service.ts#lockTaskForSupersessionWrite', under: 'tasks.update' },
+  // Unit L3's effect-time fence. Rank 40 only — the project row its callers already take at that
+  // rank, in the same UUID order and the same mode — so it adds no edge to the lock graph, and the
+  // refusal it can raise is an authorization answer that rolls its caller's transaction back whole.
+  { at: 'tasks/tasks.service.ts#refenceProjectScope', under: 'tasks.create, tasks.createMany, tasks.update' },
   // Test-only, and reachable only from the harness's own transaction.
   { at: 'projects/project-e2e-harness.ts#world', under: 'projectE2eHarness.dispatch' },
   { at: 'projects/project-e2e-harness.ts#task', under: 'projectE2eHarness.dispatch' },

@@ -179,6 +179,7 @@ export class TaskListsService {
     // question the Run button does — including "is this prerequisite a CHECK, and did it pass".
     const epochs = await loadVerificationEpochGates(
       this.prisma,
+      ownerId,
       dependencies.map((dependency) => dependency.dependsOnTaskId),
     );
     const prerequisites = new Map<string, DependencyPrerequisiteFact[]>();

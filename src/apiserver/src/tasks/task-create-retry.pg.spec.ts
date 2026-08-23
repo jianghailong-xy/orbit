@@ -138,6 +138,22 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
 
   const creatorOf = (ids: FixtureIds) => ({ type: CreatorType.AGENT, id: ids.workspaceId });
 
+  /**
+   * Unit L3: give the session doing the creating the scope it is writing under.
+   *
+   * `seedLockFixture` is the deadlock harness's world and coordinates nothing — it is about lock
+   * order, not about projects. Since L3, an agent session that files INTO a project must hold that
+   * project's scope, so a session with no binding is refused before it ever reaches the lock this
+   * file is about. Bound here rather than in the shared fixture: the barrier scripts and
+   * `dependency-revision.pg.spec` read that fixture too, and none of them makes this write.
+   */
+  async function bindCoordinator(ids: FixtureIds): Promise<void> {
+    await admin.query(
+      'UPDATE "project" SET "coordinator_session_id" = $2::uuid WHERE "id" = $1::uuid',
+      [ids.projectId, ids.contendedSessionId],
+    );
+  }
+
   /** Every `project_event` this project holds, and how many times each was observed. */
   async function projectEvents(ids: FixtureIds): Promise<{ rows: number; occurrences: number }> {
     const { rows } = await admin.query<{ rows: string; occurrences: string | null }>(
@@ -151,6 +167,7 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
   await t.test('one create: one task, one edge, one publish', async () => {
     const ids = newFixtureIds('taskretry-create');
     await seedLockFixture(admin, ids);
+    await bindCoordinator(ids);
     const { service, published, logged } = serviceUnderTest();
 
     const task = await underDeadlock(ids, () =>
@@ -204,6 +221,7 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
     // events" checkable — a count on its own cannot tell a missing event from an extra one.
     const control = newFixtureIds('taskretry-control');
     await seedLockFixture(admin, control);
+    await bindCoordinator(control);
     const clean = serviceUnderTest();
     const controlRows = await clean.service.createMany(
       control.ownerId,
@@ -222,6 +240,7 @@ test('a Task create that loses a deadlock re-runs whole and commits once', { ski
 
     const ids = newFixtureIds('taskretry-batch');
     await seedLockFixture(admin, ids);
+    await bindCoordinator(ids);
     const { service, published, logged } = serviceUnderTest();
 
     const created = await underDeadlock(ids, () =>

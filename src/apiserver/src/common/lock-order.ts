@@ -74,7 +74,7 @@ export const LOCK_ORDER = [
   {
     rank: 40,
     relation: 'project',
-    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile) · FOR KEY SHARE (task/session FK, project_event outbox)',
+    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, project_event outbox)',
     why:
       'Above `task` because that is the order the Project authorization adapter already declares ' +
       '(project FOR NO KEY UPDATE, then task FOR SHARE), and below `session` because ' +
