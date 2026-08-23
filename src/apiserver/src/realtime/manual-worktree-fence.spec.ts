@@ -87,6 +87,10 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
         mergeOperationId: true,
         mergeOperationOwner: true,
         status: true,
+        // `[K6]` §7: enough to ask whether this task has an accepted checkpoint, so the command
+        // can carry the commit the runner is allowed to merge.
+        taskId: true,
+        ownerId: true,
         workspace: { select: { workDir: true } },
       },
     },
@@ -106,6 +110,50 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
       data: { mergeOperationOwner: NEW_OWNER, mergeRequestedAt: restampedAt },
     },
   ]);
+});
+
+test('`[K6]` §7: the command carries the commit the checkpoint verified, and only then', async (t) => {
+  const TASK = '66666666-6666-4666-8666-666666666666';
+  const OWNER = '77777777-7777-4777-8777-777777777777';
+  const VERIFIED = 'ab'.repeat(20);
+
+  function prismaWith(checkpoints: Array<Record<string, unknown>>) {
+    return {
+      session: {
+        findMany: async () => [
+          {
+            id: SESSION_ID,
+            branch: 'orbit/session',
+            baseSha: null,
+            mergeTarget: 'main',
+            mergeOperationId: OPERATION_ID,
+            mergeOperationOwner: null,
+            status: RunStatus.SUCCEEDED,
+            taskId: TASK,
+            ownerId: OWNER,
+            workspace: { workDir: '/repo' },
+          },
+        ],
+        updateMany: async () => ({ count: 1 }),
+      },
+      $queryRaw: async () => checkpoints,
+    };
+  }
+
+  await t.test('an accepted checkpoint names the only mergeable commit', async () => {
+    const [command] = await service(
+      prismaWith([{ id: 'cp1', kind: 'ACCEPTED', commitSha: VERIFIED, seq: 1n }]),
+    ).drainMergeRequests(RUNNER_ID, NEW_OWNER);
+    assert.equal(command?.requiredSourceSha, VERIFIED);
+  });
+
+  await t.test('a task with none leaves the merge exactly as it always was', async () => {
+    // Project AC11: every session filed before this contract keeps behaving identically, and an
+    // absent field is what "this merge is not gated" has to look like on the wire — a runner that
+    // received an empty string would refuse every tip, including the right one.
+    const [command] = await service(prismaWith([])).drainMergeRequests(RUNNER_ID, NEW_OWNER);
+    assert.equal('requiredSourceSha' in (command ?? {}), false);
+  });
 });
 
 test('merge claim redelivers only to the same owner and loses cleanly to another owner', async (t) => {

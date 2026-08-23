@@ -21,6 +21,7 @@ import {
 import { PublicIdPipe } from '../common/public-id';
 import { MachineProtocol } from '../common/machine-protocol';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { checkpointIdForCommit } from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
@@ -3213,7 +3214,14 @@ export class RunnerApiController {
           sessionId,
           taskId: current.taskId,
           projectId: task?.projectId ?? null,
-          result: merged ? 'MERGED' : dto.status === 'conflict' ? 'CONFLICT' : 'ERROR',
+          // `[K6]` §7 / §13.7 MR2: a merge that moved nothing is `ALREADY_MERGED`, not `MERGED`.
+          // Both are landed, so every projection below treats them alike; what the distinction
+          // keeps is the one fact a reader cannot re-derive later — whether this request advanced
+          // the target or found the work already there. Older runners never set the flag and keep
+          // producing `MERGED`, which is what they always meant.
+          result: merged
+            ? (dto.alreadyMerged ? 'ALREADY_MERGED' : 'MERGED')
+            : dto.status === 'conflict' ? 'CONFLICT' : 'ERROR',
           sourceBranch,
           sourceSha,
           targetBranch,
@@ -3224,6 +3232,13 @@ export class RunnerApiController {
           conflicts: dto.status === 'conflict' ? (dto.conflicts ?? []) : [],
           message: dto.message ?? null,
           operationId: dto.operationId ?? null,
+          // CP4: which verified point this landing is about, when there is one. Null for every
+          // merge not under convergence management, which is almost all of them.
+          checkpointId: await checkpointIdForCommit(tx, {
+            ownerId: current.ownerId,
+            taskId: current.taskId,
+            commitSha: sourceSha,
+          }),
         });
       }
     }, loggedRetry(this.logger, 'runnerApi.mergeResult'));

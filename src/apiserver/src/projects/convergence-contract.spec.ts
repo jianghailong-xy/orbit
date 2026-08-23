@@ -5,6 +5,10 @@ import { test } from 'node:test';
 
 import { bare, column, headingNumbers, section, tables } from './contract-doc';
 import {
+  CHECKPOINT_RECORD_REFUSALS,
+  checkpointContentDigest,
+} from './task-checkpoint';
+import {
   EvidenceFreshness,
   actionIdentity,
   evidenceSupportsProgress,
@@ -75,9 +79,15 @@ test('§0–§9 all exist, and the code names the version the document does', ()
   }
   // v1.2: `[K3]` added the two attempt-budget dimensions §8's prose already relied on, and `[K4]`
   // added the two threshold rows the incident crossed without a line — the repeated ACTION and the
-  // repair that repairs nothing. Every other table is still byte-identical to the frozen v1.0, and
-  // the assertions below say so.
-  assert.match(DOC.split('\n')[0], /有界收敛契约 v1\.2$/);
+  // repair that repairs nothing.
+  //
+  // v1.3: `[K6]` wrote §7's second half. CP1–CP4 were frozen at v1.0 and are unchanged; what is
+  // new is the shape a checkpoint is RECORDED in (a table that had to exist before anything could
+  // write one), its own refusal vocabulary, and CP5 — the question that has to be asked before all
+  // of them, and whose absence let a merge replay twenty-two commits into a target that already
+  // held every one of them. Every other table is still byte-identical to the frozen v1.0, and the
+  // assertions below say so.
+  assert.match(DOC.split('\n')[0], /有界收敛契约 v1\.3$/);
 });
 
 test('§2: the state table and the code list exactly the same states', () => {
@@ -234,6 +244,53 @@ test('§9: the two dispatch refusals are stated and coded identically', () => {
 test('§7 CP3: the merge-gate refusal codes are stated and coded identically', () => {
   const stated = column(tableWith('7', '拒绝码'), '拒绝码').map(bare);
   assert.deepEqual([...stated].sort(), [...MERGE_GATE_REFUSALS].sort());
+});
+
+test('§7: the checkpoint RECORD refusals are stated and coded identically', () => {
+  // A second table with its own header rather than more rows on CP3's. The two answer different
+  // questions — one refuses a WRITE, the other refuses a RELEASE — and folding them together would
+  // make "why can this not be recorded" and "why can this not be merged" one vocabulary, which is
+  // how a caller ends up handling a merge refusal by editing the checkpoint it already wrote.
+  const stated = column(tableWith('7', '记录拒绝码'), '记录拒绝码').map(bare);
+  assert.deepEqual([...stated].sort(), [...CHECKPOINT_RECORD_REFUSALS].sort());
+});
+
+test('§7: the two refusal vocabularies stay disjoint apart from the one they share', () => {
+  // `SCOPE_REVISION_MISMATCH` is deliberately in both: a conclusion measured against a question
+  // nobody is asking any more is the same defect whether it is being written down or acted on.
+  // Anything ELSE appearing in both would mean one code has two meanings.
+  const shared = MERGE_GATE_REFUSALS.filter((r) =>
+    (CHECKPOINT_RECORD_REFUSALS as readonly string[]).includes(r),
+  );
+  assert.deepEqual(shared, ['SCOPE_REVISION_MISMATCH']);
+});
+
+test('§7 CP1: the recorded shape in the document is the shape the code hashes', () => {
+  // CP1's identity is "every field, hashed", so the document's field table and the digest have to
+  // list the same fields. A field in the table but outside the digest is a field somebody can
+  // change without making a new checkpoint, which is exactly what CP1 forbids.
+  const fields = column(tableWith('7', '字段'), '字段').join(' ');
+  for (const name of ['kind', 'commitSha', 'treeSha', 'baseSha', 'evidenceDigest', 'artifact']) {
+    assert.ok(fields.includes(name), `§7 no longer states the ${name} column`);
+  }
+  const base = {
+    kind: 'ACCEPTED' as const,
+    commit: { branch: 'b', commitSha: 'a'.repeat(40), treeSha: 'b'.repeat(40), baseSha: 'c'.repeat(40) },
+    evidenceDigest: 'd'.repeat(64),
+    artifact: { kind: 'GIT_BUNDLE' as const, ref: 'r', digest: 'e'.repeat(64) },
+  };
+  const digests = new Set([
+    checkpointContentDigest(base),
+    checkpointContentDigest({ ...base, kind: 'WIP_RED' }),
+    checkpointContentDigest({ ...base, commit: { ...base.commit, branch: 'other' } }),
+    checkpointContentDigest({ ...base, commit: { ...base.commit, commitSha: 'f'.repeat(40) } }),
+    checkpointContentDigest({ ...base, commit: { ...base.commit, treeSha: 'f'.repeat(40) } }),
+    checkpointContentDigest({ ...base, commit: { ...base.commit, baseSha: 'f'.repeat(40) } }),
+    checkpointContentDigest({ ...base, evidenceDigest: '1'.repeat(64) }),
+    checkpointContentDigest({ ...base, artifact: { ...base.artifact, ref: 'other' } }),
+    checkpointContentDigest({ ...base, artifact: { ...base.artifact, digest: '1'.repeat(64) } }),
+  ]);
+  assert.equal(digests.size, 9, 'a stated field does not take part in the identity');
 });
 
 test('OW4: an unbounded threshold without a USER authorizer falls back to the finite default', () => {

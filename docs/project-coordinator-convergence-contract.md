@@ -1,4 +1,4 @@
-# Project Coordinator 有界收敛契约 v1.2
+# Project Coordinator 有界收敛契约 v1.3
 
 冻结单元 `[K1]`。本文件是 `[K1]..[K9]` 的规范来源，由
 `src/apiserver/src/projects/convergence-contract.spec.ts` 逐表核对代码，任何一处不一致都会变红。
@@ -302,6 +302,40 @@ Project 计的，本契约把同一件事按 **Task 的一次 scope revision** �
 | `TEST_EVIDENCE_MISMATCH` | 证据摘要与 checkpoint 记录的不一致 |
 
 - **CP4**：合并回执按 checkpoint 幂等；重复投递的同一回执只生效一次。
+- **CP5**：合并门在做任何判断之前先问**「target 是不是已经包含 source」**，用的是冻结的 full object
+  name，不是分支名。已包含时唯一正确的回答是登记 `ALREADY_MERGED` 并交还既有回执——不 rebase、不
+  reset、不 replay、不写仓库。这一条排在 CP3 之前：已经落地的工作没有什么可以门禁，把 CP3 的任一条
+  拿来回答它，等于对一次根本不会发生的合并报告问题。
+
+  这不是假想。`[K5]` 的分支与 `main` 指向**同一个 commit**、且已经 `--ff-only` 推送之后，再点一次
+  Merge：路径上唯一的守卫比的是两个分支**名字**（不同，于是没有触发），随后按数天前记录的 `baseSha`
+  重放了 22 个提交到一个已经包含它们全部的 target 上。它报出的每一个冲突都是一个提交和它自己之间的
+  冲突。因此这一条必须在**两处**同时成立：apiserver 的调度门（用已提交的回执判定）与 Runner 的执行门
+  （用 `merge-base --is-ancestor` 判定），因为只有后者看得见仓库。
+
+checkpoint 记录下来的形状——`ACCEPTED` 与 `WIP_RED` 共用一张表，差别只在哪些列必须非空：
+
+| 字段 | 必填 | 约束 |
+| --- | --- | --- |
+| `kind` | 是 | §7 首表的两个值。由证据推导，调用方不得指定 |
+| `branch` / `commitSha` / `treeSha` / `baseSha` | 是 | 全 40 位小写 object name。`treeSha` 不与 `commitSha` 重复：两台 Runner 重放同一份工作会得到两个 commit、一个 tree |
+| `testEvidence` / `evidenceDigest` | `ACCEPTED` 必填 | 含 suite、跑在哪个 tree 上、通过/失败/跳过数。CP3 `TEST_EVIDENCE_MISMATCH` 比的就是这个摘要 |
+| `artifact`（kind/ref/digest） | `WIP_RED` 必填 | CP2。只接受可跨机器取回的 kind |
+| `contentDigest` / `dedupKey` | 是 | CP1 的身份：以上全部字段的哈希 |
+
+记录一个 checkpoint 时的**有类型拒绝**（与 CP3 的合并门拒绝是两组，前者管写入，后者管放行）：
+
+| 记录拒绝码 | 条件 |
+| --- | --- |
+| `CHECKPOINT_EVIDENCE_REQUIRED` | 声称 `ACCEPTED` 却没有测试证据 |
+| `CHECKPOINT_ARTIFACT_REQUIRED` | `WIP_RED` 没有 artifact，或 ref/digest 不成形 |
+| `CHECKPOINT_ARTIFACT_NOT_PORTABLE` | artifact 是 `LOCAL_STASH` 一类离开本机就取不回的东西 |
+| `CHECKPOINT_EVIDENCE_TREE_MISMATCH` | 证据跑在另一个 tree 上 |
+| `SCOPE_REVISION_MISMATCH` | 不是任务当前的 scope revision（FD4 同理） |
+| `CHECKPOINT_SHA_MALFORMED` | 缩写或非法的 object name——事后无法复核的值不是证据 |
+
+- **CP6**：`ACCEPTED` checkpoint 是后续 Task 的**唯一**合法起点，且「最新」按 `seq` 判定而不按时钟：
+  两个写者可以在同一毫秒落库，而这条规则的全部内容就是「最新」这个词。
 
 ## 8. 默认熔断策略
 

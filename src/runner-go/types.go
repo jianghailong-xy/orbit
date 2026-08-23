@@ -355,6 +355,12 @@ type MergeCommand struct {
 	// (see replayAnchor); the local base ref is gone by then for a torn-down checkout. Empty on
 	// an older control plane → replay everything ahead of the target, as before.
 	BaseSha string `json:"baseSha,omitempty"`
+	// RequiredSourceSha is the commit the control plane's §7 checkpoint verified. When set, the
+	// runner refuses to merge a branch whose tip is anything else: the commits after a verified one
+	// carry no test evidence, and merging them is what `[K6]`'s gate exists to stop. Empty on an
+	// older control plane, or for work that is not under convergence management — then the tip is
+	// whatever the branch says, exactly as before.
+	RequiredSourceSha string `json:"requiredSourceSha,omitempty"`
 }
 
 // MergeResultRequest mirrors @orbit/shared SessionMergeResultRequest: the outcome of a
@@ -369,6 +375,12 @@ type MergeResultRequest struct {
 	// SourceSha is the immutable source-branch tip captured before the rebase. A successful
 	// merge records exactly which version of the session branch landed in the target.
 	SourceSha string `json:"sourceSha,omitempty"`
+	// AlreadyMerged says the target already contained SourceSha, so this "merged" moved nothing.
+	// A separate flag rather than a fifth Status value: an older control plane validates Status
+	// against a closed set and would reject an unknown one, leaving the runner reporting a
+	// completed merge forever. It ignores this field and records a plain MERGED, which is true;
+	// a control plane that knows it records §13.7's ALREADY_MERGED, which is truer.
+	AlreadyMerged bool `json:"alreadyMerged,omitempty"`
 	// The branch this merge advanced, the tip it had before, and the base the source was replayed
 	// onto — the fields the control plane's merge receipt (§13.7) is checked against afterwards.
 	// Omitted by an older runner; the receipt is still written, naming what it knows.

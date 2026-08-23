@@ -174,6 +174,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'dependsOnTaskIds',
   'anchorTaskId',
   'attachmentIds',
+  // `[K6]` §7: the known-good point a merge landed, and the attempt that produced it. Addresses,
+  // not fences — a checkpoint is audit material a person reads and quotes back ("merge cp X"), and
+  // the merge gate's refusals name one, so it has to survive the round trip in the spelling
+  // clients see. The same classification `findingId` carries for the same reason.
+  'checkpointId',
+  'attemptId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

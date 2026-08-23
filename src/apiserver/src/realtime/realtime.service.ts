@@ -30,6 +30,7 @@ import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
+import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
   approvalIdOf,
   backgroundPayloadOf,
@@ -763,6 +764,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         mergeOperationId: true,
         mergeOperationOwner: true,
         status: true,
+        taskId: true,
+        ownerId: true,
         workspace: { select: { workDir: true } },
       },
     });
@@ -798,10 +801,25 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             // copy of it dies with the checkout (removeWorktree drops the base ref), and a merge
             // is usually requested after that, so send ours.
             ...(s.baseSha ? { baseSha: s.baseSha } : {}),
+            // `[K6]` §7: the commit this task's accepted checkpoint verified. The runner refuses a
+            // tip that is anything else — that comparison needs a repository, so it is made where
+            // one exists rather than guessed here. Absent when the work is not under convergence
+            // management, which leaves the merge behaving exactly as it always did.
+            ...(await this.requiredSourceSha(s.ownerId, s.taskId)),
           };
         }),
     );
     return claimed.filter((command): command is MergeCommand => command !== null);
+  }
+
+  /** `[K6]`: the accepted checkpoint's commit, spread into the command when there is one. */
+  private async requiredSourceSha(
+    ownerId: string,
+    taskId: string | null,
+  ): Promise<{ requiredSourceSha?: string }> {
+    if (!taskId) return {};
+    const checkpoint = await latestAcceptedCheckpoint(this.prisma, ownerId, taskId);
+    return checkpoint ? { requiredSourceSha: checkpoint.commitSha } : {};
   }
 
   /**
