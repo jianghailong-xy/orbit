@@ -273,6 +273,10 @@ export class RecordMergeEvidenceDto {
  * finding measured against a revision the task has moved past is an answer to a question nobody is
  * asking, and defaulting it would silently re-address the conclusion to the new question.
  */
+/** A full, lowercase, 40-hex object name. An abbreviation resolves against a repository that has
+ *  since gained objects, so a value that verified today can name a different commit later. */
+const SHA_40 = /^[0-9a-f]{40}$/;
+
 export class SubmitVerificationFindingDto {
   @IsIn(['P0', 'P1', 'P2', 'P3']) severity!: 'P0' | 'P1' | 'P2' | 'P3';
   @IsString() @MinLength(1) @MaxLength(200) violatedInvariant!: string;
@@ -293,6 +297,42 @@ export class SubmitVerificationFindingDto {
   @IsInt() @Min(1) scopeRevision!: number;
   /** Which check is reporting. Recorded for the audit, never dereferenced. */
   @IsOptional() @IsPublicId() reporterTaskId?: string | null;
+}
+
+/**
+ * `[K6]` §7: what a caller states when it records a checkpoint.
+ *
+ * The KIND is absent by design. A caller that could name its own kind could call a red tree
+ * `ACCEPTED`, and everything §7 grants an accepted point — being the baseline a later task starts
+ * from, being mergeable — would rest on that word rather than on a measurement. What a caller
+ * states is what it MEASURED; `planCheckpoint` decides what that makes the checkpoint.
+ */
+export class RecordTaskCheckpointDto {
+  @IsString() @MinLength(1) @MaxLength(255) branch!: string;
+  @Matches(SHA_40, { message: 'commitSha must be a full 40-character git object name' })
+  commitSha!: string;
+  /** Not redundant with `commitSha`: two runners replaying one piece of work produce two commits
+   *  and one tree, and it is the TREE that answers "is this the same state". */
+  @Matches(SHA_40, { message: 'treeSha must be a full 40-character git object name' })
+  treeSha!: string;
+  @Matches(SHA_40, { message: 'baseSha must be a full 40-character git object name' })
+  baseSha!: string;
+  @IsInt() @Min(1) scopeRevision!: number;
+
+  /** Absent means known-red: a checkpoint saved so the work is not lost. */
+  @IsOptional() evidence?: {
+    suite: string;
+    treeSha: string;
+    passed: number;
+    failed: number;
+    skipped: number;
+  } | null;
+
+  /** CP2. Required for anything not accepted, and never a place on one machine. */
+  @IsOptional() artifact?: { kind: string; ref: string; digest: string } | null;
+
+  /** Which run produced it. Recorded for the audit, never dereferenced. */
+  @IsOptional() @IsPublicId() attemptId?: string | null;
 }
 
 /**

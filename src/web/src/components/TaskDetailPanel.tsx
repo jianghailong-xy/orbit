@@ -8,6 +8,7 @@ import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   mergedProviderOptions,
   modelOptionsForProvider,
@@ -169,6 +170,11 @@ export function runNowHint({
   return '';
 }
 
+/** The detail panel's Run now variables: nothing but the name of the press that submitted it. */
+export interface RunNowVars {
+  triggerId: string;
+}
+
 /**
  * "Run now": tell the task's responsible workspace to start (or continue) a session on it, as
  * options a `useMutation` — or a test's `MutationObserver` — can be handed directly.
@@ -193,7 +199,13 @@ export function runNowMutationOptions(
   projectId?: string | null,
 ) {
   return {
-    mutationFn: () => api(`/tasks/${taskId}/execute`, { method: 'POST' }),
+    // A press whose ANSWER was lost is resent under the same name — see `runRequestResend`.
+    ...runRequestResend,
+    // `triggerId` arrives as a VARIABLE, drawn at the click that submitted it: every resend below
+    // this line — the 401 refresh-and-retry, a mutation retry — reuses it and is one request, and
+    // the next click draws a new one and is a second run. See `newRunRequestToken`.
+    mutationFn: ({ triggerId }: RunNowVars) =>
+      api(`/tasks/${taskId}/execute`, { method: 'POST', body: { triggerId } }),
     onSuccess: () => {
       message.success('Assignee workspace triggered');
       return refreshTaskScheduleViews(qc, taskId, projectId);
@@ -789,7 +801,7 @@ export function TaskDetailPanel({
                 icon={<PlayCircleOutlined />}
                 loading={running}
                 disabled={executeDisabled}
-                onClick={() => execute.mutate()}
+                onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}
                 style={executeDisabled ? { pointerEvents: 'none' } : undefined}
               >
                 {running ? 'Running' : 'Run now'}

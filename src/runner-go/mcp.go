@@ -564,7 +564,14 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if !ok {
 			return toolResult(noTaskMsg, true)
 		}
-		raw, err := s.t.startTask(id)
+		// One name for THIS tool call, drawn once here: everything below — a redirect, any retry
+		// of the POST — is the same request, and a second task_start is a second run. A draw that
+		// fails stops the call rather than starting an unnamed run the model could not retry.
+		token, err := newRunRequestToken()
+		if err != nil {
+			return toolResult("start task failed: "+err.Error(), true)
+		}
+		raw, err := s.t.startTask(id, token)
 		if err != nil {
 			return toolResult("start task failed: "+err.Error(), true)
 		}

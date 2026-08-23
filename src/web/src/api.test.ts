@@ -96,3 +96,34 @@ describe('a database conflict answered by the server', () => {
     expect(transientDbConflictBody().retryAfterSeconds).toBe(TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS);
   });
 });
+
+describe('the 401 refresh-and-retry', () => {
+  // WHY THIS IS A RUN-TOKEN TEST. A Run Now names its press with a `triggerId` so that a repeat of
+  // one press is one run (src/web/src/lib/runRequestToken.ts). The retry below is the resend the
+  // browser makes on its own — nothing above this layer sees it, and nothing above this layer can
+  // re-name it. If it re-serialized the body, or dropped it, one press would reach the server as
+  // two differently-named requests and start two runs.
+  const unauthorized = () =>
+    ({ ok: false, status: 401, statusText: 'Unauthorized', json: async () => ({}) }) as Response;
+
+  it('resends the very same body, so one press stays one request', async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      if (url === '/api/auth/refresh') {
+        return { ok: true, json: async () => ({ accessToken: 'a.b.c', refreshToken: 'r2' }) } as Response;
+      }
+      return calls.filter((c) => c.url !== '/api/auth/refresh').length === 1
+        ? unauthorized()
+        : okJson({ ok: true });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api('/tasks/t1/execute', { method: 'POST', body: { triggerId: '341DOGTVEs0Fk0gAn1mje' } });
+
+    const runs = calls.filter((c) => c.url === '/api/tasks/t1/execute');
+    expect(runs).toHaveLength(2);
+    expect(runs[0].init.body).toBe(runs[1].init.body);
+    expect(JSON.parse(runs[1].init.body as string)).toEqual({ triggerId: '341DOGTVEs0Fk0gAn1mje' });
+  });
+});

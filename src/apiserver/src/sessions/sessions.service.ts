@@ -59,6 +59,8 @@ import {
   treeCeiling,
 } from '../common/session-tree-sql';
 import { QueueService } from '../queue/queue.service';
+import { mergeDispatchGate } from '../projects/task-checkpoint.service';
+import { MergeReceiptRow, mergeReceiptRow } from './merge-receipt';
 import { RealtimeService } from '../realtime/realtime.service';
 import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
@@ -3608,6 +3610,7 @@ export class SessionsService {
         throw new BadRequestException("can't merge a branch into itself");
       }
       if (session.mergeStatus === 'pending') return null;
+
       if (session.commitStatus === 'pending') {
         throw new ConflictException('wait for the pending worktree commit to finish');
       }
@@ -3617,6 +3620,33 @@ export class SessionsService {
       ) {
         throw new ConflictException('wait for the current turn to finish before merging');
       }
+      // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
+      // touched. Two questions, and the ORDER is the point.
+      //
+      // "Is it already there" comes first, because a source the target already contains needs no
+      // checkpoint, no evidence and no scope comparison — there is nothing to merge, so every
+      // refusal below would be answering a question nobody is asking. That order is exactly what
+      // was missing when a session whose branch and `main` pointed at the SAME commit was asked to
+      // merge again: the one guard in the path compared the two branch NAMES, which differed, and
+      // twenty-two commits were replayed from a base recorded days earlier onto a target that
+      // already contained every one of them.
+      //
+      // The refusals are `[K1]`'s frozen §7 codes and are terminal: no queue, no backoff, no
+      // operation. What this deliberately does NOT judge is the branch tip and the evidence digest
+      // — the API server has no repository, and a gate that guessed there would be refusing on a
+      // value it invented. Those two are decided by the runner against `requiredSourceSha`, and by
+      // the receipt writer when a caller claims a landing and names the commit it landed.
+      const gate = await mergeDispatchGate(tx, {
+        ownerId,
+        sessionId: id,
+        taskId: session.taskId,
+        targetBranch: target ?? session.mergeTarget ?? '',
+      });
+      if (gate.decision === 'ALREADY_LANDED') return { alreadyLanded: gate };
+      if (gate.decision !== 'ALLOWED') {
+        throw new ConflictException(`${gate.decision}: ${gate.detail}`);
+      }
+
       await tx.session.update({
         where: { id },
         data: {
@@ -3624,6 +3654,12 @@ export class SessionsService {
           mergeTarget: target,
           mergeRequestedAt: new Date(),
           mergeOperationId: randomUUID(),
+          // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
+          // operation id it is part of. When the result comes back the server checks the reported
+          // commit against this rather than against anything the runner sent — a gate that only
+          // holds when the client cooperates is not a gate. Null for unmanaged work, which is
+          // almost every merge, and which is then unaffected by all of this.
+          mergeCheckpointId: gate.checkpointId,
           mergeOperationOwner: null,
           mergeError: null,
           mergedAt: null,
@@ -3633,6 +3669,22 @@ export class SessionsService {
       });
       return session.workspaceId;
     }, loggedRetry(this.logger, 'sessions.mergeToMain'));
+    if (workspaceId && typeof workspaceId === 'object' && 'alreadyLanded' in workspaceId) {
+      // Nothing was queued and nothing will be executed: the receipt that already says this landed
+      // IS the answer. Handing it back rather than re-running the merge is the whole of CP4's
+      // "重复投递的同一回执只生效一次" at the request end of the wire.
+      const landed = workspaceId.alreadyLanded;
+      const receipt = await this.prisma.sessionMergeReceipt.findFirst({
+        where: { id: landed.receiptId, ownerId },
+      });
+      return {
+        ok: true as const,
+        alreadyMerged: true as const,
+        sourceSha: landed.sourceSha,
+        targetSha: landed.targetSha,
+        receipt: receipt ? mergeReceiptRow(receipt as unknown as MergeReceiptRow) : null,
+      };
+    }
     // Remember an explicitly chosen target on the workspace so every session of it defaults there.
     if (target && workspaceId) {
       await this.prisma.workspace.update({

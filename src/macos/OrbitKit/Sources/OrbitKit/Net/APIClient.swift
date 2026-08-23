@@ -316,7 +316,47 @@ public final class APIClient: @unchecked Sendable {
     public func createTask(_ req: CreateTaskRequest) async throws -> TaskItem { try await post("tasks", body: req) }
     public func updateTask(_ id: String, _ req: UpdateTaskRequest) async throws -> TaskItem { try await patch("tasks/\(id)", body: req) }
     public func deleteTask(_ id: String) async throws { try await deleteRaw("tasks/\(id)") }
-    public func executeTask(_ id: String) async throws { try await postRaw("tasks/\(id)/execute", body: Optional<Empty>.none) }
+    /// Run one owned task now, under the name of the press that asked for it — see `RunTaskRequest`.
+    ///
+    /// `triggerId` is REQUIRED rather than optional. The server still accepts the bodiless POST
+    /// every deployed build sends, and always will, but a client that can name its request and
+    /// quietly does not has given up the idempotency the field exists for without saying so. Draw
+    /// it at the gesture (`PublicID.newToken`) and hand it down; never here, where the 401
+    /// refresh-and-retry would be a second name for one press.
+    public func executeTask(_ id: String, triggerId: String) async throws {
+        // Encoded ONCE, outside the loop: every attempt is byte-identical by construction rather
+        // than because two encodings happened to agree.
+        let request = try makeRequest("tasks/\(id)/execute", method: "POST",
+                                      body: RunTaskRequest(triggerId: triggerId))
+        var lastError: Error?
+        for attempt in 0..<Self.runRequestResendAttempts {
+            if attempt > 0 {
+                // Throws `CancellationError` if the caller went away, which is how cancellation is
+                // respected: a withdrawn press is not resent.
+                try await Task.sleep(nanoseconds: Self.runRequestResendBaseDelayNanos << (attempt - 1))
+            }
+            do {
+                _ = try await send(request)
+                return
+            } catch let error as APIError where Self.isRunRequestInProgress(error) {
+                lastError = error // the answer exists but is not ready; ask again under this name
+            } catch let error as APIError {
+                // The server ANSWERED — 400, 403, 409 `TASK_RUN_REQUEST_MISMATCH` — or the session
+                // is gone. An answer is the result, not a fault to paper over.
+                throw error
+            } catch let error as URLError where error.code == .cancelled {
+                throw error // withdrawn, not lost
+            } catch {
+                lastError = error // no answer ever arrived; this press may already be running
+            }
+        }
+        // The real last answer, not a summary of it: a press that ran out of attempts while the
+        // control plane kept saying "being answered right now" has to be told that.
+        throw lastError ?? APIError.invalidResponse
+    }
+    /// AUDIT (H2H): no shell calls this — neither macOS nor iOS has a bulk-Run surface — so it
+    /// carries no press id. Whoever adds that surface must add `triggerId` to
+    /// `BatchExecuteRequest` and draw it at the gesture, exactly as `executeTask` does.
     public func batchExecute(_ req: BatchExecuteRequest) async throws { try await postRaw("tasks/batch-execute", body: req) }
     public func batchStop(_ req: BatchStopRequest) async throws { try await postRaw("tasks/batch-stop", body: req) }
     public func batchAssign(_ req: BatchAssignRequest) async throws { try await postRaw("tasks/batch-assign", body: req) }
@@ -436,6 +476,39 @@ public final class APIClient: @unchecked Sendable {
     }
 
     // MARK: - request plumbing
+
+    /// How far a NAMED run request is resent when no answer comes back, and how long it waits.
+    ///
+    /// The case this exists for is the one no caller can see: the POST is delivered, the server
+    /// commits the run, and the ANSWER is lost. Without a resend the press fails on screen while
+    /// its run is already going, and the next press — a new name — starts a second one. With one,
+    /// the resend carries the SAME name and the server answers it from the first delivery's
+    /// receipt.
+    ///
+    /// Applied to `executeTask` and nowhere else. What licenses it is the `triggerId`: an unnamed
+    /// POST resent is a duplicate write, which is why `send` itself has no retry of its own beyond
+    /// the 401 refresh. Small and fixed, because this is for a dropped connection, not an outage.
+    private static let runRequestResendAttempts = 4
+    private static let runRequestResendBaseDelayNanos: UInt64 = 250_000_000
+
+    /// The control plane's name for "somebody is answering this exact request right now" — the
+    /// first delivery still holds the lease. The one HTTP answer at this door that is NOT a result:
+    /// the request was not evaluated again and nothing was changed, and asking with the SAME
+    /// triggerId reads back the first delivery's answer. It is exactly the window a resend lands
+    /// in, so stopping here would report a failure for a run that is starting.
+    ///
+    /// Matched on the server's own `code`, never on the bare 409: the same door answers 409 for
+    /// `TASK_RUN_REQUEST_MISMATCH`, which asking again can only repeat.
+    private static let taskRunRequestInProgress = "TASK_RUN_REQUEST_IN_PROGRESS"
+
+    /// Whether this answer means the request is still being answered rather than settled.
+    private static func isRunRequestInProgress(_ error: APIError) -> Bool {
+        guard case .http(let status, let body) = error, status == 409, let body,
+              let data = body.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        return object["code"] as? String == taskRunRequestInProgress
+    }
 
     private struct Empty: Codable {}
 

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -21,6 +22,7 @@ import {
   OpenAcceptanceRunDto,
   OpenProjectCoordinatorDto,
   RecordMergeEvidenceDto,
+  RecordTaskCheckpointDto,
   TriggerProjectCoordinatorDto,
   SubmitVerificationFindingDto,
   UpdateProjectDto,
@@ -28,6 +30,7 @@ import {
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { VerificationFindingService } from './verification-finding.service';
 import { SessionAttemptService } from './session-attempt.service';
+import { TaskCheckpointService } from './task-checkpoint.service';
 import { ProjectAcceptanceService } from './project-acceptance.service';
 import { ProjectHandoffService } from './project-handoff.service';
 import { ProjectsService } from './projects.service';
@@ -45,6 +48,7 @@ export class ProjectsController {
     private readonly convergence: ConvergenceLedgerService,
     private readonly findings: VerificationFindingService,
     private readonly attempts: SessionAttemptService,
+    private readonly checkpoints: TaskCheckpointService,
   ) {}
 
   @Post()
@@ -202,6 +206,70 @@ export class ProjectsController {
   ) {
     await this.projects.assertTaskInProject(user.userId, id, taskId);
     return this.findings.describe(user.userId, taskId);
+  }
+
+  /**
+   * `[K6]` §7: record a checkpoint on this task — the door the whole unit exists behind.
+   *
+   * The caller says what it MEASURED and never what kind of point that makes: §7's first row is a
+   * fact about the measurement, not a claim about the work, and a caller that could name its own
+   * kind could call a red tree `ACCEPTED`. Green evidence on the checkpointed tree makes it
+   * `ACCEPTED`; anything else makes it `WIP_RED` and CP2 then requires an artifact another machine
+   * can fetch — a stash is refused by name, because "the work is in a stash on runner-7" is the
+   * state that costs the most, being neither lost nor reachable.
+   *
+   * Recording the same content twice returns the original with `duplicate: true` and writes
+   * nothing (CP1). Like a repeat finding, that is not an error: a caller that retried a request it
+   * never saw the answer to must be able to ask again and learn what happened.
+   */
+  @Post(':id/tasks/:taskId/checkpoints')
+  async recordCheckpoint(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: RecordTaskCheckpointDto,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    const result = await this.checkpoints.record({
+      ownerId: user.userId,
+      taskId,
+      scopeRevision: dto.scopeRevision,
+      commit: {
+        branch: dto.branch,
+        commitSha: dto.commitSha,
+        treeSha: dto.treeSha,
+        baseSha: dto.baseSha,
+      },
+      evidence: dto.evidence ?? null,
+      artifact: (dto.artifact as never) ?? null,
+      recordedBy: 'USER',
+      attemptId: dto.attemptId ?? null,
+    });
+    // §7's record refusals are answers, not crashes — each one names the mistake rather than a
+    // column, which is the difference between "artifact_ref is null" and "a stash is a place".
+    if (typeof result === 'string') throw new ConflictException(result);
+    return result;
+  }
+
+  /** Every checkpoint on this task, newest first, and the one a later task may start from. */
+  @Get(':id/tasks/:taskId/checkpoints')
+  async taskCheckpoints(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+  ) {
+    await this.projects.assertTaskInProject(user.userId, id, taskId);
+    const checkpoints = await this.checkpoints.list(user.userId, taskId);
+    const baseline = checkpoints.find((c) => c.kind === 'ACCEPTED') ?? null;
+    return {
+      taskId,
+      checkpoints,
+      // Stated rather than left for a client to re-derive: §7 CP6's rule is "the LATEST accepted
+      // one", and a client that filtered this list itself would be re-implementing the ordering
+      // that makes the rule mean anything.
+      baselineCheckpointId: baseline?.id ?? null,
+      baselineAbsentReason: baseline ? null : ('NO_ACCEPTED_CHECKPOINT' as const),
+    };
   }
 
   /**

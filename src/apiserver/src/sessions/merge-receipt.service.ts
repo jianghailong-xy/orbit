@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -13,6 +19,11 @@ import {
   resultLanded,
 } from './merge-receipt';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import {
+  checkpointIdForCommit,
+  checkpointLandingGate,
+} from '../projects/task-checkpoint.service';
+import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
@@ -25,6 +36,10 @@ export interface RecordMergeReceiptInput {
   conflicts?: string[] | null;
   detail?: Record<string, unknown> | null;
   idempotencyKey?: string | null;
+  /** `[K6]` §7: the test-evidence digest the caller claims this landing rests on. Compared with the
+   *  checkpoint's, never trusted — a second measurement that disagrees with the recorded one is
+   *  `TEST_EVIDENCE_MISMATCH`, not a tie broken in favour of whoever spoke last. */
+  evidenceDigest?: string | null;
 }
 
 /**
@@ -103,12 +118,62 @@ export class MergeReceiptService {
           ? (input.conflicts ?? []).map((p) => String(p)).slice(0, MERGE_RECEIPT_MAX_CONFLICTS)
           : [];
 
-      const idempotencyKey =
-        (input.idempotencyKey ?? '').trim() ||
-        mergeReceiptIdempotencyKey({ sessionId, sourceSha, targetBranch, result: input.result });
+      // `[K6]` §7 CP3, for a caller that CLAIMS the work landed.
+      //
+      // Only a landed claim is gated. A `CONFLICT` or an `ERROR` about a commit that should never
+      // have been merged is still the truth about an attempt somebody made, and refusing to record
+      // it would delete the audit of the very thing this gate exists to prevent — which is also why
+      // an older CONFLICT receipt is never rewritten when the merge later succeeds: the two are
+      // separate rows about separate events.
+      if (resultLanded(input.result)) {
+        const gate = await checkpointLandingGate(db, {
+          ownerId,
+          taskId: session.taskId,
+          sourceSha,
+          evidenceDigest: input.evidenceDigest ?? null,
+        });
+        if (gate && gate.decision !== 'ALLOWED') {
+          throw new ConflictException(`${gate.decision}: ${gate.detail}`);
+        }
+      }
 
+      const checkpointId = await checkpointIdForCommit(db, {
+        ownerId,
+        taskId: session.taskId,
+        commitSha: sourceSha,
+      });
+
+      // CP4: keyed on the CHECKPOINT when there is one, and the caller does not get a vote.
+      //
+      // MR4's key is scoped to a session, which makes a redelivery from the same session a no-op
+      // and is the right answer for a merge nobody planned. It is the wrong answer for verified
+      // work: a checkpoint outlives the session that produced it, so the same landing re-reported
+      // by a takeover, by a recovery on another runner, or by the retry of a request whose response
+      // was lost mints a SECOND receipt for one landing. `result` stays in both keys — a conflict
+      // and a successful merge of one checkpoint are two things that happened, not one reported
+      // twice.
+      //
+      // The caller's own key is OVERRIDDEN here rather than preferred, and that is the whole of
+      // "exactly once" across the two doors. A supplied key says "these two reports are the same
+      // report"; a checkpoint says the same thing more strongly, across sessions and across
+      // processes. Letting the weaker claim win is not a tie broken politely — the runner's door
+      // derives the checkpoint key unconditionally, so one caller key on the agent's door is a
+      // SECOND row in the unique index for one landing, which is the exact defect CP4 exists to
+      // prevent. Nothing is lost: what the caller asked for is kept on the receipt's `detail`, and
+      // the key it actually got comes back on the row.
+      const callerKey = (input.idempotencyKey ?? '').trim();
+      const idempotencyKey = checkpointId
+        ? checkpointMergeReceiptKey({ checkpointId, targetBranch, result: input.result })
+        : callerKey ||
+          mergeReceiptIdempotencyKey({ sessionId, sourceSha, targetBranch, result: input.result });
+      const overriddenKey = checkpointId && callerKey && callerKey !== idempotencyKey ? callerKey : null;
+
+      // Looked up by whichever identity this receipt HAS. Reading by session when the row is keyed
+      // by checkpoint would miss the receipt a different session already wrote, and the insert
+      // below would then lose to the partial unique index instead of returning the original — a
+      // 500 where the correct answer is "yes, that already landed".
       const existing = await db.sessionMergeReceipt.findFirst({
-        where: { sessionId, idempotencyKey },
+        where: checkpointId ? { checkpointId, idempotencyKey } : { sessionId, idempotencyKey },
       });
       if (existing) {
         return { receipt: mergeReceiptRow(existing as unknown as MergeReceiptRow), created: false };
@@ -119,6 +184,7 @@ export class MergeReceiptService {
           ownerId,
           sessionId,
           taskId: session.taskId,
+          checkpointId,
           // Denormalised from the task at write time so a project's acceptance read is one indexed
           // lookup and stays answerable after the task is re-filed or deleted.
           projectId: session.task?.projectId ?? null,
@@ -131,7 +197,12 @@ export class MergeReceiptService {
           rebaseBaseSha,
           conflicts,
           recordedBy,
-          detail: (input.detail ?? {}) as Prisma.InputJsonValue,
+          detail: {
+            ...(input.detail ?? {}),
+            // Kept rather than dropped: an audit asking why this row is not under the key the
+            // caller asked for gets the answer on the row instead of having to infer it.
+            ...(overriddenKey ? { callerIdempotencyKey: overriddenKey } : {}),
+          } as Prisma.InputJsonValue,
           idempotencyKey,
         },
       });
@@ -205,14 +276,26 @@ export class MergeReceiptService {
       conflicts: string[];
       message: string | null;
       operationId: string | null;
+      /** `[K6]` CP4: the §7 checkpoint this landing is about, when the work has one. */
+      checkpointId?: string | null;
     },
   ): Promise<void> {
-    const idempotencyKey = mergeReceiptIdempotencyKey({
-      sessionId: args.sessionId,
-      sourceSha: args.sourceSha,
-      targetBranch: args.targetBranch,
-      result: args.result,
-    });
+    // CP4: the same identity the other door derives. Both doors report the same landings — the
+    // runner's own merge and an agent recording one it made itself — so a key that differed between
+    // them would put two rows in the table for one merge, which is the exact thing MR4 exists to
+    // stop and which `[K6]` widened from "one session" to "one checkpoint".
+    const idempotencyKey = args.checkpointId
+      ? checkpointMergeReceiptKey({
+          checkpointId: args.checkpointId,
+          targetBranch: args.targetBranch,
+          result: args.result,
+        })
+      : mergeReceiptIdempotencyKey({
+          sessionId: args.sessionId,
+          sourceSha: args.sourceSha,
+          targetBranch: args.targetBranch,
+          result: args.result,
+        });
     // createMany + skipDuplicates rather than a find-then-create: the runner retries a merge result
     // on redelivery, and the unique index is the thing that has to decide, not a read that raced.
     await tx.sessionMergeReceipt.createMany({
@@ -241,6 +324,7 @@ export class MergeReceiptService {
             ...(args.operationId ? { operationId: args.operationId } : {}),
           } as Prisma.InputJsonValue,
           idempotencyKey,
+          checkpointId: args.checkpointId ?? null,
         },
       ],
       skipDuplicates: true,

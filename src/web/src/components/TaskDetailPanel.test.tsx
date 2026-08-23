@@ -10,6 +10,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { newRunRequestToken } from '../lib/runRequestToken';
 import type { WriteToast } from './TaskScheduleEditor';
 import { TaskDetailPanel, runNowHint, runNowMutationOptions } from './TaskDetailPanel';
 
@@ -218,9 +219,15 @@ describe('what a successful Run now refreshes', () => {
       ...runNowMutationOptions(qc, message, TASK_ID, PROJECT_ID),
       retry: false,
     });
-    await observer.mutate();
+    // Drawn at the click and handed to the mutation as a variable, so this is exactly what goes
+    // out — and exactly what any automatic resend below this line would send again.
+    const triggerId = newRunRequestToken();
+    await observer.mutate({ triggerId });
 
-    expect(vi.mocked(api)).toHaveBeenCalledWith(`/tasks/${TASK_ID}/execute`, { method: 'POST' });
+    expect(vi.mocked(api)).toHaveBeenCalledWith(`/tasks/${TASK_ID}/execute`, {
+      method: 'POST',
+      body: { triggerId },
+    });
     expect(message.success).toHaveBeenCalledWith('Assignee workspace triggered');
     const invalidated = invalidatedIn(qc);
     expect(invalidated(['task', TASK_ID])).toBe(true);
@@ -243,7 +250,7 @@ describe('what a successful Run now refreshes', () => {
       ...runNowMutationOptions(qc, message, TASK_ID, PROJECT_ID),
       retry: false,
     });
-    await observer.mutate().catch(() => {});
+    await observer.mutate({ triggerId: newRunRequestToken() }).catch(() => {});
 
     expect(observer.getCurrentResult().isError).toBe(true);
     // The schedule is exactly where it was, and nothing was even marked stale.
@@ -259,6 +266,36 @@ describe('what a successful Run now refreshes', () => {
     expect(message.success).not.toHaveBeenCalled();
   });
 
+  it('sends a NEW name when the reader presses Run now again over a failed run', async () => {
+    // The press that failed left no run to be idempotent WITH, so a second press is a second
+    // request and must say so. Nothing here remembers the failed name — the name is drawn at the
+    // CLICK and carried down as a variable, so two clicks cannot agree by construction.
+    const qc = seededCache();
+    vi.mocked(api).mockClear();
+    vi.mocked(api).mockRejectedValueOnce(new Error('no runner available'));
+    vi.mocked(api).mockResolvedValueOnce({});
+
+    const options = { ...runNowMutationOptions(qc, toast(), TASK_ID, PROJECT_ID), retry: false };
+    await new MutationObserver(qc, options)
+      .mutate({ triggerId: newRunRequestToken() })
+      .catch(() => {});
+    await new MutationObserver(qc, options).mutate({ triggerId: newRunRequestToken() });
+
+    const names = vi
+      .mocked(api)
+      .mock.calls.map(([, init]) => (init as { body: { triggerId: string } }).body.triggerId);
+    expect(names).toHaveLength(2);
+    expect(names[0]).not.toBe(names[1]);
+  });
+
+  it('draws the name at the CLICK, not inside the request', () => {
+    // Not expressible as a type, and invisible to every other test here. Inside `mutationFn` it
+    // would be redrawn by react-query's own retry — one press, two names, two runs; remembered
+    // across presses it would answer a deliberate second press from the first one's receipt.
+    expect(source).toContain('onClick={() => execute.mutate({ triggerId: newRunRequestToken() })}');
+    expect(source).not.toMatch(/mutationFn[\s\S]{0,300}newRunRequestToken/);
+  });
+
   it('refreshes no project at all for a task filed under none', async () => {
     const qc = seededCache();
     vi.mocked(api).mockClear();
@@ -267,7 +304,7 @@ describe('what a successful Run now refreshes', () => {
       ...runNowMutationOptions(qc, toast(), TASK_ID, null),
       retry: false,
     });
-    await observer.mutate();
+    await observer.mutate({ triggerId: newRunRequestToken() });
 
     const invalidated = invalidatedIn(qc);
     expect(invalidated(['task', TASK_ID])).toBe(true);
@@ -302,7 +339,7 @@ describe('what a successful Run now refreshes', () => {
       ...runNowMutationOptions(qc, toast(), TASK_ID),
       retry: false,
     });
-    const landed = observer.mutate();
+    const landed = observer.mutate({ triggerId: newRunRequestToken() });
 
     // The execute POST is long done; the panel has not caught up.
     await tick();

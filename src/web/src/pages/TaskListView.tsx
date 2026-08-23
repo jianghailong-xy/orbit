@@ -36,6 +36,7 @@ import { encodeId, routeId } from '../lib/idCodec';
 import { TaskDetailPanel } from '../components/TaskDetailPanel';
 import { TaskStatusPill } from '../components/TaskStatusPill';
 import { deleteTask, deleteTasks } from '../lib/taskDeletion';
+import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
   refreshManyTaskScheduleViews,
   refreshTaskScheduleViews,
@@ -137,10 +138,19 @@ interface BatchRunResult {
   skipped: { reason: string }[];
 }
 
-/** The bulk Run's variables: the rows themselves, not just their ids. */
+/** A single row's Run: the row itself, plus the name of the press that submitted it. */
+export interface RunRowVars extends TaskRefreshTarget {
+  /** Drawn at the click — see `newRunRequestToken`. Carried as a variable so every resend below
+   *  this point is the same request, and every new click is a different one. */
+  triggerId: string;
+}
+
+/** The bulk Run's variables: the rows themselves, not just their ids, and the press's own name. */
 interface BatchRunVars {
   tasks: readonly TaskRefreshTarget[];
   maxConcurrent: number;
+  /** As on `RunRowVars`: one press, one name, drawn where the press happens. */
+  triggerId: string;
 }
 
 /**
@@ -159,8 +169,12 @@ interface BatchRunVars {
  */
 export function runRowMutationOptions(qc: QueryClient, message: RunToast) {
   return {
-    mutationFn: ({ id }: TaskRefreshTarget) => api(`/tasks/${id}/execute`, { method: 'POST' }),
-    onSuccess: (_res: unknown, { id, projectId }: TaskRefreshTarget) => {
+    // A press whose ANSWER was lost is resent under the same name — see `runRequestResend`. Safe
+    // here and nowhere else, because this request carries one.
+    ...runRequestResend,
+    mutationFn: ({ id, triggerId }: RunRowVars) =>
+      api(`/tasks/${id}/execute`, { method: 'POST', body: { triggerId } }),
+    onSuccess: (_res: unknown, { id, projectId }: RunRowVars) => {
       message.success('Run started');
       // Returned, never fired and forgotten: the mutation stays pending until those views have
       // actually refetched, rather than re-enabling the button over the row it just spent.
@@ -193,10 +207,12 @@ export function runRowMutationOptions(qc: QueryClient, message: RunToast) {
  */
 export function batchRunMutationOptions(qc: QueryClient, message: RunToast, dismiss: () => void) {
   return {
-    mutationFn: ({ tasks, maxConcurrent }: BatchRunVars) =>
+    // As on the single door: one press, one name, resent only when no answer came back.
+    ...runRequestResend,
+    mutationFn: ({ tasks, maxConcurrent, triggerId }: BatchRunVars) =>
       api<BatchRunResult>('/tasks/batch-execute', {
         method: 'POST',
-        body: { taskIds: tasks.map((t) => t.id), maxConcurrent },
+        body: { taskIds: tasks.map((t) => t.id), maxConcurrent, triggerId },
       }),
     onSuccess: (res: BatchRunResult, { tasks }: BatchRunVars) => {
       dismiss();
@@ -1020,7 +1036,9 @@ export function TaskListView() {
                 icon={isRetry ? <ReloadOutlined /> : <PlayCircleOutlined />}
                 onClick={(e) => {
                   e.stopPropagation();
-                  runOne.mutate({ id: r.id, projectId: r.projectId });
+                  // The gesture: this click draws the name its request carries, and the next
+                  // click draws another — including a click over an error this one leaves behind.
+                  runOne.mutate({ id: r.id, projectId: r.projectId, triggerId: newRunRequestToken() });
                 }}
               />
             </Tooltip>
@@ -1358,6 +1376,8 @@ export function TaskListView() {
             // ids reach the request body.
             tasks: selectedRows.map((r: any) => ({ id: r.id as string, projectId: r.projectId })),
             maxConcurrent: concurrency,
+            // One press of Run, named where it is pressed.
+            triggerId: newRunRequestToken(),
           })
         }
         confirmLoading={batchRun.isPending}

@@ -11,6 +11,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { newRunRequestToken } from '../lib/runRequestToken';
 import { TaskListView, batchRunMutationOptions, runRowMutationOptions } from './TaskListView';
 
 // The component reaches for the network on mount; these tests seed the cache instead and assert
@@ -555,10 +556,16 @@ describe('what a Run from the task list refreshes', () => {
       ...runRowMutationOptions(qc, message),
       retry: false,
     });
-    await observer.mutate({ id: T1, projectId: PROJ_A });
+    // The click draws the name; the mutation carries it as a variable and does not touch it.
+    const triggerId = newRunRequestToken();
+    await observer.mutate({ id: T1, projectId: PROJ_A, triggerId });
 
-    // The request is exactly the one the row has always sent.
-    expect(vi.mocked(api)).toHaveBeenCalledWith(`/tasks/${T1}/execute`, { method: 'POST' });
+    // The request the row has always sent, now carrying the name of THIS press — which is what
+    // makes an automatic resend below this line the same run rather than a second one.
+    expect(vi.mocked(api)).toHaveBeenCalledWith(`/tasks/${T1}/execute`, {
+      method: 'POST',
+      body: { triggerId },
+    });
     expect(message.success).toHaveBeenCalledWith('Run started');
     const invalidated = invalidatedIn(qc);
     expect(invalidated(['task', T1])).toBe(true);
@@ -610,7 +617,9 @@ describe('what a Run from the task list refreshes', () => {
       ...runRowMutationOptions(qc, message),
       retry: false,
     });
-    await observer.mutate({ id: T1, projectId: PROJ_A }).catch(() => {});
+    await observer
+      .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() })
+      .catch(() => {});
 
     expect(observer.getCurrentResult().isError).toBe(true);
     const invalidated = invalidatedIn(qc);
@@ -621,6 +630,45 @@ describe('what a Run from the task list refreshes', () => {
     // The reason reaches the reader whole, through the existing toast path.
     expect(message.error).toHaveBeenCalledWith('no runner available');
     expect(message.success).not.toHaveBeenCalled();
+  });
+
+  it('sends a NEW name when the reader presses again over a failed run', async () => {
+    // The boundary this whole mechanism turns on. A press that failed left no run to be idempotent
+    // WITH, and a second press is a person deciding to run the task again — answering it from the
+    // failed press's receipt would answer a question nobody asked. Nothing remembers the failed
+    // name, because the name is drawn at the CLICK and carried down as a variable: there is no
+    // state between two clicks that could make them agree.
+    const qc = seededCache();
+    const message = toast();
+    vi.mocked(api).mockClear();
+    vi.mocked(api).mockRejectedValueOnce(new Error('no runner available'));
+    vi.mocked(api).mockResolvedValueOnce({});
+
+    const options = { ...runRowMutationOptions(qc, message), retry: false };
+    await new MutationObserver(qc, options)
+      .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() })
+      .catch(() => {});
+    await new MutationObserver(qc, options)
+      .mutate({ id: T1, projectId: PROJ_A, triggerId: newRunRequestToken() });
+
+    const names = vi
+      .mocked(api)
+      .mock.calls.map(([, init]) => (init as { body: { triggerId: string } }).body.triggerId);
+    expect(names).toHaveLength(2);
+    expect(names[0]).not.toBe(names[1]);
+  });
+
+  it('draws the name at the CLICK, not inside the request', () => {
+    // WHERE it is drawn is the whole design, and it is not expressible as a type. Drawn inside
+    // `mutationFn` it would be redrawn by react-query's own retry, so one press could reach the
+    // server twice under two names; drawn once and remembered ACROSS presses, a deliberate second
+    // press would be answered from the first one's receipt and never run. Both failures are
+    // invisible to every other test here, so the wiring itself is pinned.
+    const source = readFileSync(new URL('./TaskListView.tsx', import.meta.url), 'utf8');
+    expect(source).toContain('triggerId: newRunRequestToken() }');
+    expect(source).toContain('triggerId: newRunRequestToken(),');
+    // ...and nowhere below the click: the mutations only ever destructure what they were handed.
+    expect(source).not.toMatch(/mutationFn[\s\S]{0,400}newRunRequestToken/);
   });
 
   it('refreshes every project the batch came from, and sends only ids', async () => {
@@ -635,6 +683,7 @@ describe('what a Run from the task list refreshes', () => {
       retry: false,
     });
     // Two rows in one project, one in another, and one filed under none.
+    const pressToken = newRunRequestToken();
     await observer.mutate({
       tasks: [
         { id: T1, projectId: PROJ_A },
@@ -643,13 +692,14 @@ describe('what a Run from the task list refreshes', () => {
         { id: UNFILED, projectId: null },
       ],
       maxConcurrent: 3,
+      triggerId: pressToken,
     });
 
-    // The project each row came from is local knowledge; the endpoint takes ids and a limit, and
-    // this body has nothing else in it.
+    // The project each row came from is local knowledge; the endpoint takes ids, a limit, and the
+    // name of this press, and this body has nothing else in it.
     expect(vi.mocked(api)).toHaveBeenCalledWith('/tasks/batch-execute', {
       method: 'POST',
-      body: { taskIds: [T1, T2, T3, UNFILED], maxConcurrent: 3 },
+      body: { taskIds: [T1, T2, T3, UNFILED], maxConcurrent: 3, triggerId: pressToken },
     });
     const invalidated = invalidatedIn(qc);
     for (const id of [T1, T2, T3, UNFILED]) expect(invalidated(['task', id])).toBe(true);
@@ -814,7 +864,7 @@ describe('what a Run from the task list refreshes', () => {
     // server's answer can change what is selected, and `selectedRows` is read at click time for
     // the same reason.
     const source = readFileSync(new URL('./TaskListView.tsx', import.meta.url), 'utf8');
-    expect(source).toContain('runOne.mutate({ id: r.id, projectId: r.projectId });');
+    expect(source).toContain('runOne.mutate({ id: r.id, projectId: r.projectId, triggerId:');
     expect(source).toContain(
       "tasks: selectedRows.map((r: any) => ({ id: r.id as string, projectId: r.projectId })),",
     );

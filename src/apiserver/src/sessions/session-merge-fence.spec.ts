@@ -56,7 +56,27 @@ function harness(overrides: Record<string, unknown> = {}) {
 }
 
 function sql(call: unknown[] | undefined): string {
-  return ((call?.[0] as readonly string[] | undefined) ?? []).join('?');
+  const first = call?.[0];
+  // A tagged-template call hands the strings array first; `Prisma.sql\`\`` hands a single object
+  // carrying `.strings`. `[K6]`'s gate reads through the second form, so both have to be readable
+  // here or a query would silently count as "not the lock" because of how it was spelled.
+  if (Array.isArray(first)) return (first as readonly string[]).join('?');
+  const strings = (first as { strings?: readonly string[] } | undefined)?.strings;
+  if (Array.isArray(strings)) return strings.join('?');
+  return String((first as { text?: string } | undefined)?.text ?? '');
+}
+
+/**
+ * The calls that TAKE THE LOCK, which is what these tests are about.
+ *
+ * Not "every raw query", which is what this used to count. `[K6]`'s merge gate reads committed
+ * facts inside the same closure — the accepted checkpoint, the task's revision, a landed receipt —
+ * and those are reads, not locks. Counting them as lock calls would make this spec fail for a
+ * change that did not touch the fence, and, worse, would pass a change that took a SECOND
+ * `FOR UPDATE` as long as it removed a read somewhere else.
+ */
+function locks(calls: unknown[][]): unknown[][] {
+  return calls.filter((call) => /FOR UPDATE/.test(sql(call)));
 }
 
 test('merge queueing reads and writes the Session under one owner-scoped FOR UPDATE lock', async () => {
@@ -64,11 +84,11 @@ test('merge queueing reads and writes the Session under one owner-scoped FOR UPD
 
   assert.deepEqual(await h.service.mergeToMain(OWNER_ID, SESSION_ID), { ok: true });
 
-  assert.equal(h.lockCalls.length, 1);
-  assert.match(sql(h.lockCalls[0]), /FROM "session"/);
-  assert.match(sql(h.lockCalls[0]), /"owner_id"/);
-  assert.match(sql(h.lockCalls[0]), /FOR UPDATE/);
-  assert.deepEqual(h.lockCalls[0].slice(1), [SESSION_ID, OWNER_ID]);
+  const taken = locks(h.lockCalls);
+  assert.equal(taken.length, 1);
+  assert.match(sql(taken[0]), /FROM "session"/);
+  assert.match(sql(taken[0]), /"owner_id"/);
+  assert.deepEqual(taken[0].slice(1), [SESSION_ID, OWNER_ID]);
   assert.equal(h.writes.length, 1);
   const data = (h.writes[0] as { data: Record<string, unknown> }).data;
   assert.equal(data.mergeStatus, 'pending');
@@ -98,7 +118,7 @@ for (const tc of [
         error.message === 'wait for the current turn to finish before merging',
     );
 
-    assert.equal(h.lockCalls.length, 1);
+    assert.equal(locks(h.lockCalls).length, 1);
     assert.deepEqual(h.writes, []);
   });
 }
@@ -119,7 +139,7 @@ for (const status of [
 
     await assert.doesNotReject(() => h.service.mergeToMain(OWNER_ID, SESSION_ID));
 
-    assert.equal(h.lockCalls.length, 1);
+    assert.equal(locks(h.lockCalls).length, 1);
     assert.equal(h.writes.length, 1);
     assert.equal(
       (h.writes[0] as { data: Record<string, unknown> }).data.mergeStatus,
@@ -141,6 +161,6 @@ test('merge queueing cannot overlap a runner-claimed commit', async () => {
       error.message === 'wait for the pending worktree commit to finish',
   );
 
-  assert.equal(h.lockCalls.length, 1);
+  assert.equal(locks(h.lockCalls).length, 1);
   assert.deepEqual(h.writes, []);
 });

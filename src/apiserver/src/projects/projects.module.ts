@@ -18,6 +18,7 @@ import { ProjectTaskDispatcherService } from './project-task-dispatcher.service'
 import { ProjectVerificationVerdictService } from './project-verification-verdict.service';
 import { ProjectVerificationFilingService } from './project-verification-filing.service';
 import { VerificationFindingService } from './verification-finding.service';
+import { TaskCheckpointService } from './task-checkpoint.service';
 import { ProjectsService } from './projects.service';
 
 // PrismaModule is @Global. SessionsModule is imported for the coordinator's one session create/end
@@ -43,6 +44,7 @@ import { ProjectsService } from './projects.service';
     ProjectVerificationVerdictService,
     ProjectVerificationFilingService,
     VerificationFindingService,
+    TaskCheckpointService,
     ProjectAvailabilityReaperService,
     ProjectFailureRecoveryService,
   ],
@@ -65,6 +67,7 @@ import { ProjectsService } from './projects.service';
     ProjectVerificationVerdictService,
     ProjectVerificationFilingService,
     VerificationFindingService,
+    TaskCheckpointService,
     ProjectFailureRecoveryService,
   ],
 })

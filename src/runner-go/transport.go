@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,23 @@ type transportHTTPError struct {
 
 func (e *transportHTTPError) Error() string {
 	return fmt.Sprintf("%s %s -> %d %s", e.method, e.path, e.statusCode, e.body)
+}
+
+// code is the control plane's own machine-readable name for this refusal, when the body carried
+// one, and "" otherwise.
+//
+// Read rather than inferred from the status, because one status means several different things: the
+// run door answers 409 for `TASK_RUN_REQUEST_IN_PROGRESS` (ask again with the same id) and 409 for
+// `TASK_RUN_REQUEST_MISMATCH` (that id already names something else), and only one of them may ever
+// be retried. Branching on the prose instead would break the first time somebody reworded it.
+func (e *transportHTTPError) code() string {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal([]byte(e.body), &body); err != nil {
+		return ""
+	}
+	return body.Code
 }
 
 // Transport is an outbound-only HTTP client to the control plane.
@@ -158,7 +176,17 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 		return err
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(resp.Body)
+	// A read that fails is a TRANSPORT failure, not an empty answer. `Do` returns as soon as the
+	// status line and headers arrive, so a connection that dies while the body is still streaming
+	// lands HERE — with a 2xx already received and the work behind it very possibly committed.
+	// Discarding this error made that case indistinguishable from a legitimately empty 200: the
+	// caller was told its request had succeeded, having been handed nothing that says so. Every
+	// caller is better served by the truth, and the one that can ACT on it — `startTask`, whose
+	// request carries a name — resends under that name rather than guessing.
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("%s %s: reading response body: %w", method, path, err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &transportHTTPError{method: method, path: path, statusCode: resp.StatusCode, body: string(data)}
 	}
@@ -1076,13 +1104,118 @@ func (t *Transport) deleteTask(id string) (json.RawMessage, error) {
 	return out, err
 }
 
-func (t *Transport) startTask(id string) (json.RawMessage, error) {
+// runRequestEntropy is the CSPRNG run-request names are drawn from. A variable only so a test can
+// substitute a source that fails — see `newRunRequestToken`, whose whole contract is what happens
+// then.
+var runRequestEntropy io.Reader = rand.Reader
+
+// newRunRequestToken draws the name of ONE task_start — one MCP tool call, one `orbit task start`.
+//
+// The server keys that request's receipt on it, so a delivery it has already answered is answered
+// from its answer instead of starting a second run. What the server cannot decide for itself is
+// which of two identical POSTs is a retry and which is a fresh invocation: the bytes are the same,
+// and no property of the database tells them apart. So the identity is CARRIED, and it is drawn
+// HERE — at the invocation, above every resend of it — rather than inside `do`, which would give
+// each attempt its own name and defeat the whole point.
+//
+// Base62, the spelling every id above this API line is written in: `@IsPublicId` decodes it to the
+// UUID the receipt is keyed on, so this and a raw UUID reach the same row.
+//
+// FAILS CLOSED. No entropy is an ERROR and the invocation stops, rather than falling back to the
+// bodiless POST an older runner sends. The server still accepts that wire and always will — that is
+// what keeps deployed runners working — but a binary that CAN name its request and quietly does not
+// is a different thing: it silently gives up the idempotency this exists for, at exactly the moment
+// something is already wrong with the machine. A refusal the caller can see is the honest answer.
+func newRunRequestToken() (string, error) {
+	var id [16]byte
+	if _, err := io.ReadFull(runRequestEntropy, id[:]); err != nil {
+		return "", fmt.Errorf("cannot name this run request (no entropy): %w", err)
+	}
+	id[6] = (id[6] & 0x0f) | 0x40 // UUID v4
+	id[8] = (id[8] & 0x3f) | 0x80 // RFC 4122 variant
+	return publicID(fmt.Sprintf("%x-%x-%x-%x-%x", id[0:4], id[4:6], id[6:8], id[8:10], id[10:16])), nil
+}
+
+// How far a named run request is resent, and how long it waits between attempts: three resends
+// after the first delivery, backing off 250ms -> 500ms -> 1s. A bounded ~1.75s in the worst case,
+// and then the invocation fails and says exactly why. Bounded because this is for a dropped
+// connection and a lease being handed over, not for an outage.
+const (
+	runRequestResendAttempts = 4
+	runRequestResendDelay    = 250 * time.Millisecond
+)
+
+// taskRunRequestInProgress is the control plane's name for "somebody is answering this exact
+// request right now" — the first delivery still holds the lease. It is the one HTTP answer at this
+// door that is not a result: the request was not evaluated a second time and nothing was changed,
+// and asking again with the SAME triggerId reads back the first delivery's answer.
+const taskRunRequestInProgress = "TASK_RUN_REQUEST_IN_PROGRESS"
+
+// isResendableRunFailure says whether this attempt left the request unanswered.
+//
+// Two cases and no others. A non-HTTP error means the answer never arrived — the POST may well have
+// been delivered and the run committed, which is the whole reason a named request exists. And
+// `TASK_RUN_REQUEST_IN_PROGRESS` means the answer exists but is not ready, which is exactly the
+// window a resend lands in. Every other refusal — a 400, a 403, a 409 `TASK_RUN_REQUEST_MISMATCH` —
+// IS the result, and asking again can only repeat it.
+func isResendableRunFailure(err error) bool {
+	httpErr, answered := err.(*transportHTTPError)
+	if !answered {
+		return true
+	}
+	return httpErr.statusCode == http.StatusConflict && httpErr.code() == taskRunRequestInProgress
+}
+
+// startTask runs an owned task now, under the name its caller drew for this invocation.
+//
+// `triggerID` is threaded in rather than drawn here because "the same request" is a property of the
+// INVOCATION, not of the HTTP attempt: a 307 replays this body verbatim (net/http replays a
+// *bytes.Reader for us), and every attempt below reuses the token it was handed.
+//
+// An unnamed start does not leave this runner. The guard is here rather than only at the two call
+// sites so the property belongs to the transport: every task_start this binary makes is named.
+//
+// AND THE NAME IS WHAT LICENSES THE RESEND. The case this exists for is the one a caller cannot
+// see: the POST is delivered, the server commits the run, and the ANSWER is lost — a dropped
+// connection, a killed proxy, a timeout. Without a resend the invocation fails, and the next
+// `orbit task start` draws a NEW name and starts a SECOND run for work that is already running.
+// With one, the retry carries the same name and the server answers it from the first delivery's
+// receipt. That reasoning applies to this endpoint because it is idempotent UNDER THIS TOKEN, and
+// to nothing else here — `do` is deliberately left without a retry of its own.
+//
+// What is resent, and what is not, is `isResendableRunFailure`: a missing answer, and the one
+// refusal that means the answer is not ready yet. Every other refusal — 400, 403, 409
+// `TASK_RUN_REQUEST_MISMATCH` — is the result, not a fault to paper over.
+func (t *Transport) startTask(id, triggerID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
-	var out json.RawMessage
-	err := t.do(nil, "POST", "/runner/tasks/"+url.PathEscape(id)+"/execute", nil, &out, taskOpTimeout)
-	return out, err
+	if triggerID == "" {
+		return nil, fmt.Errorf("refusing to start task %s unnamed: a run request without a triggerId cannot be retried safely", id)
+	}
+	// Built once, outside the loop, so every attempt is byte-identical by construction rather than
+	// by two encoders agreeing.
+	body := map[string]string{"triggerId": triggerID}
+	path := "/runner/tasks/" + url.PathEscape(id) + "/execute"
+	var lastErr error
+	for attempt := range runRequestResendAttempts {
+		if attempt > 0 {
+			time.Sleep(runRequestResendDelay << (attempt - 1))
+		}
+		var out json.RawMessage
+		err := t.do(nil, "POST", path, body, &out, taskOpTimeout)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+		if !isResendableRunFailure(err) {
+			return nil, err
+		}
+	}
+	// The real last answer, not a summary of it: a caller that ran out of attempts while the
+	// control plane kept saying "being answered right now" needs to be told that, and a lost
+	// connection needs to read as one.
+	return nil, lastErr
 }
 
 func (t *Transport) commentTask(id, agentID, bodyText string) (json.RawMessage, error) {

@@ -675,6 +675,11 @@ export interface MergeCommand {
    *  the record has to come from here. Absent → the runner replays `<target>..<branch>` as
    *  before. */
   baseSha?: string;
+  /** `[K6]` §7: the commit the task's accepted checkpoint verified. When set, the runner refuses to
+   *  merge a branch whose tip is anything else (`BRANCH_TIP_MISMATCH`) — the commits after a
+   *  verified one carry no test evidence. Absent for work that is not under convergence
+   *  management, which is almost every merge; the tip is then whatever the branch says. */
+  requiredSourceSha?: string;
 }
 
 /** Control plane → runner: commit a live session's uncommitted worktree changes onto its
@@ -1211,6 +1216,14 @@ export interface SessionMergeResultRequest {
   /** Exact source-branch tip replayed by this merge. Persisted so later worktree reports can
    *  detect new commits without relying on ancestry or patch-id equivalence. */
   sourceSha?: string;
+  /** `[K6]` §7: the target already contained `sourceSha`, so this merge moved nothing —
+   *  `targetShaBefore` and `mergedSha` are the same commit and no rebase ran. A flag rather than a
+   *  fifth `status` value on purpose: `status` is validated against a closed set, so a new value
+   *  would be rejected by an older control plane and the runner would report a completed merge
+   *  forever. An older control plane ignores this and records `MERGED`, which is true; a current
+   *  one records §13.7 MR2's `ALREADY_MERGED`, which keeps "the target moved" and "it was already
+   *  there" different facts. */
+  alreadyMerged?: boolean;
   /** The branch this merge advanced, the tip it had before, and the base the source was replayed
    *  onto. Together with `sourceSha`/`mergedSha` they are what makes the merge RECEIPT the control
    *  plane records (§13.5) checkable against the repository afterwards. Omitted by older runners:

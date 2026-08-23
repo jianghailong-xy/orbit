@@ -270,9 +270,19 @@ final class TasksModel {
 
     // MARK: actions
 
+    /// Run now. The press is NAMED, once, here — this method IS the gesture, called straight from
+    /// the button's action, and nothing between it and the wire redraws the name.
+    ///
+    /// Everything below this line is the same request and reuses it: the 401 refresh-and-retry
+    /// inside `APIClient.send` re-sends the very `URLRequest` it built, body included, so the
+    /// server answers the second delivery from the first one's receipt instead of starting a
+    /// second run. A NEW press draws a new name unconditionally — including a press over the error
+    /// the last one left on screen, which is a person deciding to run the task again rather than a
+    /// resend of something already in flight.
     @discardableResult
     func execute(_ id: String) async -> Bool {
-        await mutate(id) { try await self.api.executeTask(id) }
+        let triggerId = PublicID.newToken()
+        return await mutate(id) { try await self.api.executeTask(id, triggerId: triggerId) }
     }
 
     @discardableResult

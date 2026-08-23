@@ -4,10 +4,15 @@ import Foundation
 /// (docs/public-id-migration-design.md). Mirrors `@orbit/shared`'s `toUuid` and the runner's
 /// `decodeSessionID`.
 ///
-/// Only the decode direction exists, because only it has a caller: the native clients never build
-/// a URL out of an id (there is no address bar to put it in), they key local caches by one. What
-/// they need is for both spellings of a session to name the same cache entry, so a snapshot
-/// written before the server switched is still found afterwards instead of silently re-fetching.
+/// The decode direction is what keys local caches: the native clients never build a URL out of an
+/// id (there is no address bar to put it in). Both spellings of a session must name the same cache
+/// entry, so a snapshot written before the server switched is still found afterwards instead of
+/// silently re-fetching.
+///
+/// The encode direction exists for the one id these clients ORIGINATE rather than receive: the
+/// `triggerId` naming one press of Run now (`RunTaskRequest`). It is spelled the way every id above
+/// the API line is spelled, which is also the only spelling `@IsPublicId` guarantees to accept
+/// unchanged across the migration.
 public enum PublicID {
     private static let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
 
@@ -42,6 +47,38 @@ public enum PublicID {
         let groups = [hex.prefix(8), hex.dropFirst(8).prefix(4), hex.dropFirst(12).prefix(4),
                       hex.dropFirst(16).prefix(4), hex.dropFirst(20)]
         return groups.map(String.init).joined(separator: "-")
+    }
+
+    /// A fresh Base62 public id, drawn here rather than received.
+    ///
+    /// 128 bits of `UUID`, encoded by repeated division: the 16 bytes are treated as one big-endian
+    /// integer and divided by 62 until nothing is left, which is `uuidToBase62`'s loop written for a
+    /// language with no 128-bit integer. Round-trips through `toUUID` by construction, so what the
+    /// server decodes is exactly the id this client drew.
+    ///
+    /// No failure path, unlike the web and the runner: `UUID()` draws from the platform CSPRNG and
+    /// is non-failable, so there is no "could not name this request" case to fail closed on here.
+    public static func newToken() -> String {
+        let u = UUID().uuid
+        return base62([u.0, u.1, u.2, u.3, u.4, u.5, u.6, u.7,
+                       u.8, u.9, u.10, u.11, u.12, u.13, u.14, u.15])
+    }
+
+    /// The 16 bytes of a value, big-endian, as Base62. Internal to `newToken`; `toUUID` is the
+    /// inverse and `PublicIDTests` pins them against the other clients' shared vector.
+    static func base62(_ bytes: [UInt8]) -> String {
+        var digits = bytes
+        var out: [Character] = []
+        while let top = digits.firstIndex(where: { $0 != 0 }) {
+            var remainder: UInt32 = 0
+            for i in top..<digits.count {
+                let acc = (remainder << 8) | UInt32(digits[i])
+                digits[i] = UInt8(acc / 62)
+                remainder = acc % 62
+            }
+            out.append(alphabet[Int(remainder)])
+        }
+        return out.isEmpty ? "0" : String(out.reversed())
     }
 
     /// Either spelling in, a stable key out. Total: an id that is neither is returned unchanged,

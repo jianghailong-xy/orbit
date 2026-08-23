@@ -197,6 +197,21 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'dependsOnTaskIds',
   'anchorTaskId',
   'attachmentIds',
+  // `[K6]` §7: the known-good point a merge landed, and the attempt that produced it. Addresses,
+  // not fences — a checkpoint is audit material a person reads and quotes back ("merge cp X"), and
+  // the merge gate's refusals name one, so it has to survive the round trip in the spelling
+  // clients see. The same classification `findingId` carries for the same reason.
+  'checkpointId',
+  'attemptId',
+  // The checkpoint a QUEUED merge was authorised for (`session`, migration 0152). It names the
+  // same kind of thing `checkpointId` does and is read the same way — the server looks the row up
+  // by id when the merge reports back. Deliberately NOT a fence: no runner echoes it, nothing
+  // compares it byte-for-byte, and a reader handed one has somewhere to hand it.
+  'mergeCheckpointId',
+  // Wire-only, like the aggregates above: `[K6]`'s read states §7 CP6's baseline rather than
+  // leaving a client to re-derive "the LATEST accepted one" by filtering. It is the same id under
+  // a name that says which one it is, so it follows the same rule.
+  'baselineCheckpointId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

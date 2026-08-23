@@ -967,6 +967,16 @@ model Session {
   // produces a non-equivalent patch. A later worktree report clears merged state only after
   // its current branch tip differs from this SHA. Null for legacy merge results.
   mergedSourceSha      String?   @map("merged_source_sha")
+  /// `[K6]` §7: the checkpoint the QUEUED merge was authorised for (migration 0152).
+  ///
+  /// Written when the merge is queued and read when its result comes back, so the server decides
+  /// whether a reported landing is the verified one from a fact it persisted itself rather than
+  /// from a field the runner chose to send. `requiredSourceSha` travels on the command for the
+  /// runner's benefit — it is the only party that can compare a commit against a working tree —
+  /// but a runner that ignores it must not be able to make the control plane record an unverified
+  /// tip as landed. A gate that only holds when the client cooperates is not a gate.
+  mergeCheckpointId    String?         @map("merge_checkpoint_id") @db.Uuid
+  mergeCheckpoint      TaskCheckpoint? @relation("SessionMergeCheckpoint", fields: [mergeCheckpointId], references: [id], onDelete: SetNull)
   // The branch the user chose to merge into (from the status bar's branch dropdown). Null
   // means the default — the runner auto-detects main, else master. Relayed to the runner in
   // the MergeCommand and shown on the merged ✓ chip.
@@ -1178,6 +1188,15 @@ model SessionMergeReceipt {
   /// the same branch is two merges and deserves two receipts.
   idempotencyKey String @map("idempotency_key")
 
+  /// `[K6]` CP4: the §7 checkpoint this merge landed, when the work was under convergence
+  /// management. Nullable because most merges are not, and project AC11 says those keep behaving
+  /// exactly as they did. Where it IS set it is the receipt's real identity: MR4's key is scoped to
+  /// one session, so the same landing reported by a takeover or by a cross-runner recovery mints a
+  /// second row — and a checkpoint outlives the session that produced it. A trigger refuses a
+  /// LANDED receipt that names a `WIP_RED` checkpoint (§7's "可否进入依赖分支/main = 否").
+  checkpointId String?         @map("checkpoint_id") @db.Uuid
+  checkpoint   TaskCheckpoint? @relation(fields: [checkpointId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([sessionId, idempotencyKey])
@@ -1185,6 +1204,12 @@ model SessionMergeReceipt {
   @@index([taskId, createdAt])
   @@index([projectId, createdAt])
   @@index([ownerId, createdAt])
+  @@index([checkpointId, createdAt(sort: Desc)], map: "session_merge_receipt_checkpoint_idx")
+  /// CP4 is enforced by a PARTIAL unique index this schema cannot spell
+  /// (`session_merge_receipt_checkpoint_key` on `(checkpoint_id, idempotency_key)`,
+  /// `WHERE checkpoint_id IS NOT NULL`), the same trade `task_attempt_one_open_key` carries. It has
+  /// to be partial: the many receipts with no checkpoint must keep colliding only within their own
+  /// session, or every unmanaged merge in the system would share one identity.
   @@map("session_merge_receipt")
 }
 
@@ -2749,6 +2774,8 @@ model Task {
   filedByFinding          TaskVerificationFinding[] @relation("FindingEffectTask")
   /// Presses of Run Now recorded against this task (0137).
   manualRunTriggers       TaskRunManualTrigger[]
+  /// `[K6]`: §7's known-good and known-red points, append-only (migration 0152).
+  checkpoints             TaskCheckpoint[]
 
   @@index([ownerId])
   @@index([ownerId, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_created_id_idx")
@@ -2854,6 +2881,7 @@ model TaskScopeRevision {
   decisions TaskConvergenceDecision[]
   attempts  TaskAttempt[]
   findings  TaskVerificationFinding[]
+  checkpoints TaskCheckpoint[]
 
   @@unique([taskId, revision])
   /// The composite key `TaskConvergenceDecision` points at. Naming the HASH as well as the revision
@@ -3024,6 +3052,9 @@ model TaskAttempt {
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
+  /// `[K6]`: the checkpoints this attempt wrote on its way out (§2 NC5, §7).
+  checkpoints TaskCheckpoint[]
+
   @@unique([attemptKey], map: "task_attempt_attempt_key_key")
   /// AC4 in one line: the same (task, revision, generation) is never started twice. Two
   /// coordinators, a redelivered event and a takeover all compute the same triple; one lands.
@@ -3124,6 +3155,87 @@ model TaskVerificationFinding {
   @@index([taskId, scopeRevision, seq(sort: Desc)], map: "task_verification_finding_repair_idx")
   @@index([effectTaskId], map: "task_verification_finding_effect_task_idx")
   @@map("task_verification_finding")
+}
+
+/// `[K6]` §7 (migration 0152): the known-good point, and the known-red one.
+///
+/// `[K3]` gave `task_attempt` the POINTER half of a checkpoint — a sha, a kind, an evidence digest
+/// — and said the table was a later unit. This is it, and what it adds is the three things a
+/// pointer cannot answer: what the state IS (commit, tree, base, so a second machine can rebuild
+/// it), what makes it known-good (the test evidence, digested), and where known-RED work lives when
+/// the machine that produced it is gone (CP2's artifact). §0's incident lost work exactly there: a
+/// `git stash` on one runner, neither lost nor reachable.
+///
+/// Append-only and immutable by trigger. CP1 says changing a field is a NEW checkpoint, so identity
+/// is spelled over the whole content (`contentDigest`) and the unique `dedupKey` makes recording
+/// the same thing twice a no-op rather than a second row.
+model TaskCheckpoint {
+  id      String @id @default(uuid(7)) @db.Uuid
+  taskId  String @map("task_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
+  task    Task   @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade)
+  /// Denormalised from the task: the dedup key is project-scoped, and a checkpoint must keep
+  /// answering for the project it was recorded in after the task is re-filed elsewhere.
+  projectId String? @map("project_id") @db.Uuid
+  /// Monotonic within a task, allocated `MAX + 1` under the task row lock. "The LATEST accepted
+  /// checkpoint" is the whole baseline rule, so it may not rest on `createdAt`, which two writers
+  /// can tie on.
+  seq     BigInt
+
+  scopeRevision Int               @map("scope_revision")
+  scopeHash     String            @map("scope_hash") @db.Char(64)
+  /// FD4 as a foreign key: a checkpoint names the revision it was verified against, hash included,
+  /// so it cannot be re-pointed at a scope that never had that content.
+  revision      TaskScopeRevision @relation(fields: [taskId, scopeRevision, scopeHash], references: [taskId, revision, scopeHash], onDelete: Cascade, map: "task_checkpoint_scope_revision_fkey")
+
+  /// §7's first column. Derived from the evidence, never supplied — a caller that could name its
+  /// own kind could call a red tree `ACCEPTED`, and every property below it rests on that word.
+  kind String
+
+  branch    String
+  commitSha String @map("commit_sha") @db.Char(40)
+  /// Not redundant with `commitSha`: two runners replaying the same work produce two commits and
+  /// one tree, and it is the TREE that answers "is this the same state".
+  treeSha   String @map("tree_sha") @db.Char(40)
+  baseSha   String @map("base_sha") @db.Char(40)
+
+  /// §7's "有测试证据", as a row rather than an adjective. Both null for a red point; a CHECK
+  /// requires both for an accepted one.
+  evidenceDigest String? @map("evidence_digest") @db.Char(64)
+  testEvidence   Json?   @map("test_evidence")
+
+  /// CP2: how this is recovered on a machine that has never seen it. A CHECK refuses every kind
+  /// that does not travel — which is "不得只依赖某台机器上的 stash", said mechanically.
+  artifactKind   String? @map("artifact_kind")
+  artifactRef    String? @map("artifact_ref")
+  artifactDigest String? @map("artifact_digest") @db.Char(64)
+
+  /// CP1's identity: every field above, hashed.
+  contentDigest String @map("content_digest") @db.Char(64)
+  dedupKey      String @map("dedup_key")
+
+  /// Provenance, never an input to a decision. No foreign key on `sessionId`, on migration 0120's
+  /// rule: deleting a session must not rewrite who recorded an earlier checkpoint.
+  recordedBy String  @map("recorded_by")
+  sessionId  String? @map("session_id") @db.Uuid
+  /// `[K3]`'s attempt this came out of. SetNull rather than Cascade: purging the RUN must not
+  /// destroy the known-good point the next generation is standing on.
+  attemptId  String?      @map("attempt_id") @db.Uuid
+  attempt    TaskAttempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  /// The merges recorded against this checkpoint (CP4), and the queued merges authorised for it.
+  mergeReceipts   SessionMergeReceipt[]
+  authorisedMerges Session[]            @relation("SessionMergeCheckpoint")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([dedupKey], map: "task_checkpoint_dedup_key")
+  @@unique([taskId, seq], map: "task_checkpoint_seq_key")
+  /// "The latest ACCEPTED checkpoint of this task" — the baseline rule, in one indexed read.
+  @@index([taskId, kind, seq(sort: Desc)], map: "task_checkpoint_task_kind_seq_idx")
+  @@index([ownerId, createdAt(sort: Desc)], map: "task_checkpoint_owner_created_idx")
+  @@index([commitSha], map: "task_checkpoint_commit_idx")
+  @@map("task_checkpoint")
 }
 
 model TaskVerificationFailure {
