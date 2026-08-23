@@ -61,6 +61,10 @@ const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
 const P4 = '0195c0de-0000-7000-8000-000000000004';
+const P5 = '0195c0de-0000-7000-8000-000000000005';
+const P6 = '0195c0de-0000-7000-8000-000000000006';
+const P7 = '0195c0de-0000-7000-8000-000000000007';
+const P8 = '0195c0de-0000-7000-8000-000000000008';
 // A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
 // what goes on the wire has to be the short public id whichever spelling the row was handed.
 const T1 = '0195c0de-0000-7000-8000-0000000000a1';
@@ -295,6 +299,8 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+        lastActivityAt: '2026-01-02T00:00:00Z',
       },
       {
         // Open, like the other two: this test is about what ONE ROW says, and a finished project
@@ -306,6 +312,8 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-03T00:00:00Z',
         updatedAt: '2026-01-04T00:00:00Z',
         _count: { tasks: 1 },
+        buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+        lastActivityAt: '2026-01-04T00:00:00Z',
       },
       {
         id: P3,
@@ -315,6 +323,8 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-05T00:00:00Z',
         updatedAt: '2026-01-06T00:00:00Z',
         _count: { tasks: 2 },
+        buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+        lastActivityAt: '2026-01-06T00:00:00Z',
       },
     ]);
     const html = renderPage(qc);
@@ -355,6 +365,8 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+        lastActivityAt: '2026-01-02T00:00:00Z',
       },
     ]);
     const [line] = goalLines(renderPage(qc));
@@ -384,6 +396,8 @@ describe('ProjectsPage', () => {
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-02T00:00:00Z',
       _count: { tasks: 1 },
+      buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+      lastActivityAt: '2026-01-02T00:00:00Z',
       ...p,
     })));
     const html = renderPage(qc);
@@ -420,6 +434,8 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+        lastActivityAt: '2026-01-02T00:00:00Z',
       },
     ]);
     const html = renderPage(qc);
@@ -458,44 +474,54 @@ describe('ProjectsPage', () => {
 });
 
 describe('ProjectsPage — sections', () => {
-  /** One of each status, so the split has something to get wrong in both directions. */
+  /**
+   * One project per section, plus the two cases the plain rules do not cover.
+   *
+   * Buckets are what decides where each lands, not `status` alone and never `createdAt` — so the
+   * fixture is deliberately in an order no section reproduces, and `createdAt` runs the opposite
+   * way to `lastActivityAt` on the two In-progress rows. A page still sorting by the old key would
+   * put them the wrong way round.
+   */
+  const listRow = (
+    id: string,
+    title: string,
+    over: Record<string, unknown> & { buckets?: Partial<Record<string, number>> },
+  ) => ({
+    id,
+    title,
+    status: 'OPEN',
+    goal: `The goal of ${title}`,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-02T00:00:00Z',
+    _count: { tasks: 5 },
+    lastActivityAt: '2026-01-02T00:00:00Z',
+    ...over,
+    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
+  });
+
   const MIXED = [
-    {
-      id: P1,
-      title: 'Website Revamp',
-      status: 'OPEN',
-      goal: 'Ship the new marketing site',
+    // Running, and the OLDER of the two — so In progress must put it second.
+    listRow(P1, 'Website Revamp', {
+      createdAt: '2026-06-01T00:00:00Z',
+      buckets: { running: 1, blocked: 3 },
+      lastActivityAt: '2026-01-02T00:00:00Z',
+    }),
+    listRow(P2, 'Legacy Cleanup', { status: 'DONE', buckets: { done: 16 } }),
+    // Nine ready and nothing running: the case the flat list buried seventh.
+    listRow(P3, 'Ledger Migration', { buckets: { ready: 9, blocked: 1, done: 1 } }),
+    listRow(P4, 'Abandoned Rewrite', { status: 'CANCELLED', buckets: { done: 7 } }),
+    // Every task settled, project still open.
+    listRow(P5, 'Inbox Redesign', { buckets: { done: 12 } }),
+    // The most ready of all — the top row of the page.
+    listRow(P6, 'FineWeb Corpus', { buckets: { ready: 6118, blocked: 17324 } }),
+    // Running, and the more recently active.
+    listRow(P7, 'LFS Build', {
       createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-02T00:00:00Z',
-      _count: { tasks: 5 },
-    },
-    {
-      id: P2,
-      title: 'Legacy Cleanup',
-      status: 'DONE',
-      goal: 'Retire the old admin',
-      createdAt: '2026-01-03T00:00:00Z',
-      updatedAt: '2026-01-04T00:00:00Z',
-      _count: { tasks: 1 },
-    },
-    {
-      id: P3,
-      title: 'Ledger Migration',
-      status: 'OPEN',
-      goal: 'Move the ledger',
-      createdAt: '2026-01-05T00:00:00Z',
-      updatedAt: '2026-01-06T00:00:00Z',
-      _count: { tasks: 2 },
-    },
-    {
-      id: P4,
-      title: 'Abandoned Rewrite',
-      status: 'CANCELLED',
-      goal: 'Never mind',
-      createdAt: '2026-01-07T00:00:00Z',
-      updatedAt: '2026-01-08T00:00:00Z',
-      _count: { tasks: 7 },
-    },
+      buckets: { running: 1, blocked: 117 },
+      lastActivityAt: '2026-05-02T00:00:00Z',
+    }),
+    // Created, never filed against: no tasks at all, and so no activity.
+    listRow(P8, 'Brand Refresh', { _count: { tasks: 0 }, lastActivityAt: null }),
   ];
 
   /** The markup of ONE section, sliced off the flat render at the marker each one carries — the
@@ -514,38 +540,91 @@ describe('ProjectsPage — sections', () => {
     return renderPage(qc);
   }
 
-  it('cuts the list in two off the status every row already carries', () => {
+  it('cuts the list into four, attention first and running work below it', () => {
     const html = renderMixed();
-    const active = sectionOf(html, 'active');
-    const completed = sectionOf(html, 'completed');
 
-    expect(active).toContain('In progress');
-    expect(active).toContain('Website Revamp');
-    expect(active).toContain('Ledger Migration');
-    // The point of the section: neither a finished nor an abandoned project dilutes the half of
-    // the list that still needs the reader.
-    expect(active).not.toContain('Legacy Cleanup');
-    expect(active).not.toContain('Abandoned Rewrite');
-    expect(active).not.toContain('DONE');
-    expect(active).not.toContain('CANCELLED');
+    // The page's premise, in the order the sections appear: what could run but isn't, then what
+    // only needs closing, then what is already being served, then what is finished. A reader
+    // scanning top-down meets the projects that need them before the ones that don't.
+    expect(
+      [...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1]),
+    ).toEqual(['stalled', 'wrapping-up', 'running', 'completed']);
+  });
 
-    expect(completed).toContain('Completed');
-    expect(completed).toContain('Legacy Cleanup');
-    expect(completed).toContain('Abandoned Rewrite');
-    expect(completed).not.toContain('Website Revamp');
+  it('files each project by its buckets, not by its status alone', () => {
+    const html = renderMixed();
+
+    // ready > 0 with nothing running.
+    expect(sectionOf(html, 'stalled')).toContain('FineWeb Corpus');
+    expect(sectionOf(html, 'stalled')).toContain('Ledger Migration');
+    // OPEN, but running + ready + blocked all zero.
+    expect(sectionOf(html, 'wrapping-up')).toContain('Inbox Redesign');
+    expect(sectionOf(html, 'wrapping-up')).not.toContain('Ledger Migration');
+    // running > 0 — including the one that also holds 117 blocked tasks.
+    expect(sectionOf(html, 'running')).toContain('LFS Build');
+    expect(sectionOf(html, 'running')).toContain('Website Revamp');
+    expect(sectionOf(html, 'running')).not.toContain('FineWeb Corpus');
+    // DONE and CANCELLED alike, and neither dilutes the half of the list that still needs anyone.
+    expect(sectionOf(html, 'completed')).toContain('Legacy Cleanup');
+    expect(sectionOf(html, 'completed')).toContain('Abandoned Rewrite');
+    expect(sectionOf(html, 'stalled')).not.toContain('Legacy Cleanup');
+    expect(sectionOf(html, 'running')).not.toContain('Abandoned Rewrite');
+  });
+
+  it('puts an OPEN project with no tasks at the tail of In progress, not into Wrapping up', () => {
+    const html = renderMixed();
+
+    // Wrapping up says "every task settled"; a project that never had a task settled nothing.
+    expect(sectionOf(html, 'wrapping-up')).not.toContain('Brand Refresh');
+    const running = sectionOf(html, 'running');
+    expect(running).toContain('Brand Refresh');
+    expect(running.indexOf('Brand Refresh')).toBeGreaterThan(running.indexOf('Website Revamp'));
+  });
+
+  it('orders the stalled section by ready count, descending', () => {
+    const stalled = sectionOf(renderMixed(), 'stalled');
+
+    // 6,118 ready above 9 ready — the number the header names, and the number the row shows.
+    expect(stalled.indexOf('FineWeb Corpus')).toBeLessThan(stalled.indexOf('Ledger Migration'));
+  });
+
+  it('orders the in-progress section by last activity, descending', () => {
+    const running = sectionOf(renderMixed(), 'running');
+
+    // LFS Build was created FIRST and touched LAST; Website Revamp the other way round. Under the
+    // list's old `createdAt desc` this pair came out reversed, which is what makes it the pair.
+    expect(running.indexOf('LFS Build')).toBeLessThan(running.indexOf('Website Revamp'));
   });
 
   it('counts each section in its own header', () => {
     const html = renderMixed();
-    // Two open, two finished — the badge is what a reader checks the split against.
-    expect(sectionOf(html, 'active')).toMatch(/In progress<\/h3>.*?>2</);
+    expect(sectionOf(html, 'stalled')).toMatch(/Stalled<\/h3>.*?>2</);
+    expect(sectionOf(html, 'wrapping-up')).toMatch(/Wrapping up<\/h3>.*?>1</);
+    expect(sectionOf(html, 'running')).toMatch(/In progress<\/h3>.*?>3</);
     expect(sectionOf(html, 'completed')).toMatch(/Completed<\/h3>.*?>2</);
   });
 
-  it('says what each section is ordered by', () => {
+  it('prints under every header what that section is ordered by', () => {
     const html = renderMixed();
-    expect(sectionOf(html, 'active')).toContain('Newest first');
+
+    // The whole point of the redesign: the sort key is ON the page, in words, beside the rows it
+    // ordered — and both values it names are readable on each row (the ready count in the row's
+    // buckets, the activity in its last column). An order nobody can see is an order nobody can
+    // check, which is what `createdAt desc` was.
+    expect(sectionOf(html, 'stalled')).toContain('most ready first');
+    expect(sectionOf(html, 'wrapping-up')).toContain('newest activity first');
+    expect(sectionOf(html, 'running')).toContain('newest activity first');
     expect(sectionOf(html, 'completed')).toContain('folded by default');
+  });
+
+  it('says in each header what lands in it, truthfully about its awkward rows', () => {
+    const html = renderMixed();
+
+    // Stalled holds a project with 17,324 blocked tasks and no ready ones, so the header does not
+    // claim "has ready tasks"; In progress holds a project with no tasks at all, so it says so.
+    expect(sectionOf(html, 'stalled')).toContain('Nothing running, work outstanding');
+    expect(sectionOf(html, 'running')).toContain('or no tasks filed yet');
+    expect(sectionOf(html, 'wrapping-up')).toContain('Every task settled, project still open');
   });
 
   it('folds the completed section by default, into a pill that still opens the project', () => {
@@ -554,19 +633,20 @@ describe('ProjectsPage — sections', () => {
 
     // Folded means no row: the goal excerpt and the status tag a row carries are gone, while the
     // project itself is still named, still counted and still one click from being opened.
-    expect(completed).not.toContain('Retire the old admin');
+    expect(completed).not.toContain('The goal of Legacy Cleanup');
     expect(completed).not.toContain('ant-list-item');
     expect(completed).toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
     expect(completed).toContain('Legacy Cleanup');
-    // ...and the section that needs attention is NOT folded — its rows are right there.
-    expect(sectionOf(html, 'active')).toContain('Ship the new marketing site');
+    // ...and the sections that need attention are NOT folded — their rows are right there.
+    expect(sectionOf(html, 'stalled')).toContain('The goal of FineWeb Corpus');
   });
 
   it('leaves out a section with nothing in it', () => {
     const qc = newClient();
-    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.status === 'OPEN'));
+    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.buckets.running > 0));
     const html = renderPage(qc);
-    expect(html).toContain('data-section="active"');
+    expect(html).toContain('data-section="running"');
+    expect(html).not.toContain('data-section="stalled"');
     expect(html).not.toContain('data-section="completed"');
     // Below the toolbar only: "Completed" is also the name of a filter segment, which is on the
     // page whether or not anything is completed — the word must be gone from the LIST, not from
@@ -574,10 +654,13 @@ describe('ProjectsPage — sections', () => {
     expect(html.slice(html.indexOf('<section'))).not.toContain('Completed');
   });
 
-  it('keeps the sections in the server’s own order within each one', () => {
-    const html = sectionOf(renderMixed(), 'active');
-    // createdAt desc is the server's; the page must not re-sort what it was handed.
-    expect(html.indexOf('Website Revamp')).toBeLessThan(html.indexOf('Ledger Migration'));
+  it('no longer renders the list as one flat run in the server’s order', () => {
+    // The old page filtered on `status` alone and left each half in the server's `createdAt desc`.
+    // Both are gone: the section a project lands in is decided by its buckets, and every section
+    // sorts a key of its own.
+    expect(source).toContain('projectAttentionSections(matches)');
+    expect(source).not.toMatch(/note: 'Newest first'/);
+    expect(source).not.toMatch(/projects: all\.filter\(\(p\) => p\.status/);
   });
 });
 

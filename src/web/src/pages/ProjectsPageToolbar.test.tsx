@@ -48,6 +48,10 @@ const REVAMP = {
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-02T00:00:00Z',
   _count: { tasks: 5 },
+  // Something running, so the row lands in a section that is expanded by default and its goal is
+  // on the page for the search assertions to find. See lib/projectAttention.
+  buckets: { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+  lastActivityAt: '2026-01-02T00:00:00Z',
 };
 const CLEANUP = {
   id: P2,
@@ -57,6 +61,8 @@ const CLEANUP = {
   createdAt: '2026-01-03T00:00:00Z',
   updatedAt: '2026-01-04T00:00:00Z',
   _count: { tasks: 1 },
+  buckets: { running: 0, ready: 0, blocked: 0, done: 1, cancelled: 0 },
+  lastActivityAt: '2026-01-04T00:00:00Z',
 };
 const LEDGER = {
   id: P3,
@@ -66,6 +72,8 @@ const LEDGER = {
   createdAt: '2026-01-05T00:00:00Z',
   updatedAt: '2026-01-06T00:00:00Z',
   _count: { tasks: 2 },
+  buckets: { running: 1, ready: 0, blocked: 0, done: 1, cancelled: 0 },
+  lastActivityAt: '2026-01-06T00:00:00Z',
 };
 
 /**
@@ -339,6 +347,10 @@ describe('ProjectsPage — creating a project', () => {
       createdAt: '2026-02-01T00:00:00Z',
       updatedAt: '2026-02-01T00:00:00Z',
       _count: { tasks: 0 },
+      // A project created a moment ago: no tasks, so no activity either. In progress is where it
+      // lands, at the tail — see lib/projectAttention.
+      buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+      lastActivityAt: null,
     };
     apiMock.mockImplementation((path: string, init?: { method?: string; body?: unknown }) => {
       if (init?.method === 'POST') {

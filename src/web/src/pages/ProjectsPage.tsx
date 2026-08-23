@@ -14,12 +14,15 @@ import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
-import { ProjectSections, type ProjectSection } from '../components/ProjectSections';
+import { ProjectSections } from '../components/ProjectSections';
 import {
   ProjectCoordinatorPanel,
   type TriggerResult,
 } from '../components/ProjectCoordinatorPanel';
-import { ProjectPanoramaHeader } from '../components/ProjectPanoramaHeader';
+import {
+  ProjectPanoramaHeader,
+  type ProjectPanoramaBuckets,
+} from '../components/ProjectPanoramaHeader';
 import { ProjectsToolbar, type ProjectFilter } from '../components/ProjectsToolbar';
 import {
   isForbidden,
@@ -31,6 +34,7 @@ import {
 } from '../lib/coordinatorStatus';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
+import { projectAttentionSections } from '../lib/projectAttention';
 import {
   projectCoordinatorStatusQuery,
   providersQuery,
@@ -66,6 +70,12 @@ interface Project {
   createdAt: string;
   updatedAt: string;
   _count: { tasks: number };
+  /** Where the project's work stands, from the endpoint's own grouped aggregate. This — not
+   *  `_count.tasks`, which counts settled work alongside the rest — is what sections and orders
+   *  the list; see lib/projectAttention. */
+  buckets: ProjectPanoramaBuckets;
+  /** The most recent write to any of its tasks, or null on a project that has none yet. */
+  lastActivityAt: string | null;
 }
 
 /** What GET /projects/:id adds to a row: the long-form fields the list deliberately omits, plus
@@ -97,32 +107,6 @@ function excerpt(text: string | null | undefined, empty: string): string {
   const trimmed = text?.trim();
   if (!trimmed) return empty;
   return trimmed.length > ROW_EXCERPT_LENGTH ? `${trimmed.slice(0, ROW_EXCERPT_LENGTH)}…` : trimmed;
-}
-
-/** How the list is cut up. Built from the `status` every row already carries — the sections cost
- *  no second request, and the OPEN half is left in the server's own `createdAt desc` order.
- *
- *  The completed half is everything that is NOT open, rather than DONE plus CANCELLED by name: a
- *  status this page has not heard of must still land in a section, and "not open" is the only
- *  spelling of that which cannot silently drop a project off the list. */
-function projectSections(all: Project[]): ProjectSection<Project>[] {
-  return [
-    {
-      key: 'active',
-      title: 'In progress',
-      note: 'Newest first',
-      projects: all.filter((p) => p.status === 'OPEN'),
-    },
-    {
-      key: 'completed',
-      title: 'Completed',
-      note: 'Newest first · folded by default',
-      projects: all.filter((p) => p.status !== 'OPEN'),
-      // Finished work is the list's background, not its subject: it stays counted and one click
-      // from being read, without spending a row apiece on the way to what still needs doing.
-      defaultCollapsed: true,
-    },
-  ];
 }
 
 /**
@@ -207,7 +191,10 @@ export function ProjectsPage() {
     () => (projects.data ?? []).filter((p) => matchesProjectSearch(p, search)),
     [projects.data, search],
   );
-  const sections = useMemo(() => projectSections(matches), [matches]);
+  // Stalled, Wrapping up, In progress, Completed — in that order, off the buckets and
+  // `lastActivityAt` every row carries. The rules and the reason for that order live in
+  // lib/projectAttention; the server's unrendered `createdAt desc` no longer orders anything here.
+  const sections = useMemo(() => projectAttentionSections(matches), [matches]);
   const empty = projectsEmptyKind(projects.data?.length ?? 0, matches.length, filter, search);
 
   return (
