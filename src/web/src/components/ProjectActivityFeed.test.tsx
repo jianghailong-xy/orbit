@@ -284,6 +284,14 @@ describe('ProjectActivityFeed', () => {
     expect(visibleText(html)).not.toContain('Load older activity');
   });
 
+  it('treats a page with no activity list as empty', () => {
+    const qc = newClient();
+    qc.setQueryData(activityKey, { pages: [{ nextCursor: null }], pageParams: [null] });
+
+    const html = render(qc);
+    expect(visibleText(html)).toContain('The control loop has not recorded anything for this project yet.');
+  });
+
   it('renders the loading state, and does not throw', () => {
     // Nothing seeded, so the query is pending with its fetch not yet dispatched.
     const html = render(newClient());

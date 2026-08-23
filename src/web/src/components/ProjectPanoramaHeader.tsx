@@ -264,8 +264,8 @@ function Meter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
 }
 
 /** The refusal breakdown, most-refused first — the top three, and an honest count of the rest. */
-export function topRefusals(refusals: DispatchRefusal[], limit = 3): DispatchRefusal[] {
-  return refusals.slice(0, limit);
+export function topRefusals(refusals: unknown, limit = 3): DispatchRefusal[] {
+  return Array.isArray(refusals) ? refusals.slice(0, limit) : [];
 }
 
 /** What the dispatch ledger says about the window, as one sentence. Absent when it could not be read
@@ -298,8 +298,9 @@ function StalledBanner({
   health: DispatchHealth | undefined;
   healthError: boolean;
 }) {
-  const top = health ? topRefusals(health.refusals) : [];
-  const rest = health ? health.refusals.length - top.length : 0;
+  const refusals = health?.refusals;
+  const top = topRefusals(refusals);
+  const rest = Array.isArray(refusals) ? refusals.length - top.length : 0;
 
   return (
     <div

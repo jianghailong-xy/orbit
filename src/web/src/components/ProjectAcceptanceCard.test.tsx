@@ -143,6 +143,15 @@ describe('ProjectAcceptanceCard', () => {
     expect(html).not.toContain('0 / 0');
   });
 
+  it('treats a missing criteria list as empty', () => {
+    const qc = client();
+    seed(qc, { total: 0, passed: 0, lastRunAt: null });
+
+    const html = paint(qc);
+    expect(html).toContain('Acceptance has never been run');
+    expect(html).toContain('No criteria are stated for this project');
+  });
+
   it('renders while the read is in flight', () => {
     const qc = client();
     const html = paint(qc);

@@ -388,7 +388,9 @@ export function ProjectActivityFeed({ projectId }: { projectId: string }) {
     ...projectActivityQuery(projectId),
     enabled: Boolean(projectId),
   });
-  const items = coalesceActivityRuns((feed.data?.pages ?? []).flatMap((page) => page.items));
+  const items = coalesceActivityRuns(
+    (feed.data?.pages ?? []).flatMap((page) => (Array.isArray(page.items) ? page.items : [])),
+  );
 
   // Pull the next page when the end of the feed comes into view, so the stream is read by
   // scrolling. The button below is the same action for a reader who is not scrolling (and the only
