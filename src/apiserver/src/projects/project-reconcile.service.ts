@@ -170,6 +170,8 @@ interface ExistingActionRow {
 /** `[K5]`: the same row, plus the two columns a re-claim has to judge it on. */
 interface ReclaimableActionRow extends ExistingActionRow {
   refusalCode: string | null;
+  /** The judgment that first proposed it. Frozen by migration 0120 once it is set. */
+  existingDecisionId: string | null;
   detail: unknown;
 }
 
@@ -1011,10 +1013,11 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         RETURNING "id"
       `);
       let claimedId = inserted[0]?.id ?? null;
+      let ledgerDecisionId = decisionId;
       if (!claimedId) {
         const existing = (await tx.$queryRaw<ReclaimableActionRow[]>(Prisma.sql`
           SELECT "id", "project_id" AS "projectId", "status", "refusal_code" AS "refusalCode",
-                 "detail"
+                 "decision_id" AS "existingDecisionId", "detail"
             FROM "project_action" WHERE "idempotency_key" = ${action.idempotencyKey}
         `))[0];
         if (!existing || existing.projectId !== lease.projectId) {
@@ -1036,12 +1039,19 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
           UPDATE "project_action"
              SET "status" = 'CLAIMED'::"project_action_status",
                  "refusal_code" = NULL, "reason_code" = NULL,
-                 "decision_id" = ${decisionId}::uuid,
+                 -- decision_id is NOT touched. Migration 0120 freezes it once it is set, and it
+                 -- is right that it does: the lineage says which judgment PROPOSED this action, and
+                 -- a retry is the same action being attempted again rather than a new one. Which
+                 -- decision drove each retry is recorded beside the counter instead. (No backticks
+                 -- in here: this is inside a template literal and one would close it early, which
+                 -- surfaces as a TS1005 pointing at the wrong line.)
                  "fencing_token" = ${lease.fencingToken},
                  -- The counter is the BOUND, so it is written with the CLAIM and not with the
                  -- outcome: a process that dies between the two has still spent that attempt, and
                  -- a crash loop cannot buy itself an unbounded number of them.
-                 "detail" = "detail" || ${JSON.stringify({ verdictApplyAttempt: attempt })}::jsonb,
+                 "detail" = "detail" || ${JSON.stringify({
+                   verdictApplyAttempt: attempt, verdictApplyRetriedBy: uuidToBase62(decisionId),
+                 })}::jsonb,
                  "updated_at" = ${now}
            WHERE "id" = ${existing.id}::uuid AND "status" = 'REFUSED'
              AND "refusal_code" = ${existing.refusalCode}
@@ -1052,6 +1062,10 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
           } as const;
         }
         claimedId = existing.id;
+        // The row's own lineage, which the publish and refuse clauses below match on. A re-claim
+        // keeps the decision that first proposed it, so comparing against THIS pass's decision
+        // would match nothing and the publish would fail on a row it had just legally claimed.
+        ledgerDecisionId = existing.existingDecisionId ?? decisionId;
       }
       const actionId = claimedId;
 
@@ -1109,7 +1123,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
                  "detail" = "detail" || ${JSON.stringify(effectResult.detail ?? {})}::jsonb,
                  "updated_at" = ${now}
            WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
-             AND "decision_id" = ${decisionId}::uuid
+             AND "decision_id" = ${ledgerDecisionId}::uuid
         `);
         if (refused !== 1) throw new Error(`failed to refuse Project action ${actionId}`);
         return {
@@ -1122,7 +1136,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       const published = await tx.$executeRaw(Prisma.sql`
         UPDATE "project_action" SET "status" = 'APPLIED', "updated_at" = ${now}
          WHERE "id" = ${actionId}::uuid AND "status" = 'CLAIMED'
-           AND "decision_id" = ${decisionId}::uuid
+           AND "decision_id" = ${ledgerDecisionId}::uuid
       `);
       if (published !== 1) throw new Error(`failed to publish Project action ${actionId}`);
       return { status: 'APPLIED', actionId } as const;

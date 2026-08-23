@@ -486,10 +486,22 @@ test('a verification verdict reaches production through the reconcile pass',
       //
       // Injected as the durable row the executor itself writes for that case, because that is the
       // state a person would find on disk. Nothing here reaches into the effect.
+      let injectedDecisionId: string | null = null;
       const injectRefusal = async (target: Fixture, verifier: string, attempt: number) => {
         const revision = (await db.task.findUniqueOrThrow({
           where: { id: target.ids[verifier] },
         })).verdictRevision;
+        // Attributed to a REAL decision, which is the half a hand-built row gets wrong and the
+        // half that matters: migration 0120 freezes `decision_id` once it is set, so a retry that
+        // moved the lineage would be refused by the database. A refusal with a null decision would
+        // have let exactly that bug through this test.
+        const decision = await db.projectDecision.findFirst({
+          where: { projectId: target.projectId },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true },
+        });
+        assert.ok(decision, 'the loop wrote no decision to attribute the refusal to');
+        injectedDecisionId = decision.id;
         await db.projectAction.create({
           data: {
             projectId: target.projectId,
@@ -501,6 +513,7 @@ test('a verification verdict reaches production through the reconcile pass',
             subjectType: 'TASK',
             subjectId: target.ids[verifier],
             fencingToken: 1n,
+            decisionId: decision.id,
             refusalCode: 'STALE_SNAPSHOT',
             reasonCode: 'STALE_SNAPSHOT',
             detail: { v: 1, verdictApplyAttempt: attempt },
@@ -515,6 +528,9 @@ test('a verification verdict reaches production through the reconcile pass',
           v: { verifies: 's' },
         });
         await settledRun(db, target, 'v');
+        // One pass before the conclusion exists, so the refusal below can be attributed to a real
+        // judgment — which is what a refusal in production always is.
+        await settle(events, reconciler);
         await conclude(tasks, target, 'v', TaskVerdict.PASS);
         await injectRefusal(target, 'v', 1);
 
@@ -525,6 +541,9 @@ test('a verification verdict reaches production through the reconcile pass',
         // ONE row, not two: the retry re-claims the permanent key rather than minting a second.
         assert.equal((await verdictActions(db, target.projectId)).length, 1);
         assert.equal(verdictApplyAttempt(action.detail), 2, 'the attempt was not counted');
+        // 0120's lineage is history: the retry records which decision drove it in `detail` rather
+        // than re-pointing the row, which the database would refuse outright.
+        assert.equal(action.decisionId, injectedDecisionId, 'the retry moved the decision lineage');
         // …and DEP4 is satisfied, which is the whole point of applying it.
         const epochs = await loadVerificationEpochGates(db as never, [target.ids.s]);
         assert.equal(epochs.get(target.ids.s)?.gate, null, 'the epoch did not open');
@@ -536,6 +555,7 @@ test('a verification verdict reaches production through the reconcile pass',
           v: { verifies: 's' },
         });
         await settledRun(db, target, 'v');
+        await settle(events, reconciler);
         await conclude(tasks, target, 'v', TaskVerdict.PASS);
         // The state three failed attempts leave behind.
         await injectRefusal(target, 'v', VERDICT_APPLY_MAX_ATTEMPTS);
@@ -557,6 +577,7 @@ test('a verification verdict reaches production through the reconcile pass',
           v: { verifies: 's' },
         });
         await settledRun(db, target, 'v');
+        await settle(events, reconciler);
         await conclude(tasks, target, 'v', TaskVerdict.PASS);
         await injectRefusal(target, 'v', VERDICT_APPLY_MAX_ATTEMPTS);
 
@@ -593,6 +614,70 @@ test('a verification verdict reaches production through the reconcile pass',
         assert.equal(epochs.get(target.ids.s)?.gate, 'VERDICT_NOT_APPLIED');
         assert.equal(epochs.get(target.ids.s)?.stalled, true, 'a permanent wait read as a wait');
       });
+
+      await t.test('a restart and a redelivery do not turn one retry into two applies',
+        async () => {
+          // The two ways an exactly-once claim is usually lost. The retry re-claims a PERMANENT
+          // key, so if it were reachable from `APPLIED` — or if a fresh process could not see the
+          // attempt the old one spent — a redelivery would apply §13.2's consequences twice: the
+          // subject reverted again, a second defect, a second failure row.
+          const target = await fixture(db, 'restart', {
+            s: { status: TaskStatus.DONE },
+            d: { dependsOn: ['s'] },
+            v: { verifies: 's' },
+          });
+          await settledRun(db, target, 'v');
+          await settle(events, reconciler);
+          await conclude(tasks, target, 'v', TaskVerdict.FAIL);
+          await injectRefusal(target, 'v', 1);
+          await settle(events, reconciler);
+
+          const applied = (await verdictActions(db, target.projectId))[0];
+          assert.equal(applied.status, 'APPLIED');
+          const before = {
+            actions: (await verdictActions(db, target.projectId)).length,
+            attempt: verdictApplyAttempt(applied.detail),
+            defects: (await defects(db, target)).length,
+            failures: await db.taskVerificationFailure.count({
+              where: { projectId: target.projectId },
+            }),
+          };
+          assert.deepEqual(before, { actions: 1, attempt: 2, defects: 1, failures: 1 });
+
+          // A RESTART: nothing of the loop's in-memory state survives, only what it committed.
+          const events2 = new ProjectEventsService(prisma);
+          const decisions2 = new ProjectDecisionService(prisma);
+          const reconciler2 = new ProjectReconcileService(prisma, events2, decisions2);
+          const verdicts2 = new ProjectVerificationVerdictService(prisma, reconciler2);
+          const unregister2 = events2.registerHandler(reconciler2);
+          verdicts2.onModuleInit();
+          try {
+            // …and a REDELIVERY: somebody re-completes the subject, which is exactly what a second
+            // application of this FAIL would undo a second time.
+            await db.task.update({
+              where: { id: target.ids.s },
+              data: { status: TaskStatus.DONE },
+            });
+            await settle(events2, reconciler2);
+            await settle(events2, reconciler2);
+          } finally {
+            verdicts2.onModuleDestroy();
+            unregister2();
+          }
+
+          assert.deepEqual({
+            actions: (await verdictActions(db, target.projectId)).length,
+            attempt: verdictApplyAttempt(
+              (await verdictActions(db, target.projectId))[0].detail,
+            ),
+            defects: (await defects(db, target)).length,
+            failures: await db.taskVerificationFailure.count({
+              where: { projectId: target.projectId },
+            }),
+          }, before, 'the retry path applied a conclusion twice');
+          const subject = await db.task.findUniqueOrThrow({ where: { id: target.ids.s } });
+          assert.equal(subject.status, 'DONE', 'the re-completion was reverted a second time');
+        });
 
       await t.test('the boundary: a Project with the coordinator off has no loop to run this',
         async () => {

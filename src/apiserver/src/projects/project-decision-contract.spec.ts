@@ -43,7 +43,15 @@ test('stale actions fail closed and create their refusal, wake and outbox signal
   assert.match(RECONCILE, /refusalCode:\s*'STALE_SNAPSHOT'/);
   assert.match(RECONCILE, /kind:\s*'coordinator\.snapshot_stale'/);
   assert.match(RECONCILE, /stale Coordinator decision requires reconcile/);
-  assert.match(RECONCILE, /"decision_id" = \$\{decisionId\}::uuid/);
+  // The publish and the refuse both match the action's OWN decision lineage, which is what stops a
+  // pass finishing an action a different judgment planned. `[K5]`'s retry re-claims a permanent key
+  // whose `decision_id` migration 0120 freezes, so the local it compares against is the row's
+  // lineage rather than this pass's id — `ledgerDecisionId` IS `decisionId` on every path that
+  // inserts, and the row's own decision on the one path that re-claims. Both spellings are asserted
+  // so neither clause can quietly stop comparing at all.
+  assert.match(RECONCILE, /let ledgerDecisionId = decisionId;/);
+  assert.match(RECONCILE, /"decision_id" = \$\{ledgerDecisionId\}::uuid/);
+  assert.match(RECONCILE, /ledgerDecisionId = existing\.existingDecisionId \?\? decisionId;/);
   assert.match(RECONCILE, /isolationLevel:\s*Prisma\.TransactionIsolationLevel\.RepeatableRead/);
 });
 
