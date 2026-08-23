@@ -871,6 +871,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "projects/project-failure-recovery.service.ts#scan", class: "RAW_FENCE", statements: 1 },
   { at: "projects/project-reconcile.service.ts#enqueueBackstopWakes", class: "INSERT", statements: 1 },
   { at: "projects/project-reconcile.service.ts#enqueueScheduledWakes", class: "INSERT", statements: 1 },
+  { at: "projects/project-reconcile.service.ts#pruneTelemetry", class: "MANY_ROWS", statements: 2, note: "Two independent bounded retention batches: consumed idle events first, then structurally idle decisions. They need not be atomic; either deletion is safe and the next cadence retries whatever remains." },
   { at: "projects/project-reconcile.service.ts#releaseLease", class: "RAW_FENCE", statements: 1 },
   { at: "projects/project-reconcile.service.ts#renewLease", class: "RAW_FENCE", statements: 1 },
   { at: "projects/projects.service.ts#coordinator", class: "ONE_ROW_CAS", statements: 1 },

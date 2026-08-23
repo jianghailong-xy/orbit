@@ -51,6 +51,9 @@ export const PROJECT_RECONCILE_HEARTBEAT_MS = 20_000;
 export const PROJECT_RECONCILE_TIMER_MS = 10_000;
 export const PROJECT_RECONCILE_BACKSTOP_MS = 60_000;
 export const PROJECT_RECONCILE_STALE_MS = 5 * 60_000;
+export const PROJECT_TELEMETRY_RETENTION_MS = 2 * 24 * 60 * 60_000;
+export const PROJECT_TELEMETRY_PRUNE_INTERVAL_MS = 60 * 60_000;
+export const PROJECT_TELEMETRY_PRUNE_BATCH = 5_000;
 
 const ACTION_TYPES = [
   'DISPATCH_TASK',
@@ -86,6 +89,11 @@ export interface ProjectReconcileAction {
   type: ProjectReconcileActionType;
   subject: { type: string; id?: string | null };
   detail?: Prisma.InputJsonValue;
+}
+
+export interface ProjectTelemetryPruneResult {
+  events: number;
+  decisions: number;
 }
 
 export type ProjectActionApplyResult =
@@ -273,6 +281,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
   private unregisterHandler?: () => void;
   private ticking = false;
   private lastBackstopAt = 0;
+  private lastTelemetryPruneAt = 0;
   private _backstopHits = 0;
   private rotationExecutor?: ProjectRotationExecutor;
   private verdictExecutor?: ProjectVerdictExecutor;
@@ -399,6 +408,21 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       await this.events.drainAvailable();
       await this.flushPendingRotations();
       await this.flushPendingTurns();
+      // `decisions` is absent only in the pre-0120 isolated harnesses, whose schema has no
+      // project_decision table. Nest always supplies it after the audit migration.
+      if (this.decisions
+        && now.getTime() - this.lastTelemetryPruneAt >= PROJECT_TELEMETRY_PRUNE_INTERVAL_MS) {
+        this.lastTelemetryPruneAt = now.getTime();
+        // Retention is never load-bearing for reconciliation. A failed prune leaves history on
+        // disk and must not delay, consume or otherwise change a Project's durable work queue.
+        await this.pruneTelemetry(now).then(({ events, decisions }) => {
+          if (events + decisions > 0) {
+            this.log.debug(`Pruned ${events} idle Project event(s) and ${decisions} decision(s)`);
+          }
+        }).catch((cause: unknown) => {
+          this.log.error(`Project telemetry prune failed: ${errorText(cause)}`);
+        });
+      }
     } catch (cause) {
       this.log.error(`Project reconcile recovery tick failed: ${errorText(cause)}`);
     } finally {
@@ -1807,7 +1831,7 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
         "dedupe_key", "payload", "last_at"
       )
       SELECT gen_random_uuid(), p."id", 1, 'timer.due', ${now}, 'TIMER', p."id",
-             'timer.due:' || r."next_wake_at"::text,
+             'timer.due:' || COALESCE(r."next_wake_reason", ''),
              jsonb_build_object('reason', r."next_wake_reason"), ${now}
         FROM "project" p JOIN "project_runtime" r ON r."project_id" = p."id"
        WHERE p."status" = 'OPEN' AND p."coordinator_enabled" = true
@@ -1816,6 +1840,99 @@ implements ProjectEventHandler, OnModuleInit, OnModuleDestroy {
       DO UPDATE SET "occurrences" = "project_event"."occurrences" + 1,
                     "last_at" = GREATEST("project_event"."last_at", EXCLUDED."last_at")
     `);
+  }
+
+  /**
+   * Bound the two high-volume, idle control-loop traces without touching live work or business
+   * audit. Forty-eight hours keeps the current and previous day available for incident diagnosis,
+   * while bounding a continuously executing Project to roughly 2,880 one-minute timer rows (plus
+   * at most one hour's newly expired rows) instead of an unbounded history. Each call takes a
+   * 5,000-row `SKIP LOCKED` batch: more than ten times the observed hourly growth, without making
+   * cleanup contend with delivery or with another replica.
+   *
+   * Event eligibility is deliberately narrower than "old and consumed": only a normally
+   * reconciled `timer.due` is disposable. Pending, retrying, DEAD, backstop, user, blocker and all
+   * other event rows are outside the predicate. A consumed row is no longer in the partial unique
+   * index, so deleting it cannot suppress a later wake.
+   *
+   * Decision eligibility is narrower again. The row must be the single-candidate in-flight poll
+   * and carry no signal, action, authorization, turn, aggregation or blocker observation. Refused
+   * and applied actions and acceptance-run lineage are also protected relationally by anti-joins
+   * (and by their FKs). This trades only repetitive idle snapshots for the storage bound; any
+   * non-idle audit remains.
+   */
+  async pruneTelemetry(now = new Date()): Promise<ProjectTelemetryPruneResult> {
+    const cutoff = new Date(now.getTime() - PROJECT_TELEMETRY_RETENTION_MS);
+    const events = await this.prisma.$executeRaw(Prisma.sql`
+      WITH "candidates" AS (
+        SELECT e."id"
+          FROM "project_event" e
+         WHERE e."kind" = 'timer.due'
+           AND e."disposition" = 'RECONCILED'
+           AND e."consumed_at" IS NOT NULL
+           AND e."consumed_at" < ${cutoff}
+         ORDER BY e."consumed_at", e."id"
+         LIMIT ${PROJECT_TELEMETRY_PRUNE_BATCH}
+         FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM "project_event" e
+       USING "candidates" c
+       WHERE e."id" = c."id"
+    `);
+    const decisions = await this.prisma.$executeRaw(Prisma.sql`
+      WITH "candidates" AS (
+        SELECT d."id"
+          FROM "project_decision" d
+         WHERE d."reason" = 'in-flight session may end'
+           AND d."created_at" < ${cutoff}
+           AND d."decision_input"->'signals' = '[]'::jsonb
+           AND d."outcome"->>'reason' = 'in-flight session may end'
+           AND d."outcome"->>'runStateBefore' = 'EXECUTING'
+           AND d."outcome"->>'runStateAfter' = 'EXECUTING'
+           AND d."outcome"->>'nextWakeReason' = 'in-flight session may end'
+           AND d."outcome"->>'nextWakeAt' IS NOT NULL
+           AND d."outcome"->'actions' = '[]'::jsonb
+           AND d."outcome"->'authorizations' = '[]'::jsonb
+           AND d."outcome"->'blockersOpened' = '[]'::jsonb
+           AND d."outcome"->'blockersCleared' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,raised}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,touched}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,cleared}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,escalated}' = '[]'::jsonb
+           AND d."outcome"#>'{blockers,open}' = '[]'::jsonb
+           AND d."outcome"->'aggregations' = '[]'::jsonb
+           AND d."outcome"->'aggregationCycleTaskIds' = '[]'::jsonb
+           AND d."outcome"->'suppressedTurnReasons' = '[]'::jsonb
+           AND d."outcome"->'turnReason' = 'null'::jsonb
+           AND NOT (d."outcome" ? 'turn')
+           AND d."outcome"#>>'{coordinator,status}' = 'HEALTHY'
+           AND CASE
+                 WHEN jsonb_typeof(d."outcome"#>'{detail,wakeCandidates}') = 'array'
+                 THEN jsonb_array_length(d."outcome"#>'{detail,wakeCandidates}') = 1
+                 ELSE false
+               END
+           AND d."outcome"#>>'{detail,wakeCandidates,0,source}' = '5'
+           AND d."outcome"#>>'{detail,wakeCandidates,0,reason}' = 'in-flight session may end'
+           AND CASE
+                 WHEN jsonb_typeof(d."outcome"->'consumedEventIds') = 'array'
+                 THEN jsonb_array_length(d."outcome"->'consumedEventIds') = 1
+                 ELSE false
+               END
+           AND NOT EXISTS (
+             SELECT 1 FROM "project_action" a WHERE a."decision_id" = d."id"
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM "project_acceptance_run" r WHERE r."decision_id" = d."id"
+           )
+         ORDER BY d."created_at", d."id"
+         LIMIT ${PROJECT_TELEMETRY_PRUNE_BATCH}
+         FOR UPDATE OF d SKIP LOCKED
+      )
+      DELETE FROM "project_decision" d
+       USING "candidates" c
+       WHERE d."id" = c."id"
+    `);
+    return { events, decisions };
   }
 
   /**
