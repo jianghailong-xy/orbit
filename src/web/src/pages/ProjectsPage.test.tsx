@@ -84,6 +84,13 @@ function renderDetail(qc: QueryClient, urlId: string) {
   );
 }
 
+// Every project row's goal line, in row order. The rows are what the assertions below are about,
+// and a bare `html.toContain` cannot tell the goal apart from the title, the count or the page's
+// own markup — this narrows to the one element the goal is rendered into.
+function goalLines(html: string): string[] {
+  return [...html.matchAll(/<div class="project-row-goal">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
+}
+
 function newClient() {
   // refetchOnMount/retryOnMount:false keep a seeded cache entry (success OR error) from being
   // treated as needing a fresh fetch on this mount — the assertions below are about what's
@@ -257,8 +264,8 @@ describe('ProjectsPage', () => {
     );
   });
 
-  it('renders each project’s title, status, task count and goal excerpt/fallback', () => {
-    // Well past any sensible row-length cap — proves long goals get truncated, not just shown.
+  it('renders each project’s title, status, task count and goal/fallback', () => {
+    // Well past any sensible row-length cap — what proves the row no longer slices the text.
     const longGoal = 'Ship the new marketing site. '.repeat(10);
     const qc = newClient();
     qc.setQueryData(['projects'], [
@@ -300,8 +307,87 @@ describe('ProjectsPage', () => {
     expect(html).toContain('No goal set'); // fallback for a null goal
     expect(html).toContain('1 task'); // singular, not "1 tasks"
     expect(html).toContain('Ledger Migration');
-    expect(html).not.toContain(longGoal); // the full 300-char goal must not reach the row
-    expect(html).toContain(`${longGoal.slice(0, 180)}…`); // capped at 180 chars + one ellipsis
+    // The whole goal reaches the row, whitespace-collapsed and nothing else: the cut is the box's
+    // (white-space:nowrap + text-overflow:ellipsis), which is why there is no character count and
+    // no ellipsis character here. A 180-character slice occupies one rendered line of Latin text
+    // and three of CJK — the same slice cannot give every row the same height.
+    expect(goalLines(html)).toContain(longGoal.trim());
+    expect(html).not.toContain('…'); // no hard-sliced excerpt left anywhere on the page
+  });
+
+  it('shows a Markdown goal as the line it reads as, not as source', () => {
+    // The shape of goal that actually shipped: a heading, bold, inline code, a path with a line
+    // number in it, a bullet and a link — all of it rendered as Markdown on the detail page.
+    const goal = [
+      '把 Project 详情页改造成全景视图。',
+      '',
+      '## 现状缺口（2026-08-22 现网实测）',
+      '',
+      '- 项目页 payload `ProjectTask`（src/web/src/pages/ProjectsPage.tsx:521）**一个依赖字段都没有**',
+      '- 详见 [依赖图设计](https://example.com/design)',
+    ].join('\n');
+    const qc = newClient();
+    qc.setQueryData(['projects'], [
+      {
+        id: P1,
+        title: 'Panorama',
+        status: 'OPEN',
+        goal,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 5 },
+      },
+    ]);
+    const [line] = goalLines(renderPage(qc));
+
+    // The marks themselves are gone...
+    expect(line).not.toMatch(/[#*`]/);
+    expect(line).not.toContain('](');
+    expect(line).not.toContain('https://example.com/design');
+    // ...and every word they wrapped survived, in order, on one line.
+    expect(line).not.toContain('\n');
+    expect(line).toContain('现状缺口（2026-08-22 现网实测）');
+    expect(line).toContain('ProjectTask');
+    expect(line).toContain('一个依赖字段都没有');
+    expect(line).toContain('依赖图设计');
+    // A path with a line number carries no Markdown at all and has to come back untouched.
+    expect(line).toContain('src/web/src/pages/ProjectsPage.tsx:521');
+  });
+
+  it('gives every row the same height whatever its goal is', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects'], [
+      { id: P1, goal: 'Short', title: 'A' },
+      { id: P2, goal: null, title: 'B' },
+      { id: P3, goal: '## H\n\n- '.concat('长'.repeat(400)), title: 'C' },
+    ].map((p) => ({
+      status: 'OPEN' as const,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      _count: { tasks: 1 },
+      ...p,
+    })));
+    const html = renderPage(qc);
+
+    // Three rows, each a title line and exactly one goal line, in the same two elements. Same
+    // markup + same class = same height, whether the goal is five characters or four hundred.
+    expect(goalLines(html)).toHaveLength(3);
+    expect(html.match(/class="project-row-title"/g)).toHaveLength(3);
+    for (const line of goalLines(html)) expect(line).not.toContain('\n');
+
+    // The rows no longer slice the field to a character count — the constant that did it is not
+    // read here any more (it still serves the detail page's task rows, which this task left as
+    // they were), and what replaced it is the Markdown-to-text helper.
+    expect(source).toContain('markdownToPlainText(p.goal)');
+    expect(source).not.toMatch(/excerpt\(p\.goal/);
+
+    // The cut is the box's, and these three declarations are the cut. Asserted against the
+    // stylesheet because there is no layout in a static render to measure.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const rule = css.match(/\.project-row-goal\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('white-space: nowrap');
+    expect(rule).toContain('overflow: hidden');
+    expect(rule).toContain('text-overflow: ellipsis');
   });
 
   it('links the whole row to its project at the short public id, never the raw UUID', () => {
