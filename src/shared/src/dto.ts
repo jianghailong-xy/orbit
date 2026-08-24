@@ -849,7 +849,10 @@ export interface ApprovalDecisionResponse {
 // mid-turn for the same reason interrupt is — nothing about it needs the engine to be
 // idle — and like reload it occupies no in-flight slot. When one PATCH moves both halves
 // the server queues both, setconfig first, so the re-spawn that follows carries every
-// new flag rather than re-doing what the control frame just did.
+// new flag rather than re-doing what the control frame just did. Filed for the claude
+// runtime alone: the other runtimes' session loops have no arm for the kind (codex and
+// kimi are driven over ACP/JSON-RPC, opencode runs one process per turn), so one sent
+// there would be acked on delivery and applied by nobody. They keep the reload.
 // 'diff' is a fire-and-forget control turn (no text, no claude): it asks the runner to
 // recompute the live worktree diff and push it back, so an opened file's diff reflects
 // the current worktree even when the stored snapshot lagged (the heartbeat refreshes the

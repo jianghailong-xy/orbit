@@ -21,12 +21,16 @@ import { SessionsService } from './sessions.service';
 const ID = '11111111-1111-4111-8111-111111111111';
 const OWNER = '22222222-2222-4222-8222-222222222222';
 
-/** A live claude session with a committed model/mode/effort triple, and the turns a PATCH left. */
+/** A live session with a committed model/mode/effort triple, and the turns a PATCH left. Claude
+ *  unless `provider` says otherwise. */
 function serviceOn(current: {
   model?: string | null;
   permissionMode?: string | null;
   effort?: string | null;
-  /** The one configured row `provider` may be switched onto, or none. */
+  /** The identity the session declares. A configured (BYOK) slug takes providerBuiltin: false. */
+  provider?: string;
+  providerBuiltin?: boolean;
+  /** The one configured row `provider` names, or may be switched onto — or none. */
   modelProvider?: Record<string, unknown>;
 }) {
   const { modelProvider, ...row } = current;
@@ -178,4 +182,104 @@ test('a provider switch alongside a permission-mode change queues both, re-spawn
   assert.equal(live.model, respawn.model);
   assert.equal(live.permissionMode, respawn.permissionMode);
   assert.equal(live.permissionMode, 'auto');
+});
+
+/**
+ * Which turn a config PATCH queues also depends on the RUNTIME, not just on what moved.
+ *
+ * `setconfig` is a stream-json control_request. Codex and Kimi are driven over ACP/JSON-RPC and
+ * OpenCode runs one process per turn; none of their session loops has an arm for the kind, so a
+ * setconfig filed for one is acked on delivery and the change never reaches the engine at all —
+ * strictly worse than the wait the split removed. They keep the reload they always had.
+ *
+ * Each case below is paired with its opposite on purpose: "codex re-spawns" says nothing without
+ * "claude does not", and a rule that always re-spawned would satisfy the first half alone.
+ */
+
+test('a codex session is re-spawned for a model change — ACP has nothing to hear a frame', async () => {
+  const { service, turns } = serviceOn({ provider: 'codex', model: 'gpt-5.6-sol' });
+
+  await service.updateConfig(OWNER, ID, { model: 'gpt-5.6-thinking' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  // The change still lands — it rides the process this reload builds, as it always did.
+  assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'gpt-5.6-thinking');
+});
+
+test('a kimi session is re-spawned for a permission-mode change', async () => {
+  const { service, turns } = serviceOn({
+    provider: 'kimi',
+    model: 'kimi-code/kimi-for-coding',
+  });
+
+  await service.updateConfig(OWNER, ID, { permissionMode: 'plan' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').permissionMode, 'plan');
+});
+
+test('an opencode session is re-spawned too — its process does not outlive the turn', async () => {
+  const { service, turns } = serviceOn({
+    provider: 'opencode',
+    model: 'anthropic/claude-opus-5',
+  });
+
+  await service.updateConfig(OWNER, ID, { model: 'anthropic/claude-haiku-4-5' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'anthropic/claude-haiku-4-5');
+});
+
+test('a built-in claude session is told, and is the control for all three above', async () => {
+  const { service, turns } = serviceOn({});
+
+  await service.updateConfig(OWNER, ID, { model: 'claude-haiku-4-5' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+});
+
+test('a configured provider borrowing the claude runtime is told, not re-spawned', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  // The session's own slug is its owner's word — nothing about it says "claude". Judged by the
+  // slug, this session would lose the control frame; judged by the runtime it borrows, it keeps
+  // it, because the process it is actually running is a claude one.
+  const { service, turns } = serviceOn({
+    provider: 'my-anthropic',
+    providerBuiltin: false,
+    model: 'byok-large',
+    modelProvider: {
+      runtime: 'claude',
+      baseUrl: 'https://byok.example/anthropic',
+      apiKeyEnc: encryptSecret('sk-byok'),
+      defaultModel: 'byok-large',
+      enabled: true,
+    },
+  });
+
+  await service.updateConfig(OWNER, ID, { model: 'byok-small' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'byok-small');
+});
+
+test('a configured provider borrowing the codex runtime is re-spawned', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  // The other half of the same claim: a custom slug is not what decides this, the runtime is.
+  const { service, turns } = serviceOn({
+    provider: 'my-openai',
+    providerBuiltin: false,
+    model: 'byok-gpt',
+    modelProvider: {
+      runtime: 'codex',
+      baseUrl: 'https://byok.example/openai',
+      apiKeyEnc: encryptSecret('sk-byok'),
+      defaultModel: 'byok-gpt',
+      enabled: true,
+    },
+  });
+
+  await service.updateConfig(OWNER, ID, { model: 'byok-gpt-mini' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'byok-gpt-mini');
 });

@@ -52,11 +52,14 @@ test('config update seeds the prompt before the control turn when claim just cha
     ok: true,
   });
   assert.equal(turns.length, 2);
+  // The seeding ORDER is what this asserts. Which control turn follows the prompt is the codex
+  // fixture's own answer: that runtime has no control frame to be told a model on, so its config
+  // rides a re-spawn — the same reload it queued before the kinds were split.
   assert.deepEqual(
     turns.map(({ kind, seq }) => ({ kind, seq })),
     [
       { kind: 'message', seq: 1 },
-      { kind: 'setconfig', seq: 2 },
+      { kind: 'reload', seq: 2 },
     ],
   );
   assert.equal(turns[0].content, 'opening prompt');
