@@ -17,6 +17,7 @@ import {
 } from '../components/ProjectCoordinatorCard';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
+import { ProjectGoalCard } from '../components/ProjectGoalCard';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
 import { ProjectSections } from '../components/ProjectSections';
 import {
@@ -499,21 +500,16 @@ export function NewProjectModal({ open, onClose }: { open: boolean; onClose: () 
   );
 }
 
-/** One long-form field. Shown in full — the list row is where a goal gets truncated, this page is
- *  where it gets read — and pre-wrap so the author's own line breaks survive. */
+/** One long-form field. Shown in full and with the author's own line breaks preserved. */
 function Field({ label, text, empty }: { label: string; text?: string | null; empty: string }) {
   const body = text?.trim();
   return (
     <div style={{ marginBottom: 24 }}>
       <Typography.Title level={5}>{label}</Typography.Title>
-      {/* These three are written the way task descriptions are — headings, lists, fenced commands —
-          and are handed to a coordinator that reads them as prompts, so they are read as Markdown
-          rather than shown as source. `remarkHardBreaks` because they are hand-laid-out text that
-          used to be rendered pre-wrapped here, and CommonMark's soft break would collapse a
-          multi-line goal into one run-on paragraph. react-markdown directly rather than the
-          transcript's `MD`: that one carries a session's attachment and link resolvers, and
-          importing it would pull the whole transcript module onto a page with no session on it —
-          the one piece worth sharing is the plugin, which is why it lives in lib. */}
+      {/* Instructions are written the way task descriptions are — headings, lists, fenced
+          commands — and are handed to a coordinator as a prompt, so read them as Markdown rather
+          than source. `remarkHardBreaks` preserves the hand-laid-out lines. react-markdown is used
+          directly because the transcript's `MD` carries session attachment/link resolution. */}
       {body ? (
         <div className="md">
           <Markdown remarkPlugins={[remarkGfm, remarkHardBreaks]} rehypePlugins={[rehypeHighlight]}>
@@ -588,8 +584,8 @@ export function ProjectDetailPage() {
         <>
           {/* Project identity gets one quiet row of its own. The old head put a tall Coordinator
               card beside two lines of title metadata, creating a large dead rectangle under the
-              title. Work state and the way to act on it now form the balanced command centre
-              directly below instead. */}
+              title. The stable goal now frames the page, followed by a balanced command centre
+              for changing work state and the way to act on it. */}
           <header className="project-detail-identity">
             <Typography.Title level={2} className="page-title">
               {p.title}
@@ -601,6 +597,11 @@ export function ProjectDetailPage() {
               </span>
             </div>
           </header>
+
+          {/* The stable definition of the project comes before its changing execution state. A
+              long brief previews in three lines and expands in place; the full Markdown remains
+              the one source on this page rather than being repeated below the graph. */}
+          <ProjectGoalCard goal={p.goal} />
 
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On
@@ -626,10 +627,6 @@ export function ProjectDetailPage() {
               page decides to show — it is something a chain-shaped project has. Under the graph,
               because on a chain it is the reading the graph cannot give. */}
           <ProjectChainProgress projectId={id} />
-
-          {/* Between the picture and the list: what the project was SET UP to be, which is what a
-              reader needs in hand before reading the tasks that carry it out. */}
-          <Field label="Goal" text={p.goal} empty="No goal set" />
 
           {/* The criteria live HERE and nowhere else on this page. There used to be a
               `Field label="Acceptance criteria"` in this slot as well as the card below the task

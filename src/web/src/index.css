@@ -9156,11 +9156,11 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
 }
 
-/* Project identity stays visually quiet; the command centre immediately beneath it owns the live
-   numbers and actions. This avoids both the old repeated status tags and the large blank rectangle
-   created when a 90px title block shared a row with a 250px coordinator card. */
+/* Project identity stays visually quiet; the goal and then the command centre beneath it own the
+   purpose, live numbers and actions. This avoids both the old repeated status tags and the large
+   blank rectangle created when a 90px title block shared a row with a 250px coordinator card. */
 .project-detail-identity {
-  margin: 14px 0 18px;
+  margin: 14px 0;
 }
 .project-detail-identity .page-title {
   max-width: 920px;
@@ -9180,6 +9180,71 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .project-detail-meta .ant-tag {
   margin-inline-end: 0;
+}
+
+/* A project's stable purpose precedes the live work account. Long Markdown is kept in the DOM in
+   full, but the first reading is a compact three-line window; expanding changes only the window,
+   so links, lists and code keep the same rendering rather than switching between two copies. */
+.project-goal-card {
+  margin-bottom: 14px;
+  padding: 15px 18px 16px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+}
+.project-goal-head,
+.project-goal-heading {
+  display: flex;
+  align-items: center;
+}
+.project-goal-head {
+  min-height: 24px;
+  gap: 12px;
+  justify-content: space-between;
+}
+.project-goal-heading {
+  min-width: 0;
+  gap: 9px;
+}
+.project-goal-heading .ant-typography {
+  margin: 0;
+}
+.project-goal-icon {
+  color: var(--brand);
+  font-size: 18px;
+}
+.project-goal-toggle.ant-btn {
+  flex: 0 0 auto;
+  height: 26px;
+  padding-inline: 7px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.project-goal-toggle.ant-btn:hover,
+.project-goal-toggle.ant-btn:focus-visible {
+  color: var(--brand);
+  background: var(--brand-tint);
+}
+.project-goal-content {
+  margin-top: 8px;
+  color: var(--text-1);
+}
+.project-goal-content.is-collapsed {
+  max-height: 4.8em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+.project-goal-empty.ant-typography {
+  margin: 8px 0 0;
+}
+@media (max-width: 560px) {
+  .project-goal-card {
+    padding: 14px;
+  }
+  .project-goal-toggle.ant-btn {
+    padding-inline: 4px;
+  }
 }
 
 /* Work account and human control are one command centre: a flexible evidence card and a stable

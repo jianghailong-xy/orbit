@@ -303,22 +303,22 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const ranking = at('Unblocks the most work');
     const acceptance = at('Acceptance</div>');
 
-    expect(header).toBeGreaterThan(-1);
-    // Work state establishes context, then the coordinator offers the action on it. Both belong to
-    // one command-centre grid and both stay ahead of the graph and long-form project fields.
+    // The stable goal frames every changing reading below it. It is one compact card between the
+    // identity and the command centre, not a long-form appendix after the graph.
+    expect(goal).toBeGreaterThan(-1);
+    expect(header).toBeGreaterThan(goal);
+    // Work state then establishes context, and the coordinator offers the action on it. Both
+    // belong to one command-centre grid and stay ahead of the graph.
     expect(coordinator).toBeGreaterThan(-1);
     expect(coordinator).toBeGreaterThan(header);
     expect(coordinator).toBeLessThan(graph);
     // The picture the counts above are a summary of, then the chain reading of the same shape.
     expect(graph).toBeGreaterThan(header);
     expect(chain).toBeGreaterThan(graph);
-    // What the project was SET UP to be, between the picture and the list that carries it out —
-    // the graph and the list are two readings of one thing, and the fields are what they are for.
-    expect(goal).toBeGreaterThan(chain);
-    // What it was set up to be, then how anyone would know it got there, then the work itself.
-    // Acceptance is the OUTCOME measure, and it leads the task list rather than trailing it:
+    // After the graph's chain reading comes the outcome measure, then the work itself. Acceptance
+    // leads the task list rather than trailing it:
     // "did this meet its bar" is the question the counts below cannot answer.
-    expect(acceptance).toBeGreaterThan(goal);
+    expect(acceptance).toBeGreaterThan(chain);
     expect(tasks).toBeGreaterThan(acceptance);
     // The cards a reader consults less often than either, in their own order after both.
     expect(ranking).toBeGreaterThan(tasks);
@@ -407,11 +407,12 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('What the coordinator has been doing')).toBe(false);
   });
 
-  it('still carries the project’s own fields, below the panorama', async () => {
+  it('carries the project’s authored fields once, at their respective reading depths', async () => {
     serve();
     await mount(page());
 
-    // The two remaining free-text fields, in full and under their own labels.
+    // The two remaining free-text fields, in full and under their own labels. Goal frames the page;
+    // instructions remain beside the work they govern.
     expect(shows('Goal')).toBe(true);
     expect(shows('Ship the new marketing site')).toBe(true);
     expect(shows('Instructions')).toBe(true);
@@ -428,14 +429,12 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     // second copy of the list would be caught if one ever came back.
     expect(shows('Lighthouse ≥ 90 on every page')).toBe(false);
 
-    // Below the panorama, which is the move this assembly made: what the project was set up to be
-    // is read once, where the panorama is what a reader comes back for.
-    expect(at('Work overview')).toBeLessThan(at('Ship the new marketing site'));
+    // Goal is read before the changing work account and the Coordinator action, while the task
+    // list still follows the outcome measure.
+    expect(at('Ship the new marketing site')).toBeLessThan(at('Work overview'));
     expect(at('Ship the new marketing site')).toBeLessThan(at('>Tasks<'));
-    // ...and below the coordinator, which is the move THIS one made. Compared as indices into the
-    // markup rather than by walking the DOM, so it holds whatever the two are nested in.
-    expect(at('aria-label="Coordinator"')).toBeLessThan(at('>Goal</h5>'));
-    expect(at('aria-label="Coordinator"')).toBeLessThan(at('Ship the new marketing site'));
+    expect(at('>Goal</h5>')).toBeLessThan(at('aria-label="Coordinator"'));
+    expect(at('Ship the new marketing site')).toBeLessThan(at('aria-label="Coordinator"'));
 
     // Once each — the assembly places these, it does not repeat them. Ordering assertions read the
     // first match and stay green on a page that draws the whole block a second time lower down.
@@ -447,6 +446,40 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(countOf('Land behind a flag, then flip it')).toBe(1);
     // The chain strip sat inside the same duplicated run and drew twice with them.
     expect(countOf('aria-label="Chain progress"')).toBe(1);
+  });
+
+  it('previews a long goal compactly and expands the same Markdown in place', async () => {
+    const longGoal = [
+      '## Outcome',
+      '',
+      'Eliminate memory growth, blank cold launches, background drain and write amplification.',
+      '',
+      '- Keep long sessions responsive',
+      '- Keep large accounts on par with macOS',
+    ].join('\n');
+    serve({ [base]: () => Promise.resolve({ ...DETAIL, goal: longGoal }) });
+    await mount(page());
+
+    const card = container.querySelector<HTMLElement>('.project-goal-card');
+    const content = card?.querySelector<HTMLElement>('.project-goal-content');
+    const toggle = card?.querySelector<HTMLButtonElement>('.project-goal-toggle');
+
+    expect(card).not.toBeNull();
+    expect(content?.classList.contains('is-collapsed')).toBe(true);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.textContent).toContain('Show details');
+    // It remains real Markdown rather than a second plain-text excerpt.
+    expect(card?.querySelector('h2')?.textContent).toBe('Outcome');
+    expect(card?.querySelectorAll('li')).toHaveLength(2);
+
+    await act(async () => {
+      toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(content?.classList.contains('is-collapsed')).toBe(false);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle?.textContent).toContain('Hide details');
+    expect(countOf('Eliminate memory growth')).toBe(1);
   });
 
   it('keeps live and persisted task state in one overview instead of repeating header tags', async () => {
