@@ -95,6 +95,22 @@ export class ProjectsController {
   }
 
   /**
+   * Tasks in this project that the owner can start now, ranked by transitive downstream impact.
+   *
+   * This is deliberately not a client-side filter over the blocking leaderboard: runnable leaves
+   * block zero tasks and therefore do not appear there, while blocked roots must not receive a Run
+   * button. `taskId` is rendered in Base62 by the response interceptor like every other address.
+   */
+  @Get(':id/panorama/ready')
+  panoramaReady(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.projects.panoramaReady(user.userId, id, { limit });
+  }
+
+  /**
    * One level of this project's task tree: its top-level tasks, or — with `?parentId=` — the
    * direct children of one of them. Cursor-paged, newest first.
    *

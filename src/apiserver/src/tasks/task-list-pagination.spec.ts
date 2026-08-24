@@ -136,22 +136,29 @@ test('runnable filter is applied before pagination with the same rules as the Ru
 
   await service.listPage(OWNER_ID, { status: 'RUNNABLE' });
 
-  // The page ranking and the badge count must both gate on all four Run-button conditions:
-  // not finished, assigned to a workspace with a runner, nothing already in flight, no
-  // outstanding prerequisite. Spelled as NOT EXISTS so PostgreSQL can short-circuit per row.
+  // The page ranking and the badge count must both gate on the Run-button conditions: not
+  // finished or paused, assigned to an enabled workspace with a runner, no work run already in
+  // flight, no outstanding prerequisite, and no aggregate-only parent. Spelled as NOT EXISTS so
+  // PostgreSQL can short-circuit per row.
   assert.equal(raw.statements.length, 2);
   for (const sql of raw.statements) {
     assert.match(sql, /t\.owner_id = \$\d+::uuid/);
     assert.match(sql, /t\.status <> 'DONE'::task_status/);
-    assert.match(sql, /EXISTS \(SELECT 1 FROM workspace a[\s\S]*a\.runner_id IS NOT NULL\)/);
+    assert.match(sql, /t\.dispatch_hold = false/);
     assert.match(
       sql,
-      /NOT EXISTS \([\s\S]*FROM session s[\s\S]*'PENDING'::run_status, 'RUNNING'::run_status/,
+      /EXISTS \([\s\S]*FROM workspace a[\s\S]*a\.runner_id IS NOT NULL[\s\S]*a\.enabled = true/,
+    );
+    assert.match(
+      sql,
+      /NOT EXISTS \([\s\S]*FROM session s[\s\S]*s\.deleted_at IS NULL[\s\S]*s\.starts_task_work = true[\s\S]*'PENDING'::run_status, 'RUNNING'::run_status/,
     );
     assert.match(
       sql,
       /NOT EXISTS \([\s\S]*FROM task_dependency dep[\s\S]*WITH RECURSIVE chain/,
     );
+    assert.match(sql, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
+    assert.match(sql, /aggregate_child\.parent_task_id = t\.id/);
   }
   const [page, badge] = raw.statements;
   assert.match(page, /ORDER BY t\.created_at DESC, t\.id DESC/);

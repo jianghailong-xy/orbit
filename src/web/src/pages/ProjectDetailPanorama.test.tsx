@@ -86,6 +86,12 @@ const RANKING = {
   truncated: null,
 };
 
+const READY = {
+  readyCount: 2,
+  items: RANKING.items,
+  impactTruncated: null,
+};
+
 const ACTIVITY = {
   items: [
     {
@@ -185,6 +191,7 @@ function serve(overrides: Record<string, () => Promise<unknown>> = {}, form: 'ch
     [base]: () => Promise.resolve(DETAIL),
     [`${base}/panorama`]: () => Promise.resolve(panorama(form)),
     [`${base}/panorama/blocking`]: () => Promise.resolve(RANKING),
+    [`${base}/panorama/ready`]: () => Promise.resolve(READY),
     [`${base}/panorama/activity`]: () => Promise.resolve(ACTIVITY),
     [`${base}/tasks/page`]: () => Promise.resolve(TASKS),
     [`${base}/coordinator/status`]: () => Promise.resolve(COORDINATOR),
@@ -300,7 +307,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const chain = at('aria-label="Chain progress"');
     const goal = at('Ship the new marketing site');
     const tasks = at('>Tasks<');
-    const ranking = at('Unblocks the most work');
+    const ready = at('Ready to run');
     const acceptance = at('Acceptance</div>');
 
     // The stable goal frames every changing reading below it. It is one compact card between the
@@ -321,19 +328,18 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(acceptance).toBeGreaterThan(chain);
     expect(tasks).toBeGreaterThan(acceptance);
     // The cards a reader consults less often than either, in their own order after both.
-    expect(ranking).toBeGreaterThan(tasks);
+    expect(ready).toBeGreaterThan(tasks);
 
-    // The ranking is full width now rather than the wide half of a pair — it carries a horizontal
-    // bar per row and was the half that needed the width, and the pair went with acceptance.
+    // The actionable queue is full width and stands on its own after the project task tree.
     expect(container.querySelector('.project-panorama-pair')).toBeNull();
   });
 
   it('keeps a card that fails to that card, and the rest of the page standing', async () => {
-    serve({ [`${base}/panorama/blocking`]: () => Promise.reject(new Error('Internal Server Error')) });
+    serve({ [`${base}/panorama/ready`]: () => Promise.reject(new Error('Internal Server Error')) });
     await mount(page());
 
-    // The ranking says so itself, where the ranking would have been...
-    expect(shows('The blocking ranking could not be read')).toBe(true);
+    // The queue says so itself, where the runnable tasks would have been...
+    expect(shows('Ready tasks could not be read')).toBe(true);
     expect(shows('Internal Server Error')).toBe(true);
 
     // ...and nothing else on the page notices. The page's own title first, then all four of the
@@ -364,7 +370,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(shows('Website Revamp')).toBe(true);
     expect(shows('Work overview')).toBe(true);
     expect(shows('Dispatch needs attention')).toBe(true);
-    expect(shows('Unblocks the most work')).toBe(true);
+    expect(shows('Ready to run')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
   });
@@ -403,7 +409,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
 
     // Nothing painted a shell of itself either.
     expect(shows('Work overview')).toBe(false);
-    expect(shows('Unblocks the most work')).toBe(false);
+    expect(shows('Ready to run')).toBe(false);
     expect(shows('What the coordinator has been doing')).toBe(false);
   });
 

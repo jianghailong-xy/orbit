@@ -182,6 +182,7 @@ import {
 } from './task-dependencies';
 import { loadVerificationEpochGates } from './verification-epoch-read';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
+import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -645,15 +646,7 @@ function conflictingUniqueKey(error: unknown): string {
   return parts.join('|');
 }
 
-const RUNNABLE_TASK_SQL = Prisma.sql`
-  t.status <> 'DONE'::task_status
-  AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
-  AND NOT EXISTS (
-    SELECT 1 FROM session s
-    WHERE s.task_id = t.id AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
-  )
-  AND ${Prisma.raw(dependenciesSatisfiedSql('t'))}
-  AND ${Prisma.raw(taskNotObsoleteSql('t'))}`;
+const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
 
 /**
  * The auto-run sweep's candidate predicate (see reconcileReadyTasks), correlated to an outer

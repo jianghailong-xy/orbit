@@ -48,6 +48,7 @@ import {
   ProjectBlockingLeaderboard,
   readProjectBlockingLeaderboard,
 } from './project-panorama-blocking';
+import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
@@ -757,6 +758,27 @@ export class ProjectsService {
       throw new BadRequestException(`limit must be an integer from 1 to ${MAX_BLOCKING_LIMIT}`);
     }
     return readProjectBlockingLeaderboard(this.prisma, ownerId, projectId, limit);
+  }
+
+  /**
+   * The project's manually runnable tasks, with the most consequential one first.
+   *
+   * Unlike the blocking leaderboard, this includes runnable leaves with an impact of zero and
+   * excludes every task-level static condition the Run action would currently refuse. Keeping it
+   * separate preserves the full unfinished ranking consumed by the chain-progress strip while
+   * giving the actionable card a payload whose title is literally true.
+   */
+  async panoramaReady(
+    ownerId: string,
+    projectId: string,
+    query: { limit?: string } = {},
+  ): Promise<ProjectReadyToRun> {
+    await this.assertOwned(ownerId, projectId);
+    const limit = query.limit === undefined ? DEFAULT_BLOCKING_LIMIT : Number(query.limit);
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_BLOCKING_LIMIT) {
+      throw new BadRequestException(`limit must be an integer from 1 to ${MAX_BLOCKING_LIMIT}`);
+    }
+    return readProjectReadyToRun(this.prisma, ownerId, projectId, limit);
   }
 
   /**

@@ -8,7 +8,7 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { ApiError, api, restoreSession } from '../api';
 import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
-import { ProjectBlockingLeaderboard } from '../components/ProjectBlockingLeaderboard';
+import { ProjectReadyToRun } from '../components/ProjectReadyToRun';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import {
   ProjectCoordinatorCard,
@@ -646,10 +646,9 @@ export function ProjectDetailPage() {
               — the same spelling the project query above is keyed and fetched with. */}
           <ProjectTasks projectId={id} />
 
-          {/* Full width, on its own. It shared a 1.32 : 1 row with the acceptance card until
-              acceptance moved up under the goal; the ranking carries a horizontal bar per row and
-              was the half that needed the width all along. */}
-          <ProjectBlockingLeaderboard projectId={id} />
+          {/* Full width, on its own: the project-scoped queue of tasks whose prerequisites and
+              execution workspace are ready, ordered by how much downstream work they release. */}
+          <ProjectReadyToRun projectId={id} />
 
           {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator

@@ -23,7 +23,7 @@ import { runtimeForProvider } from './workspaceDefaults';
  * Read off the RENDERED tooltip rather than the helper's return value, because the copy only
  * matters where a user meets it. That needs a DOM: antd renders a tooltip into a portal, which
  * `renderToStaticMarkup` skips entirely (`@rc-component/portal` returns null with no document),
- * so this file mounts into jsdom the way ProjectBlockingLeaderboard.test.tsx does; every other
+ * so this file mounts into jsdom the way ProjectReadyToRun.test.tsx does; every other
  * test in `lib` keeps running in node.
  *
  * Nothing here asserts a rendering ORDER or a fixed sentence per pill. Each pill's copy is turned

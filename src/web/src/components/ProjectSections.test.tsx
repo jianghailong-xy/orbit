@@ -8,7 +8,7 @@ import { encodeId } from '../lib/idCodec';
 import { ProjectSections, type ProjectSection, type SectionProject } from './ProjectSections';
 
 // Folding is the whole point of a section header, and a fold is a button — which `react-dom/server`
-// cannot press. So this file mounts into a real DOM, the way ProjectBlockingLeaderboard's suite does;
+// cannot press. So this file mounts into a real DOM, the way ProjectReadyToRun's suite does;
 // jsdom is selected per file by the docblock above and every other test file still runs in node.
 
 // Real UUIDs: the pill runs each id through encodeId, which throws on anything that is neither

@@ -45,10 +45,11 @@ export interface FilterableTask {
 }
 
 /**
- * Mirror of the conditions POST /tasks/execute and /tasks/batch-execute skip on: no
- * responsible workspace, that workspace not bound to a runner, unmet prerequisites, or a run
- * already in flight. Neither endpoint refuses a DONE task, so this doesn't either —
- * it is what a batch's "will run N" preview must count to agree with the dispatch.
+ * The run conditions available on a list row: a responsible workspace bound to a runner,
+ * satisfied prerequisites, and no run already in flight. The server remains authoritative for
+ * facts this payload does not carry, including a paused task, a disabled workspace, an
+ * aggregate-only parent, or superseded work. Neither execute endpoint refuses a DONE task, so
+ * this low-level dispatch check does not either.
  */
 export function canDispatchTask(task: FilterableTask): boolean {
   return !!task.assignee?.runner?.id && !task.running && !task.queued && !task.blocked;

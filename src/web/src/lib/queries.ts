@@ -388,6 +388,36 @@ export const projectPanoramaBlockingQuery = (projectId: string, limit = 5) =>
       ),
   });
 
+/** One project task that the manual Run action can start at the time of this read. */
+export interface ProjectReadyToRunItem {
+  taskId: string;
+  title: string;
+  status: string;
+  /** Null only when the project is too large to compute transitive impact safely. */
+  downstreamBlocked: number | null;
+}
+
+export interface ProjectReadyToRun {
+  /** All runnable tasks in the project, not just the limited rows returned in `items`. */
+  readyCount: number;
+  items: ProjectReadyToRunItem[];
+  impactTruncated: { reason: string; maxTasks: number } | null;
+}
+
+/**
+ * The actionable project queue. Polled because a run can start in another tab or through a
+ * coordinator, neither of which invalidates this tab's `['project', id]` cache locally.
+ */
+export const projectReadyToRunQuery = (projectId: string, limit = 5) =>
+  queryOptions({
+    queryKey: ['project', projectId, 'panorama', 'ready', limit] as const,
+    queryFn: () =>
+      api<ProjectReadyToRun>(
+        `/projects/${encodeURIComponent(projectId)}/panorama/ready?limit=${limit}`,
+      ),
+    refetchInterval: 15_000,
+  });
+
 /**
  * Keyed under `['project', projectId]` like the rest, so a project write invalidates it too.
  *

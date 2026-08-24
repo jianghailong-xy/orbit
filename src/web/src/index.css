@@ -9260,6 +9260,23 @@ html[data-theme='dark'] .session-tag-chip {
 .project-command-center > * {
   min-width: 0;
 }
+.project-ready-row {
+  grid-template-columns: minmax(260px, 1fr) minmax(120px, auto) auto;
+}
+@media (max-width: 640px) {
+  .project-ready-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px !important;
+    row-gap: 4px !important;
+  }
+  .project-ready-impact {
+    grid-column: 1;
+  }
+  .project-ready-run {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
 .project-work-overview > header {
   flex-wrap: wrap;
 }
