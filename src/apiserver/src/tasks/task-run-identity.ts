@@ -126,27 +126,6 @@ export const TASK_RUN_TRIGGER = {
 } as const;
 
 /**
- * The identity of the manual Project trigger this run request records, scoped to one Project.
- *
- * `execute` writes a durable USER signal for the Project a started task belongs to, and that signal
- * used to be named by a `randomUUID()` minted per CALL. So a press whose response was lost recorded
- * a SECOND trigger on replay — the Session was correctly recovered, and the audit and the
- * Coordinator wake were duplicated anyway. The press is the request, so the press names the signal:
- * `project_event_manual_trigger` deduplicates on this id (`project_event_open_dedupe_idx`, unique
- * on `(project_id, dedupe_key)` while unconsumed), which makes the repeat coalesce onto the row the
- * first attempt wrote instead of adding one.
- *
- * Project-scoped rather than one id for the whole press, because a bulk Run can span Projects and
- * the outbox key is per Project: deriving from the pair keeps one signal per Project per press,
- * which is what the original comment here claimed and what a shared random id could not deliver
- * across a retry. A different press derives a different id and is a new trigger, which is the half
- * that must keep working — two deliberate clicks are two requests.
- */
-export function taskRunManualTriggerId(requestToken: string, projectId: string): string {
-  return derivedUuid(`task-run:v1:manual-trigger:${projectId}:${requestToken}`);
-}
-
-/**
  * The turn a run request delivers to a run that is PAUSED, named after the request.
  *
  * `conversation_turn (session_id, client_turn_id)` is unique, so this is what makes the delivery

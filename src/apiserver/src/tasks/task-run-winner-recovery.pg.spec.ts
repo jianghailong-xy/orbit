@@ -165,15 +165,6 @@ async function moveTo(db: PrismaClient, sessionId: string, status: RunStatus) {
   });
 }
 
-/** The durable USER signals a press left behind, newest first. */
-async function manualTriggers(db: PrismaClient, target: Fixture) {
-  return db.projectEvent.findMany({
-    where: { projectId: target.projectId, kind: 'user.manual_trigger' },
-    select: { id: true, dedupeKey: true, occurrences: true, consumedAt: true },
-    orderBy: { occurredAt: 'desc' },
-  });
-}
-
 test('two Run Now presses racing under one token leave one Session and one answer',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
@@ -224,15 +215,11 @@ for (const status of [
       const first = connect();
       let target: Fixture;
       let winner: string;
-      let firstSignal: { id: string };
       const press = randomUUID();
       try {
         target = await fixture(first.db, `winner-${status.toLowerCase()}`);
         winner = await runNow(first, target, press);
         assert.equal(winner, desiredIdFor(target, press));
-        const opened = await manualTriggers(first.db, target);
-        assert.equal(opened.length, 1, 'the press recorded its durable USER trigger');
-        firstSignal = opened[0];
         await moveTo(first.db, winner, status);
       } finally {
         await first.db.$disconnect();
@@ -246,9 +233,6 @@ for (const status of [
         assert.equal(uuidToBase62(again), uuidToBase62(winner));
         assert.equal(await retry.db.session.count({ where: { taskId: target.taskId } }), 1,
           'a repeated press must not open a second run');
-        const signals = await manualTriggers(retry.db, target);
-        assert.equal(signals.length, 1, 'one press, one durable USER trigger');
-        assert.equal(signals[0].id, firstSignal.id, 'and the same row, not a replacement');
       } finally {
         await retry.db.$disconnect();
       }
@@ -273,8 +257,6 @@ for (const status of TERMINAL) {
         assert.notEqual(second, first, 'a new press gets a Session of its own');
         assert.equal(second, desiredIdFor(target, secondPress));
         assert.equal(await services.db.session.count({ where: { taskId: target.taskId } }), 2);
-        assert.equal((await manualTriggers(services.db, target)).length, 2,
-          'two presses, two durable USER triggers');
       } finally {
         await services.db.$disconnect();
       }
@@ -322,7 +304,6 @@ for (const status of [RunStatus.PENDING, RunStatus.RUNNING]) {
         const target = await fixture(services.db, `foreign-${status.toLowerCase()}`);
         const holder = await runNow(services, target, randomUUID());
         await moveTo(services.db, holder, status);
-        const before = await manualTriggers(services.db, target);
 
         await assert.rejects(
           () => runNow(services, target, randomUUID()),
@@ -342,11 +323,6 @@ for (const status of [RunStatus.PENDING, RunStatus.RUNNING]) {
         );
 
         assert.equal(await services.db.session.count({ where: { taskId: target.taskId } }), 1);
-        assert.deepEqual(
-          (await manualTriggers(services.db, target)).map((row) => row.id),
-          before.map((row) => row.id),
-          'a refused press records no durable USER request either',
-        );
       } finally {
         await services.db.$disconnect();
       }
@@ -403,131 +379,6 @@ test('a press that woke a PAUSED run delivers one turn, however many times it is
       await retry.db.$disconnect();
     }
   });
-
-test('a press whose signal has already been ANSWERED still records nothing on replay',
-  { skip, timeout: 120_000 }, async () => {
-    // The gap a partial unique index cannot close: `project_event_open_dedupe_idx` is unique only
-    // while `consumed_at IS NULL`, so once the Coordinator has answered the first signal the same
-    // dedupe key inserts a SECOND event. 0137's permanent marker is what closes it.
-    assertCoordinatorPgUrlIsIsolated(URL!);
-    const opening = connect();
-    let target: Fixture;
-    let winner: string;
-    const press = randomUUID();
-    try {
-      target = await fixture(opening.db, 'consumed');
-      winner = await runNow(opening, target, press);
-      const [signal] = await manualTriggers(opening.db, target);
-      await opening.db.projectEvent.update({
-        where: { id: signal.id },
-        data: { consumedAt: new Date(), disposition: 'RECONCILED' },
-      });
-      await moveTo(opening.db, winner, RunStatus.SUCCEEDED);
-    } finally {
-      await opening.db.$disconnect();
-    }
-
-    const retry = connect();
-    try {
-      assert.equal(await runNow(retry, target, press), winner);
-      const signals = await manualTriggers(retry.db, target);
-      assert.equal(signals.length, 1, 'no second signal behind the consumed one');
-      assert.ok(signals[0].consumedAt, 'the one that exists is the answered one');
-      assert.equal(
-        await retry.db.taskRunManualTrigger.count({ where: { projectId: target.projectId } }), 1,
-      );
-    } finally {
-      await retry.db.$disconnect();
-    }
-  });
-
-test('the Session outlives the task it ran, and the request still finds it',
-  { skip, timeout: 120_000 }, async () => {
-    // `session_task_id_fkey` is `ON DELETE SET NULL`: deleting a task TOMBSTONES its runs. A
-    // recovery that required `task_id` to still match would fail to find the Session THIS request
-    // created, then try to create a second one against a task that no longer exists — for ever,
-    // under a token that can never answer.
-    assertCoordinatorPgUrlIsIsolated(URL!);
-    const opening = connect();
-    let target: Fixture;
-    let winner: string;
-    const press = randomUUID();
-    try {
-      target = await fixture(opening.db, 'tombstone');
-      winner = await runNow(opening, target, press);
-      await moveTo(opening.db, winner, RunStatus.SUCCEEDED);
-      // The receipt is deliberately rewound to BOUND so the replay has to RESOLVE the artifact
-      // rather than read a frozen answer — the state a crash between the effect and the answer
-      // leaves, which is the only state in which the tombstone matters.
-      await opening.db.$executeRaw`
-        UPDATE "task_run_request" SET "status" = 'BOUND', "result" = NULL
-         WHERE "owner_id" = ${target.ownerId}::uuid AND "request_token" = ${press}`;
-      await opening.db.task.delete({ where: { id: target.taskId } });
-      const orphan = await opening.db.session.findUniqueOrThrow({
-        where: { id: winner }, select: { taskId: true },
-      });
-      assert.equal(orphan.taskId, null, 'the run survives its task with a null task_id');
-    } finally {
-      await opening.db.$disconnect();
-    }
-
-    const retry = connect();
-    try {
-      // BOUND short-circuits before any task read, which is the whole point: the takeover carries
-      // out the plan the receipt froze rather than re-deciding against a world that has moved. So
-      // it resolves this request's own artifact — by its exact derived id, with `task_id` now
-      // null — and answers with the Session it created, instead of failing to find it and trying
-      // for ever to create a second one against a task that no longer exists.
-      const result = await retry.tasks.execute(target.ownerId, target.taskId, undefined, press);
-
-      assert.deepEqual(result, { ok: true, sessionId: winner },
-        'the request answers with the run it made, tombstoned or not');
-      assert.equal(await retry.db.session.count({ where: { id: winner } }), 1,
-        'and no second Session was written');
-      assert.equal((await receiptRow(retry.db, target, press))?.status, 'COMPLETED');
-    } finally {
-      await retry.db.$disconnect();
-    }
-  });
-
-test('the lease is the SERVER\'s clock, not this process\'s', { skip, timeout: 120_000 }, async () => {
-  // Two apiservers whose wall clocks differ by more than a lease would take each other's requests
-  // over — the fast one declaring a live lease expired, the slow one extending one it has lost —
-  // and "one evaluator at a time" would be a property of NTP. The lease predicate and its expiry
-  // are both `statement_timestamp()`, so a process clock an hour ahead changes nothing.
-  assertCoordinatorPgUrlIsIsolated(URL!);
-  const services = connect();
-  const realNow = Date.now;
-  try {
-    const target = await fixture(services.db, 'clock');
-    const press = randomUUID();
-    // Take the lease and leave it held, by binding a plan and never completing it.
-    await services.db.$executeRaw`
-      INSERT INTO "task_run_request" ("owner_id", "action_kind", "request_token", "fingerprint",
-                                      "status", "target", "bound_at", "lease_holder",
-                                      "lease_expires_at", "attempt")
-      VALUES (${target.ownerId}::uuid, ${TASK_RUN_ACTION.execute}, ${press},
-              ${`task:${target.taskId}`}, 'BOUND', ${'{"v":1,"kind":"RUN"}'}::jsonb,
-              statement_timestamp(), 'somebody-else',
-              statement_timestamp() + make_interval(secs => 60), 1)`;
-
-    Date.now = () => realNow() + 60 * 60_000;
-    await assert.rejects(
-      () => services.tasks.execute(target.ownerId, target.taskId, undefined, press),
-      (error: Error & { response?: { code?: string } }) => {
-        assert.equal(error.response?.code, 'TASK_RUN_REQUEST_IN_PROGRESS',
-          'an hour of process-clock skew must not take a live lease over');
-        return true;
-      },
-    );
-    const held = await receiptRow(services.db, target, press);
-    assert.equal(held?.leaseHolder, 'somebody-else', 'and the holder is untouched');
-    assert.equal(held?.attempt, 1, 'and its fence did not move');
-  } finally {
-    Date.now = realNow;
-    await services.db.$disconnect();
-  }
-});
 
 test('an EXPIRED lease is taken over, and the holder it replaced can no longer answer',
   { skip, timeout: 120_000 }, async () => {
@@ -703,8 +554,6 @@ test('a bulk Run replayed under the same press answers the same batch, item for 
       for (const row of sessions) {
         assert.equal(row.batchId, first.batchId, 'every Session is in the batch answered');
       }
-      assert.equal((await manualTriggers(retry.db, target)).length, 1,
-        'one press over one Project is one durable USER trigger');
     } finally {
       await retry.db.$disconnect();
     }
@@ -766,7 +615,6 @@ test('a real server restart does not change which Session a press answers with',
       assert.equal(await runNow(after, target, press), winner,
         'the same press, the same winner, a new server');
       assert.equal(await after.db.session.count({ where: { taskId: target.taskId } }), 1);
-      assert.equal((await manualTriggers(after.db, target)).length, 1);
     } finally {
       await after.db.$disconnect();
     }

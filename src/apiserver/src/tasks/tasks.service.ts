@@ -164,7 +164,6 @@ import {
   TASK_RUN_TRIGGER,
   taskRunBatchId,
   taskRunDesiredSessionId,
-  taskRunManualTriggerId,
   taskRunRequestKey,
   taskRunResumeTurnId,
 } from './task-run-identity';
@@ -9435,84 +9434,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Persist one manual-run request for every affected Project.
-   *
-   * The outbox row is the authoritative state of this user action, so there is no second business
-   * row to coordinate with it, and the signal is named after the PRESS rather than after this call:
-   * `taskRunManualTriggerId(token, projectId)`. That is the difference between a retry and a second
-   * click. The id used to be a `randomUUID()` minted per call, so a press whose response was lost
-   * recovered its Session correctly on replay — and recorded a second durable USER trigger, and a
-   * second Coordinator wake, for the one press that produced it.
-   *
-   * Derived per Project rather than once for the whole press, because the outbox's unique key is
-   * `(project_id, dedupe_key)`: one signal per Project per press, across every delivery of it.
-   */
-  private async recordManualProjectTriggers(
-    ownerId: string,
-    projectIds: Array<string | null | undefined>,
-    /** The press this run request was made under — see `RunTaskDto.triggerId`. */
-    requestToken: string,
-    /** Which task's run recorded it. Audit only; the trigger is per Project, not per task. */
-    taskId?: string,
-  ): Promise<void> {
-    const distinct = [...new Set(projectIds.filter((id): id is string => !!id))].sort();
-    if (distinct.length === 0) return;
-    // Retried whole, and safe because every id here is a pure function of the press and the
-    // Project: an attempt after a transient failure — and a delivery after a lost response — writes
-    // the same ledger row and enqueues the same signal.
-    //
-    // The LEDGER is what makes it exactly-once for the life of the request, and 0117's dedupe key
-    // could not be: `project_event_open_dedupe_idx` is unique only while an event is UNCONSUMED, so
-    // a delivery arriving after the Coordinator answered the first signal would enqueue a second
-    // one under the same key — a second audited USER request, and a second wake, for one press.
-    // `task_run_manual_trigger` outlives the signal, and the insert and the enqueue commit
-    // together, so there is no state in which the press was recorded and the signal was not.
-    await withTransactionRetry(this.prisma, async (tx) => {
-      // CANONICAL ORDER FIRST, explicitly, before any write in here takes a lock implicitly.
-      //
-      // The marker insert's three foreign keys acquire `FOR KEY SHARE` on `project`, on `user` and
-      // (when the audit column is set) on `task` — in whatever order PostgreSQL checks them, which
-      // is not the order `docs/postgres-lock-order.md` fixes: user (10) -> project (40) -> task
-      // (50). A transaction that takes project before user can wait on one that holds user and
-      // wants a project key lock, and the cycle is closed by a writer nobody wrote a `FOR UPDATE`
-      // for. Taking the same locks up front, in rank order and in the weakest mode that covers what
-      // follows, leaves the foreign keys re-using locks this transaction already holds.
-      //
-      // One statement per relation with `ORDER BY id`, so a press spanning several Projects cannot
-      // interleave project/task/project with another press going the other way.
-      await tx.$executeRaw(Prisma.sql`
-        SELECT 1 FROM "user" WHERE "id" = ${ownerId}::uuid FOR KEY SHARE`);
-      await tx.$executeRaw(Prisma.sql`
-        SELECT 1 FROM "project" WHERE "id" = ANY(${distinct}::uuid[]) ORDER BY "id" FOR KEY SHARE`);
-      if (taskId) {
-        await tx.$executeRaw(Prisma.sql`
-          SELECT 1 FROM "task" WHERE "id" = ${taskId}::uuid FOR KEY SHARE`);
-      }
-      for (const projectId of distinct) {
-        const requestId = taskRunManualTriggerId(requestToken, projectId);
-        const recorded = await tx.$executeRaw(Prisma.sql`
-          INSERT INTO "task_run_manual_trigger" ("project_id", "request_id", "owner_id", "task_id")
-          VALUES (${projectId}::uuid, ${requestId}::uuid, ${ownerId}::uuid, ${taskId ?? null}::uuid)
-          ON CONFLICT DO NOTHING
-        `);
-        // Nothing inserted means this press already recorded this Project's trigger — a repeat, or
-        // the loser of two deliveries landing together. Either way the signal it would enqueue is
-        // one that already exists or has already been answered.
-        if (recorded === 0) continue;
-        // The authoritative producer, called rather than reimplemented: every Project event is
-        // enqueued by this function at the database write (migration 0117).
-        await tx.$executeRaw(Prisma.sql`
-          SELECT "project_event_manual_trigger"(
-            ${projectId}::uuid,
-            ${ownerId}::uuid,
-            ${requestId}::uuid
-          )
-        `);
-      }
-    }, this.transientWriteRetry('tasks.recordManualProjectTriggers'));
-  }
-
-  /**
    * Manually kick off the task's responsible workspace from the "开始执行" button: same
    * resume-first-else-create flow as an @-mention, but as a user-facing action, so a
    * missing assignee / runner becomes a hard error instead of a silent skip.
@@ -9934,24 +9855,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       return this.completeRunReceipt<TaskRunAnswer>(
         lease.claim, { ok: false as const, skipped: 'target-tombstoned' as const },
       );
-    }
-    // Everything below this line is a POST-COMMIT step, and the session already exists.
-    //
-    // A failure in any of them used to fail the whole call, which turned a live run into a 500 the
-    // caller would retry — starting a second one. The Session commit is the authoritative success;
-    // these three are idempotent recomputations of facts that follow from it (a compare-and-set on
-    // the status, a compare-and-set on the schedule, a durable signal keyed by this request), and a
-    // takeover re-derives any that did not land. So they are attempted, logged if they fail, and
-    // never allowed to contradict a run that is already going.
-    //
-    // Each is keyed by the FROZEN command, not by what the task looks like now: the Project is the
-    // one the press named, and the appointment is the one it kept.
-    if (!target.auto && target.projectId) {
-      await this.recordManualProjectTriggers(
-        ownerId, [target.projectId], requestToken, target.taskId,
-      ).catch((e) => this.logger.warn(
-        `manual project trigger for task ${target.taskId} failed: ${e?.message ?? e}`,
-      ));
     }
     if (target.clearFailed) {
       await this.clearFailedForRetry(ownerId, target.taskId).catch((e) =>
@@ -10461,17 +10364,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // ...and it may not fail the call either. Several worker Sessions are live by now; a 500 here
     // would tell the caller nothing started, and a retry would start them all again.
     //
-    // The Project of each item comes off the PLAN, not off the task as it stands now: a task moved
-    // to another Project between the plan and a takeover would otherwise have its press's signal
-    // filed against a Project the press never named, or — if it was deleted — no signal at all.
-    const started = new Set(results.filter((result) => result.ok).map((result) => result.id));
-    await this.recordManualProjectTriggers(
-      ownerId,
-      plan.items.filter((item) => started.has(item.taskId)).map((item) => item.projectId),
-      pressToken,
-    ).catch((e) =>
-      this.logger.warn(`batchExecute: manual project triggers failed: ${e?.message ?? e}`));
-
     const answer = {
       dispatched: results.filter((r) => r.ok).length,
       failed: results.filter((r) => !r.ok),

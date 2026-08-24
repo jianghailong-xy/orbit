@@ -264,7 +264,6 @@ model User {
   agents           Agent[] // Agent identities this user owns (tenant scope)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
-  manualRunTriggers TaskRunManualTrigger[]
   runRequests       TaskRunRequest[]
 
   /// Cross-project crossings recorded under this account (unit L4, 0155).
@@ -1607,7 +1606,6 @@ model Project {
   discoveredTasks Task[] @relation("TaskDiscoveredFrom")
   members ProjectMember[]
   runtime ProjectRuntime?
-  events  ProjectEvent[]
   actions ProjectAction[]
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
@@ -1617,7 +1615,6 @@ model Project {
   mergeReceipts   SessionMergeReceipt[]
 
   /// Presses of Run Now recorded against this project's tasks (0137).
-  manualRunTriggers TaskRunManualTrigger[]
 
   /// Cross-project crossings decided about this project, in both directions (unit L4, 0155).
   handoffsOut ProjectHandoffApproval[] @relation("ProjectHandoffFrom")
@@ -1968,58 +1965,6 @@ model TaskRunRequest {
   @@index([ownerId, createdAt(sort: Desc)], map: "task_run_request_owner_created_idx")
   @@map("task_run_request")
 }
-
-/// The Project signal's EFFECT MARKER: one row per (Project, request), written in the same
-/// transaction as the enqueue (migration 0137). 0117's dedupe key is unique only while an event is
-/// unconsumed, so it coalesces an unanswered signal and cannot make the effect exactly-once.
-model TaskRunManualTrigger {
-  projectId String  @map("project_id") @db.Uuid
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  /// `taskRunManualTriggerId(token, projectId)` — a function of the press and this Project.
-  requestId String  @map("request_id") @db.Uuid
-  ownerId   String  @map("owner_id") @db.Uuid
-  owner     User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  /// Audit only. SetNull, so deleting a task cannot resurrect a press.
-  taskId    String? @map("task_id") @db.Uuid
-  task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@id([projectId, requestId])
-  @@index([ownerId, createdAt(sort: Desc)], map: "task_run_manual_trigger_owner_created_idx")
-  @@map("task_run_manual_trigger")
-}
-
-model ProjectEvent {
-  id        String  @id @default(uuid(7)) @db.Uuid
-  projectId String  @map("project_id") @db.Uuid
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  /// Envelope schema version. Readers deliberately accept values they do not know yet: an event
-  /// is still a valid dirty signal even when its audit payload came from a newer binary.
-  v          Int      @default(1)
-  kind       String
-  occurredAt DateTime @default(now()) @map("occurred_at")
-  sourceType String   @map("source_type")
-  sourceId   String   @map("source_id") @db.Uuid
-  dedupeKey  String   @map("dedupe_key")
-  payload    Json     @default("{}")
-
-  /// Delivery observations, not business facts. They must never enter a semantic decision digest.
-  occurrences   Int       @default(1)
-  lastAt        DateTime  @default(now()) @map("last_at")
-  attempts      Int       @default(0)
-  nextAttemptAt DateTime? @map("next_attempt_at")
-
-  /// Set only in the same transaction that commits the handler's database effects. `disposition`
-  /// is null while pending and one of RECONCILED / DISCARDED_OUT_OF_LOOP / DEAD afterwards; the
-  /// migration CHECK freezes that closed terminal set.
-  consumedAt  DateTime? @map("consumed_at")
-  disposition String?
-
-  @@index([projectId])
-  @@map("project_event")
-}
-
 
 /// The conclusion an acceptance run — or one of its criteria — reached. Deliberately its own enum
 /// rather than a second use of `TaskVerdict`: a project-level acceptance is not a verification
@@ -2741,7 +2686,6 @@ model Task {
   verificationFindings    TaskVerificationFinding[] @relation("FindingSubject")
   filedByFinding          TaskVerificationFinding[] @relation("FindingEffectTask")
   /// Presses of Run Now recorded against this task (0137).
-  manualRunTriggers       TaskRunManualTrigger[]
   /// `[K6]`: §7's known-good and known-red points, append-only (migration 0152).
   checkpoints             TaskCheckpoint[]
 
