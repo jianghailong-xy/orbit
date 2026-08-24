@@ -9182,9 +9182,8 @@ html[data-theme='dark'] .session-tag-chip {
   margin-inline-end: 0;
 }
 
-/* A project's stable purpose precedes the live work account. Long Markdown is complete by default
-   and can be collapsed to a three-line window after reading; the window changes in place, so
-   links, lists and code keep the same rendering rather than switching between two copies. */
+/* A project's stable purpose precedes the live work account. Long Markdown stays complete here,
+   so links, lists and code are always readable without a disclosure control or a second copy. */
 .project-goal-card {
   margin-bottom: 14px;
   padding: 15px 18px 16px;
@@ -9199,8 +9198,6 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .project-goal-head {
   min-height: 24px;
-  gap: 12px;
-  justify-content: space-between;
 }
 .project-goal-heading {
   min-width: 0;
@@ -9213,27 +9210,9 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--brand);
   font-size: 18px;
 }
-.project-goal-toggle.ant-btn {
-  flex: 0 0 auto;
-  height: 26px;
-  padding-inline: 7px;
-  color: var(--text-2);
-  font-size: 12.5px;
-}
-.project-goal-toggle.ant-btn:hover,
-.project-goal-toggle.ant-btn:focus-visible {
-  color: var(--brand);
-  background: var(--brand-tint);
-}
 .project-goal-content {
   margin-top: 8px;
   color: var(--text-1);
-}
-.project-goal-content.is-collapsed {
-  max-height: 4.8em;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
 }
 .project-goal-empty.ant-typography {
   margin: 8px 0 0;
@@ -9241,9 +9220,6 @@ html[data-theme='dark'] .session-tag-chip {
 @media (max-width: 560px) {
   .project-goal-card {
     padding: 14px;
-  }
-  .project-goal-toggle.ant-btn {
-    padding-inline: 4px;
   }
 }
 

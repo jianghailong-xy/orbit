@@ -599,8 +599,8 @@ export function ProjectDetailPage() {
           </header>
 
           {/* The stable definition of the project comes before its changing execution state. A
-              long brief is complete by default and can be collapsed in place after reading; the
-              full Markdown remains the one source rather than being repeated below the graph. */}
+              long brief stays complete here; its full Markdown remains the one source rather than
+              being hidden behind a disclosure or repeated below the graph. */}
           <ProjectGoalCard goal={p.goal} />
 
           {/* One command centre, two responsibilities: the work account establishes context on
