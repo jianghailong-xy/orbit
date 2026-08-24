@@ -3319,9 +3319,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         tone: 'error',
       }),
   });
-  // Change a LIVE session's model / mode / provider between turns. Optimistically patch the
-  // cached session so the pill updates instantly; server-side the runner re-spawns
-  // claude --resume with the new flag. Revert + surface the error on failure. Keyed on
+  // Change a LIVE session's model / mode / effort / provider, mid-turn included. Optimistically
+  // patch the cached session so the pill updates instantly; server-side the runner tells the
+  // running engine, or re-spawns claude --resume with the new flag when it is a provider (or a
+  // runtime with no control channel). Revert + surface the error on failure. Keyed on
   // effectiveView to match the (view-scoped) sessions query that renders the list.
   const configMut = useMutation({
     mutationFn: (cfg: {
@@ -4054,8 +4055,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
   // online to act on it), and none of them aborts the running turn. WHEN the change lands is no
   // longer one answer for all four, so it is derived per field rather than stated here — see
-  // `configPillHints`: model and permission mode reach the running engine over its control
-  // channel, effort and provider wait for the re-spawn the inbox defers to the end of the turn.
+  // `configPillHints`: model, permission mode and effort reach the running engine over its
+  // control channel, and only a provider waits for the re-spawn the inbox defers to the end of
+  // the turn.
   // When not live they're freely editable (pre-session config).
   // Workspace stays fixed once the session exists (it's never re-assigned on resume).
   const configEditable = selectedTrashed || selectedMissing ? false : live ? runner.online : true;

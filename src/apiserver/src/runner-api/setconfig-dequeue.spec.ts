@@ -59,7 +59,7 @@ test('setconfig lands mid-turn like an interrupt, and reload is still held until
     /turn\."kind" IN \('interrupt', 'end', 'diff', 'setconfig'\)\s*\n\s*AND \(turn\."status" = 'PENDING' OR \(turn\."status" = 'IN_FLIGHT' AND turn\."lease_deadline_at" < now\(\)\)\)/,
   );
   // The opposite claim, which is what makes the one above mean something: a reload still waits
-  // for an empty slot, because effort and provider cannot be applied without a new process.
+  // for an empty slot, because a provider switch cannot be applied without a new process.
   assert.match(
     sql,
     /turn\."kind" = 'reload' AND turn\."status" = 'PENDING' AND NOT EXISTS \(\s*SELECT 1 FROM "conversation_turn" inflight[\s\S]*?inflight\."kind" IN \('message', 'shell'\)[\s\S]*?inflight\."status" = 'IN_FLIGHT'/,

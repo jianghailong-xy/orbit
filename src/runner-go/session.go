@@ -1546,13 +1546,13 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 					}
 				}(w)
 			case "setconfig":
-				// Model / permission mode changed, on a session whose engine is up. Neither is
-				// built into that process the way effort and the provider environment are: a
-				// resident CLI can be TOLD about them, over the same control channel it already
-				// services for interrupts. So the change lands in the conversation that is
-				// already going — mid-turn included, which is the whole reason this is a kind of
-				// its own — and `reload` below keeps the half that really does need another
-				// process.
+				// Model / permission mode / reasoning effort changed, on a session whose engine
+				// is up. None of the three is built into that process the way the provider
+				// environment is: a resident CLI can be TOLD about them, over the same control
+				// channel it already services for interrupts. So the change lands in the
+				// conversation that is already going — mid-turn included, which is the whole
+				// reason this is a kind of its own — and `reload` below keeps the half that
+				// really does need another process.
 				//
 				// Answered on this goroutine, unlike the interrupt above, because the answer
 				// decides whether this process survives: a refusal ends in procCancel, and that
@@ -1572,9 +1572,16 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				}
 				var refused error
 				for _, f := range frames {
-					w, err := rt.requestControlWith(f.subtype, f.payload)
+					// Asked before the frame is built, and only of the one frame whose effect
+					// cannot be read back: an effort this CLI would answer `success` to and
+					// ignore is not sent at all, it is degraded to the re-spawn below, which
+					// applies it the way it has always been applied.
+					err := f.unsupportedBy(rt.announcedVersion())
 					if err == nil {
-						err = rt.awaitControl(procCtx, w, claudeSetConfigTimeout)
+						var w *controlWaiter
+						if w, err = rt.requestControlWith(f.subtype, f.payload); err == nil {
+							err = rt.awaitControl(procCtx, w, claudeSetConfigTimeout)
+						}
 					}
 					if err != nil {
 						refused = fmt.Errorf("%s: %w", f.what, err)
@@ -1617,15 +1624,20 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 				procCancel() // kill claude; the main loop returns reload=true to re-spawn
 				return
 			case "reload":
-				// Model / permission-mode / effort / provider changed on this idle session.
-				// --model, --permission-mode and --effort are spawn flags, so we apply
-				// the new values to job.Agent and tear claude down; the outer loop
-				// re-spawns with --resume + the new flags (full context preserved).
+				// Model / permission-mode / effort / provider changed, and this session gets the
+				// change by being rebuilt. --model, --permission-mode and --effort are spawn
+				// flags, so we apply the new values to job.Agent and tear claude down; the outer
+				// loop re-spawns with --resume + the new flags (full context preserved).
 				// Only the changed fields are carried, so an untouched field keeps its
 				// running value. Effort is a *string so present-but-empty can clear it
 				// back to the model default (drop --effort) — "" that model/mode can't.
 				// A provider switch arrives as a new environment, applied the same way:
 				// the process it belongs to is the one this re-spawn creates.
+				//
+				// Still the only path for the runtimes with no control channel (codex, kimi and
+				// opencode reload for every field), and for a provider switch, which really does
+				// need a different process. What no longer arrives here on its own is a claude
+				// session's model, mode or effort: those are `setconfig` above.
 				var cfg struct {
 					Model          string  `json:"model"`
 					PermissionMode string  `json:"permissionMode"`
@@ -1739,6 +1751,15 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			continue
 		}
 		handleMessage(msg, emit, bg)
+		// The init handshake is where the CLI names its own version, and it is the only place
+		// it does. One control frame has to know it — apply_flag_settings answers `success`
+		// whether or not it acted, so the version is all there is to gate on (claude_setconfig.go)
+		// — and it is recorded on the runtime rather than the session because it describes THIS
+		// process: an engine that self-updates underneath a live session does not change it.
+		if msg["type"] == "system" && msg["subtype"] == "init" {
+			version, _ := msg["claude_code_version"].(string)
+			rt.noteAnnouncedVersion(version)
+		}
 		// --replay-user-messages: the CLI echoes back each user turn it reads, which is the
 		// only signal that a message became part of the conversation rather than just bytes
 		// in a pipe. Replays arrive in the order the frames were read, so the oldest

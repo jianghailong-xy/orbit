@@ -286,8 +286,9 @@ func TestSessionSettlesASetConfigTurnOnEveryPath(t *testing.T) {
 		},
 		{
 			name: "nothing in it had changed",
-			// The control plane sends one of these for every config PATCH, including the
-			// ones where only effort moved. Nothing to ask the CLI, and still a turn.
+			// The control plane sends one of these for every config PATCH that reaches a
+			// claude session, including the ones that restate what is already running.
+			// Nothing to ask the CLI, and still a turn.
 			turn: setConfigTurn("cfg-1", "claude-opus-5", "acceptEdits"),
 			script: []fakeStep{
 				{Await: "user"}, {Emit: "replay_user"},
@@ -575,5 +576,238 @@ func TestSetConfigFramesCarryTheValuesOntoTheClaim(t *testing.T) {
 	}
 	if agent.Model != "claude-sonnet-5" || agent.PermissionMode != "plan" {
 		t.Fatalf("the claim ended up at %+v, want the new model and mode", agent)
+	}
+}
+
+// setConfigEffortTurn is the control plane telling the runner a session's reasoning effort
+// moved. Its own helper because effort is stated differently from the pair above: only when
+// the PATCH moved it (a session with none of its own runs on its workspace's), and with ""
+// meaning "back to the model default" rather than "not stated".
+//
+// `after` holds it back until the named turn has settled, which is what makes these tests
+// deterministic rather than lucky: the version this frame is gated on is read out of an init
+// handshake, and a turn that has settled is a turn whose init line the stdout reader has
+// necessarily already gone past.
+func setConfigEffortTurn(id, effort, after string) scriptedTurn {
+	content, err := json.Marshal(map[string]string{"effort": effort})
+	if err != nil {
+		panic(err)
+	}
+	return scriptedTurn{
+		turn:    RunInboxResponse{TurnID: id, Kind: "setconfig", Content: string(content)},
+		ungated: true,
+		after:   after,
+	}
+}
+
+// Effort, changed on the engine that is already running — including while it is running a
+// turn, which is the whole reason this stopped being a `reload`.
+//
+// The frame is sent during turn-2 and the process it was sent to is the process that
+// finishes turn-2: one spawn, no reload, no `resumed` marker. What this canNOT assert is
+// that the CLI acted on it — apply_flag_settings answers `success` either way and reports
+// nothing afterwards, which is why the claim that it takes effect is made against real API
+// request bodies instead (claude_effort_requestbody_test.go).
+func TestSessionAppliesAnEffortChangeToTheRunningEngine(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			// The handshake the version gate reads. The CLI emits one at the start of every
+			// turn; this one belongs to turn-1, and turn-2's is left out because a second
+			// would prove nothing the first does not.
+			{Emit: "system_init", Version: "2.1.241"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "done"},
+			{Await: "user"},
+			{Emit: "replay_user"},
+			{Emit: "assistant", Text: "working on it"},
+			// Mid-turn: the CLI is between its own output and its result when it is told.
+			{Await: "control_request", Subtype: ctrlApplyFlagSettings},
+			{Emit: "control_response"},
+			{Emit: "result", Text: "done again"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{
+			messageTurn("turn-1", "warm the engine up"),
+			messageTurn("turn-2", "start something long"),
+			setConfigEffortTurn("cfg-1", "xhigh", "turn-1"),
+		}, nil)
+
+	frames := controlRequestsOfSubtype(run.fake, ctrlApplyFlagSettings)
+	if len(frames) != 1 {
+		t.Fatalf("the CLI received %d %s request(s), want exactly 1", len(frames), ctrlApplyFlagSettings)
+	}
+	settings, _ := frames[0]["settings"].(map[string]interface{})
+	if settings == nil || settings["effortLevel"] != "xhigh" {
+		t.Errorf("the CLI was asked for %v, want settings.effortLevel = %q", frames[0], "xhigh")
+	}
+	if run.reload {
+		t.Error("an applied effort change still asked the supervisor to re-spawn")
+	}
+	if n := len(run.fake.Spawns()); n != 1 {
+		t.Errorf("the session ran %d processes; an effort change the engine can take must not cost it its process", n)
+	}
+	if markers := run.resumedMarkers(); len(markers) != 0 {
+		t.Errorf("the transcript claims the session was resumed: %v", markers)
+	}
+	if notes := run.notices("setconfig-degraded"); len(notes) != 0 {
+		t.Errorf("an effort change sent to a capable engine was reported as degraded: %v", notes)
+	}
+	if got := run.turnResult("cfg-1"); got == nil || got.Status != stSucceeded {
+		t.Fatalf("the setconfig turn settled as %v, want %s", got, stSucceeded)
+	}
+	// The turn it was sent into still ends normally in the same process.
+	if got := run.turnResult("turn-2"); got == nil || got.Status != stSucceeded {
+		t.Errorf("the turn the effort change landed in settled as %v, want %s", got, stSucceeded)
+	}
+	// And the claim carries it, so the next process — a crash resume, a provider switch —
+	// is built with --effort xhigh rather than handing the old level back.
+	if got := run.job.Agent.Effort; got != "xhigh" {
+		t.Errorf("the claim still carries effort %q, want xhigh", got)
+	}
+}
+
+// The degradation, end to end: an engine that cannot be trusted to apply an effort is never
+// sent the frame at all, and the change becomes the re-spawn it always used to be.
+//
+// This frame is the one that cannot answer for itself — every apply_flag_settings comes back
+// `success`, including from a CLI that has no such setting — so the decision is made from the
+// version the process announced, before anything is sent. Both failing shapes are covered
+// (too old, and never announced), each against the capable control that proves the gate is
+// not simply always closed.
+func TestSessionRespawnsForAnEffortChangeTheEngineCannotApply(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		version    string
+		wantReload bool
+	}{
+		{name: "the engine is new enough", version: "2.1.241", wantReload: false},
+		{name: "the engine predates the setting", version: "2.1.200", wantReload: true},
+		// No claude_code_version in the handshake at all: nothing to judge on, and a frame
+		// sent on the hope that it lands would be answered `success` and change nothing.
+		{name: "the engine never said what it is", version: "", wantReload: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := []fakeStep{
+				{Await: "user"},
+				{Emit: "system_init", Version: tc.version},
+				{Emit: "replay_user"},
+				{Emit: "result", Text: "done"},
+			}
+			if !tc.wantReload {
+				// A capable engine keeps its process, so this script has to end the run
+				// itself. The degraded ones do not: the runner tears the process down,
+				// which is what stdout reaching EOF with no `eof` step proves.
+				script = append(script,
+					fakeStep{Await: "control_request", Subtype: ctrlApplyFlagSettings},
+					fakeStep{Emit: "control_response"},
+					fakeStep{Emit: "eof"})
+			}
+			run := runDeliverySession(t, script,
+				[]scriptedTurn{
+					messageTurn("turn-1", "warm the engine up"),
+					setConfigEffortTurn("cfg-1", "xhigh", "turn-1"),
+				}, nil)
+
+			if run.reload != tc.wantReload {
+				t.Fatalf("the run asked for a re-spawn = %v, want %v", run.reload, tc.wantReload)
+			}
+			frames := controlRequestsOfSubtype(run.fake, ctrlApplyFlagSettings)
+			notes := run.notices("setconfig-degraded")
+			if !tc.wantReload {
+				if len(frames) != 1 {
+					t.Fatalf("the capable engine received %d %s request(s), want 1", len(frames), ctrlApplyFlagSettings)
+				}
+				if len(notes) != 0 {
+					t.Fatalf("a change the engine could take was reported as degraded: %v", notes)
+				}
+				return
+			}
+			// Nothing was sent. A frame this engine would answer `success` and ignore is
+			// worse than no frame: it would be logged as applied and never made.
+			if len(frames) != 0 {
+				t.Fatalf("an engine that cannot apply the setting was sent it anyway: %v", frames)
+			}
+			if len(notes) != 1 {
+				t.Fatalf("the transcript carries %d degradation notice(s), want 1: %v", len(notes), notes)
+			}
+			if !strings.Contains(notes[0], "reasoning effort") {
+				t.Errorf("the notice does not say which setting could not be applied: %q", notes[0])
+			}
+			if !strings.Contains(notes[0], claudeEffortFloor) {
+				t.Errorf("the notice does not say what the engine was judged against: %q", notes[0])
+			}
+			if !strings.Contains(notes[0], "nothing is lost") {
+				t.Errorf("the notice does not say the conversation survives: %q", notes[0])
+			}
+			// The value still goes on the claim: the process the fallback builds next is
+			// the one that has to come back up with --effort xhigh.
+			if got := run.job.Agent.Effort; got != "xhigh" {
+				t.Errorf("the claim still carries effort %q, want xhigh — the re-spawn would come back on the old level", got)
+			}
+			if got := run.turnResult("cfg-1"); got == nil || got.Status != stSucceeded {
+				t.Fatalf("the setconfig turn settled as %v, want %s", got, stSucceeded)
+			}
+			if got := run.turnResult("cfg-1"); !strings.Contains(got.Result, "re-spawn") {
+				t.Errorf("the turn reports %q, which does not say it fell back", got.Result)
+			}
+		})
+	}
+}
+
+// Clearing the effort travels as null, through the whole loop and out of the real frame
+// builder. "" and an absent key are each accepted by the CLI and change nothing, so this is
+// the difference between handing the model back its default and quietly leaving the session
+// on the level the person just cleared.
+//
+// Set and then cleared in one run, because the second frame is only sent if the first one
+// moved the claim: a runner that told the engine without recording what it had told it would
+// see the clear as a no-op and never send this at all.
+func TestSessionClearsEffortWithANullLevel(t *testing.T) {
+	run := runDeliverySession(t,
+		[]fakeStep{
+			{Await: "user"},
+			{Emit: "system_init", Version: "2.1.241"},
+			{Emit: "replay_user"},
+			{Emit: "result", Text: "done"},
+			{Await: "control_request", Subtype: ctrlApplyFlagSettings},
+			{Emit: "control_response"},
+			{Await: "control_request", Subtype: ctrlApplyFlagSettings},
+			{Emit: "control_response"},
+			{Emit: "eof"},
+		},
+		[]scriptedTurn{
+			messageTurn("turn-1", "warm the engine up"),
+			setConfigEffortTurn("cfg-1", "xhigh", "turn-1"),
+			setConfigEffortTurn("cfg-2", "", "cfg-1"),
+		}, nil)
+
+	frames := controlRequestsOfSubtype(run.fake, ctrlApplyFlagSettings)
+	if len(frames) != 2 {
+		t.Fatalf("the CLI received %d %s request(s), want 2 (set, then clear)", len(frames), ctrlApplyFlagSettings)
+	}
+	levels := make([]interface{}, 0, 2)
+	for i, frame := range frames {
+		settings, _ := frame["settings"].(map[string]interface{})
+		if settings == nil {
+			t.Fatalf("request %d carries no settings object: %v", i, frame)
+		}
+		level, present := settings["effortLevel"]
+		if !present {
+			t.Fatalf("request %d omits effortLevel entirely, which asks the engine for nothing: %v", i, frame)
+		}
+		levels = append(levels, level)
+	}
+	if levels[0] != "xhigh" {
+		t.Errorf("the first request set the effort to %#v, want %q", levels[0], "xhigh")
+	}
+	if levels[1] != nil {
+		t.Errorf("the clear was sent as %#v, want null", levels[1])
+	}
+	if run.reload {
+		t.Error("clearing the effort still asked the supervisor to re-spawn")
+	}
+	if got := run.job.Agent.Effort; got != "" {
+		t.Errorf("the claim still carries effort %q, want it empty so the next spawn drops --effort", got)
 	}
 }

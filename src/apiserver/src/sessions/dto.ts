@@ -98,8 +98,10 @@ export interface SessionRenameDto {
 
 export interface SessionConfigDto {
   /** Change the model, permission mode and/or effort of an already-started session.
-   *  The runner re-spawns the runtime so the change takes effect on the next
-   *  turn. Only allowed between turns (AWAITING_INPUT); omitted fields are untouched.
+   *  Allowed in any non-terminal status, mid-turn included, and omitted fields are untouched.
+   *  On the claude runtime all three are said to the engine that is already running, so they
+   *  take effect from that point in the turn; on the others the runner re-spawns the runtime and
+   *  the change lands on the next turn.
    *  effort: '' clears it back to the model default; omitted keeps the running value. */
   model?: string;
   permissionMode?: string;

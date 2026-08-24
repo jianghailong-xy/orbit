@@ -16,9 +16,9 @@ import { runtimeForProvider } from './workspaceDefaults';
 /**
  * What the composer's config pills PROMISE about a change made through them, checked against what
  * the change actually does. The two used to be one sentence for all four fields ("the server
- * defers the re-spawn, so it applies on the next turn"); model and permission mode stopped
- * working that way when they moved onto the engine's control channel, and a tooltip that still
- * said it would be worse than no tooltip at all.
+ * defers the re-spawn, so it applies on the next turn"); model, permission mode and effort each
+ * stopped working that way when they moved onto the engine's control channel, and a tooltip that
+ * still said it would be worse than no tooltip at all.
  *
  * Read off the RENDERED tooltip rather than the helper's return value, because the copy only
  * matters where a user meets it. That needs a DOM: antd renders a tooltip into a portal, which
@@ -123,17 +123,15 @@ describe('what the config pills promise about when a change lands', () => {
 
     // …and the two halves have to READ differently. One shared sentence would satisfy every
     // assertion above the moment both halves were described with it.
-    for (const immediate of ['model', 'permissionMode'] as const) {
-      for (const deferred of ['effort', 'provider'] as const) {
-        expect(copy[immediate]).not.toBe(copy[deferred]);
-      }
+    for (const immediate of ['model', 'permissionMode', 'effort'] as const) {
+      expect(copy[immediate]).not.toBe(copy.provider);
     }
   });
 
   /**
-   * `set_model` / `set_permission_mode` are Claude Code's; a Codex, Kimi or OpenCode session
-   * re-spawns for all four fields exactly as it did before any of this. Telling one of those
-   * "even mid-turn" would be a promise nothing in the stack keeps.
+   * `set_model` / `set_permission_mode` / `apply_flag_settings` are Claude Code's; a Codex, Kimi
+   * or OpenCode session re-spawns for all four fields exactly as it did before any of this.
+   * Telling one of those "even mid-turn" would be a promise nothing in the stack keeps.
    */
   it('promises no other runtime the control channel it does not have', async () => {
     for (const runtime of [AgentProvider.CODEX, AgentProvider.KIMI, AgentProvider.OPENCODE]) {
@@ -143,10 +141,11 @@ describe('what the config pills promise about when a change lands', () => {
           false,
         );
       }
-      // Spelled out for the two that moved: on Claude these read "even mid-turn", and the whole
+      // Spelled out for the three that moved: on Claude these read "even mid-turn", and the whole
       // point of the gate is that here they must not.
       expect(copy.model).toMatch(/on the next turn/);
       expect(copy.permissionMode).toMatch(/on the next turn/);
+      expect(copy.effort).toMatch(/on the next turn/);
     }
   });
 
@@ -167,7 +166,10 @@ describe('what the config pills promise about when a change lands', () => {
     });
     expect(promisedTiming(onClaude.model)).toBe(true);
     expect(promisedTiming(onClaude.permissionMode)).toBe(true);
-    expect(promisedTiming(onClaude.effort)).toBe(false);
+    expect(promisedTiming(onClaude.effort)).toBe(true);
+    // The one field a borrowed claude runtime still waits for: switching identity is switching
+    // the process's environment, which no frame can do.
+    expect(promisedTiming(onClaude.provider)).toBe(false);
 
     const onCodex = await copyForEachField({
       ...LIVE_CLAUDE,
@@ -175,6 +177,7 @@ describe('what the config pills promise about when a change lands', () => {
     });
     expect(promisedTiming(onCodex.model)).toBe(false);
     expect(promisedTiming(onCodex.permissionMode)).toBe(false);
+    expect(promisedTiming(onCodex.effort)).toBe(false);
   });
 
   /**

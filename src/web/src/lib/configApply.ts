@@ -23,13 +23,16 @@ const LABEL: Record<ConfigField, string> = {
  * Whether a change to this field reaches the engine that is already running, rather than the one
  * that runs next.
  *
- * The four fields stopped answering this the same way. Effort and provider are decided when the
- * engine process is BUILT — its flags and its environment — so changing them enqueues a `reload`:
- * the runner tears the process down and re-spawns it with `--resume`, and the inbox holds that
- * turn until no message is in flight. A change made mid-turn therefore lands on the next turn.
- * Model and permission mode are not build-time facts: a resident Claude Code takes `set_model`
- * and `set_permission_mode` on its control channel and honours them from that point in the turn
- * it is running, so they enqueue a `setconfig`, which the inbox hands over mid-turn.
+ * The four fields stopped answering this the same way. A provider is decided when the engine
+ * process is BUILT — it IS that process's environment — so changing one enqueues a `reload`: the
+ * runner tears the process down and re-spawns it with `--resume`, and the inbox holds that turn
+ * until no message is in flight. A change made mid-turn therefore lands on the next turn. Model,
+ * permission mode and effort are not build-time facts: a resident Claude Code takes `set_model`,
+ * `set_permission_mode` and `apply_flag_settings` on its control channel and honours them from
+ * that point in the turn it is running, so they enqueue a `setconfig`, which the inbox hands over
+ * mid-turn. Effort reads like a spawn flag (`--effort`) and was promised as one here until the
+ * frame was measured against the API requests the running turn goes on to make: every call after
+ * it carries the new level.
  *
  * The split is the server's (SessionsService.updateConfig), and so is the gate below it: those
  * control frames exist on the claude runtime only, so a Codex / Kimi / OpenCode session still
@@ -38,7 +41,7 @@ const LABEL: Record<ConfigField, string> = {
  * client's copy of the server's `execRuntime`.
  */
 export const appliesMidTurn = (field: ConfigField, runtime: string): boolean =>
-  runtime === AgentProvider.CLAUDE && (field === 'model' || field === 'permissionMode');
+  runtime === AgentProvider.CLAUDE && field !== 'provider';
 
 const MID_TURN = 'applies immediately, even mid-turn';
 const NEXT_TURN = 'applies on the next turn (the engine restarts to pick it up)';

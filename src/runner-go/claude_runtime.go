@@ -87,6 +87,13 @@ type claudeRuntime struct {
 
 	mu    sync.Mutex
 	phase runtimePhase
+	// announced is the CLI version THIS process named in its init handshake, or "" until
+	// it has emitted one. Per-runtime rather than per-runner because that is what it is a
+	// fact about: engines self-update underneath a running session, so `claude --version`
+	// on PATH answers for the binary the NEXT spawn will use, not for the process being
+	// spoken to here. Read by the one control frame whose effect cannot be read back
+	// (claude_setconfig.go).
+	announced string
 	// control is every control_request sent to this process and not yet answered, keyed
 	// by the request id its answer will carry. One table per process is what makes an
 	// answer from a torn-down generation unroutable rather than merely unlikely
@@ -113,6 +120,26 @@ func newClaudeRuntime(proc *claudeSpawn) *claudeRuntime {
 	}
 	go r.writeLoop()
 	return r
+}
+
+// noteAnnouncedVersion records the version out of one init handshake. The CLI emits that
+// frame at the start of every turn, so this is written repeatedly with the same value —
+// and after a re-spawn it is a NEW runtime that starts blank again, which is the point.
+func (r *claudeRuntime) noteAnnouncedVersion(version string) {
+	if version == "" {
+		return
+	}
+	r.mu.Lock()
+	r.announced = version
+	r.mu.Unlock()
+}
+
+// announcedVersion is the CLI version this process named, or "" if it has not named one
+// yet — a process spawned but not yet asked for a turn has said nothing.
+func (r *claudeRuntime) announcedVersion() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.announced
 }
 
 func (r *claudeRuntime) pid() int {

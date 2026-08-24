@@ -385,9 +385,10 @@ pgTest('a steer stranded by a dead runner is never handed to the next one', asyn
 //
 // A config PATCH used to queue one kind for four fields, so a model change made mid-turn
 // waited for the turn to end exactly as a provider switch did. The split is not a relaxed
-// gate: effort and provider are spawn-only, and holding a `reload` until the slot is empty
-// is the correct treatment for them. What follows asserts both directions, because either
-// one alone would be satisfied by a predicate that simply let everything through.
+// gate: a provider is spawn-only — it IS the process's environment — and holding a `reload`
+// until the slot is empty is the correct treatment for it. What follows asserts both
+// directions, because either one alone would be satisfied by a predicate that simply let
+// everything through.
 
 pgTest('a setconfig lands mid-turn, while the reload of the same session waits', async () => {
   await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
@@ -398,12 +399,29 @@ pgTest('a setconfig lands mid-turn, while the reload of the same session waits',
   assert.equal((await readTurn('{"model":"claude-haiku-4-5","permissionMode":"auto"}')).status, 'IN_FLIGHT');
 });
 
+pgTest('an effort change is handed over in the same poll, mid-turn, like the rest of its kind', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
+  // What a PATCH that moved only the effort of a claude session leaves behind. It used to be a
+  // reload, held by the test below until the running turn ended; it is a setconfig because the
+  // engine can be told, mid-turn, and every API call the turn goes on to make carries the new
+  // level (runner-go/claude_effort_requestbody_test.go measures exactly that).
+  await addTurn(2, 'setconfig', 'PENDING', '{"model":"claude-opus-5","permissionMode":"default","effort":"xhigh"}');
+
+  const first = await dequeue();
+  assert.equal(first?.kind, 'setconfig');
+  // The level has to survive the hand-over: the runner reads it out of this content, and a
+  // delivery that dropped it would apply nothing while reporting a turn it had carried out.
+  assert.equal(JSON.parse(first?.content ?? '{}').effort, 'xhigh');
+});
+
 pgTest('a reload sent during the same running turn stays queued until that turn is over', async () => {
   await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
-  await addTurn(2, 'reload', 'PENDING', '{"effort":"high"}');
+  // A provider switch, which is what a reload carries now that the other three fields are
+  // said to the running engine. The control case for the two tests above: re-spawning the
+  // process the running turn executes in is the abort this gate exists to prevent, so nothing
+  // is handed over yet.
+  await addTurn(2, 'reload', 'PENDING', '{"model":"claude-opus-5","permissionMode":"default","provider":"byok"}');
 
-  // The control case for the test above. Re-spawning the process the running turn executes in
-  // is the abort this gate exists to prevent, so nothing is handed over yet.
   assert.equal(await dequeue(), null);
 
   await client.query(`UPDATE "conversation_turn" SET status = 'ANSWERED' WHERE kind = 'message'`);

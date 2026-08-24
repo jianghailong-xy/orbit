@@ -203,22 +203,32 @@ func TestRealClaudeTakesASetModelWithNoSystemPrompt(t *testing.T) {
 // Runs with or without a CLI installed: it reads argv, not an engine.
 func TestRealClaudeProbeSpawnsWithProductionsTransportFlags(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
-	job := &ClaimedSession{
-		SessionID:   "real-claude-setconfig-contract",
-		SessionUUID: "11111111-2222-3333-4444-555555555555",
-		Agent:       realClaudeContractAgent(),
-	}
-	production := claudeCommandArgs(job, t.TempDir(), true)
-	probe := realClaudeTransportArgs(job)
-	for i := 0; i < len(probe); {
-		group := probe[i : i+1]
-		if strings.HasPrefix(probe[i], "-") && i+1 < len(probe) && !strings.HasPrefix(probe[i+1], "-") {
-			group = probe[i : i+2]
+	// Both shapes of agent: with an effort and without, because the flag that carries it is
+	// conditional on both sides and a probe measuring effort has to spawn the way a session
+	// with one really does.
+	for _, effort := range []string{"", "low"} {
+		agent := realClaudeContractAgent()
+		agent.Effort = effort
+		job := &ClaimedSession{
+			SessionID:   "real-claude-setconfig-contract",
+			SessionUUID: "11111111-2222-3333-4444-555555555555",
+			Agent:       agent,
 		}
-		if !containsArgs(production, group) {
-			t.Errorf("the probe spawns with %v, which a real session no longer passes: %v", group, production)
+		production := claudeCommandArgs(job, t.TempDir(), true)
+		probe := realClaudeTransportArgs(job)
+		if effort != "" && !containsArgs(probe, []string{"--effort", effort}) {
+			t.Errorf("the probe drops --effort for an agent that has one: %v", probe)
 		}
-		i += len(group)
+		for i := 0; i < len(probe); {
+			group := probe[i : i+1]
+			if strings.HasPrefix(probe[i], "-") && i+1 < len(probe) && !strings.HasPrefix(probe[i+1], "-") {
+				group = probe[i : i+2]
+			}
+			if !containsArgs(production, group) {
+				t.Errorf("the probe spawns with %v, which a real session no longer passes: %v", group, production)
+			}
+			i += len(group)
+		}
 	}
 }
 
@@ -236,8 +246,13 @@ func realClaudeContractAgent() AgentExecConfig {
 // what dialect the process speaks and which conversation it is — without the MCP config,
 // the agent instructions or the extra working dirs, none of which a control frame reaches.
 // TestRealClaudeProbeSpawnsWithProductionsTransportFlags holds it to the real thing.
+//
+// --effort is here on the same terms production passes it: only when the agent has one, so
+// an empty effort means the flag is absent and the model decides. The request-body probe
+// depends on that being the real spelling, since what it measures is a frame changing what
+// this flag set.
 func realClaudeTransportArgs(job *ClaimedSession) []string {
-	return []string{
+	args := []string{
 		"-p",
 		"--input-format", "stream-json",
 		"--output-format", "stream-json",
@@ -248,6 +263,10 @@ func realClaudeTransportArgs(job *ClaimedSession) []string {
 		"--permission-mode", job.Agent.PermissionMode,
 		"--session-id", job.SessionUUID,
 	}
+	if job.Agent.Effort != "" {
+		args = append(args, "--effort", job.Agent.Effort)
+	}
+	return args
 }
 
 // realClaudeProbe is one live `claude`, driven through the production control path.

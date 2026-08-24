@@ -65,6 +65,10 @@ type fakeStep struct {
 	ToolUseID string                 `json:"toolUseId,omitempty"`
 	ToolName  string                 `json:"toolName,omitempty"`
 	Input     map[string]interface{} `json:"input,omitempty"`
+	// Version is the CLI version a system_init frame announces (`claude_code_version`).
+	// Omitted leaves the key out entirely, which is a real shape too: it is what a runner
+	// sees from a process that has emitted an init handshake with nothing in it to gate on.
+	Version string `json:"version,omitempty"`
 	// RequestID of a control_request to emit, or of the control_response to await. Empty
 	// on an emitted control_response means "answer the last control_request awaited".
 	RequestID string                 `json:"requestId,omitempty"`
@@ -252,10 +256,14 @@ func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match 
 func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 	switch s.Emit {
 	case "system_init":
-		return marshalFrame(map[string]interface{}{
+		init := map[string]interface{}{
 			"type": "system", "subtype": "init", "session_id": sessionID,
 			"model": model, "slash_commands": []interface{}{}, "skills": []interface{}{},
-		}), nil
+		}
+		if s.Version != "" {
+			init["claude_code_version"] = s.Version
+		}
+		return marshalFrame(init), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
 	case "tool_use":

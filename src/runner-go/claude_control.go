@@ -42,13 +42,18 @@ import (
 const claudeInterruptTimeout = 30 * time.Second
 
 // The control subtypes Orbit sends, named once so the frame builder and the waiter agree.
-// interrupt takes no arguments; the other two each carry theirs beside the subtype in the
-// request object — {"subtype":"set_permission_mode","mode":"acceptEdits"} and
-// {"subtype":"set_model","model":"claude-sonnet-5"}.
+// interrupt takes no arguments; the rest each carry theirs beside the subtype in the
+// request object — {"subtype":"set_permission_mode","mode":"acceptEdits"},
+// {"subtype":"set_model","model":"claude-sonnet-5"} and
+// {"subtype":"apply_flag_settings","settings":{"effortLevel":"xhigh"}}.
 const (
 	ctrlInterrupt         = "interrupt"
 	ctrlSetPermissionMode = "set_permission_mode"
 	ctrlSetModel          = "set_model"
+	// apply_flag_settings sets the flags a CLI was started with, on the running process.
+	// Orbit uses exactly one of them, effortLevel, and reads nothing back: unlike the two
+	// above, this subtype answers `success` whatever it was handed (claude_setconfig.go).
+	ctrlApplyFlagSettings = "apply_flag_settings"
 )
 
 var (

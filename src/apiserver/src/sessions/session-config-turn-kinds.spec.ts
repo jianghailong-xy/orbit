@@ -7,11 +7,12 @@ import { SessionsService } from './sessions.service';
 /**
  * Which control turn a config PATCH queues, decided by what that PATCH actually moved.
  *
- * The split is not a relaxation of the inbox gate — it is a statement about the fields. Effort
- * and provider are decided when the process is built, so the only way to change them is to build
- * another one, and the gate that holds a `reload` until no message is in flight is exactly right
- * for them. Model and permission mode are not built in; they can be said to a resident engine,
- * and holding those until the turn ends was a delay with nothing behind it.
+ * The split is not a relaxation of the inbox gate — it is a statement about the fields. A
+ * provider is decided when the process is built (it IS that process's environment), so the only
+ * way to change one is to build another process, and the gate that holds a `reload` until no
+ * message is in flight is exactly right for it. Model, permission mode and effort are not built
+ * in; they can be said to a resident engine, and holding those until the turn ends was a delay
+ * with nothing behind it.
  *
  * So each case below is a claim about one direction: the live half alone must NOT produce a
  * reload, the spawn-only half alone must NOT produce a setconfig, and neither assertion means
@@ -96,14 +97,15 @@ test('a permission-mode change is said to the live engine too', async () => {
   assert.equal(JSON.parse(turns[0].content ?? '{}').permissionMode, 'auto');
 });
 
-test('effort is spawn-only, so it still re-spawns and nothing else is queued', async () => {
+test('an effort change is said to the live engine, not spawned into a new one', async () => {
   const { service, turns } = serviceOn({});
 
   await service.updateConfig(OWNER, ID, { effort: 'high' });
 
-  // No setconfig beside it: the model/mode pair did not move, and a control frame restating it
-  // would be work the re-spawn below immediately redoes.
-  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  // No reload beside it. `--effort` reads like a spawn flag and was treated as one until the
+  // control frame was measured against the API requests a running turn goes on to make: every
+  // call after it carries the new level, so there is nothing left for a new process to do.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
   assert.deepEqual(JSON.parse(turns[0].content ?? '{}'), {
     model: 'claude-opus-5',
     permissionMode: 'default',
@@ -111,34 +113,59 @@ test('effort is spawn-only, so it still re-spawns and nothing else is queued', a
   });
 });
 
+test('an effort cleared back to the model default is stated, not omitted', async () => {
+  const { service, turns } = serviceOn({ effort: 'xhigh' });
+
+  await service.updateConfig(OWNER, ID, { effort: '' });
+
+  // '' is a value here, not an absence: it is what the runner turns into `effortLevel: null`,
+  // the frame that hands the model back its own default. An omitted key would tell the engine
+  // nothing and leave it on xhigh while the session showed the default.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').effort, '');
+});
+
+test('a PATCH that does not mention effort does not state one either', async () => {
+  const { service, turns } = serviceOn({ effort: 'xhigh' });
+
+  await service.updateConfig(OWNER, ID, { model: 'claude-haiku-4-5' });
+
+  // Unlike the model/mode pair, effort is NOT restated on every setconfig. A session with no
+  // effort of its own runs on its WORKSPACE's (the claim resolves `session.effort ??
+  // workspace.effort`), so the committed value is not what the engine was built with — sending
+  // it would tell a live engine to drop a workspace default nobody touched.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.equal('effort' in JSON.parse(turns[0].content ?? '{}'), false);
+});
+
 test('re-sending the effort a session already has moves nothing, so it does not re-spawn', async () => {
   const { service, turns } = serviceOn({ effort: 'high' });
 
   await service.updateConfig(OWNER, ID, { effort: 'high' });
 
-  // The process was built with this flag; rebuilding it to arrive at the same flag is the
-  // interruption this split exists to stop handing out.
+  // Rebuilding the process to arrive at the flag it already has is the interruption this split
+  // exists to stop handing out. The frame restates it and the runner asks the engine for
+  // nothing, which is the cheap end of the two.
   assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
 });
 
-test('moving both halves queues both, with the re-spawn last', async () => {
+test('moving the whole live half at once queues one setconfig and no re-spawn', async () => {
   const { service, turns } = serviceOn({});
 
-  await service.updateConfig(OWNER, ID, { permissionMode: 'auto', effort: 'high' });
+  await service.updateConfig(OWNER, ID, {
+    model: 'claude-haiku-4-5',
+    permissionMode: 'plan',
+    effort: 'high',
+  });
 
-  // Order is the point: a reload re-spawns with every new flag, so a setconfig ordered after it
-  // would be a control frame for config the fresh process already has.
-  assert.deepEqual(
-    turns.map(({ kind, seq }) => ({ kind, seq })),
-    [
-      { kind: 'setconfig', seq: 1 },
-      { kind: 'reload', seq: 2 },
-    ],
-  );
-  assert.equal(JSON.parse(turns[0].content ?? '{}').permissionMode, 'auto');
-  assert.equal(JSON.parse(turns[1].content ?? '{}').effort, 'high');
-  // The live half is not repeated as a spawn-only field, nor the spawn-only half as a live one.
-  assert.equal(JSON.parse(turns[0].content ?? '{}').effort, undefined);
+  // All three travel together, in the one frame-bearing turn. A reload here would abort the
+  // running turn to arrive at config the engine had already been told.
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+  assert.deepEqual(JSON.parse(turns[0].content ?? '{}'), {
+    model: 'claude-haiku-4-5',
+    permissionMode: 'plan',
+    effort: 'high',
+  });
 });
 
 test('re-sending the provider a session already declares moves nothing either', async () => {
@@ -147,6 +174,38 @@ test('re-sending the provider a session already declares moves nothing either', 
   await service.updateConfig(OWNER, ID, { provider: 'claude' });
 
   assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+});
+
+test('a provider switch alongside an effort change queues both, re-spawn last', async () => {
+  process.env.PROVIDER_SECRET_KEY ??= 'test-master-key';
+  const { service, turns } = serviceOn({
+    modelProvider: {
+      runtime: 'claude',
+      baseUrl: 'https://byok.example/anthropic',
+      apiKeyEnc: encryptSecret('sk-byok'),
+      defaultModel: 'byok-large',
+      enabled: true,
+    },
+  });
+
+  await service.updateConfig(OWNER, ID, { provider: 'byok', effort: 'xhigh' });
+
+  // Order is the point: the reload re-spawns with every new flag, so a setconfig ordered after
+  // it would be a control frame for config the fresh process already has. And the effort has to
+  // be on BOTH — the frame moves the turn that is running now, the flag builds the process that
+  // runs next, and a reload that dropped it would come back on the old level.
+  assert.deepEqual(
+    turns.map(({ kind, seq }) => ({ kind, seq })),
+    [
+      { kind: 'setconfig', seq: 1 },
+      { kind: 'reload', seq: 2 },
+    ],
+  );
+  assert.equal(JSON.parse(turns[0].content ?? '{}').effort, 'xhigh');
+  assert.equal(JSON.parse(turns[1].content ?? '{}').effort, 'xhigh');
+  // Only the reload names the provider: it is the one that has to rebuild the process.
+  assert.equal(JSON.parse(turns[0].content ?? '{}').provider, undefined);
+  assert.equal(JSON.parse(turns[1].content ?? '{}').provider, 'byok');
 });
 
 test('a provider switch alongside a permission-mode change queues both, re-spawn last', async () => {
@@ -234,6 +293,36 @@ test('a built-in claude session is told, and is the control for all three above'
   const { service, turns } = serviceOn({});
 
   await service.updateConfig(OWNER, ID, { model: 'claude-haiku-4-5' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
+});
+
+/**
+ * Effort specifically, on the runtimes that cannot be told. It moved onto the control channel
+ * for claude alone; a runtime with no arm for the kind would have the change acked on delivery
+ * and applied by nobody, which is strictly worse than the wait the split removed. So each of
+ * the three keeps the reload it always had — with the new level on it, because the process
+ * that reload builds is what applies it.
+ */
+for (const runtime of [
+  { provider: 'codex', model: 'gpt-5.6-sol' },
+  { provider: 'kimi', model: 'kimi-code/kimi-for-coding' },
+  { provider: 'opencode', model: 'anthropic/claude-opus-5' },
+]) {
+  test(`a ${runtime.provider} session is re-spawned for an effort change`, async () => {
+    const { service, turns } = serviceOn(runtime);
+
+    await service.updateConfig(OWNER, ID, { effort: 'high' });
+
+    assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+    assert.equal(JSON.parse(turns[0].content ?? '{}').effort, 'high');
+  });
+}
+
+test('a claude session is the control for the three above: its effort is told, not spawned', async () => {
+  const { service, turns } = serviceOn({});
+
+  await service.updateConfig(OWNER, ID, { effort: 'high' });
 
   assert.deepEqual(turns.map((t) => t.kind), ['setconfig']);
 });
