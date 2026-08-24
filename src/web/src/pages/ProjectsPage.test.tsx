@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
 import { encodeId } from '../lib/idCodec';
+import { QUIET_MS } from '../lib/projectAttention';
+import { PANORAMA_BUCKETS } from '../components/ProjectPanoramaHeader';
 import {
   EMPTY_NEW_TASK_DRAFT,
   NewProjectTaskForm,
@@ -23,6 +25,14 @@ import {
   scheduledStart,
   RUN_AT_IMPOSSIBLE,
   canCreateProjectTask,
+  canCreateProject,
+  invalidateAfterProjectCreate,
+  matchesProjectSearch,
+  noMatchDescription,
+  newProjectBody,
+  projectsEmptyKind,
+  projectsPath,
+  projectsQueryKey,
   type NewProjectTaskDraft,
 } from './ProjectsPage';
 
@@ -52,6 +62,11 @@ const source = readFileSync(fileURLToPath(new URL('./ProjectsPage.tsx', import.m
 const P1 = '0195c0de-0000-7000-8000-000000000001';
 const P2 = '0195c0de-0000-7000-8000-000000000002';
 const P3 = '0195c0de-0000-7000-8000-000000000003';
+const P4 = '0195c0de-0000-7000-8000-000000000004';
+const P5 = '0195c0de-0000-7000-8000-000000000005';
+const P6 = '0195c0de-0000-7000-8000-000000000006';
+const P7 = '0195c0de-0000-7000-8000-000000000007';
+const P8 = '0195c0de-0000-7000-8000-000000000008';
 // A task id in the raw-UUID spelling a payload can still carry across the public-id migration:
 // what goes on the wire has to be the short public id whichever spelling the row was handed.
 const T1 = '0195c0de-0000-7000-8000-0000000000a1';
@@ -82,6 +97,13 @@ function renderDetail(qc: QueryClient, urlId: string) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+// Every project row's goal line, in row order. The rows are what the assertions below are about,
+// and a bare `html.toContain` cannot tell the goal apart from the title, the count or the page's
+// own markup — this narrows to the one element the goal is rendered into.
+function goalLines(html: string): string[] {
+  return [...html.matchAll(/<div class="project-row-goal">([\s\S]*?)<\/div>/g)].map((m) => m[1]);
 }
 
 function newClient() {
@@ -149,6 +171,18 @@ const task = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+// What GET /projects reports about every project besides its name: the four buckets and when it
+// last moved. Spelled as a helper because the endpoint ALWAYS sends both — a project with no tasks
+// reports five zeroes and a null rather than dropping them — so a row fixture without them would
+// be testing a payload nobody sends. Named for what it answers: where this project stands.
+const standing = (
+  buckets: Partial<Record<'running' | 'ready' | 'blocked' | 'done' | 'cancelled', number>> = {},
+  lastActivityAt: string | null = '2026-01-02T00:00:00Z',
+) => ({
+  buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...buckets },
+  lastActivityAt,
+});
+
 const detail = (over: Record<string, unknown> = {}) => ({
   id: P1,
   title: 'Website Revamp',
@@ -178,7 +212,16 @@ describe('ProjectsPage', () => {
       (m) => m[1].trim().replace(/,$/, ''),
     );
     expect(apiCalls).toEqual([
-      "'/projects'",
+      // The list read. The URL itself is built by `projectsPath`, because the status filter is
+      // part of it — held there rather than interpolated here so there is ONE place the
+      // `?status=` spelling is decided, asserted directly by its own unit tests below. What this
+      // line still fixes is that the page reads the projects collection exactly once and passes
+      // it nothing but the filter.
+      "projectsPath(filter)",
+      // The write that creates a project: the collection itself, POST, and a body built in one
+      // place so no caller can send an untrimmed title or a goal of spaces. Held as literally as
+      // the task create below, for the same reason — the body IS the contract.
+      "'/projects', { method: 'POST', body: newProjectBody(draft) }",
       '`/projects/${encodeURIComponent(id!)}`',
       // The write that opens the conversation with this project's coordinator, and the reason it
       // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather
@@ -231,11 +274,11 @@ describe('ProjectsPage', () => {
     );
   });
 
-  it('renders each project’s title, status, task count and goal excerpt/fallback', () => {
-    // Well past any sensible row-length cap — proves long goals get truncated, not just shown.
+  it('renders each project’s title, status, task count and goal/fallback', () => {
+    // Well past any sensible row-length cap — what proves the row no longer slices the text.
     const longGoal = 'Ship the new marketing site. '.repeat(10);
     const qc = newClient();
-    qc.setQueryData(['projects'], [
+    qc.setQueryData(['projects', 'ALL'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -244,15 +287,19 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        ...standing({ running: 1 }),
       },
       {
+        // Open, like the other two: this test is about what ONE ROW says, and a finished project
+        // is folded into a pill rather than given a row — see the sections suite below.
         id: P2,
         title: 'Legacy Cleanup',
-        status: 'DONE',
+        status: 'OPEN',
         goal: null,
         createdAt: '2026-01-03T00:00:00Z',
         updatedAt: '2026-01-04T00:00:00Z',
         _count: { tasks: 1 },
+        ...standing({ running: 1 }, '2026-01-04T00:00:00Z'),
       },
       {
         id: P3,
@@ -262,6 +309,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-05T00:00:00Z',
         updatedAt: '2026-01-06T00:00:00Z',
         _count: { tasks: 2 },
+        ...standing({ running: 1 }, '2026-01-06T00:00:00Z'),
       },
     ]);
     const html = renderPage(qc);
@@ -270,17 +318,249 @@ describe('ProjectsPage', () => {
     expect(html).toContain('Ship the new marketing site');
     expect(html).toContain('5 tasks');
     expect(html).toContain('Legacy Cleanup');
-    expect(html).toContain('DONE');
     expect(html).toContain('No goal set'); // fallback for a null goal
     expect(html).toContain('1 task'); // singular, not "1 tasks"
     expect(html).toContain('Ledger Migration');
-    expect(html).not.toContain(longGoal); // the full 300-char goal must not reach the row
-    expect(html).toContain(`${longGoal.slice(0, 180)}…`); // capped at 180 chars + one ellipsis
+    // The whole goal reaches the row, whitespace-collapsed and nothing else: the cut is the box's
+    // (white-space:nowrap + text-overflow:ellipsis), which is why there is no character count and
+    // no ellipsis character here. A 180-character slice occupies one rendered line of Latin text
+    // and three of CJK — the same slice cannot give every row the same height.
+    expect(goalLines(html)).toContain(longGoal.trim());
+    expect(html).not.toContain('…'); // no hard-sliced excerpt left anywhere on the page
+  });
+
+  it('draws where the project stands as one meter, dropping the empty buckets and keeping the tiny one', () => {
+    const qc = newClient();
+    // The deployment's own worst row: one task running against seventeen thousand blocked. One
+    // flex unit in 23,442 is a fraction of a pixel across the 196px this column gets, so the
+    // running segment is exactly the one a proportional bar loses — and "nothing is running" is
+    // the opposite of what this row would then be saying.
+    qc.setQueryData(['projects', 'ALL'], [
+      {
+        id: P1,
+        title: 'FineWeb × Common Crawl',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 23442 },
+        ...standing({ running: 1, ready: 0, blocked: 17324, done: 6117 }),
+      },
+    ]);
+    const html = renderPage(qc);
+    const meter = html.match(/<div role="img"[\s\S]*?<\/div>/)?.[0] ?? '';
+
+    // Three segments for the three non-zero buckets, in the table's order, each wearing that
+    // bucket's token. `ready` is at zero and draws nothing: a hairline of colour for a bucket that
+    // is empty is the one value a reader cannot un-see.
+    const segments = [...meter.matchAll(/background:var\(--([a-z0-9-]+)\)/g)].map((m) => m[1]);
+    expect(segments).toEqual(['brand', 'text-3', 'success']);
+    expect(meter).not.toContain('warning-solid');
+
+    // The mark spec: 6px tall, 2px of surface between segments, 4px rounded at the two outer ends
+    // only, and a 3px floor under every segment that is drawn — which is what keeps the 1-of-23,442
+    // running task on the page at all.
+    expect(meter).toContain('height:6px');
+    expect(meter).toContain('gap:2px');
+    expect(meter.match(/min-width:3px/g)).toHaveLength(3);
+    expect(meter).toContain('border-radius:4px 2px 2px 4px');
+    expect(meter).toContain('border-radius:2px 4px 4px 2px');
+
+    // The bar has no room for a shape, so its label is where the buckets get named — all four of
+    // them, including the one with no segment.
+    expect(meter).toContain('aria-label="Task status: 1 running, 0 ready, 17324 blocked, 6117 done"');
+
+    // Beside it, a figure per drawn bucket, each with its own shape: amber --warning-solid and
+    // neutral --text-3 are 2.32:1 and 2.94:1 against this background, so nothing here may rest on
+    // colour alone. Thousands are grouped — 17,324 and 17324 are not read at the same speed.
+    const figures = html.match(/<div class="project-row-buckets"[\s\S]*?<\/div><\/div>/)?.[0] ?? '';
+    expect([...figures.matchAll(/data-glyph="([a-z]+)"/g)].map((m) => m[1])).toEqual([
+      'disc',
+      'square',
+      'check',
+    ]);
+    expect([...figures.matchAll(/<b>([\d,]+)<\/b>/g)].map((m) => m[1])).toEqual([
+      '1',
+      '17,324',
+      '6,117',
+    ]);
+  });
+
+  it('takes the buckets, their order, their shapes and their colours from the panorama’s own table', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], [
+      {
+        id: P1,
+        title: 'Website Revamp',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 10 },
+        ...standing({ running: 1, ready: 2, blocked: 3, done: 4 }),
+      },
+    ]);
+    const html = renderPage(qc);
+    const meter = html.match(/<div role="img"[\s\S]*?<\/div>/)?.[0] ?? '';
+
+    // Derived from the table rather than spelled here: a row that drew its own four colours would
+    // pass a hard-coded list and still disagree with the project page it links to. Change the
+    // table and this expectation changes with it — which is the only way one source can be proven.
+    expect([...meter.matchAll(/background:(var\(--[a-z0-9-]+\))/g)].map((m) => m[1])).toEqual(
+      PANORAMA_BUCKETS.map((bucket) => bucket.color),
+    );
+    const figures = html.match(/<div class="project-row-buckets"[\s\S]*?<\/div><\/div>/)?.[0] ?? '';
+    expect([...figures.matchAll(/data-glyph="([a-z]+)"/g)].map((m) => m[1])).toEqual(
+      PANORAMA_BUCKETS.map((bucket) => bucket.glyph),
+    );
+
+    // And it is an IMPORT that makes that true, not a copy that currently agrees.
+    expect(source).toMatch(/import \{[\s\S]*?PANORAMA_BUCKETS[\s\S]*?\} from '..\/components\/ProjectPanoramaHeader';/);
+    expect(source).toContain('<BucketMeter buckets={buckets} height={6} />');
+    // The row's meter decides no colour of its own: every one it draws arrives as `bucket.color`
+    // off the table. (The page still names tokens elsewhere — the detail page's task rows have
+    // their own status table — so this is scoped to the component under test.)
+    const component = source.match(/function ProjectRowMeter\([\s\S]*?\n\}\n/)?.[0] ?? '';
+    expect(component).toContain('color={bucket.color}');
+    expect(component).not.toContain('var(--');
+    // And nowhere on this page, nor in the rules it renders into, is a colour spelled as a hex.
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    for (const cls of ['project-row-meter', 'project-row-buckets', 'project-row-when', 'project-row-activity', 'project-row-count']) {
+      const rule = css.match(new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+      expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    }
+  });
+
+  it('ends the row with when the project last moved, and the total demoted behind it', () => {
+    const qc = newClient();
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    qc.setQueryData(['projects', 'ALL'], [
+      {
+        id: P1,
+        title: 'Website Revamp',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 23442 },
+        ...standing({ running: 1, blocked: 6 }, threeHoursAgo),
+      },
+      {
+        id: P2,
+        title: 'Nothing Filed Yet',
+        status: 'OPEN',
+        goal: null,
+        createdAt: '2026-01-03T00:00:00Z',
+        updatedAt: '2026-01-04T00:00:00Z',
+        _count: { tasks: 0 },
+        // A project with no tasks: the endpoint sends five zeroes and a null rather than dropping
+        // the fields, and the row has to read that as "nothing has happened here" — not as a
+        // rendering failure, and not as a date nobody performed.
+        ...standing({}, null),
+      },
+    ]);
+    const html = renderPage(qc);
+
+    const activity = [...html.matchAll(/<span class="project-row-activity">([^<]*)<\/span>/g)].map((m) => m[1]);
+    expect(activity).toEqual(['3h ago', 'No activity']);
+    // The total survives as scale — 6 blocked out of 23,442 is not 6 out of 12 — but it is no
+    // longer the number the row leads with.
+    const totals = [...html.matchAll(/<span class="project-row-count">([\s\S]*?)<\/span>/g)].map((m) =>
+      m[1].replace(/<!-- -->/g, ''),
+    );
+    expect(totals).toEqual(['23,442 tasks', '0 tasks']);
+
+    // Which one is the quieter number is the stylesheet's to say, and it says it in tokens.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    expect(css.match(/\.project-row-activity\s*\{([^}]*)\}/)?.[1]).toContain('color: var(--text-2)');
+    expect(css.match(/\.project-row-count\s*\{([^}]*)\}/)?.[1]).toContain('color: var(--text-4)');
+
+    // An empty project still draws a bar — an empty track, the same one the project page draws —
+    // rather than an absent element that reads as a broken row.
+    expect(html).toContain('var(--fill-muted)');
+  });
+
+  it('shows a Markdown goal as the line it reads as, not as source', () => {
+    // The shape of goal that actually shipped: a heading, bold, inline code, a path with a line
+    // number in it, a bullet and a link — all of it rendered as Markdown on the detail page.
+    const goal = [
+      '把 Project 详情页改造成全景视图。',
+      '',
+      '## 现状缺口（2026-08-22 现网实测）',
+      '',
+      '- 项目页 payload `ProjectTask`（src/web/src/pages/ProjectsPage.tsx:521）**一个依赖字段都没有**',
+      '- 详见 [依赖图设计](https://example.com/design)',
+    ].join('\n');
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], [
+      {
+        id: P1,
+        title: 'Panorama',
+        status: 'OPEN',
+        goal,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+        _count: { tasks: 5 },
+        ...standing({ running: 1 }),
+      },
+    ]);
+    const [line] = goalLines(renderPage(qc));
+
+    // The marks themselves are gone...
+    expect(line).not.toMatch(/[#*`]/);
+    expect(line).not.toContain('](');
+    expect(line).not.toContain('https://example.com/design');
+    // ...and every word they wrapped survived, in order, on one line.
+    expect(line).not.toContain('\n');
+    expect(line).toContain('现状缺口（2026-08-22 现网实测）');
+    expect(line).toContain('ProjectTask');
+    expect(line).toContain('一个依赖字段都没有');
+    expect(line).toContain('依赖图设计');
+    // A path with a line number carries no Markdown at all and has to come back untouched.
+    expect(line).toContain('src/web/src/pages/ProjectsPage.tsx:521');
+  });
+
+  it('gives every row the same height whatever its goal is', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], [
+      { id: P1, goal: 'Short', title: 'A' },
+      { id: P2, goal: null, title: 'B' },
+      { id: P3, goal: '## H\n\n- '.concat('长'.repeat(400)), title: 'C' },
+    ].map((p) => ({
+      status: 'OPEN' as const,
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-02T00:00:00Z',
+      _count: { tasks: 1 },
+      ...standing({ running: 1 }),
+      ...p,
+    })));
+    const html = renderPage(qc);
+
+    // Three rows, each a title line and exactly one goal line, in the same two elements. Same
+    // markup + same class = same height, whether the goal is five characters or four hundred.
+    expect(goalLines(html)).toHaveLength(3);
+    expect(html.match(/class="project-row-title"/g)).toHaveLength(3);
+    for (const line of goalLines(html)) expect(line).not.toContain('\n');
+
+    // The rows no longer slice the field to a character count — the constant that did it is not
+    // read here any more (it still serves the detail page's task rows, which this task left as
+    // they were), and what replaced it is the Markdown-to-text helper.
+    expect(source).toContain('markdownToPlainText(p.goal)');
+    expect(source).not.toMatch(/excerpt\(p\.goal/);
+
+    // The cut is the box's, and these three declarations are the cut. Asserted against the
+    // stylesheet because there is no layout in a static render to measure.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const rule = css.match(/\.project-row-goal\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('white-space: nowrap');
+    expect(rule).toContain('overflow: hidden');
+    expect(rule).toContain('text-overflow: ellipsis');
   });
 
   it('links the whole row to its project at the short public id, never the raw UUID', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], [
+    qc.setQueryData(['projects', 'ALL'], [
       {
         id: P1,
         title: 'Website Revamp',
@@ -289,6 +569,7 @@ describe('ProjectsPage', () => {
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-02T00:00:00Z',
         _count: { tasks: 5 },
+        ...standing({ running: 1 }),
       },
     ]);
     const html = renderPage(qc);
@@ -310,7 +591,7 @@ describe('ProjectsPage', () => {
 
   it('shows an empty state when there are no projects', () => {
     const qc = newClient();
-    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['projects', 'ALL'], []);
     const html = renderPage(qc);
     expect(html).toContain('No projects yet');
   });
@@ -318,13 +599,351 @@ describe('ProjectsPage', () => {
   it('shows an error with a Retry action when the load fails', async () => {
     const qc = newClient();
     // Seed a settled error state for the exact same key the page reads, independent of apiMock.
-    await qc.prefetchQuery({ queryKey: ['projects'], queryFn: () => Promise.reject(new Error('network down')) });
+    await qc.prefetchQuery({ queryKey: ['projects', 'ALL'], queryFn: () => Promise.reject(new Error('network down')) });
     const html = renderPage(qc);
     expect(html).toContain('Projects could not be loaded');
     expect(html).toContain('network down');
     expect(html).toContain('Retry');
   });
 });
+
+describe('ProjectsPage — sections', () => {
+  /**
+   * One project per section, plus the two cases the plain rules do not cover.
+   *
+   * Buckets are what decides where each lands, not `status` alone and never `createdAt` — so the
+   * fixture is deliberately in an order no section reproduces, and `createdAt` runs the opposite
+   * way to `lastActivityAt` on the two In-progress rows. A page still sorting by the old key would
+   * put them the wrong way round.
+   */
+  const listRow = (
+    id: string,
+    title: string,
+    over: Record<string, unknown> & { buckets?: Partial<Record<string, number>> },
+  ) => ({
+    id,
+    title,
+    status: 'OPEN',
+    goal: `The goal of ${title}`,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-02T00:00:00Z',
+    _count: { tasks: 5 },
+    lastActivityAt: '2026-01-02T00:00:00Z',
+    ...over,
+    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
+  });
+
+  const MIXED = [
+    // Running, and the OLDER of the two — so In progress must put it second.
+    listRow(P1, 'Website Revamp', {
+      createdAt: '2026-06-01T00:00:00Z',
+      buckets: { running: 1, blocked: 3 },
+      lastActivityAt: '2026-01-02T00:00:00Z',
+    }),
+    listRow(P2, 'Legacy Cleanup', { status: 'DONE', buckets: { done: 16 } }),
+    // Nine ready and nothing running: the case the flat list buried seventh.
+    listRow(P3, 'Ledger Migration', { buckets: { ready: 9, blocked: 1, done: 1 } }),
+    listRow(P4, 'Abandoned Rewrite', { status: 'CANCELLED', buckets: { done: 7 } }),
+    // Every task settled, project still open.
+    listRow(P5, 'Inbox Redesign', { buckets: { done: 12 } }),
+    // The most ready of all — the top row of the page.
+    listRow(P6, 'FineWeb Corpus', { buckets: { ready: 6118, blocked: 17324 } }),
+    // Running, and the more recently active.
+    listRow(P7, 'LFS Build', {
+      createdAt: '2026-01-01T00:00:00Z',
+      buckets: { running: 1, blocked: 117 },
+      lastActivityAt: '2026-05-02T00:00:00Z',
+    }),
+    // Created, never filed against: no tasks at all, and so no activity.
+    listRow(P8, 'Brand Refresh', { _count: { tasks: 0 }, lastActivityAt: null }),
+  ];
+
+  /** The markup of ONE section, sliced off the flat render at the marker each one carries — the
+   *  assertions below are about which section a project landed in, which a whole-page `toContain`
+   *  cannot tell apart. */
+  function sectionOf(html: string, key: string): string {
+    const start = html.indexOf(`data-section="${key}"`);
+    expect(start).toBeGreaterThan(-1);
+    const nextSection = html.indexOf('<section', start);
+    return nextSection === -1 ? html.slice(start) : html.slice(start, nextSection);
+  }
+
+  function renderMixed(): string {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], MIXED);
+    return renderPage(qc);
+  }
+
+  it('cuts the list into four, attention first and running work below it', () => {
+    const html = renderMixed();
+
+    // The page's premise, in the order the sections appear: what could run but isn't, then what
+    // only needs closing, then what is already being served, then what is finished. A reader
+    // scanning top-down meets the projects that need them before the ones that don't.
+    expect([...html.matchAll(/data-section="([^"]+)"/g)].map((m) => m[1])).toEqual([
+      'stalled',
+      'wrapping-up',
+      'running',
+      'completed',
+    ]);
+  });
+
+  it('files each project by its buckets, not by its status alone', () => {
+    const html = renderMixed();
+
+    // ready > 0 with nothing running.
+    expect(sectionOf(html, 'stalled')).toContain('FineWeb Corpus');
+    expect(sectionOf(html, 'stalled')).toContain('Ledger Migration');
+    // OPEN, but running + ready + blocked all zero.
+    expect(sectionOf(html, 'wrapping-up')).toContain('Inbox Redesign');
+    expect(sectionOf(html, 'wrapping-up')).not.toContain('Ledger Migration');
+    // running > 0 — including the one that also holds 117 blocked tasks.
+    expect(sectionOf(html, 'running')).toContain('LFS Build');
+    expect(sectionOf(html, 'running')).toContain('Website Revamp');
+    expect(sectionOf(html, 'running')).not.toContain('FineWeb Corpus');
+    // DONE and CANCELLED alike, and neither dilutes the half of the list that still needs anyone.
+    expect(sectionOf(html, 'completed')).toContain('Legacy Cleanup');
+    expect(sectionOf(html, 'completed')).toContain('Abandoned Rewrite');
+    expect(sectionOf(html, 'stalled')).not.toContain('Legacy Cleanup');
+    expect(sectionOf(html, 'running')).not.toContain('Abandoned Rewrite');
+  });
+
+  it('puts an OPEN project with no tasks at the tail of In progress, not into Wrapping up', () => {
+    const html = renderMixed();
+
+    // Wrapping up says "every task settled"; a project that never had a task settled nothing.
+    expect(sectionOf(html, 'wrapping-up')).not.toContain('Brand Refresh');
+    const running = sectionOf(html, 'running');
+    expect(running).toContain('Brand Refresh');
+    expect(running.indexOf('Brand Refresh')).toBeGreaterThan(running.indexOf('Website Revamp'));
+  });
+
+  it('orders the stalled section by ready count, descending', () => {
+    const stalled = sectionOf(renderMixed(), 'stalled');
+
+    // 6,118 ready above 9 ready — the number the header names, and the number the row shows.
+    expect(stalled.indexOf('FineWeb Corpus')).toBeLessThan(stalled.indexOf('Ledger Migration'));
+  });
+
+  it('orders the in-progress section by last activity, descending', () => {
+    const running = sectionOf(renderMixed(), 'running');
+
+    // LFS Build was created FIRST and touched LAST; Website Revamp the other way round. Under the
+    // list's old `createdAt desc` this pair came out reversed, which is what makes it the pair.
+    expect(running.indexOf('LFS Build')).toBeLessThan(running.indexOf('Website Revamp'));
+  });
+
+  it('counts each section in its own header', () => {
+    const html = renderMixed();
+    expect(sectionOf(html, 'stalled')).toMatch(/Stalled<\/h3>.*?>2</);
+    expect(sectionOf(html, 'wrapping-up')).toMatch(/Wrapping up<\/h3>.*?>1</);
+    expect(sectionOf(html, 'running')).toMatch(/In progress<\/h3>.*?>3</);
+    expect(sectionOf(html, 'completed')).toMatch(/Completed<\/h3>.*?>2</);
+  });
+
+  it('prints under every header what that section is ordered by', () => {
+    const html = renderMixed();
+
+    // The whole point of the redesign: the sort key is ON the page, in words, beside the rows it
+    // ordered — and both values it names are readable on each row (the ready count in the row's
+    // buckets, the activity in its last column). An order nobody can see is an order nobody can
+    // check, which is what `createdAt desc` was.
+    expect(sectionOf(html, 'stalled')).toContain('most ready first');
+    expect(sectionOf(html, 'wrapping-up')).toContain('newest activity first');
+    expect(sectionOf(html, 'running')).toContain('newest activity first');
+    expect(sectionOf(html, 'completed')).toContain('folded by default');
+  });
+
+  it('says in each header what lands in it, truthfully about its awkward rows', () => {
+    const html = renderMixed();
+
+    // Stalled holds a project with 17,324 blocked tasks and no ready ones, so the header does not
+    // claim "has ready tasks"; In progress holds a project with no tasks at all, so it says so.
+    expect(sectionOf(html, 'stalled')).toContain('Nothing running, work outstanding');
+    expect(sectionOf(html, 'running')).toContain('or no tasks filed yet');
+    expect(sectionOf(html, 'wrapping-up')).toContain('Every task settled, project still open');
+  });
+
+  it('folds the completed section by default, into a pill that still opens the project', () => {
+    const html = renderMixed();
+    const completed = sectionOf(html, 'completed');
+
+    // Folded means no row: the goal excerpt and the status tag a row carries are gone, while the
+    // project itself is still named, still counted and still one click from being opened.
+    expect(completed).not.toContain('The goal of Legacy Cleanup');
+    expect(completed).not.toContain('ant-list-item');
+    expect(completed).toContain(`href="/projects/${encodeURIComponent(encodeId(P2))}"`);
+    expect(completed).toContain('Legacy Cleanup');
+    // ...and the sections that need attention are NOT folded — their rows are right there.
+    expect(sectionOf(html, 'stalled')).toContain('The goal of FineWeb Corpus');
+  });
+
+  it('leaves out a section with nothing in it', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], MIXED.filter((p) => p.buckets.running > 0));
+    const html = renderPage(qc);
+    expect(html).toContain('data-section="running"');
+    expect(html).not.toContain('data-section="stalled"');
+    expect(html).not.toContain('data-section="completed"');
+    // Below the toolbar only: "Completed" is also the name of a filter segment, which is on the
+    // page whether or not anything is completed — the word must be gone from the LIST, not from
+    // the controls that ask for one.
+    expect(html.slice(html.indexOf('<section'))).not.toContain('Completed');
+  });
+
+  it('no longer renders the list as one flat run in the server’s order', () => {
+    // The old page filtered on `status` alone and left each half in the server's `createdAt desc`.
+    // Both are gone: the section a project lands in is decided by its buckets, and every section
+    // sorts a key of its own.
+    expect(source).toContain('projectAttentionSections(matches)');
+    expect(source).not.toMatch(/note: 'Newest first'/);
+    expect(source).not.toMatch(/projects: all\.filter\(\(p\) => p\.status/);
+  });
+});
+
+describe('ProjectsPage — toolbar', () => {
+  it('builds the list URL from the segment, sending no parameter for All', () => {
+    // 'ALL' is the absence of the parameter, not `?status=ALL` — which the endpoint would 400 on,
+    // since it validates against the three real statuses (ProjectsController.parseStatus).
+    expect(projectsPath('ALL')).toBe('/projects');
+    expect(projectsPath('OPEN')).toBe('/projects?status=OPEN');
+    expect(projectsPath('DONE')).toBe('/projects?status=DONE');
+  });
+
+  it('keys the cache by the filter, under the prefix every write invalidates', () => {
+    expect(projectsQueryKey('ALL')).toEqual(['projects', 'ALL']);
+    expect(projectsQueryKey('OPEN')).toEqual(['projects', 'OPEN']);
+    // Same first element for all three: `['projects']` is what invalidateAfterProjectCreate and
+    // invalidateAfterProjectTaskCreate invalidate, and a prefix only matches if it is one.
+    expect(projectsQueryKey('DONE')[0]).toBe('projects');
+  });
+
+  it('stays on screen while the list is loading and after it fails', () => {
+    // The controls are how a slow or failed read is narrowed and retried; a toolbar that appeared
+    // only once rows did would take them away exactly when they are wanted.
+    const loading = renderPage(newClient());
+    expect(loading).toContain('Search projects');
+    expect(loading).toContain('New project');
+
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], undefined);
+    expect(renderPage(qc)).toContain('Search projects');
+  });
+
+  it('offers all three statuses and a way to make a project', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], []);
+    const html = renderPage(qc);
+    expect(html).toContain('Search projects');
+    expect(html).toContain('>All<');
+    expect(html).toContain('>In progress<');
+    expect(html).toContain('>Completed<');
+    // Twice: once in the toolbar, once as the empty page's own call to action.
+    expect(html.split('New project').length - 1).toBe(2);
+  });
+});
+
+describe('ProjectsPage — search matching', () => {
+  const project = (over: { title?: string; goal?: string | null }) => ({
+    title: 'Website Revamp',
+    goal: 'Ship the new marketing site',
+    ...over,
+  });
+
+  it('matches the goal with its Markdown removed, not its source', () => {
+    // What the row shows is `Ship the new marketing site`; what the field HOLDS is the line below.
+    // A reader typing what they can see has to find it, which a match over the source cannot do.
+    const p = project({ goal: '## Goal\n\n**Ship** the new marketing `site`' });
+    expect(matchesProjectSearch(p, 'ship the new marketing site')).toBe(true);
+    // The marks themselves are not searchable text — nobody types them, and matching them would
+    // make `*` find every project with an emphasis in its goal.
+    expect(matchesProjectSearch(p, '**')).toBe(false);
+    expect(matchesProjectSearch(p, '## Goal')).toBe(false);
+  });
+
+  it('matches the title, ignores case and surrounding space, and lets a blank search through', () => {
+    expect(matchesProjectSearch(project({}), 'REVAMP')).toBe(true);
+    expect(matchesProjectSearch(project({}), '  revamp  ')).toBe(true);
+    expect(matchesProjectSearch(project({}), 'ledger')).toBe(false);
+    // An empty box is not a filter — and neither is one holding only spaces.
+    expect(matchesProjectSearch(project({}), '')).toBe(true);
+    expect(matchesProjectSearch(project({}), '   ')).toBe(true);
+  });
+
+  it('survives a project with no goal at all', () => {
+    const p = project({ goal: null });
+    expect(matchesProjectSearch(p, 'revamp')).toBe(true);
+    expect(matchesProjectSearch(p, 'ship')).toBe(false);
+  });
+});
+
+describe('ProjectsPage — which empty state', () => {
+  it('says "no projects" only when nothing is being narrowed', () => {
+    expect(projectsEmptyKind(0, 0, 'ALL', '')).toBe('none');
+    // The same zero rows, but with a reason: an account with projects the filter is hiding must
+    // not be told it has none.
+    expect(projectsEmptyKind(0, 0, 'OPEN', '')).toBe('no-match');
+    expect(projectsEmptyKind(0, 0, 'ALL', 'zzz')).toBe('no-match');
+    expect(projectsEmptyKind(3, 0, 'ALL', 'zzz')).toBe('no-match');
+    // A search of nothing but spaces narrows nothing, so it cannot be the reason either.
+    expect(projectsEmptyKind(0, 0, 'ALL', '   ')).toBe('none');
+  });
+
+  it('is not an empty state at all when something matched', () => {
+    expect(projectsEmptyKind(3, 1, 'ALL', 'revamp')).toBeNull();
+    expect(projectsEmptyKind(3, 3, 'OPEN', '')).toBeNull();
+  });
+
+  it('names whichever narrowing emptied the list, the search first', () => {
+    expect(noMatchDescription('ALL', 'ledger')).toBe('No projects match “ledger”');
+    // Both on: the search is the one that was just typed, so it is the one named.
+    expect(noMatchDescription('OPEN', 'ledger')).toBe('No projects match “ledger”');
+    expect(noMatchDescription('OPEN', '')).toBe('No projects are in progress');
+    expect(noMatchDescription('DONE', '  ')).toBe('No completed projects');
+  });
+});
+
+describe('ProjectsPage — creating a project', () => {
+  it('opens the create only on a title that names something', () => {
+    expect(canCreateProject({ title: '' })).toBe(false);
+    expect(canCreateProject({ title: '   ' })).toBe(false);
+    expect(canCreateProject({ title: 'Ledger Migration' })).toBe(true);
+    // The goal is optional — a project can be named before it is explained.
+    expect(canCreateProject({ title: 'Ledger Migration', goal: '' })).toBe(true);
+  });
+
+  it('trims the title and leaves an unfilled goal out of the body entirely', () => {
+    expect(newProjectBody({ title: '  Ledger Migration  ' })).toEqual({ title: 'Ledger Migration' });
+    expect(newProjectBody({ title: 'Ledger Migration', goal: '  ' })).toEqual({
+      title: 'Ledger Migration',
+    });
+    expect(newProjectBody({ title: 'Ledger Migration', goal: '  Move the ledger  ' })).toEqual({
+      title: 'Ledger Migration',
+      goal: 'Move the ledger',
+    });
+  });
+
+  it('refreshes every filter’s list, not only the one that is showing', () => {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], []);
+    qc.setQueryData(['projects', 'OPEN'], []);
+    qc.setQueryData(['projects', 'DONE'], []);
+    qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
+
+    invalidateAfterProjectCreate(qc);
+
+    const invalidated = (key: unknown[]) =>
+      qc.getQueryCache().find({ queryKey: key })!.state.isInvalidated;
+    // A project created while Completed is selected must not be missing from All when it is
+    // switched back to — which is what one invalidation on the shared prefix buys.
+    expect(invalidated(['projects', 'ALL'])).toBe(true);
+    expect(invalidated(['projects', 'OPEN'])).toBe(true);
+    expect(invalidated(['projects', 'DONE'])).toBe(true);
+    // Scoped, though: a new project with no tasks moves no task view.
+    expect(invalidated(['tasks', 'counts', null, []])).toBe(false);
+  });
+});
+
 
 describe('ProjectDetailPage', () => {
   it('renders the title, status, total tasks, per-status tallies and the full long-form fields', () => {
@@ -1208,7 +1827,7 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     const qc = newClient();
     qc.setQueryData(['project', encodeId(P1)], detail());
     qc.setQueryData(tasksKey(P1), { items: [task()], nextCursor: null });
-    qc.setQueryData(['projects'], []);
+    qc.setQueryData(['projects', 'ALL'], []);
     qc.setQueryData(['tasks', 'counts', null, []], { open: 1 });
     // Another project's page, open in another tab: it must not be dragged along.
     qc.setQueryData(['project', encodeId(P2)], detail({ id: P2 }));
@@ -1222,8 +1841,10 @@ describe('ProjectDetailPage — creating a top-level task', () => {
     expect(invalidated(tasksKey(P1))).toBe(true);
     // ...the document whose total and per-status tallies it moved...
     expect(invalidated(['project', encodeId(P1)])).toBe(true);
-    // ...the list row carrying the same count...
-    expect(invalidated(['projects'])).toBe(true);
+    // ...the list row carrying the same count, under whichever status filter is showing —
+    // `['projects']` is the prefix of every filter's entry, which is what makes one invalidation
+    // enough...
+    expect(invalidated(['projects', 'ALL'])).toBe(true);
     // ...and the task views elsewhere in the app, which have never heard of this page.
     expect(invalidated(['tasks', 'counts', null, []])).toBe(true);
     // Scoped, though: another project's page is left exactly where it was.
@@ -1826,5 +2447,168 @@ describe('the New task form’s Start at control', () => {
     expect(out.indexOf('>Start at<')).toBeLessThan(out.indexOf('>Assignee<'));
     expect(out).toContain('value="Ship it"');
     expect(out).toContain('Copy is signed off');
+  });
+});
+
+describe('ProjectsPage — badges', () => {
+  /**
+   * The badges are ages, and the page reads the real clock — so the fixtures are written as
+   * offsets from `Date.now()` rather than as fixed instants that would age out of the case they
+   * were chosen for. QUIET_MS is imported rather than restated: a test carrying its own copy of
+   * the threshold cannot fail when the threshold moves, which is the one thing it is here for.
+   */
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+  const listRow = (
+    id: string,
+    title: string,
+    over: Record<string, unknown> & { buckets?: Partial<Record<string, number>> },
+  ) => ({
+    id,
+    title,
+    status: 'OPEN',
+    goal: `The goal of ${title}`,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-02T00:00:00Z',
+    _count: { tasks: 5 },
+    lastActivityAt: ago(2 * QUIET_MS),
+    ...over,
+    buckets: { running: 0, ready: 0, blocked: 0, done: 0, cancelled: 0, ...(over.buckets ?? {}) },
+  });
+
+  /** Every row of the page, read back out of the markup: which section it is in, what its badge
+   *  says, and whether it is tinted. The assertions below are about the rendered row — a rule
+   *  that is right in lib/projectAttention and unwired here has to fail. */
+  function rowsOf(html: string): Array<{ section: string; title: string; chip: string | null; tone: string | null; spotlit: boolean }> {
+    const out = [];
+    const marks = [...html.matchAll(/data-section="([^"]+)"/g)];
+    for (const [i, m] of marks.entries()) {
+      const block = html.slice(m.index, i + 1 < marks.length ? marks[i + 1].index : html.length);
+      for (const li of block.matchAll(/<li [^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/li>/g)) {
+        const chip = /class="project-row-chip project-row-chip-(\w+)">([^<]*)</.exec(li[2]);
+        out.push({
+          section: m[1],
+          title: /class="project-row-title">([^<]*)</.exec(li[2])?.[1] ?? '',
+          chip: chip?.[2] ?? null,
+          tone: chip?.[1] ?? null,
+          spotlit: li[1].split(' ').includes('project-row-spotlit'),
+        });
+      }
+    }
+    return out;
+  }
+
+  function render(rows: ReturnType<typeof listRow>[]) {
+    const qc = newClient();
+    qc.setQueryData(['projects', 'ALL'], rows);
+    return rowsOf(renderPage(qc));
+  }
+
+  const rowFor = (rows: ReturnType<typeof render>, title: string) => rows.find((r) => r.title === title)!;
+
+  it('badges a stalled project with how long it has been quiet', () => {
+    const rows = render([listRow(P1, 'Ledger Migration', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(4 * QUIET_MS) })]);
+
+    expect(rowFor(rows, 'Ledger Migration')).toMatchObject({
+      section: 'stalled',
+      chip: 'Stalled 4d',
+      tone: 'warning',
+    });
+  });
+
+  it('badges a run that says RUNNING and has written nothing for days', () => {
+    // The zombie, and the reason this unit exists: the section header over this row reads "Work in
+    // flight" while the project has not been touched since Thursday. Production held two of these
+    // and the page said nothing about either.
+    const rows = render([listRow(P2, 'Fair Scheduling', { buckets: { running: 1, ready: 1, blocked: 9, done: 5 }, lastActivityAt: ago(2 * QUIET_MS) })]);
+
+    expect(rowFor(rows, 'Fair Scheduling')).toMatchObject({
+      section: 'running',
+      chip: 'No progress 2d',
+      tone: 'warning',
+    });
+  });
+
+  it('badges a finished project nobody closed with the count that justifies closing it', () => {
+    const rows = render([listRow(P3, 'Inbox Redesign', { _count: { tasks: 12 }, buckets: { done: 12 } })]);
+
+    expect(rowFor(rows, 'Inbox Redesign')).toMatchObject({
+      section: 'wrapping-up',
+      chip: '12/12 settled · still open',
+      tone: 'brand',
+    });
+  });
+
+  it('leaves a stalled project touched inside the threshold unbadged', () => {
+    // The negative case the threshold is FOR. Same section, same buckets, three hours instead of
+    // four days: the section already says nothing is running, and a badge here would say only
+    // that the reader should stop reading badges.
+    const rows = render([
+      listRow(P1, 'Quiet For Days', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(4 * QUIET_MS) }),
+      listRow(P4, 'Touched This Morning', { buckets: { ready: 6118, blocked: 17324 }, lastActivityAt: ago(3 * 60 * 60 * 1000) }),
+    ]);
+
+    expect(rowFor(rows, 'Touched This Morning').section).toBe('stalled');
+    expect(rowFor(rows, 'Touched This Morning').chip).toBeNull();
+    expect(rowFor(rows, 'Quiet For Days').chip).toBe('Stalled 4d');
+  });
+
+  it('leaves a running project that just wrote something unbadged', () => {
+    const rows = render([listRow(P5, 'LFS Build', { buckets: { running: 1, blocked: 117 }, lastActivityAt: ago(3 * 60 * 1000) })]);
+
+    expect(rowFor(rows, 'LFS Build').section).toBe('running');
+    expect(rowFor(rows, 'LFS Build').chip).toBeNull();
+  });
+
+  it('badges nothing else on a page full of rows', () => {
+    // Three badges out of eight rows. A badge on every row is a second background colour: the
+    // stalled section alone holds eight projects in production, and the reader would be back to
+    // a page where nothing stands out — one screen further down than before.
+    const rows = render([
+      listRow(P1, 'Stalled Quiet', { buckets: { ready: 9, blocked: 1 }, lastActivityAt: ago(2 * QUIET_MS) }),
+      listRow(P2, 'Stalled Fresh', { buckets: { ready: 40 }, lastActivityAt: ago(60 * 1000) }),
+      listRow(P3, 'Zombie Run', { buckets: { running: 1, blocked: 9 }, lastActivityAt: ago(3 * QUIET_MS) }),
+      listRow(P4, 'Healthy Run', { buckets: { running: 2 }, lastActivityAt: ago(90 * 1000) }),
+      listRow(P5, 'Needs Closing', { _count: { tasks: 7 }, buckets: { done: 4, cancelled: 3 } }),
+      listRow(P6, 'Long Done', { status: 'DONE', buckets: { done: 16 }, lastActivityAt: ago(90 * QUIET_MS) }),
+      listRow(P7, 'Abandoned', { status: 'CANCELLED', buckets: { done: 7 }, lastActivityAt: ago(50 * QUIET_MS) }),
+      listRow(P8, 'Brand New', { _count: { tasks: 0 }, lastActivityAt: null }),
+    ]);
+
+    expect(rows.filter((r) => r.chip).map((r) => [r.title, r.chip])).toEqual([
+      ['Stalled Quiet', 'Stalled 2d'],
+      ['Needs Closing', '7/7 settled · still open'],
+      ['Zombie Run', 'No progress 3d'],
+    ]);
+  });
+
+  it('tints the head of Stalled and nothing below it', () => {
+    // At most two rows, and only in Stalled — see spotlitProjectIds. Eight tinted rows would make
+    // amber the section's background rather than a mark on the rows worth starting.
+    const rows = render([
+      listRow(P1, 'Biggest Pile', { buckets: { ready: 6118, blocked: 17324 } }),
+      listRow(P2, 'Second Pile', { buckets: { ready: 9, blocked: 1 } }),
+      listRow(P3, 'Third Pile', { buckets: { ready: 4 } }),
+      listRow(P4, 'Blocked Elsewhere', { buckets: { blocked: 30 } }),
+      listRow(P5, 'Running', { buckets: { running: 1, ready: 99 } }),
+    ]);
+
+    expect(rows.filter((r) => r.spotlit).map((r) => r.title)).toEqual(['Biggest Pile', 'Second Pile']);
+  });
+
+  it('spells its colours as theme tokens, never as a hex', () => {
+    // Both tones and the tint are named in index.css off --warning-*/--brand-*, so they follow the
+    // palette into dark mode. A hex on this row would be a light-mode-only badge — and the row
+    // itself carries no colour at all, only the class that picks one.
+    const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8');
+    const rules = /\.project-row-chip[\s\S]*?\.project-row-spotlit\s*\{[^}]*\}/.exec(css)?.[0] ?? '';
+
+    expect(rules).toContain('var(--warning-bg)');
+    expect(rules).toContain('var(--warning-border)');
+    expect(rules).toContain('var(--brand-tint)');
+    expect(rules).toContain('var(--brand-border)');
+    expect(rules).toContain('var(--brand-strong)');
+    expect(rules).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(source).not.toMatch(/project-row-chip[^`]*#[0-9a-f]{3}/i);
   });
 });
