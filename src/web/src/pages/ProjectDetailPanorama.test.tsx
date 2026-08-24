@@ -319,18 +319,18 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(coordinator).toBeGreaterThan(-1);
     expect(coordinator).toBeGreaterThan(header);
     expect(coordinator).toBeLessThan(graph);
-    // The picture the counts above are a summary of, then the chain reading of the same shape.
+    // The picture the counts above summarize is followed by the chain-specific reading of the
+    // same shape, then the queue that turns that context into action.
     expect(graph).toBeGreaterThan(header);
     expect(chain).toBeGreaterThan(graph);
-    // After the graph's chain reading comes the outcome measure, then the work itself. Acceptance
-    // leads the task list rather than trailing it:
+    expect(ready).toBeGreaterThan(chain);
+    // After the graph's actionable and chain readings comes the outcome measure, then the work
+    // itself. Acceptance leads the task list rather than trailing it:
     // "did this meet its bar" is the question the counts below cannot answer.
-    expect(acceptance).toBeGreaterThan(chain);
+    expect(acceptance).toBeGreaterThan(ready);
     expect(tasks).toBeGreaterThan(acceptance);
-    // The cards a reader consults less often than either, in their own order after both.
-    expect(ready).toBeGreaterThan(tasks);
 
-    // The actionable queue is full width and stands on its own after the project task tree.
+    // The actionable queue is full width and stands on its own directly after chain progress.
     expect(container.querySelector('.project-panorama-pair')).toBeNull();
   });
 

@@ -624,9 +624,13 @@ export function ProjectDetailPage() {
 
           {/* Draws nothing at all unless this project is a chain: it reads the same shape the
               header above does and returns null for a mesh, so the strip is not something this
-              page decides to show — it is something a chain-shaped project has. Under the graph,
-              because on a chain it is the reading the graph cannot give. */}
+              page decides to show — it is something a chain-shaped project has. */}
           <ProjectChainProgress projectId={id} />
+
+          {/* After the graph and its chain-specific reading, this queue turns that context into
+              action. Full width, on its own, and ordered by how much downstream work each
+              runnable task releases. */}
+          <ProjectReadyToRun projectId={id} />
 
           {/* The criteria live HERE and nowhere else on this page. There used to be a
               `Field label="Acceptance criteria"` in this slot as well as the card below the task
@@ -645,10 +649,6 @@ export function ProjectDetailPage() {
               404s never puts a second doomed request on the wire. `id` is the normalized route id
               — the same spelling the project query above is keyed and fetched with. */}
           <ProjectTasks projectId={id} />
-
-          {/* Full width, on its own: the project-scoped queue of tasks whose prerequisites and
-              execution workspace are ready, ordered by how much downstream work they release. */}
-          <ProjectReadyToRun projectId={id} />
 
           {/* Unit L7. Siblings of everything above, on the same terms: a crossings queue that
               500s costs the reader that card and leaves the page standing. Below the coordinator
