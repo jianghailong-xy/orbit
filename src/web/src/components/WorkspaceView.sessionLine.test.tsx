@@ -121,3 +121,65 @@ describe('sessionLine', () => {
     });
   });
 });
+
+/**
+ * The row for a session that holds a slot but whose engine is not up yet. Measured on this
+ * deployment it is ~3.3s of every start (against ~50ms actually queued), and it used to render as
+ * the message echoed back under a working spinner — which reads as "the agent has your prompt".
+ */
+describe('sessionLine while the engine is starting', () => {
+  it('says it is starting rather than echoing the prompt back', () => {
+    expect(
+      sessionLine(
+        { status: 'RUNNING', engineStartedAt: null, lastUserText: 'ship it' },
+        true,
+      ),
+    ).toEqual({ text: 'Starting…', tone: 'running' });
+  });
+
+  it('goes back to the ordinary live line once the engine has spoken', () => {
+    expect(
+      sessionLine(
+        {
+          status: 'RUNNING',
+          engineStartedAt: '2026-08-24T17:07:37.170Z',
+          lastToolUse: 'Read',
+        },
+        true,
+      ),
+    ).toEqual({ text: 'Running Read…', tone: 'running' });
+  });
+
+  // The rolling-upgrade case: a control plane that never sends the field must not park every
+  // running session under a startup label. Absent is not null.
+  it('keeps the old behaviour for a payload that never carried the field', () => {
+    expect(sessionLine({ status: 'RUNNING' }, true)).toEqual({
+      text: 'Running…',
+      tone: 'running',
+    });
+  });
+
+  // Starting is a refinement of RUNNING; a queued session has no engine to be starting. The row
+  // carries `queuedReason: null` because that is what a current server sends for an ungated
+  // queued session — omitting it here would exercise the old-server fallback instead.
+  it('does not pre-empt the queued line', () => {
+    expect(
+      sessionLine({ status: 'PENDING', engineStartedAt: null, queuedReason: null }, true),
+    ).toEqual({ text: 'Queued', tone: 'queued' });
+  });
+});
+
+describe('sessionLine names the gate holding a queued session', () => {
+  it('says the runner is offline instead of blaming a slot', () => {
+    expect(sessionLine({ status: 'PENDING', queuedReason: 'runner_offline' }, true)).toEqual({
+      text: 'Runner offline',
+      tone: 'queued',
+    });
+  });
+
+  it('keeps slot wording when a slot really is what is missing', () => {
+    expect(
+      sessionLine({ status: 'PENDING', queuedReason: 'runner_at_capacity' }, true),
+    ).toEqual({ text: 'Waiting for slot', tone: 'queued' });
+  });
+});
