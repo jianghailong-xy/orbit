@@ -1287,6 +1287,18 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.items.isEmpty)
     }
 
+    /// The other line Orbit's env injection provokes: the CLI reports the provider's model id as
+    /// missing from its built-in table on every request it issues — including the internal one that
+    /// names its own resume entry — so a DeepSeek session collected a red row per turn.
+    func testUnrecognizedModelNoticeIsNotAnError() {
+        var r = TranscriptReducer()
+        for (i, source) in ["sdk", "generate_session_title"].enumerated() {
+            r.apply(RunEvent(seq: i + 1, type: .system, payload: .object([
+                "stderr": .string("[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-pro\",\"query_source\":\"\(source)\"}\n")])))
+        }
+        XCTAssertTrue(r.state.items.isEmpty)
+    }
+
     /// A repeat folds into the first row as a count — an engine re-reporting one line per request
     /// would otherwise fill the transcript with identical rows. Folded on the line minus its leading
     /// timestamp, since the runtimes that log at all stamp every line.

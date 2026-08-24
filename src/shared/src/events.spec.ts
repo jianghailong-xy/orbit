@@ -212,8 +212,25 @@ describe('isBenignEngineStderr', () => {
       ),
     ).toBe(true);
   });
+  // Verbatim from a DeepSeek session's run_event rows: one per request the CLI issues, including
+  // the internal one it makes to name its own resume entry. Six sessions here opened on a red row.
+  it('flags the unrecognized-model notice a borrowed runtime’s model id provokes', () => {
+    expect(
+      isBenignEngineStderr(
+        '[claude-code:unrecognized_model] {"model":"deepseek-v4-pro","query_source":"sdk"}\n',
+      ),
+    ).toBe(true);
+    expect(
+      isBenignEngineStderr(
+        '[claude-code:unrecognized_model] ' +
+          '{"model":"deepseek-v4-pro","query_source":"generate_session_title"}\n',
+      ),
+    ).toBe(true);
+  });
   it('keeps stderr that explains why a runtime failed', () => {
     expect(isBenignEngineStderr('No conversation found with session ID: abc')).toBe(false);
+    // A model the endpoint itself rejects is a real failure, and says so in its own words.
+    expect(isBenignEngineStderr('API Error: 400 model "deepseek-v4-pro" not found')).toBe(false);
     expect(isBenignEngineStderr('')).toBe(false);
     expect(isBenignEngineStderr(null)).toBe(false);
   });

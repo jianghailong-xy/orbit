@@ -579,6 +579,27 @@ describe('engine stderr', () => {
     expect(html).not.toContain('chat-error');
   });
 
+  // And this once per request it issues — the provider's model id is not in the CLI's built-in
+  // table — including the internal request that names its own resume entry. Six DeepSeek sessions
+  // here carry a red row per turn from it.
+  it('drops the unrecognized-model notice the provider’s model id provokes', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(1, '[claude-code:unrecognized_model] {"model":"deepseek-v4-pro","query_source":"sdk"}\n'),
+          stderrEvent(
+            2,
+            '[claude-code:unrecognized_model] ' +
+              '{"model":"deepseek-v4-pro","query_source":"generate_session_title"}\n',
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).not.toContain('unrecognized_model');
+    expect(html).not.toContain('chat-error');
+  });
+
   it('still shows stderr that explains why a runtime failed', () => {
     const html = renderToStaticMarkup(
       <Transcript events={[stderrEvent(1, 'No conversation found with session ID: abc\n')]} />,

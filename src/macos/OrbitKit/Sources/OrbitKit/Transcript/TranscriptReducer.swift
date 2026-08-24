@@ -970,15 +970,24 @@ private enum EngineStderr {
     /// The key two occurrences of one line fold on: the line minus its leading ISO-8601 timestamp.
     static func foldKey(_ line: String) -> String { strip(leadingTimestamp, from: line) }
 
-    /// Does this line say nothing about the session? Claude Code prints "⚠ claude.ai connectors are
-    /// disabled because ANTHROPIC_API_KEY or another auth source is set …" on every start when an
-    /// auth token is in its environment — which is exactly how a configured provider (DeepSeek, …)
-    /// borrows the claude runtime. Its advice would break the very provider the user picked, and an
-    /// error row on every such session opened on what looked like a failed turn.
+    /// Does this line say nothing about the session? Both lines below are noise Orbit's own env
+    /// injection provokes: a configured provider (DeepSeek, …) borrows the claude runtime by having
+    /// an auth token, the provider's endpoint and the provider's model id put in the CLI's
+    /// environment, and the CLI remarks on each. An error row for them opened every such session,
+    /// and ran every turn, on what looked like a failed turn.
     ///
-    /// Deliberately one known line rather than a "warnings aren't errors" rule: the reason stderr is
-    /// surfaced at all is that a runtime's only account of why it failed to come up arrives there.
-    static func isBenign(_ line: String) -> Bool { line.contains("claude.ai connectors are disabled") }
+    ///  - "⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is
+    ///    set …", once per start. Its advice would break the very provider the user picked.
+    ///  - "[claude-code:unrecognized_model] {"model":"deepseek-v4-pro","query_source":"sdk"}", once
+    ///    per request the CLI issues. It reports an id absent from the CLI's built-in model table,
+    ///    not a request that failed — the endpoint is the provider's own and answers for it.
+    ///
+    /// Deliberately a list of known lines rather than a "warnings aren't errors" rule: the reason
+    /// stderr is surfaced at all is that a runtime's only account of why it failed to come up
+    /// arrives there. Mirrors the web transcript's `isBenignEngineStderr`.
+    private static let benignMarkers = ["claude.ai connectors are disabled", "[claude-code:unrecognized_model]"]
+
+    static func isBenign(_ line: String) -> Bool { benignMarkers.contains(where: line.contains) }
 
     private static func strip(_ re: NSRegularExpression?, from s: String) -> String {
         guard let re else { return s }

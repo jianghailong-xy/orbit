@@ -183,20 +183,33 @@ export function isUsageLimitErrorText(text: string | null | undefined): boolean 
 }
 
 /**
- * Does an engine's stderr line say nothing about this session? Claude Code prints
- * "⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is
- * set …" on every start when an auth token is in its environment — which is exactly how a
- * configured ModelProvider (DeepSeek, …) borrows the claude runtime: the control plane injects
- * ANTHROPIC_AUTH_TOKEN/ANTHROPIC_BASE_URL so the CLI talks to the provider's endpoint
- * (custom-provider.ts). Its advice — unset the key — would break the very provider the user
- * picked, and stderr renders as an error line, so every DeepSeek session opened on what looked
- * like a failed turn.
+ * Does an engine's stderr line say nothing about this session? Both lines below are noise Orbit's
+ * own env injection provokes. A configured ModelProvider (DeepSeek, …) borrows the claude runtime:
+ * the control plane injects ANTHROPIC_AUTH_TOKEN/ANTHROPIC_BASE_URL so the CLI talks to the
+ * provider's endpoint, and names that provider's model (custom-provider.ts). The CLI then remarks
+ * on both, and stderr renders as an error line — so every such session opened, and every turn ran,
+ * on what looked like a failed turn.
  *
- * Deliberately one known line rather than a "warnings aren't errors" rule: the reason stderr is
- * surfaced at all is that a runtime's only account of why it failed to come up arrives there.
+ *  - "⚠ claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is
+ *    set …", once per start. Its advice — unset the key — would break the very provider the user
+ *    picked.
+ *  - `[claude-code:unrecognized_model] {"model":"deepseek-v4-pro","query_source":"sdk"}`, once per
+ *    request the CLI issues, including the ones it makes for itself ("generate_session_title" —
+ *    the CLI's own resume-list naming, which Orbit does not use; it names sessions in naming.ts).
+ *    It reports an id absent from the CLI's built-in model table, not a request that failed: the
+ *    endpoint is the provider's own and answers for it. A model the endpoint really rejects comes
+ *    back as an API error, on a different path than this.
+ *
+ * Deliberately a list of known lines rather than a "warnings aren't errors" rule: the reason stderr
+ * is surfaced at all is that a runtime's only account of why it failed to come up arrives there.
  */
+const BENIGN_ENGINE_STDERR_MARKERS = [
+  'claude.ai connectors are disabled',
+  '[claude-code:unrecognized_model]',
+];
+
 export function isBenignEngineStderr(line: string | null | undefined): boolean {
-  return !!line && line.includes('claude.ai connectors are disabled');
+  return !!line && BENIGN_ENGINE_STDERR_MARKERS.some((marker) => line.includes(marker));
 }
 
 /**
