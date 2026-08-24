@@ -549,7 +549,7 @@ test('a new moment opens its own receipt rather than continuing the previous one
 // D5-b4(6) — every automatic stand-down ends its hold, and each takes the ending it has earned.
 // ---------------------------------------------------------------------------------------------
 
-test('all four automatic stand-downs leave no holder, and only the stale one freezes',
+test('every automatic stand-down leaves no holder, and only the stale one freezes',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const s = connect();
@@ -579,19 +579,10 @@ test('all four automatic stand-downs leave no holder, and only the stale one fre
         where: { id: parent.taskId }, data: { completionPolicy: 'ALL_CHILDREN_DONE' },
       });
 
-      // 4. coordinator-authority — RELEASED: a Project's coordinator can be turned off. Flipped
-      //    through the real fan-out trigger rather than by writing the column, so the task's
-      //    authority is derived the way a coordinated Project actually derives it.
-      const claimed = await fixture(s.db, 'stand-authority');
-      await s.db.project.update({
-        where: { id: claimed.projectId }, data: { coordinatorEnabled: true },
-      });
-
       const cases: Array<[string, Fixture, string, boolean]> = [
         ['stale-epoch', stale, 'COMPLETED', true],
         ['superseded', retired, 'OPEN', false],
         ['aggregate-parent', parent, 'OPEN', false],
-        ['coordinator-authority', claimed, 'OPEN', false],
       ];
       for (const [reason, ids, receiptStatus, frozen] of cases) {
         const epoch = reason === 'stale-epoch' ? before : await epochOf(s.db, ids.taskId);
@@ -642,22 +633,27 @@ test('a released stand-down evaluates again once the fact that refused it is lif
     assertCoordinatorPgUrlIsIsolated(URL!);
     const s = connect();
     try {
-      // The reason the other three release rather than freeze, proven rather than argued: the
-      // Project's coordinator is turned off again, the token is unchanged because nothing in the
+      // The reason the released ones release rather than freeze, proven rather than argued: the
+      // completion policy goes back to MANUAL, the token is unchanged because nothing in the
       // epoch's transition table moved, and the same request now legitimately starts work.
       const ids = await fixture(s.db, 'stand-lift');
-      await s.db.project.update({ where: { id: ids.projectId }, data: { coordinatorEnabled: true } });
+      await extraTask(s.db, ids, { parentTaskId: ids.taskId });
+      await s.db.task.update({
+        where: { id: ids.taskId }, data: { completionPolicy: 'ALL_CHILDREN_DONE' },
+      });
       const epoch = await epochOf(s.db, ids.taskId);
       const token = TASK_RUN_TRIGGER.dependency(ids.taskId, epoch);
 
       assert.deepEqual(
         await s.tasks.execute(ids.ownerId, ids.taskId, { observedEpoch: epoch }, token),
-        { ok: false, skipped: 'coordinator-authority' },
+        { ok: false, skipped: 'aggregate-parent' },
       );
 
-      await s.db.project.update({ where: { id: ids.projectId }, data: { coordinatorEnabled: false } });
+      await s.db.task.update({
+        where: { id: ids.taskId }, data: { completionPolicy: 'MANUAL' },
+      });
       assert.equal(await epochOf(s.db, ids.taskId), epoch,
-        'flipping authority is not a dispatch moment, so the token is the same one');
+        'changing a completion policy is not a dispatch moment, so the token is the same one');
 
       const run = await s.tasks.execute(ids.ownerId, ids.taskId, { observedEpoch: epoch }, token);
       assert.equal(run.ok, true, 'a frozen refusal here would have wedged this task for ever');

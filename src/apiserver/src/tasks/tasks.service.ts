@@ -389,7 +389,6 @@ export type TaskRunAnswer =
       skipped:
         | 'superseded'
         | 'aggregate-parent'
-        | 'coordinator-authority'
         /**
          * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
          * that produced this delivery. Terminal, and the one automatic stand-down that is — the
@@ -668,10 +667,19 @@ const RUNNABLE_TASK_SQL = Prisma.sql`${Prisma.raw(manualRunnableTaskSql('t'))}`;
  * with no LIMIT to stop at, the planner picks a hash anti-join either way). Anchored on DONE
  * prerequisites instead it seeks the few hundred finished tasks through
  * `task_dependency_depends_on_task_id_idx`: 264ms -> 32ms.
+ *
+ * `dispatch_authority` is deliberately NOT read here, nor in SCHEDULED_DUE_SQL, nor at execute()'s
+ * automatic door. It named the Coordinator's dispatch pass as the starter for a coordinated
+ * Project's tasks, and that pass was removed with the control loop — so the column stopped naming a
+ * second starter and started naming none at all: every task in a `coordinator_enabled` Project
+ * (0122's `task_dispatch_authority_derive` gives them COORDINATOR at birth) fell out of this
+ * candidate set and never ran, with nothing else scanning for it. Whether a task runs by itself is
+ * now answered by the task's own auto-run opt-in and its prerequisites, and by nothing about the
+ * Project it is filed under. The column and 0122's triggers that derive it are left standing — no
+ * reader of them is left in this service, but removing them is its own change.
  */
 const AUTO_RUN_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
-  AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
   AND t.auto_run_when_ready = true
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- A held task is out of the sweep entirely: pausing a list is the stop for a campaign
@@ -746,7 +754,6 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   t.run_at IS NOT NULL
   AND t.run_at <= now()
   AND t.status = 'OPEN'::task_status
-  AND t.dispatch_authority = 'LEGACY'::task_dispatch_authority
   AND t.dispatch_hold = false
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
@@ -9867,7 +9874,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         isForeman: true,
         verifiesTaskId: true,
         dispatchHold: true,
-        dispatchAuthority: true,
         runAt: true,
         supersededByTaskId: true,
         terminalReason: true,
@@ -9969,11 +9975,6 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `task ${uuidToBase62(id)}: this task is completed by aggregating its subtasks `
         + `(${task.completionPolicy}), so it has no work of its own to run — `
         + 'run its subtasks, or set its completion policy to MANUAL',
-      );
-    }
-    if (auto && task.dispatchAuthority === 'COORDINATOR') {
-      return this.standDownReleasing(
-        lease, { ok: false as const, skipped: 'coordinator-authority' as const },
       );
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];

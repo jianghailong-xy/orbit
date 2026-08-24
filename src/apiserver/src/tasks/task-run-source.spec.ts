@@ -115,23 +115,32 @@ test('an automatic Task List run carries distinct auditable provenance', async (
   });
 });
 
-test('legacy automatic dispatch stands down after Coordinator authority takes over', async () => {
+test('automatic dispatch runs a coordinated Project\'s task like any other', async () => {
   let creates = 0;
   const service = new TasksService({
-    // Every run door opens its receipt (0137) before anything else, and a stand-down RELEASES it
-    // rather than freezing — the same durable fact arriving later must be able to evaluate again.
+    // Every run door opens its receipt (0137) before anything else.
     ...fakeReceiptStore(),
-    // §13.1 AG6 is judged before the authority stand-down — the role invariant holds the same
-    // position at all three gates — so even this deliberately minimal row carries its two facts.
     task: {
       findFirst: async () => ({
-        id: 'task-1', dispatchAuthority: 'COORDINATOR', completionPolicy: 'MANUAL', children: [],
+        id: 'task-1', title: 'Coordinated', description: null, status: 'OPEN', runAt: null,
+        // What 0122's `task_dispatch_authority_derive` writes for every task in a
+        // `coordinator_enabled` Project. This door used to stand down on it and hand the dispatch
+        // to the Coordinator's pass; that pass was removed with the control loop, so standing down
+        // handed the task to nobody and it never ran. Whether a task starts by itself is the task's
+        // own opt-in, not a fact about the Project it is filed under.
+        dispatchAuthority: 'COORDINATOR', dispatchHold: false,
+        completionPolicy: 'MANUAL', children: [],
+        assignee: { id: 'workspace-1', runnerId: 'runner-1' },
       }),
     },
-  } as never, { create: async () => { creates += 1; } } as never, {} as never);
+    taskDependency: { findMany: async () => [] },
+    session: { findUnique: async () => null, findFirst: async () => null },
+  } as never, {
+    create: async () => { creates += 1; return { id: 'session-1' }; },
+  } as never, {} as never);
 
-  const result = await service.execute('owner-1', 'task-1', { observedEpoch: 0n });
+  const result = await service.execute('owner-1', 'task-1', { observedEpoch: 0n }, 'sweep-tick-1');
 
-  assert.deepEqual(result, { ok: false, skipped: 'coordinator-authority' });
-  assert.equal(creates, 0);
+  assert.deepEqual(result, { ok: true, sessionId: 'session-1' });
+  assert.equal(creates, 1);
 });
