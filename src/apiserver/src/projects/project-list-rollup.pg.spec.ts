@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, ProjectStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, ProjectStatus, RunStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -274,6 +274,134 @@ test('the project index buckets every project in one pass and agrees with the pr
         const theirs = (await projects.list(strangerId)) as unknown as Listed[];
         assert.deepEqual(theirs.map((row) => row.id), [strangerProject]);
         assert.deepEqual(theirs[0].buckets, { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 });
+      });
+    } finally {
+      await db.$disconnect();
+      await identity.end();
+    }
+  });
+
+/**
+ * The dispatched work `Task.status` does not carry.
+ *
+ * Every scenario above builds `running` out of `TaskStatus.IN_PROGRESS`, and no Session row exists
+ * anywhere in them — which is exactly why they cannot see this. A run opened by the dispatcher
+ * leaves its task OPEN for the whole run; nothing writes IN_PROGRESS at dispatch. So on a fixture
+ * made of task statuses alone, "running = IN_PROGRESS" and "running = IN_PROGRESS or dispatched"
+ * are the same number, and the index can hold the first definition while the project page holds
+ * the second without a single test going red.
+ *
+ * That is not a hypothetical: it is what the deployment reported. Two projects with an agent
+ * working in them read `running: 0, ready: 1` on the index and `running: 1, ready: 0` on their own
+ * page, which put them in the STALLED section of the list — under a header reading "nothing
+ * running" — while the work was in flight.
+ *
+ * Own owner, own projects: nothing above sees these rows, and the counts here are unaffected by
+ * anything above.
+ */
+test('a dispatched task is running in the index rather than ready, and the page agrees',
+  { skip: !URL, timeout: 300_000 }, async (t) => {
+    assertCoordinatorPgUrlIsIsolated(URL);
+    const identity = new Client({ connectionString: URL, connectionTimeoutMillis: 2_000 });
+    await identity.connect();
+    await verifyCoordinatorPgIdentity(identity);
+
+    const db = prismaClientFor(URL);
+    const projects = new ProjectsService(db as unknown as PrismaService);
+
+    /** A session on a task — the only place a dispatched run is written down. */
+    const session = async (ownerId: string, taskId: string, status: RunStatus): Promise<void> => {
+      await db.session.create({
+        data: { ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status },
+      });
+    };
+
+    try {
+      const ownerId = randomUUID();
+      await db.user.create({
+        data: { id: ownerId, email: `live-${ownerId}@rollup.invalid`, name: 'live', passwordHash: 'x' },
+      });
+
+      //   d1 OPEN + RUNNING session    -> running   (the case the old definition missed)
+      //   d2 OPEN + PENDING session    -> running   (queued is held too: the task is taken)
+      //   d3 OPEN + SUCCEEDED session  -> ready     (a settled run says nothing about now)
+      //   d4 OPEN, never dispatched    -> ready
+      //   d5 OPEN -> d4                -> blocked   (a prerequisite still owes work)
+      //   d6 DONE + RUNNING session    -> done      (only an OPEN task is promoted)
+      const liveId = await makeProject(db, ownerId, 'three agents at work');
+      const d1 = await makeTask(db, ownerId, liveId, 'd1', TaskStatus.OPEN);
+      const d2 = await makeTask(db, ownerId, liveId, 'd2', TaskStatus.OPEN);
+      const d3 = await makeTask(db, ownerId, liveId, 'd3', TaskStatus.OPEN);
+      const d4 = await makeTask(db, ownerId, liveId, 'd4', TaskStatus.OPEN);
+      const d5 = await makeTask(db, ownerId, liveId, 'd5', TaskStatus.OPEN);
+      const d6 = await makeTask(db, ownerId, liveId, 'd6', TaskStatus.DONE);
+      await db.taskDependency.create({ data: { taskId: d5, dependsOnTaskId: d4 } });
+      await session(ownerId, d1, RunStatus.RUNNING);
+      await session(ownerId, d2, RunStatus.PENDING);
+      await session(ownerId, d3, RunStatus.SUCCEEDED);
+      await session(ownerId, d6, RunStatus.RUNNING);
+
+      const listed = async (owner: string): Promise<Map<string, Listed>> => {
+        const rows = (await projects.list(owner)) as unknown as Listed[];
+        return new Map(rows.map((row) => [row.id, row]));
+      };
+
+      await t.test('a live session moves its task out of ready and into running', async () => {
+        const row = (await listed(ownerId)).get(liveId)!;
+        assert.deepEqual(row.buckets, { running: 2, ready: 2, blocked: 1, done: 1, cancelled: 0 });
+        // Stated separately from the line above, because it is the claim that matters and the
+        // deepEqual would still read plausibly with both numbers wrong by one in opposite
+        // directions: NOT ONE of the six tasks is IN_PROGRESS, so under the old definition this
+        // project reports `running: 0, ready: 4` and the list calls it stalled.
+        assert.equal(
+          await db.task.count({ where: { projectId: liveId, status: TaskStatus.IN_PROGRESS } }),
+          0,
+          'no task row carries IN_PROGRESS — the runs are only in the session table',
+        );
+        assert.equal(row.buckets.running, 2, 'the two dispatched OPEN tasks are the running ones');
+      });
+
+      await t.test('the buckets still partition the project exactly once', async () => {
+        const row = (await listed(ownerId)).get(liveId)!;
+        const total = await db.task.count({ where: { projectId: liveId } });
+        const sum = row.buckets.running + row.buckets.ready + row.buckets.blocked
+          + row.buckets.done + row.buckets.cancelled;
+        assert.equal(sum, total, 'six tasks, counted once each');
+        // The OPEN population is now split THREE ways, not two: a dispatched OPEN task left
+        // ready/blocked for running. An invariant that still read `ready + blocked = OPEN` would
+        // be asserting the old definition.
+        const open = await db.task.count({ where: { projectId: liveId, status: TaskStatus.OPEN } });
+        assert.equal(row.buckets.ready + row.buckets.blocked + 2, open,
+          'ready + blocked + the dispatched OPEN tasks covers OPEN once each');
+      });
+
+      await t.test('the index and the project page report the same five numbers', async () => {
+        const row = (await listed(ownerId)).get(liveId)!;
+        const { buckets } = await projects.panorama(ownerId, liveId);
+        // The whole point: `readProjectPanorama` has counted live sessions since the definition
+        // moved, and this is where the index is caught still holding the older one.
+        assert.deepEqual(row.buckets, buckets, 'index vs page over a dispatched project');
+      });
+
+      await t.test('another owner’s live session colours their project and not mine', async () => {
+        const strangerId = randomUUID();
+        await db.user.create({
+          data: { id: strangerId, email: `sl-${strangerId}@rollup.invalid`, name: 'sl', passwordHash: 'x' },
+        });
+        const mineId = await makeProject(db, ownerId, 'nothing dispatched here');
+        await makeTask(db, ownerId, mineId, 'm1', TaskStatus.OPEN);
+        const theirsId = await makeProject(db, strangerId, 'theirs');
+        const s1 = await makeTask(db, strangerId, theirsId, 's1', TaskStatus.OPEN);
+        await session(strangerId, s1, RunStatus.RUNNING);
+
+        assert.deepEqual((await listed(ownerId)).get(mineId)!.buckets,
+          { running: 0, ready: 1, blocked: 0, done: 0, cancelled: 0 },
+          'a live session in somebody else’s project does not promote my task');
+        // And the join is not simply dead: the same session DOES promote the task it points at.
+        assert.deepEqual((await listed(strangerId)).get(theirsId)!.buckets,
+          { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 });
+        assert.deepEqual((await listed(strangerId)).get(theirsId)!.buckets,
+          (await projects.panorama(strangerId, theirsId)).buckets);
       });
     } finally {
       await db.$disconnect();

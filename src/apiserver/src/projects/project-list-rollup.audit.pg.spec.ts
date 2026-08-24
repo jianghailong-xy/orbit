@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, ProjectStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, ProjectStatus, RunStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -75,6 +75,21 @@ async function makeTask(
     data: { id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId, status },
   });
   return id;
+}
+
+/**
+ * A session on a task. The dispatcher writes one of these and leaves `Task.status` at OPEN, so
+ * this is the only row in the database that says a task is being worked on right now.
+ */
+async function makeSession(
+  db: PrismaClient,
+  ownerId: string,
+  taskId: string,
+  status: RunStatus,
+): Promise<void> {
+  await db.session.create({
+    data: { ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status },
+  });
 }
 
 /** Seeded so a failing round can be replayed exactly. Seeds here start at 9000 — a range no
@@ -271,6 +286,87 @@ test('GET /projects buckets, second independent pass', { skip: !URL, timeout: 90
       assert.ok(comparedProjects >= 100, `compared ${comparedProjects} projects`);
       assert.ok(edgesMade >= 100, `built ${edgesMade} edges`);
       console.log(`[audit-fuzz] ${comparedProjects} projects, ${edgesMade} edges compared`);
+    });
+
+    /**
+     * The blind spot in both invariants above.
+     *
+     * `running must equal the IN_PROGRESS count` and `ready + blocked must partition the OPEN
+     * tasks` are the two self-consistency checks this pass was written to add — and both are
+     * statements of the OLD bucket definition. They hold on every fixture above only because no
+     * fixture above contains a Session row, which makes "IN_PROGRESS" and "IN_PROGRESS or
+     * dispatched" the same set. A dispatched run does not touch `Task.status` at all, so the
+     * moment one exists both invariants are false as written, and the corrected forms are the two
+     * asserted below.
+     */
+    await t.test('a dispatched OPEN task counts as running, and the invariants shift with it', async () => {
+      const owner = await makeUser(db);
+      const other = await makeUser(db);
+
+      // pLive: two dispatched (one RUNNING, one PENDING), one settled run, one free, one blocked,
+      // one finished task with a live re-run against it.
+      const pLive = await makeProject(db, owner, 'dispatched');
+      const running = await makeTask(db, owner, pLive, 'running', TaskStatus.OPEN);
+      const queued = await makeTask(db, owner, pLive, 'queued', TaskStatus.OPEN);
+      const settled = await makeTask(db, owner, pLive, 'settled', TaskStatus.OPEN);
+      const free = await makeTask(db, owner, pLive, 'free', TaskStatus.OPEN);
+      const waiting = await makeTask(db, owner, pLive, 'waiting', TaskStatus.OPEN);
+      const finished = await makeTask(db, owner, pLive, 'finished', TaskStatus.DONE);
+      await db.taskDependency.create({ data: { taskId: waiting, dependsOnTaskId: free } });
+      await makeSession(db, owner, running, RunStatus.RUNNING);
+      await makeSession(db, owner, queued, RunStatus.PENDING);
+      // A run that ENDED says nothing about now; a live re-run against work already DONE must not
+      // take it back out of `done`, which is what the progress reading counts with.
+      await makeSession(db, owner, settled, RunStatus.SUCCEEDED);
+      await makeSession(db, owner, finished, RunStatus.RUNNING);
+
+      // pQuiet: same owner, no sessions at all — the control that keeps the promotion attributable
+      // to the session rather than to anything the owner has.
+      const pQuiet = await makeProject(db, owner, 'quiet');
+      await makeTask(db, owner, pQuiet, 'q1', TaskStatus.OPEN);
+      await makeTask(db, owner, pQuiet, 'q2', TaskStatus.IN_PROGRESS);
+
+      // A stranger's live session, so a `live` subquery that forgot its owner filter shows up.
+      const pStranger = await makeProject(db, other, 'not mine');
+      const strangerTask = await makeTask(db, other, pStranger, 'x1', TaskStatus.OPEN);
+      await makeSession(db, other, strangerTask, RunStatus.RUNNING);
+
+      const byId = new Map(((await svc.list(owner)) as unknown as Listed[]).map((r) => [r.id, r]));
+
+      assert.deepEqual(byId.get(pLive)!.buckets, { running: 2, ready: 2, blocked: 1, done: 1, cancelled: 0 },
+        'a RUNNING and a PENDING session each hold their OPEN task; a SUCCEEDED one does not');
+      assert.deepEqual(byId.get(pQuiet)!.buckets, { running: 1, ready: 1, blocked: 0, done: 0, cancelled: 0 },
+        'a project with no sessions is bucketed exactly as before');
+
+      // ---- the two invariants, in their corrected form ---------------------------------------
+      for (const pid of [pLive, pQuiet]) {
+        const row = byId.get(pid)!;
+        const open = await db.task.count({ where: { projectId: pid, status: TaskStatus.OPEN } });
+        const inProgress = await db.task.count({ where: { projectId: pid, status: TaskStatus.IN_PROGRESS } });
+        const dispatched = await db.task.count({
+          where: {
+            projectId: pid,
+            status: TaskStatus.OPEN,
+            sessions: { some: { ownerId: owner, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } },
+          },
+        });
+        assert.equal(row.buckets.running, inProgress + dispatched,
+          `${pid}: running is the IN_PROGRESS tasks PLUS the dispatched OPEN ones`);
+        assert.equal(row.buckets.ready + row.buckets.blocked + dispatched, open,
+          `${pid}: ready + blocked + dispatched partitions the OPEN tasks`);
+        assert.equal(
+          Object.values(row.buckets).reduce((s, n) => s + n, 0),
+          await db.task.count({ where: { projectId: pid } }),
+          `${pid}: every task is in exactly one bucket`,
+        );
+      }
+
+      // ---- and the page still reports the same five numbers -----------------------------------
+      for (const pid of [pLive, pQuiet]) {
+        const { buckets } = await plain.panorama(owner, pid);
+        assert.deepEqual(byId.get(pid)!.buckets, buckets, `index vs page for ${pid}`);
+      }
+      assert.equal(byId.has(pStranger), false, 'the stranger’s project is not in my index');
     });
 
     await t.test('the whole index costs one aggregate, not one per project', async () => {

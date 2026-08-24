@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, ProjectStatus, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, ProjectStatus, RunStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -74,6 +74,21 @@ async function makeTask(
     data: { id, ownerId, projectId, title, creatorType: CreatorType.USER, creatorId: ownerId, status },
   });
   return id;
+}
+
+/**
+ * A dispatched run. `Task.status` is left at OPEN by the dispatcher, so the Session row is the
+ * only record in the database that this task is being worked on right now.
+ */
+async function makeSession(
+  db: PrismaClient,
+  ownerId: string,
+  taskId: string,
+  status: RunStatus,
+): Promise<void> {
+  await db.session.create({
+    data: { ownerId, creatorId: ownerId, taskId, title: `run of ${taskId}`, prompt: 'do it', status },
+  });
 }
 
 /** Seeded so a failing round can be replayed exactly. */
@@ -183,6 +198,86 @@ test('GET /projects buckets, independently', { skip: !URL, timeout: 900_000 }, a
         const { buckets } = await svc.panorama(owner, projectId);
         assert.deepEqual(byId.get(projectId)!.buckets, buckets, `index vs page for ${projectId}`);
       }
+    });
+
+    /**
+     * The fifth boundary, and the one the four above cannot reach: a task that is being WORKED ON.
+     *
+     * The contract this file is written against is `readProjectPanorama`'s, and that contract says
+     * `running` is "IN_PROGRESS, or OPEN with a live session on it" while `ready` is "OPEN, no
+     * live session, nothing owed" — because dispatch opens a Session and leaves `Task.status` at
+     * OPEN for the whole run. Nothing else in this file builds a Session, so every fixture above
+     * exercises only the half of that contract the task status carries, and an implementation
+     * that had never heard of the other half would pass all of them.
+     *
+     * `ready` is the number the index sorts its Stalled section by and the number the stalled
+     * banner fires on, so a dispatched task counted as ready is not an off-by-one: it is a project
+     * with an agent working in it, listed under a header that reads "nothing running".
+     */
+    await t.test('a live session is what makes a task running, not its status column', async () => {
+      const owner = await makeUser(db);
+      const other = await makeUser(db);
+
+      // p_live, with every case the contract distinguishes, and NOT ONE task set to IN_PROGRESS:
+      //   dispatched OPEN + RUNNING   -> running
+      //   queued     OPEN + PENDING   -> running   (a queued run holds the task too)
+      //   ended      OPEN + SUCCEEDED -> ready     (a run that finished is not a run in flight)
+      //   free       OPEN, no session -> ready
+      //   waiting    OPEN -> free     -> blocked   (unmet wins: it was never dispatched)
+      //   held       OPEN -> free, + RUNNING       -> running (dispatched beats blocked, as on the page)
+      //   closed     DONE + RUNNING   -> done      (only an OPEN task is promoted)
+      const pLive = await makeProject(db, owner, 'live');
+      const dispatched = await makeTask(db, owner, pLive, 'dispatched', TaskStatus.OPEN);
+      const queued = await makeTask(db, owner, pLive, 'queued', TaskStatus.OPEN);
+      const ended = await makeTask(db, owner, pLive, 'ended', TaskStatus.OPEN);
+      const free = await makeTask(db, owner, pLive, 'free', TaskStatus.OPEN);
+      const waiting = await makeTask(db, owner, pLive, 'waiting', TaskStatus.OPEN);
+      const held = await makeTask(db, owner, pLive, 'held', TaskStatus.OPEN);
+      const closed = await makeTask(db, owner, pLive, 'closed', TaskStatus.DONE);
+      await db.taskDependency.create({ data: { taskId: waiting, dependsOnTaskId: free } });
+      await db.taskDependency.create({ data: { taskId: held, dependsOnTaskId: free } });
+      await makeSession(db, owner, dispatched, RunStatus.RUNNING);
+      await makeSession(db, owner, queued, RunStatus.PENDING);
+      await makeSession(db, owner, ended, RunStatus.SUCCEEDED);
+      await makeSession(db, owner, held, RunStatus.RUNNING);
+      await makeSession(db, owner, closed, RunStatus.RUNNING);
+
+      // p_stranger: a live session under ANOTHER owner. The contract scopes `live` by owner, and
+      // a subquery that dropped that filter would still pass every assertion above.
+      const pStranger = await makeProject(db, other, 'stranger-live');
+      const strangerTask = await makeTask(db, other, pStranger, 'x1', TaskStatus.OPEN);
+      await makeSession(db, other, strangerTask, RunStatus.RUNNING);
+
+      const byId = new Map(((await svc.list(owner)) as unknown as Listed[]).map((r) => [r.id, r]));
+
+      assert.deepEqual(
+        byId.get(pLive)!.buckets,
+        { running: 3, ready: 2, blocked: 1, done: 1, cancelled: 0 },
+        'a live session promotes its OPEN task out of ready — and out of blocked — into running',
+      );
+      // Named on its own, because the deepEqual above is exactly what the OLD definition would
+      // also produce if these tasks were IN_PROGRESS, and the point is that none of them is.
+      assert.equal(
+        await db.task.count({ where: { projectId: pLive, status: TaskStatus.IN_PROGRESS } }),
+        0,
+        'not one task row says IN_PROGRESS: `running: 3` comes entirely from the session table',
+      );
+      assert.equal(
+        Object.values(byId.get(pLive)!.buckets).reduce((s, n) => s + n, 0),
+        await db.task.count({ where: { projectId: pLive } }),
+        'the seven tasks are still counted once each',
+      );
+      assert.equal(byId.has(pStranger), false, 'another owner’s project is not in my index');
+
+      // ---- and the page, which is the contract this file is written against --------------------
+      for (const pid of [pLive]) {
+        const { buckets } = await svc.panorama(owner, pid);
+        assert.deepEqual(byId.get(pid)!.buckets, buckets, `index vs page for ${pid}`);
+      }
+      const theirs = ((await svc.list(other)) as unknown as Listed[]).find((r) => r.id === pStranger)!;
+      assert.deepEqual(theirs.buckets, { running: 1, ready: 0, blocked: 0, done: 0, cancelled: 0 },
+        'the same session DOES promote the task it actually points at');
+      assert.deepEqual(theirs.buckets, (await svc.panorama(other, pStranger)).buckets);
     });
 
     await t.test('randomized parity against readProjectPanorama, 60 owners', async () => {

@@ -66,10 +66,16 @@ interface RollupRow {
  * The bucket rules are `readProjectPanorama`'s, word for word, because a task that is `blocked` in
  * the list and `ready` on the project page is worse than either number alone:
  *
- *   - `running`  = IN_PROGRESS
- *   - `ready`    = OPEN with no unmet prerequisite
- *   - `blocked`  = OPEN with at least one
+ *   - `running`  = IN_PROGRESS, or OPEN with a live session on it
+ *   - `ready`    = OPEN, no live session, no unmet prerequisite
+ *   - `blocked`  = OPEN, no live session, at least one unmet prerequisite
  *   - FAILED is in no bucket: neither work in flight nor work settled.
+ *
+ * The live-session half is not decoration: dispatch opens a Session and leaves `Task.status` at
+ * OPEN for the whole run, so a rollup that read the status column alone reported `running: 0` for
+ * a project with an agent working in it — and the index put it under "Stalled: nothing running".
+ * A dispatched task is not `ready` either, because `ready` is what the page offers the reader to
+ * START, and this one has already started.
  *
  * "Unmet" carries the same scope too — a prerequisite is unmet while its status is OPEN or
  * IN_PROGRESS, wherever it is filed. A prerequisite in ANOTHER project still holds its dependent
@@ -107,10 +113,11 @@ export async function readProjectListRollups(
        GROUP BY task_id
     )
     SELECT s.project_id AS "projectId",
-           (count(*) FILTER (WHERE s.status = 'IN_PROGRESS'))::int AS "running",
-           (count(*) FILTER (WHERE s.status = 'OPEN'
+           (count(*) FILTER (WHERE s.status = 'IN_PROGRESS'
+                                OR (s.status = 'OPEN' AND live.task_id IS NOT NULL)))::int AS "running",
+           (count(*) FILTER (WHERE s.status = 'OPEN' AND live.task_id IS NULL
                                AND coalesce(tally.unmet_count, 0) = 0))::int AS "ready",
-           (count(*) FILTER (WHERE s.status = 'OPEN'
+           (count(*) FILTER (WHERE s.status = 'OPEN' AND live.task_id IS NULL
                                AND coalesce(tally.unmet_count, 0) > 0))::int AS "blocked",
            (count(*) FILTER (WHERE s.status = 'DONE'))::int AS "done",
            (count(*) FILTER (WHERE s.status = 'CANCELLED'))::int AS "cancelled",
@@ -120,6 +127,30 @@ export async function readProjectListRollups(
       -- out into two counted rows. LEFT because a task with no prerequisites is ready, not
       -- absent.
       LEFT JOIN tally ON tally.task_id = s.id
+      -- live is the dispatch half of running, and the join is a derived table rather than an
+      -- EXISTS per task so a 23,442-task project costs ONE small index scan instead of 23,442
+      -- probes. Measured on the deployment: session_owner_status_task_idx (owner_id, status,
+      -- task_id) serves the subquery as an index-only scan reading 2 rows in 0.2ms, which is then
+      -- hash-joined against the 23,906 task rows -- the whole aggregate lands at 256ms, against
+      -- the 252ms it cost before this join existed. DISTINCT, so a task carrying two sessions
+      -- still contributes one row and cannot be counted twice.
+      --
+      -- PENDING counts with RUNNING — both mean a session holds this task — and the pair is the
+      -- same one TasksService.withRunning derives and readProjectPanorama joins, so the index, the
+      -- page, the task list and the graph cannot disagree about a running task. Only an OPEN task
+      -- is promoted: a re-run opened against a task that is already DONE must not take it back out
+      -- of done. Aliased sess rather than the page's s only because s is scoped out here; the rows
+      -- it selects are the same ones.
+      --
+      -- (No backticks in this comment on purpose: it is inside a Prisma.sql template literal, and
+      -- one would close it — the build then fails as TS1005 on a line that looks unrelated.)
+      LEFT JOIN (
+        SELECT DISTINCT sess.task_id
+          FROM session sess
+         WHERE sess.owner_id = ${ownerId}::uuid
+           AND sess.status IN ('PENDING', 'RUNNING')
+           AND sess.task_id IS NOT NULL
+      ) live ON live.task_id = s.id
      GROUP BY s.project_id`);
 
   return new Map(
