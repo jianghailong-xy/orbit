@@ -233,8 +233,8 @@ function StatusPill({ label, tone, glyph }: { label: string; tone: Tone; glyph: 
   );
 }
 
-/** A workspace or agent name. The square remains a quick visual cue, while the role is printed by
- *  `IdentityRow` so two identical names never collapse into an unexplained "orbit orbit". */
+/** A workspace name. The square remains a quick visual cue while `IdentityRow` makes the role
+ *  explicit instead of leaving the value as an unexplained label. */
 function NameChip({ name, tone }: { name: string; tone: 'neutral' | 'brand' }) {
   return (
     <span
@@ -507,9 +507,6 @@ function Live({
       <div style={{ display: 'grid', gap: 7 }}>
         {coordination.workspaceName ? (
           <IdentityRow label="Workspace" name={coordination.workspaceName} tone="neutral" />
-        ) : null}
-        {coordination.agentName ? (
-          <IdentityRow label="Agent" name={coordination.agentName} tone="brand" />
         ) : null}
       </div>
 

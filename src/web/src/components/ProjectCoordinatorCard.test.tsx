@@ -279,13 +279,13 @@ describe('ProjectCoordinatorCard — LIVE', () => {
     expect(body).toContain('3rd coordinator of this project');
   });
 
-  it('names the conversation and labels the workspace and agent roles explicitly', () => {
+  it('names the conversation and shows its workspace without repeating the coordinator agent', () => {
     const body = text(paint(liveStatus()));
     expect(body).toContain('协调：实施 Project 公平调度域改造');
     expect(body).toContain('Workspace');
     expect(body).toContain('orbit-main');
-    expect(body).toContain('Agent');
-    expect(body).toContain('Claude Opus 5');
+    expect(body).not.toContain('Agent');
+    expect(body).not.toContain('Claude Opus 5');
   });
 
   it('says how much work it coordinates and identifies dispatch as manual', () => {
