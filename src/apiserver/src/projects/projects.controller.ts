@@ -438,4 +438,17 @@ export class ProjectsController {
   ) {
     return this.projects.coordinator(user.userId, id, dto?.workspaceId);
   }
+
+  /**
+   * What this project's coordination is, and what the button above would do if pressed right now.
+   *
+   * A GET beside the POST it predicts, and a read in the strict sense: no body, no lock, no write.
+   * The card needs to know whether a coordinator exists, whether the conversation is alive, whether
+   * it is in Trash and whether the press would refuse — all four BEFORE the press, which is the one
+   * thing pressing it can never tell you.
+   */
+  @Get(':id/coordinator/status')
+  coordinatorStatus(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.projects.coordinatorStatus(user.userId, id);
+  }
 }
