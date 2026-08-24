@@ -21,6 +21,7 @@ import {
   ReopenProjectDto,
   FinalizeAcceptanceRunDto,
   OpenAcceptanceRunDto,
+  OpenProjectCoordinatorDto,
   RecordMergeEvidenceDto,
   RecordTaskCheckpointDto,
   UpdateProjectDto,
@@ -419,5 +420,22 @@ export class ProjectsController {
       throw new BadRequestException(`status must be one of ${PROJECT_STATUSES.join(', ')}`);
     }
     return value as ProjectStatus;
+  }
+
+  /**
+   * Open (or return) the session this project is coordinated from.
+   *
+   * POST because it may create one, and idempotent in the way that matters: calling it twice
+   * returns the same conversation with `created: false` rather than opening a second one. A body
+   * is optional — `workspaceId` decides where a FIRST coordinator opens, and on a project that
+   * already has one a different value is a 409 rather than a move.
+   */
+  @Post(':id/coordinator')
+  openCoordinator(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: OpenProjectCoordinatorDto,
+  ) {
+    return this.projects.coordinator(user.userId, id, dto?.workspaceId);
   }
 }

@@ -874,6 +874,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "sessions/auto-retry.service.ts#refundIfStillAggregateParent", class: "ONE_ROW_CAS", statements: 1, note: "As above: the write belongs to `underAggregateParentLock`, which owns the locks and the compare-and-set." },
   { at: "projects/session-attempt.service.ts#chargeSteer", class: "ONE_ROW_CAS", statements: 1, note: "AU3's charge and its bound are ONE conditional UPDATE, so two coordinators steering at once cannot both read 'one left'. The two `FOR UPDATE` reads around it are each their own implicit transaction and hold nothing between statements — deliberately: the CAS is what decides, and the second read only says WHY it refused." },
   { at: "projects/project-handoff.service.ts#decide", class: "ONE_ROW_CAS", statements: 1, note: "The user's answer, as a compare-and-set on the state it was read in: two clicks produce one answer and one 409. Re-approving a live yes writes nothing at all — it returns the row unchanged, so an approval's own deadline cannot be extended by clicking approve again." },
+  { at: "projects/projects.service.ts#coordinator", class: "ONE_ROW_CAS", statements: 1 },
   { at: "projects/projects.service.ts#create", class: "INSERT", statements: 1 },
   { at: "providers/providers.service.ts#create", class: "INSERT", statements: 1 },
   { at: "providers/providers.service.ts#remove", class: "ONE_ROW_BY_KEY", statements: 1 },

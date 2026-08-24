@@ -164,7 +164,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the coordinator POST, the two task-page levels, the per-row prerequisite read and the task-create POST — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if an eighth
@@ -180,6 +180,11 @@ describe('ProjectsPage', () => {
     expect(apiCalls).toEqual([
       "'/projects'",
       '`/projects/${encodeURIComponent(id!)}`',
+      // The write that opens the conversation with this project's coordinator, and the reason it
+      // is one: resolve-or-create, so a stale or trashed binding is repaired server-side rather
+      // than followed. Method and body are held here as literally as the path, because an empty
+      // body is the whole contract of this unit.
+      "`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} }",
       // Exactly this, spelled out: the root level is requested by sending NO parentId, so an
       // added `&parentId=…` here would silently turn this into a subtask page under the same
       // cache key. `limit=100` is inline rather than interpolated so this stays a literal read

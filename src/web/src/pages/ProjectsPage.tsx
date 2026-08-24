@@ -190,6 +190,24 @@ export function ProjectDetailPage() {
     enabled: Boolean(id),
   });
   const p = project.data;
+
+  // Declared here, above the branch that decides whether the project loaded, because a hook cannot
+  // live inside it — the section it drives renders further down. Keyed by project, so two projects
+  // open in two tabs cannot read each other's in-flight or failed state.
+  const coordinator = useMutation({
+    mutationKey: ['project', id, 'coordinator'],
+    mutationFn: async () => {
+      // Not reachable from the button, which only exists inside the loaded branch — but the id is
+      // nullable up here, and a guard is what keeps `/projects/null/coordinator` off the wire
+      // rather than narrowing the type with an assertion that would send it.
+      if (!id) throw new Error('This link is missing a project id.');
+      return openProjectCoordinator(id);
+    },
+    // The id that gets navigated to is the one the SERVER just returned, never the pointer the
+    // project document arrived with: on a trashed binding those are two different sessions, and
+    // only the returned one is the live conversation.
+    onSuccess: (result) => navigate(coordinatorSessionPath(result.sessionId)),
+  });
   const byStatus = Object.entries(p?.tasksByStatus ?? {});
 
   return (
@@ -281,6 +299,16 @@ export function ProjectDetailPage() {
           />
           <Field label="Instructions" text={p.instructions} empty="No instructions set" />
 
+          {/* The way a person drives this project: open the conversation with its coordinator.
+              A sibling of the fields above, not a wrapper — a coordinator that fails to open
+              costs the reader the coordinator and nothing else. */}
+          <ProjectCoordinatorControl
+            bound={Boolean(p.coordinatorSessionId)}
+            pending={coordinator.isPending}
+            error={coordinator.error}
+            onOpen={() => coordinator.mutate()}
+          />
+
           {/* The same tasks the graph above draws, as an indented topological plan — and the only
               one of the two that is exact at any size. Inside this branch on purpose: the tasks
               page is only asked for once the project it belongs to came back, so a project that
@@ -336,6 +364,81 @@ export interface CoordinatorResult {
  *  a response carrying the raw UUID and one carrying the short public id land on one route. */
 export const coordinatorSessionPath = (sessionId: string): string =>
   `/sessions/${encodeURIComponent(encodeId(sessionId))}`;
+
+/**
+ * Resolve-or-create this project's one coordinator session.
+ *
+ * A POST every time, including from a project whose detail payload already names a coordinator.
+ * The pointer it carries can be stale — the session behind it may since have gone to Trash — and
+ * the server is what notices and replaces it, handing back the live conversation. Deep-linking
+ * straight to `coordinatorSessionId` would skip that repair and land the reader inside Trash.
+ *
+ * The body is `{}` rather than nothing: `workspaceId` is what picks where a FIRST coordinator
+ * opens, and this unit deliberately has no picker, so it sends none and lets the server's own
+ * fallback answer — down to its 400 when even that has nothing to go on, which names the two
+ * things a reader can actually do about it.
+ */
+export function openProjectCoordinator(projectId: string): Promise<CoordinatorResult> {
+  return api<CoordinatorResult>(`/projects/${encodeURIComponent(projectId)}/coordinator`, { method: 'POST', body: {} });
+}
+
+/**
+ * The Coordinator section as a function of its state alone.
+ *
+ * Presentational, and exported for the same reason ProjectTaskLevel is: a static render cannot
+ * press the button, so handing each state in directly is the only way to assert what pending and
+ * failed actually put on screen.
+ *
+ * One control for both labels. `bound` changes what the button is called — a project that already
+ * has a coordinator is being reopened, not started — and nothing else: both spellings fire the
+ * same resolve-or-create request, because which of the two it turns out to be is the server's
+ * answer, not this component's guess.
+ */
+export function ProjectCoordinatorControl({
+  bound,
+  pending,
+  error,
+  onOpen,
+}: {
+  bound: boolean;
+  pending: boolean;
+  error: Error | null;
+  onOpen: () => void;
+}) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <Typography.Title level={4}>Coordinator</Typography.Title>
+      <Typography.Paragraph type="secondary">
+        A project has exactly one coordinator session. Opening it here reuses that conversation, or
+        starts it if there is none yet.
+      </Typography.Paragraph>
+
+      {/* `disabled` as well as `loading`: the spinner says a request is in flight, but only the
+          disabled state stops a second press from opening a second one. */}
+      <Button type="primary" loading={pending} disabled={pending} onClick={onOpen}>
+        {bound ? 'Open coordinator' : 'Start coordinator'}
+      </Button>
+
+      {/* The server's own message, verbatim. On the one failure a reader can act on — no workspace
+          to open in — it names both ways out, and this unit has no picker of its own to offer
+          instead. Inline, so a failure here leaves the project and its tasks where they were. */}
+      {error ? (
+        <Alert
+          style={{ marginTop: 16 }}
+          type="error"
+          showIcon
+          message="Coordinator could not be opened"
+          description={error.message}
+          action={
+            <Button size="small" danger onClick={onOpen}>
+              Retry
+            </Button>
+          }
+        />
+      ) : null}
+    </div>
+  );
+}
 
 /** One page of a project's task tree. `nextCursor` is non-null only when a further page really
  *  exists — the server reads one row past the limit rather than counting the remainder. */
