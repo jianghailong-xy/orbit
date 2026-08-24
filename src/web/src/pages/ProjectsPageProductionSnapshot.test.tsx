@@ -584,6 +584,29 @@ describe('projects index — badges over the 2026-08-23 production snapshot', ()
     expect(badged.map(([t]) => t)).not.toContain(NAME.fineweb);
   });
 
+  it('keeps the one running task in the 118-task project on the bar', () => {
+    // The snapshot's thinnest real segment: 1 running against 117 blocked. Across the 196px this
+    // column gets, one flex unit in 118 is under two pixels, and a proportional bar would round it
+    // away — leaving the row saying nothing is running in the project that is the only reason it
+    // is filed under In progress at all. The 3px floor is what stops that.
+    const row = [...html.matchAll(/<li [\s\S]*?<\/li>/g)]
+      .map((m) => m[0])
+      .find((li) => li.includes(NAME.lfs))!;
+    const meter = /<div role="img"[\s\S]*?<\/div>/.exec(row)![0];
+
+    // Two segments for the two non-empty buckets, in the panorama's own order, each with the floor
+    // under it. The two buckets at zero draw nothing at all.
+    expect([...meter.matchAll(/background:var\(--([a-z0-9-]+)\)/g)].map((m) => m[1])).toEqual([
+      'brand',
+      'text-3',
+    ]);
+    expect(meter.match(/min-width:3px/g)).toHaveLength(2);
+    // Proportion is still what sizes them — the floor is a minimum, not a redistribution.
+    expect([...meter.matchAll(/flex:(\d+)/g)].map((m) => m[1])).toEqual(['1', '117']);
+    // And the number is beside the bar too, because colour alone is not carrying it.
+    expect(row).toContain('<b>1</b>');
+  });
+
   it('tints the two biggest piles in Stalled, not the section', () => {
     const tinted = [...html.matchAll(/<li [^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/li>/g)]
       .filter((li) => li[1].split(' ').includes('project-row-spotlit'))
