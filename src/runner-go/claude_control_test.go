@@ -68,6 +68,26 @@ func TestControlRequestReachesTheCLIAsAnInterruptItCanAnswer(t *testing.T) {
 	}
 }
 
+// A subtype's argument reaches the CLI through the same path the interrupt takes, in the
+// request object beside the subtype — and under the id the waiter is registered on, so the
+// answer to a mode or model change routes back like any other. An argument that never made
+// it onto the wire would be a setting that silently did not change.
+func TestControlRequestCarriesItsArgumentToTheCLI(t *testing.T) {
+	rt := newPipeRuntime(t)
+	w, err := rt.requestControlWith(ctrlSetModel, map[string]interface{}{"model": "claude-sonnet-5"})
+	if err != nil {
+		t.Fatalf("requestControlWith: %v", err)
+	}
+	msg := decodeControlRequest(t, rt.nextLine(t))
+	if msg["request_id"] != w.id {
+		t.Fatalf("the CLI was asked under id %v while the waiter is registered under %q", msg["request_id"], w.id)
+	}
+	req, _ := msg["request"].(map[string]interface{})
+	if req == nil || req["subtype"] != ctrlSetModel || req["model"] != "claude-sonnet-5" {
+		t.Fatalf("the CLI was asked %v, want set_model carrying the model", msg["request"])
+	}
+}
+
 // Ids are unique — within one process and, crucially, across a re-spawn. A counter that
 // restarted with each process would hand the session's second CLI the same id its first
 // one used, and an answer from the first would then be matched against the second's
