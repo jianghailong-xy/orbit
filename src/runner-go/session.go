@@ -314,9 +314,24 @@ func retainsTurnPermit(status string) bool { return status == stRunning }
 // INTO a turn that is still running — the server acks that row and touches nothing else —
 // so treating its failure as the session's would seal the transcript of a run that is going
 // perfectly well, and the reply the user is waiting for would simply stop appearing.
+//
+// An unrecognised turn kind is the same shape of exception for the same reason: the run is
+// mid-conversation and in perfect health, and the only thing that failed is one instruction
+// from a control plane newer than this binary. Ending the session over it would turn "your
+// runner is out of date" into "your work stopped".
 func turnCompletionEndsSession(req TurnCompleteRequest) bool {
-	return req.Status == stFailed && req.Subtype != subtypeSteer
+	return req.Status == stFailed && req.Subtype != subtypeSteer && req.Subtype != subtypeUnknownKind
 }
+
+// subtypeUnknownKind marks the completion of an inbox turn whose kind this binary does not
+// implement — the arm a half-upgraded fleet reaches, where the control plane is newer than
+// some of the runners answering to it.
+//
+// It is reported FAILED because that is what happened: the instruction was not carried out
+// and will not be. The subtype is what keeps that failure the turn's own (see above); it is
+// also what a reader of the completion needs to tell "this runner is out of date" from a
+// turn that ran and went wrong.
+const subtypeUnknownKind = "unknown_kind"
 
 func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Context, shutdownCtx context.Context, execDir string, onCodexRateLimits func(map[string]interface{}), pool *sessionPool, live *liveSession) {
 	syncJobProvider(job)
@@ -1530,6 +1545,77 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 						emit(evError, map[string]interface{}{"message": interruptFailureMessage(err)})
 					}
 				}(w)
+			case "setconfig":
+				// Model / permission mode changed, on a session whose engine is up. Neither is
+				// built into that process the way effort and the provider environment are: a
+				// resident CLI can be TOLD about them, over the same control channel it already
+				// services for interrupts. So the change lands in the conversation that is
+				// already going — mid-turn included, which is the whole reason this is a kind of
+				// its own — and `reload` below keeps the half that really does need another
+				// process.
+				//
+				// Answered on this goroutine, unlike the interrupt above, because the answer
+				// decides whether this process survives: a refusal ends in procCancel, and that
+				// decision belongs where the poller can simply stop. The cost is that an `end` or
+				// `interrupt` queued behind it waits out the deadline — only ever reached by a CLI
+				// that has stopped servicing control at all, which would have left the interrupt
+				// unanswered too.
+				frames, err := setConfigFrames(resp.Content, job.Agent)
+				if err != nil {
+					// The control plane builds this payload with JSON.stringify, so an unreadable
+					// one is version skew rather than anything a person did. Nothing to apply, and
+					// nothing a re-spawn would apply either — the flags it would come back with are
+					// the ones already running.
+					logln("unreadable setconfig payload for", job.SessionID+":", err)
+					settleSetConfigTurn(resp.TurnID, "unreadable payload: "+err.Error(), job, completeTurn)
+					continue
+				}
+				var refused error
+				for _, f := range frames {
+					w, err := rt.requestControlWith(f.subtype, f.payload)
+					if err == nil {
+						err = rt.awaitControl(procCtx, w, claudeSetConfigTimeout)
+					}
+					if err != nil {
+						refused = fmt.Errorf("%s: %w", f.what, err)
+						break
+					}
+				}
+				// Written whichever way it went. These values are what the session's config now
+				// IS, and the next process built for it — by the fallback just below, by a crash,
+				// by a later effort change — has to be built with them. A runner that skipped this
+				// would come back up on the model the user stopped using, with the control plane
+				// showing the one they chose.
+				for _, f := range frames {
+					f.apply(&job.Agent)
+				}
+				if refused == nil {
+					// In place: no procCancel, no reloadRequested, and so no `resumed` marker
+					// either. Nothing was resumed, and a transcript that says otherwise teaches
+					// people to read a restart into every setting they change.
+					logln("interactive run", job.SessionID, "— setconfig:", setConfigApplied(frames))
+					settleSetConfigTurn(resp.TurnID, setConfigApplied(frames), job, completeTurn)
+					continue
+				}
+				settleSetConfigTurn(resp.TurnID, "fell back to a re-spawn: "+refused.Error(), job, completeTurn)
+				if procCtx.Err() != nil {
+					// The process is going away underneath the request; its teardown owns what
+					// happens next, and there is no re-spawn here to promise anybody.
+					logln("setconfig for", job.SessionID, "abandoned:", refused)
+					return
+				}
+				// The engine said no, or said nothing. Fall back to the path this kind exists to
+				// avoid — the re-spawn below — and say so where a person can see it: a control
+				// frame that was refused and then quietly covered up by a restart looks, from the
+				// outside, exactly like the feature working.
+				logln("setconfig for", job.SessionID, "fell back to a re-spawn:", refused)
+				emit(evSystem, map[string]interface{}{
+					"notice":     setConfigDegradedNotice(refused),
+					"noticeKind": "setconfig-degraded",
+				})
+				reloadRequested.Store(true)
+				procCancel() // kill claude; the main loop returns reload=true to re-spawn
+				return
 			case "reload":
 				// Model / permission-mode / effort / provider changed on this idle session.
 				// --model, --permission-mode and --effort are spawn flags, so we apply
@@ -1582,6 +1668,31 @@ func runClaudeSessionProcess(ctx context.Context, shutdownCtx context.Context, t
 			case "end":
 				endSession()
 				return
+			default:
+				// A kind this binary has never heard of. The control plane is deployed ahead of
+				// the runners on purpose, so a newer one WILL hand this fleet instructions some
+				// of its members do not know — and with no arm here, that was silent on every
+				// side at once: nothing in the log, nothing in the transcript, and a turn this
+				// runner never answered. Whatever the person did — changed a model, changed a
+				// permission mode — simply did not happen, with no sign anywhere that it hadn't.
+				//
+				// So it is reported, and settled as a failure of THIS turn — see
+				// subtypeUnknownKind for why it must not be a failure of the session. Settling it
+				// is belt and braces rather than the point: today's control plane acks a control
+				// turn as it delivers it, so this completion is normally an idempotent no-op
+				// there. The runner is still the only side that knows the instruction was not
+				// carried out, and leaving a turn it was handed unanswered is not an option.
+				logln(fmt.Sprintf("interactive run %s — ignoring an inbox turn of unknown kind %q; this runner is older than the control plane that sent it", job.SessionID, resp.Kind))
+				if err := completeTurn(TurnCompleteRequest{
+					TurnID:           resp.TurnID,
+					Status:           stFailed,
+					Result:           fmt.Sprintf("this runner does not understand turns of kind %q; upgrade the runner", resp.Kind),
+					Subtype:          subtypeUnknownKind,
+					RuntimeSessionID: currentRuntimeSessionID(job),
+					BranchSha:        effectiveBranchSha(job.WT),
+				}); err != nil {
+					logln("unknown-kind turn-complete failed for", job.SessionID+":", err)
+				}
 			}
 		}
 	}()

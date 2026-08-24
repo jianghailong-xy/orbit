@@ -1,0 +1,379 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>New workspace — flow</title>
+<style>
+:root{
+  --brand:#3370ff; --brand-bg:#eaf1ff;
+  --t1:#1f2329; --t2:#646a73; --t3:#8f959e;
+  --bd:#dee0e3; --bd2:#eceef1; --hover:#f2f3f5;
+  --ok:#2ea121; --err:#f54a45; --warn:#ff8800;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Segoe UI",Roboto,sans-serif;
+  color:var(--t1);background:#eef0f3;-webkit-font-smoothing:antialiased}
+.screen{display:none;width:1180px;height:768px;background:#fff;position:relative;overflow:hidden;padding-bottom:48px}
+.screen.on{display:flex}
+/* ---------- sidebar ---------- */
+.sb{width:240px;flex:none;border-right:1px solid var(--bd2);padding:12px 0;display:flex;flex-direction:column}
+.sb-brand{display:flex;align-items:center;gap:8px;padding:2px 16px 14px;font-weight:600;font-size:15px}
+.sb-dot{width:16px;height:16px;border-radius:50%;border:2.5px solid var(--brand);position:relative}
+.sb-dot::after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:var(--brand);top:-3.5px;right:-3px}
+.nav{padding:0 8px}
+.nav-i{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:6px;font-size:13.5px;color:var(--t1)}
+.nav-i .ico{width:16px;text-align:center;color:var(--t3);font-size:13px}
+.nav-i.act{background:var(--brand-bg);color:var(--brand)}
+.nav-i.act .ico{color:var(--brand)}
+.sb-div{height:1px;background:var(--bd2);margin:10px 16px}
+.grp-head{display:flex;align-items:center;gap:8px;height:32px;padding:0 18px;font-size:12px;color:var(--t2);font-weight:500}
+.grp-head .cnt{margin-left:auto;color:var(--t3);font-size:11.5px}
+.grp-head .odot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.grp-head .odot.off{background:#c5c9cf}
+.ws{display:flex;align-items:center;gap:9px;height:32px;margin:0 8px;padding:0 10px 0 24px;border-radius:6px;font-size:13.5px;color:var(--t1)}
+.ws .sq{width:15px;height:15px;border-radius:4px;background:#dfe3e8;flex:none;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600}
+.ws.act{background:var(--hover)}
+.ws.new{color:var(--t2)}
+.ws .tail{margin-left:auto;font-size:11px;color:var(--t3)}
+.sb-add{margin:auto 12px 4px;display:flex;align-items:center;justify-content:center;gap:7px;height:34px;
+  border:1px dashed var(--bd);border-radius:6px;color:var(--t2);font-size:13px}
+.sb-add.hi{border-color:var(--brand);border-style:solid;color:var(--brand);background:var(--brand-bg)}
+/* spinner */
+.spin{width:12px;height:12px;border-radius:50%;border:2px solid #cfe0ff;border-top-color:var(--brand);flex:none}
+.spin.lg{width:20px;height:20px;border-width:2.5px}
+.rdot{width:7px;height:7px;border-radius:50%;background:var(--err);flex:none}
+/* ---------- main ---------- */
+.main{flex:1;display:flex;align-items:flex-start;justify-content:center;overflow:hidden}
+.wrap{width:100%;max-width:640px;padding:52px 0 0}
+.step{font-size:12px;color:var(--t3);letter-spacing:.02em;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.step .back{color:var(--t2)}
+h1{font-size:20px;font-weight:600;margin-bottom:8px}
+.sub{font-size:14px;line-height:1.6;color:var(--t2);margin-bottom:22px}
+.foot-note{font-size:12px;color:var(--t3);line-height:1.6;margin-top:16px}
+/* source cards */
+.cards{display:flex;gap:14px}
+.card{flex:1;border:1px solid var(--bd);border-radius:10px;padding:20px 18px 18px;position:relative;background:#fff}
+.card.sel{border-color:var(--brand);box-shadow:0 0 0 3px rgba(51,112,255,.10)}
+.card .ci{width:34px;height:34px;border-radius:8px;background:var(--brand-bg);color:var(--brand);
+  display:flex;align-items:center;justify-content:center;font-size:17px;margin-bottom:13px}
+.card.mute .ci{background:var(--hover);color:var(--t2)}
+.card h3{font-size:14.5px;font-weight:600;margin-bottom:6px}
+.card p{font-size:12.5px;line-height:1.65;color:var(--t2)}
+.badge{position:absolute;top:14px;right:14px;font-size:11px;color:var(--brand);background:var(--brand-bg);
+  padding:2px 7px;border-radius:4px;font-weight:500}
+/* inputs */
+.lbl{font-size:12.5px;color:var(--t2);margin-bottom:6px;font-weight:500}
+.inp{height:36px;border:1px solid var(--bd);border-radius:6px;display:flex;align-items:center;padding:0 11px;
+  font-size:13.5px;gap:8px;background:#fff}
+.inp.focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(51,112,255,.10)}
+.inp .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+.inp .chip{margin-left:auto;font-size:11.5px;color:var(--ok);background:#eaf6e8;padding:2px 8px;border-radius:4px;font-weight:500}
+.row2{display:flex;gap:12px;margin-top:14px}
+.row2>div{flex:1}
+.sec-t{font-size:12px;color:var(--t3);font-weight:500;margin:26px 0 8px;letter-spacing:.03em}
+.recent{border:1px solid var(--bd2);border-radius:8px;overflow:hidden}
+.rec{display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--bd2);font-size:13px}
+.rec:last-child{border-bottom:0}
+.rec:hover{background:var(--hover)}
+.rec .rn{font-weight:500}
+.rec .ru{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--t3)}
+.rec .rm{margin-left:auto;font-size:11.5px;color:var(--t3)}
+/* machine picker */
+.m{border:1px solid var(--bd);border-radius:8px;padding:13px 14px;margin-bottom:10px;display:flex;gap:11px;align-items:flex-start}
+.m.sel{border-color:var(--brand);box-shadow:0 0 0 3px rgba(51,112,255,.10)}
+.m.dis{background:#fbfbfc;border-color:var(--bd2)}
+.radio{width:15px;height:15px;border-radius:50%;border:1.5px solid #c5c9cf;flex:none;margin-top:2px;position:relative}
+.radio.on{border:5px solid var(--brand)}
+.radio.dis{background:#f2f3f5}
+.m-b{flex:1;min-width:0}
+.m-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;margin-bottom:3px}
+.m.dis .m-t{color:var(--t3);font-weight:400}
+.m-t .os{font-weight:400;color:var(--t3);font-size:12px}
+.tag{font-size:11px;padding:1.5px 7px;border-radius:4px;font-weight:500}
+.tag.ok{color:var(--ok);background:#eaf6e8}
+.m-s{font-size:12px;color:var(--t2);line-height:1.55}
+.m.dis .m-s{color:var(--t3)}
+.m-s .mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+.m-r{margin-left:auto;font-size:12px;color:var(--t3);flex:none;padding-top:2px}
+.m-r.bad{color:var(--err)}
+.subopt{margin-top:11px;padding-top:11px;border-top:1px solid var(--bd2);display:flex;flex-direction:column;gap:9px}
+.so{display:flex;gap:9px;align-items:flex-start;font-size:12.5px}
+.so .radio{width:13px;height:13px;margin-top:1px}
+.so .radio.on{border-width:4px}
+.so-t{font-weight:500}
+.so-s{color:var(--t2);font-size:11.5px;margin-top:2px;line-height:1.5}
+/* buttons */
+.btns{display:flex;gap:10px;align-items:center;margin-top:22px}
+.btn{height:34px;padding:0 17px;border-radius:6px;font-size:13.5px;display:inline-flex;align-items:center;
+  gap:7px;border:1px solid var(--bd);background:#fff;color:var(--t1);font-weight:500}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.dis{background:var(--hover);border-color:var(--bd2);color:var(--t3)}
+.btn.dgr{border:0;color:var(--err);background:transparent;padding:0 8px}
+.btn-note{font-size:12px;color:var(--t3);margin-left:2px}
+/* status cards */
+.st{border:1px solid var(--bd);border-radius:10px;padding:18px;display:flex;gap:13px;align-items:flex-start}
+.st.run{border-color:#bcd3ff;background:#f6f9ff}
+.st.bad{border-color:#f7c9c7;background:#fef6f6}
+.st-b{flex:1}
+.st-t{font-size:14.5px;font-weight:600;margin-bottom:5px}
+.st-s{font-size:12.5px;color:var(--t2);line-height:1.6}
+.bar{height:4px;border-radius:2px;background:#dce8ff;margin-top:12px;overflow:hidden}
+.bar>i{display:block;height:100%;width:62%;background:var(--brand);border-radius:2px}
+.code{background:#1f2329;border-radius:6px;padding:11px 13px;margin-top:12px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.75;color:#f0837b;white-space:pre}
+.code .c-dim{color:#8b9099}
+.auto{margin-top:18px;border:1px solid var(--bd2);border-radius:8px;padding:14px 15px}
+.auto-t{font-size:12px;color:var(--t3);font-weight:500;margin-bottom:10px;letter-spacing:.03em}
+.auto-i{display:block;font-size:12.5px;line-height:1.75;margin-bottom:8px}
+.auto-i:last-child{margin-bottom:0}
+.auto-i .ck{color:var(--ok);font-size:11px;margin-right:8px}
+.auto-i b{font-weight:500}
+.auto-i span{color:var(--t2)}
+.err-ico{width:22px;height:22px;border-radius:50%;background:var(--err);color:#fff;display:flex;
+  align-items:center;justify-content:center;font-size:14px;font-weight:600;flex:none}
+/* caption */
+.cap{position:absolute;left:0;bottom:0;width:100%;background:#1f2329;color:#c9ced5;font-size:12.5px;
+  padding:11px 20px;line-height:1.6;display:flex;gap:10px;align-items:baseline}
+.cap b{color:#fff;font-weight:600;flex:none}
+</style></head><body>
+
+<!-- ══════════ 1 · SOURCE ══════════ -->
+<section class="screen" id="s1">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+    <div class="sb-add hi">＋ New workspace</div>
+  </aside>
+  <main class="main"><div class="wrap">
+    <div class="step">Step 1 of 3</div>
+    <h1>New workspace</h1>
+    <p class="sub">A workspace is one repository on one machine — the place your sessions and tasks actually run.</p>
+    <div class="cards">
+      <div class="card sel">
+        <span class="badge">Recommended</span>
+        <div class="ci"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
+        <h3>From a git repository</h3>
+        <p>Paste a URL. Orbit clones it onto the machine you pick, turns on worktree isolation and detects the merge target.</p>
+      </div>
+      <div class="card mute">
+        <div class="ci"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+        <h3>From an existing directory</h3>
+        <p>Point at a folder that is already on one of your machines. You will pick the machine first.</p>
+      </div>
+    </div>
+    <p class="foot-note">Cloning uses the git credentials already on that machine — ssh key, credential helper, or <span style="font-family:ui-monospace,Menlo,monospace">gh auth</span>. Orbit stores no tokens.</p>
+    <div class="btns"><button class="btn pri">Continue</button><button class="btn">Cancel</button></div>
+  </div></main>
+  <div class="cap"><b>① 选来源</b>第一屏就分叉,因为两条路的步骤顺序天然相反:git 路是「仓库 → 机器」,目录路必须「机器 → 路径」。硬凑成统一向导会把 git 路的优势吃掉。</div>
+</section>
+
+<!-- ══════════ 2 · REPOSITORY ══════════ -->
+<section class="screen" id="s2">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+    <div class="sb-add hi">＋ New workspace</div>
+  </aside>
+  <main class="main"><div class="wrap">
+    <div class="step"><span class="back">← Back</span> · Step 2 of 3</div>
+    <h1>Which repository?</h1>
+    <p class="sub">Any URL git can clone — SSH or HTTPS.</p>
+    <div class="lbl">Repository URL</div>
+    <div class="inp focus"><span class="mono">git@github.com:wikova/orbit.git</span><span class="chip">wikova/orbit</span></div>
+    <div class="row2">
+      <div><div class="lbl">Workspace name</div><div class="inp">orbit</div></div>
+      <div><div class="lbl">Branch <span style="color:var(--t3);font-weight:400">(optional)</span></div>
+        <div class="inp" style="color:var(--t3)">Default branch</div></div>
+    </div>
+    <div class="sec-t">RECENTLY USED</div>
+    <div class="recent">
+      <div class="rec"><span class="rn">orbit</span><span class="ru">git@github.com:wikova/orbit.git</span><span class="rm">on 2 machines</span></div>
+      <div class="rec"><span class="rn">orbit-docs</span><span class="ru">git@github.com:wikova/orbit-docs.git</span><span class="rm">on 1 machine</span></div>
+      <div class="rec"><span class="rn">runner-bench</span><span class="ru">git@github.com:wikova/runner-bench.git</span><span class="rm">on 1 machine</span></div>
+    </div>
+    <div class="btns"><button class="btn pri">Continue</button><button class="btn">Cancel</button></div>
+  </div></main>
+  <div class="cap"><b>② 仓库</b>「最近用过的仓库」是顶层入口独有的收益 —— Runner 详情页看不见跨机器的仓库集合。第二次建 workspace 应该是点一下,不是重贴 URL。</div>
+</section>
+
+<!-- ══════════ 3 · MACHINE ══════════ -->
+<section class="screen" id="s3">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">1</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+    <div class="sb-add hi">＋ New workspace</div>
+  </aside>
+  <main class="main"><div class="wrap" style="padding-top:44px">
+    <div class="step"><span class="back">← Back</span> · Step 3 of 3</div>
+    <h1>Which machine?</h1>
+    <p class="sub">Orbit clones <b style="font-weight:500">wikova/orbit</b> there. The toolchain lives on the machine, so this is never guessed for you.</p>
+
+    <div class="m sel" style="flex-direction:column;gap:0">
+      <div style="display:flex;gap:11px;align-items:flex-start;width:100%">
+        <span class="radio on"></span>
+        <div class="m-b">
+          <div class="m-t">mac-01 <span class="os">macOS · online</span><span class="tag ok">Already has this repo</span></div>
+          <div class="m-s"><span class="mono">~/work/orbit</span> · 3 workspaces already run here · 412 GB free</div>
+        </div>
+      </div>
+      <div class="subopt" style="width:100%;padding-left:26px">
+        <div class="so"><span class="radio on"></span><div><div class="so-t">Reuse that checkout</div>
+          <div class="so-s">Shares one working tree with the 3 workspaces already there. A wedged checkout blocks all of their merges.</div></div></div>
+        <div class="so"><span class="radio"></span><div><div class="so-t">Clone a second copy</div>
+          <div class="so-s"><span class="mono" style="font-family:ui-monospace,Menlo,monospace">~/orbit-repos/wikova-orbit-2</span> · fully isolated · needs ~1.4 GB</div></div></div>
+      </div>
+    </div>
+
+    <div class="m">
+      <span class="radio"></span>
+      <div class="m-b">
+        <div class="m-t">linux-build-02 <span class="os">Linux · online</span></div>
+        <div class="m-s">Clones to <span class="mono">~/orbit-repos/wikova-orbit</span> · 218 GB free</div>
+      </div>
+    </div>
+
+    <div class="m dis">
+      <span class="radio dis"></span>
+      <div class="m-b">
+        <div class="m-t">mac-mini-ci <span class="os">macOS</span></div>
+        <div class="m-s">Last seen 2 days ago</div>
+      </div>
+      <div class="m-r">Offline — can't clone</div>
+    </div>
+
+    <div class="m dis">
+      <span class="radio dis"></span>
+      <div class="m-b">
+        <div class="m-t">dev-box <span class="os">Linux · online</span></div>
+        <div class="m-s">1.2 GB free on <span class="mono">/home</span></div>
+      </div>
+      <div class="m-r bad">Under its 5 GB floor</div>
+    </div>
+
+    <div class="btns"><button class="btn pri">Create workspace</button>
+      <span class="btn-note">With a single runner this step is skipped entirely.</span></div>
+  </div></main>
+  <div class="cap"><b>③ 选机器</b>顶层入口的唯一成本,压到最低:一台机器时整步消失;多台时「已有这个仓库」置顶;离线和磁盘不足禁选并说明原因。永不替用户猜机器 —— 猜错的代价是任务跑一半才发现没有 Xcode。</div>
+</section>
+
+<!-- ══════════ 4 · CLONING ══════════ -->
+<section class="screen" id="s4">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">2</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+    <div class="ws new act"><span class="spin"></span>orbit<span class="tail">Cloning…</span></div>
+    <div class="sb-add">＋ New workspace</div>
+  </aside>
+  <main class="main"><div class="wrap">
+    <div class="step">Workspace created</div>
+    <h1>orbit</h1>
+    <p class="sub">on linux-build-02 · <span style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px">~/orbit-repos/wikova-orbit</span></p>
+    <div class="st run">
+      <span class="spin lg"></span>
+      <div class="st-b">
+        <div class="st-t">Cloning wikova/orbit…</div>
+        <div class="st-s">You can leave this page. It turns blue in the sidebar when it's ready, and you'll get a notification if it fails.</div>
+        <div class="bar"><i></i></div>
+        <div class="st-s" style="margin-top:7px;color:var(--t3);font-size:11.5px">Receiving objects: 62% (18,204/29,361), 94.2 MiB</div>
+      </div>
+    </div>
+    <div class="auto">
+      <div class="auto-t">SET UP AUTOMATICALLY</div>
+      <div class="auto-i"><span class="ck">✓</span><b>Worktree isolation on</b><span>— each session gets its own branch. A cloned repo is known to be git, so this defaults on.</span></div>
+      <div class="auto-i"><span class="ck">✓</span><b>Merge target: main</b><span>— read from the remote's default branch.</span></div>
+      <div class="auto-i"><span class="ck">✓</span><b>Name: orbit</b><span>— from the repo, editable any time.</span></div>
+    </div>
+    <div class="btns"><button class="btn">Back to sessions</button>
+      <span class="btn-note">Dependencies are not installed — your first session's agent does that.</span></div>
+  </div></main>
+  <div class="cap"><b>④ 克隆中</b>别把用户钉在等待页上 —— 大仓库要几分钟。立刻放人走,状态活在侧边栏那一行里。这一屏也是「从 git 建」相对「输路径建」的真优势兑现处:隔离、merge target、命名三件事都不用问。</div>
+</section>
+
+<!-- ══════════ 5 · FAILED ══════════ -->
+<section class="screen" id="s5">
+  <aside class="sb">
+    <div class="sb-brand"><span class="sb-dot"></span>Orbit</div>
+    <div class="nav">
+      <div class="nav-i"><span class="ico">◧</span>Projects</div>
+      <div class="nav-i"><span class="ico">▤</span>Runners</div>
+      <div class="nav-i"><span class="ico">⚙</span>Providers</div>
+    </div>
+    <div class="sb-div"></div>
+    <div class="grp-head"><span>▤ mac-01</span><span class="odot"></span><span class="cnt">3</span></div>
+    <div class="ws"><span class="sq">o</span>orbit</div>
+    <div class="ws"><span class="sq">i</span>orbit-ios</div>
+    <div class="ws"><span class="sq">d</span>orbit-docs</div>
+    <div class="grp-head" style="margin-top:6px"><span>▤ linux-build-02</span><span class="odot"></span><span class="cnt">2</span></div>
+    <div class="ws"><span class="sq">b</span>runner-bench</div>
+    <div class="ws new act"><span class="rdot"></span>orbit<span class="tail" style="color:var(--err)">Failed</span></div>
+    <div class="sb-add">＋ New workspace</div>
+  </aside>
+  <main class="main"><div class="wrap">
+    <div class="step">Workspace created · clone failed</div>
+    <h1>orbit</h1>
+    <p class="sub">on linux-build-02 · <span style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px">~/orbit-repos/wikova-orbit</span></p>
+    <div class="st bad">
+      <span class="err-ico">!</span>
+      <div class="st-b">
+        <div class="st-t">Clone failed</div>
+        <div class="st-s">linux-build-02 could not authenticate to github.com. Orbit uses the git credentials already on that machine — it holds no tokens of its own.</div>
+        <div class="code"><span class="c-dim">$ git clone git@github.com:wikova/orbit.git</span>
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.</div>
+        <div class="st-s" style="margin-top:12px">On that machine, run <span style="font-family:ui-monospace,Menlo,monospace;background:#fff;border:1px solid var(--bd);border-radius:4px;padding:1px 6px;font-size:11.5px">ssh -T git@github.com</span> to check its key, then retry.</div>
+      </div>
+    </div>
+    <div class="btns"><button class="btn pri">Retry clone</button><button class="btn">Edit URL</button>
+      <button class="btn">Pick another machine</button><button class="btn dgr">Delete workspace</button></div>
+  </div></main>
+  <div class="cap"><b>⑤ 失败</b>git 的 stderr 原样回显,不做二次翻译 —— 自己解析 git 错误再改写成人话,那层翻译迟早会骗人。行留在侧边栏而不是消失,因为它可重试、可改 URL、可换机器。</div>
+</section>
+
+<script>
+var h=location.hash.slice(1);
+var all=document.querySelectorAll('.screen');
+if(h&&document.getElementById(h)){document.getElementById(h).classList.add('on');}
+else{all.forEach(function(s){s.classList.add('on');});document.body.style.display='flex';document.body.style.flexDirection='column';document.body.style.gap='24px';document.body.style.padding='24px';}
+</script>
+</body></html>

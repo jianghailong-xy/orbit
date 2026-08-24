@@ -390,6 +390,12 @@ model Runner {
   // NULL means a runner too old to report it, which stays unrestricted — "we don't know" must not
   // remove a mode that works today.
   runsAsRoot        Boolean?     @map("runs_as_root")
+  // Where this machine puts checkouts Orbit clones for it, reported each heartbeat. A clone of
+  // `<owner>/<repo>` lands at `<reposRoot>/<owner>-<repo>`.
+  // NULL means this runner has never reported one — a build too old to send it. That withdraws
+  // the create-from-a-git-URL path for this machine instead of inventing a root: a guessed path
+  // is a checkout written somewhere the user never agreed to put one.
+  reposRoot         String?     @map("repos_root")
   // State of the shared checkouts this machine's agents work in, reported each heartbeat.
   // Array of @orbit/shared RunnerRepoHealth. Session worktrees are isolated; the checkout they
   // fork from and merge into is not, so a half-finished merge left there blocks every merge on
@@ -546,6 +552,25 @@ model DeviceEnrollment {
   @@map("device_enrollment")
 }
 
+/// Where a Workspace's `workDir` is in its lifecycle. Only the create-from-a-git-remote path can
+/// leave READY: it inserts the row CLONING, and the runner's result moves it to READY or FAILED.
+///
+///   READY   — the directory is on the machine and usable. Every workspace that predates this
+///             column, and every one made from a path the user already had, is born here.
+///   CLONING — a clone job is in flight; the directory is not usable yet.
+///   FAILED  — the clone did not finish. `Workspace.provisionError` holds git's stderr verbatim.
+///
+/// NOT NULL with a READY default, and no UNKNOWN member, on purpose. `Workspace.repoUrl`'s NULL is
+/// already this model's one "nobody told us"; a second spelling of it here would make every reader
+/// ask which of the two a given row means.
+enum WorkspaceProvisionState {
+  READY
+  CLONING
+  FAILED
+
+  @@map("workspace_provision_state")
+}
+
 // A workspace: one checkout on one machine, plus how to branch and merge inside it.
 //
 // It is a PLACE, not an actor — the actor is the Session (one live coding-runtime process) and
@@ -589,6 +614,19 @@ model Workspace {
   runner              Runner?   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   // The project directory the runtime runs in for this workspace, and its coding-tool key.
   workDir             String?   @map("work_dir")
+  // The git remote this workspace's `workDir` was cloned from, when Orbit created it from a repo
+  // URL. NULL means nobody ever told us — a workspace `orbit register` minted from a directory
+  // that was already there, or one hand-made in the config form. Those are deliberately NOT
+  // backfilled from the checkout's own `origin`: at every later read a guessed remote is
+  // indistinguishable from a recorded one, and this column exists to be trusted.
+  repoUrl             String?   @map("repo_url")
+  // Where the directory is in its lifecycle — see WorkspaceProvisionState for why it cannot be
+  // NULL and has no UNKNOWN.
+  provisionState      WorkspaceProvisionState @default(READY) @map("provision_state")
+  // Git's own stderr from the clone that failed, stored verbatim: no summarising, no rewriting,
+  // no mapping onto an Orbit vocabulary. What git said about a bad URL or a missing credential is
+  // the only text that tells the user what to change. NULL unless provisionState is FAILED.
+  provisionError      String?   @map("provision_error")
   // Custom environment variables injected into this workspace's runtime process (string map).
   env                 Json?     @map("env")
   agentKey            String?   @map("agent_key")
@@ -1362,9 +1400,11 @@ model ConversationTurn {
   session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   seq             Int // server-assigned, per-session delivery ordering
   clientTurnId    String    @map("client_turn_id") // client-supplied idempotency key
-  // message | steer | shell | interrupt | end | reload | diff (see ConversationTurnKind).
-  // A plain string, so a new kind needs no migration. `steer` is a message written into the
-  // turn already running instead of queued behind its result.
+  // message | steer | shell | interrupt | end | reload | setconfig | diff (see
+  // ConversationTurnKind). A plain string, so a new kind needs no migration. `steer` is a
+  // message written into the turn already running instead of queued behind its result;
+  // `setconfig` is the half of a config change a resident engine can just be told about,
+  // split off from `reload` so it need not wait for the running turn to end.
   kind            String    @default("message")
   content         String? // user message text (null for interrupt/end)
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED

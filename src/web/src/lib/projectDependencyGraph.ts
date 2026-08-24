@@ -29,7 +29,7 @@ export interface ProjectRunMark {
   taskCount: number;
   statusCounts: MarkStatusCounts;
   parentTaskId: string | null;
-  members: Array<{ taskId: string; title: string; status: string }>;
+  members: Array<{ taskId: string; title: string; status: string; running?: boolean; queued?: boolean }>;
   /** False when the run is longer than the response carries members for. */
   expandable: boolean;
 }
@@ -44,7 +44,7 @@ export interface ProjectMotifMark {
   statusCounts: MarkStatusCounts;
   parentTaskId: null;
   /** A few of the real tasks behind it, failures and running work first. */
-  samples: Array<{ taskId: string; title: string; status: string }>;
+  samples: Array<{ taskId: string; title: string; status: string; running?: boolean; queued?: boolean }>;
 }
 
 /**
@@ -104,6 +104,24 @@ export function markStatus(mark: ProjectGraphMark): string {
   if ((counts.IN_PROGRESS ?? 0) > 0) return 'IN_PROGRESS';
   if ((counts.OPEN ?? 0) > 0) return 'OPEN';
   return 'DONE';
+}
+
+/**
+ * A mark as the palette reads it: its status, plus the live run on it when it stands for one task.
+ *
+ * A task being worked on right now keeps `OPEN` in its row — nothing writes `IN_PROGRESS` at
+ * dispatch — so a node coloured from the status alone draws the one task somebody is watching as
+ * untouched. `getTaskDependencyVisualState` already knows what to do with the two live flags; this
+ * is what makes sure they reach it, on this canvas as on the task-rooted one.
+ *
+ * A fold has no single session, and needs none: the server counted its running tasks under
+ * `IN_PROGRESS`, so `markStatus` already reports a fold with work in flight as active.
+ */
+export function markLiveState(
+  mark: ProjectGraphMark,
+): { status: string; running?: boolean; queued?: boolean } {
+  if (mark.kind === 'TASK') return { status: mark.status, running: mark.running, queued: mark.queued };
+  return { status: markStatus(mark) };
 }
 
 /** Matches `.tdg-node` in index.css — the project graph reuses the task graph's node chrome. */
@@ -370,7 +388,7 @@ export function projectGraphOverview(layout: ProjectDependencyLayout): ProjectGr
   const maxX = Math.max(...units.map((unit) => unit.x + unit.width));
   const maxY = Math.max(...units.map((unit) => unit.y + unit.height));
   const unfinished = units.find(
-    (unit) => getTaskDependencyVisualState({ status: markStatus(unit.task) }) !== 'complete',
+    (unit) => getTaskDependencyVisualState(markLiveState(unit.task)) !== 'complete',
   );
   const frontier = unfinished ?? units[units.length - 1];
 
@@ -422,6 +440,8 @@ export function expandRunMarks(
         taskId: member.taskId,
         title: member.title,
         status: member.status,
+        running: member.running,
+        queued: member.queued,
         parentTaskId: run.parentTaskId,
       });
       if (index > 0) {

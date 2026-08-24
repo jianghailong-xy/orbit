@@ -484,8 +484,11 @@ export const decideApproval = (
     body: { behavior, message, answers, rememberRules },
   });
 
-/** Change a live session's model, permission mode and/or effort between turns. The
- *  runner re-spawns claude with --resume so the change takes effect on the next turn. */
+/** Change a live session's model, permission mode, effort and/or provider — mid-turn included.
+ *  Model and permission mode are handed to the running engine over its control channel and take
+ *  effect where the turn stands; effort and provider are spawn-only, so the runner re-spawns with
+ *  --resume once the turn ends and they take effect on the next one (`configPillHints` is the copy
+ *  that says which is which, and only the claude runtime has the control channel). */
 export const updateSessionConfig = (
   sessionId: string,
   config: { model?: string; permissionMode?: string; effort?: string; provider?: string },

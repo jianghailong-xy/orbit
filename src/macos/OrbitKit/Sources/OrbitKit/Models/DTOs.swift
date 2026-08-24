@@ -860,7 +860,12 @@ public struct ResumeRequest: Codable, Sendable {
     }
 }
 
-/// PATCH /sessions/:id/config — change model / permission-mode / effort mid-session.
+/// PATCH /sessions/:id/config — change model / permission-mode / effort / provider mid-session.
+///
+/// Mid-TURN too, for the first two: on the claude runtime the server hands model and permission
+/// mode to the resident engine over its control channel, so they take hold inside the turn that
+/// is already running. Effort and provider are decided when the process is built, so they wait for
+/// the re-spawn the server defers to the end of that turn (`ConsoleModel.applyConfig`).
 public struct ConfigUpdateRequest: Codable, Sendable {
     public let model: String?
     public let permissionMode: String?

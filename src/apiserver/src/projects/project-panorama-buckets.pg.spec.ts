@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
 import { NotFoundException } from '@nestjs/common';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
@@ -87,6 +87,30 @@ async function fixture(
     }
   }
   return { ownerId, projectId, ids };
+}
+
+/**
+ * A session on a task — the only place a dispatched run is written down.
+ *
+ * `Task.status` stays OPEN for the whole run (nothing writes IN_PROGRESS at dispatch), so a
+ * fixture built from statuses alone cannot tell whether the buckets know about live work.
+ */
+async function session(
+  db: PrismaClient,
+  ownerId: string,
+  taskId: string,
+  status: RunStatus,
+): Promise<void> {
+  await db.session.create({
+    data: {
+      ownerId,
+      creatorId: ownerId,
+      taskId,
+      title: `run of ${taskId}`,
+      prompt: 'do the thing',
+      status,
+    },
+  });
 }
 
 /** `count` tasks in one straight line, `first` depending on nothing. */
@@ -203,6 +227,45 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
           // which is OPEN and still owes the work — that one really is blocked.
           assert.deepEqual(buckets, { running: 0, ready: 1, blocked: 1, done: 0, cancelled: 1 });
         });
+
+      // ---- F: the dispatched work the status column does not carry ------------------------------
+      await t.test('a live session moves its task from ready into running', async () => {
+        const f = await fixture(db, 'live-f', {
+          dispatched: {},
+          waiting: {},
+          idle: {},
+          blocked: { dependsOn: ['idle'] },
+          finished: { status: TaskStatus.DONE },
+        });
+        // Every one of these rows stays OPEN: this is the state the header used to report as
+        // "0 running, 3 ready" while three agents were working, and then call stalled.
+        await session(db, f.ownerId, f.ids.dispatched, RunStatus.RUNNING);
+        await session(db, f.ownerId, f.ids.waiting, RunStatus.PENDING);
+        // A settled session says nothing about now; a re-run against finished work must not take
+        // it back out of `done`.
+        await session(db, f.ownerId, f.ids.idle, RunStatus.SUCCEEDED);
+        await session(db, f.ownerId, f.ids.finished, RunStatus.RUNNING);
+
+        const { buckets } = await projects.panorama(f.ownerId, f.projectId);
+
+        assert.deepEqual(buckets, { running: 2, ready: 1, blocked: 1, done: 1, cancelled: 0 });
+        const total = await db.task.count({ where: { projectId: f.projectId } });
+        assert.equal(
+          buckets.running + buckets.ready + buckets.blocked + buckets.done + buckets.cancelled,
+          total,
+          'the buckets still partition the project exactly once',
+        );
+      });
+
+      await t.test('a live session in another project does not colour this one', async () => {
+        const mine = await fixture(db, 'mine-f', { only: {} });
+        const theirs = await fixture(db, 'theirs-f', { only: {} });
+        await session(db, theirs.ownerId, theirs.ids.only, RunStatus.RUNNING);
+
+        const { buckets } = await projects.panorama(mine.ownerId, mine.projectId);
+
+        assert.deepEqual(buckets, { running: 0, ready: 1, blocked: 0, done: 0, cancelled: 0 });
+      });
 
       // ---- The size the deployment actually reaches --------------------------------------------
       await t.test('the recursive walk handles the largest real project (118 tasks)', async () => {

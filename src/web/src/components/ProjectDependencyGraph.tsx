@@ -65,7 +65,7 @@ import {
   expandRunMarks,
   layoutProjectDependencyGraph,
   markHeight,
-  markStatus,
+  markLiveState,
   markTaskCount,
   markWidth,
   projectGraphOverview,
@@ -135,12 +135,16 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
       <Link
         className="tdg-node-main nodrag nopan"
         to={`/tasks/${data.task.id}`}
-        aria-label={`${data.task.title}, ${taskStatusLabel(data.task.status)}`}
+        aria-label={`${data.task.title}, ${taskStatusLabel(data.task.status, data.task.running, data.task.queued)}`}
       >
         <span className="tdg-node-title-row">
           <span className="tdg-node-title">{data.task.title}</span>
         </span>
-        <TaskStatusPill status={data.task.status} />
+        <TaskStatusPill
+          status={data.task.status}
+          running={data.task.running}
+          queued={data.task.queued}
+        />
       </Link>
       {data.hasOutgoing && <Handle type="source" position={Position.Right} isConnectable={false} />}
     </div>
@@ -204,7 +208,7 @@ function MotifSamples({ mark }: { mark: ProjectMotifMark }) {
       {mark.samples.map((sample) => (
         <Link key={sample.taskId} className="pdg-fold-sample" to={`/tasks/${sample.taskId}`}>
           <span className="pdg-fold-sample-title">{sample.title}</span>
-          <TaskStatusPill status={sample.status} />
+          <TaskStatusPill status={sample.status} running={sample.running} queued={sample.queued} />
         </Link>
       ))}
     </div>
@@ -219,7 +223,7 @@ function MotifSamples({ mark }: { mark: ProjectMotifMark }) {
  */
 function FoldNode({ data }: NodeProps<FoldFlowNode>) {
   const mark = data.mark;
-  const state = getTaskDependencyVisualState({ status: markStatus(mark) });
+  const state = getTaskDependencyVisualState(markLiveState(mark));
   const count = markTaskCount(mark);
   const body = (
     <>
@@ -282,24 +286,29 @@ function FoldNode({ data }: NodeProps<FoldFlowNode>) {
 
 /** A parent task. Its subtasks are separate React Flow children positioned inside this frame. */
 function GroupNode({ data }: NodeProps<GroupFlowNode>) {
-  const state = getTaskDependencyVisualState({ status: markStatus(data.task) });
+  const live = markLiveState(data.task);
+  const state = getTaskDependencyVisualState(live);
   return (
     <div className={`pdg-group state-${state}`}>
       {data.hasIncoming && <Handle type="target" position={Position.Left} isConnectable={false} />}
       <Link
         className="pdg-group-header nodrag nopan"
         to={`/tasks/${data.task.id}`}
-        aria-label={`${data.task.title}, ${taskStatusLabel(markStatus(data.task))}, ${data.memberCount} subtask${data.memberCount === 1 ? '' : 's'}`}
+        aria-label={`${data.task.title}, ${taskStatusLabel(live.status, live.running, live.queued)}, ${data.memberCount} subtask${data.memberCount === 1 ? '' : 's'}`}
       >
         <span className="pdg-group-title">{data.task.title}</span>
-        <TaskStatusPill status={markStatus(data.task)} />
+        <TaskStatusPill status={live.status} running={live.running} queued={live.queued} />
       </Link>
       {data.hasOutgoing && <Handle type="source" position={Position.Right} isConnectable={false} />}
     </div>
   );
 }
 
-const NODE_TYPES = {
+/**
+ * Exported as well as handed to the canvas: what a mark SAYS is the whole point of this view, and
+ * a node component nothing can render is a node component nothing can assert on.
+ */
+export const NODE_TYPES = {
   projectDependencyTask: TaskNode,
   projectDependencyGroup: GroupNode,
   projectDependencyFold: FoldNode,
@@ -325,13 +334,10 @@ export function buildProjectFlowElements(
   const outgoing = new Set(layout.edges.map((edge) => edge.sourceMarkId));
   const stateById = new Map<string, TaskDependencyVisualState>();
   for (const group of layout.groups) {
-    stateById.set(group.task.id, getTaskDependencyVisualState({ status: markStatus(group.task) }));
+    stateById.set(group.task.id, getTaskDependencyVisualState(markLiveState(group.task)));
   }
   for (const placement of layout.placements) {
-    stateById.set(
-      placement.task.id,
-      getTaskDependencyVisualState({ status: markStatus(placement.task) }),
-    );
+    stateById.set(placement.task.id, getTaskDependencyVisualState(markLiveState(placement.task)));
   }
 
   const groupNodes: GroupFlowNode[] = layout.groups.map((group) => ({
@@ -569,7 +575,7 @@ function ProjectCanvas({
             const data = node.data as { mark?: ProjectGraphMark; task?: ProjectGraphMark };
             const mark = data.mark ?? data.task;
             if (!mark) return 'var(--brand-border)';
-            return EDGE_COLORS[getTaskDependencyVisualState({ status: markStatus(mark) })];
+            return EDGE_COLORS[getTaskDependencyVisualState(markLiveState(mark))];
           }}
         />
       )}

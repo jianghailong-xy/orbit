@@ -116,6 +116,48 @@ test('running and failed work is never folded away', () => {
   assert.equal(representedTaskCount(fold.marks), 100);
 });
 
+test('a live session is what says a task is running, not the row', () => {
+  // The state this test exists for: dispatch opens a Session and leaves `Task.status` at OPEN, so
+  // every one of these tasks reads as untouched in the column the graph used to draw from.
+  const { tasks, edges } = chain(100, (i) => (i < 40 ? TaskStatus.DONE : TaskStatus.OPEN));
+  tasks[40] = { ...tasks[40], running: true };
+  tasks[60] = { ...tasks[60], queued: true };
+
+  const fold = foldProjectGraph(tasks, edges);
+  const own = fold.marks.filter((mark) => mark.kind === 'TASK');
+  const running = own.find((mark) => mark.id === 't40');
+
+  assert.ok(running, 'the running task is its own mark, not folded into the stretch around it');
+  assert.equal(running.status, TaskStatus.OPEN, 'its row still says OPEN — that is the point');
+  assert.equal(running.running, true);
+  assert.equal(representedTaskCount(fold.marks), 100);
+
+  // A queued task is not pulled out of its fold — nothing is happening on it yet — but the flag
+  // rides onto the member, so opening the run does not lose it.
+  const queued = fold.marks
+    .flatMap((mark) => (mark.kind === 'RUN' ? mark.members : []))
+    .find((member) => member.taskId === 't60');
+  assert.ok(queued, 't60 stays inside a folded run');
+  assert.equal(queued.queued, true);
+  assert.equal(queued.running, false);
+});
+
+test('a folded mark counts a live run under running, not under open', () => {
+  const { tasks, edges } = batch(100, ['FineWeb', 'Merge'], () => TaskStatus.OPEN);
+  const dispatched = tasks.findIndex((one) => one.id === 'i7s1');
+  tasks[dispatched] = { ...tasks[dispatched], running: true };
+
+  const fold = foldProjectGraph(tasks, edges);
+  const merge = fold.marks.find((mark) => mark.kind === 'MOTIF' && mark.title.includes('Merge'));
+
+  assert.ok(merge && merge.kind === 'MOTIF');
+  assert.equal(merge.statusCounts.IN_PROGRESS, 1, 'the bar says one of these hundred is running');
+  assert.equal(merge.statusCounts.OPEN, 99);
+  // Which one, without opening a hundred tasks: running work sorts to the front of the samples.
+  assert.equal(merge.samples[0].taskId, 'i7s1');
+  assert.equal(merge.samples[0].running, true);
+});
+
 test('a run never crosses a parent boundary, so boxes still hold their own members', () => {
   const tasks = [
     task('boxA', 'Toolchain'),

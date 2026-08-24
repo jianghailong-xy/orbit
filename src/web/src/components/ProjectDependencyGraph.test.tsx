@@ -1,6 +1,15 @@
 // @vitest-environment jsdom
+import { ReactFlowProvider } from '@xyflow/react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { planProjectGraphViewport } from './ProjectDependencyGraph';
+import {
+  buildProjectFlowElements,
+  NODE_TYPES,
+  planProjectGraphViewport,
+  type ProjectFlowNode,
+} from './ProjectDependencyGraph';
+import { EDGE_COLORS } from './TaskDependencyGraph';
 import {
   expandRunMarks,
   layoutProjectDependencyGraph,
@@ -213,3 +222,120 @@ describe('folded marks', () => {
 });
 
 const zero = { DONE: 0, IN_PROGRESS: 0, FAILED: 0, CANCELLED: 0, OPEN: 0 };
+
+/**
+ * One node, drawn — the only way to assert what a mark SAYS rather than what it carries.
+ *
+ * The rest of this file is arithmetic over positions, which needs no renderer. What a reader is
+ * told about a task is not: a flag that reaches `data` and never reaches the pill is exactly the
+ * bug this describes, and it is invisible to an assertion on the node array.
+ */
+function drawNode(node: ProjectFlowNode): string {
+  const props = {
+    ...node,
+    selected: false,
+    isConnectable: false,
+    zIndex: 0,
+    positionAbsoluteX: node.position.x,
+    positionAbsoluteY: node.position.y,
+    dragging: false,
+    deletable: false,
+    draggable: false,
+    selectable: false,
+  };
+  const Node = NODE_TYPES[node.type] as (given: typeof props) => ReturnType<typeof MemoryRouter>;
+  // A node draws its own connection handles, and a handle reads React Flow's store.
+  return renderToStaticMarkup(
+    <MemoryRouter>
+      <ReactFlowProvider>
+        <Node {...props} />
+      </ReactFlowProvider>
+    </MemoryRouter>,
+  );
+}
+
+/**
+ * The live run on a task, drawn.
+ *
+ * A dispatched task keeps `OPEN` in its row — nothing writes `IN_PROGRESS` when a session starts —
+ * so a graph drawn from the status column alone shows the one task somebody is watching as
+ * untouched. These are the two flags that fix it, from the response through to the pill.
+ */
+describe('a task with a session on it', () => {
+  const oneTask = (over: Record<string, unknown>): ProjectDependencyGraphResponse => ({
+    marks: [
+      { kind: 'TASK', id: 't1', taskId: 't1', title: 'Clone the repo', status: 'OPEN', parentTaskId: null, ...over },
+      { kind: 'TASK', id: 't2', taskId: 't2', title: 'Report the result', status: 'OPEN', parentTaskId: null },
+    ],
+    edges: [{ sourceMarkId: 't1', targetMarkId: 't2' }],
+    taskCount: 2,
+    folded: false,
+    truncated: false,
+    limits: { maxTasks: 50_000, maxMarks: 500 },
+  });
+  const drawFirst = (over: Record<string, unknown>) => {
+    const elements = buildProjectFlowElements(layoutProjectDependencyGraph(oneTask(over)));
+    return {
+      html: drawNode(elements.nodes.find((node) => node.id === 't1')!),
+      edge: elements.edges[0],
+    };
+  };
+
+  it('says Running on the node while the row still says Open', () => {
+    const { html, edge } = drawFirst({ running: true });
+
+    expect(html).toContain('Running');
+    expect(html).not.toContain('Open');
+    // Screen readers read the label, not the pill, so it cannot keep saying Open either.
+    expect(html).toContain('aria-label="Clone the repo, Running"');
+    // And the line leaving it is the active one: an edge's state is its prerequisite's.
+    expect(edge.style?.stroke).toBe(EDGE_COLORS.active);
+  });
+
+  it('says Queued for a task waiting on a runner slot', () => {
+    const { html, edge } = drawFirst({ queued: true });
+
+    expect(html).toContain('Queued');
+    expect(html).not.toContain('Open');
+    expect(edge.style?.stroke).toBe(EDGE_COLORS.queued);
+  });
+
+  it('says Open when nothing is on it', () => {
+    const { html, edge } = drawFirst({});
+
+    expect(html).toContain('Open');
+    expect(html).not.toContain('Running');
+    expect(edge.style?.stroke).toBe(EDGE_COLORS.pending);
+  });
+
+  it('keeps the flags on the tasks a folded run gives way to', () => {
+    const graph: ProjectDependencyGraphResponse = {
+      marks: [
+        {
+          kind: 'RUN',
+          id: 'run:1',
+          title: '3 steps',
+          taskCount: 3,
+          statusCounts: { DONE: 1, IN_PROGRESS: 0, FAILED: 0, CANCELLED: 0, OPEN: 2 },
+          parentTaskId: null,
+          members: [
+            { taskId: 'm1', title: 'Step 1', status: 'DONE' },
+            { taskId: 'm2', title: 'Step 2', status: 'OPEN', queued: true },
+            { taskId: 'm3', title: 'Step 3', status: 'OPEN' },
+          ],
+          expandable: true,
+        },
+      ],
+      edges: [],
+      taskCount: 3,
+      folded: true,
+      truncated: false,
+      limits: { maxTasks: 50_000, maxMarks: 500 },
+    };
+
+    const opened = expandRunMarks(graph, new Set(['run:1']));
+    const queued = opened.marks.find((mark) => mark.id === 'm2');
+
+    expect(queued?.kind === 'TASK' && queued.queued).toBe(true);
+  });
+});

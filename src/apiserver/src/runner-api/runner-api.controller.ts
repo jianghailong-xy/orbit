@@ -543,6 +543,12 @@ export class RunnerApiController {
         // ROOT_REFUSED_PERMISSION_MODES). Omitted by a runner too old to report it, which keeps
         // the stored value — NULL there means "never told us" and stays unrestricted.
         runsAsRoot: dto?.runsAsRoot ?? undefined,
+        // The directory this machine clones into, under which a workspace created from a git URL
+        // gets its checkout. An empty string is treated as no report, exactly like the omission an
+        // older runner sends: NULL here means "this machine never told us where it clones", and
+        // the answer to that is to leave it off the clone targets — not to store a root nobody
+        // named and then write a checkout to it.
+        reposRoot: dto?.reposRoot || undefined,
         // Runtime-owned default snapshot. Omission means an older runner and preserves the
         // previous value; an explicit {} clears stale values so catalog/static fallback applies.
         runtimeDefaultModels:
@@ -1814,7 +1820,12 @@ export class RunnerApiController {
             AND (
               -- interrupt/end land immediately, even mid-message (interrupt is the point).
               -- diff is read-only and runtime-independent, so it may land while idle too.
-              (turn."kind" IN ('interrupt', 'end', 'diff')
+              -- setconfig is here for the same reason: model and permission mode are said to a
+              -- resident engine rather than built into it, so nothing about the frame needs the
+              -- engine to be idle, and waiting for it would be the whole delay this kind exists
+              -- to remove. Its spawn-only sibling reload stays gated below: that one really
+              -- does have to replace the process the running turn is executing in.
+              (turn."kind" IN ('interrupt', 'end', 'diff', 'setconfig')
                 AND (turn."status" = 'PENDING' OR (turn."status" = 'IN_FLIGHT' AND turn."lease_deadline_at" < now())))
               -- A reload is ordered between executable turns, but does not itself consume
               -- an active-turn slot. A cold runtime can leave it queued until the next claim.
@@ -1871,7 +1882,7 @@ export class RunnerApiController {
                   ))
                 ))
             )
-          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" IN ('reload', 'steer') THEN 1 ELSE 2 END), turn."seq" ASC
+          ORDER BY (CASE WHEN turn."kind" IN ('interrupt', 'end', 'diff') THEN 0 WHEN turn."kind" = 'setconfig' THEN 1 WHEN turn."kind" IN ('reload', 'steer') THEN 2 ELSE 3 END), turn."seq" ASC
           FOR UPDATE SKIP LOCKED
           LIMIT 1
         )

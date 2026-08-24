@@ -380,3 +380,70 @@ pgTest('a steer stranded by a dead runner is never handed to the next one', asyn
   assert.equal(await dequeue(), null);
   assert.equal((await readTurn('actually, call it gadget')).status, 'IN_FLIGHT');
 });
+
+// ── setconfig vs reload ─────────────────────────────────────────────────────────────
+//
+// A config PATCH used to queue one kind for four fields, so a model change made mid-turn
+// waited for the turn to end exactly as a provider switch did. The split is not a relaxed
+// gate: effort and provider are spawn-only, and holding a `reload` until the slot is empty
+// is the correct treatment for them. What follows asserts both directions, because either
+// one alone would be satisfied by a predicate that simply let everything through.
+
+pgTest('a setconfig lands mid-turn, while the reload of the same session waits', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
+  await addTurn(2, 'setconfig', 'PENDING', '{"model":"claude-haiku-4-5","permissionMode":"auto"}');
+
+  const first = await dequeue();
+  assert.equal(first?.kind, 'setconfig');
+  assert.equal((await readTurn('{"model":"claude-haiku-4-5","permissionMode":"auto"}')).status, 'IN_FLIGHT');
+});
+
+pgTest('a reload sent during the same running turn stays queued until that turn is over', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
+  await addTurn(2, 'reload', 'PENDING', '{"effort":"high"}');
+
+  // The control case for the test above. Re-spawning the process the running turn executes in
+  // is the abort this gate exists to prevent, so nothing is handed over yet.
+  assert.equal(await dequeue(), null);
+
+  await client.query(`UPDATE "conversation_turn" SET status = 'ANSWERED' WHERE kind = 'message'`);
+  assert.equal((await dequeue())?.kind, 'reload');
+});
+
+pgTest('a setconfig takes no slot: the message queued behind it still goes next', async () => {
+  await addTurn(1, 'setconfig', 'PENDING', '{"model":"claude-haiku-4-5","permissionMode":"auto"}');
+  await addTurn(2, 'message', 'PENDING', 'now do the thing under the new config');
+
+  // Ranked ahead of the message even though a message is deliverable right now…
+  assert.equal((await dequeue())?.kind, 'setconfig');
+  // …and the message follows on the very next poll, because the NOT EXISTS that gates it
+  // counts message/shell only. If setconfig occupied the slot, changing config would stall
+  // the turn it was changed for.
+  const second = await dequeue();
+  assert.equal(second?.kind, 'message');
+  assert.equal(second?.content, 'now do the thing under the new config');
+});
+
+pgTest('one patch that moved both halves is handed over setconfig first, reload after', async () => {
+  await addTurn(1, 'setconfig', 'PENDING', '{"model":"claude-haiku-4-5","permissionMode":"auto"}');
+  await addTurn(2, 'reload', 'PENDING', '{"model":"claude-haiku-4-5","permissionMode":"auto","provider":"byok"}');
+
+  assert.equal((await dequeue())?.kind, 'setconfig');
+  assert.equal((await dequeue())?.kind, 'reload');
+});
+
+pgTest('a setconfig abandoned by a dead runner is re-delivered, unlike a steer', async () => {
+  await addTurn(1, 'setconfig', 'IN_FLIGHT', '{"model":"claude-haiku-4-5"}', -60_000);
+
+  // Nothing was written into a turn by handing it over, so replaying it costs nothing and
+  // leaving it stranded would leave the engine on config the session no longer has.
+  assert.equal((await dequeue())?.kind, 'setconfig');
+});
+
+pgTest('an interrupt still overtakes a setconfig', async () => {
+  await addTurn(1, 'message', 'IN_FLIGHT', 'refactor everything', 60_000);
+  await addTurn(2, 'setconfig', 'PENDING', '{"model":"claude-haiku-4-5"}');
+  await addTurn(3, 'interrupt', 'PENDING', '');
+
+  assert.equal((await dequeue())?.kind, 'interrupt');
+});

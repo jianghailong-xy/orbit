@@ -20,6 +20,11 @@ import { api } from '../api';
  *  3. **A stalled banner.** Rendered only when `ready > 0 && running === 0` — work that could
  *     start and nothing starting it — carrying the dispatch ledger's own account of why.
  *
+ * `Running` counts a task with a LIVE SESSION on it, not one whose row says IN_PROGRESS: dispatch
+ * never writes that column (see `project-panorama.ts`). Which is what the cell's own footnote has
+ * always claimed, and is what keeps the banner below from calling a project with three agents
+ * working on it stalled.
+ *
  * FETCHES ITS OWN DATA, deliberately: it is mounted next to four other cards that each read a
  * different endpoint, and a header that took its numbers as props would make the page decide when
  * to poll for a card it does not otherwise know anything about. It takes the project id and

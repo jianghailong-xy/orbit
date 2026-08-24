@@ -346,6 +346,11 @@ export interface RunnerHeartbeatRequest {
    *  ROOT_REFUSED_PERMISSION_MODES). Absent on older runners, which are left unrestricted —
    *  an unknown must not withdraw a mode that works. */
   runsAsRoot?: boolean;
+  /** Root directory this machine clones repositories into: a clone of `<owner>/<repo>` lands at
+   *  `<reposRoot>/<owner>-<repo>`. Absent on older runners, which leaves the stored value NULL —
+   *  and a machine with no reported root is not offered as a clone target at all, rather than
+   *  having one guessed for it. */
+  reposRoot?: string;
 }
 
 /** What the runner saw at one agent's working directory. Reported from the runner's own disk,
@@ -422,6 +427,46 @@ export interface RunnerRepoCleanupResult {
   message?: string;
 }
 
+/** Control plane → runner: clone `repoUrl` onto this machine for the workspace waiting on it.
+ *
+ *  No path travels with it: the checkout lands at `<reposRoot>/<owner>-<repo>`, derived by the
+ *  runner from the URL, because the repos root is that machine's own fact. No credential travels
+ *  with it either — the clone runs with whatever git credentials the machine already has (ssh key,
+ *  credential helper, gh auth), and Orbit stores no token to send.
+ *
+ *  Redelivered every heartbeat until the control plane records an outcome. Acting on it twice is
+ *  safe: the second run finds a checkout of this same remote where it would have cloned, and
+ *  reports it reused. */
+export interface CloneCommand {
+  workspaceId: string;
+  repoUrl: string;
+  /** When the user asked, echoed back for log correlation. */
+  requestedAt?: string;
+}
+
+/** Runner → control plane: how the clone went (POST /runner/clone-result).
+ *
+ *  `path` and `defaultBranch` are what the workspace is then configured from — reported rather
+ *  than assumed, since the control plane chose neither. */
+export interface RunnerCloneResult {
+  workspaceId: string;
+  status: 'done' | 'failed';
+  /** Where the checkout actually is. */
+  path?: string;
+  /** The remote's own default branch, read from what the clone recorded for it. Absent for a
+   *  repository with no commits yet, which has no default branch to report. */
+  defaultBranch?: string;
+  /** The directory already held a checkout of this same remote, so nothing was cloned. */
+  reused?: boolean;
+  /** Git's own stderr, byte for byte. Never parsed, summarized or rewritten anywhere between the
+   *  machine and the screen: the runner is the only thing that can see this machine's credentials
+   *  and network, and a translation of git's message is the layer that eventually explains the
+   *  wrong problem. Absent for a failure git never saw (an unusable URL, an unwritable repos
+   *  root) — `message` carries those, plus what is in the way when the directory is occupied. */
+  stderr?: string;
+  message?: string;
+}
+
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
  *  the same snapshot at turn boundaries). */
 export interface SessionLiveState {
@@ -490,6 +535,10 @@ export interface RunnerHeartbeatResponse {
   /** A checkout repair the user started after seeing it reported wedged. Absent on older control
    *  planes, and whenever no repair is in flight for this runner. */
   repoCleanupRequest?: RepoCleanupCommand;
+  /** Repositories to clone on this machine, one per workspace created from a git URL that is
+   *  still waiting for its checkout. Absent on older control planes (an older runner ignores the
+   *  field → the workspace stays CLONING until its runner is upgraded). */
+  cloneRequests?: CloneCommand[];
 }
 
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */
@@ -841,6 +890,18 @@ export interface ApprovalDecisionResponse {
 // 'reload' carries no user text: it tells the runner the session's model /
 // permission-mode changed, so it should re-spawn claude with --resume + the new
 // flags (full context preserved). The new config rides in the turn's `content` JSON.
+// It is reserved for the SPAWN-ONLY half of a config change — effort and provider are
+// process-construction facts, so the only way to apply them is to build a new process.
+// 'setconfig' is the other half: model and permission mode are things a resident engine
+// can be told, so this asks the runner to say them over the live session instead of
+// tearing it down. Same payload shape, minus the spawn-only fields. It is deliverable
+// mid-turn for the same reason interrupt is — nothing about it needs the engine to be
+// idle — and like reload it occupies no in-flight slot. When one PATCH moves both halves
+// the server queues both, setconfig first, so the re-spawn that follows carries every
+// new flag rather than re-doing what the control frame just did. Filed for the claude
+// runtime alone: the other runtimes' session loops have no arm for the kind (codex and
+// kimi are driven over ACP/JSON-RPC, opencode runs one process per turn), so one sent
+// there would be acked on delivery and applied by nobody. They keep the reload.
 // 'diff' is a fire-and-forget control turn (no text, no claude): it asks the runner to
 // recompute the live worktree diff and push it back, so an opened file's diff reflects
 // the current worktree even when the stored snapshot lagged (the heartbeat refreshes the
@@ -852,7 +913,15 @@ export interface ApprovalDecisionResponse {
 // It is deliberately its own kind rather than a relaxation of the message gate — a steer
 // neither occupies the single in-flight slot nor waits for it, and it settles its own turn
 // on the engine's echo rather than on a `result`, which belongs to the turn it joined.
-export type ConversationTurnKind = 'message' | 'interrupt' | 'end' | 'reload' | 'shell' | 'diff' | 'steer';
+export type ConversationTurnKind =
+  | 'message'
+  | 'interrupt'
+  | 'end'
+  | 'reload'
+  | 'setconfig'
+  | 'shell'
+  | 'diff'
+  | 'steer';
 
 /** An attachment as handed to the runner on the inbox: the id to fetch its bytes with
  *  (runner-scoped `GET /runner/sessions/:id/attachments/:attId`), its MIME type, and the

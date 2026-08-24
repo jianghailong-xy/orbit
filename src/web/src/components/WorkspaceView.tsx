@@ -88,6 +88,7 @@ import {
   newSessionEffortForProvider,
   normalizeEffortForProvider,
   providerIdentityResolved,
+  runtimeForProvider,
   supportsAuto,
 } from '../lib/workspaceDefaults';
 import {
@@ -105,6 +106,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
+import { configPillHints } from '../lib/configApply';
 import {
   decideContextSeed,
   dirtyContextSeed,
@@ -4049,10 +4051,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [shownProvider, shownProviderIsBuiltin, shownModel, runner.runsAsRoot],
   );
   const shownModeSemantics = permissionSemanticsFor(shownMode);
-  // Model, Mode & Effort can be changed any time on a live session (the runner must be
-  // online to act on it). A change made mid-turn doesn't abort the running turn: the
-  // server defers the re-spawn until the turn finishes, so it applies on the next turn —
-  // same as a queued message. When not live they're freely editable (pre-session config).
+  // Model, Mode, Effort & Provider can be changed any time on a live session (the runner must be
+  // online to act on it), and none of them aborts the running turn. WHEN the change lands is no
+  // longer one answer for all four, so it is derived per field rather than stated here — see
+  // `configPillHints`: model and permission mode reach the running engine over its control
+  // channel, effort and provider wait for the re-spawn the inbox defers to the end of the turn.
+  // When not live they're freely editable (pre-session config).
   // Workspace stays fixed once the session exists (it's never re-assigned on resume).
   const configEditable = selectedTrashed || selectedMissing ? false : live ? runner.online : true;
   // An existing session's workspace is fixed (live or recycled/terminal); only a brand-new
@@ -4068,15 +4072,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     lockedWorkspace?.name;
   // Per-control hints derived from the same state that drives enable/disable, so the help
   // can't drift from behaviour (this used to be one hard-coded paragraph on the whole row).
-  // Empty string = no tooltip, which keeps idle controls free of hover noise.
+  // One table for the four config pills: what each controls, why it's unavailable when it is,
+  // and — since the answer differs per field — when a change to it actually takes effect.
   const composerDisabled = selectedTrashed || selectedMissing;
-  const configHint = selectedTrashed
-    ? 'Restore this session before changing settings'
-    : selectedMissing
-      ? 'Session not found'
-      : live && !runner.online
-        ? 'Runner offline — cannot change this now'
-        : '';
+  const configHints = configPillHints({
+    live,
+    runnerOnline: !!runner.online,
+    trashed: selectedTrashed,
+    missing: selectedMissing,
+    // The runtime, never the slug: a configured (BYOK) identity borrows one, and until the
+    // provider list has answered it borrows an unknown, which promises nothing.
+    runtime: shownProviderCapabilitiesResolved
+      ? runtimeForProvider(shownProvider, configuredProviders)
+      : undefined,
+    permissionNote: shownModeSemantics?.note,
+  });
   // Switching session leaves whatever history recall was in progress; reset the cursor
   // so the next Up starts fresh from the (per-session) history.
   useEffect(() => {
@@ -5496,10 +5506,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {/* Tooltip wraps the span (not the Select): a disabled Select has no pointer
               events, so the parent span is what surfaces the reason on hover. With the
               icons gone, the tooltip also names what each pill controls. */}
-          <Tooltip
-            title={configHint || shownModeSemantics?.note || 'Permission mode'}
-            open={hoverTipOpen}
-          >
+          <Tooltip title={configHints.permissionMode} open={hoverTipOpen}>
             <span className="composer-pill">
               <Select
                 size="small"
@@ -5546,7 +5553,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           </Tooltip>
           <span className="composer-pill-spacer" />
           {providerSwitchChoices.length > 1 && (
-            <Tooltip title={configHint || 'Provider'} open={hoverTipOpen}>
+            <Tooltip title={configHints.provider} open={hoverTipOpen}>
               <span className="composer-pill">
                 <Select
                   size="small"
@@ -5640,14 +5647,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               </span>
             </Tooltip>
           )}
-          <Tooltip
-            title={
-              !shownProviderCapabilitiesResolved
-                ? 'Model will be resolved from the provider default'
-                : configHint || 'Model'
-            }
-            open={hoverTipOpen}
-          >
+          <Tooltip title={configHints.model} open={hoverTipOpen}>
             <span className="composer-pill">
               <Select
                 size="small"
@@ -5693,7 +5693,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               />
             </span>
           </Tooltip>
-          <Tooltip title={configHint || 'Reasoning effort'} open={hoverTipOpen}>
+          <Tooltip title={configHints.effort} open={hoverTipOpen}>
             <span className="composer-pill">
               <Select
                 size="small"

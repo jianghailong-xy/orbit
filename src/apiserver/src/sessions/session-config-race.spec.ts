@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SessionsService } from './sessions.service';
 
-test('config update seeds the prompt before reload when claim just changed PENDING to RUNNING', async () => {
+test('config update seeds the prompt before the control turn when claim just changed PENDING to RUNNING', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   const ownerId = '22222222-2222-4222-8222-222222222222';
   const turns: Array<{ kind: string; content?: string; seq: number }> = [];
@@ -13,7 +13,7 @@ test('config update seeds the prompt before reload when claim just changed PENDI
     $queryRaw: async () => [{ id }],
     session: {
       // The claim committed before updateConfig acquired its row lock, so the locked read sees
-      // RUNNING and must queue a reload instead of relying on the claim path.
+      // RUNNING and must queue a control turn instead of relying on the claim path.
       findUniqueOrThrow: async () => ({
         id,
         ownerId,
@@ -52,6 +52,9 @@ test('config update seeds the prompt before reload when claim just changed PENDI
     ok: true,
   });
   assert.equal(turns.length, 2);
+  // The seeding ORDER is what this asserts. Which control turn follows the prompt is the codex
+  // fixture's own answer: that runtime has no control frame to be told a model on, so its config
+  // rides a re-spawn — the same reload it queued before the kinds were split.
   assert.deepEqual(
     turns.map(({ kind, seq }) => ({ kind, seq })),
     [
@@ -64,11 +67,11 @@ test('config update seeds the prompt before reload when claim just changed PENDI
   assert.equal(inboxWakes, 1);
 });
 
-test('a live model change persists and reloads the normalized permission pair', async () => {
+test('a live model change persists and hands the runner the normalized permission pair', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   const ownerId = '22222222-2222-4222-8222-222222222222';
   let updatedData: Record<string, unknown> = {};
-  const reloads: Array<{ content?: string }> = [];
+  const controlTurns: Array<{ content?: string }> = [];
   const tx = {
     $queryRaw: async () => [{ id }],
     session: {
@@ -94,7 +97,7 @@ test('a live model change persists and reloads the normalized permission pair', 
       findUnique: async () => null,
       findFirst: async () => null,
       create: async ({ data }: { data: { content?: string } }) => {
-        reloads.push(data);
+        controlTurns.push(data);
         return { id: '33333333-3333-4333-8333-333333333333', ...data };
       },
       count: async () => 0,
@@ -113,7 +116,7 @@ test('a live model change persists and reloads the normalized permission pair', 
 
   assert.equal(updatedData.model, 'claude-haiku-4-5');
   assert.equal(updatedData.permissionMode, 'default');
-  assert.deepEqual(JSON.parse(reloads[0].content ?? '{}'), {
+  assert.deepEqual(JSON.parse(controlTurns[0].content ?? '{}'), {
     model: 'claude-haiku-4-5',
     permissionMode: 'default',
   });
@@ -126,7 +129,7 @@ test('concurrent partial config patches serialize without restoring a stale mode
     model: 'claude-opus-5',
     permissionMode: 'auto',
   };
-  const reloads: Array<{ content?: string }> = [];
+  const controlTurns: Array<{ content?: string }> = [];
   let sequence = 0;
   const tx = {
     $queryRaw: async () => [{ id }],
@@ -154,7 +157,7 @@ test('concurrent partial config patches serialize without restoring a stale mode
       findFirst: async () => (sequence ? { seq: sequence } : null),
       create: async ({ data }: { data: { content?: string; seq: number } }) => {
         sequence = data.seq;
-        reloads.push(data);
+        controlTurns.push(data);
         return { id: `turn-${sequence}`, ...data };
       },
       count: async () => 0,
@@ -193,6 +196,6 @@ test('concurrent partial config patches serialize without restoring a stale mode
     model: 'claude-haiku-4-5',
     permissionMode: 'default',
   });
-  assert.equal(reloads.length, 2);
-  assert.deepEqual(JSON.parse(reloads[1].content ?? '{}'), state);
+  assert.equal(controlTurns.length, 2);
+  assert.deepEqual(JSON.parse(controlTurns[1].content ?? '{}'), state);
 });

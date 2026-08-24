@@ -14,6 +14,23 @@ export interface RetryEvent {
 }
 
 /**
+ * The user event a retry re-sends: the latest one that carries text.
+ *
+ * Exposed next to the text because a message is not only its words — the images sent with it
+ * hang off the turn that carried it, and the server needs THIS event to find them. Choosing the
+ * text here and the attachments from anywhere else is how a retry ends up re-sending one
+ * message's words under another message's screenshot.
+ */
+export function lastUserMessage<T extends RetryEvent>(events: T[]): T | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type !== 'user') continue;
+    const text = (events[i].payload as { text?: unknown } | undefined)?.text;
+    if (typeof text === 'string' && text.trim()) return events[i];
+  }
+  return undefined;
+}
+
+/**
  * The message a retry should re-send: the latest user message in the stream.
  *
  * Falls back to the session's opening prompt only on a first run (`numTurns === 0`), where
@@ -26,11 +43,8 @@ export function lastUserMessageText(
   openingPrompt?: string | null,
   numTurns?: number,
 ): string {
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].type !== 'user') continue;
-    const text = (events[i].payload as { text?: unknown } | undefined)?.text;
-    if (typeof text === 'string' && text.trim()) return text;
-  }
+  const text = (lastUserMessage(events)?.payload as { text?: string } | undefined)?.text;
+  if (text) return text;
   return numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '';
 }
 

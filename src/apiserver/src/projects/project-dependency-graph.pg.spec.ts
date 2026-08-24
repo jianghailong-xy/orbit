@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
-import { CreatorType, PrismaClient, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 import { PrismaService } from '../prisma/prisma.service';
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -94,10 +94,34 @@ async function project(
   return { ownerId, projectId, ids };
 }
 
+/**
+ * A session on a task, which is the only place a dispatched run is written down.
+ *
+ * `Task.status` stays OPEN through a whole run — nothing writes IN_PROGRESS at dispatch — so a
+ * fixture that only sets statuses cannot tell whether the graph knows about live work at all.
+ */
+async function session(
+  db: PrismaClient,
+  ownerId: string,
+  taskId: string,
+  status: RunStatus,
+): Promise<void> {
+  await db.session.create({
+    data: {
+      ownerId,
+      creatorId: ownerId,
+      taskId,
+      title: `run of ${taskId}`,
+      prompt: 'do the thing',
+      status,
+    },
+  });
+}
+
 async function emptyWorld(client: Client): Promise<void> {
   await verifyCoordinatorPgIdentity(client);
   await client.query(`
-    TRUNCATE "task_dependency", "task", "project", "user" RESTART IDENTITY CASCADE
+    TRUNCATE "session", "task_dependency", "task", "project", "user" RESTART IDENTITY CASCADE
   `);
 }
 
@@ -176,6 +200,35 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
       // Membership is a field on a node and never a row in `edges`: the client draws a box from
       // this, and an edge here would be a line meaning "is part of".
       assert.deepEqual(graph.edges, []);
+    });
+
+    await t.test('reports the run on a task, which the status column does not', async () => {
+      const fixture = await project(db, 'live', { dispatched: {}, waiting: {}, done: {}, idle: {} });
+      // The same owner's next project, also running: a flag that leaked across this boundary would
+      // put a spinner on a task nobody dispatched.
+      const neighbour = await project(db, 'neighbour', { theirs: {} }, { ownerId: fixture.ownerId });
+      await session(db, fixture.ownerId, fixture.ids.dispatched, RunStatus.RUNNING);
+      await session(db, fixture.ownerId, fixture.ids.waiting, RunStatus.PENDING);
+      await session(db, fixture.ownerId, neighbour.ids.theirs, RunStatus.RUNNING);
+      // A finished session says nothing about now. (A task cannot carry a live PENDING and a live
+      // RUNNING at once — `session_task_execution_claim_idx` refuses the second — so the pair the
+      // flags disambiguate is unreachable here by construction.)
+      await session(db, fixture.ownerId, fixture.ids.done, RunStatus.SUCCEEDED);
+
+      const graph = await service.dependencyGraph(fixture.ownerId, fixture.projectId);
+      const byId = new Map(graph.marks.map((mark) => [mark.id, mark]));
+      const state = (name: string) => {
+        const mark = byId.get(fixture.ids[name]);
+        assert.ok(mark && mark.kind === 'TASK');
+        // Every one of these rows is OPEN: that is the whole reason the flags have to exist.
+        assert.equal(mark.status, TaskStatus.OPEN, `${name} was never written IN_PROGRESS`);
+        return { running: mark.running, queued: mark.queued };
+      };
+
+      assert.deepEqual(state('dispatched'), { running: true, queued: false });
+      assert.deepEqual(state('waiting'), { running: false, queued: true });
+      assert.deepEqual(state('done'), { running: false, queued: false });
+      assert.deepEqual(state('idle'), { running: false, queued: false });
     });
 
     await t.test('answers an empty project with an empty graph rather than an error', async () => {

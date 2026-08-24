@@ -44,12 +44,30 @@ import { TaskStatus } from '@prisma/client';
  *     working without knowing folding happened.
  */
 
-/** A task as this module needs it: identity, what it says, where it stands, whose child it is. */
+/**
+ * A task as this module needs it: identity, what it says, where it stands, whose child it is —
+ * and whether a session is on it right now.
+ *
+ * `running` / `queued` are the LIVE reading (a RUNNING / PENDING Session), which is a different
+ * fact from `status`: nothing writes `IN_PROGRESS` when a run is dispatched, so a task being
+ * worked on this second is `OPEN` in its row and stays `OPEN` here. The task list and the
+ * task-rooted graph have always carried these two flags alongside the status for that reason, and
+ * a project graph that reads the column alone is the one view in the app that draws running work
+ * as untouched.
+ */
 export interface FoldTask {
   id: string;
   title: string;
   status: TaskStatus;
   parentTaskId: string | null;
+  running?: boolean;
+  queued?: boolean;
+}
+
+/** The live half of a task, carried onto every mark that names one. */
+export interface LiveTaskState {
+  running: boolean;
+  queued: boolean;
 }
 
 /** Prerequisite → dependent, the direction the arrows are drawn in. */
@@ -61,7 +79,7 @@ export interface FoldEdge {
 export type MarkStatusCounts = Record<TaskStatus, number>;
 
 /** One task, drawn as itself. */
-export interface TaskMark {
+export interface TaskMark extends LiveTaskState {
   kind: 'TASK';
   id: string;
   taskId: string;
@@ -78,7 +96,7 @@ export interface RunMark {
   taskCount: number;
   statusCounts: MarkStatusCounts;
   parentTaskId: string | null;
-  members: Array<{ taskId: string; title: string; status: TaskStatus }>;
+  members: Array<{ taskId: string; title: string; status: TaskStatus } & LiveTaskState>;
   /** False when the run is longer than one response carries its members for. */
   expandable: boolean;
 }
@@ -93,7 +111,7 @@ export interface MotifMark {
   statusCounts: MarkStatusCounts;
   parentTaskId: null;
   /** A few real tasks behind the mark, failures and running work first. */
-  samples: Array<{ taskId: string; title: string; status: TaskStatus }>;
+  samples: Array<{ taskId: string; title: string; status: TaskStatus } & LiveTaskState>;
 }
 
 export type ProjectGraphMark = TaskMark | RunMark | MotifMark;
@@ -148,6 +166,27 @@ const isSettled = (status: TaskStatus) =>
 /** Work the picture must never fold away, wherever it sits. */
 const demandsAttention = (status: TaskStatus) =>
   status === TaskStatus.IN_PROGRESS || status === TaskStatus.FAILED;
+
+/**
+ * The status a mark reports for a task: a live run wins over the stored lifecycle.
+ *
+ * A dispatched task keeps `OPEN` in its row — nothing writes `IN_PROGRESS` at dispatch — so
+ * reading the column alone folds the one task somebody is watching into a run of untouched steps
+ * and counts it under "open" in the bar. Everywhere else in the app the live session wins
+ * (`TasksService.withRunning`, the task list's pill), and this is that same rule, applied where
+ * the fold makes its decisions.
+ *
+ * Only `running` promotes. `queued` stays where it is: a task waiting for a runner slot has
+ * nothing to look at yet, and the frontier rule below already keeps the next unfinished task of
+ * every component drawn as itself.
+ */
+const liveStatus = (task: FoldTask): TaskStatus =>
+  task.running ? TaskStatus.IN_PROGRESS : task.status;
+
+const live = (task: FoldTask): LiveTaskState => ({
+  running: !!task.running,
+  queued: !!task.queued,
+});
 
 /**
  * A title with its varying part taken out, so two instances of one motif read as one thing.
@@ -303,7 +342,7 @@ export function foldProjectGraph(
     if (components.size < options.motifMinInstances) continue;
     motifIndex += 1;
     const statusCounts = ZERO_COUNTS();
-    for (const task of group) statusCounts[task.status] += 1;
+    for (const task of group) statusCounts[liveStatus(task)] += 1;
     const mark: MotifMark = {
       kind: 'MOTIF',
       id: `motif:${motifIndex}`,
@@ -315,9 +354,9 @@ export function foldProjectGraph(
       // Failures first, then running work: a motif mark is opened to find out which instance
       // broke, and an arbitrary six of six thousand answers a question nobody asked.
       samples: [...group]
-        .sort((a, b) => sampleRank(a.status) - sampleRank(b.status))
+        .sort((a, b) => sampleRank(liveStatus(a)) - sampleRank(liveStatus(b)))
         .slice(0, options.maxMotifSamples)
-        .map((task) => ({ taskId: task.id, title: task.title, status: task.status })),
+        .map((task) => ({ taskId: task.id, title: task.title, status: task.status, ...live(task) })),
     };
     motifByTitle.set(title, mark);
     marks.push(mark);
@@ -332,7 +371,7 @@ export function foldProjectGraph(
     out: (outgoing.get(id) ?? []).length,
   });
   const foldable = (task: FoldTask) => {
-    if (frontierIds.has(task.id) || demandsAttention(task.status) || boxIds.has(task.id)) {
+    if (frontierIds.has(task.id) || demandsAttention(liveStatus(task)) || boxIds.has(task.id)) {
       return false;
     }
     const degree = degreeOf(task.id);
@@ -425,13 +464,14 @@ function taskMark(task: FoldTask): TaskMark {
     title: task.title,
     status: task.status,
     parentTaskId: task.parentTaskId,
+    ...live(task),
   };
 }
 
 function runMark(id: string, run: FoldTask[], options: FoldOptions): RunMark {
   const statusCounts = ZERO_COUNTS();
-  for (const task of run) statusCounts[task.status] += 1;
-  const settled = run.every((task) => isSettled(task.status));
+  for (const task of run) statusCounts[liveStatus(task)] += 1;
+  const settled = run.every((task) => isSettled(liveStatus(task)));
   return {
     kind: 'RUN',
     id,
@@ -443,6 +483,7 @@ function runMark(id: string, run: FoldTask[], options: FoldOptions): RunMark {
       taskId: task.id,
       title: task.title,
       status: task.status,
+      ...live(task),
     })),
     expandable: run.length <= options.maxRunMembers,
   };
@@ -465,7 +506,7 @@ function frontiersOf(
 ): Set<string> {
   const first = new Map<string, FoldTask>();
   for (const task of loose) {
-    if (isSettled(task.status)) continue;
+    if (isSettled(liveStatus(task))) continue;
     const component = componentOf.get(task.id)!;
     const held = first.get(component);
     if (!held || (rank.get(task.id) ?? 0) < (rank.get(held.id) ?? 0)) first.set(component, task);
