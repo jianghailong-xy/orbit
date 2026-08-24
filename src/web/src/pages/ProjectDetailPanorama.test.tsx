@@ -454,7 +454,7 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     expect(countOf('aria-label="Chain progress"')).toBe(1);
   });
 
-  it('previews a long goal compactly and expands the same Markdown in place', async () => {
+  it('shows a long goal in full by default and lets the same Markdown collapse in place', async () => {
     const longGoal = [
       '## Outcome',
       '',
@@ -471,9 +471,9 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
     const toggle = card?.querySelector<HTMLButtonElement>('.project-goal-toggle');
 
     expect(card).not.toBeNull();
-    expect(content?.classList.contains('is-collapsed')).toBe(true);
-    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
-    expect(toggle?.textContent).toContain('Show details');
+    expect(content?.classList.contains('is-collapsed')).toBe(false);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle?.textContent).toContain('Hide details');
     // It remains real Markdown rather than a second plain-text excerpt.
     expect(card?.querySelector('h2')?.textContent).toBe('Outcome');
     expect(card?.querySelectorAll('li')).toHaveLength(2);
@@ -482,9 +482,9 @@ describe('ProjectDetailPage — the panorama, assembled', { timeout: 20_000 }, (
       toggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(content?.classList.contains('is-collapsed')).toBe(false);
-    expect(toggle?.getAttribute('aria-expanded')).toBe('true');
-    expect(toggle?.textContent).toContain('Hide details');
+    expect(content?.classList.contains('is-collapsed')).toBe(true);
+    expect(toggle?.getAttribute('aria-expanded')).toBe('false');
+    expect(toggle?.textContent).toContain('Show details');
     expect(countOf('Eliminate memory growth')).toBe(1);
   });
 

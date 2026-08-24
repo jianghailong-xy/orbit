@@ -7,9 +7,9 @@ import remarkGfm from 'remark-gfm';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 
 /**
- * A goal can be a one-line sentence or a small project brief. Keep the sentence visible without
- * making every visit start below the fold; anything likely to occupy more than the card's three
- * preview lines gets an explicit, accessible way to reveal the complete Markdown in place.
+ * A goal can be a one-line sentence or a small project brief. Show the complete brief on first
+ * reading; anything likely to occupy more than three lines gets an explicit, accessible way to
+ * collapse it in place when the reader has already absorbed it.
  *
  * This is deliberately a content hint rather than a DOM measurement. The control is present on
  * the first/server render, so it neither pops into the page after hydration nor disappears from
@@ -20,7 +20,7 @@ export function goalNeedsExpansion(goal: string): boolean {
 }
 
 export function ProjectGoalCard({ goal }: { goal?: string | null }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const headingId = useId();
   const contentId = useId();
   const body = goal?.trim();

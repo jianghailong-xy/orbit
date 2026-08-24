@@ -9182,9 +9182,9 @@ html[data-theme='dark'] .session-tag-chip {
   margin-inline-end: 0;
 }
 
-/* A project's stable purpose precedes the live work account. Long Markdown is kept in the DOM in
-   full, but the first reading is a compact three-line window; expanding changes only the window,
-   so links, lists and code keep the same rendering rather than switching between two copies. */
+/* A project's stable purpose precedes the live work account. Long Markdown is complete by default
+   and can be collapsed to a three-line window after reading; the window changes in place, so
+   links, lists and code keep the same rendering rather than switching between two copies. */
 .project-goal-card {
   margin-bottom: 14px;
   padding: 15px 18px 16px;
