@@ -15,12 +15,18 @@ import { ProjectFilingBanner } from '../components/ProjectFilingBanner';
 import { ProjectReopenControl } from '../components/ProjectReopenControl';
 import { ProjectSections } from '../components/ProjectSections';
 import {
+  BucketMeter,
+  Glyph,
+  PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
 import { ProjectsToolbar, type ProjectFilter } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
 import { markdownToPlainText } from '../lib/markdownText';
+// The one relative-time spelling this app already exports. A row that says "3h ago" and a runner
+// page that says "3h ago" should not be two functions that agree by coincidence.
+import { ago } from '../lib/runnerEngines';
 import {
   attentionChipOf,
   projectAttentionSections,
@@ -293,8 +299,18 @@ export function ProjectsPage() {
                     </div>
                     <div className="project-row-goal">{goal}</div>
                   </div>
-                  <div className="project-row-count">
-                    {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
+                  <ProjectRowMeter buckets={p.buckets} />
+                  {/* Furthest right, and the smaller of the two: when the project last moved is
+                      what orders a list by attention, and how many tasks it holds is scale — kept
+                      because a 6-blocked project and a 6,118-blocked one are not the same project,
+                      and demoted because it was never the number to act on. */}
+                  <div className="project-row-when">
+                    <span className="project-row-activity">
+                      {p.lastActivityAt ? ago(p.lastActivityAt, now) : 'No activity'}
+                    </span>
+                    <span className="project-row-count">
+                      {p._count.tasks.toLocaleString('en-US')} task{p._count.tasks === 1 ? '' : 's'}
+                    </span>
                   </div>
                 </Link>
               </List.Item>
@@ -302,6 +318,42 @@ export function ProjectsPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Where one project's work stands, as a 6px bar and the four figures behind it.
+ *
+ * Everything about the buckets — which four, in what order, which shape and which token — comes
+ * from `PANORAMA_BUCKETS`, the table the project page's own header is drawn from. Not copied:
+ * imported, so a bucket that is amber there cannot be anything else here, and the meter is that
+ * page's `BucketMeter` at a row's height rather than a second bar that agrees for now.
+ *
+ * COLOUR IS NOT CARRYING ANY OF THIS ALONE. Amber `--warning-solid` and neutral `--text-3` sit at
+ * 2.32:1 and 2.94:1 against the row's background — below the 3:1 a non-text channel needs — so
+ * each bucket brings its shape and its number too, and the bar, which has room for neither, spells
+ * all four numbers into its `aria-label`.
+ *
+ * A bucket at zero draws no segment and prints no figure: this list is read to find the project
+ * that is stuck, and a zero drawn as a hairline of colour is the value hardest to un-see.
+ */
+function ProjectRowMeter({ buckets }: { buckets: ProjectPanoramaBuckets }) {
+  return (
+    <div className="project-row-meter">
+      <BucketMeter buckets={buckets} height={6} />
+      {/* `aria-hidden` because the bar directly above already reads out all four numbers, named:
+          this line is the same fact for the eye, and a screen reader should hear it once. The
+          shape is what tells a reader which bucket a figure belongs to, and `title` names it for
+          a pointer. */}
+      <div className="project-row-buckets" aria-hidden="true">
+        {PANORAMA_BUCKETS.filter((bucket) => buckets[bucket.key] > 0).map((bucket) => (
+          <span key={bucket.key} title={bucket.label}>
+            <Glyph shape={bucket.glyph} color={bucket.color} size={8} />
+            <b>{buckets[bucket.key].toLocaleString('en-US')}</b>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
