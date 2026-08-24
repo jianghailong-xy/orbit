@@ -12,16 +12,12 @@ import {
   ProjectAutomationPolicy,
   ProjectIdentitySource,
   ProjectRole,
-  ProjectRunState,
   ProjectStatus,
-  RunStatus,
   TaskStatus,
 } from '@prisma/client';
-import { toUuid, uuidToBase62 } from '@orbit/shared';
+import { toUuid } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { MergeReceiptRow, mergeReceiptRow } from '../sessions/merge-receipt';
-import { SessionsService } from '../sessions/sessions.service';
-import { withSessionState } from '../sessions/session-state';
 import { DependencyState, dependencyStateFromCounts } from '../tasks/task-dependencies';
 import {
   DEFAULT_TASK_PAGE_SIZE,
@@ -33,7 +29,6 @@ import { ProjectStatus as SharedProjectStatus } from '@orbit/shared';
 import { CreateProjectDto, ReopenProjectDto, UpdateProjectDto } from './dto';
 import { admitReopen, reopenImpact, type ReopenImpact } from './project-attribution-surface';
 import { AcceptanceRefusal, ProjectAcceptanceService } from './project-acceptance.service';
-import { parseWindowHours, readDispatchHealth } from './project-panorama-dispatch-health';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import {
   DEFAULT_BLOCKING_LIMIT,
@@ -41,8 +36,6 @@ import {
   ProjectBlockingLeaderboard,
   readProjectBlockingLeaderboard,
 } from './project-panorama-blocking';
-import { ProjectActivityQuery, readProjectActivity } from './project-panorama-activity';
-import { PROJECT_LIVE_SESSION_STATUS_SQL } from './live-session-status';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
@@ -217,153 +210,6 @@ function withCoordination<T extends WithCoordination>(
 }
 
 /**
- * The rows `coordinatorStatus` reads, one interface per query.
- *
- * Written out rather than inferred because every one of them comes from `$queryRaw`, where the
- * type parameter IS the only check: a column renamed in the SQL and not here compiles, runs, and
- * serves `undefined` under the old name. Keeping them next to each other is also what makes the
- * "no raw UUID leaves this endpoint" rule reviewable — every id-shaped field is in this block.
- */
-interface CoordinatorStatusHeadRow {
-  id: string;
-  title: string;
-  status: string;
-  createdAt: Date;
-  updatedAt: Date;
-  acceptanceCriteria: string | null;
-  coordinatorEnabled: boolean;
-  automationPolicy: string;
-  configRevision: bigint;
-  maxConcurrentTasks: number;
-  sessionBudgetPerDay: number | null;
-  coordinatorSessionId: string | null;
-  coordinatorWorkspaceId: string | null;
-  /** Null on a project whose runtime row is somehow missing — see `withCoordination` for why that
-   *  reads as "nothing has happened yet" rather than as an error. */
-  runState: string | null;
-  nextWakeAt: Date | null;
-  nextWakeReason: string | null;
-  coordinatorGeneration: bigint | null;
-  identitySource: string | null;
-  /** Whether a holder is recorded. The holder ITSELF is deliberately not selected: it is a
-   *  compare-and-swap fence (`NEVER_PUBLIC_ID_FIELDS`), not an address to hand out. */
-  leaseTaken: boolean | null;
-  leaseExpiresAt: Date | null;
-  leaseHeartbeatAt: Date | null;
-  fencingToken: bigint | null;
-  acceptanceAttempt: bigint | null;
-  coordinatorAgentId: string | null;
-  coordinatorAgentName: string | null;
-  sessionStatus: string | null;
-  sessionEndReason: string | null;
-  sessionStartedAt: Date | null;
-  sessionFinishedAt: Date | null;
-  sessionCompletedAt: Date | null;
-  sessionArchivedAt: Date | null;
-  sessionDeletedAt: Date | null;
-}
-
-interface CoordinatorStatusDecisionRow {
-  id: string;
-  createdAt: Date;
-  decidedBy: string;
-  reason: string;
-  decisionInputHash: string;
-  fencingToken: bigint;
-  coordinatorAgentId: string | null;
-  coordinatorSessionId: string | null;
-  outcome: unknown;
-}
-
-interface CoordinatorStatusActionRow {
-  id: string;
-  decisionId: string | null;
-  type: string;
-  status: string;
-  subjectType: string;
-  subjectId: string | null;
-  idempotencyKey: string;
-  refusalCode: string | null;
-  reasonCode: string | null;
-  resultSessionId: string | null;
-  fencingToken: bigint;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface CoordinatorStatusEventRow {
-  id: string;
-  kind: string;
-  occurredAt: Date;
-  sourceType: string;
-  sourceId: string;
-  dedupeKey: string;
-  occurrences: number;
-  lastAt: Date;
-  attempts: number;
-  nextAttemptAt: Date | null;
-  consumedAt: Date | null;
-  disposition: string | null;
-}
-
-interface CoordinatorStatusMergeRow {
-  sessionId: string;
-  taskId: string | null;
-  taskTitle: string;
-  taskStatus: string;
-  branch: string | null;
-  baseSha: string | null;
-  mergeStatus: string | null;
-  mergeTarget: string | null;
-  mergedSourceSha: string | null;
-  branchMerged: boolean | null;
-  mergedAt: Date | null;
-  commitStatus: string | null;
-  worktreeDirty: boolean | null;
-}
-
-interface CoordinatorStatusVerdictTally {
-  total: number;
-  pending: number;
-  pass: number;
-  fail: number;
-  inconclusive: number;
-}
-
-/** The parts of a stored decision outcome this read projects. Everything is optional: the column
- *  is JSON and rows written by older binaries genuinely lack these fields (§10.4 W5 arrived in
- *  migration 0125), which a reader must report as "not recorded" rather than as "none". */
-interface CoordinatorStatusOutcome {
-  runStateBefore?: string;
-  runStateAfter?: string;
-  configRevision?: string;
-  nextWakeAt?: string | null;
-  nextWakeReason?: string | null;
-  detail?: {
-    wakeCandidates?: Array<{
-      at: string;
-      source: number;
-      subjectType: string;
-      subjectId: string;
-      reason: string;
-    }>;
-    flooredBy?: 'W3' | null;
-  };
-}
-
-interface CoordinatorStatusSession {
-  id: string;
-  runStatus: string;
-  runState: string;
-  lifecycleState: string;
-  endReason: string | null;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  completedAt: Date | null;
-  deletedAt: Date | null;
-}
-
-/**
  * Projects: what a body of work is trying to achieve, and how anyone would know it got there.
  *
  * Nothing here dispatches, cancels, holds or releases a TASK, and that is a property to preserve
@@ -425,16 +271,6 @@ export class ProjectsService {
     'so this project was not created. Record it from a session that coordinates nothing yet.';
 
   /**
-   * One wording for "this project's coordinator is not where you asked", whether that was noticed
-   * before a session was created or after losing the race to bind one. Two phrasings would read as
-   * two different rules to anyone who hit both.
-   */
-  private static readonly ELSEWHERE =
-    'this project already has a coordinator, and it runs in a different workspace — open it where ' +
-    'it is, or delete it first. Moving a coordinator is not something this endpoint does as a side ' +
-    'effect of asking for one.';
-
-  /**
    * `acceptance` carries its own default so that the several dozen existing constructions of this
    * service — every one of them in a test, over a Prisma double — keep compiling and keep meaning
    * what they meant. Nest still injects the module's singleton in production: the parameter is
@@ -442,7 +278,6 @@ export class ProjectsService {
    */
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sessions: SessionsService,
     private readonly acceptance: ProjectAcceptanceService = new ProjectAcceptanceService(prisma),
   ) {}
 
@@ -743,22 +578,6 @@ export class ProjectsService {
       throw new BadRequestException(`limit must be an integer from 1 to ${MAX_BLOCKING_LIMIT}`);
     }
     return readProjectBlockingLeaderboard(this.prisma, ownerId, projectId, limit);
-  }
-
-  /**
-   * What the control loop has been doing, newest first (panorama).
-   *
-   * The one layer of a project of autonomous work that has no counterpart in a tracker whose
-   * tickets do not decide anything — and, until this endpoint, the one with six thousand rows
-   * behind it and nowhere to read them. `/coordinator/status` serves the last few decisions as
-   * part of a current-state answer; this is the history itself, merged out of the outbox, the
-   * decision audit and the action ledger into one vocabulary and paged.
-   *
-   * A read, and only a read.
-   */
-  async activity(ownerId: string, projectId: string, query: ProjectActivityQuery = {}) {
-    await this.assertOwned(ownerId, projectId);
-    return readProjectActivity(this.prisma, projectId, query);
   }
 
   /** The stored outcome, or undefined when a row predates the audit fields this read projects.
@@ -1625,19 +1444,5 @@ export class ProjectsService {
       `This project still holds ${tasks ?? 'one or more'} task(s) and cannot be deleted — ` +
       'move them to another project or delete them first'
     );
-  }
-}
-
-/** §11.3's key is `<kind>:<subjectType>:<subjectId>`. The subject inside it is an address, so it
- *  is served in the same Base62 spelling `PublicIdInterceptor` gives every other id — a raw uuid
- *  buried in a string is one no caller could hand to any other endpoint, and the interceptor
- *  cannot see into it. */
-function publicDedupeKey(dedupeKey: string): string {
-  const parts = dedupeKey.split(':');
-  if (parts.length !== 3) return dedupeKey;
-  try {
-    return `${parts[0]}:${parts[1]}:${uuidToBase62(parts[2])}`;
-  } catch {
-    return dedupeKey;
   }
 }

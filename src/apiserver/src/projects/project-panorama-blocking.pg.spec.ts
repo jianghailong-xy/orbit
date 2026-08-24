@@ -120,7 +120,7 @@ test('the blocking leaderboard ranks unfinished tasks by transitive downstream r
 
     const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
-    const projects = new ProjectsService(prisma, {} as unknown as SessionsService);
+    const projects = new ProjectsService(prisma);
 
     try {
       // ---- A: a chain, a diamond, two islands, and two finished prerequisites ------------------

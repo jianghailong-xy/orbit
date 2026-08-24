@@ -4,7 +4,6 @@ import { Alert, Button, Empty, Input, List, Modal, Select, Spin, Tag, Typography
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { ProjectAcceptanceCard } from '../components/ProjectAcceptanceCard';
-import { ProjectActivityFeed } from '../components/ProjectActivityFeed';
 import { ProjectBlockingLeaderboard } from '../components/ProjectBlockingLeaderboard';
 import { ProjectChainProgress } from '../components/ProjectChainProgress';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
@@ -249,8 +248,6 @@ export function ProjectDetailPage() {
             <ProjectBlockingLeaderboard projectId={id} />
             <ProjectAcceptanceCard projectId={id} />
           </div>
-
-          <ProjectActivityFeed projectId={id} />
 
           {/* Inside this branch on purpose: the tasks page is only asked for once the project it
               belongs to came back, so a project that 404s never puts a second doomed request on

@@ -9,10 +9,13 @@ const { PrismaClientKnownRequestError } = Prisma;
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
 const PROJECT_ID = '00000000-0000-7000-8000-0000000000a1';
 
-// No sessions stub: nothing exercised here opens one. `coordinator` is the only path that does,
-// and it has its own file (project-coordinator.spec.ts).
+// The acceptance service is stubbed to the empty standing: `get` reads a criteria summary beside
+// the task tally, and no test in this file is about what that summary contains.
 function serviceWith(prisma: unknown): ProjectsService {
-  return new ProjectsService(prisma as never, {} as never);
+  const acceptance = {
+    criteriaSummary: async () => ({ total: 0, passed: 0, lastRunAt: null, criteria: [] }),
+  };
+  return new ProjectsService(prisma as never, acceptance as never);
 }
 
 test('create files the project against the caller and stores blank prose as null', async () => {

@@ -113,7 +113,6 @@ const panoramaKeys = (projectUuid: string) => {
   return [
     ['project', id, 'panorama'],
     ['project', id, 'panorama', 'blocking', 5],
-    ['project', id, 'panorama', 'activity'],
   ];
 };
 

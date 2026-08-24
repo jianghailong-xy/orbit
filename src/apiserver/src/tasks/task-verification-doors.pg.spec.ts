@@ -537,7 +537,7 @@ suite('verification relations and phase aggregation, on real PostgreSQL', async 
     const tasks = tasksService(db);
     const prisma = db as unknown as PrismaService;
     const acceptance = new ProjectAcceptanceService(prisma);
-    const projects = new ProjectsService(prisma, {} as any, acceptance);
+    const projects = new ProjectsService(prisma, acceptance);
 
     const phase = await tasks.create(w.ownerId, {
       title: 'phase',

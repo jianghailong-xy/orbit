@@ -107,7 +107,7 @@ test('the project panorama buckets OPEN by readiness and judges the graph shape'
 
     const db = prismaClientFor(URL);
     const prisma = db as unknown as PrismaService;
-    const projects = new ProjectsService(prisma, {} as unknown as SessionsService);
+    const projects = new ProjectsService(prisma);
 
     try {
       // ---- A: a ten-task chain, three finished, one running -----------------------------------

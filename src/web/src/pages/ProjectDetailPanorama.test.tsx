@@ -268,7 +268,7 @@ const at = (text: string): number => container.innerHTML.indexOf(text);
 const shows = (text: string): boolean => container.innerHTML.includes(text);
 
 describe('ProjectDetailPage — the panorama, assembled', () => {
-  it('lays the five blocks out in the order the reader asks for them', async () => {
+  it('lays the four blocks out in the order the reader asks for them', async () => {
     serve();
     await mount(page());
 
@@ -277,7 +277,6 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     const header = at('Where the work stands');
     const ranking = at('Unblocks the most work');
     const acceptance = at('Acceptance</div>');
-    const feed = at('What the coordinator has been doing');
     const tasks = at('>Tasks<');
     const chain = at('aria-label="Chain progress"');
 
@@ -285,8 +284,7 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(ranking).toBeGreaterThan(header);
     // Side by side, so the ranking leads and acceptance follows within the same row.
     expect(acceptance).toBeGreaterThan(ranking);
-    expect(feed).toBeGreaterThan(acceptance);
-    expect(tasks).toBeGreaterThan(feed);
+    expect(tasks).toBeGreaterThan(acceptance);
     expect(chain).toBeGreaterThan(tasks);
 
     // And the pair really is a pair — one grid, two cards, neither wrapping the other.
@@ -308,7 +306,6 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('Website Revamp')).toBe(true);
     expect(shows('Where the work stands')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
-    expect(shows('What the coordinator has been doing')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
     expect(shows('aria-label="Chain progress"')).toBe(true);
 
@@ -335,7 +332,6 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     expect(shows('Where the work stands')).toBe(true);
     expect(shows('Unblocks the most work')).toBe(true);
     expect(shows('Acceptance')).toBe(true);
-    expect(shows('What the coordinator has been doing')).toBe(true);
     expect(shows('Design the landing page')).toBe(true);
   });
 

@@ -105,7 +105,7 @@ test('the project dependency graph on PostgreSQL', { skip: !URL, timeout: 120_00
   const db = prismaClientFor(URL);
   // `dependencyGraph` reads nothing but Prisma, and nothing it calls reaches a session. Handing it
   // a real SessionsService would need half the module graph to answer a question about tasks.
-  const service = new ProjectsService(db as unknown as PrismaService, null as unknown as SessionsService);
+  const service = new ProjectsService(db as unknown as PrismaService);
 
   try {
     await t.test('carries every task in the project, including one no edge touches', async () => {
