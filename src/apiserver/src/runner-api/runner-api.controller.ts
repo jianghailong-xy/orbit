@@ -65,7 +65,9 @@ import {
   LoginCommand,
   LoginResult,
   OrchestrationCredentialResponse,
+  CloneCommand,
   RepoCleanupCommand,
+  RunnerCloneResult,
   RunnerRegisterRequest,
   RunnerRegisterResponse,
   RunnerRepoCleanupResult,
@@ -755,6 +757,7 @@ export class RunnerApiController {
     let installRequest: RunnerHeartbeatResponse['installRequest'];
     let agentDirs: RunnerHeartbeatResponse['agentDirs'] = [];
     let repoCleanupRequest: RunnerHeartbeatResponse['repoCleanupRequest'];
+    let cloneRequests: RunnerHeartbeatResponse['cloneRequests'] = [];
     try {
       cancelSessionIds = await this.realtime.drainCancellations(runner.id);
       // Manual git mutations are fail-closed during rolling upgrades. A capable
@@ -777,6 +780,7 @@ export class RunnerApiController {
       loginRequest = await this.drainLoginRequest(runner.id);
       installRequest = await this.drainInstallRequest(runner.id);
       repoCleanupRequest = await this.drainRepoCleanupRequest(runner.id);
+      cloneRequests = await this.pendingCloneRequests(runner.id);
       // The directories to stat before the next heartbeat. Sent every cycle rather than on
       // change, so an edited path is picked up without any invalidation to get wrong, and the
       // runner never has to hold a workspace list of its own. Last of the block on purpose: it is
@@ -805,7 +809,45 @@ export class RunnerApiController {
       installRequest,
       agentDirs,
       repoCleanupRequest,
+      cloneRequests,
     };
+  }
+
+  /**
+   * The clones this machine still owes, one per workspace of its own that is still CLONING.
+   *
+   * Redelivered every heartbeat until a result comes back, on the same argument as the checkout
+   * repair above: nothing needs claiming, because the row itself is the request — a workspace in
+   * CLONING is exactly the set of clones not yet answered for, so a runner that restarts mid-clone
+   * is asked again on its next beat instead of leaving a workspace stuck forever. Unlike the
+   * repair, a clone is NOT short, so the duplicate-suppression is the runner's: it dedupes by
+   * workspace while one is running, and a delivery that arrives after the checkout exists is
+   * reported reused rather than cloned twice.
+   *
+   * No path travels with the request. `<reposRoot>/<owner>-<repo>` is derived on the machine that
+   * owns the root, and the result reports where the checkout actually is — so the control plane
+   * never asserts a path it cannot see, and a machine with no root of its own answers with that as
+   * a failure the user can read instead of leaving the workspace CLONING for ever.
+   */
+  private async pendingCloneRequests(runnerId: string): Promise<CloneCommand[]> {
+    const pending = await this.prisma.workspace.findMany({
+      where: {
+        runnerId,
+        deletedAt: null,
+        provisionState: 'CLONING',
+        repoUrl: { not: null },
+      },
+      select: { id: true, repoUrl: true },
+      // Oldest first, and bounded: a machine cloning twenty repositories at once is already past
+      // what its disk and network will do in parallel, and FIFO means the rest are picked up on a
+      // later beat rather than dropped — a workspace stays CLONING until it is answered for.
+      orderBy: { createdAt: 'asc' },
+      take: 20,
+    });
+    return pending.map((workspace) => ({
+      workspaceId: workspace.id,
+      repoUrl: workspace.repoUrl as string,
+    }));
   }
 
   /**
@@ -873,6 +915,91 @@ export class RunnerApiController {
       },
     });
     return { ok: true };
+  }
+
+  /**
+   * What a failed clone leaves on the workspace for the user to read.
+   *
+   * Two fields, and they are not alternatives: `stderr` is git's own output, and `message` is the
+   * runner's line for what git could not say — the failures git never ran to see (an unusable
+   * URL, an unwritable repos root), and, when the target directory is occupied, which other remote
+   * is sitting there, which git's "already exists and is not an empty directory" does not mention
+   * and the control plane cannot see. When both arrive, both are kept, in that order: appending to
+   * git's text is allowed, rewriting it is not.
+   */
+  private static cloneFailureText(result: RunnerCloneResult): string | null {
+    const parts = [result.stderr, result.message].filter((part): part is string => !!part?.trim());
+    return parts.length ? parts.join('\n') : null;
+  }
+
+  /**
+   * Runner → control plane: how the clone went.
+   *
+   * Success is where a cloned workspace becomes usable: the directory the runner actually landed
+   * on (its answer, not the path we asked for), worktree isolation on — the checkout is Orbit's
+   * own, so there is no reason for its sessions to share a working tree — and the remote's default
+   * branch as the merge target, which is the one thing about the repository only the clone knew.
+   *
+   * Failure stores git's stderr verbatim. No summarising and no mapping onto an Orbit vocabulary:
+   * that translation layer gets things wrong eventually, and what git said about a bad URL or a
+   * missing credential is the only text that tells the user what to change.
+   *
+   * Scoped to a workspace of THIS runner that is still CLONING, which is also the fence: a result
+   * that arrives after the user retried elsewhere writes nothing, rather than dragging a workspace
+   * back to a state a later attempt already left.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('clone-result')
+  @HttpCode(200)
+  async cloneResult(
+    @CurrentRunner() runner: { id: string },
+    // The runner echoes back the id it was given, which is a raw UUID on this protocol — the pipe
+    // takes either spelling, so nothing here depends on which one a future runner sends.
+    @Body(PublicIdPipe.forFields('workspaceId')) body: RunnerCloneResult,
+  ) {
+    const status = body?.status;
+    if (status !== 'done' && status !== 'failed') {
+      throw new BadRequestException('Unknown clone status');
+    }
+    if (!body?.workspaceId) throw new BadRequestException('workspaceId is required');
+    if (status === 'done' && !body.path) {
+      throw new BadRequestException('a finished clone must report where it landed');
+    }
+    const { count } = await this.prisma.workspace.updateMany({
+      where: {
+        id: body.workspaceId,
+        runnerId: runner.id,
+        deletedAt: null,
+        provisionState: 'CLONING',
+      },
+      data:
+        status === 'done'
+          ? {
+              // Where the checkout really is, which includes the case where the runner found one
+              // already there and cloned nothing (`reused`): the workspace is configured from what
+              // is on the disk either way, so that flag changes nothing here.
+              workDir: body.path,
+              provisionState: 'READY',
+              enableWorktree: true,
+              provisionError: null,
+              // Only when the runner detected one: absent leaves the column NULL, which is the
+              // runner's own main-else-master detection — a default nobody chose is not a
+              // default worth writing.
+              ...(body.defaultBranch ? { defaultMergeTarget: body.defaultBranch } : {}),
+            }
+          : {
+              provisionState: 'FAILED',
+              // git's stderr verbatim, then the runner's own line for what git could not say —
+              // the failures git never saw (an unusable URL, an unwritable root) and what is in
+              // the way when the directory is occupied. Never a rewrite of git's words, only
+              // something beside them, and less the one byte Postgres cannot store in `text`
+              // (22P05): failing the whole statement over a NUL would lose the message entirely.
+              provisionError: stripNul(RunnerApiController.cloneFailureText(body)),
+            },
+    });
+    // False when nothing matched — a workspace deleted, retried onto another machine, or already
+    // answered for. The runner has nothing to do about it either way; this is not an error.
+    return { ok: count > 0 };
   }
 
   /**

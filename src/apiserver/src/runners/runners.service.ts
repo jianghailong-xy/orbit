@@ -27,6 +27,25 @@ const OFFLINE_AFTER_MS = 90_000;
 const DEVICE_LOOKUP_WINDOW_MS = 5 * 60_000;
 const DEVICE_LOOKUP_MAX = 20;
 
+/**
+ * Is this machine reachable right now?
+ *
+ * Exported because "online" has to mean the same thing everywhere it decides something. The
+ * runners list renders it; the clone-target list REFUSES on it (a clone runs on the machine, so an
+ * offline one is not a slower choice, it is not a choice). Two spellings of this rule would drift
+ * into a picker that offers a machine the create call then rejects.
+ */
+export function isRunnerOnline(
+  runner: { status: string; lastHeartbeatAt: Date | null },
+  now: number = Date.now(),
+): boolean {
+  return (
+    runner.status !== 'OFFLINE' &&
+    !!runner.lastHeartbeatAt &&
+    runner.lastHeartbeatAt.getTime() >= now - OFFLINE_AFTER_MS
+  );
+}
+
 @Injectable()
 export class RunnersService {
   private readonly logger = new Logger(RunnersService.name);
@@ -109,7 +128,7 @@ export class RunnersService {
     );
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
-    const staleBefore = Date.now() - OFFLINE_AFTER_MS;
+    const now = Date.now();
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -135,7 +154,7 @@ export class RunnersService {
         installMessage,
         installMode,
       }),
-      online: r.status !== 'OFFLINE' && !!r.lastHeartbeatAt && r.lastHeartbeatAt.getTime() >= staleBefore,
+      online: isRunnerOnline(r, now),
       activeSessions: activeByRunner.get(r.id) ?? 0,
       // Surface the `/` autocomplete catalog under clean names (mirrors the heartbeat DTO).
       commands: (availableCommands ?? []) as unknown as SlashCommandInfo[],

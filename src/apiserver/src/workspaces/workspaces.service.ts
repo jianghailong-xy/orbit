@@ -16,10 +16,48 @@ import {
   readRunnerRepoHealth,
   repoHealthForWorkspace,
 } from '../common/runner-repo-health';
-import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
+// The disk gate the auto-run dispatcher already applies, imported rather than restated: one
+// machine-wide floor (Runner.minFreeDiskMb) evaluated against one measured filesystem
+// (Workspace.workDirFreeBytes). A second implementation of "is this disk too full" would be a
+// second answer to give a user who set the number once.
+import { diskBelowFloor } from '../tasks/tasks.service';
+import { isRunnerOnline } from '../runners/runners.service';
+import { cloneTargetDir, sameRepo } from './repo-url';
+import { CreateWorkspaceDto, RedispatchCloneDto, UpdateWorkspaceDto } from './dto';
 
 /** Shape of the account-level preferences this service reads (users.controller owns the rest). */
 type OrchestrationPreference = { defaultEnableOrchestration?: unknown };
+
+/**
+ * The freshest free-space reading among the workspaces that sit under this machine's repos root.
+ *
+ * The only disk numbers Orbit has are the per-workDir probes the runner takes each heartbeat, and
+ * they are per-directory rather than per-machine for the reason that decides this function: one
+ * runner's workspaces can sit on different mounts, so the only number that can gate a write is the
+ * one for the filesystem being written to. A workspace elsewhere on the machine measures a
+ * different filesystem, and a confident wrong number is worse than none.
+ *
+ * Null — no workspace under that root, which is every machine's first clone — leaves
+ * `diskBelowFloor` to fail open, exactly as it does for a runner too old to measure. A gate that
+ * fired on silence would stop a fleet precisely because it knows nothing about it.
+ *
+ * The trailing separator matters: without it `/srv/repos` also matches `/srv/repos-old`, which is
+ * a different directory and possibly a different mount.
+ */
+function mostRecentlyProbedFreeBytes(
+  workspaces: readonly {
+    workDir: string | null;
+    workDirFreeBytes: bigint | null;
+    workDirProbedAt: Date | null;
+  }[],
+  reposRoot: string,
+): bigint | null {
+  const prefix = `${reposRoot.replace(/\/+$/, '')}/`;
+  const measured = workspaces
+    .filter((w) => w.workDir?.startsWith(prefix) && w.workDirFreeBytes != null)
+    .sort((a, b) => (b.workDirProbedAt?.getTime() ?? 0) - (a.workDirProbedAt?.getTime() ?? 0));
+  return measured[0]?.workDirFreeBytes ?? null;
+}
 
 @Injectable()
 export class WorkspacesService {
@@ -62,6 +100,16 @@ export class WorkspacesService {
     await this.assertOwnedRunner(ownerId, dto.runnerId);
     const enableOrchestration =
       dto.enableOrchestration ?? (await this.defaultEnableOrchestration(ownerId));
+    // A repo URL and no directory is a clone request: Orbit picks the path, on the convention the
+    // runner reported. A repo URL WITH a directory is the other half of the same flow — "reuse the
+    // checkout that is already there" — which clones nothing and only records which repository
+    // that directory holds, so the machine is not asked to do anything and none of the gates below
+    // apply to it.
+    const cloning = !!dto.repoUrl && !dto.workDir;
+    // Checked BEFORE the row exists, on purpose: a workspace written CLONING that no machine will
+    // ever clone is a row the user has to clean up by hand. Everything this refuses is a state the
+    // request could have been told about before it asked.
+    if (cloning) await this.assertCloneDispatchable(ownerId, dto.runnerId, dto.repoUrl as string);
     const workspace = await this.prisma.workspace.create({
       data: {
         ownerId,
@@ -82,6 +130,11 @@ export class WorkspacesService {
         targetLabels: dto.targetLabels ?? [],
         runnerId: dto.runnerId,
         workDir: dto.workDir,
+        repoUrl: dto.repoUrl,
+        // The row goes in already CLONING and the job goes out on this runner's next heartbeat —
+        // eagerly, not at the first session claim. An error that waits for the first run to
+        // surface is one the user meets minutes later, attached to the wrong thing.
+        provisionState: cloning ? 'CLONING' : 'READY',
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
@@ -92,6 +145,278 @@ export class WorkspacesService {
     });
     // Brand-new: no sessions yet, so the seed is the floor. Shaped like every other read.
     return withProviderSeed([workspace], new Map())[0];
+  }
+
+  /**
+   * Everything that has to be true of a machine before a clone is dispatched to it.
+   *
+   * Every refusal here is about the machine as it is RIGHT NOW, which is why they are checked at
+   * dispatch and not at pick time: the runner list the user chose from is a snapshot, and the
+   * machine can have gone offline between reading it and pressing the button.
+   *
+   * There is deliberately no queue-for-later. A clone runs on the machine, so a request parked for
+   * an offline one is a workspace that sits in CLONING for as long as that machine stays off —
+   * "wait for it to come back" is a state, and the user asked for a checkout.
+   */
+  private async assertCloneDispatchable(
+    ownerId: string,
+    runnerId: string | undefined,
+    repoUrl: string,
+  ): Promise<void> {
+    // Never guessed. The toolchain is on the machine, and picking wrong costs a task that runs
+    // half-way before discovering the machine has no Xcode.
+    if (!runnerId) throw new BadRequestException('choose the machine to clone onto');
+    const runner = await this.prisma.runner.findFirst({
+      where: { id: runnerId, ownerId },
+      select: {
+        id: true,
+        status: true,
+        lastHeartbeatAt: true,
+        reposRoot: true,
+        minFreeDiskMb: true,
+      },
+    });
+    if (!runner) throw new ForbiddenException('runner not found');
+    if (!isRunnerOnline(runner)) {
+      throw new BadRequestException('that machine is offline — a clone runs on the machine itself');
+    }
+    // A runner too old to report a repos root is not given an invented one: a path Orbit made up is
+    // a checkout written somewhere the user never agreed to put one.
+    if (!runner.reposRoot) {
+      throw new BadRequestException(
+        "that machine's runner has not reported where it keeps checkouts — upgrade the runner, " +
+          'or point this workspace at a directory you cloned yourself',
+      );
+    }
+    if (!cloneTargetDir(runner.reposRoot, repoUrl)) {
+      throw new BadRequestException(
+        `no directory name can be derived from ${repoUrl} — expected a remote like ` +
+          'https://github.com/owner/repo.git or git@github.com:owner/repo.git',
+      );
+    }
+    const freeBytes = await this.freeBytesUnderReposRoot(runner.id, runner.reposRoot);
+    if (diskBelowFloor(freeBytes, runner.minFreeDiskMb)) {
+      const floorBytes = BigInt(runner.minFreeDiskMb as number) * 1024n * 1024n;
+      throw new BadRequestException(
+        `that machine is below its free-space floor: ${freeBytes as bigint} bytes free, ` +
+          `${floorBytes} required (${(floorBytes - (freeBytes as bigint)).toString()} bytes short)`,
+      );
+    }
+  }
+
+  /**
+   * This machine's free-space reading for the filesystem a clone would land on.
+   *
+   * Reads the machine's workspaces and resolves the number with the same helper the candidate
+   * list uses, rather than expressing the "under the repos root" rule a second time in SQL: two
+   * spellings of one predicate is how a picker ends up green on a machine the create call then
+   * refuses. A runner's workspaces are a list the sidebar already loads whole, so reading them
+   * here costs nothing worth a second implementation.
+   */
+  private async freeBytesUnderReposRoot(
+    runnerId: string,
+    reposRoot: string,
+  ): Promise<bigint | null> {
+    const workspaces = await this.prisma.workspace.findMany({
+      where: { runnerId, deletedAt: null },
+      select: { workDir: true, workDirFreeBytes: true, workDirProbedAt: true },
+    });
+    return mostRecentlyProbedFreeBytes(workspaces, reposRoot);
+  }
+
+  /**
+   * Send the clone again for a workspace whose last one failed.
+   *
+   * Retry, edit-the-URL and change-the-machine are one path and not three: each is this same
+   * dispatch made again, differing only in what it is told. That is also why the preflight above
+   * runs here unchanged — a retry onto a machine that has since filled up is refused for the same
+   * reason the first attempt would have been.
+   *
+   * Only FAILED re-arms, as a compare-and-set. A second click while one is in flight would
+   * otherwise start a second clone of the same repository into the same directory, and a READY
+   * workspace would lose the working checkout it already has.
+   */
+  async redispatchClone(ownerId: string, id: string, dto: RedispatchCloneDto) {
+    const current = await this.get(ownerId, id);
+    await this.assertOwnedRunner(ownerId, dto.runnerId);
+    const repoUrl = dto.repoUrl ?? current.repoUrl;
+    if (!repoUrl) {
+      throw new BadRequestException('this workspace was not created from a repository URL');
+    }
+    const runnerId = dto.runnerId ?? current.runnerId ?? undefined;
+    await this.assertCloneDispatchable(ownerId, runnerId, repoUrl);
+    const { count } = await this.prisma.workspace.updateMany({
+      where: { id, ownerId, deletedAt: null, provisionState: 'FAILED' },
+      data: {
+        repoUrl,
+        runnerId,
+        provisionState: 'CLONING',
+        // The old stderr is the previous attempt's, and leaving it up while a new clone runs is
+        // how a card shows a failure that is no longer happening.
+        provisionError: null,
+      },
+    });
+    if (count === 0) {
+      throw new ConflictException(
+        current.provisionState === 'CLONING'
+          ? 'a clone is already running for this workspace'
+          : 'only a workspace whose clone failed can be cloned again',
+      );
+    }
+    return this.get(ownerId, id);
+  }
+
+  /**
+   * The repositories this account already has workspaces for, and how many machines each one is
+   * on.
+   *
+   * This is what the top-level "new workspace" entry can say and a Runner detail page cannot: a
+   * machine's own page knows the checkouts on that machine, and nothing about the same repository
+   * sitting on two others. Picking a repo you already work on is the common case, and it is the
+   * step that lets the user skip typing a URL at all.
+   *
+   * Grouped by the URL as it was stored, so what comes back is what gets sent to create — two
+   * spellings of one remote (ssh and https) are two entries, because they are two things the user
+   * pasted. `machineCount` counts only machines where the checkout actually exists: a repo whose
+   * every clone failed is still a repo you used, and is still on no machines.
+   */
+  async recentRepos(ownerId: string) {
+    const rows = await this.prisma.workspace.findMany({
+      where: { ownerId, deletedAt: null, repoUrl: { not: null } },
+      // Newest first, so the reduce below keeps the first `lastUsedAt` it sees.
+      orderBy: { createdAt: 'desc' },
+      select: { repoUrl: true, runnerId: true, createdAt: true, provisionState: true, workDir: true },
+    });
+    const byUrl = new Map<
+      string,
+      { repoUrl: string; machineIds: Set<string>; workspaceCount: number; lastUsedAt: Date }
+    >();
+    for (const row of rows) {
+      const repoUrl = row.repoUrl as string;
+      const entry = byUrl.get(repoUrl) ?? {
+        repoUrl,
+        machineIds: new Set<string>(),
+        workspaceCount: 0,
+        lastUsedAt: row.createdAt,
+      };
+      entry.workspaceCount += 1;
+      if (row.runnerId && row.workDir && row.provisionState === 'READY') {
+        entry.machineIds.add(row.runnerId);
+      }
+      byUrl.set(repoUrl, entry);
+    }
+    return [...byUrl.values()].map(({ machineIds, lastUsedAt, ...rest }) => ({
+      ...rest,
+      machineCount: machineIds.size,
+      lastUsedAt: lastUsedAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Which machines can take a clone, and which of them already has this repository.
+   *
+   * Two questions in one read because the picker asks them together: it pins the machines that
+   * already have the repo to the top, and offers "reuse that checkout" or "clone another copy"
+   * there rather than choosing for the user — reuse means a shared working tree, where one wedged
+   * checkout blocks every merge on that machine, and that is the user's trade to make.
+   *
+   * Eligibility is about the MACHINE and never about the URL: an unreadable URL leaves
+   * `targetDir` and `existingCheckout` null but takes no machine out of the list, because whether
+   * a remote resolves is git's answer to give on the runner, not this endpoint's to guess.
+   */
+  async cloneTargets(ownerId: string, repoUrl?: string) {
+    const runners = await this.prisma.runner.findMany({
+      where: { ownerId },
+      // The order the user already arranged their machines in (sidebar and Runners page).
+      orderBy: [
+        { position: { sort: 'asc', nulls: 'last' } },
+        { enrolledAt: 'asc' },
+        { id: 'asc' },
+      ],
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        status: true,
+        lastHeartbeatAt: true,
+        reposRoot: true,
+        minFreeDiskMb: true,
+        workspaces: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            workDir: true,
+            repoUrl: true,
+            provisionState: true,
+            workDirFreeBytes: true,
+            workDirProbedAt: true,
+          },
+        },
+      },
+    });
+    const now = Date.now();
+    const candidates = runners.map((runner) => {
+      const online = isRunnerOnline(runner, now);
+      const freeBytes = runner.reposRoot
+        ? mostRecentlyProbedFreeBytes(runner.workspaces, runner.reposRoot)
+        : null;
+      const diskShort = diskBelowFloor(freeBytes, runner.minFreeDiskMb);
+      const floorBytes =
+        runner.minFreeDiskMb != null ? BigInt(runner.minFreeDiskMb) * 1024n * 1024n : null;
+      // A checkout of this repo already on this machine — matched on what the remote IS rather
+      // than on how it was spelled, so pasting the https URL for a repo cloned over ssh still
+      // finds it. Only a workspace that finished cloning counts: one still in flight has no
+      // directory to reuse, and a failed one never had.
+      const existing = repoUrl
+        ? runner.workspaces.find(
+            (w) =>
+              w.repoUrl && w.workDir && w.provisionState === 'READY' && sameRepo(w.repoUrl, repoUrl),
+          )
+        : undefined;
+      return {
+        runnerId: runner.id,
+        name: runner.name,
+        displayName: runner.displayName,
+        online,
+        // Null is the load-bearing value: it is what says this machine's runner is too old for
+        // this path at all, and the UI has to say so rather than showing a machine that will be
+        // refused at create.
+        reposRoot: runner.reposRoot,
+        // Where the checkout would land, so the picker can show it before anything is created.
+        // A preview, not a promise: the runner derives the same `<reposRoot>/<owner>-<repo>` on
+        // its own disk and reports back where the clone actually went, and that is what the
+        // workspace is configured from.
+        targetDir:
+          runner.reposRoot && repoUrl ? cloneTargetDir(runner.reposRoot, repoUrl) : null,
+        freeBytes,
+        minFreeDiskMb: runner.minFreeDiskMb,
+        diskShort,
+        // How much is missing, so the UI can say it without re-deriving MB from bytes. Null
+        // whenever the gate is not firing — including "no floor set" and "nothing measured".
+        shortfallBytes: diskShort && floorBytes != null ? floorBytes - (freeBytes as bigint) : null,
+        existingCheckout: existing
+          ? { workspaceId: existing.id, name: existing.name, workDir: existing.workDir }
+          : null,
+        eligible: online && !!runner.reposRoot && !diskShort,
+        // One reason, most-actionable first: an offline machine's repos root and disk are last
+        // heartbeat's news, so saying "offline" is the only claim still standing.
+        ineligibleReason: !online
+          ? 'OFFLINE'
+          : !runner.reposRoot
+            ? 'NO_REPOS_ROOT'
+            : diskShort
+              ? 'DISK_SHORT'
+              : null,
+      };
+    });
+    // Machines that already have this repository first, then the ones that can take it. Stable
+    // within each group, so the user's own machine order survives.
+    return [
+      ...candidates.filter((c) => c.existingCheckout),
+      ...candidates.filter((c) => !c.existingCheckout && c.eligible),
+      ...candidates.filter((c) => !c.existingCheckout && !c.eligible),
+    ];
   }
 
   /** What the read paths include about a workspace's machine: identity for grouping/routing, plus

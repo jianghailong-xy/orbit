@@ -7,6 +7,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
   MinLength,
   ValidateNested,
@@ -47,6 +48,14 @@ export class CreateWorkspaceDto {
   // the project directory it runs in. Both are otherwise minted by `orbit register`.
   @IsOptional() @IsPublicId() runnerId?: string;
   @IsOptional() @IsString() workDir?: string;
+  // The git remote this workspace is made from. With no `workDir`, this is a clone request: the
+  // row is written CLONING and its runner is told to clone into `<reposRoot>/<owner>-<repo>` on
+  // its next heartbeat. With a `workDir`, it records which repository a checkout the user already
+  // had is — the "reuse this checkout" half of the create flow, which clones nothing.
+  //
+  // Only length-checked here. Whether the URL resolves, and whether this machine may read it, is
+  // git's answer to give on the runner, and it comes back as git's own stderr.
+  @IsOptional() @IsString() @MaxLength(2048) repoUrl?: string;
   @IsOptional() @IsObject() env?: Record<string, string>;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
@@ -97,4 +106,17 @@ export class ReorderWorkspacesDto {
 // afterwards — it just spares the user one visit per workspace.
 export class SetOrchestrationDto {
   @IsBoolean() enabled!: boolean;
+}
+
+/**
+ * Re-arm the clone on a workspace whose last one failed — the failure card's retry, change-URL and
+ * change-machine exits, which are one path and not three: each of them is the same dispatch made
+ * again, differing only in what it is told this time.
+ *
+ * Both fields optional: retrying unchanged is the common case, and omitting one keeps whatever the
+ * workspace already holds.
+ */
+export class RedispatchCloneDto {
+  @IsOptional() @IsString() @MaxLength(2048) repoUrl?: string;
+  @IsOptional() @IsPublicId() runnerId?: string;
 }

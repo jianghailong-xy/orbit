@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PublicIdPipe } from '../common/public-id';
@@ -14,6 +15,7 @@ import { AuthUser, CurrentUser } from '../common/current-user.decorator';
 import { WorkspacesService } from './workspaces.service';
 import {
   CreateWorkspaceDto,
+  RedispatchCloneDto,
   ReorderWorkspacesDto,
   SetOrchestrationDto,
   UpdateWorkspaceDto,
@@ -52,6 +54,21 @@ export class WorkspacesController {
     return this.workspaces.setOrchestrationForAll(user.userId, dto.enabled);
   }
 
+  /** The repositories this account already works on, for the first step of "new workspace".
+   *  Static path, so it is declared ahead of the `:id` routes. */
+  @Get('recent-repos')
+  recentRepos(@CurrentUser() user: AuthUser) {
+    return this.workspaces.recentRepos(user.userId);
+  }
+
+  /** Which machines can take a clone of `repoUrl`, and which already have it. Same reason for
+   *  sitting above `:id`. `repoUrl` is optional: without it this still answers which machines can
+   *  clone at all, which is what the picker needs while the URL is still being typed. */
+  @Get('clone-targets')
+  cloneTargets(@CurrentUser() user: AuthUser, @Query('repoUrl') repoUrl?: string) {
+    return this.workspaces.cloneTargets(user.userId, repoUrl);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.get(user.userId, id);
@@ -73,6 +90,17 @@ export class WorkspacesController {
   @Post(':id/repo-cleanup')
   cleanUpRepo(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.workspaces.requestRepoCleanup(user.userId, id);
+  }
+
+  /** Clone again for a workspace whose last clone failed — the failure card's retry, and its
+   *  change-URL and change-machine exits, which are the same dispatch with different arguments. */
+  @Post(':id/clone')
+  redispatchClone(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RedispatchCloneDto,
+  ) {
+    return this.workspaces.redispatchClone(user.userId, id, dto);
   }
 
   /** What this workspace's sessions no longer ask about ("always allow" answers that outlived
