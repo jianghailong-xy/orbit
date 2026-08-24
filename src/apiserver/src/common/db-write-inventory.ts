@@ -1026,7 +1026,6 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   { table: "project_acceptance_criterion", trigger: "project_acceptance_criterion_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
   { table: "project_acceptance_run", trigger: "project_acceptance_run_epoch_guard", event: "BEFORE INSERT OR UPDATE", kind: "ROW/STATEMENT", since: "0150_task_provenance_project_acceptance_epoch", takes: [] },
   { table: "project_acceptance_run", trigger: "project_acceptance_run_immutable_guard", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0127_project_acceptance_run", takes: [] },
-  { table: "project_action", trigger: "project_action_decision_link_guard", event: "BEFORE UPDATE OF \"decision_id\", \"project_id\"", kind: "ROW/STATEMENT", since: "0120_project_decision_audit", takes: [] },
   { table: "project_action", trigger: "project_action_dispatch_immutable", event: "BEFORE UPDATE", kind: "ROW/STATEMENT", since: "0122_project_dispatch_boundary", takes: [] },
   { table: "project_action", trigger: "project_action_dispatch_result_check", event: "AFTER INSERT OR UPDATE OF \"status\", \"result_session_id\"", kind: "CONSTRAINT", since: "0122_project_dispatch_boundary", takes: [] },
   { table: "project_blocker", trigger: "project_blocker_escalation_once", event: "BEFORE UPDATE OF \"escalated_at\"", kind: "ROW/STATEMENT", since: "0125_project_blocker", takes: [] },

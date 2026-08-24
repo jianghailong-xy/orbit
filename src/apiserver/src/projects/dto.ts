@@ -264,8 +264,6 @@ export class OpenAcceptanceRunDto {
    *  rotating or deleting either must not rewrite who ran an acceptance. */
   @IsOptional() @IsPublicId() coordinatorAgentId?: string | null;
   @IsOptional() @IsPublicId() coordinatorSessionId?: string | null;
-  /** Ledger lineage when the run came from a `RUN_PROJECT_ACCEPTANCE` pass rather than a person. */
-  @IsOptional() @IsPublicId() decisionId?: string | null;
   @IsOptional() @IsPublicId() projectActionId?: string | null;
 }
 

@@ -1609,7 +1609,6 @@ model Project {
   runtime ProjectRuntime?
   events  ProjectEvent[]
   actions ProjectAction[]
-  decisions ProjectDecision[]
   blockers  ProjectBlocker[]
   verdictFailures TaskVerificationFailure[]
   acceptanceRuns  ProjectAcceptanceRun[]     @relation("ProjectAcceptanceRuns")
@@ -1756,10 +1755,8 @@ model ProjectAction {
   subjectId      String?             @map("subject_id") @db.Uuid
   fencingToken   BigInt              @map("fencing_token")
 
-  /// Decision lineage is a same-Project composite FK (migration 0120). Result-session lineage is
-  /// bidirectional and commit-time checked by the Project dispatch boundary (migration 0122).
-  decisionId      String? @map("decision_id") @db.Uuid
-  decision        ProjectDecision? @relation(fields: [decisionId, projectId], references: [id, projectId], onDelete: NoAction)
+  /// Result-session lineage is bidirectional and commit-time checked by the Project dispatch
+  /// boundary (migration 0122).
   resultSessionId String? @unique @map("result_session_id") @db.Uuid
   resultSession   Session? @relation("ProjectActionResultSession", fields: [resultSessionId], references: [id], onDelete: NoAction)
   dispatchedSession Session? @relation("ProjectActionSession")
@@ -1781,33 +1778,6 @@ model ProjectAction {
 
 /// Append-only Coordinator judgment audit. The JSON protocol uses Base62 public ids, while the
 /// relational attribution columns retain UUIDs so ownership and action lineage remain enforceable.
-model ProjectDecision {
-  id                String  @id @default(uuid(7)) @db.Uuid
-  projectId         String  @map("project_id") @db.Uuid
-  project           Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  inputVersion      Int     @map("input_version")
-  decisionInputHash String  @map("decision_input_hash") @db.Char(64)
-  decisionInput     Json    @map("decision_input")
-  outcome           Json
-  decidedBy         String  @map("decided_by")
-
-  /// Historical attribution, deliberately without foreign keys: deleting or rotating an Agent or
-  /// Session must not rewrite what identity made an earlier decision.
-  coordinatorAgentId   String? @map("coordinator_agent_id") @db.Uuid
-  coordinatorSessionId String? @map("coordinator_session_id") @db.Uuid
-  fencingToken         BigInt  @map("fencing_token")
-  reason               String
-  createdAt            DateTime @default(now()) @map("created_at")
-
-  actions        ProjectAction[]
-  acceptanceRuns ProjectAcceptanceRun[]
-
-  @@unique([id, projectId])
-  @@index([projectId, createdAt])
-  @@index([projectId, decisionInputHash])
-  @@map("project_decision")
-}
-
 /// WHO can resolve a blocker (contract §11.1). This column decides `run_state` — §4.2's guard 2
 /// selects AWAITING_HUMAN when any open blocker is USER, guard 3 BLOCKED otherwise — and nothing
 /// else. §11.5 ES3 moves it exactly once, always to USER.
@@ -2122,10 +2092,8 @@ model ProjectAcceptanceRun {
   coordinatorAgentId   String? @map("coordinator_agent_id") @db.Uuid
   coordinatorSessionId String? @map("coordinator_session_id") @db.Uuid
 
-  /// Ledger lineage, when this run was produced by a `RUN_PROJECT_ACCEPTANCE` pass rather than by a
-  /// person. Both are optional: a user may run acceptance without the control loop being enabled.
-  decisionId       String?          @map("decision_id") @db.Uuid
-  decision         ProjectDecision? @relation(fields: [decisionId, projectId], references: [id, projectId], onDelete: NoAction)
+  /// Ledger lineage, when this run was produced by a pass rather than by a person. Optional: a
+  /// user may run acceptance directly.
   projectActionId  String?          @map("project_action_id") @db.Uuid
 
   /// Why this run no longer counts. Set — never cleared — when a newer run opens, or when any
@@ -2274,7 +2242,7 @@ model ProjectHandoffApproval {
   title  String
   reason String?
 
-  /// Historical attribution without a foreign key (cf. `ProjectDecision`): rotating or deleting the
+  /// Historical attribution without a foreign key : rotating or deleting the
   /// session that asked must not rewrite who asked or delete the answer.
   requestedBySessionId String   @map("requested_by_session_id") @db.Uuid
   requestedAt          DateTime @map("requested_at")
@@ -3263,7 +3231,7 @@ model TaskVerificationFailure {
   raisedByActionId String? @map("raised_by_action_id") @db.Uuid
   raisedByAction   ProjectAction? @relation("VerificationFailureAction", fields: [raisedByActionId], references: [id], onDelete: SetNull)
 
-  /// Base62 throughout, like `ProjectDecision.decisionInput`: this is read back over the audit API
+  /// Base62 throughout, in Base62: this is read back over the audit API
   /// and an id spelled as a UUID here is one no caller could hand to any other endpoint.
   evidence Json @default("{}")
 
@@ -3271,7 +3239,7 @@ model TaskVerificationFailure {
   /// resolve it — otherwise deleting an inconvenient conclusion would be the way to unblock the
   /// work, which is the hole V4 names.
   resolvedAt       DateTime? @map("resolved_at")
-  /// Historical attribution without a foreign key, as ProjectDecision does it: deleting the
+  /// Historical attribution without a foreign key: deleting the
   /// verification that passed must not rewrite what resolved this.
   resolvedByTaskId String?   @map("resolved_by_task_id") @db.Uuid
 

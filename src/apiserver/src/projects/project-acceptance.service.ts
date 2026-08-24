@@ -30,7 +30,6 @@ export interface OpenAcceptanceRunInput {
   decidedBy: 'COORDINATOR_AGENT' | 'USER';
   coordinatorAgentId?: string | null;
   coordinatorSessionId?: string | null;
-  decisionId?: string | null;
   projectActionId?: string | null;
 }
 
@@ -332,7 +331,6 @@ export class ProjectAcceptanceService {
           decidedBy: input.decidedBy,
           coordinatorAgentId: input.coordinatorAgentId ?? null,
           coordinatorSessionId: input.coordinatorSessionId ?? null,
-          decisionId: input.decisionId ?? null,
           projectActionId: input.projectActionId ?? null,
         },
       });
@@ -726,7 +724,7 @@ export class ProjectAcceptanceService {
     criteriaRevision: string; inputDigest: string; resultDigest: string | null;
     verdict: ProjectAcceptanceVerdict | null; decidedBy: string;
     coordinatorAgentId: string | null; coordinatorSessionId: string | null;
-    decisionId: string | null; projectActionId: string | null;
+    projectActionId: string | null;
     supersededAt: Date | null; supersededReason: string | null;
     startedAt: Date; completedAt: Date | null;
     criteria?: Array<{
@@ -751,7 +749,6 @@ export class ProjectAcceptanceService {
       resultDigest: run.resultDigest,
       coordinatorAgentId: run.coordinatorAgentId,
       coordinatorSessionId: run.coordinatorSessionId,
-      decisionId: run.decisionId,
       projectActionId: run.projectActionId,
       supersededAt: run.supersededAt,
       supersededReason: run.supersededReason,

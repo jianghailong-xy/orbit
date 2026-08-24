@@ -10,7 +10,20 @@
 > **自检**：`src/apiserver/src/projects/project-agent-contract.spec.ts` 把本文件按它自己声明的性质检一遍
 > （错误码闭合、快照两段式不重叠、§13→§14 映射完整、§7.5 的 id 都被 §10 覆盖、§11.2 的迁移语句顺序在真实外键
 > 形状上可执行、两组拒绝谓词的交集各只有一个码、PAC 派发拒绝码与 PCC blocker kind 的**双向**闭合）。
-> 改本文件必须让它继续绿；最后两类断言同时读 `docs/project-coordinator-contract.md`，因此**动一份契约就必须同时动另一份**。
+> 改本文件必须让它继续绿；最后两类断言同时读 PCC 契约。
+
+> ⚠️ **2026-08-23：Project Coordinator 控制环已整体移除**，本文若干条款的对方因此不复存在。
+> 具体影响，逐条列出而不是逐条改写 —— 改写等于替本项目重定契约，那是本项目自己的事：
+>
+> | 本文位置 | 失去的对方 |
+> |---|---|
+> | §0 自检说明 | `project-agent-contract.spec.ts` 已随控制环删除，本文不再有自动自检 |
+> | §13 blocker 列来源表 | `project_blocker` 与 PCC §11.2 的 kind 表都已删除 |
+> | §12 E4 双向闭合 | 同上：`路径 = 派发` 的行不再落成 `project_blocker` |
+> | §14 O7 | PCC §6.1 的决策输入投影（`project_decision`）已删除 |
+>
+> 其余条款（Agent / Workspace / Provider 分流、§5 执行契约、§11 兼容矩阵）**不依赖控制环，照常有效**。
+> 本文其余部分逐字保留：它记录的是当时为什么这样定，删掉会让这段历史读不懂。
 
 ## 0. v1.1 修订说明（相对 v1）
 
@@ -438,7 +451,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 
   | 列 | 唯一来源 |
   |---|---|
-  | `owner` · `recovery` · `next_check_at` 的默认值 | PCC §11.2（`docs/project-coordinator-contract.md`）kind 表里**同一个 kind 那一行** |
+  | `owner` · `recovery` · `next_check_at` 的默认值 | PCC §11.2 kind 表里**同一个 kind 那一行**（该契约已删除，见文首状态说明） |
   | `severity` · `required_action` | PCC §11.1 定义它们各自回答什么问题；逐 kind 的取值落在实现的 per-kind 策略表（`project-blocker.ts`），该表由 PCC §11.2 的行**逐条覆盖**，多一行少一行都红 |
   | `dedupe_key` · `lifecycle_generation` · `condition_version` | PCC §11.3（去重键与代次分配）与 PCC §7.2 TF2（`condition_version`） |
 
@@ -791,7 +804,7 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
   WHERE 的 `WORKSPACE_PIN_NOT_A_CANDIDATE` ∩ `NO_PROJECT_WORKSPACE` 由 §7.3 优先级 1 消掉（后者胜）。
   契约自检对这两组**各跑一次谓词交集**，不是只比对码的集合 —— v1.1 的 `00.10` 只比集合，两组交集因此全都漏了过去。
 - **E4（派发路径的码必须落得下去，v1.2）**：`路径 = 派发` 的每一行都会按 §7.4 AU-F 落成一条 `project_blocker`，
-  因此它**必须**是 PCC §11.2（`docs/project-coordinator-contract.md`）kind 封闭集合的一行。
+  因此它**必须**是 PCC §11.2 kind 封闭集合的一行。
   反过来，PCC §11.2 里标注 `来源 = PAC §12` 的每一个 kind 都必须是本表的一行。**两个方向都由契约自检断言**
   —— v1.1 只有 PCC ⊆ PAC 那一半，于是 v1.1 新增的 `WORKSPACE_PIN_NOT_A_CANDIDATE` 在 PCC 里根本不存在，两边测试却全绿。
   闭合链的另外两截（数据库约束 `project_blocker_kind_chk` 的取值、实现里那份 kind 封闭集合常量的成员）**不由本契约
@@ -1070,7 +1083,7 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 - **O4**：多个可行 Workspace 时的负载均衡（C6）v1 不做。
 - **O5**：iOS/macOS 的 Team / Agent 配置 UI 不在 v1 范围；v1 对原生端的唯一要求是 §11.4 的两条最低线。
 - **O7**：~~PCC 的决策输入投影读 `tasks[].provider`、没有 `tasks[].executionContract`~~ —— **v1.2 已关闭**。
-  PCC §6.1（`docs/project-coordinator-contract.md`）的 `world.tasks[]` 现在带 `executionContract`（它是 PAC §5 第 2 步
+  PCC §6.1 的 `world.tasks[]` 现在带 `executionContract`（它是 PAC §5 第 2 步
   的分流判据），PCC §7.4 EC1 的 V1 读集里不再有 `task.provider` / `task.model` —— 那两列只属于 LEGACY 分支的旧桥
   （§11.1 L1），EC1-b 把这条边界写死。两份契约的闭合由 `00.15` 与 §12 E4 的双向自检看着，因此它不可能再无声漂回去。
   这一条保留编号是为了让引用它的历史文档仍然指得到地方。
